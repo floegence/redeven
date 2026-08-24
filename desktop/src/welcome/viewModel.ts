@@ -29,7 +29,7 @@ import {
   type DesktopProviderRuntimeLinkTargetID,
 } from '../shared/providerRuntimeLinkTarget';
 import {
-  desktopEntryKindSupportsRuntimeManagement,
+  desktopEntryKindSupportsDirectRuntimeOperations,
   desktopProviderEnvironmentOpenRoute,
 } from '../shared/environmentManagementPrinciples';
 import {
@@ -310,14 +310,6 @@ function formatRuntimeStartedRelativeTimestamp(unixMS: number): string {
 function environmentRuntimeStartedLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'gateway_environment') {
     const gatewayLabel = compact(environment.gateway_label) || 'Gateway';
-    if (environment.gateway_environment_control_capabilities?.some((capability) => (
-      capability === 'start'
-      || capability === 'stop'
-      || capability === 'restart'
-      || capability === 'update_runtime'
-    ))) {
-      return `Gateway managed:${gatewayLabel}`;
-    }
     if (environment.gateway_environment_access_capabilities?.includes('open')) {
       return `Gateway available:${gatewayLabel}`;
     }
@@ -1253,8 +1245,7 @@ function resolveEnvironmentOpenFlow(
   if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
     return 'request_access';
   }
-  if (environment.runtime_health.offline_reason_code === 'auth_required'
-    || environment.runtime_management?.authorization.state === 'denied') {
+  if (environment.runtime_health.offline_reason_code === 'auth_required') {
     return 'request_access';
   }
   if (environment.kind === 'gateway_environment' && desktopGatewayNeedsResolution(environment.gateway_status ?? 'unknown')) {
@@ -1348,7 +1339,7 @@ function runtimeProviderLinkMenuAction(
 ): EnvironmentActionMenuItemModel | null {
   // IMPORTANT: Provider-link controls live only on Local/SSH runtime cards.
   // Provider cards represent remote access permissions, not device management.
-  if (!desktopEntryKindSupportsRuntimeManagement(environment.kind)) {
+  if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
     return null;
   }
   const target = environment.provider_runtime_link_target;
@@ -1578,7 +1569,7 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (remoteRouteAction) {
     items.push(remoteRouteAction);
   }
-  if (desktopEntryKindSupportsRuntimeManagement(environment.kind)) {
+  if (desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
     for (const operation of runtimeOperationMenuOrder) {
       const item = runtimeOperationMenuItem(environment.runtime_operations[operation], operation, true);
       if (item) {
@@ -1617,7 +1608,7 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (runtimeProviderLinkAction) {
     items.push(runtimeProviderLinkAction);
   }
-  if (!desktopEntryKindSupportsRuntimeManagement(environment.kind)) {
+  if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
     const refreshPlan = environment.runtime_operations.refresh;
     const refreshLabel = environment.kind === 'provider_environment' ? 'Refresh provider status' : 'Refresh runtime status';
     items.push({

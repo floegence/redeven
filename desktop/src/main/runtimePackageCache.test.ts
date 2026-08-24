@@ -638,7 +638,7 @@ describe('runtimePackageCache', () => {
 	      expect((error as DesktopOperationFailureError).presentation.summary).toBe(
 	        'Desktop could not prepare the linux/amd64 Redeven Gateway package.',
 	      );
-	      expect((error as DesktopOperationFailureError).runtime_lifecycle_step_id).toBe('preparing_gateway_package');
+	      expect((error as DesktopOperationFailureError).runtime_lifecycle_step_id).toBeUndefined();
 	      expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.channel).toBe('gateway_package_build');
 	    } finally {
 	      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });

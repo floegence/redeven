@@ -53,10 +53,6 @@ function resolveBundledRuntimeBinary() {
   return bundledBinaryCandidate(goos === 'windows' ? 'redeven.exe' : 'redeven');
 }
 
-function resolveBundledGatewayBinary() {
-  return bundledBinaryCandidate('redeven-gateway');
-}
-
 function loadReleaseArtifactHelpers() {
   const helperPath = path.join(desktopDir, 'dist', 'shared', 'releaseArtifactNames.js');
   try {
@@ -70,7 +66,6 @@ function loadReleaseArtifactHelpers() {
 }
 
 const bundledRuntimeBinary = resolveBundledRuntimeBinary();
-const bundledGatewayBinary = resolveBundledGatewayBinary();
 const bundledDesktopManifest = bundledBinaryCandidate('desktop-bundle-manifest.json');
 const bundledReDevPluginResources = resolveTargetGoos() === 'linux'
   ? [
@@ -126,10 +121,6 @@ export default {
     {
       from: bundledRuntimeBinary,
       to: 'bin/redeven',
-    },
-    {
-      from: bundledGatewayBinary,
-      to: 'bin/redeven-gateway',
     },
     {
       from: bundledDesktopManifest,

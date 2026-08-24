@@ -253,7 +253,7 @@ describe('desktopPreferences', () => {
       },
       auto_runtime_probe_enabled: false,
     });
-    expect(withLocalContainer.saved_runtime_targets[0]?.auto_runtime_probe_enabled).toBe(true);
+    expect(withLocalContainer.saved_runtime_targets.find((target) => target.label === 'Local Container Runtime')?.auto_runtime_probe_enabled).toBe(true);
 
     const withSSHContainer = upsertSavedRuntimeTarget(withLocalContainer, {
       label: 'SSH Container Runtime',

@@ -7,7 +7,7 @@
     "frontmatter": {
       "okf_version": "0.2"
     },
-    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first temporary opens, explicit persistence, and isolated Desktop routing.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md) - Bound revisioned workspace capture, transport resources, mutation coordination, and linked-worktree removal.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.\n- [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.\n- [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.\n- [Containers operation observation](architecture/containers-operation-observation.md) - Observe resource-local mutations to terminal reconciliation while keeping unsigned candidates outside official release trust.\n- [Container resources capability](architecture/container-resources-capability.md) - Register Docker and Podman business access while preserving explicit `containers.read` admission.\n\n## Security\n\n- [Local UI network exposure](security/local-ui-network-exposure.md) - Fixed-port plaintext exposure admission, exact authority checks, acknowledgement, and warning preferences.\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.\n\n## Desktop\n\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-integrated Local UI access, runtime-control, and startup probing.\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Validate startup handoff, access admission, lifecycle readiness, and window-open gates.\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Coordinate shared SSH transports, operation generations, host discovery, and process inventory.\n- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.\n- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep one storage owner per card, migrate retired SSH records once, and serialize rename, pin, and removal safely.\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Scoped inventory, historical process reconciliation, package activation ordering, and lifecycle success conditions.\n- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Direct-channel destructive reinstall, one Launcher progress operation, quarantine recovery, and Gateway separation.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.\n- [Env App floating layer order](ui/env-app-floating-layer-order.md) - Order movable windows, Flower, plugin surfaces, blocking modals, and command UI through one product contract.\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.\n- [Git browser visual states](ui/git-browser-visual-states.md) - Keep selection, current-branch facts, Git status tones, hover, and focus visually independent across themes.\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.\n- [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.\n- [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.\n- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.\n- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.\n- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.\n- [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Use the product v1 first-release baseline, capability-bound upload staging, canonical identity binding, and future contiguous migrations.\n- [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.\n- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.\n- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.\n- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.\n- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.\n- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Signed Gateway HTTP JSON access and Runtime lifecycle contract.\n- [RCPP v3 provider API](protocol/rcpp-v2-provider-api.md) - Provider Runtime grants, permits, enrollment, binding, and readiness projection.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
+    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first temporary opens, explicit persistence, and isolated Desktop routing.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md) - Bound revisioned workspace capture, transport resources, mutation coordination, and linked-worktree removal.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.\n- [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.\n- [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.\n- [Containers operation observation](architecture/containers-operation-observation.md) - Observe resource-local mutations to terminal reconciliation while keeping unsigned candidates outside official release trust.\n- [Container resources capability](architecture/container-resources-capability.md) - Register Docker and Podman business access while preserving explicit `containers.read` admission.\n\n## Security\n\n- [Local UI network exposure](security/local-ui-network-exposure.md) - Fixed-port plaintext exposure admission, exact authority checks, acknowledgement, and warning preferences.\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.\n\n## Desktop\n\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Separate direct Runtime health and recovery from access-only Gateway, Provider, and URL readiness.\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Execute SSH-host and SSH-container lifecycle actions through one direct Desktop owner.\n- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.\n- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep one storage owner per card, migrate retired SSH records once, and serialize rename, pin, and removal safely.\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Own Local, SSH, and container Runtime lifecycle through one process-local Desktop coordinator.\n- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Recover an exact managed Runtime root with a Runtime-only package and minimal Desktop journal.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Run the optional standalone identity, catalog, open-session, and access forwarding service.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.\n- [Env App floating layer order](ui/env-app-floating-layer-order.md) - Order movable windows, Flower, plugin surfaces, blocking modals, and command UI through one product contract.\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.\n- [Git browser visual states](ui/git-browser-visual-states.md) - Keep selection, current-branch facts, Git status tones, hover, and focus visually independent across themes.\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.\n- [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.\n- [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.\n- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.\n- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.\n- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.\n- [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Use the product v1 first-release baseline, capability-bound upload staging, canonical identity binding, and future contiguous migrations.\n- [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.\n- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.\n- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.\n- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.\n- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.\n- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Define signed pairing, catalog, profile, open-session, and access-only Gateway routes.\n- [RCPP v3 provider API](protocol/rcpp-v2-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
     "sections": [
       {
         "title": "Architecture",
@@ -318,14 +318,14 @@
             "path": "desktop/desktop-runtime-bridge.md",
             "type": "Desktop Contract",
             "title": "Desktop runtime bridge",
-            "description": "Canonical navigation and security boundary for Desktop-integrated Runtime access.",
+            "description": "Canonical navigation and security boundary for Desktop-integrated Runtime access and direct lifecycle.",
             "tags": [
               "bridge",
               "desktop",
               "lifecycle",
               "runtime"
             ],
-            "summary": "Redeven Desktop opens Runtime instances through machine-readable startup, scoped control, transport, session, and process contracts. Runtime remains independently runnable without Gateway, while Redeven-managed lifecycle actions route through the target user's Gateway supervisor. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent details while the bridge overview retains the security boundary between Desktop coordination, Runtime APIs, Gateway lifecycle authority, and plugin capabilities.",
+            "summary": "Redeven Desktop opens Runtime instances through machine-readable startup, scoped transport, session, and process contracts. Runtime remains independently runnable without Gateway. Redeven-managed lifecycle actions use the registered Local, SSH, or container direct channel and are owned by Desktop's process-local coordinator; Gateway and Provider remain access-only. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent details while this concept retains the boundary between Desktop lifecycle coordination, Runtime services, optional access forwarding, and plugin capabilities.",
             "section_count": 2
           },
           {
@@ -333,14 +333,14 @@
             "path": "desktop/desktop-runtime-readiness.md",
             "type": "Desktop Contract",
             "title": "Desktop runtime readiness",
-            "description": "Independent access readiness, lifecycle capability projection, and window-open gates.",
+            "description": "Direct Runtime health, access readiness, and Open recovery boundaries.",
             "tags": [
               "desktop",
               "readiness",
               "runtime",
               "startup"
             ],
-            "summary": "Desktop keeps Connect, Workspace, Runtime UI, and managed lifecycle readiness independent. Packaged Desktop startup validates and starts the bundled Gateway, Runtime, bridge, and Workspace readiness path before the Local Environment is presented as ready. Environment rows present the user outcome `Open`; support, authorization, readiness, and lifecycle authority remain internal facts that decide whether Open is direct or requires one confirmation flow. Runtime `open_readiness` and AI `ai_readiness` are separate facts: an unsupported AI store does not make an otherwise verified Runtime unavailable for Open or Update.",
+            "summary": "Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible service and Local UI readiness. Missing, stopped, old, or damaged Runtime state selects a direct Desktop Start, Update, or reinstall recovery; it never invokes Gateway or Provider lifecycle. A transient status gap during startup is observed within the bounded readiness deadline and is not treated as process exit.",
             "section_count": 2
           },
           {
@@ -363,14 +363,14 @@
             "path": "desktop/desktop-ssh-runtime-operations.md",
             "type": "Desktop Contract",
             "title": "Desktop SSH runtime operations",
-            "description": "SSH transport isolation and direct Desktop Runtime lifecycle execution.",
+            "description": "Direct SSH and SSH-container Runtime lifecycle execution owned by Desktop.",
             "tags": [
               "desktop",
               "process",
               "runtime",
               "ssh"
             ],
-            "summary": "Desktop shares one lazy, credential-scoped SSH transport manager and executes SSH-host and SSH-container Runtime lifecycle actions through the same direct Desktop coordinator as Local targets. Actions remain recoverable when the Runtime is stopped, stale, unreachable, partially installed, or represented by residual processes. Cached probes are observations only; each click authoritatively acts on the exact saved target. SSH establishment uses the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound, with no second fixed timeout. Transport generations fence retries, and hostnames, container labels, or Desktop card ids never substitute for target identity. The direct coordinator is the only Desktop lifecycle owner; the target stores no Desktop lock, PID lease, daemon, or second state machine.",
+            "summary": "Desktop manages an SSH-host or SSH-container Runtime only through the exact saved SSH connection and placement. The same process-local lifecycle coordinator, Launcher Operation, transport lease, platform observation, and temporary helper session serve Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall. Gateway and Provider credentials are never substituted for SSH authority, and the target stores no Desktop lifecycle lock or supervisor state.",
             "section_count": 2
           },
           {
@@ -410,7 +410,7 @@
             "path": "desktop/desktop-runtime-process-lifecycle.md",
             "type": "Desktop Contract",
             "title": "Desktop runtime process lifecycle",
-            "description": "Target-scoped Runtime inventory, lifecycle fencing, and Gateway execution boundaries.",
+            "description": "One Desktop-owned direct Runtime lifecycle for Local, SSH, and container targets.",
             "tags": [
               "coordination",
               "desktop",
@@ -419,7 +419,7 @@
               "process",
               "runtime"
             ],
-            "summary": "Desktop validates the packaged Gateway and Runtime and gives every physical Managed Environment one lifecycle owner across automatic startup, Open recovery, Start, Stop, Restart, Update, Refresh, and Reinstall. Direct Local, SSH, and container maintenance reuses one operation-scoped executor, platform result, process helper, and inventory lineage instead of preparing a Runtime package for every process query. Durable Gateway operations remain addressed by `lifecycle_target_id` and `target_generation`. A stale compatible package recommends Update; incompatible protocol, persisted state, identity, or trust recommends wipe reinstall. Diagnosis never hides direct lifecycle controls. Reinstall is a separately confirmed Desktop maintenance action that replaces only the exact registered environment root and never asks the incompatible component to clean its own data.",
+            "summary": "Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLifecycleCoordinator` and execute through the saved direct channel. Gateway and Provider are access-only; Runtime does not expose a second external lifecycle protocol. A direct-channel or filesystem failure can end an operation, while old Runtime, Gateway, data, or process state cannot create another owner or fallback path.",
             "section_count": 2
           },
           {
@@ -427,16 +427,15 @@
             "path": "desktop/desktop-reinstall-operations.md",
             "type": "Desktop Contract",
             "title": "Desktop managed Environment reinstall",
-            "description": "Direct-channel destructive reinstall, shared progress operation, and target ownership boundaries.",
+            "description": "Runtime-only direct-channel reinstall with minimal Desktop recovery journal.",
             "tags": [
               "containers",
               "desktop",
-              "gateway",
               "reinstall",
               "runtime",
               "ssh"
             ],
-            "summary": "Desktop owns one `reinstall_target` operation with `wipe_data` and `preserve_data` modes for Local, SSH host, Local container, and SSH container Managed Environments. It acquires the same physical-target lifecycle owner used by Start, Stop, Restart, Update, Open recovery, Refresh, and automatic startup. It uses the saved direct host or container channel and never depends on the old Gateway, Runtime, bridge, or state. Gateway and Runtime packages form one verified parallel batch, while the current lightweight process helper is prepared in parallel with that batch. Wipe is the final recovery path: if the confirmed direct channel, supported current packages, and exact-root filesystem operations work, old Redeven state cannot block completion. Preserve atomically replaces both managed component directories and restores both on failure.",
+            "summary": "Wipe-data reinstall is Desktop's final recovery path for a broken managed Redeven Runtime. After the user confirms the exact Local, SSH, or container target and Runtime root, Desktop prepares a verified Runtime-only package, attempts to stop old Redeven processes, replaces the exact root, starts and verifies the fresh Runtime, and cleans retained old data. Gateway, old Runtime health, old databases, unknown process state, previous journals, and quarantine content cannot reject the operation before a direct filesystem action is attempted. Preserve-data reinstall is a convenience path and rolls back its managed-file replacement when fresh verification fails.",
             "section_count": 2
           }
         ]
@@ -450,14 +449,14 @@
             "path": "gateway/gateway-service.md",
             "type": "Gateway Contract",
             "title": "Gateway service",
-            "description": "Standalone Gateway supervisor, target binding, operation recovery, and Desktop transport integration.",
+            "description": "Standalone optional Gateway identity, catalog, session, and access forwarding service.",
             "tags": [
+              "access",
               "desktop",
               "gateway",
-              "release",
-              "runtime"
+              "release"
             ],
-            "summary": "`redeven-gateway` is an independent process and component version. In `standalone` mode it is an access and catalog endpoint only: it owns Gateway identity and trust, does not create Runtime binding or state, and exposes no Runtime lifecycle API. A Managed Environment may have an internal Gateway supervisor, but that supervisor is not a Gateway record and is never projected into Desktop's Gateway page. Direct Desktop host or container channels own destructive Environment reinstall.\n\nThe service uses one state-root lock so two Gateway supervisors cannot control the same target concurrently. Its status record is accepted only when the PID still has the recorded executable and process start time; a stale or reused PID is treated as not running.",
+            "summary": "`redeven-gateway` is an optional standalone access forwarder. It owns Gateway identity, pairing, trust, Environment profiles, catalog responses, open-session artifacts, and request forwarding. It never owns, starts, stops, updates, reinstalls, or observes Runtime lifecycle state. Gateway failure can interrupt access through that Gateway, but it cannot block Desktop from managing a Runtime through an authorized Local, SSH, or container channel.",
             "section_count": 2
           }
         ]
@@ -1041,15 +1040,15 @@
             "path": "protocol/gateway-v1-protocol.md",
             "type": "Protocol Contract",
             "title": "Gateway v2 protocol",
-            "description": "OpenAPI and signed HTTP JSON contract for Gateway access and Runtime lifecycle operations.",
+            "description": "Signed Gateway HTTP JSON contract for pairing, catalog, open-session, and access forwarding.",
             "tags": [
+              "access",
               "desktop",
               "gateway",
               "openapi",
-              "protocol",
-              "runtime"
+              "protocol"
             ],
-            "summary": "`redeven-gateway` exposes the stable `redeven-gateway-v2` HTTP JSON protocol. Gateway is an optional Runtime lifecycle supervisor and an independent process; it is not required for Runtime Connect, Workspace, or Runtime UI access. Gateway owns Runtime operation progress, target locking, checkpoints, fencing, and recovery. Desktop is a client that observes or starts an operation and never represents Runtime lifecycle ownership.",
+            "summary": "`redeven-gateway-v2` is the signed access-plane protocol defined by `spec/openapi/gateway-v2.yaml`. It supports pairing, Gateway identity and capabilities, Environment profile/catalog operations, and open-session. It exposes no Runtime lifecycle operation, artifact, supervisor, checkpoint, recovery, or Provider management route. Unsupported or removed paths return the normal HTTP not-found response and never fall back to another lifecycle owner.",
             "section_count": 2
           },
           {
@@ -1057,15 +1056,16 @@
             "path": "protocol/rcpp-v2-provider-api.md",
             "type": "Protocol Contract",
             "title": "RCPP v3 provider API",
-            "description": "Provider access, Runtime grants, supervisor enrollment, permit, and readiness contract.",
+            "description": "Provider discovery, health, open-session, Runtime link, and access authorization contract.",
             "tags": [
+              "access",
               "desktop",
               "openapi",
               "protocol",
               "provider",
               "runtime"
             ],
-            "summary": "RCPP v3 is the Provider-side authorization contract in `docs/openapi/rcpp-v3.yaml` and `shared/contracts/providerprotocol/rcpp.go`. Connect and Workspace access are separate from Runtime management. The Portal exposes `manage_runtime`, `deploy_custom_runtime`, and `manage_runtime_binding` independently, signs a precise one-time permit, and stores only binding and audit facts. The target Gateway remains the sole Runtime operation authority.",
+            "summary": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.",
             "section_count": 2
           }
         ]
@@ -5505,111 +5505,85 @@
       "concept_id": "desktop.desktop-reinstall-operations",
       "type": "Desktop Contract",
       "title": "Desktop managed Environment reinstall",
-      "description": "Direct-channel destructive reinstall, shared progress operation, and target ownership boundaries.",
+      "description": "Runtime-only direct-channel reinstall with minimal Desktop recovery journal.",
       "tags": [
         "containers",
         "desktop",
-        "gateway",
         "reinstall",
         "runtime",
         "ssh"
       ],
-      "timestamp": "2026-08-22T00:00:00Z",
+      "timestamp": "2026-08-24T00:00:00Z",
       "frontmatter": {
-        "description": "Direct-channel destructive reinstall, shared progress operation, and target ownership boundaries.",
+        "description": "Runtime-only direct-channel reinstall with minimal Desktop recovery journal.",
         "tags": [
           "containers",
           "desktop",
-          "gateway",
           "reinstall",
           "runtime",
           "ssh"
         ],
-        "timestamp": "2026-08-22T00:00:00Z",
+        "timestamp": "2026-08-24T00:00:00Z",
         "title": "Desktop managed Environment reinstall",
         "type": "Desktop Contract"
       },
-      "body_length": 9495,
-      "summary": "Desktop owns one `reinstall_target` operation with `wipe_data` and `preserve_data` modes for Local, SSH host, Local container, and SSH container Managed Environments. It acquires the same physical-target lifecycle owner used by Start, Stop, Restart, Update, Open recovery, Refresh, and automatic startup. It uses the saved direct host or container channel and never depends on the old Gateway, Runtime, bridge, or state. Gateway and Runtime packages form one verified parallel batch, while the current lightweight process helper is prepared in parallel with that batch. Wipe is the final recovery path: if the confirmed direct channel, supported current packages, and exact-root filesystem operations work, old Redeven state cannot block completion. Preserve atomically replaces both managed component directories and restores both on failure.",
+      "body_length": 4893,
+      "summary": "Wipe-data reinstall is Desktop's final recovery path for a broken managed Redeven Runtime. After the user confirms the exact Local, SSH, or container target and Runtime root, Desktop prepares a verified Runtime-only package, attempts to stop old Redeven processes, replaces the exact root, starts and verifies the fresh Runtime, and cleans retained old data. Gateway, old Runtime health, old databases, unknown process state, previous journals, and quarantine content cannot reject the operation before a direct filesystem action is attempted. Preserve-data reinstall is a convenience path and rolls back its managed-file replacement when fresh verification fails.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## One operation and one timeline\n\nThe click creates a Launcher Operation before preflight, so the existing `EnvironmentProgressPanel` immediately shows the complete ordered plan. Preflight, confirmation, package acquisition, installation, startup, verification, and cleanup retain one `operation_key`. The panel keeps completed, running, and pending steps visible, carries elapsed time and structured diagnostics, and can be reopened from the Environment card after it is closed. Confirmation is a state of the same operation, not a second renderer dialog or a second preflight. Runtime lifecycle and Open recovery carry an explicit progress surface, so a stale Open snapshot cannot replace the active Update timeline.\n\nThe fixed plan and durable commit points are:\n\n```text\nconfirmation -\u003e direct_channel_open -\u003e target_resolved\n-\u003e package_batch_prepared_and_verified -\u003e redeven_process_stop_attempted\n-\u003e old_root_isolated_or_cleared -\u003e fresh_suite_installed\n-\u003e gateway_started -\u003e runtime_started -\u003e runtime_verified\n-\u003e catalog_and_local_ui_verified -\u003e old_data_cleaned -\u003e completed\n```\n\nThe package phase shows independent Gateway and Runtime sub-progress. Desktop upload and remote install both validate manifest, release, commit, platform, architecture, archive size, and SHA-256. Development cache identity includes the source commit, so equal development tags cannot mix binaries from different source revisions. Public ReDevPlugin release metadata is fetched over verified HTTPS and does not require a signed-in GitHub CLI. Platform detection occurs once. The process helper and component batch start concurrently after that probe and publish independent ready events; helper failure remains best-effort, while a package failure cancels its sibling and cleans staging. Parallel cancellation retains the first initiating build or transfer failure as the structured operation cause instead of replacing it with a sibling cancellation. The journal records `package_batch_prepared_and_verified` only after every component is ready. A matching suite manifest is required before activation, so partial installation is impossible.\n\nEvery direct Managed Environment menu always contains Start, Stop, Restart, Update, Refresh, wipe reinstall, preserve reinstall, and Provider connect/disconnect. Diagnosis changes the recommended primary action but never removes or disables direct lifecycle recovery. Provider connect alone may be disabled when no compatible Provider Environment exists. Repeating the active action reopens its existing progress; a different action shows the current owner instead of creating a competing operation.\n\n## Direct-channel ownership\n\nAfter confirmation, the direct Local/SSH/container channel is the only required authority. One in-process coordinator serializes lifecycle requests from the current Desktop. The owner key is the SSH authority or local host, exact container engine/id when present, and canonical `runtime_root`; registration id and alternate state-root projections cannot create a second owner. `remote_default`, `~/.redeven`, and the confirmed account home path are one root. The target stores no lifecycle lock, PID lease, daemon, or second state machine. Multiple Desktop instances changing the same physical target concurrently are unsupported. Old Gateway/Runtime state, unknown processes, installation strategy, journal age, and existing quarantine never block wipe reinstall.\n\nA current lightweight maintenance helper is staged once outside `runtime_root`; inventory and best-effort stop reuse that session. Every process whose executable is loaded from the exact Redeven root is owned by that target regardless of historical filename or directory layout; PID, start time, user, namespace, device, and inode still protect every signal from PID reuse. Process-helper, identity, or stop failure does not prevent wipe cleanup. Other processes are not inspected or treated as owners merely because they read files below the root. Wipe first attempts an atomic sibling quarantine; if that exact rename is unavailable it clears only the validated root and creates a fresh one. Every file below the root is Redeven-owned. All operation and older exact-root quarantines are removed only after fresh verification.\n\nThe operation does not read, migrate, or call APIs in the quarantined installation. It does not invoke old Gateway APIs, bridge commands, service fallback, broad path deletion, home-directory deletion, container prune, or unregistered volumes. A missing target is a fresh install. Only an unsafe coordinate, unsupported package platform, unavailable direct channel, or real filesystem/command refusal fails an execution step. Logical SSH aliases are resolved over the direct channel instead of compared as local strings. Existing journals and quarantines are takeover inputs rather than blockers. Once wipe isolation starts, the old installation is never restarted.\n\nEach journal phase is idempotent and is written outside the target only after its command reaches the phase commit point. A Desktop crash, duplicate IPC, or SSH result loss resumes the same confirmed operation. Wipe discards a failed fresh root while preserving the original quarantine, stages the current package batch again when necessary, and continues until verification succeeds. Preserve uses one operation-scoped rollback directory for the Gateway, Runtime, and suite manifest. Activation, rollback, and commit cleanup are separate short filesystem actions; only the Desktop journal decides which action runs. A successful preserve rollback returns a retryable result that recommends wipe. Invalid Desktop-owned journal bytes are discarded without touching the target; they do not acquire recovery authority or become a permanent blocker. `manual_recovery_required` is reserved for a direct channel or filesystem state that prevents both continuation and the required cleanup or rollback.\n\n## Gateway separation\n\nManaged Environment records live in Environment Target storage and appear only on the Environments page. Their internal Gateway supervisor is an implementation detail and is never projected into Gateway records or paired from Desktop. Standalone Gateways use `redeven-gateway --mode standalone`, own only their URL endpoint and trust/catalog, and never create Runtime binding, Runtime state, or lifecycle APIs. A Gateway-backed Environment is an access-only Environment reached through its explicit URL `access_endpoint`; it does not expose reinstall or Runtime lifecycle controls.",
-          "char_count": 6526
+          "body": "## Confirmation and prerequisites\n\nPreview is local and non-destructive. It shows one short risk statement, with host, container, root, affected registrations, and process details collapsed. Confirmation binds the saved host/user/port, exact container engine/id when present, normalized Runtime root, mode, and operation identity.\n\nExecution has four prerequisites only: the confirmed direct channel opens, the target resolves to the confirmed exact root, the current Desktop can prepare and verify a Runtime package for the target platform, and the filesystem permits the required exact-root operations. Gateway availability, Runtime protocol, schema, trust, token, old process identity, or old directory contents are not prerequisites.\n\n## Runtime-only sequence\n\nThe authoritative progress order is:\n\n```text\nconfirmation\n-\u003e direct_channel_open\n-\u003e target_resolved\n-\u003e package_batch_prepared_and_verified\n-\u003e redeven_process_stop_attempted\n-\u003e old_root_isolated_or_cleared\n-\u003e runtime_installed\n-\u003e runtime_started\n-\u003e runtime_verified\n-\u003e catalog_and_local_ui_verified\n-\u003e old_data_cleaned\n-\u003e completed\n```\n\nPackage preparation completes before target disruption and contains Runtime plus its required companions, never Gateway. Helper preparation and package preparation may run together, but the helper is optional for wipe recovery: inventory or stop failure is recorded and replacement proceeds against the exact confirmed root.\n\nWipe mode adopts an existing operation quarantine when safe, otherwise atomically isolates the exact Runtime root or performs controlled clearing of that same root. It never restores or starts the old Runtime after isolation. Preserve mode keeps user data in place, replaces only managed Runtime files, and restores the previous managed files and prior running intent when the fresh installation cannot be verified.\n\nOld Gateway directories under the confirmed Runtime root are historical residue. They may be removed as part of exact-root wipe cleanup but are never prepared, installed, started, or verified.\n\n## Recovery journal\n\nDesktop writes one minimal journal outside the target root. It records the confirmed target, mode, normalized physical root, operation quarantine, and last committed phase. Each committed phase is repeatable. After Desktop or transport interruption, a repeated confirmation resumes from this Desktop journal without consulting an old Gateway API, Runtime database, target-side lock, checkpoint service, or shell state machine.\n\nAn old journal or quarantine is input to continuation or cleanup, not a reason to hide or block wipe reinstall. A genuine target-coordinate change still requires new confirmation because continuing against another host, container, user, or explicit root could delete unrelated data.\n\n`manual_recovery_required` is reserved for cases where the direct channel or filesystem prevents continuation and, for preserve mode, also prevents safe rollback. Wipe failures retain the journal and present Continue Reinstall with the original command, exit status, stderr, and filesystem reason in technical details.",
+          "char_count": 3090
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven clears the exact Desktop-registered root, including Gateway, Runtime, managed packages, workspaces, projects, application data, Floret/ReDevPlugin data, trust, identity, Catalog, and Environment configuration. It retains only channel credentials, target location, and the temporary journal required to complete or recover the operation. It does not delete upstream databases outside the root or inspect unrelated process file descriptors. User-facing failures keep a structured category for direct-channel, package-batch, filesystem, Gateway-start, and Runtime-readiness failure; raw command, exit status, stderr, and startup files remain folded technical diagnostics.",
-          "char_count": 676
+          "body": "Reinstall never scans a home directory, follows an unconfirmed symlink target, performs container-wide prune, or removes data outside the exact Runtime root and its operation quarantine. It does not require a remote lock or long-running script. Remote commands perform one bounded filesystem or process action; Desktop owns ordering, journal commits, progress, and retry.",
+          "char_count": 371
         }
       ],
       "evidence": [
         {
-          "id": "redeven:desktop/src/shared/desktopReinstallProgress.ts:1:canonical reinstall step plan and structured step snapshots.",
-          "source": "redeven:desktop/src/shared/desktopReinstallProgress.ts",
-          "line": 1,
-          "description": "Canonical reinstall step plan and structured step snapshots."
-        },
-        {
-          "id": "redeven:desktop/src/main/reinstallTargetCoordinator.ts:1:exact-target preflight, process inventory, quarantine, fresh install, verification, journal recovery, and fail-closed validation.",
+          "id": "redeven:desktop/src/main/reinstallTargetCoordinator.ts:1:direct target confirmation, journal, exact-root replacement, verification, and recovery.",
           "source": "redeven:desktop/src/main/reinstallTargetCoordinator.ts",
           "line": 1,
-          "description": "Exact-target preflight, process inventory, quarantine, fresh install, verification, journal recovery, and fail-closed validation."
+          "description": "Direct target confirmation, journal, exact-root replacement, verification, and recovery."
         },
         {
-          "id": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1:shared physical-target ownership across lifecycle and reinstall operations.",
-          "source": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts",
+          "id": "redeven:desktop/src/shared/desktopReinstallProgress.ts:1:runtime-only ordered phase contract.",
+          "source": "redeven:desktop/src/shared/desktopReinstallProgress.ts",
           "line": 1,
-          "description": "Shared physical-target ownership across lifecycle and reinstall operations."
+          "description": "Runtime-only ordered phase contract."
         },
         {
-          "id": "redeven:desktop/src/main/runtimePackageCache.ts:1:lightweight current-helper preparation without building the complete runtime suite.",
-          "source": "redeven:desktop/src/main/runtimePackageCache.ts",
+          "id": "redeven:desktop/src/main/reinstallTargetProcess.ts:1:temporary helper inventory and best-effort stop.",
+          "source": "redeven:desktop/src/main/reinstallTargetProcess.ts",
           "line": 1,
-          "description": "Lightweight current-helper preparation without building the complete Runtime suite."
+          "description": "Temporary helper inventory and best-effort stop."
         },
         {
-          "id": "redeven:desktop/src/main/main.ts:3039:current gateway/runtime package acquisition and progress mapping through direct host/container executors.",
+          "id": "redeven:desktop/src/main/reinstallComponentStaging.ts:1:runtime-only component preparation and installation transaction.",
+          "source": "redeven:desktop/src/main/reinstallComponentStaging.ts",
+          "line": 1,
+          "description": "Runtime-only component preparation and installation transaction."
+        },
+        {
+          "id": "redeven:desktop/src/main/main.ts:1:local, ssh, and container executor wiring and launcher operation projection.",
           "source": "redeven:desktop/src/main/main.ts",
-          "line": 3039,
-          "description": "Current Gateway/Runtime package acquisition and progress mapping through direct host/container executors."
+          "line": 1,
+          "description": "Local, SSH, and container executor wiring and Launcher Operation projection."
         },
         {
-          "id": "redeven:desktop/src/main/main.ts:4481:launcher operation journal hydration after desktop restart.",
-          "source": "redeven:desktop/src/main/main.ts",
-          "line": 4481,
-          "description": "Launcher operation journal hydration after Desktop restart."
-        },
-        {
-          "id": "redeven:desktop/src/welcome/App.tsx:8850:shared environment progress panel, explicit surface selection, and concise reinstall confirmation details.",
+          "id": "redeven:desktop/src/welcome/App.tsx:1:confirmation, details disclosure, progress, and continuation ui.",
           "source": "redeven:desktop/src/welcome/App.tsx",
-          "line": 8850,
-          "description": "Shared Environment progress panel, explicit surface selection, and concise reinstall confirmation details."
-        },
-        {
-          "id": "redeven:desktop/src/main/gatewayStore.ts:779:gateway store url-only standalone record boundary.",
-          "source": "redeven:desktop/src/main/gatewayStore.ts",
-          "line": 779,
-          "description": "Gateway Store URL-only standalone record boundary."
-        },
-        {
-          "id": "redeven:cmd/redeven-gateway/main.go:494:standalone gateway startup omits runtime supervisor and lifecycle state.",
-          "source": "redeven:cmd/redeven-gateway/main.go",
-          "line": 494,
-          "description": "Standalone Gateway startup omits Runtime supervisor and lifecycle state."
-        },
-        {
-          "id": "redeven:desktop/src/main/reinstallTargetCoordinator.test.ts:1:exact-root replacement, quarantine retention, changed-target rejection, and direct executor coverage.",
-          "source": "redeven:desktop/src/main/reinstallTargetCoordinator.test.ts",
           "line": 1,
-          "description": "Exact-root replacement, quarantine retention, changed-target rejection, and direct executor coverage."
+          "description": "Confirmation, details disclosure, progress, and continuation UI."
         }
       ],
-      "snippet": "Desktop owns one `reinstall_target` operation with `wipe_data` and `preserve_data` modes for Local, SSH host, Local container, and SSH container Managed Environments. It acquires the same physical-target lifecycle owner used by Start, Stop,",
+      "snippet": "Wipe-data reinstall is Desktop's final recovery path for a broken managed Redeven Runtime. After the user confirms the exact Local, SSH, or container target and Runtime root, Desktop prepares a verified Runtime-only package, attempts to sto",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -5623,28 +5597,28 @@
       "concept_id": "desktop.desktop-runtime-bridge",
       "type": "Desktop Contract",
       "title": "Desktop runtime bridge",
-      "description": "Canonical navigation and security boundary for Desktop-integrated Runtime access.",
+      "description": "Canonical navigation and security boundary for Desktop-integrated Runtime access and direct lifecycle.",
       "tags": [
         "bridge",
         "desktop",
         "lifecycle",
         "runtime"
       ],
-      "timestamp": "2026-07-18T00:00:00Z",
+      "timestamp": "2026-08-24T00:00:00Z",
       "frontmatter": {
-        "description": "Canonical navigation and security boundary for Desktop-integrated Runtime access.",
+        "description": "Canonical navigation and security boundary for Desktop-integrated Runtime access and direct lifecycle.",
         "tags": [
           "bridge",
           "desktop",
           "lifecycle",
           "runtime"
         ],
-        "timestamp": "2026-07-18T00:00:00Z",
+        "timestamp": "2026-08-24T00:00:00Z",
         "title": "Desktop runtime bridge",
         "type": "Desktop Contract"
       },
-      "body_length": 4740,
-      "summary": "Redeven Desktop opens Runtime instances through machine-readable startup, scoped control, transport, session, and process contracts. Runtime remains independently runnable without Gateway, while Redeven-managed lifecycle actions route through the target user's Gateway supervisor. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent details while the bridge overview retains the security boundary between Desktop coordination, Runtime APIs, Gateway lifecycle authority, and plugin capabilities.",
+      "body_length": 4845,
+      "summary": "Redeven Desktop opens Runtime instances through machine-readable startup, scoped transport, session, and process contracts. Runtime remains independently runnable without Gateway. Redeven-managed lifecycle actions use the registered Local, SSH, or container direct channel and are owned by Desktop's process-local coordinator; Gateway and Provider remain access-only. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent details while this concept retains the boundary between Desktop lifecycle coordination, Runtime services, optional access forwarding, and plugin capabilities.",
       "sections": [
         {
           "id": "contract",
@@ -5657,8 +5631,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, and session observations must not become competing lifecycle authorities. Desktop must not change the system proxy, install Tailscale/VPN/private-range bypass tables, globally disable proxying, or recover a missing trusted bridge by selecting a public Local UI address. ReDevPlugin, Provider, Runtime Control, public Local UI, and Gateway contracts retain their existing ownership boundaries.",
-          "char_count": 526
+          "body": "Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, Gateway, Provider, and session observations must not become competing lifecycle authorities. Desktop must not change the system proxy, install Tailscale/VPN/private-range bypass tables, globally disable proxying, or recover a missing trusted bridge by selecting a public Local UI address. ReDevPlugin, Provider, Runtime Control, public Local UI, and Gateway contracts retain their access and execution boundaries.",
+          "char_count": 547
         }
       ],
       "evidence": [
@@ -5717,7 +5691,7 @@
           "description": "Welcome Flower cold-starts Local Environment through structured local Runtime lifecycle progress."
         }
       ],
-      "snippet": "Redeven Desktop opens Runtime instances through machine-readable startup, scoped control, transport, session, and process contracts. Runtime remains independently runnable without Gateway, while Redeven-managed lifecycle actions route throu",
+      "snippet": "Redeven Desktop opens Runtime instances through machine-readable startup, scoped transport, session, and process contracts. Runtime remains independently runnable without Gateway. Redeven-managed lifecycle actions use the registered Local, ",
       "links": [
         {
           "label": "Desktop runtime readiness",
@@ -5757,7 +5731,7 @@
       "concept_id": "desktop.desktop-runtime-process-lifecycle",
       "type": "Desktop Contract",
       "title": "Desktop runtime process lifecycle",
-      "description": "Target-scoped Runtime inventory, lifecycle fencing, and Gateway execution boundaries.",
+      "description": "One Desktop-owned direct Runtime lifecycle for Local, SSH, and container targets.",
       "tags": [
         "coordination",
         "desktop",
@@ -5766,10 +5740,9 @@
         "process",
         "runtime"
       ],
-      "timestamp": "2026-08-20T00:00:00Z",
+      "timestamp": "2026-08-24T00:00:00Z",
       "frontmatter": {
-        "description": "Target-scoped Runtime inventory, lifecycle fencing, and Gateway execution boundaries.",
-        "quality_exception": "Cross-placement Runtime process contract spanning identity, reconciliation, lifecycle ordering, and Gateway delegation.",
+        "description": "One Desktop-owned direct Runtime lifecycle for Local, SSH, and container targets.",
         "tags": [
           "coordination",
           "desktop",
@@ -5778,211 +5751,79 @@
           "process",
           "runtime"
         ],
-        "timestamp": "2026-08-20T00:00:00Z",
+        "timestamp": "2026-08-24T00:00:00Z",
         "title": "Desktop runtime process lifecycle",
         "type": "Desktop Contract"
       },
-      "body_length": 27732,
-      "summary": "Desktop validates the packaged Gateway and Runtime and gives every physical Managed Environment one lifecycle owner across automatic startup, Open recovery, Start, Stop, Restart, Update, Refresh, and Reinstall. Direct Local, SSH, and container maintenance reuses one operation-scoped executor, platform result, process helper, and inventory lineage instead of preparing a Runtime package for every process query. Durable Gateway operations remain addressed by `lifecycle_target_id` and `target_generation`. A stale compatible package recommends Update; incompatible protocol, persisted state, identity, or trust recommends wipe reinstall. Diagnosis never hides direct lifecycle controls. Reinstall is a separately confirmed Desktop maintenance action that replaces only the exact registered environment root and never asks the incompatible component to clean its own data.",
+      "body_length": 5145,
+      "summary": "Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLifecycleCoordinator` and execute through the saved direct channel. Gateway and Provider are access-only; Runtime does not expose a second external lifecycle protocol. A direct-channel or filesystem failure can end an operation, while old Runtime, Gateway, data, or process state cannot create another owner or fallback path.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Identity and inventory\n\nThe Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock. When the managed executable changes outside Desktop, Gateway exposes only an authorized `update_runtime` operation and uses a host process-inventory snapshot for that repair; stop and restart remain unavailable until the replacement passes full identity, protocol, capability, provenance, and digest validation.\n\n## Packaged Desktop startup\n\nDesktop distributions contain a precompiled Gateway, Runtime suite, and one manifest bound to the product version, commit, platform, architecture, file size, executable mode, and SHA-256 digest. Desktop validates the exact manifest inventory before starting its managed Gateway. The Gateway supervisor then provisions the verified Runtime suite into the managed slot and starts it through the same fenced process controller used by later lifecycle operations. Desktop does not spawn Runtime through a second authority.\n\nThe manifest records whether it is a released packaged baseline or a development bundle and includes a canonical digest of the complete Runtime suite. A development bundle is an exact target: if the managed installation has a different executable or suite digest, Gateway replaces it atomically only after proving the Runtime target is idle. Known active work or unknown workload state returns a structured confirmation-required failure and preserves the current installation. A packaged baseline preserves a different managed installation only when the complete suite still matches a persisted `verified_lifecycle_update` or safely migrated legacy validation. This keeps an explicit user update authoritative without allowing an unverified old managed slot to override a development build.\n\nRuntime target binding schema v2 persists the Runtime version, platform, architecture, executable digest, complete managed-suite digest, and installation provenance. Provenance distinguishes packaged and development bundles, verified lifecycle updates, and migrated schema-v1 validation. The contiguous v1-to-v2 migration accepts an old validation without a suite digest only after checking the exact platform inventory, regular non-symlink file types, `0700` directory and executable modes, `0600` data-file modes, and the old executable digest. It derives the suite digest from those bytes and writes the migrated binding durably and atomically. Unsupported inventory, changed bytes or modes, symlinks, extra files, and write failures leave the original binding bytes unchanged and fail with an actionable structured cause.\n\nFor a freshly spawned Local Runtime, the private startup report is the authoritative handoff for process ownership and the initial listening endpoints. Desktop verifies that the reported child remains alive and performs one best-effort status refresh to improve readiness details; a transient status timeout or unavailable optional service snapshot does not terminate or clean up that child. An attached Runtime may be discovered from the status command only when the process was already present before the operation; a newly exited child is never converted into an attachment to an unrelated old process.\n\nNormal Desktop startup and the initial Environment Open preflight never copy source, build assets, compile Runtime, upload an artifact, or create `update_runtime`. A configured source root is consulted only after the user explicitly selects Update, or selects the Open recovery action that must converge through update, and the Gateway operation reaches `awaiting_artifact`. If a target lock already identifies a durable non-terminal operation, packaged startup leaves that lock and operation intact so Desktop can reattach instead of creating a duplicate operation.\n\nAfter a successful explicit update, a Gateway restart may accept a managed slot that differs from the packaged bundle only when the persisted validation matches the Runtime executable digest, platform, architecture, version, and a canonical digest of the complete managed suite inventory. Missing, additional, symlinked, non-regular, permission-changed, or byte-changed suite entries fail closed. The packaged bundle itself always requires its exact declared inventory.\n\nGateway persists structured startup failures with a stable code, reason, and recovery action. Desktop retains that structure when projecting launch failure or an active-workload confirmation boundary instead of replacing it with a generic retry message. Once startup succeeds, Desktop logs the actual Runtime version, commit, and executable digest returned by Runtime status; expected bundle fields remain separately labeled as target identity.\n\n## Direct lifecycle coordination and maintenance sessions\n\n`RuntimeLifecycleCoordinator` is the single in-process target-level owner for automatic Local startup, Open recovery, Start, Stop, Restart, Update, Refresh, and Reinstall. Physically identical registrations resolve from host/user/port, container engine/id, and canonical Runtime root; a registration id or alternate state-root field cannot create another owner. Identical lifecycle requests share the active Promise and Launcher Operation; incompatible requests cannot create a second process owner. No target-side lifecycle lock, PID lease, or long-running shell command exists; multiple Desktop processes mutating the same target concurrently are unsupported. Open waits for an active readiness-producing mutation and consumes its committed Runtime record. It does not start an independent attach retry or repeat target discovery. Stop and Reinstall are not readiness-producing, so Open exposes the active operation instead of observing a partially stopped or replaced target.\n\nEach direct SSH or container operation opens one maintenance session. The session owns the SSH lease or container executor, one platform/architecture result, the selected helper, operation staging, and the latest inventory digest. A warm Start, Stop, or Restart uses the installed managed `redeven` only after its release, commit, and managed stamp match the requested target. Update reuses the already prepared staged Runtime. Otherwise Desktop prepares a lightweight helper once: source development builds only `./cmd/redeven`, while packaged builds extract the verified `redeven` executable from the release archive and cache its single-file helper archive by release, platform, and executable digest. Inventory, stop, and final verification reuse that session and never upload or unpack another helper.\n\n`discovering_runtime_instances` performs only the process inventory command. Platform detection, helper/package preparation, transfer, install, startup, service readiness, and final inventory use distinct observable phases and timings. When helper and package staging overlap, one preparation step displays independent Maintenance helper and Runtime subtasks; each publishes its own ready event and the parent completes only after both are ready. Update starts Runtime package preparation and maintenance-session preparation concurrently. Both must finish before stopping or replacing a live Runtime. Post-start identity verification is distinct from stop verification in both state and user-visible copy. A helper/session is closed only after its final inventory or failure cleanup completes.\n\nLocal automatic startup enters the same coordinator before the Welcome window becomes interactive. If normal Start cannot converge, Desktop runs a preserve-data Update through that coordinator using the current Desktop suite. A verified process whose Runtime Service status is still being published is awaited through the lifecycle owner's normal startup deadline. Open without an active lifecycle owner does not use a fixed grace-period retry for an orphan process; it returns the explicit Restart or Update recovery boundary. A completed lifecycle generation replaces stale active failure presentation, while logs retain historical diagnostics. Desktop-created incomplete local package state, marker, or preserve transaction is therefore repaired or rolled back instead of permanently hiding Open.\n\n## Incompatible-state reinstall\n\n`needs_reinstall` is a recovery diagnosis, not an operation-capability filter. Local Environment, SSH host, Local container, and SSH container cards always expose enabled Start, Stop, Restart, Update, Refresh, wipe reinstall, and preserve reinstall actions. Incompatibility promotes wipe reinstall as the primary recommendation while leaving the full menu available. Provider connect may be disabled when no compatible Provider target exists. URL and Provider-managed targets expose only their real access and refresh capabilities. `preview_reinstall_target` creates the Launcher Operation and local confirmation summary without connecting to the target; confirmed `reinstall_target` resolves the canonical host, full container id, exact root, shared-root records, and lost data over the direct channel. Managed Environment records remain exclusively on the Environments page and never become Gateway records or pairing subjects.\n\nDesktop uses its saved Local, SSH, or container executor and never invokes an old Gateway API, bridge, service-stop command, binary, or component reset API. A current-bundle helper uploaded outside `runtime_root` attempts to inventory Gateway, Runtime, bridges, Local UI, exact managed-path executables, and their child tree. PID, creation time, executable identity, user, namespace, root arguments, and ancestry authorize best-effort SIGTERM and identity-rechecked SIGKILL; an incomplete inventory or stop result does not block the confirmed exact-root cleanup. Other processes' file descriptors, current directories, and reads are not scanned; external access to this private root does not block maintenance. Direct-channel and filesystem errors fail at their concrete execution step.\n\nAfter confirmation, the coordinator requires only the registered host/container coordinate and the direct channel. Gateway/Runtime compatibility, unknown old processes, custom roots, journal age, and prior quarantine do not block recovery. Root, Home, fuzzy paths, pruning, and alternate container resolution are forbidden. The Redeven-exclusive root—including packages, Workspace, projects, application and component data, trust, identity, Catalog, configuration, and unknown files—moves atomically to an operation sibling. A missing root is a fresh install; records sharing the canonical root use one in-process owner and all are refreshed without pairing.\n\nThe durable state order is `confirmation -\u003e direct_channel_open -\u003e target_resolved -\u003e package_batch_prepared_and_verified -\u003e redeven_process_stop_attempted -\u003e old_root_isolated_or_cleared -\u003e fresh_suite_installed -\u003e gateway_started -\u003e runtime_started -\u003e runtime_verified -\u003e catalog_and_local_ui_verified -\u003e old_data_cleaned -\u003e completed`. One platform probe completes first, then current-helper staging and the Gateway/Runtime package batch run concurrently. Helper failure is best-effort and does not block wipe; package failure remains non-destructive. The package-ready journal commit occurs only after both packages are transferred and verified. No old process is stopped and no live package is changed until the suite manifest proves every requested component ready.\n\nWipe atomically quarantines the exact root or, if the exact rename is unavailable, performs controlled clearing of that root only. An old process that cannot be identified or stopped is a warning, not a blocker. Preserve atomically switches `gateway/managed` and `runtime/managed` together, restores an interrupted prior transaction before retry, and restores both plus the prior suite manifest if fresh verification fails. Quarantine is never live state and is removed only after fresh identity, Catalog, and Local UI verification through the same direct channel. Target-required markers and journals live in Desktop state outside the target. They suppress unsafe automatic reads of old state, but no longer reject a user-selected direct lifecycle or reinstall action. Reinstall never calls pairing and never preserves the old Gateway identity. Wipe failure remains retryable from the journal and never restarts old processes; `manual_recovery_required` applies only when the direct channel or filesystem also prevents continuation/cleanup. A successful reinstall completes directly without pairing.\n\nDevelopment Desktop identity derives from the canonical checkout and explicit outer state root, which owns its user data, cache, temp, processes, bundle snapshot, and ports. Port allocation never stops another listener; immutable bundle promotion prevents a later build changing a running instance. `--stop-runtimes` addresses only that instance's exact inventory and is not a product lifecycle path. The development launcher keeps the real Electron process in the foreground and traps `SIGINT`/`SIGTERM`; a signal stops the launched Desktop session first, then stops the current local Runtime with the nested Local Environment Runtime root and that same outer state root. The cleanup is instance-scoped and uses the verified Runtime stop command; it never probes a second root interpretation or scans or kills another checkout's processes.\n\n## Operation ordering\n\nFor an explicit update, Desktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -\u003e unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.\n\nStart is idempotent and never asks the user to confirm workload impact: it starts a stopped Runtime or verifies the already-running target without stopping or replacing it. Only stop, restart, and update may interrupt or replace a Runtime workload and therefore use the explicit workload confirmation boundary. An identity-repair update may use an offline host-process fence when the running Runtime identity cannot be trusted; it still compares the exact workload snapshot before stopping the process and verifies the new installation before returning success. Desktop silently completes the same safe start contract when an older Gateway still returns a conservative confirmation state.\n\nThe Gateway Runtime operation store uses contiguous schema migrations. Schema v2 records with nanosecond-era `snapshot_revision` values that cannot round-trip through Desktop JavaScript are migrated atomically to schema v3 using the same snapshot's bounded observation timestamp, preserving operation authority, target locks, artifacts, and events. Current and newly observed snapshots outside the JSON-safe integer range fail closed before they can be persisted or committed; a failed migration leaves the original file unchanged.\n\nDesktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening either a direct or Provider card queries the exact target and attaches to active Gateway progress. Only the original operation client can resume confirmation, artifact upload, or commit. Another authorized manager receives redacted progress, while a current binding administrator may start the separate permit-bound reconcile action for quarantine. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.\n\nProvider cards use a Provider-scoped management client key and their own protected management tunnel. Gateway-backed Environments are catalog entries, not Gateway records: they are shown only on the Environments page and can be opened only through an explicit validated `access_endpoint` URL. Desktop never discovers, pairs with, or routes through an internal Gateway on the environment host, and never infers an endpoint from SSH, container, or `runtime_root`. Standalone Gateway cards are access-only and do not own a Runtime supervisor or Runtime lifecycle. Managed Environment cards use their own Local, SSH, or container direct executor for start, stop, restart, update, refresh, and reinstall; they never create Gateway records or trust profiles. Local and SSH host-process bootstrap select the published Linux or Darwin package for the observed CPU architecture; container bootstrap remains Linux-only. SSH host health refresh first consumes an existing verified bridge when available, otherwise queries Runtime Service status through the saved SSH channel without staging a helper or package. The planner always projects the complete managed-operation menu; the latest observed Runtime state recommends the primary action but does not remove or disable direct operations. Start, Stop, Restart, Update, and Refresh are idempotent against the observed target. After a direct operation succeeds, Desktop refreshes authoritative health and opens only after readiness is confirmed.\n\nThe same lifecycle contract applies to Local host, SSH host, Local container, and SSH container targets. Every direct lifecycle action creates its Launcher Operation before target inspection and publishes `lifecycle_progress` through the shared workflow. Every operation declares one active progress surface. A standalone lifecycle request owns and completes its Operation; lifecycle recovery inside Open is a child stage that cannot finish or remove the parent and explicitly returns the surface to Open after Runtime readiness. The renderer supplies and binds the exact operation key and attempt start time; main preserves that identity, and neither side guesses by recency or combines inactive Open, Runtime, reinstall, or Gateway payloads. Local verification accepts one uniquely identified, verified Runtime process from either the current Desktop bundle path or a verified alternate path; SSH and container targets retain the stricter current-layout rule. Container preparation first inspects the saved engine and exact container identity; Start, Restart, Update, and Open recovery may start only that container, then re-inspect it before Runtime inventory work. Stop is idempotent for a positively identified stopped container and never starts it as a side effect. Stop progress always advances `checking -\u003e discovering_runtime_instances -\u003e stopping_runtime_process -\u003e verifying_runtime_inventory -\u003e runtime_stopped`; an empty inventory records `runtime_already_stopped` and explicitly omits only the stop and verification steps. A missing container, unavailable Docker/Podman engine, permission error, or stale container id is a typed failure after the exact target is attempted. Desktop retains the operation and recovery actions instead of silently selecting another container or leaving the user with an unqualified open error.\n\nDirect SSH lifecycle recovery keeps the registered target identity separate from the physical root resolved on the remote account. `remote_default`, `~/.redeven`, and the account's canonical `\u003chome\u003e/.redeven` are equivalent aliases. Persisted reinstall hydration compares only the registered host, user, container identity, and root identity; final cleanup re-probes the physical root through the direct channel and accepts an existing operation quarantine. A different explicit root or target identity remains fail-closed.\n\nOpen recovery and explicit lifecycle actions use one decision helper and one execution path. The helper receives only the latest health and advertised operation set, returns `open`, one lifecycle operation, or an actionable block, and never invents an unsupported operation. The renderer may label the resulting stages, but it cannot dispatch Start, Initialize, or Update from a stale projection without the main-process probe and re-probe barriers.\n\nThe product smoke launches real Electron with isolated user-data, state, bundle snapshot, and port roots, validates the packaged bundle, and observes automatic Local Gateway, Runtime, bridge, and Workspace readiness before the first click. It enters Gateway only through `desktop-bridge`, completes the signed pairing chain, and validates capability target/generation, compatibility epoch, Runtime PID, actual identity, version, commit, executable digest, and phase timing. Normal cold startup and direct Open assert that no source copy, build script, `update_runtime`, `awaiting_artifact`, staging file, or artifact upload occurred. A real schema-v1 binding fixture without a suite digest and with a different managed Runtime proves migration followed by exact development convergence. Restart and explicit custom-build update traverse prepare, confirmation, artifact staging where required, commit, and succeeded states against the real Runtime process. Pending confirmation and verified updated suites survive Desktop and Gateway restart without duplicate operations.\n\nThe macOS smoke exercises Local and a real temporary sshd/SSH Remote Environment through direct Open, stop, start-and-open, restart, cold and warm explicit update, reopen, and Desktop restart. The Docker E2E provides real Linux Local precompiled startup and restart recovery plus real Linux Local and sshd Remote lifecycle, signed bridge authorization, negative digest/lock/confirmation cases, and operation/event persistence. Tests do not use `serve`, pairing-code shortcuts, fake controllers, direct Runtime replacement, or legacy stamp writes as lifecycle evidence.",
-          "char_count": 22174
+          "body": "## Single owner\n\nEvery directly managed target has one normalized coordination key made from its host authority, exact container engine/id when present, and normalized Runtime root. Default remote-root spellings resolve to the same target. The coordinator exists only in the current Desktop process, deduplicates an identical in-flight action, and rejects a conflicting action with the active Launcher Operation. Multiple Desktop processes controlling the same target are unsupported; Desktop writes no remote lifecycle lock, lease, supervisor state, or daemon.\n\nOpen waits for an in-flight Start, Restart, or Update and consumes that operation's committed readiness result. Auto Start uses the same coordinator before the Local Environment becomes interactive. Renderer state displays the main-process Launcher Operation and never creates a second progress or lifecycle owner.\n\n## Direct execution\n\nLifecycle execution is selected only from the saved Local, SSH, or container placement. Each operation creates its Launcher Operation before probing or opening transport, then performs only the steps needed by its intent:\n\n- Start is idempotent when one verified Runtime is already healthy.\n- Stop is idempotent when inventory is empty and verifies the stopped result.\n- Restart stops the observed Runtime when present, starts the installed Runtime, and verifies readiness.\n- Update prepares and verifies the current Runtime package before replacement, restores the prior running/stopped intent, and verifies the result.\n- Refresh performs a fresh direct observation without changing installation or process state.\n- Reinstall follows the dedicated direct recovery contract.\n\nThe Runtime package contains `redeven` and required Runtime companions only. Runtime package preparation never builds, bundles, installs, starts, or verifies Gateway. A package preparation failure occurs before a remote target is modified.\n\n## Maintenance helper\n\nDesktop may use the current `redeven` binary as a temporary maintenance helper for exact inventory and best-effort stop. One operation prepares and stages it at most once and reuses the same direct transport and platform observation. The helper returns typed before/after inventory; it is not resident, stores no lifecycle state, and provides no network API or lock protocol.\n\nProcess discovery performs only inventory work. Package build, dependency download, archive preparation, upload, or extraction must appear in their own progress phase and cannot be hidden under process discovery. Desktop stops only processes tied to the confirmed Runtime root and target namespace; it never scans broadly or prunes a host/container.\n\n## Capability and presentation\n\nDirectly managed Environment menus keep Start, Stop, Restart, Update, Refresh, wipe reinstall, preserve reinstall, and Provider Connect/Disconnect available regardless of health diagnosis. Diagnosis changes the recommended action, not direct capability. Provider Connect may be disabled when no Provider is available; lifecycle actions remain clickable and idempotent.\n\nGateway-only, Provider-only, and URL Environments have no authorized direct process channel. They expose their real Open/Connect/refresh-access functions and no Runtime lifecycle menu or Gateway/Provider management fallback.",
+          "char_count": 3294
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "External shell, systemd, launchd, or container-entrypoint maintenance is outside Redeven lifecycle authority and produces no operation, permit, target lock, fence, rollback, or recovery guarantee. Gateway revalidates Runtime identity, service protocol, epoch, capabilities, provenance, and digest before allowing normal lifecycle management; an externally changed installation is a repair-only state until a verified update completes. Desktop owner ids, takeover confirmation, and ownership mismatch are not Runtime concepts.",
-          "char_count": 525
+          "body": "Runtime owns business services, active sessions, and graceful cleanup after a normal process signal. Desktop owns installation and process actions. Maintenance helper performs two temporary low-level operations. Gateway and Provider own access. External systemd, Docker, or Kubernetes automation may be added by users, but it is outside Redeven's lifecycle contract.",
+          "char_count": 366
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/runtimemanagement/process_inventory.go:1:target-scoped process inventory and digest validation.",
-          "source": "redeven:internal/runtimemanagement/process_inventory.go",
-          "line": 1,
-          "description": "Target-scoped process inventory and digest validation."
-        },
-        {
-          "id": "redeven:internal/runtimegateway/protocol/lifecycle_v2.go:283:prepare and exact workload confirmation contracts.",
-          "source": "redeven:internal/runtimegateway/protocol/lifecycle_v2.go",
-          "line": 283,
-          "description": "Prepare and exact workload confirmation contracts."
-        },
-        {
-          "id": "redeven:internal/gatewayservice/server.go:188:gateway operation authorization and target checks.",
-          "source": "redeven:internal/gatewayservice/server.go",
-          "line": 188,
-          "description": "Gateway operation authorization and target checks."
-        },
-        {
-          "id": "redeven:desktop/src/shared/desktopRuntimeOperationPlanner.ts:1:desktop preflight and operation projection.",
-          "source": "redeven:desktop/src/shared/desktopRuntimeOperationPlanner.ts",
-          "line": 1,
-          "description": "Desktop preflight and operation projection."
-        },
-        {
-          "id": "redeven:desktop/src/main/sshRuntime.ts:1:ssh placement delegates lifecycle execution to the gateway boundary.",
-          "source": "redeven:desktop/src/main/sshRuntime.ts",
-          "line": 1,
-          "description": "SSH placement delegates lifecycle execution to the Gateway boundary."
-        },
-        {
-          "id": "redeven:desktop/src/main/runtimeLifecycleAttachment.ts:1:cross-client confirmation, redacted observation, resume, and recovery projection.",
-          "source": "redeven:desktop/src/main/runtimeLifecycleAttachment.ts",
-          "line": 1,
-          "description": "Cross-client confirmation, redacted observation, resume, and recovery projection."
-        },
-        {
-          "id": "redeven:desktop/src/main/desktopBundle.ts:1:strict packaged gateway and runtime manifest validation before desktop startup.",
-          "source": "redeven:desktop/src/main/desktopBundle.ts",
-          "line": 1,
-          "description": "Strict packaged Gateway and Runtime manifest validation before Desktop startup."
-        },
-        {
-          "id": "redeven:desktop/src/main/reinstallTargetCoordinator.ts:1:direct-channel target binding, full-root quarantine, external journal, and verification-gated cleanup.",
-          "source": "redeven:desktop/src/main/reinstallTargetCoordinator.ts",
-          "line": 1,
-          "description": "Direct-channel target binding, full-root quarantine, external journal, and verification-gated cleanup."
-        },
-        {
-          "id": "redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1:ordered direct stop plans and explicit no-process terminal path.",
-          "source": "redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts",
-          "line": 1,
-          "description": "Ordered direct stop plans and explicit no-process terminal path."
-        },
-        {
-          "id": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1:one physical-target owner, identical-operation joining, readiness waits, and cancellation cleanup.",
+          "id": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1:one process-local target coordinator.",
           "source": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts",
           "line": 1,
-          "description": "One physical-target owner, identical-operation joining, readiness waits, and cancellation cleanup."
+          "description": "One process-local target coordinator."
         },
         {
-          "id": "redeven:desktop/src/main/runtimePackageCache.ts:1:verified one-file maintenance helper extraction, source-only go build, and persistent helper caching.",
-          "source": "redeven:desktop/src/main/runtimePackageCache.ts",
+          "id": "redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1:ordered direct lifecycle steps by intent and placement.",
+          "source": "redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts",
           "line": 1,
-          "description": "Verified one-file maintenance helper extraction, source-only Go build, and persistent helper caching."
+          "description": "Ordered direct lifecycle steps by intent and placement."
         },
         {
-          "id": "redeven:desktop/src/main/runtimeArchive.ts:1:exact runtime executable extraction from verified release archives.",
-          "source": "redeven:desktop/src/main/runtimeArchive.ts",
-          "line": 1,
-          "description": "Exact Runtime executable extraction from verified release archives."
-        },
-        {
-          "id": "redeven:desktop/src/main/reinstallTargetProcess.ts:1:current-bundle helper upload outside the old root.",
-          "source": "redeven:desktop/src/main/reinstallTargetProcess.ts",
-          "line": 1,
-          "description": "Current-bundle helper upload outside the old root."
-        },
-        {
-          "id": "redeven:internal/runtimemanagement/target_process.go:1:exact redeven process and child-tree identity, sigterm, revalidation, and sigkill.",
-          "source": "redeven:internal/runtimemanagement/target_process.go",
-          "line": 1,
-          "description": "Exact Redeven process and child-tree identity, SIGTERM, revalidation, and SIGKILL."
-        },
-        {
-          "id": "redeven:desktop/src/main/gatewayLifecycleManager.ts:1:ordinary gateway lifecycle rejection for incompatible state.",
-          "source": "redeven:desktop/src/main/gatewayLifecycleManager.ts",
-          "line": 1,
-          "description": "Ordinary Gateway lifecycle rejection for incompatible state."
-        },
-        {
-          "id": "redeven:desktop/src/main/main.ts:1:four-placement routing, persistent markers, trust/cache clearing, fresh install, and pairing boundary.",
+          "id": "redeven:desktop/src/main/main.ts:1:local, ssh, and container action routing into the coordinator.",
           "source": "redeven:desktop/src/main/main.ts",
           "line": 1,
-          "description": "Four-placement routing, persistent markers, trust/cache clearing, fresh install, and pairing boundary."
+          "description": "Local, SSH, and container action routing into the coordinator."
         },
         {
-          "id": "redeven:internal/runtimegateway/supervisor/precompiled.go:1:gateway-owned precompiled provisioning, startup, suite validation, and recovery.",
-          "source": "redeven:internal/runtimegateway/supervisor/precompiled.go",
+          "id": "redeven:desktop/src/main/runtimePackageCache.ts:1:runtime package and temporary helper preparation.",
+          "source": "redeven:desktop/src/main/runtimePackageCache.ts",
           "line": 1,
-          "description": "Gateway-owned precompiled provisioning, startup, suite validation, and recovery."
+          "description": "Runtime package and temporary helper preparation."
         },
         {
-          "id": "redeven:internal/runtimegateway/supervisor/controller.go:385:operation-aware repair snapshots and offline fencing for externally changed runtime installations.",
-          "source": "redeven:internal/runtimegateway/supervisor/controller.go",
-          "line": 385,
-          "description": "Operation-aware repair snapshots and offline fencing for externally changed Runtime installations."
-        },
-        {
-          "id": "redeven:internal/gatewayservice/server.go:262:allows gateway lifecycle service startup to expose the repair operation when the managed runtime is untrusted.",
-          "source": "redeven:internal/gatewayservice/server.go",
-          "line": 262,
-          "description": "Allows Gateway lifecycle service startup to expose the repair operation when the managed Runtime is untrusted."
-        },
-        {
-          "id": "redeven:internal/runtimegateway/supervisor/binding.go:1:runtime target binding schema migration, complete managed identity, and installation provenance.",
-          "source": "redeven:internal/runtimegateway/supervisor/binding.go",
+          "id": "redeven:desktop/src/main/runtimeProcess.ts:1:local runtime inventory and exact stop operations.",
+          "source": "redeven:desktop/src/main/runtimeProcess.ts",
           "line": 1,
-          "description": "Runtime target binding schema migration, complete managed identity, and installation provenance."
+          "description": "Local Runtime inventory and exact stop operations."
         },
         {
-          "id": "redeven:desktop/src/main/providerRuntimeLifecycleClient.ts:1:provider-scoped signed lifecycle tunnel without gateway-card credential borrowing.",
-          "source": "redeven:desktop/src/main/providerRuntimeLifecycleClient.ts",
+          "id": "redeven:desktop/src/main/sshRuntime.ts:1:direct ssh runtime execution and one-operation helper session.",
+          "source": "redeven:desktop/src/main/sshRuntime.ts",
           "line": 1,
-          "description": "Provider-scoped signed lifecycle tunnel without Gateway-card credential borrowing."
+          "description": "Direct SSH Runtime execution and one-operation helper session."
         },
         {
-          "id": "redeven:desktop/src/main/environmentOpenCoordinator.ts:1:shared open/lifecycle decision and idempotent recovery rules.",
-          "source": "redeven:desktop/src/main/environmentOpenCoordinator.ts",
+          "id": "redeven:desktop/src/main/runtimePlacementManager.ts:1:direct container runtime execution.",
+          "source": "redeven:desktop/src/main/runtimePlacementManager.ts",
           "line": 1,
-          "description": "Shared Open/lifecycle decision and idempotent recovery rules."
+          "description": "Direct container Runtime execution."
         },
         {
-          "id": "redeven:desktop/src/main/containerRuntime.ts:230:exact container inspect/start and identity checks.",
-          "source": "redeven:desktop/src/main/containerRuntime.ts",
-          "line": 230,
-          "description": "Exact container inspect/start and identity checks."
-        },
-        {
-          "id": "redeven:scripts/build_desktop_bundled_runtime.sh:1:target-specific precompiled bundle assembly and manifest generation.",
-          "source": "redeven:scripts/build_desktop_bundled_runtime.sh",
+          "id": "redeven:desktop/src/shared/environmentManagementPrinciples.ts:1:direct-operation versus access-only environment boundary.",
+          "source": "redeven:desktop/src/shared/environmentManagementPrinciples.ts",
           "line": 1,
-          "description": "Target-specific precompiled bundle assembly and manifest generation."
-        },
-        {
-          "id": "redeven:scripts/dev_desktop.sh:1:per-instance state, immutable bundle snapshots, collision-safe port allocation, and exact maintenance scope.",
-          "source": "redeven:scripts/dev_desktop.sh",
-          "line": 1,
-          "description": "Per-instance state, immutable bundle snapshots, collision-safe port allocation, and exact maintenance scope."
-        },
-        {
-          "id": "redeven:scripts/dev_desktop_process_inventory_test.sh:1:cross-instance process, state, port, and managed runtime isolation regression.",
-          "source": "redeven:scripts/dev_desktop_process_inventory_test.sh",
-          "line": 1,
-          "description": "Cross-instance process, state, port, and managed Runtime isolation regression."
-        },
-        {
-          "id": "redeven:scripts/dev_desktop_signal_cleanup_test.sh:1:sigint cleanup of the launched desktop and current/legacy local runtime state roots.",
-          "source": "redeven:scripts/dev_desktop_signal_cleanup_test.sh",
-          "line": 1,
-          "description": "SIGINT cleanup of the launched Desktop and current/legacy local Runtime state roots."
-        },
-        {
-          "id": "redeven:desktop/src/main/sshReleaseAssets.test.ts:1:linux and darwin host-process ssh targets select published runtime and gateway packages.",
-          "source": "redeven:desktop/src/main/sshReleaseAssets.test.ts",
-          "line": 1,
-          "description": "Linux and Darwin host-process SSH targets select published Runtime and Gateway packages."
-        },
-        {
-          "id": "redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1:real desktop local and ssh remote lifecycle and workspace-open matrix.",
-          "source": "redeven:scripts/smoke_desktop_runtime_lifecycle.mjs",
-          "line": 1,
-          "description": "Real Desktop Local and SSH Remote lifecycle and workspace-open matrix."
-        },
-        {
-          "id": "redeven:tests/docker_runtime_e2e/gateway_lifecycle_smoke_test.go:1:real service, desktop bridge, signed lifecycle, persistence, and negative smoke.",
-          "source": "redeven:tests/docker_runtime_e2e/gateway_lifecycle_smoke_test.go",
-          "line": 1,
-          "description": "Real service, Desktop bridge, signed lifecycle, persistence, and negative smoke."
+          "description": "Direct-operation versus access-only Environment boundary."
         }
       ],
-      "snippet": "Desktop validates the packaged Gateway and Runtime and gives every physical Managed Environment one lifecycle owner across automatic startup, Open recovery, Start, Stop, Restart, Update, Refresh, and Reinstall. Direct Local, SSH, and contai",
+      "snippet": "Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLife",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -5996,191 +5837,95 @@
       "concept_id": "desktop.desktop-runtime-readiness",
       "type": "Desktop Contract",
       "title": "Desktop runtime readiness",
-      "description": "Independent access readiness, lifecycle capability projection, and window-open gates.",
+      "description": "Direct Runtime health, access readiness, and Open recovery boundaries.",
       "tags": [
         "desktop",
         "readiness",
         "runtime",
         "startup"
       ],
-      "timestamp": "2026-08-20T00:00:00Z",
+      "timestamp": "2026-08-24T00:00:00Z",
       "frontmatter": {
-        "description": "Independent access readiness, lifecycle capability projection, and window-open gates.",
+        "description": "Direct Runtime health, access readiness, and Open recovery boundaries.",
         "tags": [
           "desktop",
           "readiness",
           "runtime",
           "startup"
         ],
-        "timestamp": "2026-08-20T00:00:00Z",
+        "timestamp": "2026-08-24T00:00:00Z",
         "title": "Desktop runtime readiness",
         "type": "Desktop Contract"
       },
-      "body_length": 14274,
-      "summary": "Desktop keeps Connect, Workspace, Runtime UI, and managed lifecycle readiness independent. Packaged Desktop startup validates and starts the bundled Gateway, Runtime, bridge, and Workspace readiness path before the Local Environment is presented as ready. Environment rows present the user outcome `Open`; support, authorization, readiness, and lifecycle authority remain internal facts that decide whether Open is direct or requires one confirmation flow. Runtime `open_readiness` and AI `ai_readiness` are separate facts: an unsupported AI store does not make an otherwise verified Runtime unavailable for Open or Update.",
+      "body_length": 4890,
+      "summary": "Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible service and Local UI readiness. Missing, stopped, old, or damaged Runtime state selects a direct Desktop Start, Update, or reinstall recovery; it never invokes Gateway or Provider lifecycle. A transient status gap during startup is observed within the bounded readiness deadline and is not treated as process exit.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime compatibility failures use `Update Runtime and open`; Desktop compatibility failures use the Desktop update handoff. The two recovery actions stay separate because updating a remote Runtime cannot repair the bundled Desktop application.\n\nThe Desktop update handoff is the single existing-installation upgrade notice. Before opening the release page, its localized native dialog states that installing the new version restarts Redeven Desktop and the Local Runtime and interrupts active Local Environment sessions. Choosing Later performs no action. A first installation does not use this handoff because there is no existing Desktop or Local Runtime to restart.\n\n## Capability projection\n\nLocal, SSH, local-container, and SSH-container paths with a clear supervisor setup route report `support=supported`; URL paths report `unsupported`. With a grant, no binding is `setup_required`, and an existing binding with an unavailable Gateway is `temporarily_unavailable`. Without a grant, target, generation, operations, artifact policies, and supervisor facts remain hidden. Provider uses the same projection from RCPP v3.\n\n## Startup and access\n\nDesktop validates the bundled manifest, exact file inventory, version, commit, platform, architecture, executable permissions, sizes, and digests before starting the Local Environment service chain. If the managed Runtime was changed outside Desktop, Gateway remains available for an authorized `update_runtime` repair while withholding stop/restart; Desktop reports that the managed files changed and points to Update Runtime. Validation or startup failure is a launcher-level startup issue with repair/retry guidance; it is not deferred until Open, converted into a source build, or hidden behind an unbounded readiness wait. Startup logs record access check, environment preparation, environment start, Workspace readiness, total elapsed time, Runtime PID/version/digest, and the final readiness outcome.\n\nLocal UI password and network exposure acknowledgement are startup configuration, not Runtime lifecycle ownership. The Local Environment uses two explicit paths: Desktop's outer `stateRoot` selects the Go state layout and is the only value passed to Runtime `--state-root`, status, startup-report, lock, and control-socket resolution; the catalog `local_hosting.state_dir` is the resulting nested Local Environment `runtimeRoot` used by process inventory and installation scope. Start, attach, status, health, Stop, Restart, Update, Refresh, and Open use this same pair. Neither path is inferred from the other by appending `local-environment` or taking a parent. Long Unix control-socket paths resolve through a stable `/tmp` digest path so independently launched Desktop, Gateway, and Runtime processes address the same socket even when their inherited `TMPDIR` values differ. Health probes are read-only and do not start, stop, or reconnect a service. SSH/container bridge startup performs one typed health and open-readiness probe before opening a window; failed probes end that open attempt without selecting another transport. Readiness failures retain the probe stage and diagnostics: a Runtime hello that proves incompatibility routes to Update, while an unknown health response remains a Retry check path. Desktop never presents the raw `invalid_response` string as the user decision; HTML or asset mismatch is classified as Runtime readiness incompatibility and offers the same Update action. Existing bridge recovery validates exact process, token, target, and protocol identity, and never migrates a session to a different Runtime. A non-fresh Local or SSH observation always takes this short authoritative preflight on Open; an incompatible Runtime routes to an explicit Update action, while an unknown or failed check offers Retry check rather than Retry initialization. Before `Start and open` sends a start command, Desktop refreshes the latest Runtime observation; an already-running Runtime skips Start and proceeds directly to Open. The same reconciliation is used after Update or Start, so a stale renderer snapshot cannot issue a duplicate lifecycle command.\n\nAn accepted destructive lifecycle operation closes the attached Env App session through the shared operation coordinator. A disconnected Desktop leaves the Gateway operation running; a later open attaches to the durable progress. Lifecycle incompatibility disables only the management area; Connect, Workspace, and Runtime UI remain available.\n\nAn Open failure keeps the original intent and promotes the typed recovery action to the panel's primary action. A `update_runtime` next action is presented as `Update Runtime and open`; after the update completes Desktop reruns the authoritative open preflight and opens only after fresh readiness succeeds. When readiness is unknown, the primary action is `Refresh status`; a failed Open panel must never offer the same Open request again. Preflight failures carry the recovery action into the guidance session as well as the operation progress, so an SSH bridge failure cannot fall back to a misleading `Open` retry. Recovery actions are derived from the operation contract, not from a second renderer-only status machine.\n\nGateway restart recovery also migrates the durable operation store before attach refresh. Historical nanosecond snapshot revisions are converted to bounded, stable values during the atomic v2-to-v3 migration; invalid revisions from preflight or lifecycle fencing are rejected before persistence, so Desktop receives a retryable operation failure instead of an attach-refresh parsing error. Every cancellable lifecycle phase owns a renewable lease: Desktop renews operations when they approach expiry, up to Gateway's maximum deadline, and stops the lease when the operation reaches a terminal state.\n\n## Unified open flow\n\nEvery Environment row uses `Open` as its primary action. After successful packaged Desktop startup, Local Environment is already ready and Open performs only connection, bridge, and Workspace readiness work. URL and other access-only connections open directly. A running Runtime also opens directly, even when lifecycle setup facts are unavailable or stale. When a Local or SSH Runtime has not been observed yet, or its cached observation is not fresh, that same Open click owns one transient access preflight: successful access opens immediately, while a failed attempt refreshes the Environment and continues in the same panel as start, update, initialization, or access guidance. It must not surface the obsolete offline error before evaluating that refreshed lifecycle state. For a lifecycle-capable Environment, a confirmed missing setup opens one `Initialize and open` panel; an initialized but stopped Runtime opens one `Start and open` panel. `Start and open` creates only a Gateway start operation over the already installed verified Runtime; it never copies source, builds assets or Runtime, uploads an artifact, or changes the action into Update. An existing binding whose managed service stopped with Desktop is still initialized: `Start and open` uses the authorized lifecycle entrypoint, which restores that service before starting the Runtime, instead of falling back to a direct offline Open. Provider authorization denial is resolved before initialization work begins and presents `Request access`.\n\nThe initialization panel owns its interaction until completion. It reports `Check access`, `Prepare environment`, `Start environment`, and `Open workspace` in execution order while the internal Gateway progress remains hidden. The start-only path omits the preparation stage. A lifecycle success is not enough to complete the action: Desktop waits for a fresh Runtime health sample with open readiness before opening, and waits for a fresh offline sample after stop. The final Open request remains authoritative when the first renderer snapshot is stale. Success opens the workspace and closes the panel. Failure preserves the exact user-facing reason in that panel and exposes the next reason-specific action: Retry check, Prepare environment, Upgrade runtime, or Request access. Snapshot refresh and lower-level operation progress cannot prematurely replace or complete this session.\n\nThe renderer guidance state is presentation only. One main-process decision contract owns every Local, SSH host, Local container, and SSH container Open or lifecycle request: `probe -\u003e decide -\u003e lifecycle -\u003e re-probe -\u003e open`. The decision uses the latest observed health and advertised operations; it treats a running Runtime as idempotently started, treats an unknown result as a probe/recovery decision rather than an instruction to initialize, and chooses Update when that is the only safe convergence operation. After any recovery attempt, Desktop probes the exact same target again before creating a session. This prevents a stale card snapshot and a renderer retry flow from becoming a second lifecycle state machine.\n\nEvery failed Open or Runtime action retains a structured summary and executable next actions in the operation snapshot: `Retry`, `Refresh status`, `Copy log`, and `Dismiss`. Container failures name the actual boundary (missing container, unavailable engine, SSH failure, or invalid Runtime response) and retain the exact host, container id, reference, and placement in the retry request. A failure cannot collapse to a toast or a disabled Open button without a recovery path.\n\nProgress snapshots keep the last real execution step until the operation is dismissed. Open progress describes only its ordered connection stages; operation `status` carries success, failure, or cancellation, so a failed Open marks the step that actually failed instead of replacing it with a generic `failed` stage. Runtime lifecycle progress uses the same rule with its terminal failed step. The operation registry recomputes localized title and detail keys whenever status or stage changes, preventing stale step copy from hiding a terminal failure.",
-          "char_count": 9993
+          "body": "## Local Environment\n\nEvery Desktop installation includes a managed Local Environment. Desktop uses two explicit paths consistently:\n\n- outer Desktop `stateRoot` for Runtime `--state-root`, startup report, process lock, control socket, and status lookup;\n- nested Local Environment `runtimeRoot` for managed files and process inventory.\n\nStart, Auto Start, Open, Stop, Restart, Update, Refresh, and Reinstall use that same pair and the same lifecycle coordinator. Desktop does not append `local-environment` twice or infer one path from the other during attach. A new process that has published listeners but not yet published final status remains in the bounded startup wait. Failure is reported only when the process exits, the state path is inaccessible, the service reports failure, or the readiness deadline expires with the original logs retained.\n\nPackaged Desktop validates the Runtime-only bundle manifest, version, commit, platform, architecture, file inventory, executable permissions, sizes, and digests before modifying the Local installation. Missing or mismatched managed files trigger the direct Runtime repair path. Desktop update handoff tells the user that installation restarts Desktop and the Local Runtime and interrupts Local sessions; choosing Later changes nothing.\n\n## Managed remote readiness\n\nSSH-host, local-container, and SSH-container readiness is observed through the saved direct channel. Open uses one main-process flow:\n\n```text\nprobe -\u003e decide -\u003e lifecycle when needed -\u003e re-probe same target -\u003e open\n```\n\nA healthy Runtime opens directly. A stopped Runtime offers Start and Open. An incompatible Runtime offers Update and Open. Unknown or failed health offers Refresh with the real direct-channel diagnostic. A successful lifecycle step cannot complete Open until the same target produces a fresh compatible readiness observation.\n\nRuntime process health, Runtime Service compatibility, Local UI availability, Workspace readiness, AI readiness, Provider link, and Gateway access are separate facts. AI or Provider failure does not make a healthy Runtime installation unavailable. Gateway failure affects only sessions routed through that Gateway.\n\n## Capability and progress\n\nLocal and registered SSH/container targets are direct managed Environments and retain all direct lifecycle actions in every diagnosis state. Gateway, Provider, and URL entries without a direct management registration are access-only and expose no Runtime lifecycle action.\n\nOne Launcher Operation owns Open and any nested direct Runtime recovery. Runtime recovery temporarily selects the Runtime lifecycle progress surface, then returns to Open without completing or deleting the parent operation. Renderer binds the exact operation key and start identity; it does not select an older operation, infer progress from card state, or synthesize long-lived steps.\n\nAll operation labels, details, errors, recovery actions, tooltips, and accessibility text use structured keys and localized catalogs. Raw command stderr remains literal only inside technical diagnostics.",
+          "char_count": 3077
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Environment open guidance does not display Gateway, Desktop ownership, target binding, takeover, or lifecycle-controller terminology. Provider setup never borrows another card's credentials or a public URL control path; authorization and target selection remain enforced behind the product action.",
-          "char_count": 297
+          "body": "Read-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.",
+          "char_count": 326
         }
       ],
       "evidence": [
         {
-          "id": "redeven:desktop/src/shared/desktopRuntimeOperationPlanner.ts:1:shared support/authorization/readiness projection and preflight.",
-          "source": "redeven:desktop/src/shared/desktopRuntimeOperationPlanner.ts",
-          "line": 1,
-          "description": "Shared support/authorization/readiness projection and preflight."
-        },
-        {
-          "id": "redeven:desktop/src/main/desktopBundle.ts:1:startup-time packaged service validation and fail-closed diagnostics.",
+          "id": "redeven:desktop/src/main/desktopBundle.ts:1:runtime-only bundle identity and file validation.",
           "source": "redeven:desktop/src/main/desktopBundle.ts",
           "line": 1,
-          "description": "Startup-time packaged service validation and fail-closed diagnostics."
+          "description": "Runtime-only bundle identity and file validation."
         },
         {
-          "id": "redeven:desktop/src/main/main.ts:10183:automatic local gateway, runtime, bridge, and workspace readiness sequence with phase timing.",
-          "source": "redeven:desktop/src/main/main.ts",
-          "line": 10183,
-          "description": "Automatic Local Gateway, Runtime, bridge, and Workspace readiness sequence with phase timing."
-        },
-        {
-          "id": "redeven:desktop/src/shared/desktopRuntimeHealth.ts:1:typed health observation independent from lifecycle commands.",
-          "source": "redeven:desktop/src/shared/desktopRuntimeHealth.ts",
-          "line": 1,
-          "description": "Typed health observation independent from lifecycle commands."
-        },
-        {
-          "id": "redeven:desktop/src/main/runtimePlacementBridgeSession.ts:337:one exact bridge session identity for ssh and container access.",
-          "source": "redeven:desktop/src/main/runtimePlacementBridgeSession.ts",
-          "line": 337,
-          "description": "One exact bridge session identity for SSH and container access."
-        },
-        {
-          "id": "redeven:desktop/src/main/runtimeLifecycleReadiness.ts:1:fresh online/openable and offline completion barriers.",
-          "source": "redeven:desktop/src/main/runtimeLifecycleReadiness.ts",
-          "line": 1,
-          "description": "Fresh online/openable and offline completion barriers."
-        },
-        {
-          "id": "redeven:desktop/src/main/statePaths.ts:1:stable cross-process unix control-socket fallback.",
-          "source": "redeven:desktop/src/main/statePaths.ts",
-          "line": 1,
-          "description": "Stable cross-process Unix control-socket fallback."
-        },
-        {
-          "id": "redeven:desktop/src/main/desktopWelcomeRuntimeState.ts:1:local status hydration receives the authoritative outer desktop state root instead of the nested runtime root.",
+          "id": "redeven:desktop/src/main/desktopWelcomeRuntimeState.ts:1:local readiness hydration with explicit state and runtime roots.",
           "source": "redeven:desktop/src/main/desktopWelcomeRuntimeState.ts",
           "line": 1,
-          "description": "Local status hydration receives the authoritative outer Desktop state root instead of the nested Runtime root."
+          "description": "Local readiness hydration with explicit state and Runtime roots."
         },
         {
-          "id": "redeven:desktop/src/main/runtimeProcess.ts:336:local inventory accepts distinct runtime and state roots while status uses the outer state root.",
+          "id": "redeven:desktop/src/main/runtimeProcess.ts:1:local inventory and status lookup path contract.",
           "source": "redeven:desktop/src/main/runtimeProcess.ts",
-          "line": 336,
-          "description": "Local inventory accepts distinct Runtime and state roots while status uses the outer state root."
-        },
-        {
-          "id": "redeven:desktop/src/welcome/viewModel.ts:1239:direct, preflight, initialize, start, and request-access open-flow decision.",
-          "source": "redeven:desktop/src/welcome/viewModel.ts",
-          "line": 1239,
-          "description": "Direct, preflight, initialize, start, and request-access open-flow decision."
-        },
-        {
-          "id": "redeven:desktop/src/welcome/environmentOpenPreflight.ts:1:unknown-state open preflight, runtime reconciliation, and refreshed lifecycle routing.",
-          "source": "redeven:desktop/src/welcome/environmentOpenPreflight.ts",
           "line": 1,
-          "description": "Unknown-state Open preflight, Runtime reconciliation, and refreshed lifecycle routing."
+          "description": "Local inventory and status lookup path contract."
         },
         {
-          "id": "redeven:desktop/src/welcome/environmentOpenPreflight.smoke.test.ts:1:open, initialize, start, and authorization smoke outcomes.",
-          "source": "redeven:desktop/src/welcome/environmentOpenPreflight.smoke.test.ts",
+          "id": "redeven:desktop/src/main/runtimeLifecycleReadiness.ts:1:bounded healthy and stopped completion barriers.",
+          "source": "redeven:desktop/src/main/runtimeLifecycleReadiness.ts",
           "line": 1,
-          "description": "Open, initialize, start, and authorization smoke outcomes."
+          "description": "Bounded healthy and stopped completion barriers."
         },
         {
-          "id": "redeven:desktop/src/welcome/environmentGuidanceSession.ts:1:panel ownership, ordered stages, typed recovery actions, failure retention, and retry state.",
-          "source": "redeven:desktop/src/welcome/environmentGuidanceSession.ts",
-          "line": 1,
-          "description": "Panel ownership, ordered stages, typed recovery actions, failure retention, and retry state."
-        },
-        {
-          "id": "redeven:desktop/src/main/launcherOperations.ts:1:durable operation snapshots retain real open stages and derive status-aware presentation keys.",
-          "source": "redeven:desktop/src/main/launcherOperations.ts",
-          "line": 1,
-          "description": "Durable operation snapshots retain real Open stages and derive status-aware presentation keys."
-        },
-        {
-          "id": "redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:59:maps typed open failures to runtime update-and-open, desktop update handoff, or refresh-status primary recovery actions.",
-          "source": "redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts",
-          "line": 59,
-          "description": "Maps typed Open failures to Runtime update-and-open, Desktop update handoff, or refresh-status primary recovery actions."
-        },
-        {
-          "id": "redeven:desktop/src/main/desktopUpdateHandoff.ts:1:builds the localized native update handoff warning for the desktop and local runtime restart impact.",
-          "source": "redeven:desktop/src/main/desktopUpdateHandoff.ts",
-          "line": 1,
-          "description": "Builds the localized native update handoff warning for the Desktop and Local Runtime restart impact."
-        },
-        {
-          "id": "redeven:desktop/src/welcome/App.tsx:5104:one localized initialize/start/open orchestrator.",
-          "source": "redeven:desktop/src/welcome/App.tsx",
-          "line": 5104,
-          "description": "One localized initialize/start/open orchestrator."
-        },
-        {
-          "id": "redeven:desktop/src/welcome/App.tsx:10290:runs update-and-open continuation through the shared open preflight.",
-          "source": "redeven:desktop/src/welcome/App.tsx",
-          "line": 10290,
-          "description": "Runs update-and-open continuation through the shared open preflight."
-        },
-        {
-          "id": "redeven:desktop/src/main/environmentOpenCoordinator.ts:1:single target-scoped open and lifecycle decision contract.",
+          "id": "redeven:desktop/src/main/environmentOpenCoordinator.ts:1:one probe/decide/lifecycle/re-probe/open flow.",
           "source": "redeven:desktop/src/main/environmentOpenCoordinator.ts",
           "line": 1,
-          "description": "Single target-scoped Open and lifecycle decision contract."
+          "description": "One probe/decide/lifecycle/re-probe/open flow."
         },
         {
-          "id": "redeven:desktop/src/main/runtimeOperationLease.ts:1:bounded runtime operation renewal across confirmation, artifact, and commit-ready phases.",
-          "source": "redeven:desktop/src/main/runtimeOperationLease.ts",
+          "id": "redeven:desktop/src/main/launcherOperations.ts:1:authoritative progress surface and terminal state.",
+          "source": "redeven:desktop/src/main/launcherOperations.ts",
           "line": 1,
-          "description": "Bounded Runtime operation renewal across confirmation, artifact, and commit-ready phases."
+          "description": "Authoritative progress surface and terminal state."
         },
         {
-          "id": "redeven:internal/runtimegateway/supervisor/controller.go:385:repair-only snapshot and lifecycle fencing for an externally changed managed runtime.",
-          "source": "redeven:internal/runtimegateway/supervisor/controller.go",
-          "line": 385,
-          "description": "Repair-only Snapshot and lifecycle fencing for an externally changed managed Runtime."
-        },
-        {
-          "id": "redeven:internal/gatewayservice/server.go:262:keeps gateway lifecycle service available for authorized runtime identity repair.",
-          "source": "redeven:internal/gatewayservice/server.go",
-          "line": 262,
-          "description": "Keeps Gateway lifecycle service available for authorized Runtime identity repair."
-        },
-        {
-          "id": "redeven:desktop/src/main/environmentOpenCoordinator.test.ts:1:unknown, stale, stopped, old, and idempotent runtime decisions.",
-          "source": "redeven:desktop/src/main/environmentOpenCoordinator.test.ts",
+          "id": "redeven:desktop/src/shared/environmentManagementPrinciples.ts:1:direct managed versus access-only capability boundary.",
+          "source": "redeven:desktop/src/shared/environmentManagementPrinciples.ts",
           "line": 1,
-          "description": "Unknown, stale, stopped, old, and idempotent Runtime decisions."
+          "description": "Direct managed versus access-only capability boundary."
         },
         {
-          "id": "redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1:real local and ssh remote outcomes plus local/ssh container failure guidance.",
-          "source": "redeven:scripts/smoke_desktop_runtime_lifecycle.mjs",
+          "id": "redeven:desktop/src/welcome/App.tsx:1:localized action menu, progress, and recovery presentation.",
+          "source": "redeven:desktop/src/welcome/App.tsx",
           "line": 1,
-          "description": "Real Local and SSH Remote outcomes plus Local/SSH container failure guidance."
+          "description": "Localized action menu, progress, and recovery presentation."
         }
       ],
-      "snippet": "Desktop keeps Connect, Workspace, Runtime UI, and managed lifecycle readiness independent. Packaged Desktop startup validates and starts the bundled Gateway, Runtime, bridge, and Workspace readiness path before the Local Environment is pres",
+      "snippet": "Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible servi",
       "backlinks": [
         {
           "label": "Desktop runtime bridge",
@@ -6444,89 +6189,83 @@
       "concept_id": "desktop.desktop-ssh-runtime-operations",
       "type": "Desktop Contract",
       "title": "Desktop SSH runtime operations",
-      "description": "SSH transport isolation and direct Desktop Runtime lifecycle execution.",
+      "description": "Direct SSH and SSH-container Runtime lifecycle execution owned by Desktop.",
       "tags": [
         "desktop",
         "process",
         "runtime",
         "ssh"
       ],
-      "timestamp": "2026-08-20T00:00:00Z",
+      "timestamp": "2026-08-24T00:00:00Z",
       "frontmatter": {
-        "description": "SSH transport isolation and direct Desktop Runtime lifecycle execution.",
+        "description": "Direct SSH and SSH-container Runtime lifecycle execution owned by Desktop.",
         "tags": [
           "desktop",
           "process",
           "runtime",
           "ssh"
         ],
-        "timestamp": "2026-08-20T00:00:00Z",
+        "timestamp": "2026-08-24T00:00:00Z",
         "title": "Desktop SSH runtime operations",
         "type": "Desktop Contract"
       },
-      "body_length": 5384,
-      "summary": "Desktop shares one lazy, credential-scoped SSH transport manager and executes SSH-host and SSH-container Runtime lifecycle actions through the same direct Desktop coordinator as Local targets. Actions remain recoverable when the Runtime is stopped, stale, unreachable, partially installed, or represented by residual processes. Cached probes are observations only; each click authoritatively acts on the exact saved target. SSH establishment uses the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound, with no second fixed timeout. Transport generations fence retries, and hostnames, container labels, or Desktop card ids never substitute for target identity. The direct coordinator is the only Desktop lifecycle owner; the target stores no Desktop lock, PID lease, daemon, or second state machine.",
+      "body_length": 4049,
+      "summary": "Desktop manages an SSH-host or SSH-container Runtime only through the exact saved SSH connection and placement. The same process-local lifecycle coordinator, Launcher Operation, transport lease, platform observation, and temporary helper session serve Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall. Gateway and Provider credentials are never substituted for SSH authority, and the target stores no Desktop lifecycle lock or supervisor state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Transport and setup\n\nThe SSH manager keys leases by normalized destination, port, auth mode, SSH binary, and credential scope. A master exit invalidates the pinned generation; the current command returns an interruption and does not silently acquire a replacement or choose another transport. An established bridge may later recover only after exact session identity checks.\n\nSSH discovery follows bounded `Include` rules, excludes wildcard/negated hosts from selectable aliases, and keeps manually entered destinations possible. SSH host, local-container, and SSH-container setup uses an explicit target and supervisor enrollment path. Provider never reads these credentials implicitly.\n\n## Direct lifecycle execution\n\nDesktop creates one Launcher Operation before opening the SSH channel. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall reuse that operation owner and publish the same typed lifecycle timeline. If ordinary start or restart is unavailable because the installed Runtime is old, unknown, or damaged, Desktop runs the direct recovery operation and preserves the requested user-facing outcome. Stop remains available as an idempotent cleanup action, including for residual Runtime processes. A confirmed update requested by Open resumes the readiness check and opens only after Runtime health succeeds.\n\nSSH-container execution follows the same order inside the selected exact container: inspect the saved container id or stable reference, start that container first for Start, Restart, Update, or initialization when it is stopped, re-inspect it, then inspect exact process identities, stop verified residuals for restart or update, repair or install the package when required, start one Runtime, and verify one new current process before Open. Stop never starts a stopped container and completes idempotently once the saved container is positively identified as stopped. Start never replaces a live process implicitly. An identity that cannot be tied to the selected user, namespace, state root, and executable remains fail-closed rather than signaling an unrelated process.\n\nLocal containers follow the same exact-identity rules through the local engine executor. Local host, SSH host, Local container, and SSH container all share the same main-process Open/lifecycle decision order: probe, choose one recovery operation, execute it, re-probe the same target, then open. Unknown health is not treated as initialization, and a running Runtime makes Start a no-op. If only update is advertised, Update is the convergence operation for Start, Restart, and Open recovery.\n\nDesktop reports typed phases, per-step elapsed time, and actionable terminal failures, and can attach after disconnect without creating a second SSH lifecycle state machine. A slow phase remains visible with its current step and elapsed time, and cancellation, SSH interruption, or process exit closes the operation with retry/diagnostic guidance. An old or incompatible Runtime is classified as an update requirement and exposes Update Runtime before Open. Artifact preparation or upload failure cancels a still-precommit operation; the next user attempt starts a fresh direct operation.",
-          "char_count": 3197
+          "body": "## Transport\n\nThe SSH transport manager keys a connection by normalized destination, port, authentication mode, SSH binary, and credential scope. A transport failure ends the current command with its original SSH diagnostics; Desktop does not silently select another connection, Gateway, public URL, or Provider route.\n\nSSH discovery follows bounded configuration includes, excludes wildcard and negated aliases from selectable entries, and still allows explicit destinations. The Environment registration keeps the display name separate from SSH destination and supplies the exact Runtime root and, for containers, engine and container id.\n\nOne lifecycle operation opens or reuses one SSH transport, probes platform once, prepares a lightweight helper only when required, and reuses that session for inventory and stop. Start and Stop do not prepare a full Runtime package. Update prepares the Runtime package independently, verifies it before target modification, and exposes build/download/upload phases separately from process discovery.\n\n## Host and container behavior\n\nSSH-host actions execute against the confirmed remote user and Runtime root. SSH-container actions additionally inspect the saved exact container. Start, Restart, Update, or Reinstall may start that saved container when required; Stop never starts a stopped container and succeeds idempotently when the Runtime inventory is already empty.\n\nInventory identifies processes by exact Runtime scope and returns typed before/after state. Desktop signals only verified matching processes for ordinary Stop/Restart/Update. Wipe reinstall treats helper inventory and stop as best effort and proceeds to exact-root isolation when SSH and filesystem access remain available.\n\nThe remote command snippets each perform one bounded action: probe, stage helper, inventory, stop, install, start, verify, isolate, or cleanup. They do not implement a lifecycle state machine, persist a lock, maintain a heartbeat, or wait on Provider/Gateway authorization. Desktop owns sequence, timeouts, cancellation, progress, and retry.\n\n## User-facing result\n\nThe Launcher Operation exists before the first SSH command and reports the actual active phase. SSH connection failure, missing container, unavailable engine, package preparation failure, command exit, and Runtime readiness failure remain distinct structured errors with technical stderr available in details.\n\nAn SSH or SSH-container registration always retains its direct lifecycle menu. A Gateway-only or Provider-only Environment has no SSH authority and therefore cannot borrow this execution path.",
+          "char_count": 2609
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "SSH and container inventory is observational until a lifecycle action executes. Desktop may start only the exact saved container needed for Runtime recovery; it never creates or selects an unrelated container. Engine absence, permission failure, missing container, or SSH failure is reported as the real boundary after the action is attempted. URL access has no Runtime control fallback, and an unavailable Gateway does not disable existing Connect or Workspace sessions.",
-          "char_count": 471
+          "body": "Desktop never scans unrelated processes, selects a similarly named container, deletes a home directory, or performs global container cleanup. Multiple Desktop processes controlling one SSH target are unsupported and do not justify a target-side coordination protocol.",
+          "char_count": 267
         }
       ],
       "evidence": [
         {
-          "id": "redeven:desktop/src/main/sshTransportManager.ts:1:credential-scoped ssh lease and generation fencing.",
+          "id": "redeven:desktop/src/main/sshTransportManager.ts:1:credential-scoped ssh transport reuse and cancellation.",
           "source": "redeven:desktop/src/main/sshTransportManager.ts",
           "line": 1,
-          "description": "Credential-scoped SSH lease and generation fencing."
+          "description": "Credential-scoped SSH transport reuse and cancellation."
         },
         {
-          "id": "redeven:desktop/src/main/sshRuntime.ts:1:ssh target setup and gateway lifecycle adapter.",
+          "id": "redeven:desktop/src/main/sshRuntime.ts:1:direct ssh runtime package, helper, process, start, and verification operations.",
           "source": "redeven:desktop/src/main/sshRuntime.ts",
           "line": 1,
-          "description": "SSH target setup and Gateway lifecycle adapter."
+          "description": "Direct SSH Runtime package, helper, process, start, and verification operations."
         },
         {
-          "id": "redeven:desktop/src/main/containerRuntime.ts:230:exact container inspect/start commands and lifecycle recovery verification.",
+          "id": "redeven:desktop/src/main/containerRuntime.ts:1:exact ssh-container command construction.",
           "source": "redeven:desktop/src/main/containerRuntime.ts",
-          "line": 230,
-          "description": "Exact container inspect/start commands and lifecycle recovery verification."
+          "line": 1,
+          "description": "Exact SSH-container command construction."
         },
         {
-          "id": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1:one in-process owner for direct lifecycle actions.",
+          "id": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1:one current-desktop owner per physical target.",
           "source": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts",
           "line": 1,
-          "description": "One in-process owner for direct lifecycle actions."
+          "description": "One current-Desktop owner per physical target."
         },
         {
-          "id": "redeven:desktop/src/main/reinstallTargetCoordinator.ts:1:direct-channel final recovery without a target-side lock.",
+          "id": "redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1:explicit intent-specific progress phases.",
+          "source": "redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts",
+          "line": 1,
+          "description": "Explicit intent-specific progress phases."
+        },
+        {
+          "id": "redeven:desktop/src/main/reinstallTargetCoordinator.ts:1:ssh and container final-recovery path.",
           "source": "redeven:desktop/src/main/reinstallTargetCoordinator.ts",
           "line": 1,
-          "description": "Direct-channel final recovery without a target-side lock."
-        },
-        {
-          "id": "redeven:desktop/src/main/environmentOpenCoordinator.ts:1:unified open/lifecycle recovery decision.",
-          "source": "redeven:desktop/src/main/environmentOpenCoordinator.ts",
-          "line": 1,
-          "description": "Unified Open/lifecycle recovery decision."
-        },
-        {
-          "id": "redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1:ssh-container and local-container failure guidance smoke.",
-          "source": "redeven:scripts/smoke_desktop_runtime_lifecycle.mjs",
-          "line": 1,
-          "description": "SSH-container and Local-container failure guidance smoke."
+          "description": "SSH and container final-recovery path."
         }
       ],
-      "snippet": "Desktop shares one lazy, credential-scoped SSH transport manager and executes SSH-host and SSH-container Runtime lifecycle actions through the same direct Desktop coordinator as Local targets. Actions remain recoverable when the Runtime is ",
+      "snippet": "Desktop manages an SSH-host or SSH-container Runtime only through the exact saved SSH connection and placement. The same process-local lifecycle coordinator, Launcher Operation, transport lease, platform observation, and temporary helper se",
       "backlinks": [
         {
           "label": "Desktop runtime bridge",
@@ -6672,94 +6411,83 @@
       "concept_id": "gateway.gateway-service",
       "type": "Gateway Contract",
       "title": "Gateway service",
-      "description": "Standalone Gateway supervisor, target binding, operation recovery, and Desktop transport integration.",
+      "description": "Standalone optional Gateway identity, catalog, session, and access forwarding service.",
       "tags": [
+        "access",
         "desktop",
         "gateway",
-        "release",
-        "runtime"
+        "release"
       ],
-      "timestamp": "2026-08-17T00:00:00Z",
+      "timestamp": "2026-08-24T00:00:00Z",
       "frontmatter": {
-        "description": "Standalone Gateway supervisor, target binding, operation recovery, and Desktop transport integration.",
+        "description": "Standalone optional Gateway identity, catalog, session, and access forwarding service.",
         "tags": [
+          "access",
           "desktop",
           "gateway",
-          "release",
-          "runtime"
+          "release"
         ],
-        "timestamp": "2026-08-17T00:00:00Z",
+        "timestamp": "2026-08-24T00:00:00Z",
         "title": "Gateway service",
         "type": "Gateway Contract"
       },
-      "body_length": 8409,
-      "summary": "`redeven-gateway` is an independent process and component version. In `standalone` mode it is an access and catalog endpoint only: it owns Gateway identity and trust, does not create Runtime binding or state, and exposes no Runtime lifecycle API. A Managed Environment may have an internal Gateway supervisor, but that supervisor is not a Gateway record and is never projected into Desktop's Gateway page. Direct Desktop host or container channels own destructive Environment reinstall.\n\nThe service uses one state-root lock so two Gateway supervisors cannot control the same target concurrently. Its status record is accepted only when the PID still has the recorded executable and process start time; a stale or reused PID is treated as not running.",
+      "body_length": 3356,
+      "summary": "`redeven-gateway` is an optional standalone access forwarder. It owns Gateway identity, pairing, trust, Environment profiles, catalog responses, open-session artifacts, and request forwarding. It never owns, starts, stops, updates, reinstalls, or observes Runtime lifecycle state. Gateway failure can interrupt access through that Gateway, but it cannot block Desktop from managing a Runtime through an authorized Local, SSH, or container channel.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Supervisor and compatibility\n\n`redeven-gateway --mode standalone` rejects Runtime-root and precompiled-Runtime options and starts without a Runtime binding store, lifecycle controller, or Runtime heartbeat. Its Runtime-management capability is `unsupported`; Gateway-backed Environments are opened only through their explicit access endpoint. Managed Environment supervisor mode remains an internal implementation detail and does not create a Desktop Gateway pairing requirement.\n\nGateway persists its supervisor identity, installation marker, target id/generation, binding, operation store, checkpoint, and quarantine state. Registration rejects an installation-root alias that names another target. Gateway and Runtime versions need not match; a signed compatibility manifest, stable Gateway protocol, Runtime service protocol/epoch, capabilities, and artifact digest decide compatibility. Gateway-first setup is performed by Desktop installer or an administrator and has no self-update state machine.\n\nFor a Provider binding, the Gateway process itself maintains the signed RCPP v3 supervisor poll/respond transport and dispatches accepted lifecycle frames directly to the Gateway-owned operation service. This transport remains available while Runtime and its Agent are stopped. An offline heartbeat may reuse persisted Runtime compatibility facts only when exact process inventory is empty and the managed executable digest still matches those facts; external byte replacement stops readiness projection. There is no Runtime control RPC, local management socket, or self-RPC fallback for Provider lifecycle. A transport disconnect does not cancel an already authorized durable operation; reconnect resumes polling and authorized clients attach to Gateway state.\n\nWhen a Desktop-managed Runtime is running but exposes an older service protocol or compatibility epoch, the Gateway exposes stop, restart, and update recovery. Start or restart clients may converge through update when the old Runtime cannot execute the original operation. Gateway first verifies the status identity, state root, managed executable, PID, and automatically stoppable process. The confirmation shows the observed process and workload summary; Gateway rechecks that snapshot before stopping the exact verified process. After a successful update, the new Runtime is health-checked before Open continues. A current or future epoch is never treated as legacy and remains unavailable until its contract can be validated.\n\nStart is an idempotent observation or launch operation and does not require workload confirmation. When a managed process appears while Service status is delayed, Gateway waits briefly for the status to become available and verifies that exact Runtime instead of launching a duplicate or replacing it. Workload confirmation remains limited to stop, restart, and update operations that can interrupt or replace active work.\n\nWhen Runtime control is unreachable, Gateway derives capability and the lifecycle fence from one process inventory. Missing, unknown, externally replaced, or incompatible installations still expose idempotent stop and update repair; a positively identified residual process is stopped before restart or update. If the process cannot be tied to the bound user, namespace, state root, and executable, automatic signaling remains unavailable because SSH reachability is not process ownership evidence.\n\n## Lifecycle\n\n`prepare` validates its action-scoped permit and client key before build, upload, staging, stop, or lock acquisition. One target mutation lock serializes prepare with enrollment; a same-target rebind advances generation from `n` to `n+1` and is rejected while an active operation or quarantine exists. One target lock protects each durable operation. Checkpoints survive Gateway restart; pre-commit deadlines expire safely, while committing/recovering/quarantined operations do not silently expire. Atomic replacement, health verification, rollback, and persistent manual recovery are one Gateway state machine. Reconcile requires a separate binding-admin permit with no artifact or build scope; Gateway persists its one-time consumption before recovery, and response-loss retry can only return the same terminal result.\n\nPublished artifacts carry distinct archive and executable digests. Gateway verifies the archive before extraction, verifies the final executable bytes in staging before activation, and compares the running Runtime identity with that executable digest after start. The complete recovery plan, previous-installation identity, verified staging root, and exact candidate process identity are durably persisted and parent-directory synced before shutdown. Recovery first terminates only the recorded candidate process, then advances idempotent phases to restore and verify the previous installation; an unverifiable result remains `manual_recovery_required` instead of unlocking or accepting mixed state.\n\nOperation identifiers are canonical bounded tokens and staging paths are derived from their digest, so request data cannot select an arbitrary filesystem path. Failed extraction, cancellation, expiry, interrupted staging, and commit rejection before the checkpoint boundary remove the durable artifact directory and release the lifecycle fence and target lock. Failures after installation changes retain checkpoint recovery instead.\n\nAuthorized managers list active operations by exact environment, target, and generation. The original authorized client receives the mutation fields it needs to resume confirmation, artifact upload, or commit. Another current manager receives only a redacted observation DTO and can attach to progress without inheriting mutation authority. A binding administrator can reconcile a quarantined operation with a new exact permit; historical Desktop client identity is not required for that separate action.\n\n## Access boundary\n\nCatalog and explicit open-session continue to provide Gateway-card access. Terminal, files, web, and workspace data do not pass through the lifecycle operation store. Gateway is not a container/Provider Environment lifecycle manager, and Runtime continues to start and serve ordinary access without a Gateway process.",
-          "char_count": 6240
+          "body": "## Standalone service\n\nThe Gateway CLI starts only the Gateway server. Its `service-start`, `service-status`, and `service-stop` commands manage the Gateway process and state root; they accept no Runtime root, Runtime artifact, activation, binding, or enrollment input. Gateway startup does not create, inspect, or start a Runtime.\n\nThe service persists only access-plane state: Gateway identity, paired clients, trust bindings, Environment profiles, catalog metadata, and session material. Runtime operations, target locks, checkpoints, quarantine, artifact staging, rollback, supervisor heartbeat, and Provider management transport are not Gateway state.\n\nGateway access remains useful without Desktop lifecycle management. An explicit Gateway profile can publish a catalog and issue an open-session artifact for a configured access endpoint. HTTP, WebSocket, and streaming traffic is forwarded according to that access contract; the Gateway does not translate access requests into process commands.\n\n## Packaging\n\nGateway is built and published as the independent `redeven-gateway_\u003cos\u003e_\u003carch\u003e.tar.gz` archive. The Desktop Runtime bundle and Runtime archive must not contain `redeven-gateway`, and normal Local, SSH, or container Runtime installation must not create a Gateway managed directory. Desktop may install or update a standalone Gateway only through an explicit Gateway workflow, with its binary stored under the Gateway state root rather than a Runtime root.\n\n## Retired state\n\nRemoving Runtime lifecycle authority must not delete pairing, trust, profiles, catalog configuration, or access sessions. Retired lifecycle stores and staging directories have no production reader and are not consulted before serving access or before a Desktop direct Runtime operation. Cleanup is limited to known Gateway-owned lifecycle artifacts and never reaches a Runtime root or user workspace.",
+          "char_count": 1891
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Gateway owns only Redeven-managed Runtime lifecycle state for its registered target and generation. Ordinary session access, terminal, files, web, workspace traffic, Runtime service execution, and Provider or container environment lifecycle remain outside that operation store. Desktop and Provider transports may authorize or observe Gateway operations, but they cannot bypass its target lock, permits, checkpoints, or recovery state.",
-          "char_count": 435
+          "body": "Desktop owns Runtime lifecycle only for targets with an authorized direct management channel. Provider owns discovery and access authorization. Runtime owns business execution. Gateway owns only its process and the access plane described above. A Gateway-only Environment is access-only and exposes no Runtime lifecycle action.",
+          "char_count": 327
         }
       ],
       "evidence": [
         {
-          "id": "redeven:cmd/redeven-gateway/main.go:1:independent gateway cli and persistent service identity.",
+          "id": "redeven:cmd/redeven-gateway/main.go:1:standalone gateway cli and gateway-only service commands.",
           "source": "redeven:cmd/redeven-gateway/main.go",
           "line": 1,
-          "description": "Independent Gateway CLI and persistent service identity."
+          "description": "Standalone Gateway CLI and Gateway-only service commands."
         },
         {
-          "id": "redeven:internal/gatewayservice/server.go:188:signed request and operation endpoint validation.",
+          "id": "redeven:internal/gatewayservice/server.go:1:pairing, catalog, profile, open-session, and access forwarding routes.",
           "source": "redeven:internal/gatewayservice/server.go",
-          "line": 188,
-          "description": "Signed request and operation endpoint validation."
-        },
-        {
-          "id": "redeven:internal/runtimegateway/supervisor/:0:target lock, durable operation, checkpoint, deadline, and recovery implementation.",
-          "source": "redeven:internal/runtimegateway/supervisor/",
-          "description": "Target lock, durable operation, checkpoint, deadline, and recovery implementation."
-        },
-        {
-          "id": "redeven:internal/runtimegateway/supervisor/provider.go:1:gateway-owned provider heartbeat and signed reverse management transport.",
-          "source": "redeven:internal/runtimegateway/supervisor/provider.go",
           "line": 1,
-          "description": "Gateway-owned Provider heartbeat and signed reverse management transport."
+          "description": "Pairing, catalog, profile, open-session, and access forwarding routes."
         },
         {
-          "id": "redeven:internal/gatewayservice/provider_tunnel.go:1:direct dispatch into the single gateway operation authority.",
-          "source": "redeven:internal/gatewayservice/provider_tunnel.go",
+          "id": "redeven:internal/gatewayservice/server_test.go:1:verifies runtime lifecycle routes and state are absent.",
+          "source": "redeven:internal/gatewayservice/server_test.go",
           "line": 1,
-          "description": "Direct dispatch into the single Gateway operation authority."
+          "description": "Verifies Runtime lifecycle routes and state are absent."
         },
         {
-          "id": "redeven:internal/runtimegateway/lifecycle/store.go:390:exact active-operation listing, observer redaction, and binding-admin reconciliation.",
-          "source": "redeven:internal/runtimegateway/lifecycle/store.go",
-          "line": 390,
-          "description": "Exact active-operation listing, observer redaction, and binding-admin reconciliation."
-        },
-        {
-          "id": "redeven:spec/openapi/gateway-v2.yaml:1:gateway v2 machine contract.",
+          "id": "redeven:spec/openapi/gateway-v2.yaml:1:access-only gateway http contract.",
           "source": "redeven:spec/openapi/gateway-v2.yaml",
           "line": 1,
-          "description": "Gateway v2 machine contract."
+          "description": "Access-only Gateway HTTP contract."
         },
         {
-          "id": "redeven:desktop/src/main/gatewayLifecycleManager.ts:1:desktop installer/setup and service readiness adapter.",
-          "source": "redeven:desktop/src/main/gatewayLifecycleManager.ts",
+          "id": "redeven:desktop/src/main/gatewayServiceHost.ts:1:explicit standalone gateway installation under the gateway state root.",
+          "source": "redeven:desktop/src/main/gatewayServiceHost.ts",
           "line": 1,
-          "description": "Desktop installer/setup and service readiness adapter."
+          "description": "Explicit standalone Gateway installation under the Gateway state root."
+        },
+        {
+          "id": "redeven:.github/workflows/release.yml:1:independent gateway archive build and publication.",
+          "source": "redeven:.github/workflows/release.yml",
+          "line": 1,
+          "description": "Independent Gateway archive build and publication."
         }
       ],
-      "snippet": "`redeven-gateway` is an independent process and component version. In `standalone` mode it is an access and catalog endpoint only: it owns Gateway identity and trust, does not create Runtime binding or state, and exposes no Runtime lifecycl",
+      "snippet": "`redeven-gateway` is an optional standalone access forwarder. It owns Gateway identity, pairing, trust, Environment profiles, catalog responses, open-session artifacts, and request forwarding. It never owns, starts, stops, updates, reinstal",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -6773,83 +6501,79 @@
       "concept_id": "protocol.gateway-v1-protocol",
       "type": "Protocol Contract",
       "title": "Gateway v2 protocol",
-      "description": "OpenAPI and signed HTTP JSON contract for Gateway access and Runtime lifecycle operations.",
+      "description": "Signed Gateway HTTP JSON contract for pairing, catalog, open-session, and access forwarding.",
       "tags": [
+        "access",
         "desktop",
         "gateway",
         "openapi",
-        "protocol",
-        "runtime"
+        "protocol"
       ],
-      "timestamp": "2026-08-17T00:00:00Z",
+      "timestamp": "2026-08-24T00:00:00Z",
       "frontmatter": {
-        "description": "OpenAPI and signed HTTP JSON contract for Gateway access and Runtime lifecycle operations.",
+        "description": "Signed Gateway HTTP JSON contract for pairing, catalog, open-session, and access forwarding.",
         "tags": [
+          "access",
           "desktop",
           "gateway",
           "openapi",
-          "protocol",
-          "runtime"
+          "protocol"
         ],
-        "timestamp": "2026-08-17T00:00:00Z",
+        "timestamp": "2026-08-24T00:00:00Z",
         "title": "Gateway v2 protocol",
         "type": "Protocol Contract"
       },
-      "body_length": 5909,
-      "summary": "`redeven-gateway` exposes the stable `redeven-gateway-v2` HTTP JSON protocol. Gateway is an optional Runtime lifecycle supervisor and an independent process; it is not required for Runtime Connect, Workspace, or Runtime UI access. Gateway owns Runtime operation progress, target locking, checkpoints, fencing, and recovery. Desktop is a client that observes or starts an operation and never represents Runtime lifecycle ownership.",
+      "body_length": 2801,
+      "summary": "`redeven-gateway-v2` is the signed access-plane protocol defined by `spec/openapi/gateway-v2.yaml`. It supports pairing, Gateway identity and capabilities, Environment profile/catalog operations, and open-session. It exposes no Runtime lifecycle operation, artifact, supervisor, checkpoint, recovery, or Provider management route. Unsupported or removed paths return the normal HTTP not-found response and never fall back to another lifecycle owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Wire surface\n\nThe machine-readable source is `spec/openapi/gateway-v2.yaml`. It defines pairing, catalog, open-session, profile writes, capability discovery, operation prepare/list/get/confirm/artifact/commit/cancel/deadline/reconcile, and event reads under `/gateway/v2/*`. Signed requests bind protocol, method, route, body digest, gateway identity, binding audience, nonce, and timestamp. Pairing and profile-write bridge tokens are transport credentials, not Runtime operation authority.\n\nRuntime lifecycle requests require an exact `lifecycle_target_id`, `target_generation`, authorized client key, operation scope, and (for updates) a published-release or custom-build artifact policy. `prepare` is the authorization linearization point and occurs before staging, upload, process stop, or local build. Repeating the same normalized scope attaches to the durable operation; a conflicting operation returns `operation_in_progress` instead of queueing or reassigning control.\n\n`operation_id` is a canonical 1-128 character token using only letters, digits, dot, underscore, colon, and hyphen. Gateway derives artifact staging directories from its digest and rejects path syntax before persistence.\n\nThe Gateway operation store is the only lifecycle progress authority. It persists pre-commit deadlines, workload snapshots, distinct archive/executable digests, artifact staging, lifecycle fence tokens, durable commit checkpoints, exact candidate process identity, recovery phases, and `manual_recovery_required` quarantine. Commit rechecks target generation and exact workload identities; unknown inventory is never treated as empty. A source-built Linux Runtime update archive may carry the authorized `redeven` executable and the closed ReDevPlugin runtime evidence set. If required companions are absent, the supervisor may carry forward only regular, verified companions from the current managed installation; a fresh or damaged installation must supply them in the archive. Missing or unsafe companions fail before Runtime shutdown, and legacy Desktop management stamps are not copied or trusted. A successful commit verifies staged executable bytes before activation and running identity afterward. Recovery terminates a recorded failed candidate before idempotently restoring the previous installation; an unverifiable result remains quarantined until a binding administrator reconciles it with a new exact permit.\n\nCapability discovery does not make Runtime health a prerequisite for repair. Old, missing, unknown, externally replaced, incompatible, or residual-process states expose the operations that can converge them, while start and restart may be fulfilled through `update_runtime` when that is the only safe executable path. Stop is idempotent. A pre-checkpoint rejection is terminal and releases its fence, artifact, and target lock; only a failure after the durable installation-change boundary enters recovery.\n\nList, Get, and Events authorize before exposing operation existence. The original authorized client receives the full operation needed for mutation; any other current `manage_runtime` client receives a redacted DTO without actor, client key, idempotency, build, artifact, workload-identity, checkpoint, or desired-runtime details. Reconcile is not an ownership takeover and never accepts force unlock.\n\nGateway and Runtime versions are independent. Lifecycle compatibility is decided by the signed compatibility manifest, Gateway protocol, Runtime service protocol/epoch, and capabilities. A version string match is neither necessary nor sufficient. Cross-epoch updates additionally require the signed manifest to list the discovered current Runtime epoch in `upgrade_from_runtime_epochs`; the v0.11.0 release contract explicitly admits the reviewed epoch 8 to epoch 9 transition. Gateway updates are performed by Desktop installer or administrator setup; the Gateway protocol contains no self-update operation.\n\nCatalog/open-session and ordinary terminal, files, web, and workspace traffic remain separate from lifecycle operations. An explicit Gateway card may use its own open-session transport, but ordinary data never enters the Runtime operation store and does not consume a lifecycle permit.",
-          "char_count": 4235
+          "body": "## Wire surface\n\nThe protocol contains these route groups:\n\n- pairing challenge and completion;\n- Gateway capability and catalog reads;\n- Environment profile upsert and delete;\n- open-session artifact issuance;\n- authenticated access forwarding used by the issued session.\n\nSigned requests bind the protocol, HTTP method, route, body digest, Gateway identity, binding audience, nonce, and timestamp. Pairing credentials authorize only the declared Gateway access operations. There is no Runtime management grant or implicit process authority in a paired client.\n\nCatalog entries describe how an Environment can be accessed. Access capabilities do not imply Start, Stop, Restart, Update, or Reinstall. Open-session creates a short-lived, scoped access artifact for an explicit profile and route; it does not inspect or mutate Runtime installation state.\n\nThe OpenAPI document is the machine-readable authority. Typed Go protocol structures must remain closed to Runtime lifecycle fields, and structural tests must fail when a Runtime or lifecycle route is introduced.\n\n## Compatibility\n\nGateway protocol compatibility is independent from Runtime package identity. Gateway and Runtime may be released separately because this protocol does not coordinate Runtime upgrades. A client encountering a removed lifecycle path receives not found and must use a Desktop direct management channel, if one is registered; it must not retry through Provider or infer an access endpoint as a management channel.",
+          "char_count": 1495
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The contract excludes Desktop bridge stdio frames, Env App proxy routes, Runtime Service schemas, installer metadata, and Provider authorization. Portal grants and permits are consumed by Gateway at prepare; Portal records only authorization and binding audit facts and does not mirror operation state. URL environments remain access-only for Runtime lifecycle management.",
-          "char_count": 372
+          "body": "Desktop bridge IPC, Runtime Service APIs, Provider RCPP APIs, package manifests, and direct SSH/container execution are separate contracts. Gateway v2 authenticates and forwards access only. Runtime lifecycle progress is represented by Desktop Launcher Operations and never appears in Gateway protocol state.",
+          "char_count": 308
         }
       ],
       "evidence": [
         {
-          "id": "redeven:spec/openapi/gateway-v2.yaml:1:openapi 3.1 gateway v2 contract and signed payload fields.",
+          "id": "redeven:spec/openapi/gateway-v2.yaml:1:canonical access-only openapi contract.",
           "source": "redeven:spec/openapi/gateway-v2.yaml",
           "line": 1,
-          "description": "OpenAPI 3.1 Gateway v2 contract and signed payload fields."
+          "description": "Canonical access-only OpenAPI contract."
         },
         {
-          "id": "redeven:internal/runtimegateway/protocol/openapi_contract_test.go:69:structural contract test compares protocol, paths, routes, security, enums, and closed schemas.",
+          "id": "redeven:internal/runtimegateway/protocol/protocol.go:1:typed gateway access dtos.",
+          "source": "redeven:internal/runtimegateway/protocol/protocol.go",
+          "line": 1,
+          "description": "Typed Gateway access DTOs."
+        },
+        {
+          "id": "redeven:internal/runtimegateway/protocol/openapi_contract_test.go:1:rejects runtime and lifecycle paths in the openapi surface.",
           "source": "redeven:internal/runtimegateway/protocol/openapi_contract_test.go",
-          "line": 69,
-          "description": "Structural contract test compares protocol, paths, routes, security, enums, and closed schemas."
+          "line": 1,
+          "description": "Rejects Runtime and lifecycle paths in the OpenAPI surface."
         },
         {
-          "id": "redeven:internal/gatewayservice/server.go:188:gateway validates protocol, target, authorization, and operation scope before lifecycle execution.",
+          "id": "redeven:internal/gatewayservice/server.go:1:signed request validation and access route registration.",
           "source": "redeven:internal/gatewayservice/server.go",
-          "line": 188,
-          "description": "Gateway validates protocol, target, authorization, and operation scope before lifecycle execution."
+          "line": 1,
+          "description": "Signed request validation and access route registration."
         },
         {
-          "id": "redeven:internal/runtimegateway/protocol/lifecycle_v2.go:283:typed prepare, confirmation, deadline, artifact, and recovery request contracts.",
-          "source": "redeven:internal/runtimegateway/protocol/lifecycle_v2.go",
-          "line": 283,
-          "description": "Typed prepare, confirmation, deadline, artifact, and recovery request contracts."
-        },
-        {
-          "id": "redeven:internal/runtimegateway/supervisor/:0:durable operation authorization, target locking, checkpoint, and recovery implementation.",
-          "source": "redeven:internal/runtimegateway/supervisor/",
-          "description": "Durable operation authorization, target locking, checkpoint, and recovery implementation."
-        },
-        {
-          "id": "redeven:desktop/src/main/gatewayClient.ts:0:desktop uses the gateway v2 route and protocol literal.",
+          "id": "redeven:desktop/src/main/gatewayClient.ts:1:desktop gateway access client.",
           "source": "redeven:desktop/src/main/gatewayClient.ts",
-          "description": "Desktop uses the Gateway v2 route and protocol literal."
+          "line": 1,
+          "description": "Desktop Gateway access client."
         }
       ],
-      "snippet": "`redeven-gateway` exposes the stable `redeven-gateway-v2` HTTP JSON protocol. Gateway is an optional Runtime lifecycle supervisor and an independent process; it is not required for Runtime Connect, Workspace, or Runtime UI access. Gateway o",
+      "snippet": "`redeven-gateway-v2` is the signed access-plane protocol defined by `spec/openapi/gateway-v2.yaml`. It supports pairing, Gateway identity and capabilities, Environment profile/catalog operations, and open-session. It exposes no Runtime life",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -6863,73 +6587,75 @@
       "concept_id": "protocol.rcpp-v2-provider-api",
       "type": "Protocol Contract",
       "title": "RCPP v3 provider API",
-      "description": "Provider access, Runtime grants, supervisor enrollment, permit, and readiness contract.",
+      "description": "Provider discovery, health, open-session, Runtime link, and access authorization contract.",
       "tags": [
+        "access",
         "desktop",
         "openapi",
         "protocol",
         "provider",
         "runtime"
       ],
-      "timestamp": "2026-08-17T00:00:00Z",
+      "timestamp": "2026-08-24T00:00:00Z",
       "frontmatter": {
-        "description": "Provider access, Runtime grants, supervisor enrollment, permit, and readiness contract.",
+        "description": "Provider discovery, health, open-session, Runtime link, and access authorization contract.",
         "tags": [
+          "access",
           "desktop",
           "openapi",
           "protocol",
           "provider",
           "runtime"
         ],
-        "timestamp": "2026-08-17T00:00:00Z",
+        "timestamp": "2026-08-24T00:00:00Z",
         "title": "RCPP v3 provider API",
         "type": "Protocol Contract"
       },
-      "body_length": 4269,
-      "summary": "RCPP v3 is the Provider-side authorization contract in `docs/openapi/rcpp-v3.yaml` and `shared/contracts/providerprotocol/rcpp.go`. Connect and Workspace access are separate from Runtime management. The Portal exposes `manage_runtime`, `deploy_custom_runtime`, and `manage_runtime_binding` independently, signs a precise one-time permit, and stores only binding and audit facts. The target Gateway remains the sole Runtime operation authority.",
+      "body_length": 2917,
+      "summary": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Access and Runtime link\n\nRCPP v3 open-session is Access/Open only and rejects any response that contains the frozen v2 `bootstrap_ticket` field. Runtime link uses a separate one-time authorization and exchange. Lifecycle traffic uses the Provider Environment's signed management tunnel and never asks for another Gateway card, paired key, SSH credential, container credential, or public Runtime URL. The tunnel permits only Gateway lifecycle routes; ordinary access and data-plane traffic remain outside it.\n\n## Capability projection\n\nEnvironment list and capability responses expose `support`, `authorization`, and `readiness` as independent dimensions. Projection always evaluates support first, authorization second, and readiness third. Unsupported URL access returns `unsupported`; an authorized but unbound local, SSH, or container target returns `setup_required`; an existing binding with a stale heartbeat returns `temporarily_unavailable`. An unauthorized response does not reveal target, generation, installation, or last-seen facts.\n\n## Authorization and permits\n\n`POST .../runtime-management/authorizations` signs an explicit `prepare` or binding-admin `reconcile` action. Prepare binds the exact actor, access point, environment, lifecycle target, generation, operation, desired Runtime version, artifact policy, build-input digest, authorized client key, current Gateway binding, and expiry. Gateway exchanges that permit once during prepare; later Provider token expiry or revocation does not re-authorize an already linearized operation. Reconcile carries only `manage_runtime_binding`, has no desired-version, artifact-policy, or build-input scope, and is durably consumed by Gateway before recovery. Any action or scope mismatch is rejected.\n\n## Enrollment and fencing\n\nEnrollment is either an explicitly selected direct card or an interactive one-time code. The challenge persists a proof nonce, target generation, and the full `ControlChannelFence`: logical binding, control binding generation, artifact sequence, authorization lease, and control owner instance. The supervisor signs the canonical proof payload with its Ed25519 key. Existing control bindings require a live same-scope RPC proof and an unchanged fence; first binding has no prior fence and establishes a new trust record. Rebinding the same target advances its generation from `n` to `n+1`; Gateway serializes it with prepare under one target mutation lock and rejects it while an operation is active or the target is quarantined. A challenge is single-use, expires, and cannot be replayed.\n\nThe binding records lifecycle target/generation, supervisor identity, installation digest, independent Gateway and Runtime versions, protocol, compatibility epoch, capabilities, artifact digest, and heartbeat freshness. These observations determine readiness only; Portal does not store operation steps, checkpoints, locks, or recovery projections.",
-          "char_count": 2930
+          "body": "## Discovery and access\n\nProvider exposes discovery, Environment list, health, Desktop open-session, Runtime link authorization/exchange, and the authorization needed to forward normal requests. Open-session is access-only and never carries a process-management instruction. Runtime link establishes the scoped Provider-to-Runtime access relationship; it does not enroll a lifecycle supervisor.\n\nEnvironment list responses describe identity, availability, health, and access routes. They do not contain `runtime_management`, lifecycle permissions, permits, target generations, bindings, relay state, supervisor freshness, or operation projections. Health is an access observation and cannot make Provider a lifecycle coordinator.\n\n## Authorization boundary\n\nProvider authenticates the user and grants access to an Environment or Runtime link. It never receives Desktop SSH credentials, container credentials, a Runtime installation root, or a Runtime package. It cannot turn a Gateway access endpoint into a management channel.\n\nDesktop may show Provider Connect or Disconnect for a directly managed Runtime target. That action links access identity only. All Runtime lifecycle actions continue through the target's Local, SSH, or container channel and remain available independently of Provider health.\n\nThe retired Runtime management routes, permits, enrollment challenge/exchange, supervisor heartbeat, poll/respond transport, bindings, relays, cluster state, and authorization audit have no supported schema or compatibility shell. Because those contracts were not deployed, their migrations are removed rather than retained as dead production paths.",
+          "char_count": 1654
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "RCPP v2 remains a frozen access/bootstrap protocol, but v3 has its own DTOs and never falls back to v2 bootstrap. Provider cards never borrow Gateway/SSH/container credentials or use a public Environment URL as a control fallback. Runtime Connect, Workspace, and open-session continue when lifecycle support is unavailable.",
-          "char_count": 323
+          "body": "RCPP v3 does not mirror Desktop Launcher Operations or Gateway state. Provider may route requests to Runtime directly or through an optional Gateway, but it cannot start or repair the destination. An Environment with Provider or Gateway access but no direct Desktop management channel remains access-only.",
+          "char_count": 305
         }
       ],
       "evidence": [
         {
-          "id": "redeven:desktop/src/main/controlPlaneProviderClient.ts:1:rcpp v3 capability, authorization, enrollment, and heartbeat client adapter.",
+          "id": "redeven:desktop/src/main/controlPlaneProviderClient.ts:1:desktop provider discovery, health, open-session, and runtime-link adapter.",
           "source": "redeven:desktop/src/main/controlPlaneProviderClient.ts",
           "line": 1,
-          "description": "RCPP v3 capability, authorization, enrollment, and heartbeat client adapter."
+          "description": "Desktop Provider discovery, health, open-session, and Runtime-link adapter."
         },
         {
-          "id": "redeven:desktop/src/main/controlPlaneProviderClient.test.ts:1:provider response parsing and request-scope coverage.",
-          "source": "redeven:desktop/src/main/controlPlaneProviderClient.test.ts",
+          "id": "redeven:desktop/src/shared/controlPlaneProvider.ts:1:access-only provider dtos exposed to desktop.",
+          "source": "redeven:desktop/src/shared/controlPlaneProvider.ts",
           "line": 1,
-          "description": "Provider response parsing and request-scope coverage."
+          "description": "Access-only Provider DTOs exposed to Desktop."
         },
         {
-          "id": "redeven:internal/runtimegateway/supervisor/authorizer.go:1:provider permit verification and explicit runtime grant enforcement.",
-          "source": "redeven:internal/runtimegateway/supervisor/authorizer.go",
+          "id": "redeven:desktop/src/shared/environmentManagementPrinciples.ts:1:separates provider cards from direct runtime operation targets.",
+          "source": "redeven:desktop/src/shared/environmentManagementPrinciples.ts",
           "line": 1,
-          "description": "Provider permit verification and explicit Runtime grant enforcement."
+          "description": "Separates Provider cards from direct Runtime operation targets."
         },
         {
-          "id": "redeven:internal/runtimegateway/supervisor/authorizer_test.go:1:permit scope, pinned key, and grant-isolation tests.",
-          "source": "redeven:internal/runtimegateway/supervisor/authorizer_test.go",
+          "id": "spec/openapi/gateway-v2.yaml:1:gateway access-only protocol surface.",
+          "source": "spec/openapi/gateway-v2.yaml",
           "line": 1,
-          "description": "Permit scope, pinned key, and grant-isolation tests."
+          "description": "Gateway access-only protocol surface."
         }
       ],
-      "snippet": "RCPP v3 is the Provider-side authorization contract in `docs/openapi/rcpp-v3.yaml` and `shared/contracts/providerprotocol/rcpp.go`. Connect and Workspace access are separate from Runtime management. The Portal exposes `manage_runtime`, `dep",
+      "snippet": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management c",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -9846,5 +9572,5 @@
       ]
     }
   ],
-  "source_sha256": "bf16f09d9643c72841dc7b969a15b91a82b49c17bf8517333e51bd50720ef91b"
+  "source_sha256": "d71d693f77fbc3adf0516ebce3df9c76e0c3a4c3437907683457959d9cb6a6ba"
 }

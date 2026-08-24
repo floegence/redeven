@@ -23,25 +23,13 @@ import {
   type GatewayEnvProfileUpsertResponse,
   type GatewayOpenSessionRequest,
   type GatewayOpenSessionResponse,
-  type GatewayRuntimeArtifactMetadata,
-  type GatewayRuntimeManagementCapabilityRequest,
-  type GatewayRuntimeOperation,
-  type GatewayRuntimeOperationListRequest,
-  type GatewayRuntimeOperationListResponse,
-  type GatewayRuntimeOperationConfirmationRequest,
-  type GatewayRuntimeOperationEventsResponse,
-  type GatewayRuntimeOperationPrepareRequest,
-  type GatewayRuntimeOperationReconcileRequest,
-  type GatewayRuntimeOperationPrepareResponse,
 } from './gatewayClient';
 import { gatewayEnvAppBridgeRouteID } from './gatewaySessionArtifact';
 import { gatewayRecordSSHPasswordRef, type GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
 import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
-import type { DesktopGatewayRuntimeManagementCapability } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
-  enrollManagedGatewaySupervisor,
   gatewayServiceBinaryPath,
   probeManagedGatewayServiceDeep,
   probeManagedGatewayServiceStatus,
@@ -56,7 +44,6 @@ import {
   type RuntimeLifecycleIntent,
 } from './runtimeLifecycleCoordinator';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
-import type { DesktopBundle } from './desktopBundle';
 
 export type GatewayLifecycleSession = Readonly<{
   target_id: string;
@@ -139,7 +126,6 @@ export type GatewayLifecycleManagerOptions = Readonly<{
   temp_root: string;
   lifecycle_coordinator: RuntimeLifecycleCoordinator;
   source_runtime_root?: string;
-  precompiled_bundle?: DesktopBundle;
   local_ui_bind?: string;
   target_commit?: string;
   session_cache?: Map<string, GatewayLifecycleSession>;
@@ -256,73 +242,6 @@ export class GatewayLifecycleManager {
     return session.client.deleteEnvironmentProfile(record, request, options);
   }
 
-  async prepareRuntimeOperation(
-    record: GatewayRecord,
-    request: GatewayRuntimeOperationPrepareRequest,
-    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<GatewayRuntimeOperationPrepareResponse> {
-    const client = await this.runtimeOperationClient(record, options);
-    return client.prepareRuntimeOperation(record, request, options);
-  }
-
-  async runtimeManagementCapability(
-    record: GatewayRecord,
-    request: GatewayRuntimeManagementCapabilityRequest,
-    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<DesktopGatewayRuntimeManagementCapability> {
-    const client = await this.runtimeOperationClient(record, options);
-    return client.runtimeManagementCapability(record, request, options);
-  }
-
-  async getRuntimeOperation(record: GatewayRecord, operationID: string, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
-    return (await this.runtimeOperationClient(record, options)).getRuntimeOperation(record, operationID, options);
-  }
-
-  async listRuntimeOperations(record: GatewayRecord, request: GatewayRuntimeOperationListRequest, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperationListResponse> {
-    return (await this.runtimeOperationClient(record, options)).listRuntimeOperations(record, request, options);
-  }
-
-  async confirmRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationConfirmationRequest, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
-    return (await this.runtimeOperationClient(record, options)).confirmRuntimeOperation(record, operationID, request, options);
-  }
-
-  async uploadRuntimeOperationArtifact(record: GatewayRecord, operationID: string, metadata: GatewayRuntimeArtifactMetadata, artifact: Buffer, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
-    return (await this.runtimeOperationClient(record, options)).uploadRuntimeOperationArtifact(record, operationID, metadata, artifact, options);
-  }
-
-  async commitRuntimeOperation(record: GatewayRecord, operationID: string, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
-    return (await this.runtimeOperationClient(record, options)).commitRuntimeOperation(record, operationID, options);
-  }
-
-  async cancelRuntimeOperation(record: GatewayRecord, operationID: string, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
-    return (await this.runtimeOperationClient(record, options)).cancelRuntimeOperation(record, operationID, options);
-  }
-
-  async renewRuntimeOperation(record: GatewayRecord, operationID: string, expiresAtUnixMS: number, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
-    return (await this.runtimeOperationClient(record, options)).renewRuntimeOperation(record, operationID, expiresAtUnixMS, options);
-  }
-
-  async reconcileRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationReconcileRequest, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
-    return (await this.runtimeOperationClient(record, options)).reconcileRuntimeOperation(record, operationID, request, options);
-  }
-
-  async runtimeOperationEvents(record: GatewayRecord, operationID: string, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperationEventsResponse> {
-    return (await this.runtimeOperationClient(record, options)).runtimeOperationEvents(record, operationID, options);
-  }
-
-  private async runtimeOperationClient(
-    record: GatewayRecord,
-    options: Readonly<{ signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }>,
-  ): Promise<GatewayURLClient | GatewayBridgeClient> {
-    if (record.connection.kind === 'url') {
-      throw new GatewayNotManageableError('URL Gateways do not expose Runtime lifecycle management.');
-    }
-    return (await this.ensureGatewayReady(record, {
-      startPolicy: options.startPolicy ?? 'start_if_needed',
-      signal: options.signal,
-      onProgress: options.onProgress,
-    })).client;
-  }
 
   async bridgeClient(record: GatewayRecord, options: Readonly<{
     startPolicy: GatewayStartPolicy;
@@ -357,11 +276,10 @@ export class GatewayLifecycleManager {
         placement: gatewayPlacement(record),
         stateRoot: gatewayServiceStateRoot(record),
         gatewayID: record.gateway_id,
-        releaseTag: this.gatewayReleaseTag(record),
+        releaseTag: this.gatewayReleaseTag(),
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
-        precompiledBundle: this.options.precompiled_bundle,
         localUIBind: this.options.local_ui_bind,
         targetCommit: this.options.target_commit,
         sshPassword,
@@ -423,11 +341,10 @@ export class GatewayLifecycleManager {
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
       gatewayID: record.gateway_id,
-      releaseTag: this.gatewayReleaseTag(record),
+      releaseTag: this.gatewayReleaseTag(),
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
-      precompiledBundle: this.options.precompiled_bundle,
       localUIBind: this.options.local_ui_bind,
       targetCommit: this.options.target_commit,
       sshPassword,
@@ -563,11 +480,10 @@ export class GatewayLifecycleManager {
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
       gatewayID: record.gateway_id,
-      releaseTag: this.gatewayReleaseTag(record),
+      releaseTag: this.gatewayReleaseTag(),
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
-      precompiledBundle: this.options.precompiled_bundle,
       localUIBind: this.options.local_ui_bind,
       targetCommit: this.options.target_commit,
       sshPassword: await this.gatewaySSHPassword(record),
@@ -577,34 +493,6 @@ export class GatewayLifecycleManager {
     };
   }
 
-  async enrollProviderSupervisor(
-    record: GatewayRecord,
-    enrollment: Readonly<{
-      provider_origin: string;
-      environment_id: string;
-      enrollment_code: string;
-    }>,
-    options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {},
-  ): Promise<GatewayLifecycleSession> {
-    if (record.connection.kind === 'url') {
-      throw new GatewayNotManageableError('Provider enrollment requires an explicitly selected direct connection.');
-    }
-    await this.throwIfReinstallRequired(record, options.signal);
-    const targetID = gatewayLifecycleTargetID(record);
-    return this.options.lifecycle_coordinator.run({
-      target_key: gatewayLifecycleCoordinatorTargetKey(record),
-      intent: 'update',
-      fingerprint: runtimeLifecycleFingerprint({
-        intent: 'provider_enrollment',
-        gateway_id: record.gateway_id,
-        provider_origin: enrollment.provider_origin,
-        environment_id: enrollment.environment_id,
-      }),
-      operation_key: options.operationKey ?? targetID,
-      signal: options.signal,
-      execute: (signal) => this.enrollProviderSupervisorUncoordinated(record, enrollment, { ...options, signal }),
-    });
-  }
 
   private async stopGatewayUncoordinated(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<void> {
     await this.clear(record);
@@ -616,11 +504,10 @@ export class GatewayLifecycleManager {
       hostAccess: gatewayHostAccess(record),
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
-      releaseTag: this.gatewayReleaseTag(record),
+      releaseTag: this.gatewayReleaseTag(),
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
-      precompiledBundle: this.options.precompiled_bundle,
       localUIBind: this.options.local_ui_bind,
       targetCommit: this.options.target_commit,
       sshPassword,
@@ -641,11 +528,10 @@ export class GatewayLifecycleManager {
       hostAccess: gatewayHostAccess(record),
       placement,
       stateRoot: gatewayServiceStateRoot(record),
-      releaseTag: this.gatewayReleaseTag(record),
+      releaseTag: this.gatewayReleaseTag(),
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
-      precompiledBundle: this.options.precompiled_bundle,
       localUIBind: this.options.local_ui_bind,
       targetCommit: this.options.target_commit,
       sshPassword,
@@ -655,82 +541,6 @@ export class GatewayLifecycleManager {
     });
     const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
       forceUpdate: true,
-      onProgress: options.onProgress,
-    });
-    return this.openBridgeSession(record, gatewayBinaryPath, {
-      signal: options.signal,
-      onProgress: options.onProgress,
-    });
-  }
-
-  private async enrollProviderSupervisorUncoordinated(
-    record: GatewayRecord,
-    enrollment: Readonly<{
-      provider_origin: string;
-      environment_id: string;
-      enrollment_code: string;
-    }>,
-    options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<GatewayLifecycleSession> {
-    const placement = gatewayPlacement(record);
-    const sshPassword = await this.gatewaySSHPassword(record);
-    await this.clear(record);
-    await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
-      onProgress: options.onProgress,
-    });
-    await stopManagedGatewayService({
-      sshTransportManager: this.options.ssh_transport_manager,
-      sshCredentialScope: record.gateway_id,
-      target: gatewaySSHDetails(record),
-      hostAccess: gatewayHostAccess(record),
-      placement,
-      stateRoot: gatewayServiceStateRoot(record),
-      releaseTag: this.gatewayReleaseTag(record),
-      releaseBaseURL: this.options.release_base_url,
-      assetCacheRoot: this.options.asset_cache_root,
-      sourceRuntimeRoot: this.options.source_runtime_root,
-      precompiledBundle: this.options.precompiled_bundle,
-      localUIBind: this.options.local_ui_bind,
-      targetCommit: this.options.target_commit,
-      sshPassword,
-      tempRoot: this.options.temp_root,
-      signal: options.signal,
-      onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
-    });
-    try {
-      await enrollManagedGatewaySupervisor({
-        sshTransportManager: this.options.ssh_transport_manager,
-        sshCredentialScope: record.gateway_id,
-        target: gatewaySSHDetails(record),
-        hostAccess: gatewayHostAccess(record),
-        placement,
-        stateRoot: gatewayServiceStateRoot(record),
-        releaseTag: this.gatewayReleaseTag(record),
-        releaseBaseURL: this.options.release_base_url,
-        assetCacheRoot: this.options.asset_cache_root,
-        sourceRuntimeRoot: this.options.source_runtime_root,
-        precompiledBundle: this.options.precompiled_bundle,
-        localUIBind: this.options.local_ui_bind,
-        targetCommit: this.options.target_commit,
-        sshPassword,
-        tempRoot: this.options.temp_root,
-        signal: options.signal,
-        onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
-      }, enrollment);
-    } catch (enrollmentError) {
-      try {
-        await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
-          onProgress: options.onProgress,
-        });
-      } catch (restoreError) {
-        throw new AggregateError(
-          [enrollmentError, restoreError],
-          'Provider enrollment failed and Desktop could not restart the previous Gateway service.',
-        );
-      }
-      throw enrollmentError;
-    }
-    const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
       onProgress: options.onProgress,
     });
     return this.openBridgeSession(record, gatewayBinaryPath, {
@@ -856,7 +666,7 @@ export class GatewayLifecycleManager {
         placement,
         stateRoot: gatewayServiceStateRoot(record),
         gatewayID: record.gateway_id,
-        releaseTag: this.gatewayReleaseTag(record),
+        releaseTag: this.gatewayReleaseTag(),
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
         // A development Desktop may not have a published Gateway artifact for the
@@ -864,7 +674,6 @@ export class GatewayLifecycleManager {
         // managed Gateway can be built locally; the service host only uses it when
         // the package probe requires installation or forceUpdate is requested.
         sourceRuntimeRoot: this.options.source_runtime_root,
-        precompiledBundle: this.options.precompiled_bundle,
         localUIBind: this.options.local_ui_bind,
         targetCommit: this.options.target_commit,
         sshPassword,
@@ -892,23 +701,11 @@ export class GatewayLifecycleManager {
   }
 
   private gatewayExecutablePath(record: GatewayRecord): string {
-    if (record.connection.kind === 'local_host') {
-      const path = this.options.precompiled_bundle?.gateway.path;
-      if (!path) {
-        throw new GatewayServiceUnavailableError(
-          'gateway_service_start_failed',
-          'Desktop could not validate its bundled environment services. Repair or reinstall the application, then try again.',
-        );
-      }
-      return path;
-    }
-    return gatewayServiceBinaryPath(gatewayPlacement(record));
+    return gatewayServiceBinaryPath(gatewayServiceStateRoot(record));
   }
 
-  private gatewayReleaseTag(record: GatewayRecord): string {
-    return record.connection.kind === 'local_host'
-      ? this.options.precompiled_bundle?.version ?? this.options.runtime_release_tag
-      : this.options.runtime_release_tag;
+  private gatewayReleaseTag(): string {
+    return this.options.runtime_release_tag;
   }
 
   private emit(

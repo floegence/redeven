@@ -53,7 +53,6 @@ const (
 	controlRPCTypeHeartbeat         uint32 = 41002
 	controlRPCTypeGrantServer       uint32 = 41003 // notify
 	controlRPCTypeRuntimeDisconnect uint32 = 41005
-	controlRPCTypeRuntimeEnrollment uint32 = 41008
 )
 
 // Floe app ids.
@@ -194,9 +193,7 @@ type Agent struct {
 	remoteEnabled           bool
 	accessGate              *accessgate.Gate
 	gitRuntime              *gitruntime.Runtime
-	runtimeLifecycle        *runtimeservice.LifecycleManager
-	runtimeShutdown         chan struct{}
-	runtimeShutdownOnce     sync.Once
+	runtimeWorkloads        *runtimeservice.WorkloadManager
 	runtimeWorkloadSequence atomic.Uint64
 }
 
@@ -275,7 +272,7 @@ func New(opts Options) (*Agent, error) {
 			return nil, fmt.Errorf("create plugin process generation: %w", err)
 		}
 	}
-	runtimeLifecycle := runtimeservice.NewLifecycleManager()
+	runtimeWorkloads := runtimeservice.NewWorkloadManager()
 	a := &Agent{
 		cfg:                     opts.Config,
 		log:                     logger,
@@ -308,13 +305,8 @@ func New(opts Options) (*Agent, error) {
 		remoteEnabled:           opts.RemoteEnabled,
 		accessGate:              opts.AccessGate,
 		gitRuntime:              gitruntime.New(),
-		runtimeLifecycle:        runtimeLifecycle,
-		runtimeShutdown:         make(chan struct{}),
+		runtimeWorkloads:        runtimeWorkloads,
 	}
-	runtimeLifecycle.SetShutdown(func() error {
-		a.runtimeShutdownOnce.Do(func() { close(a.runtimeShutdown) })
-		return nil
-	})
 	a.term.SetWorkloadAdmission(func() (func(), error) {
 		sequence := a.runtimeWorkloadSequence.Add(1)
 		lease, err := a.admitRuntimeWorkload(runtimeservice.ManagedWorkload{
@@ -505,11 +497,8 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 	}
 
-	requestedShutdown := false
 	select {
 	case <-ctx.Done():
-	case <-a.runtimeShutdown:
-		requestedShutdown = true
 	}
 	a.beginSessionShutdown()
 	a.stopControlChannel()
@@ -522,9 +511,6 @@ func (a *Agent) Run(ctx context.Context) error {
 	if !a.waitForPluginSessionCloses(30 * time.Second) {
 		closeCodeApp = false
 		return errors.New("plugin session maintenance timed out; plugin host left open for process termination")
-	}
-	if requestedShutdown {
-		return nil
 	}
 	return ctx.Err()
 }
@@ -629,12 +615,6 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		return
 	}
 	handlers := flowersec.NewRPCHandlers()
-	if err := handlers.HandleRPC(controlRPCTypeRuntimeEnrollment, func(handlerCtx context.Context, payload json.RawMessage) (any, *flowersec.RPCError) {
-		return a.handleRuntimeEnrollmentProof(handlerCtx, payload)
-	}); err != nil {
-		a.log.Error("control channel not started: register Runtime enrollment proof handler", "error", err)
-		return
-	}
 	if err := handlers.HandleNotification(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) error {
 		a.handleGrantNotify(handlerCtx, payload)
 		return nil

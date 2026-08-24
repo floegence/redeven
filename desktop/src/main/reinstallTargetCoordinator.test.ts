@@ -47,7 +47,7 @@ function preparedBatch(operationID = 'test-operation'): PreparedComponentBatch {
   return {
     operation_id: operationID,
     tasks: [],
-    suite_manifest: {
+    runtime_manifest: {
       release_tag: 'v1',
       commit: 'abc',
       platform: 'darwin',
@@ -156,8 +156,7 @@ describe('ReinstallTargetCoordinator', () => {
     const coordinator = new ReinstallTargetCoordinator({
       ...dependencies,
       install_fresh: async (_descriptor, freshRoot, report) => {
-        await report?.('fresh_suite_installed');
-        await report?.('gateway_started');
+        await report?.('runtime_installed');
         await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
       },
     });
@@ -169,8 +168,7 @@ describe('ReinstallTargetCoordinator', () => {
       'package_batch_prepared_and_verified',
       'redeven_process_stop_attempted',
       'old_root_isolated_or_cleared',
-      'fresh_suite_installed',
-      'gateway_started',
+      'runtime_installed',
       'runtime_started',
       'runtime_verified',
       'catalog_and_local_ui_verified',
@@ -222,8 +220,7 @@ describe('ReinstallTargetCoordinator', () => {
       prepare_packages: async () => preparedBatch(),
       install_fresh: async (_descriptor, freshRoot, report) => {
         await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
-        await report?.('fresh_suite_installed');
-        await report?.('gateway_started');
+        await report?.('runtime_installed');
         installStarted();
         await installGate;
       },

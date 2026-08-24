@@ -848,18 +848,6 @@ describe('desktopWelcomeState', () => {
         id: 'http://192.168.1.20:24000/',
         kind: 'external_local_ui',
         is_open: false,
-        runtime_management: {
-          support: 'unsupported',
-          authorization: { state: 'unknown', grants: [] },
-          readiness: 'unknown',
-          presentation_state: 'unsupported',
-          operations: [],
-          artifact_policies: [],
-          binding_actions: [],
-          supervision_mode: '',
-          reason_code: 'url_runtime_management_unsupported',
-          checked_at_unix_ms: 1000,
-        },
         runtime_service: expect.objectContaining({
           runtime_version: 'v1.7.0',
           open_readiness: { state: 'openable' },

@@ -10,24 +10,25 @@ import (
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
-func TestSendUserTurnRejectsLifecycleAdmissionBeforeFloretMutation(t *testing.T) {
+func TestSendUserTurnRejectsWorkloadAdmissionBeforeFloretMutation(t *testing.T) {
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()
 	thread, err := svc.CreateThread(t.Context(), meta, "lifecycle admission", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	admissionErr := errors.New("workload admission denied")
 	svc.SetWorkloadAdmission(func(workload runtimeservice.ManagedWorkload) (func(), error) {
 		if workload.Kind != "ai_turn" || !workload.Protected {
 			t.Fatalf("workload = %#v", workload)
 		}
-		return nil, runtimeservice.ErrLifecycleAdmissionClosed
+		return nil, admissionErr
 	})
 
 	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
 		ClientRequestID: "request-fenced", ThreadID: thread.ThreadID, Input: RunInput{Text: "must not start"},
 	})
-	if !errors.Is(err, runtimeservice.ErrLifecycleAdmissionClosed) {
+	if !errors.Is(err, admissionErr) {
 		t.Fatalf("SendUserTurn error = %v", err)
 	}
 	view, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
@@ -100,16 +101,17 @@ func TestHostedTerminalProcessLeaseEndsAfterProcessReap(t *testing.T) {
 	}
 }
 
-func TestHostedTerminalProcessRejectsLifecycleAdmissionBeforeSpawn(t *testing.T) {
+func TestHostedTerminalProcessRejectsWorkloadAdmissionBeforeSpawn(t *testing.T) {
 	manager := newTerminalProcessManager()
+	admissionErr := errors.New("workload admission denied")
 	manager.SetWorkloadAdmission(func(runtimeservice.ManagedWorkload) (func(), error) {
-		return nil, runtimeservice.ErrLifecycleAdmissionClosed
+		return nil, admissionErr
 	})
 	_, err := manager.Start(terminalProcessStartRequest{
 		ProcessID: "process-fenced", EndpointID: "env", ThreadID: "thread", RunID: "run", TurnID: "turn",
 		ToolID: "tool", ToolName: "terminal.exec", Command: "exit 0", CwdAbs: t.TempDir(), Shell: "/bin/sh",
 	})
-	if !errors.Is(err, runtimeservice.ErrLifecycleAdmissionClosed) {
+	if !errors.Is(err, admissionErr) {
 		t.Fatalf("Start error = %v", err)
 	}
 	if manager.active != 0 || len(manager.processes) != 0 {

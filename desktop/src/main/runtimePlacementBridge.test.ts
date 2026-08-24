@@ -69,7 +69,7 @@ describe('runtimePlacementBridge', () => {
         runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
         runtime_state_root: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_demo`,
       },
-      runtime_binary_path: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateway/managed/bin/redeven-gateway`,
+      runtime_binary_path: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_test/state/managed/bin/redeven-gateway`,
       command_kind: 'gateway',
     });
 
@@ -79,7 +79,7 @@ describe('runtimePlacementBridge', () => {
       expect.stringContaining('runtime_binary_path="${HOME%/}/.redeven/${runtime_binary_path#' + DEFAULT_DESKTOP_SSH_RUNTIME_ROOT + '/}"'),
       'redeven-host-desktop-bridge',
       DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-      `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateway/managed/bin/redeven-gateway`,
+      `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_test/state/managed/bin/redeven-gateway`,
       `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_demo`,
     ]);
     expect(plan.command[2]).toContain('exec "$runtime_binary_path" desktop-bridge --state-root "$state_root"');
@@ -133,7 +133,7 @@ describe('runtimePlacementBridge', () => {
         runtime_state_root: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_demo`,
         bridge_strategy: 'exec_stream',
       },
-      runtime_binary_path: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateway/managed/bin/redeven-gateway`,
+      runtime_binary_path: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_test/state/managed/bin/redeven-gateway`,
       command_kind: 'gateway',
     })).toMatchObject({
       bridge_kind: 'container_exec_stream',
@@ -147,7 +147,7 @@ describe('runtimePlacementBridge', () => {
         expect.stringContaining('runtime_binary_path="${runtime_root%/}/${runtime_binary_path#' + DEFAULT_DESKTOP_SSH_RUNTIME_ROOT + '/}"'),
         'redeven-container-desktop-bridge',
         DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-        `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateway/managed/bin/redeven-gateway`,
+        `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_test/state/managed/bin/redeven-gateway`,
         `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_demo`,
       ],
       requires_published_port: false,
@@ -165,7 +165,7 @@ describe('runtimePlacementBridge', () => {
         runtime_state_root: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_demo`,
         bridge_strategy: 'exec_stream',
       },
-      runtime_binary_path: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateway/managed/bin/redeven-gateway`,
+      runtime_binary_path: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_test/state/managed/bin/redeven-gateway`,
       command_kind: 'gateway',
     });
     expect(plan.command[6]).toContain('exec "$runtime_binary_path" desktop-bridge --state-root "$state_root"');

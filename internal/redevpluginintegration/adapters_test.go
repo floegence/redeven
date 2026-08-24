@@ -156,7 +156,7 @@ func TestMethodAuthorizationDefersExactEffectToLocalPolicy(t *testing.T) {
 	}
 }
 
-func TestSharedRuntimeManagementRequiresAdmin(t *testing.T) {
+func TestSharedPluginHostControlRequiresAdmin(t *testing.T) {
 	for _, action := range []host.ManagementAction{
 		host.ManagementActionStartRuntime,
 		host.ManagementActionStopRuntime,

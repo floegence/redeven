@@ -418,7 +418,7 @@ function runtimePackagePreparationFailure(
     }],
   }), {
     cause: error,
-    runtimeLifecycleStepID: isGateway ? 'preparing_gateway_package' : 'preparing_runtime_package',
+    ...(isGateway ? {} : { runtimeLifecycleStepID: 'preparing_runtime_package' as const }),
   });
 }
 
@@ -882,7 +882,7 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
       }],
     }), {
       cause: error,
-      runtimeLifecycleStepID: isGateway ? 'preparing_gateway_package' : 'preparing_runtime_package',
+      ...(isGateway ? {} : { runtimeLifecycleStepID: 'preparing_runtime_package' as const }),
     });
   }
 }

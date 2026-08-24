@@ -6,8 +6,6 @@ import {
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
   normalizeDesktopProviderEnvironmentList,
-  normalizeDesktopProviderRuntimeManagementCapability,
-  projectDesktopProviderRuntimeManagementState,
   suggestControlPlaneDisplayLabel,
 } from './controlPlaneProvider';
 
@@ -198,37 +196,4 @@ describe('controlPlaneProvider', () => {
     ]);
   });
 
-  it('projects Runtime management in support, authorization, readiness order', () => {
-    expect(projectDesktopProviderRuntimeManagementState('unsupported', 'allowed', 'ready')).toBe('unsupported');
-    expect(projectDesktopProviderRuntimeManagementState('supported', 'denied', 'ready')).toBe('denied');
-    expect(projectDesktopProviderRuntimeManagementState('supported', 'allowed', 'setup_required')).toBe('setup_required');
-    expect(projectDesktopProviderRuntimeManagementState('supported', 'allowed', 'temporarily_unavailable')).toBe('temporarily_unavailable');
-    expect(projectDesktopProviderRuntimeManagementState('supported', 'allowed', 'ready')).toBe('allowed');
-  });
-
-  it('removes target and supervisor facts from unauthorized Runtime capability payloads', () => {
-    expect(normalizeDesktopProviderRuntimeManagementCapability({
-      support: 'supported',
-      authorization: { state: 'denied', grants: ['manage_runtime_binding'] },
-      readiness: 'ready',
-      target: { lifecycle_target_id: 'secret_target', target_generation: 17 },
-      operations: ['update_runtime'],
-      artifact_policies: ['custom_build'],
-      binding_actions: ['rebind'],
-      supervision_mode: 'provider_gateway',
-      reason_code: 'runtime_supervisor_online',
-      checked_at_unix_ms: 1_710_000_000_000,
-    })).toEqual({
-      support: 'supported',
-      authorization: { state: 'denied', grants: [] },
-      readiness: 'unknown',
-      presentation_state: 'denied',
-      operations: [],
-      artifact_policies: [],
-      binding_actions: [],
-      supervision_mode: '',
-      reason_code: 'runtime_management_permission_required',
-      checked_at_unix_ms: 1_710_000_000_000,
-    });
-  });
 });

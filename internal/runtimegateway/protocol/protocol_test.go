@@ -69,19 +69,6 @@ func TestOpenSessionRequestValidation(t *testing.T) {
 	}
 }
 
-func TestRuntimeOperationIDValidationRejectsPathSyntaxAndNonCanonicalInput(t *testing.T) {
-	for _, value := range []string{"../escape", "nested/path", " operation", "operation ", strings.Repeat("a", 129)} {
-		if err := ValidateRuntimeOperationID(value); err == nil {
-			t.Fatalf("ValidateRuntimeOperationID(%q) accepted unsafe or non-canonical input", value)
-		}
-	}
-	for _, value := range []string{"op-1", "op.v2", "op:restart_01"} {
-		if err := ValidateRuntimeOperationID(value); err != nil {
-			t.Fatalf("ValidateRuntimeOperationID(%q) error = %v", value, err)
-		}
-	}
-}
-
 func TestEnvProfileInputRejectsRemovedLifecycleOwnershipField(t *testing.T) {
 	var input EnvProfileInput
 	err := json.Unmarshal([]byte(`{"display_name":"Demo","access_route":{"kind":"url","url":"https://example.com"},"control_owner":"gateway"}`), &input)
@@ -98,17 +85,16 @@ func TestCatalogNormalization(t *testing.T) {
 		Capabilities: []GatewayCapability{GatewayCapabilityEnvCatalog, GatewayCapabilityEnvProfileWrite, "bad", GatewayCapabilityEnvCatalog},
 	}, []Environment{
 		{
-			GatewayEnvID:        " env_demo ",
-			State:               "bad",
-			AccessCapabilities:  []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles, "bad", EnvironmentCapabilityOpen},
-			ControlCapabilities: []EnvironmentCapability{EnvironmentCapabilityStart, EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime, "bad"},
-			Profile:             &EnvironmentProfile{Managed: true, AccessRouteKind: EnvProfileAccessRouteKindSSHHost},
-			Origin:              EnvironmentOrigin{Kind: "bad", Label: " Target "},
+			GatewayEnvID:       " env_demo ",
+			State:              "bad",
+			AccessCapabilities: []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles, "bad", EnvironmentCapabilityOpen},
+			Profile:            &EnvironmentProfile{Managed: true, AccessRouteKind: EnvProfileAccessRouteKindSSHHost},
+			Origin:             EnvironmentOrigin{Kind: "bad", Label: " Target "},
 		},
 		{
 			GatewayEnvID: " env_legacy ",
 			DisplayName:  "Legacy",
-			Capabilities: []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityStop, EnvironmentCapabilityTerminal},
+			Capabilities: []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal},
 			Profile:      &EnvironmentProfile{Managed: true},
 		},
 		{
@@ -147,10 +133,7 @@ func TestCatalogNormalization(t *testing.T) {
 	if got := env.AccessCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles}) {
 		t.Fatalf("AccessCapabilities = %#v", got)
 	}
-	if got := env.ControlCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityStart, EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime}) {
-		t.Fatalf("ControlCapabilities = %#v", got)
-	}
-	if got := env.Capabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles, EnvironmentCapabilityStart, EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime}) {
+	if got := env.Capabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles}) {
 		t.Fatalf("Environment capabilities = %#v", got)
 	}
 	if env.Profile == nil || !env.Profile.Managed || env.Profile.AccessRouteKind != EnvProfileAccessRouteKindSSHHost {
@@ -162,9 +145,6 @@ func TestCatalogNormalization(t *testing.T) {
 	}
 	if got := legacy.AccessCapabilities; len(got) != 0 {
 		t.Fatalf("legacy AccessCapabilities = %#v, want no inferred access capability", got)
-	}
-	if got := legacy.ControlCapabilities; len(got) != 0 {
-		t.Fatalf("legacy ControlCapabilities = %#v, want no inferred control capability", got)
 	}
 	if got := legacy.Capabilities; len(got) != 0 {
 		t.Fatalf("legacy Capabilities = %#v, want no inferred aggregate capability", got)

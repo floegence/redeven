@@ -93,11 +93,6 @@ export function buildGatewayEnvironmentEntries(
       continue;
     }
     for (const environment of gateway.environments) {
-      // A managed Environment owns its Runtime supervisor and is rendered on
-      // the Environments surface. Gateway catalog entries are access-only.
-      if (environment.env_kind === 'managed_local_env') {
-        continue;
-      }
       const entry = buildGatewayEnvironmentEntry(gateway, environment, source, createdAtMS);
       if (entry) {
         entries.push(entry);
@@ -170,7 +165,6 @@ function buildGatewayEnvironmentEntry(
     gateway_environment_kind: environment.env_kind,
     gateway_environment_capabilities: environment.capabilities,
     gateway_environment_access_capabilities: accessCapabilities,
-    gateway_environment_control_capabilities: [],
     gateway_environment_profile: environment.profile,
     gateway_environment_profile_access_route: environment.profile_access_route,
     gateway_environment_origin: environment.origin,

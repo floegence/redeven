@@ -19,14 +19,8 @@ export const DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS = [
   'disconnect_provider_runtime',
 ] as const satisfies readonly DesktopLauncherActionKind[];
 
-export const DESKTOP_RUNTIME_MANAGEMENT_ENTRY_KINDS = [
+export const DESKTOP_DIRECT_RUNTIME_OPERATION_ENTRY_KINDS = [
   'local_environment',
-  'ssh_environment',
-] as const satisfies readonly DesktopEnvironmentEntryKind[];
-
-export const DESKTOP_RUNTIME_MANAGEMENT_INITIATOR_KINDS = [
-  'local_environment',
-  'provider_environment',
   'ssh_environment',
 ] as const satisfies readonly DesktopEnvironmentEntryKind[];
 
@@ -44,17 +38,13 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-// IMPORTANT: Provider Open and Runtime management use separate Provider-scoped
-// tunnels. A direct card may be used only when the user explicitly selects it for
-// supervisor setup; routine lifecycle must never borrow that card's credentials
-// or use the public Environment URL as fallback.
 export function desktopEnvironmentManagementSurface(
   kind: DesktopEnvironmentEntryKind,
 ): DesktopEnvironmentManagementSurface {
   if (kind === 'provider_environment') {
     return 'provider_card';
   }
-  if (desktopEntryKindSupportsRuntimeManagement(kind)) {
+  if (desktopEntryKindSupportsDirectRuntimeOperations(kind)) {
     return 'managed_runtime_card';
   }
   return 'unmanaged_environment_card';
@@ -68,12 +58,10 @@ export function desktopProviderCardAllowsAction(action: DesktopLauncherActionKin
   return !DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS.includes(action as (typeof DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS)[number]);
 }
 
-export function desktopEntryKindSupportsRuntimeManagement(kind: DesktopEnvironmentEntryKind): boolean {
-  return DESKTOP_RUNTIME_MANAGEMENT_ENTRY_KINDS.includes(kind as (typeof DESKTOP_RUNTIME_MANAGEMENT_ENTRY_KINDS)[number]);
-}
-
-export function desktopEntryKindCanInitiateRuntimeManagement(kind: DesktopEnvironmentEntryKind): boolean {
-  return DESKTOP_RUNTIME_MANAGEMENT_INITIATOR_KINDS.includes(kind as (typeof DESKTOP_RUNTIME_MANAGEMENT_INITIATOR_KINDS)[number]);
+export function desktopEntryKindSupportsDirectRuntimeOperations(kind: DesktopEnvironmentEntryKind): boolean {
+  return DESKTOP_DIRECT_RUNTIME_OPERATION_ENTRY_KINDS.includes(
+    kind as (typeof DESKTOP_DIRECT_RUNTIME_OPERATION_ENTRY_KINDS)[number],
+  );
 }
 
 // IMPORTANT: Provider-link requests are runtime-target-first and must name the

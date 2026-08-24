@@ -1,57 +1,41 @@
 ---
 type: Gateway Contract
 title: Gateway service
-description: Standalone Gateway supervisor, target binding, operation recovery, and Desktop transport integration.
-tags: [gateway, desktop, release, runtime]
-timestamp: 2026-08-17T00:00:00Z
+description: Standalone optional Gateway identity, catalog, session, and access forwarding service.
+tags: [gateway, desktop, release, access]
+timestamp: 2026-08-24T00:00:00Z
 ---
 # Summary
 
-`redeven-gateway` is an independent process and component version. In `standalone` mode it is an access and catalog endpoint only: it owns Gateway identity and trust, does not create Runtime binding or state, and exposes no Runtime lifecycle API. A Managed Environment may have an internal Gateway supervisor, but that supervisor is not a Gateway record and is never projected into Desktop's Gateway page. Direct Desktop host or container channels own destructive Environment reinstall.
-
-The service uses one state-root lock so two Gateway supervisors cannot control the same target concurrently. Its status record is accepted only when the PID still has the recorded executable and process start time; a stale or reused PID is treated as not running.
+`redeven-gateway` is an optional standalone access forwarder. It owns Gateway identity, pairing, trust, Environment profiles, catalog responses, open-session artifacts, and request forwarding. It never owns, starts, stops, updates, reinstalls, or observes Runtime lifecycle state. Gateway failure can interrupt access through that Gateway, but it cannot block Desktop from managing a Runtime through an authorized Local, SSH, or container channel.
 
 # Contract
 
-## Supervisor and compatibility
+## Standalone service
 
-`redeven-gateway --mode standalone` rejects Runtime-root and precompiled-Runtime options and starts without a Runtime binding store, lifecycle controller, or Runtime heartbeat. Its Runtime-management capability is `unsupported`; Gateway-backed Environments are opened only through their explicit access endpoint. Managed Environment supervisor mode remains an internal implementation detail and does not create a Desktop Gateway pairing requirement.
+The Gateway CLI starts only the Gateway server. Its `service-start`, `service-status`, and `service-stop` commands manage the Gateway process and state root; they accept no Runtime root, Runtime artifact, activation, binding, or enrollment input. Gateway startup does not create, inspect, or start a Runtime.
 
-Gateway persists its supervisor identity, installation marker, target id/generation, binding, operation store, checkpoint, and quarantine state. Registration rejects an installation-root alias that names another target. Gateway and Runtime versions need not match; a signed compatibility manifest, stable Gateway protocol, Runtime service protocol/epoch, capabilities, and artifact digest decide compatibility. Gateway-first setup is performed by Desktop installer or an administrator and has no self-update state machine.
+The service persists only access-plane state: Gateway identity, paired clients, trust bindings, Environment profiles, catalog metadata, and session material. Runtime operations, target locks, checkpoints, quarantine, artifact staging, rollback, supervisor heartbeat, and Provider management transport are not Gateway state.
 
-For a Provider binding, the Gateway process itself maintains the signed RCPP v3 supervisor poll/respond transport and dispatches accepted lifecycle frames directly to the Gateway-owned operation service. This transport remains available while Runtime and its Agent are stopped. An offline heartbeat may reuse persisted Runtime compatibility facts only when exact process inventory is empty and the managed executable digest still matches those facts; external byte replacement stops readiness projection. There is no Runtime control RPC, local management socket, or self-RPC fallback for Provider lifecycle. A transport disconnect does not cancel an already authorized durable operation; reconnect resumes polling and authorized clients attach to Gateway state.
+Gateway access remains useful without Desktop lifecycle management. An explicit Gateway profile can publish a catalog and issue an open-session artifact for a configured access endpoint. HTTP, WebSocket, and streaming traffic is forwarded according to that access contract; the Gateway does not translate access requests into process commands.
 
-When a Desktop-managed Runtime is running but exposes an older service protocol or compatibility epoch, the Gateway exposes stop, restart, and update recovery. Start or restart clients may converge through update when the old Runtime cannot execute the original operation. Gateway first verifies the status identity, state root, managed executable, PID, and automatically stoppable process. The confirmation shows the observed process and workload summary; Gateway rechecks that snapshot before stopping the exact verified process. After a successful update, the new Runtime is health-checked before Open continues. A current or future epoch is never treated as legacy and remains unavailable until its contract can be validated.
+## Packaging
 
-Start is an idempotent observation or launch operation and does not require workload confirmation. When a managed process appears while Service status is delayed, Gateway waits briefly for the status to become available and verifies that exact Runtime instead of launching a duplicate or replacing it. Workload confirmation remains limited to stop, restart, and update operations that can interrupt or replace active work.
+Gateway is built and published as the independent `redeven-gateway_<os>_<arch>.tar.gz` archive. The Desktop Runtime bundle and Runtime archive must not contain `redeven-gateway`, and normal Local, SSH, or container Runtime installation must not create a Gateway managed directory. Desktop may install or update a standalone Gateway only through an explicit Gateway workflow, with its binary stored under the Gateway state root rather than a Runtime root.
 
-When Runtime control is unreachable, Gateway derives capability and the lifecycle fence from one process inventory. Missing, unknown, externally replaced, or incompatible installations still expose idempotent stop and update repair; a positively identified residual process is stopped before restart or update. If the process cannot be tied to the bound user, namespace, state root, and executable, automatic signaling remains unavailable because SSH reachability is not process ownership evidence.
+## Retired state
 
-## Lifecycle
-
-`prepare` validates its action-scoped permit and client key before build, upload, staging, stop, or lock acquisition. One target mutation lock serializes prepare with enrollment; a same-target rebind advances generation from `n` to `n+1` and is rejected while an active operation or quarantine exists. One target lock protects each durable operation. Checkpoints survive Gateway restart; pre-commit deadlines expire safely, while committing/recovering/quarantined operations do not silently expire. Atomic replacement, health verification, rollback, and persistent manual recovery are one Gateway state machine. Reconcile requires a separate binding-admin permit with no artifact or build scope; Gateway persists its one-time consumption before recovery, and response-loss retry can only return the same terminal result.
-
-Published artifacts carry distinct archive and executable digests. Gateway verifies the archive before extraction, verifies the final executable bytes in staging before activation, and compares the running Runtime identity with that executable digest after start. The complete recovery plan, previous-installation identity, verified staging root, and exact candidate process identity are durably persisted and parent-directory synced before shutdown. Recovery first terminates only the recorded candidate process, then advances idempotent phases to restore and verify the previous installation; an unverifiable result remains `manual_recovery_required` instead of unlocking or accepting mixed state.
-
-Operation identifiers are canonical bounded tokens and staging paths are derived from their digest, so request data cannot select an arbitrary filesystem path. Failed extraction, cancellation, expiry, interrupted staging, and commit rejection before the checkpoint boundary remove the durable artifact directory and release the lifecycle fence and target lock. Failures after installation changes retain checkpoint recovery instead.
-
-Authorized managers list active operations by exact environment, target, and generation. The original authorized client receives the mutation fields it needs to resume confirmation, artifact upload, or commit. Another current manager receives only a redacted observation DTO and can attach to progress without inheriting mutation authority. A binding administrator can reconcile a quarantined operation with a new exact permit; historical Desktop client identity is not required for that separate action.
-
-## Access boundary
-
-Catalog and explicit open-session continue to provide Gateway-card access. Terminal, files, web, and workspace data do not pass through the lifecycle operation store. Gateway is not a container/Provider Environment lifecycle manager, and Runtime continues to start and serve ordinary access without a Gateway process.
+Removing Runtime lifecycle authority must not delete pairing, trust, profiles, catalog configuration, or access sessions. Retired lifecycle stores and staging directories have no production reader and are not consulted before serving access or before a Desktop direct Runtime operation. Cleanup is limited to known Gateway-owned lifecycle artifacts and never reaches a Runtime root or user workspace.
 
 # Boundaries
 
-Gateway owns only Redeven-managed Runtime lifecycle state for its registered target and generation. Ordinary session access, terminal, files, web, workspace traffic, Runtime service execution, and Provider or container environment lifecycle remain outside that operation store. Desktop and Provider transports may authorize or observe Gateway operations, but they cannot bypass its target lock, permits, checkpoints, or recovery state.
+Desktop owns Runtime lifecycle only for targets with an authorized direct management channel. Provider owns discovery and access authorization. Runtime owns business execution. Gateway owns only its process and the access plane described above. A Gateway-only Environment is access-only and exposes no Runtime lifecycle action.
 
 # Evidence
 
-- `redeven:cmd/redeven-gateway/main.go:1` - Independent Gateway CLI and persistent service identity.
-- `redeven:internal/gatewayservice/server.go:188` - Signed request and operation endpoint validation.
-- `redeven:internal/runtimegateway/supervisor/` - Target lock, durable operation, checkpoint, deadline, and recovery implementation.
-- `redeven:internal/runtimegateway/supervisor/provider.go:1` - Gateway-owned Provider heartbeat and signed reverse management transport.
-- `redeven:internal/gatewayservice/provider_tunnel.go:1` - Direct dispatch into the single Gateway operation authority.
-- `redeven:internal/runtimegateway/lifecycle/store.go:390` - Exact active-operation listing, observer redaction, and binding-admin reconciliation.
-- `redeven:spec/openapi/gateway-v2.yaml:1` - Gateway v2 machine contract.
-- `redeven:desktop/src/main/gatewayLifecycleManager.ts:1` - Desktop installer/setup and service readiness adapter.
+- `redeven:cmd/redeven-gateway/main.go:1` - Standalone Gateway CLI and Gateway-only service commands.
+- `redeven:internal/gatewayservice/server.go:1` - Pairing, catalog, profile, open-session, and access forwarding routes.
+- `redeven:internal/gatewayservice/server_test.go:1` - Verifies Runtime lifecycle routes and state are absent.
+- `redeven:spec/openapi/gateway-v2.yaml:1` - Access-only Gateway HTTP contract.
+- `redeven:desktop/src/main/gatewayServiceHost.ts:1` - Explicit standalone Gateway installation under the Gateway state root.
+- `redeven:.github/workflows/release.yml:1` - Independent Gateway archive build and publication.

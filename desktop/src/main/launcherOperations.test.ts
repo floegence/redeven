@@ -62,34 +62,6 @@ describe('LauncherOperationRegistry', () => {
     })).not.toThrow();
   });
 
-  it('preserves a confirmation summary when attaching an existing Runtime operation', () => {
-    const registry = new LauncherOperationRegistry();
-    const confirmation = {
-      operation: 'restart' as const,
-      snapshot_revision: 4,
-      workload_knowledge: 'known' as const,
-      affected_process_count: 2,
-      active_session_count: 1,
-      protected_workload_present: true,
-    };
-
-    const operation = registry.create({
-      operation_key: 'runtime-attached-confirmation',
-      action: 'run_provider_environment_lifecycle',
-      active_progress_surface: 'runtime_lifecycle',
-      subject_kind: 'provider_environment',
-      subject_id: 'provider-a',
-      status: 'needs_confirmation',
-      phase: 'runtime_operation_confirmation_required',
-      title: 'Review Runtime impact',
-      detail: 'Review the verified Runtime workload.',
-      runtime_confirmation: confirmation,
-    });
-
-    expect(operation.runtime_confirmation).toEqual(confirmation);
-    expect(registry.progressItems()[0]?.runtime_confirmation).toEqual(confirmation);
-  });
-
   it('restores a reinstall operation with the original key and complete step plan', () => {
     const source = new LauncherOperationRegistry();
     const persisted = source.create({
@@ -112,7 +84,7 @@ describe('LauncherOperationRegistry', () => {
 
     expect(restored.get(persisted.operation_key)).toEqual(persisted);
     expect(restored.progressItems()[0]?.operation_key).toBe(persisted.operation_key);
-    expect(restored.progressItems()[0]?.step_progress?.steps).toHaveLength(13);
+    expect(restored.progressItems()[0]?.step_progress?.steps).toHaveLength(12);
     expect(restored.progressItems()[0]?.step_progress?.active_step_id).toBe('confirmation');
   });
 

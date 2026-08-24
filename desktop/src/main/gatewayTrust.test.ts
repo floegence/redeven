@@ -302,21 +302,15 @@ describe('gatewayTrust', () => {
     })).toThrow('Gateway protocol version is not supported');
   });
 
-  it('binds explicit Runtime grants into direct pairing proofs', () => {
+  it('binds optional profile-write capability without lifecycle grants', () => {
     const record = gatewayRecord();
     const material = createGatewayPairingMaterial(record);
     const gatewayMaterial = createGatewayPairingMaterial(record);
     const challenge = signedChallenge(material, gatewayMaterial);
-    const request = buildPairingCompleteRequest(material, challenge, {
-      profileWrite: true,
-      runtimeGrants: ['manage_runtime_binding', 'manage_runtime', 'deploy_custom_runtime'],
-    });
+    const request = buildPairingCompleteRequest(material, challenge, { profileWrite: true });
 
-    expect(request.runtime_grants).toEqual([
-      'deploy_custom_runtime',
-      'manage_runtime',
-      'manage_runtime_binding',
-    ]);
+    expect(request.client_capability).toBe('env_profile_write');
+    expect('runtime_grants' in request).toBe(false);
     expect(verifyGatewaySignature(material.client_public_key, pairingProofPayload({
       protocol_version: request.protocol_version,
       client_nonce: request.client_nonce,
@@ -325,7 +319,6 @@ describe('gatewayTrust', () => {
       binding_audience: request.binding_audience,
       client_key_id: request.client_key_id,
       client_capability: request.client_capability,
-      runtime_grants: request.runtime_grants,
     }), request.proof)).toBe(true);
   });
 

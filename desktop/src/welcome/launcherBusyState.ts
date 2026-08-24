@@ -47,11 +47,6 @@ export type BusyAction =
   | 'delete_gateway'
   | 'upsert_environment_registration'
   | 'delete_environment_registration'
-  | 'run_provider_environment_lifecycle'
-  | 'setup_provider_runtime_management_with_direct_card'
-  | 'setup_direct_runtime_management'
-  | 'confirm_runtime_operation'
-  | 'reconcile_runtime_operation'
   | 'set_provider_environment_pinned'
   | 'set_environment_registration_pinned'
   | 'delete_control_plane'
@@ -265,22 +260,6 @@ export function runtimeLifecycleOperationForActionProgress(
     case 'update_environment_runtime':
       return 'update';
     case 'refresh_environment_runtime':
-      return 'refresh';
-    case 'run_provider_environment_lifecycle':
-      break;
-    default:
-      return null;
-  }
-  const operation = progress.runtime_confirmation?.operation
-    ?? String(progress.operation_key ?? '').split(':').at(-1);
-  switch (operation) {
-    case 'start':
-    case 'stop':
-    case 'restart':
-      return operation;
-    case 'update_runtime':
-      return 'update';
-    case 'refresh':
       return 'refresh';
     default:
       return null;

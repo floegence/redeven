@@ -1,6 +1,6 @@
 import type { DesktopComponentTaskProgress } from '../shared/desktopLauncherIPC';
 
-export type ManagedComponentKind = 'gateway' | 'runtime';
+export type ManagedComponentKind = 'runtime';
 export type ManagedComponentTaskProgress = DesktopComponentTaskProgress & Readonly<{
   id: ManagedComponentKind;
 }>;
@@ -44,7 +44,7 @@ export type ManagedComponentSuiteManifestEntry = Readonly<{
 export type PreparedComponentBatch = Readonly<{
   operation_id: string;
   tasks: readonly PreparedComponent[];
-  suite_manifest: Readonly<{
+  runtime_manifest: Readonly<{
     release_tag: string;
     commit: string;
     platform: string;
@@ -153,7 +153,7 @@ function partialBatch(
   return {
     operation_id: operationID ?? 'batch',
     tasks: ordered,
-    suite_manifest: {
+    runtime_manifest: {
       release_tag: releaseTag,
       commit,
       platform,
@@ -215,7 +215,7 @@ export async function prepareAndStageBatch(
     const batch: PreparedComponentBatch = {
       operation_id: options.operation_id ?? 'batch',
       tasks: tasks.map((task) => prepared.find((item) => item.task.component === task.component)!).filter(Boolean),
-      suite_manifest: {
+      runtime_manifest: {
         release_tag: releaseTag,
         commit,
         platform,
@@ -243,7 +243,7 @@ export async function activateBatch(
   batch: PreparedComponentBatch,
   options: ManagedComponentBatchInstallerOptions,
 ): Promise<void> {
-  if (batch.tasks.length !== batch.suite_manifest.components.length) {
+  if (batch.tasks.length !== batch.runtime_manifest.components.length) {
     throw new Error('Cannot activate an incomplete managed component batch.');
   }
   await options.activate?.(batch);

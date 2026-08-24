@@ -21,7 +21,7 @@ import (
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
-func newRuntimeManagementTestAgent(t *testing.T, cfgPath string) *agent.Agent {
+func newRuntimeControlTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 	t.Helper()
 	policy, err := config.ParsePermissionPolicyPreset("")
 	if err != nil {
@@ -44,7 +44,7 @@ func newRuntimeManagementTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 	return a
 }
 
-func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
+func TestServerStartPublishesRuntimeControlStatus(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	bind, err := ParseBind("127.0.0.1:0")
 	if err != nil {
@@ -76,7 +76,7 @@ func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 			}
 			return store
 		}(),
-		a:       newRuntimeManagementTestAgent(t, cfgPath),
+		a:       newRuntimeControlTestAgent(t, cfgPath),
 		pending: make(map[string]pendingDirect),
 	}
 
@@ -191,7 +191,7 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 		t.Fatalf("MkdirTemp() error = %v", err)
 	}
 	defer func() { _ = os.RemoveAll(socketDir) }()
-	a := newRuntimeManagementTestAgent(t, cfgPath)
+	a := newRuntimeControlTestAgent(t, cfgPath)
 	s := &Server{
 		log:                    discardLogger(),
 		bind:                   bind,

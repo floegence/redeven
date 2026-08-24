@@ -4,7 +4,7 @@ import type { DesktopTranslationKey } from './i18n/desktopI18n';
 export const REINSTALL_TARGET_PROGRESS_STEPS = [
   'confirmation', 'direct_channel_open', 'target_resolved',
   'package_batch_prepared_and_verified', 'redeven_process_stop_attempted',
-  'old_root_isolated_or_cleared', 'fresh_suite_installed', 'gateway_started',
+  'old_root_isolated_or_cleared', 'runtime_installed',
   'runtime_started', 'runtime_verified', 'catalog_and_local_ui_verified',
   'old_data_cleaned', 'completed',
 ] as const;
@@ -15,7 +15,7 @@ export type ReinstallTargetStepStatus = 'pending' | 'running' | 'succeeded' | 'f
 export const REINSTALL_TARGET_JOURNAL_PHASES = [
   'confirmation', 'direct_channel_open', 'target_resolved',
   'package_batch_prepared_and_verified', 'redeven_process_stop_attempted',
-  'old_root_isolated_or_cleared', 'fresh_suite_installed', 'gateway_started',
+  'old_root_isolated_or_cleared', 'runtime_installed',
   'runtime_started', 'runtime_verified', 'catalog_and_local_ui_verified',
   'old_data_cleaned',
 ] as const;

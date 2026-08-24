@@ -35,7 +35,6 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
       state: 'available',
       capabilities: [],
       access_capabilities: ['open'],
-      control_capabilities: [],
       origin: { kind: 'network_target', label: 'Bastion network' },
     }],
     ...overrides,

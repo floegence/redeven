@@ -176,7 +176,6 @@ const { join } = require("node:path");
 const expected = [
   "desktop-bundle-manifest.json",
   "redeven",
-  "redeven-gateway",
 ];
 if (process.env.BUNDLE_GOOS === "linux") expected.push(
   ".redevplugin-release-artifacts-verified.json",
@@ -263,15 +262,14 @@ const suiteIdentity = {
   })).sort((left, right) => left.name.localeCompare(right.name)),
 };
 const manifest = {
-  schema_version: 2,
+  schema_version: 3,
   version: version.startsWith("v") ? version : `v${version}`,
   commit,
   platform,
   architecture,
   provenance,
-  gateway: descriptor("redeven-gateway", true),
-  runtime_suite: runtimeSuite,
-  runtime_suite_sha256: `sha256:${createHash("sha256").update(JSON.stringify(suiteIdentity)).digest("hex")}`,
+  runtime_files: runtimeSuite,
+  runtime_files_sha256: `sha256:${createHash("sha256").update(JSON.stringify(suiteIdentity)).digest("hex")}`,
 };
 writeFileSync(join(root, "desktop-bundle-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
 
@@ -280,46 +278,6 @@ function fail(message) {
   process.exit(1);
 }
 NODE
-}
-
-bundle_gateway_from_tarball() {
-  local tarball_path="$1"
-  local bundle_dir="$2"
-  local extract_parent extract_root
-
-  if [ -z "$tarball_path" ]; then
-    return 0
-  fi
-  if [ ! -f "$tarball_path" ]; then
-    ui_pkg_die "desktop bundle Gateway tarball not found: $tarball_path"
-  fi
-  if ! command -v python3 >/dev/null 2>&1; then
-    ui_pkg_die "python3 not found (required to inspect REDEVEN_DESKTOP_GATEWAY_TARBALL)"
-  fi
-
-  ui_pkg_log "Preparing desktop bundled Gateway from release tarball..."
-  ui_pkg_log "GATEWAY_TARBALL: $tarball_path"
-  extract_parent=$(mktemp -d)
-  extract_root="$extract_parent/gateway"
-  if ! "$SCRIPT_DIR/safe_extract_tar.py" \
-    --archive "$tarball_path" \
-    --dest "$extract_root" \
-    --allow-file redeven-gateway \
-    --allow-file LICENSE \
-    --allow-file THIRD_PARTY_NOTICES.md \
-    --max-files 3 \
-    --max-total-bytes 268435456
-  then
-    rm -rf "$extract_parent"
-    ui_pkg_die "Gateway release archive failed controlled extraction"
-  fi
-  if ! cmp -s "$extract_root/LICENSE" "$bundle_dir/LICENSE" ||
-     ! cmp -s "$extract_root/THIRD_PARTY_NOTICES.md" "$bundle_dir/THIRD_PARTY_NOTICES.md"; then
-    rm -rf "$extract_parent"
-    ui_pkg_die "Gateway release archive metadata does not match the runtime archive"
-  fi
-  install -m 0755 "$extract_root/redeven-gateway" "$bundle_dir/redeven-gateway"
-  rm -rf "$extract_parent"
 }
 
 stage_redevplugin_runtime() {
@@ -365,9 +323,8 @@ bundle_from_source() {
   local goos="$1"
   local goarch="$2"
   local output_path="$3"
-  local runtime_gateway_output_path="$4"
-  local version="$5"
-  local commit="$6"
+  local version="$4"
+  local commit="$5"
 
   if ! command -v go >/dev/null 2>&1; then
     ui_pkg_die "go not found (required to build the desktop bundled runtime)"
@@ -378,7 +335,6 @@ bundle_from_source() {
   ui_pkg_log "Building desktop bundled runtime from the current repository..."
   ui_pkg_log "TARGET: ${goos}-${goarch}"
   ui_pkg_log "OUTPUT: $output_path"
-  ui_pkg_log "GATEWAY_OUTPUT: $runtime_gateway_output_path"
 
   "$SCRIPT_DIR/build_runtime_binary.sh" \
     --check-only \
@@ -387,15 +343,13 @@ bundle_from_source() {
   "$SCRIPT_DIR/build_assets.sh"
 
   build_go_command "$goos" "$goarch" "$output_path" ./cmd/redeven "$version" "$commit" "$build_time"
-  build_go_command "$goos" "$goarch" "$runtime_gateway_output_path" ./cmd/redeven-gateway "$version" "$commit" "$build_time"
 }
 
 main() {
-  local goos goarch binary_name bundle_parent bundle_dir bundle_path gateway_bundle_path
-  local staging_parent working_bundle working_bundle_path working_gateway_path
-  local tarball_path gateway_tarball_path from_archive bundle_version bundle_commit
+  local goos goarch binary_name bundle_parent bundle_dir bundle_path
+  local staging_parent working_bundle working_bundle_path
+  local tarball_path from_archive bundle_version bundle_commit
   tarball_path="${REDEVEN_DESKTOP_RUNTIME_TARBALL:-${REDEVEN_DESKTOP_AGENT_TARBALL:-}}"
-  gateway_tarball_path="${REDEVEN_DESKTOP_GATEWAY_TARBALL:-}"
   goos="$(resolve_target_goos "$tarball_path")"
   goarch="$(resolve_target_goarch "$tarball_path")"
   binary_name="$(resolve_binary_name "$goos")"
@@ -411,7 +365,6 @@ main() {
 		bundle_dir="$bundle_parent/${goos}-${goarch}"
 	fi
   bundle_path="$bundle_dir/$binary_name"
-  gateway_bundle_path="$bundle_dir/redeven-gateway"
   bundle_version="$(resolve_bundle_version)"
   bundle_commit="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
 
@@ -422,19 +375,16 @@ main() {
   staging_parent=$(mktemp -d "$bundle_parent/.${goos}-${goarch}.stage.XXXXXX")
   working_bundle="$staging_parent/bundle"
   working_bundle_path="$working_bundle/$binary_name"
-  working_gateway_path="$working_bundle/redeven-gateway"
   trap 'rm -rf "$staging_parent"' EXIT
 
   if [ -n "$tarball_path" ]; then
     from_archive=1
     assert_tarball_target "$tarball_path" "$goos" "$goarch" "Redeven runtime archive"
-    assert_tarball_target "$gateway_tarball_path" "$goos" "$goarch" "Redeven Gateway archive"
     bundle_from_tarball "$tarball_path" "$working_bundle" "$goos"
-    bundle_gateway_from_tarball "$gateway_tarball_path" "$working_bundle"
   else
     from_archive=0
     mkdir -p "$working_bundle"
-    bundle_from_source "$goos" "$goarch" "$working_bundle_path" "$working_gateway_path" "$bundle_version" "$bundle_commit"
+    bundle_from_source "$goos" "$goarch" "$working_bundle_path" "$bundle_version" "$bundle_commit"
     if [[ "$goos" == "linux" ]]; then
       stage_redevplugin_runtime "$working_bundle" "$goos" "$goarch"
     fi
@@ -443,12 +393,7 @@ main() {
   if [ ! -f "$working_bundle_path" ]; then
     ui_pkg_die "desktop bundled runtime not found after preparation: $working_bundle_path"
   fi
-  if [ ! -f "$working_gateway_path" ]; then
-    ui_pkg_die "desktop bundled Gateway not found after preparation: $working_gateway_path"
-  fi
-
   assert_go_binary_target "$working_bundle_path" "$goos" "$goarch" "Redeven runtime"
-  assert_go_binary_target "$working_gateway_path" "$goos" "$goarch" "Redeven Gateway"
   "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
     --scan-root "$working_bundle" \
     --runtime-target "${goos}/${goarch}"
@@ -456,12 +401,10 @@ main() {
   assert_bundle_inventory "$working_bundle" "$from_archive" "$goos"
 
   chmod +x "$working_bundle_path"
-  chmod +x "$working_gateway_path"
   "$SCRIPT_DIR/safe_extract_tar.py" --replace-dir "$working_bundle" --dest "$bundle_dir"
   rm -rf "$staging_parent"
   trap - EXIT
   ui_pkg_log "Desktop bundled runtime ready: $bundle_path"
-  ui_pkg_log "Desktop bundled Gateway ready: $gateway_bundle_path"
   printf '%s\n' "$bundle_path"
 }
 

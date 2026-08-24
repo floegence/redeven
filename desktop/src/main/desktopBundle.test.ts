@@ -30,50 +30,39 @@ function bundleFixture(overrides: Record<string, unknown> = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-desktop-bundle-'));
   roots.push(root);
   const runtime = Buffer.from("#!/bin/sh\nprintf 'redeven v1.2.3 (abc123) 2026-08-19T00:00:00Z\\n'\n");
-  const gateway = Buffer.from("#!/bin/sh\nprintf 'redeven-gateway v1.2.3 (abc123) 2026-08-19T00:00:00Z\\n'\n");
   fs.writeFileSync(path.join(root, 'redeven'), runtime, { mode: 0o755 });
-  fs.writeFileSync(path.join(root, 'redeven-gateway'), gateway, { mode: 0o755 });
-  const runtimeSuite = [{
+  const runtimeFiles = [{
     path: 'redeven',
     sha256: sha256(runtime),
     size_bytes: runtime.length,
     executable: true,
   }];
   const manifest = {
-    schema_version: 2,
+    schema_version: 3,
     version: 'v1.2.3',
     commit: 'abc123',
     platform: 'linux',
     architecture: 'amd64',
     provenance: 'packaged_bundle',
-    gateway: {
-      path: 'redeven-gateway',
-      sha256: sha256(gateway),
-      size_bytes: gateway.length,
-      executable: true,
-    },
-    runtime_suite: runtimeSuite,
-    runtime_suite_sha256: suiteSHA256(runtimeSuite),
+    runtime_files: runtimeFiles,
+    runtime_files_sha256: suiteSHA256(runtimeFiles),
     ...overrides,
   };
   fs.writeFileSync(path.join(root, 'desktop-bundle-manifest.json'), `${JSON.stringify(manifest)}\n`);
   return root;
 }
 
-function replaceBundleArtifact(root: string, name: 'redeven' | 'redeven-gateway', value: Buffer): void {
-  fs.writeFileSync(path.join(root, name), value, { mode: 0o755 });
+function replaceBundleRuntime(root: string, value: Buffer): void {
+  fs.writeFileSync(path.join(root, 'redeven'), value, { mode: 0o755 });
   const manifestPath = path.join(root, 'desktop-bundle-manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown> & {
-    gateway: Record<string, unknown>;
-    runtime_suite: Array<Record<string, unknown>>;
+    runtime_files: Array<Record<string, unknown>>;
   };
-  const descriptor = name === 'redeven-gateway'
-    ? manifest.gateway
-    : manifest.runtime_suite.find((artifact) => artifact.path === name);
-  if (!descriptor) throw new Error(`Missing bundle artifact ${name}.`);
+  const descriptor = manifest.runtime_files.find((artifact) => artifact.path === 'redeven');
+  if (!descriptor) throw new Error('Missing bundle Runtime artifact.');
   descriptor.sha256 = sha256(value);
   descriptor.size_bytes = value.length;
-  manifest.runtime_suite_sha256 = suiteSHA256(manifest.runtime_suite);
+  manifest.runtime_files_sha256 = suiteSHA256(manifest.runtime_files);
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
 }
 
@@ -84,7 +73,7 @@ afterEach(() => {
 });
 
 describe('Desktop precompiled bundle', () => {
-  it('validates the exact packaged Gateway and Runtime identities before startup', async () => {
+  it('validates the exact packaged Runtime identity before startup', async () => {
     const root = bundleFixture();
 
     await expect(loadDesktopBundle({
@@ -96,8 +85,7 @@ describe('Desktop precompiled bundle', () => {
       root,
       version: 'v1.2.3',
       commit: 'abc123',
-      gateway: { path: path.join(root, 'redeven-gateway') },
-      runtime_suite: [{ path: path.join(root, 'redeven') }],
+      runtime_files: [{ path: path.join(root, 'redeven') }],
     });
   });
 
@@ -116,9 +104,9 @@ describe('Desktop precompiled bundle', () => {
     })).rejects.toThrow(message);
   });
 
-  it.each(['redeven', 'redeven-gateway'])('rejects a digest mismatch for %s', async (name) => {
+  it('rejects a Runtime digest mismatch', async () => {
     const root = bundleFixture();
-    const filePath = path.join(root, name);
+    const filePath = path.join(root, 'redeven');
     const tampered = fs.readFileSync(filePath);
     tampered[0] = tampered[0] === 0 ? 1 : 0;
     fs.writeFileSync(filePath, tampered, { mode: 0o755 });
@@ -145,18 +133,23 @@ describe('Desktop precompiled bundle', () => {
     })).rejects.toThrow('regular non-symlink file');
   });
 
-  it.each([
-    ['redeven', "#!/bin/sh\nprintf 'redeven v9.9.9 (abc123) now\\n'\n", 'version'],
-    ['redeven-gateway', "#!/bin/sh\nprintf 'redeven-gateway v1.2.3 (different) now\\n'\n", 'commit'],
-  ] as const)('rejects a digest-valid %s with a mismatched embedded identity', async (name, script, mismatch) => {
+  it('rejects a digest-valid Runtime with a mismatched embedded identity', async () => {
     const root = bundleFixture();
-    replaceBundleArtifact(root, name, Buffer.from(script));
+    replaceBundleRuntime(root, Buffer.from("#!/bin/sh\nprintf 'redeven v9.9.9 (abc123) now\\n'\n"));
 
     await expect(loadDesktopBundle({
       root,
       expectedPlatform: 'linux',
       expectedArchitecture: 'amd64',
       expectedVersion: 'v1.2.3',
-    })).rejects.toThrow(mismatch);
+    })).rejects.toThrow('version');
+  });
+
+  it('rejects the retired Gateway and Runtime suite manifest shape', async () => {
+    await expect(loadDesktopBundle({
+      root: bundleFixture({ schema_version: 2, gateway: {}, runtime_suite: [] }),
+      expectedPlatform: 'linux',
+      expectedArchitecture: 'amd64',
+    })).rejects.toThrow('unsupported shape');
   });
 });

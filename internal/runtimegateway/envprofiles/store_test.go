@@ -42,9 +42,6 @@ func TestStoreUpsertURLProfileNormalizesAndPersistsAccessOnlyCatalogEntry(t *tes
 	if got := env.AccessCapabilities; !reflect.DeepEqual(got, []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen}) {
 		t.Fatalf("AccessCapabilities = %#v", got)
 	}
-	if len(env.ControlCapabilities) != 0 {
-		t.Fatalf("ControlCapabilities = %#v, want empty for URL access profile", env.ControlCapabilities)
-	}
 	if got := env.Capabilities; !reflect.DeepEqual(got, []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen}) {
 		t.Fatalf("Capabilities = %#v", got)
 	}
@@ -226,8 +223,8 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 		sshEnv.ProfileAccessRoute.SSHRuntimeRoot != "~/.redeven" {
 		t.Fatalf("ssh profile access route = %#v", sshEnv.ProfileAccessRoute)
 	}
-	if len(sshEnv.AccessCapabilities) != 0 || len(sshEnv.ControlCapabilities) != 0 || len(sshEnv.Capabilities) != 0 {
-		t.Fatalf("ssh capabilities = access %#v control %#v legacy %#v, want empty until Gateway executor is available", sshEnv.AccessCapabilities, sshEnv.ControlCapabilities, sshEnv.Capabilities)
+	if len(sshEnv.AccessCapabilities) != 0 || len(sshEnv.Capabilities) != 0 {
+		t.Fatalf("ssh capabilities = access %#v legacy %#v, want empty for access-only Gateway profile", sshEnv.AccessCapabilities, sshEnv.Capabilities)
 	}
 
 	containerEnv, err := store.Upsert(context.Background(), protocol.EnvProfileUpsertRequest{
@@ -261,8 +258,8 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 		containerEnv.ProfileAccessRoute.ContainerRuntimeRoot != "~/.redeven" {
 		t.Fatalf("container profile access route = %#v", containerEnv.ProfileAccessRoute)
 	}
-	if len(containerEnv.AccessCapabilities) != 0 || len(containerEnv.ControlCapabilities) != 0 || len(containerEnv.Capabilities) != 0 {
-		t.Fatalf("container capabilities = access %#v control %#v legacy %#v, want empty until Gateway executor is available", containerEnv.AccessCapabilities, containerEnv.ControlCapabilities, containerEnv.Capabilities)
+	if len(containerEnv.AccessCapabilities) != 0 || len(containerEnv.Capabilities) != 0 {
+		t.Fatalf("container capabilities = access %#v legacy %#v, want empty for access-only Gateway profile", containerEnv.AccessCapabilities, containerEnv.Capabilities)
 	}
 
 	profiles, err := NewStore(path).List(context.Background())

@@ -145,11 +145,6 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v2/desktop-model-source/connect", s.handleDesktopModelSourceConnect)
 	mux.HandleFunc("/v2/desktop-model-source/disconnect", s.handleDesktopModelSourceDisconnect)
 	mux.HandleFunc("/v2/desktop-model-source/rpc", s.handleDesktopModelSourceRPC)
-	mux.HandleFunc("GET /v2/runtime/identity", s.handleRuntimeIdentity)
-	mux.HandleFunc("GET /v2/runtime/workload-snapshot", s.handleRuntimeWorkloadSnapshot)
-	mux.HandleFunc("POST /v2/runtime/lifecycle-fence/begin", s.handleRuntimeLifecycleFenceBegin)
-	mux.HandleFunc("POST /v2/runtime/lifecycle-fence/release", s.handleRuntimeLifecycleFenceRelease)
-	mux.HandleFunc("POST /v2/runtime/shutdown", s.handleRuntimeShutdown)
 	mux.HandleFunc("GET /v2/runtime/health", s.handleRuntimeHealth)
 	return withLocalUISecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r == nil {
@@ -227,94 +222,6 @@ func (s *runtimeControlServer) require(w http.ResponseWriter, r *http.Request) b
 	return true
 }
 
-type runtimeLifecycleFenceBeginRequest struct {
-	ProtocolVersion  string `json:"protocol_version"`
-	OperationID      string `json:"operation_id"`
-	TargetGeneration int64  `json:"target_generation"`
-}
-
-type runtimeLifecycleFenceTokenRequest struct {
-	ProtocolVersion string `json:"protocol_version"`
-	FenceToken      string `json:"fence_token"`
-}
-
-func (s *runtimeControlServer) handleRuntimeIdentity(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r) {
-		return
-	}
-	identity, err := s.agent.RuntimeLifecycleIdentity()
-	if err != nil {
-		writeRuntimeControlError(w, http.StatusServiceUnavailable, "RUNTIME_IDENTITY_UNAVAILABLE", err.Error())
-		return
-	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: identity})
-}
-
-func (s *runtimeControlServer) handleRuntimeWorkloadSnapshot(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r) {
-		return
-	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.RuntimeLifecycleSnapshot()})
-}
-
-func (s *runtimeControlServer) handleRuntimeLifecycleFenceBegin(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r) {
-		return
-	}
-	var request runtimeLifecycleFenceBeginRequest
-	if !decodeRuntimeControlJSON(w, r, &request) {
-		return
-	}
-	if request.ProtocolVersion != runtimeControlProtocolVersion {
-		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_PROTOCOL_INCOMPATIBLE", "Runtime control protocol is not supported.")
-		return
-	}
-	fence, err := s.agent.BeginRuntimeLifecycleFence(request.OperationID, request.TargetGeneration)
-	if err != nil {
-		writeRuntimeLifecycleManagerError(w, err)
-		return
-	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: fence})
-}
-
-func (s *runtimeControlServer) handleRuntimeLifecycleFenceRelease(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r) {
-		return
-	}
-	var request runtimeLifecycleFenceTokenRequest
-	if !decodeRuntimeControlJSON(w, r, &request) {
-		return
-	}
-	if request.ProtocolVersion != runtimeControlProtocolVersion {
-		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_PROTOCOL_INCOMPATIBLE", "Runtime control protocol is not supported.")
-		return
-	}
-	if err := s.agent.ReleaseRuntimeLifecycleFence(request.FenceToken); err != nil {
-		writeRuntimeLifecycleManagerError(w, err)
-		return
-	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: map[string]any{"released": true}})
-}
-
-func (s *runtimeControlServer) handleRuntimeShutdown(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r) {
-		return
-	}
-	var request runtimeLifecycleFenceTokenRequest
-	if !decodeRuntimeControlJSON(w, r, &request) {
-		return
-	}
-	if request.ProtocolVersion != runtimeControlProtocolVersion {
-		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_PROTOCOL_INCOMPATIBLE", "Runtime control protocol is not supported.")
-		return
-	}
-	if err := s.agent.RequestRuntimeLifecycleShutdown(request.FenceToken); err != nil {
-		writeRuntimeLifecycleManagerError(w, err)
-		return
-	}
-	writeRuntimeControlJSON(w, http.StatusAccepted, runtimeControlEnvelope{OK: true, Data: map[string]any{"shutdown_requested": true}})
-}
-
 func (s *runtimeControlServer) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r) {
 		return
@@ -337,17 +244,6 @@ func decodeRuntimeControlJSON(w http.ResponseWriter, r *http.Request, output any
 		return false
 	}
 	return true
-}
-
-func writeRuntimeLifecycleManagerError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, runtimeservice.ErrLifecycleAdmissionClosed), errors.Is(err, runtimeservice.ErrLifecycleFenceHeld):
-		writeRuntimeControlError(w, http.StatusConflict, "OPERATION_IN_PROGRESS", err.Error())
-	case errors.Is(err, runtimeservice.ErrLifecycleFenceToken):
-		writeRuntimeControlError(w, http.StatusForbidden, "STALE_FENCE_TOKEN", err.Error())
-	default:
-		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_LIFECYCLE_INVALID_REQUEST", err.Error())
-	}
 }
 
 func (s *runtimeControlServer) handleProviderLink(w http.ResponseWriter, r *http.Request) {

@@ -541,7 +541,6 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
       state: 'available',
       capabilities: ['open'],
       access_capabilities: ['open'],
-      control_capabilities: [],
       origin: { kind: 'network_target', label: 'Finance subnet' },
     }],
     ...overrides,

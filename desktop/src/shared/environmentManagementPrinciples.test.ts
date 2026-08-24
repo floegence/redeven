@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS,
-  desktopEntryKindCanInitiateRuntimeManagement,
-  desktopEntryKindSupportsRuntimeManagement,
+  desktopEntryKindSupportsDirectRuntimeOperations,
   desktopEnvironmentManagementSurface,
   desktopProviderCardAllowsAction,
   desktopProviderEnvironmentOpenRoute,
@@ -11,11 +10,10 @@ import {
 } from './environmentManagementPrinciples';
 
 describe('environmentManagementPrinciples', () => {
-  it('keeps provider Open remote-only while allowing explicit Gateway-backed runtime management', () => {
+  it('keeps Provider cards access-only and outside direct Runtime operations', () => {
     expect(desktopEnvironmentManagementSurface('provider_environment')).toBe('provider_card');
     expect(desktopProviderEnvironmentOpenRoute()).toBe('remote_desktop');
-    expect(desktopEntryKindSupportsRuntimeManagement('provider_environment')).toBe(false);
-    expect(desktopEntryKindCanInitiateRuntimeManagement('provider_environment')).toBe(true);
+    expect(desktopEntryKindSupportsDirectRuntimeOperations('provider_environment')).toBe(false);
 
     for (const action of DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS) {
       expect(desktopProviderCardAllowsAction(action)).toBe(false);
@@ -30,9 +28,9 @@ describe('environmentManagementPrinciples', () => {
     expect(desktopEnvironmentManagementSurface('local_environment')).toBe('managed_runtime_card');
     expect(desktopEnvironmentManagementSurface('ssh_environment')).toBe('managed_runtime_card');
     expect(desktopEnvironmentManagementSurface('external_local_ui')).toBe('unmanaged_environment_card');
-    expect(desktopEntryKindSupportsRuntimeManagement('local_environment')).toBe(true);
-    expect(desktopEntryKindSupportsRuntimeManagement('ssh_environment')).toBe(true);
-    expect(desktopEntryKindSupportsRuntimeManagement('external_local_ui')).toBe(false);
+    expect(desktopEntryKindSupportsDirectRuntimeOperations('local_environment')).toBe(true);
+    expect(desktopEntryKindSupportsDirectRuntimeOperations('ssh_environment')).toBe(true);
+    expect(desktopEntryKindSupportsDirectRuntimeOperations('external_local_ui')).toBe(false);
   });
 
   it('requires an exact selected Local or SSH runtime target for provider links', () => {

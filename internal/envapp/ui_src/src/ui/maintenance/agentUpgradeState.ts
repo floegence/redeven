@@ -14,7 +14,7 @@ export type AgentUpgradeState = Readonly<{
   actionMethod: RuntimeMaintenanceContext['upgrade']['method'];
 }>;
 
-const DEFAULT_DESKTOP_RELEASE_MESSAGE = 'Runtime management is provided through Redeven Gateway setup. Use Desktop or your administrator\'s setup flow to install the update.';
+const DEFAULT_DESKTOP_RELEASE_MESSAGE = 'Runtime updates are managed by Redeven Desktop through the configured host connection.';
 const DEFAULT_MANUAL_MESSAGE = 'Latest version metadata is unavailable in this mode. Enter a specific release tag to update manually.';
 
 function normalizeUpgradePolicy(latestMeta: AgentLatestVersion | null | undefined): AgentUpgradePolicy {
@@ -34,7 +34,7 @@ export function resolveAgentUpgradeState(
   const releasePageURL = String(latestMeta?.release_page_url ?? '').trim();
   const upgradePlan = maintenanceContext?.upgrade ?? null;
   const upgradeAvailable = upgradePlan?.availability === 'available'
-    && upgradePlan.method === 'gateway_supervisor';
+    && upgradePlan.method === 'host_device_handoff';
   const actionMethod = upgradePlan?.method ?? 'manual';
 
   let message = upgradePlan?.message || rawMessage;

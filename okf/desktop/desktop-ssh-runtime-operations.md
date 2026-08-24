@@ -1,42 +1,47 @@
 ---
 type: Desktop Contract
 title: Desktop SSH runtime operations
-description: SSH transport isolation and direct Desktop Runtime lifecycle execution.
+description: Direct SSH and SSH-container Runtime lifecycle execution owned by Desktop.
 tags: [desktop, ssh, runtime, process]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 # Summary
 
-Desktop shares one lazy, credential-scoped SSH transport manager and executes SSH-host and SSH-container Runtime lifecycle actions through the same direct Desktop coordinator as Local targets. Actions remain recoverable when the Runtime is stopped, stale, unreachable, partially installed, or represented by residual processes. Cached probes are observations only; each click authoritatively acts on the exact saved target. SSH establishment uses the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound, with no second fixed timeout. Transport generations fence retries, and hostnames, container labels, or Desktop card ids never substitute for target identity. The direct coordinator is the only Desktop lifecycle owner; the target stores no Desktop lock, PID lease, daemon, or second state machine.
+Desktop manages an SSH-host or SSH-container Runtime only through the exact saved SSH connection and placement. The same process-local lifecycle coordinator, Launcher Operation, transport lease, platform observation, and temporary helper session serve Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall. Gateway and Provider credentials are never substituted for SSH authority, and the target stores no Desktop lifecycle lock or supervisor state.
 
 # Contract
 
-## Transport and setup
+## Transport
 
-The SSH manager keys leases by normalized destination, port, auth mode, SSH binary, and credential scope. A master exit invalidates the pinned generation; the current command returns an interruption and does not silently acquire a replacement or choose another transport. An established bridge may later recover only after exact session identity checks.
+The SSH transport manager keys a connection by normalized destination, port, authentication mode, SSH binary, and credential scope. A transport failure ends the current command with its original SSH diagnostics; Desktop does not silently select another connection, Gateway, public URL, or Provider route.
 
-SSH discovery follows bounded `Include` rules, excludes wildcard/negated hosts from selectable aliases, and keeps manually entered destinations possible. SSH host, local-container, and SSH-container setup uses an explicit target and supervisor enrollment path. Provider never reads these credentials implicitly.
+SSH discovery follows bounded configuration includes, excludes wildcard and negated aliases from selectable entries, and still allows explicit destinations. The Environment registration keeps the display name separate from SSH destination and supplies the exact Runtime root and, for containers, engine and container id.
 
-## Direct lifecycle execution
+One lifecycle operation opens or reuses one SSH transport, probes platform once, prepares a lightweight helper only when required, and reuses that session for inventory and stop. Start and Stop do not prepare a full Runtime package. Update prepares the Runtime package independently, verifies it before target modification, and exposes build/download/upload phases separately from process discovery.
 
-Desktop creates one Launcher Operation before opening the SSH channel. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall reuse that operation owner and publish the same typed lifecycle timeline. If ordinary start or restart is unavailable because the installed Runtime is old, unknown, or damaged, Desktop runs the direct recovery operation and preserves the requested user-facing outcome. Stop remains available as an idempotent cleanup action, including for residual Runtime processes. A confirmed update requested by Open resumes the readiness check and opens only after Runtime health succeeds.
+## Host and container behavior
 
-SSH-container execution follows the same order inside the selected exact container: inspect the saved container id or stable reference, start that container first for Start, Restart, Update, or initialization when it is stopped, re-inspect it, then inspect exact process identities, stop verified residuals for restart or update, repair or install the package when required, start one Runtime, and verify one new current process before Open. Stop never starts a stopped container and completes idempotently once the saved container is positively identified as stopped. Start never replaces a live process implicitly. An identity that cannot be tied to the selected user, namespace, state root, and executable remains fail-closed rather than signaling an unrelated process.
+SSH-host actions execute against the confirmed remote user and Runtime root. SSH-container actions additionally inspect the saved exact container. Start, Restart, Update, or Reinstall may start that saved container when required; Stop never starts a stopped container and succeeds idempotently when the Runtime inventory is already empty.
 
-Local containers follow the same exact-identity rules through the local engine executor. Local host, SSH host, Local container, and SSH container all share the same main-process Open/lifecycle decision order: probe, choose one recovery operation, execute it, re-probe the same target, then open. Unknown health is not treated as initialization, and a running Runtime makes Start a no-op. If only update is advertised, Update is the convergence operation for Start, Restart, and Open recovery.
+Inventory identifies processes by exact Runtime scope and returns typed before/after state. Desktop signals only verified matching processes for ordinary Stop/Restart/Update. Wipe reinstall treats helper inventory and stop as best effort and proceeds to exact-root isolation when SSH and filesystem access remain available.
 
-Desktop reports typed phases, per-step elapsed time, and actionable terminal failures, and can attach after disconnect without creating a second SSH lifecycle state machine. A slow phase remains visible with its current step and elapsed time, and cancellation, SSH interruption, or process exit closes the operation with retry/diagnostic guidance. An old or incompatible Runtime is classified as an update requirement and exposes Update Runtime before Open. Artifact preparation or upload failure cancels a still-precommit operation; the next user attempt starts a fresh direct operation.
+The remote command snippets each perform one bounded action: probe, stage helper, inventory, stop, install, start, verify, isolate, or cleanup. They do not implement a lifecycle state machine, persist a lock, maintain a heartbeat, or wait on Provider/Gateway authorization. Desktop owns sequence, timeouts, cancellation, progress, and retry.
+
+## User-facing result
+
+The Launcher Operation exists before the first SSH command and reports the actual active phase. SSH connection failure, missing container, unavailable engine, package preparation failure, command exit, and Runtime readiness failure remain distinct structured errors with technical stderr available in details.
+
+An SSH or SSH-container registration always retains its direct lifecycle menu. A Gateway-only or Provider-only Environment has no SSH authority and therefore cannot borrow this execution path.
 
 # Boundaries
 
-SSH and container inventory is observational until a lifecycle action executes. Desktop may start only the exact saved container needed for Runtime recovery; it never creates or selects an unrelated container. Engine absence, permission failure, missing container, or SSH failure is reported as the real boundary after the action is attempted. URL access has no Runtime control fallback, and an unavailable Gateway does not disable existing Connect or Workspace sessions.
+Desktop never scans unrelated processes, selects a similarly named container, deletes a home directory, or performs global container cleanup. Multiple Desktop processes controlling one SSH target are unsupported and do not justify a target-side coordination protocol.
 
 # Evidence
 
-- `redeven:desktop/src/main/sshTransportManager.ts:1` - Credential-scoped SSH lease and generation fencing.
-- `redeven:desktop/src/main/sshRuntime.ts:1` - SSH target setup and Gateway lifecycle adapter.
-- `redeven:desktop/src/main/containerRuntime.ts:230` - Exact container inspect/start commands and lifecycle recovery verification.
-- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1` - One in-process owner for direct lifecycle actions.
-- `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - Direct-channel final recovery without a target-side lock.
-- `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - Unified Open/lifecycle recovery decision.
-- `redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1` - SSH-container and Local-container failure guidance smoke.
+- `redeven:desktop/src/main/sshTransportManager.ts:1` - Credential-scoped SSH transport reuse and cancellation.
+- `redeven:desktop/src/main/sshRuntime.ts:1` - Direct SSH Runtime package, helper, process, start, and verification operations.
+- `redeven:desktop/src/main/containerRuntime.ts:1` - Exact SSH-container command construction.
+- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1` - One current-Desktop owner per physical target.
+- `redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1` - Explicit intent-specific progress phases.
+- `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - SSH and container final-recovery path.

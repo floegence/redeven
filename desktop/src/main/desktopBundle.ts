@@ -23,9 +23,8 @@ export type DesktopBundle = Readonly<{
   platform: 'darwin' | 'linux';
   architecture: 'amd64' | 'arm64';
   provenance: 'packaged_bundle' | 'development_bundle';
-  gateway: DesktopBundleArtifact;
-  runtime_suite: readonly DesktopBundleArtifact[];
-  runtime_suite_sha256: string;
+  runtime_files: readonly DesktopBundleArtifact[];
+  runtime_files_sha256: string;
 }>;
 
 type LoadDesktopBundleOptions = Readonly<{
@@ -67,37 +66,21 @@ function parseArtifact(value: unknown, label: string): DesktopBundleArtifact {
   const digest = compact(artifact.sha256).toLowerCase().replace(/^sha256:/u, '');
   const sizeBytes = Number(artifact.size_bytes);
   if (
-    relativePath === ''
-    || path.basename(relativePath) !== relativePath
-    || relativePath === '.'
-    || !SHA256_PATTERN.test(digest)
-    || !Number.isSafeInteger(sizeBytes)
-    || sizeBytes <= 0
+    relativePath === '' || path.basename(relativePath) !== relativePath || relativePath === '.'
+    || !SHA256_PATTERN.test(digest) || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0
     || typeof artifact.executable !== 'boolean'
   ) {
     throw new Error(`Desktop bundle ${label} is invalid.`);
   }
-  return {
-    path: relativePath,
-    sha256: digest,
-    size_bytes: sizeBytes,
-    executable: artifact.executable,
-  };
+  return { path: relativePath, sha256: digest, size_bytes: sizeBytes, executable: artifact.executable };
 }
 
-async function readRegularFile(filePath: string, label: string): Promise<Readonly<{
-  bytes: Buffer;
-  mode: number;
-}>> {
+async function readRegularFile(filePath: string, label: string): Promise<Readonly<{ bytes: Buffer; mode: number }>> {
   const before = await fs.promises.lstat(filePath).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === 'ENOENT') {
-      throw new Error(`Desktop bundle ${label} is missing.`);
-    }
+    if (error.code === 'ENOENT') throw new Error(`Desktop bundle ${label} is missing.`);
     throw error;
   });
-  if (before.isSymbolicLink() || !before.isFile()) {
-    throw new Error(`Desktop bundle ${label} must be a regular non-symlink file.`);
-  }
+  if (before.isSymbolicLink() || !before.isFile()) throw new Error(`Desktop bundle ${label} must be a regular non-symlink file.`);
   const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
   const handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | noFollow);
   try {
@@ -111,155 +94,65 @@ async function readRegularFile(filePath: string, label: string): Promise<Readonl
   }
 }
 
-async function validateArtifact(
-  root: string,
-  artifact: DesktopBundleArtifact,
-  label: string,
-): Promise<DesktopBundleArtifact> {
-  const absolutePath = path.join(root, artifact.path);
-  const file = await readRegularFile(absolutePath, label);
-  if (file.bytes.length !== artifact.size_bytes) {
-    throw new Error(`Desktop bundle ${label} size does not match its manifest.`);
-  }
-  const digest = createHash('sha256').update(file.bytes).digest('hex');
-  if (digest !== artifact.sha256) {
+async function validateArtifact(root: string, artifact: DesktopBundleArtifact, label: string): Promise<DesktopBundleArtifact> {
+  const file = await readRegularFile(path.join(root, artifact.path), label);
+  if (file.bytes.length !== artifact.size_bytes) throw new Error(`Desktop bundle ${label} size does not match its manifest.`);
+  if (createHash('sha256').update(file.bytes).digest('hex') !== artifact.sha256) {
     throw new Error(`Desktop bundle ${label} digest does not match its manifest.`);
   }
-  if (artifact.executable && (file.mode & 0o111) === 0) {
-    throw new Error(`Desktop bundle ${label} is not executable.`);
-  }
-  return { ...artifact, path: absolutePath };
+  if (artifact.executable && (file.mode & 0o111) === 0) throw new Error(`Desktop bundle ${label} is not executable.`);
+  return { ...artifact, path: path.join(root, artifact.path) };
 }
 
-async function validateBinaryIdentity(
-  filePath: string,
-  binaryName: 'redeven' | 'redeven-gateway',
-  version: string,
-  commit: string,
-): Promise<void> {
+async function validateBinaryIdentity(filePath: string, version: string, commit: string): Promise<void> {
   let stdout: string;
   try {
-    const result = await execFileAsync(filePath, ['version'], {
-      encoding: 'utf8',
-      timeout: 5_000,
-      maxBuffer: 64 * 1024,
-    });
-    stdout = result.stdout;
+    stdout = (await execFileAsync(filePath, ['version'], { encoding: 'utf8', timeout: 5_000, maxBuffer: 64 * 1024 })).stdout;
   } catch (error) {
-    throw new Error(`Desktop bundle ${binaryName} identity check failed.`, { cause: error });
+    throw new Error('Desktop bundle Runtime identity check failed.', { cause: error });
   }
-  const match = stdout.trim().match(/^(redeven(?:-gateway)?)\s+(\S+)\s+\(([^)]+)\)(?:\s|$)/u);
-  if (!match || match[1] !== binaryName) {
-    throw new Error(`Desktop bundle ${binaryName} identity is invalid.`);
+  const match = stdout.trim().match(/^redeven\s+(\S+)\s+\(([^)]+)\)(?:\s|$)/u);
+  if (!match) throw new Error('Desktop bundle Runtime identity output is invalid.');
+  if (normalizedVersion(match[1]) !== normalizedVersion(version)) {
+    throw new Error(`Desktop bundle Runtime version ${match[1]} does not match manifest version ${version}.`);
   }
-  if (normalizedVersion(match[2]) !== normalizedVersion(version)) {
-    throw new Error(`Desktop bundle ${binaryName} version does not match its manifest.`);
-  }
-  if (compact(match[3]) !== commit) {
-    throw new Error(`Desktop bundle ${binaryName} commit does not match its manifest.`);
+  if (compact(match[2]) !== commit) {
+    throw new Error(`Desktop bundle Runtime commit ${match[2]} does not match manifest commit ${commit}.`);
   }
 }
 
 export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Promise<DesktopBundle> {
   const root = path.resolve(compact(options.root));
-  if (compact(options.root) === '') {
-    throw new Error('Desktop bundle root is missing.');
-  }
+  if (compact(options.root) === '') throw new Error('Desktop bundle root is missing.');
   const manifestPath = path.join(root, DESKTOP_BUNDLE_MANIFEST_NAME);
   const manifestFile = await readRegularFile(manifestPath, 'manifest');
   let decoded: unknown;
-  try {
-    decoded = JSON.parse(manifestFile.bytes.toString('utf8'));
-  } catch {
-    throw new Error('Desktop bundle manifest is not valid JSON.');
-  }
+  try { decoded = JSON.parse(manifestFile.bytes.toString('utf8')); } catch { throw new Error('Desktop bundle manifest is not valid JSON.'); }
   const manifest = requireObject(decoded, 'manifest');
-  requireExactKeys(
-    manifest,
-    ['architecture', 'commit', 'gateway', 'platform', 'provenance', 'runtime_suite', 'runtime_suite_sha256', 'schema_version', 'version'],
-    'manifest',
-  );
-  if (manifest.schema_version !== 2) {
-    throw new Error('Desktop bundle manifest schema is unsupported.');
-  }
+  requireExactKeys(manifest, ['architecture', 'commit', 'platform', 'provenance', 'runtime_files', 'runtime_files_sha256', 'schema_version', 'version'], 'manifest');
+  if (manifest.schema_version !== 3) throw new Error('Desktop bundle manifest schema is unsupported.');
   const version = compact(manifest.version);
   const commit = compact(manifest.commit);
   const platform = compact(manifest.platform);
   const architecture = compact(manifest.architecture);
   const provenance = compact(manifest.provenance);
-  const runtimeSuiteSHA256 = compact(manifest.runtime_suite_sha256).toLowerCase();
-  if (version === '' || commit === '') {
-    throw new Error('Desktop bundle version and commit are required.');
-  }
-  if (platform !== compact(options.expectedPlatform)) {
-    throw new Error(`Desktop bundle platform ${platform || '(missing)'} does not match ${options.expectedPlatform}.`);
-  }
-  if (architecture !== compact(options.expectedArchitecture)) {
-    throw new Error(`Desktop bundle architecture ${architecture || '(missing)'} does not match ${options.expectedArchitecture}.`);
-  }
-  if (options.expectedVersion && normalizedVersion(version) !== normalizedVersion(options.expectedVersion)) {
-    throw new Error(`Desktop bundle version ${version} does not match ${options.expectedVersion}.`);
-  }
-  if (options.expectedCommit && commit !== compact(options.expectedCommit)) {
-    throw new Error(`Desktop bundle commit ${commit} does not match ${options.expectedCommit}.`);
-  }
-  if ((platform !== 'darwin' && platform !== 'linux') || (architecture !== 'amd64' && architecture !== 'arm64')) {
-    throw new Error('Desktop bundle target is unsupported.');
-  }
-  if ((provenance !== 'packaged_bundle' && provenance !== 'development_bundle') || !/^sha256:[0-9a-f]{64}$/u.test(runtimeSuiteSHA256)) {
-    throw new Error('Desktop bundle Runtime suite provenance or digest is invalid.');
-  }
-  const gateway = parseArtifact(manifest.gateway, 'Gateway');
-  if (gateway.path !== 'redeven-gateway' || !gateway.executable) {
-    throw new Error('Desktop bundle Gateway entry is invalid.');
-  }
-  if (!Array.isArray(manifest.runtime_suite) || manifest.runtime_suite.length === 0) {
-    throw new Error('Desktop bundle Runtime suite is missing.');
-  }
-  const runtimeSuite = manifest.runtime_suite.map((value, index) => parseArtifact(value, `Runtime suite entry ${index + 1}`));
-  const runtimeNames = new Set(runtimeSuite.map((artifact) => artifact.path));
-  if (runtimeNames.size !== runtimeSuite.length || !runtimeNames.has('redeven')) {
-    throw new Error('Desktop bundle Runtime suite inventory is invalid.');
-  }
-  const runtime = runtimeSuite.find((artifact) => artifact.path === 'redeven');
-  if (!runtime?.executable) {
-    throw new Error('Desktop bundle Runtime executable entry is invalid.');
-  }
-  const suiteIdentity = {
-    schema_version: 1,
-    files: runtimeSuite.map((artifact) => ({
-      name: artifact.path,
-      sha256: `sha256:${artifact.sha256}`,
-      size_bytes: artifact.size_bytes,
-      executable: artifact.executable,
-    })).sort((left, right) => left.name.localeCompare(right.name)),
-  };
-  const actualSuiteSHA256 = `sha256:${createHash('sha256').update(JSON.stringify(suiteIdentity)).digest('hex')}`;
-  if (actualSuiteSHA256 !== runtimeSuiteSHA256) {
-    throw new Error('Desktop bundle Runtime suite digest does not match its manifest.');
-  }
-  const [validatedGateway, ...validatedRuntimeSuite] = await Promise.all([
-    validateArtifact(root, gateway, 'Gateway'),
-    ...runtimeSuite.map((artifact) => validateArtifact(root, artifact, `Runtime file ${artifact.path}`)),
-  ]);
-  const validatedRuntime = validatedRuntimeSuite.find((artifact) => path.basename(artifact.path) === 'redeven');
-  if (!validatedRuntime) {
-    throw new Error('Desktop bundle Runtime executable entry is missing after validation.');
-  }
-  await Promise.all([
-    validateBinaryIdentity(validatedGateway.path, 'redeven-gateway', version, commit),
-    validateBinaryIdentity(validatedRuntime.path, 'redeven', version, commit),
-  ]);
-  return {
-    root,
-    manifest_path: manifestPath,
-    version: version.startsWith('v') ? version : `v${version}`,
-    commit,
-    platform,
-    architecture,
-    provenance,
-    gateway: validatedGateway,
-    runtime_suite: validatedRuntimeSuite,
-    runtime_suite_sha256: runtimeSuiteSHA256,
-  };
+  const filesDigest = compact(manifest.runtime_files_sha256).toLowerCase();
+  if (!version || !commit) throw new Error('Desktop bundle version and commit are required.');
+  if (platform !== compact(options.expectedPlatform)) throw new Error(`Desktop bundle platform ${platform || '(missing)'} does not match ${options.expectedPlatform}.`);
+  if (architecture !== compact(options.expectedArchitecture)) throw new Error(`Desktop bundle architecture ${architecture || '(missing)'} does not match ${options.expectedArchitecture}.`);
+  if (options.expectedVersion && normalizedVersion(version) !== normalizedVersion(options.expectedVersion)) throw new Error(`Desktop bundle version ${version} does not match ${options.expectedVersion}.`);
+  if (options.expectedCommit && commit !== compact(options.expectedCommit)) throw new Error(`Desktop bundle commit ${commit} does not match ${options.expectedCommit}.`);
+  if ((platform !== 'darwin' && platform !== 'linux') || (architecture !== 'amd64' && architecture !== 'arm64')) throw new Error('Desktop bundle target is unsupported.');
+  if ((provenance !== 'packaged_bundle' && provenance !== 'development_bundle') || !/^sha256:[0-9a-f]{64}$/u.test(filesDigest)) throw new Error('Desktop bundle Runtime provenance or digest is invalid.');
+  if (!Array.isArray(manifest.runtime_files) || manifest.runtime_files.length === 0) throw new Error('Desktop bundle Runtime files are missing.');
+  const runtimeFiles = manifest.runtime_files.map((value, index) => parseArtifact(value, `Runtime file ${index + 1}`));
+  const runtime = runtimeFiles.find((artifact) => artifact.path === 'redeven');
+  if (!runtime?.executable || new Set(runtimeFiles.map((artifact) => artifact.path)).size !== runtimeFiles.length) throw new Error('Desktop bundle Runtime inventory is invalid.');
+  const identity = { schema_version: 1, files: runtimeFiles.map((artifact) => ({ name: artifact.path, sha256: `sha256:${artifact.sha256}`, size_bytes: artifact.size_bytes, executable: artifact.executable })).sort((a, b) => a.name.localeCompare(b.name)) };
+  if (`sha256:${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}` !== filesDigest) throw new Error('Desktop bundle Runtime digest does not match its manifest.');
+  const validated = await Promise.all(runtimeFiles.map((artifact) => validateArtifact(root, artifact, `Runtime file ${artifact.path}`)));
+  const validatedRuntime = validated.find((artifact) => path.basename(artifact.path) === 'redeven');
+  if (!validatedRuntime) throw new Error('Desktop bundle Runtime executable is missing after validation.');
+  await validateBinaryIdentity(validatedRuntime.path, version, commit);
+  return { root, manifest_path: manifestPath, version: version.startsWith('v') ? version : `v${version}`, commit, platform, architecture, provenance, runtime_files: validated, runtime_files_sha256: filesDigest };
 }

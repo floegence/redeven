@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  desktopShellRuntimeMaintenanceMethodUsesDesktop,
   normalizeDesktopShellRuntimeMaintenanceContext,
   normalizeDesktopShellRuntimeMaintenanceStartedNotification,
   normalizeDesktopShellRuntimeAction,
@@ -101,7 +100,7 @@ describe('desktopShellRuntimeIPC', () => {
   it('normalizes explicit runtime maintenance contexts', () => {
     const context = normalizeDesktopShellRuntimeMaintenanceContext({
       available: true,
-      authority: 'gateway_supervisor',
+      authority: 'host_device',
       runtime_kind: 'ssh',
       upgrade_policy: 'desktop_release',
       current_version: ' v1.0.0 ',
@@ -113,22 +112,22 @@ describe('desktopShellRuntimeIPC', () => {
       },
       restart: {
         availability: 'available',
-        method: 'gateway_supervisor',
+        method: 'host_device_handoff',
         label: 'Restart Runtime',
         title: 'Restart Runtime',
-        message: 'Gateway will restart the Runtime.',
+        message: 'Desktop will restart the Runtime through the host channel.',
       },
       upgrade: {
         availability: 'available',
-        method: 'gateway_supervisor',
+        method: 'host_device_handoff',
         label: 'Update Runtime',
         title: 'Update Runtime',
-        message: 'Gateway will install the verified Runtime release.',
+        message: 'Desktop will install the verified Runtime release through the host channel.',
         requires_target_version: false,
       },
     });
 
-    expect(context.authority).toBe('gateway_supervisor');
+    expect(context.authority).toBe('host_device');
     expect(context.runtime_kind).toBe('ssh');
     expect(context.current_version).toBe('v1.0.0');
     expect(context.active_workload).toEqual({
@@ -138,6 +137,6 @@ describe('desktopShellRuntimeIPC', () => {
       port_forward_count: 3,
     });
     expect(context.upgrade.requires_target_version).toBe(false);
-    expect(desktopShellRuntimeMaintenanceMethodUsesDesktop(context.upgrade.method)).toBe(true);
+    expect(context.upgrade.method).toBe('host_device_handoff');
   });
 });

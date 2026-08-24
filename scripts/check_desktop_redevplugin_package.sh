@@ -9,7 +9,7 @@ Usage:
   ./scripts/check_desktop_redevplugin_package.sh --package <file> --runtime-target <goos/arch> --write-receipt <file>
 
 Inspects a native Redeven Desktop installer on its builder platform, verifies
-the Redeven and Gateway target identities, verifies the product-built
+the Redeven Runtime target identity, verifies the product-built
 ReDevPlugin runtime on Linux or its required absence on Darwin, and writes a
 receipt bound to the exact installer bytes.
 USAGE
@@ -258,15 +258,12 @@ esac
 
 [[ -d "$runtime_dir" && ! -L "$runtime_dir" ]] || die "installer is missing the exact runtime directory"
 redeven_path="$runtime_dir/redeven"
-gateway_path="$runtime_dir/redeven-gateway"
-for required in "$redeven_path" "$gateway_path"; do
-  [[ -f "$required" && ! -L "$required" ]] || die "installer is missing a required regular runtime file: $(basename -- "$required")"
-done
+[[ -f "$redeven_path" && ! -L "$redeven_path" ]] || die "installer is missing the required Redeven Runtime executable"
+[[ ! -e "$runtime_dir/redeven-gateway" ]] || die "Desktop installer must not contain Redeven Gateway"
 
 goos=${RUNTIME_TARGET%/*}
 goarch=${RUNTIME_TARGET#*/}
 assert_go_binary_target "$redeven_path" "$goos" "$goarch" "Redeven runtime"
-assert_go_binary_target "$gateway_path" "$goos" "$goarch" "Redeven Gateway"
 if [[ "$goos" == "linux" ]]; then
   for required_name in \
     redevplugin-runtime \

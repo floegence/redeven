@@ -213,12 +213,11 @@ func (s *Store) Delete(ctx context.Context, req protocol.EnvProfileDeleteRequest
 func EnvironmentFromProfile(profile EnvironmentProfile) protocol.Environment {
 	accessCapabilities := profileAccessCapabilities(profile)
 	env := protocol.Environment{
-		GatewayEnvID:        strings.TrimSpace(profile.GatewayEnvID),
-		DisplayName:         strings.TrimSpace(profile.DisplayName),
-		EnvKind:             protocol.EnvironmentKindReachableEnv,
-		State:               protocol.EnvironmentStateAvailable,
-		AccessCapabilities:  accessCapabilities,
-		ControlCapabilities: nil,
+		GatewayEnvID:       strings.TrimSpace(profile.GatewayEnvID),
+		DisplayName:        strings.TrimSpace(profile.DisplayName),
+		EnvKind:            protocol.EnvironmentKindReachableEnv,
+		State:              protocol.EnvironmentStateAvailable,
+		AccessCapabilities: accessCapabilities,
 		Profile: &protocol.EnvironmentProfile{
 			Managed:         true,
 			AccessRouteKind: profile.AccessRoute.Kind,

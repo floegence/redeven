@@ -1,41 +1,37 @@
 ---
 type: Protocol Contract
 title: RCPP v3 provider API
-description: Provider access, Runtime grants, supervisor enrollment, permit, and readiness contract.
-tags: [protocol, provider, openapi, desktop, runtime]
-timestamp: 2026-08-17T00:00:00Z
+description: Provider discovery, health, open-session, Runtime link, and access authorization contract.
+tags: [protocol, provider, openapi, desktop, runtime, access]
+timestamp: 2026-08-24T00:00:00Z
 ---
 # Summary
 
-RCPP v3 is the Provider-side authorization contract in `docs/openapi/rcpp-v3.yaml` and `shared/contracts/providerprotocol/rcpp.go`. Connect and Workspace access are separate from Runtime management. The Portal exposes `manage_runtime`, `deploy_custom_runtime`, and `manage_runtime_binding` independently, signs a precise one-time permit, and stores only binding and audit facts. The target Gateway remains the sole Runtime operation authority.
+RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.
 
 # Contract
 
-## Access and Runtime link
+## Discovery and access
 
-RCPP v3 open-session is Access/Open only and rejects any response that contains the frozen v2 `bootstrap_ticket` field. Runtime link uses a separate one-time authorization and exchange. Lifecycle traffic uses the Provider Environment's signed management tunnel and never asks for another Gateway card, paired key, SSH credential, container credential, or public Runtime URL. The tunnel permits only Gateway lifecycle routes; ordinary access and data-plane traffic remain outside it.
+Provider exposes discovery, Environment list, health, Desktop open-session, Runtime link authorization/exchange, and the authorization needed to forward normal requests. Open-session is access-only and never carries a process-management instruction. Runtime link establishes the scoped Provider-to-Runtime access relationship; it does not enroll a lifecycle supervisor.
 
-## Capability projection
+Environment list responses describe identity, availability, health, and access routes. They do not contain `runtime_management`, lifecycle permissions, permits, target generations, bindings, relay state, supervisor freshness, or operation projections. Health is an access observation and cannot make Provider a lifecycle coordinator.
 
-Environment list and capability responses expose `support`, `authorization`, and `readiness` as independent dimensions. Projection always evaluates support first, authorization second, and readiness third. Unsupported URL access returns `unsupported`; an authorized but unbound local, SSH, or container target returns `setup_required`; an existing binding with a stale heartbeat returns `temporarily_unavailable`. An unauthorized response does not reveal target, generation, installation, or last-seen facts.
+## Authorization boundary
 
-## Authorization and permits
+Provider authenticates the user and grants access to an Environment or Runtime link. It never receives Desktop SSH credentials, container credentials, a Runtime installation root, or a Runtime package. It cannot turn a Gateway access endpoint into a management channel.
 
-`POST .../runtime-management/authorizations` signs an explicit `prepare` or binding-admin `reconcile` action. Prepare binds the exact actor, access point, environment, lifecycle target, generation, operation, desired Runtime version, artifact policy, build-input digest, authorized client key, current Gateway binding, and expiry. Gateway exchanges that permit once during prepare; later Provider token expiry or revocation does not re-authorize an already linearized operation. Reconcile carries only `manage_runtime_binding`, has no desired-version, artifact-policy, or build-input scope, and is durably consumed by Gateway before recovery. Any action or scope mismatch is rejected.
+Desktop may show Provider Connect or Disconnect for a directly managed Runtime target. That action links access identity only. All Runtime lifecycle actions continue through the target's Local, SSH, or container channel and remain available independently of Provider health.
 
-## Enrollment and fencing
-
-Enrollment is either an explicitly selected direct card or an interactive one-time code. The challenge persists a proof nonce, target generation, and the full `ControlChannelFence`: logical binding, control binding generation, artifact sequence, authorization lease, and control owner instance. The supervisor signs the canonical proof payload with its Ed25519 key. Existing control bindings require a live same-scope RPC proof and an unchanged fence; first binding has no prior fence and establishes a new trust record. Rebinding the same target advances its generation from `n` to `n+1`; Gateway serializes it with prepare under one target mutation lock and rejects it while an operation is active or the target is quarantined. A challenge is single-use, expires, and cannot be replayed.
-
-The binding records lifecycle target/generation, supervisor identity, installation digest, independent Gateway and Runtime versions, protocol, compatibility epoch, capabilities, artifact digest, and heartbeat freshness. These observations determine readiness only; Portal does not store operation steps, checkpoints, locks, or recovery projections.
+The retired Runtime management routes, permits, enrollment challenge/exchange, supervisor heartbeat, poll/respond transport, bindings, relays, cluster state, and authorization audit have no supported schema or compatibility shell. Because those contracts were not deployed, their migrations are removed rather than retained as dead production paths.
 
 # Boundaries
 
-RCPP v2 remains a frozen access/bootstrap protocol, but v3 has its own DTOs and never falls back to v2 bootstrap. Provider cards never borrow Gateway/SSH/container credentials or use a public Environment URL as a control fallback. Runtime Connect, Workspace, and open-session continue when lifecycle support is unavailable.
+RCPP v3 does not mirror Desktop Launcher Operations or Gateway state. Provider may route requests to Runtime directly or through an optional Gateway, but it cannot start or repair the destination. An Environment with Provider or Gateway access but no direct Desktop management channel remains access-only.
 
 # Evidence
 
-- `redeven:desktop/src/main/controlPlaneProviderClient.ts:1` - RCPP v3 capability, authorization, enrollment, and heartbeat client adapter.
-- `redeven:desktop/src/main/controlPlaneProviderClient.test.ts:1` - Provider response parsing and request-scope coverage.
-- `redeven:internal/runtimegateway/supervisor/authorizer.go:1` - Provider permit verification and explicit Runtime grant enforcement.
-- `redeven:internal/runtimegateway/supervisor/authorizer_test.go:1` - Permit scope, pinned key, and grant-isolation tests.
+- `redeven:desktop/src/main/controlPlaneProviderClient.ts:1` - Desktop Provider discovery, health, open-session, and Runtime-link adapter.
+- `redeven:desktop/src/shared/controlPlaneProvider.ts:1` - Access-only Provider DTOs exposed to Desktop.
+- `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Separates Provider cards from direct Runtime operation targets.
+- `spec/openapi/gateway-v2.yaml:1` - Gateway access-only protocol surface.
