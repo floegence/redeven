@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -12,7 +13,7 @@ describe('gatewayServiceHost', () => {
   });
 
   it('does not install or start Gateway through a Runtime root', () => {
-    const source = fs.readFileSync(new URL('./gatewayServiceHost.ts', import.meta.url), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, 'gatewayServiceHost.ts'), 'utf8');
     expect(source).not.toContain('/gateway/managed');
     expect(source).not.toContain('--runtime-root "$runtime_root"');
     expect(source).toContain('managed_root="${state_root%/}/managed"');
