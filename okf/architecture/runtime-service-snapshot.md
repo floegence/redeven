@@ -25,7 +25,7 @@ Portal `ControlChannelFence` fields protect the Provider control channel and are
 
 - `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.
 - `redeven:internal/runtimeservice/compatibility.go:1` - Signed/embedded Runtime compatibility contract.
-- `redeven:internal/runtimeservice/lifecycle.go:1` - Optional lifecycle fence and supervisor-facing identity.
+- `redeven:internal/runtimeservice/workload.go:1` - Protected workload admission, leases, revisions, and supervisor-facing impact snapshots.
 - `redeven:internal/runtimemanagement/process_inventory.go:1` - Exact workload identity and unknown inventory behavior.
 - `redeven:internal/localui/runtime_control.go:1` - Ordinary Runtime control remains a local Runtime interface.
 - `redeven:internal/agent/runtime_service.go:1` - Runtime snapshots use local model-source and workload state without historical thread scans.

@@ -403,7 +403,7 @@
               "ssh"
             ],
             "summary": "Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; SSH host and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
-            "section_count": 3
+            "section_count": 4
           },
           {
             "concept_id": "desktop.desktop-runtime-process-lifecycle",
@@ -3005,7 +3005,7 @@
         "title": "AI terminal tool runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 3392,
+      "body_length": 3542,
       "summary": "Redeven owns PTY process resources and bounded output retention. Floret v5 owns the canonical tool call, interaction, effect attempt, result, and Activity. One effect adapter authorizes execution once and publishes stable current-view updates; Redeven does not persist a parallel terminal lifecycle or recover effects from product SQL.",
       "sections": [
         {
@@ -3035,8 +3035,14 @@
           "description": "Owns bounded PTY resources, output, reap, and termination."
         },
         {
-          "id": "redeven:internal/ai/runtime_lifecycle_admission_test.go:0:proves post-fence rejection and release only after canonical turn or process terminal state.",
-          "source": "redeven:internal/ai/runtime_lifecycle_admission_test.go",
+          "id": "redeven:internal/ai/runtime_lifecycle_admission.go:1:admits and releases ai turn and terminal process workloads at their canonical lifecycle boundaries.",
+          "source": "redeven:internal/ai/runtime_lifecycle_admission.go",
+          "line": 1,
+          "description": "Admits and releases AI turn and terminal process workloads at their canonical lifecycle boundaries."
+        },
+        {
+          "id": "redeven:internal/ai/workload_admission_test.go:0:proves post-fence rejection and release only after canonical turn or process terminal state.",
+          "source": "redeven:internal/ai/workload_admission_test.go",
           "description": "Proves post-fence rejection and release only after canonical turn or process terminal state."
         },
         {
@@ -4600,7 +4606,7 @@
         "title": "Runtime Service snapshot",
         "type": "Runtime Contract"
       },
-      "body_length": 3310,
+      "body_length": 3341,
       "summary": "The Runtime Service snapshot is a typed boundary between Runtime, Desktop, Local UI, and optional Gateway supervision. Runtime protocol/version, compatibility epoch, capabilities, service readiness, and workload identity are explicit facts. Gateway is optional for Runtime startup and ordinary access; its absence only closes Redeven-managed lifecycle actions.",
       "sections": [
         {
@@ -4632,10 +4638,10 @@
           "description": "Signed/embedded Runtime compatibility contract."
         },
         {
-          "id": "redeven:internal/runtimeservice/lifecycle.go:1:optional lifecycle fence and supervisor-facing identity.",
-          "source": "redeven:internal/runtimeservice/lifecycle.go",
+          "id": "redeven:internal/runtimeservice/workload.go:1:protected workload admission, leases, revisions, and supervisor-facing impact snapshots.",
+          "source": "redeven:internal/runtimeservice/workload.go",
           "line": 1,
-          "description": "Optional lifecycle fence and supervisor-facing identity."
+          "description": "Protected workload admission, leases, revisions, and supervisor-facing impact snapshots."
         },
         {
           "id": "redeven:internal/runtimemanagement/process_inventory.go:1:exact workload identity and unknown inventory behavior.",
@@ -5412,15 +5418,22 @@
         "title": "Desktop Environment registration ownership",
         "type": "Desktop Contract"
       },
-      "body_length": 4685,
+      "body_length": 4948,
       "summary": "Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; SSH host and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
       "sections": [
         {
-          "id": "registration-contract",
-          "title": "Registration contract",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
           "body": "Every actionable card carries an explicit `EnvironmentRegistrationRef`. Create, edit, rename, pin, and remove route through the generic registration actions and that reference; Renderer presentation kinds and placement fields never select a persistence action. An SSH destination is connection identity, while the Runtime Target label is user-visible metadata; changing the label does not change the SSH destination. Removal deletes only the Desktop registration, publishes the new snapshot before background session and bridge cleanup, and never deletes remote Redeven data. A missing registration is a typed failure rather than a successful no-op.\n\nPreferences mutations form one serialized queue. Each mutation reads the latest committed value and writes only its owner fields. Long-running Open, probe, and lifecycle work may update health, operation, or `last_used_at` only while the registration still exists. Removal advances the Launcher subject generation before background cleanup, so results from an earlier generation cannot reintroduce a card. Pinning and use-time updates never upsert a missing registration.",
           "char_count": 1122
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Desktop owns registration metadata, persistence, and presentation. Runtime, Gateway, and remote targets retain ownership of remote data, lifecycle authority, and access policy; removing or changing a Desktop registration never mutates those upstream resources.",
+          "char_count": 260
         },
         {
           "id": "legacy-ssh-migration",
@@ -9562,5 +9575,5 @@
       ]
     }
   ],
-  "source_sha256": "b83e5390a1571d7ef62a9bccd21fc7905058b0e98585c6da8da12d6b1b377f0d"
+  "source_sha256": "af8d3983d8c8030d65aef360bc2026779eb73f8ba103d5fc577f5230c1f34eee"
 }
