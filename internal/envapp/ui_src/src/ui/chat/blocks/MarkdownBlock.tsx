@@ -5,15 +5,13 @@
 // it back into raw markdown source. Raw streaming text is only used before the first compatible
 // snapshot exists or when the current snapshot still has no rendered tail.
 
-import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, useContext } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
 import type { Marked } from 'marked';
 import { cn } from '@floegence/floe-webapp-core';
 
 import { StreamingMarkdownTail } from '../markdown/StreamingMarkdownTail';
 import { createMarkdownRenderer } from '../markdown/markedConfig';
-import { basenameFromMarkdownPath, parseMarkdownLocalFileHref } from '../markdown/markdownFileReference';
-import type { MarkdownRendererVariant } from '../markdown/markdownRendererOptions';
 import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { AppendOnlyText, isAppendOnlyTextCompatible } from '../status/AppendOnlyText';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
@@ -21,15 +19,12 @@ import { StreamingCursor } from '../status/StreamingCursor';
 import { StreamingShimmer } from '../status/StreamingShimmer';
 import type { MarkdownRenderSnapshot } from '../types';
 import { renderMarkdownSnapshot } from '../workers/markdownWorkerClient';
-import { fileItemFromPath } from '../../utils/filePreviewItem';
-import { FilePreviewContext } from '../../widgets/FilePreviewContext';
 import { useI18n } from '../../i18n';
 
 export interface MarkdownBlockProps {
   content: string;
   streaming?: boolean;
   class?: string;
-  rendererVariant?: MarkdownRendererVariant;
 }
 
 type MarkedState = {
@@ -38,27 +33,18 @@ type MarkedState = {
   queue: Array<() => void>;
 };
 
-const DEFAULT_MARKDOWN_RENDERER_VARIANT: MarkdownRendererVariant = 'default';
-const markedStates = new Map<MarkdownRendererVariant, MarkedState>();
+let markedState: MarkedState | null = null;
 
 let markdownWorkerUnavailable = false;
 let markdownWorkerErrorLogged = false;
 
-function getMarkedState(variant: MarkdownRendererVariant): MarkedState {
-  let state = markedStates.get(variant);
-  if (!state) {
-    state = {
-      instance: null,
-      loading: false,
-      queue: [],
-    };
-    markedStates.set(variant, state);
-  }
-  return state;
+function getMarkedState(): MarkedState {
+  if (!markedState) markedState = { instance: null, loading: false, queue: [] };
+  return markedState;
 }
 
-async function getMarked(variant: MarkdownRendererVariant): Promise<Marked<string, string> | null> {
-  const state = getMarkedState(variant);
+async function getMarked(): Promise<Marked<string, string> | null> {
+  const state = getMarkedState();
   if (state.instance) return state.instance;
 
   return new Promise<Marked<string, string> | null>((resolve) => {
@@ -70,7 +56,7 @@ async function getMarked(variant: MarkdownRendererVariant): Promise<Marked<strin
     import('marked')
       .then(({ Marked }) => {
         const instance = new Marked<string, string>();
-        instance.use({ renderer: createMarkdownRenderer({ variant }) });
+        instance.use({ renderer: createMarkdownRenderer() });
         state.instance = instance;
         state.loading = false;
 
@@ -88,9 +74,8 @@ async function getMarked(variant: MarkdownRendererVariant): Promise<Marked<strin
 async function renderMarkdownFallback(
   content: string,
   streaming: boolean,
-  rendererVariant: MarkdownRendererVariant,
 ): Promise<MarkdownRenderSnapshot> {
-  const marked = await getMarked(rendererVariant);
+  const marked = await getMarked();
   if (!marked) {
     throw new Error('marked failed to load');
   }
@@ -99,13 +84,8 @@ async function renderMarkdownFallback(
 
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   const i18n = useI18n();
-  const filePreview = useContext(FilePreviewContext);
   const [renderedSnapshot, setRenderedSnapshot] = createSignal<MarkdownRenderSnapshot | null>(null);
   const [renderedText, setRenderedText] = createSignal('');
-  const [renderedVariant, setRenderedVariant] = createSignal<MarkdownRendererVariant | null>(null);
-  const rendererVariant = createMemo<MarkdownRendererVariant>(() => (
-    props.rendererVariant === 'codex' ? 'codex' : DEFAULT_MARKDOWN_RENDERER_VARIANT
-  ));
   const displayContent = createMemo(() => (
     props.streaming === true
       ? normalizeMarkdownForStreamingDisplay(String(props.content ?? ''))
@@ -116,16 +96,15 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
 
   let destroyed = false;
   let inFlight = false;
-  let queuedContent: { content: string; streaming: boolean; rendererVariant: MarkdownRendererVariant } | null = null;
+  let queuedContent: { content: string; streaming: boolean } | null = null;
 
   const clearSnapshot = () => {
     queuedContent = null;
     setRenderedSnapshot(null);
     setRenderedText('');
-    setRenderedVariant(null);
   };
 
-  const startRender = (content: string, streaming: boolean, currentRendererVariant: MarkdownRendererVariant) => {
+  const startRender = (content: string, streaming: boolean) => {
     if (destroyed) return;
     const requested = String(content ?? '');
     if (!requested) {
@@ -138,10 +117,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
       try {
         let snapshot: MarkdownRenderSnapshot | null = null;
         if (!markdownWorkerUnavailable) {
-          const workerOptions = currentRendererVariant === 'codex'
-            ? { streaming, rendererVariant: 'codex' as const }
-            : { streaming };
-          snapshot = await renderMarkdownSnapshot(requested, workerOptions).catch(async (err) => {
+          snapshot = await renderMarkdownSnapshot(requested, { streaming }).catch(async (err) => {
             markdownWorkerUnavailable = true;
             if (!markdownWorkerErrorLogged) {
               markdownWorkerErrorLogged = true;
@@ -150,17 +126,16 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
             if (streaming) {
               throw err;
             }
-            return await renderMarkdownFallback(requested, streaming, currentRendererVariant);
+            return await renderMarkdownFallback(requested, streaming);
           });
         } else if (!streaming) {
-          snapshot = await renderMarkdownFallback(requested, streaming, currentRendererVariant);
+          snapshot = await renderMarkdownFallback(requested, streaming);
         }
 
         if (destroyed || snapshot === null) return;
         batch(() => {
           setRenderedSnapshot(snapshot);
           setRenderedText(requested);
-          setRenderedVariant(currentRendererVariant);
         });
       } catch (err) {
         if (!streaming) {
@@ -177,9 +152,8 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
       if (next && (
         next.content !== requested
         || next.streaming !== streaming
-        || next.rendererVariant !== currentRendererVariant
       )) {
-        scheduleRender(next.content, next.streaming, next.rendererVariant);
+        scheduleRender(next.content, next.streaming);
       }
     })();
   };
@@ -187,7 +161,6 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   const scheduleRender = (
     content: string,
     streaming: boolean,
-    currentRendererVariant: MarkdownRendererVariant,
   ) => {
     if (destroyed) return;
 
@@ -201,11 +174,11 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
     }
 
     if (inFlight) {
-      queuedContent = { content, streaming, rendererVariant: currentRendererVariant };
+      queuedContent = { content, streaming };
       return;
     }
 
-    startRender(content, streaming, currentRendererVariant);
+    startRender(content, streaming);
   };
 
   onCleanup(() => {
@@ -214,7 +187,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   });
 
   createEffect(() => {
-    scheduleRender(displayContent(), props.streaming === true, rendererVariant());
+    scheduleRender(displayContent(), props.streaming === true);
   });
 
   const renderState = createMemo(() => {
@@ -223,7 +196,6 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
 
     const base = renderedText();
     const current = displayContent();
-    if (renderedVariant() !== rendererVariant()) return null;
     if (!isAppendOnlyTextCompatible(base, current)) return null;
 
     return {
@@ -232,32 +204,8 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
     };
   });
 
-  const openLocalFilePreview = (path: string) => {
-    if (!filePreview) return;
-    const normalizedPath = String(path ?? '').trim();
-    if (!normalizedPath) return;
-    void filePreview.openPreview(fileItemFromPath(normalizedPath, basenameFromMarkdownPath(normalizedPath) || 'File'));
-  };
-
-  const handleClick = (event: MouseEvent) => {
-    if (rendererVariant() !== 'codex' || !filePreview) return;
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-
-    const anchor = target.closest('a.chat-md-link');
-    if (!(anchor instanceof HTMLAnchorElement)) return;
-
-    const rawHref = anchor.getAttribute('href') ?? anchor.href;
-    const localHref = parseMarkdownLocalFileHref(rawHref);
-    if (!localHref) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    openLocalFilePreview(localHref.path);
-  };
-
   return (
-    <div class={cn('chat-markdown-block', props.class)} onClick={handleClick}>
+    <div class={cn('chat-markdown-block', props.class)}>
       <Show
         when={!isEmptyStreaming()}
         fallback={

@@ -1,7 +1,6 @@
 // Chat module types — forked from @floegence/floe-webapp-core/chat for local customization.
 
 import type { Component } from 'solid-js';
-import type { MarkdownRendererVariant } from './markdown/markdownRendererOptions';
 
 export interface TextBlock {
   type: 'text';
@@ -311,7 +310,6 @@ export interface MarkdownWorkerRequest {
   id: string;
   content: string;
   streaming?: boolean;
-  rendererVariant?: MarkdownRendererVariant;
 }
 
 export interface MarkdownWorkerResponse {

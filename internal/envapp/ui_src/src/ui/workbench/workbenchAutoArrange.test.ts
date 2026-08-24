@@ -11,7 +11,6 @@ const TYPE_ORDER = [
   'redeven.codespaces',
   'redeven.ports',
   'redeven.ai',
-  'redeven.codex',
 ] as const;
 
 type Bounds = Readonly<{
@@ -506,7 +505,6 @@ describe('workbenchAutoArrange', () => {
       { type: 'redeven.codespaces', count: 1, sizes: [{ width: 780, height: 520 }] },
       { type: 'redeven.ports', count: 1, sizes: [{ width: 760, height: 480 }] },
       { type: 'redeven.ai', count: 1, sizes: [{ width: 980, height: 620 }] },
-      { type: 'redeven.codex', count: 1, sizes: [{ width: 980, height: 620 }] },
     ]);
 
     assertScenarioQuality(widgets, {
@@ -549,7 +547,6 @@ describe('workbenchAutoArrange', () => {
         ],
       },
       { type: 'redeven.ai', count: 1, sizes: [{ width: 980, height: 620 }] },
-      { type: 'redeven.codex', count: 1, sizes: [{ width: 980, height: 620 }] },
     ]);
 
     assertScenarioQuality(widgets, {

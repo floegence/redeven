@@ -20,7 +20,6 @@ import { CodespacesSection } from './settings/sections/CodespacesSection';
 import { PermissionPolicySection } from './settings/sections/PermissionPolicySection';
 import { FlowerSection } from './settings/sections/FlowerSection';
 import { SkillsSection } from './settings/sections/SkillsSection';
-import { CodexSection } from './settings/sections/CodexSection';
 import { DebugConsoleSection } from './settings/sections/DebugConsoleSection';
 
 const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
@@ -33,7 +32,6 @@ const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
   permission_policy: ['permission', 'policy', 'security', 'read', 'write', 'execute', 'by_user', 'by_app', 'local_max', 'schema'],
   ai: ['api key', 'model', 'provider', 'openai', 'anthropic', 'flower', 'llm', 'gpt', 'claude', 'deepseek', 'execution policy', 'approval', 'dangerous'],
   skills: ['skill', 'catalog', 'github', 'install', 'extension', 'plugin', 'agent skill', 'tool'],
-  codex: ['codex', 'host', 'binary', 'diagnostics', 'bridge'],
   debug_console: ['debug', 'console', 'floating', 'overlay', 'frontend', 'performance', 'request'],
 };
 
@@ -67,8 +65,6 @@ function navLabel(section: EnvSettingsSection, fallback: string, t: ReturnType<t
       return t('settings.nav.flower');
     case 'skills':
       return t('settings.nav.skills');
-    case 'codex':
-      return t('settings.nav.codex');
     case 'debug_console':
       return t('settings.nav.debugConsole');
     default:
@@ -103,7 +99,6 @@ const sectionComponents: Record<EnvSettingsSection, () => JSX.Element> = {
   permission_policy: PermissionPolicySection,
   ai: FlowerSection,
   skills: SkillsSection,
-  codex: CodexSection,
   debug_console: DebugConsoleSection,
 };
 

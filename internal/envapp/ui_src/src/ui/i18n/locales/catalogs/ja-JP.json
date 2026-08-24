@@ -230,7 +230,6 @@
       "permissionPolicy": "権限ポリシー",
       "flower": "Flower",
       "skills": "スキル",
-      "codex": "Codex",
       "debugConsole": "デバッグコンソール"
     },
     "groups": {
@@ -362,8 +361,7 @@
       "codespaces": "Codespaces",
       "browserEditor": "Browser Editor",
       "webServices": "Webサービス",
-      "flower": "Flower",
-      "codex": "Codex"
+      "flower": "Flower"
     },
     "topbar": {
       "backToDashboard": "Dashboard に戻る",
@@ -553,8 +551,6 @@
       "goToWebServicesDescription": "Webサービス登録を開きます",
       "goToFlowerTitle": "Flower へ移動",
       "goToFlowerDescription": "Flower を開きます",
-      "goToCodexTitle": "Codex へ移動",
-      "goToCodexDescription": "Codex を開きます",
       "openEnvironmentTitle": "環境を開きます...",
       "openEnvironmentDescription": "Redeven Desktop の環境ランチャーを開きます。",
       "backToDashboardTitle": "Dashboard に戻る",
@@ -684,7 +680,6 @@
   },
   "aiChrome": {
     "flowerTitle": "Flower",
-    "codexTitle": "Codex",
     "newChat": "新しいチャット",
     "copyMessage": "メッセージをコピー",
     "retryMessage": "再試行",
@@ -735,288 +730,17 @@
       "flower": {
         "label": "Flower",
         "defaultTitle": "Flower"
-      },
-      "codex": {
-        "label": "Codex",
-        "defaultTitle": "Codex"
       }
     },
     "notices": {
       "flowerRwxTitle": "Flower には読み取り、書き込み、および実行アクセス権が必要です",
       "flowerRwxDescription": "Workbench モードで組み込みの Flower ワークスペースを使用するには、この環境に RWX 権限を付与してください。",
-      "flowerThreads": "Flower スレッド",
-      "codexRwxTitle": "Codex には読み取り、書き込み、実行アクセスが必要です",
-      "codexRwxDescription": "Workbench モードで組み込みの Codex ワークスペースを使用するには、この環境に RWX 権限を付与してください。",
-      "codexThreads": "Codex スレッド"
+      "flowerThreads": "Flower スレッド"
     }
   },
-  "codex": {
-    "title": "Codex",
-    "loading": "Codex を読み込み中...",
-    "common": {
-      "idle": "アイドル",
-      "working": "作業中",
-      "request": "リクエスト",
-      "file": "ファイル",
-      "image": "画像",
-      "newThread": "新しいスレッド",
-      "untitledThread": "無題のスレッド",
-      "newChat": "新しいチャット",
-      "noConversationPreview": "会話のプレビューはまだありません。",
-      "workingDirectory": "作業ディレクトリ",
-      "workingDir": "作業ディレクトリ",
-      "default": "デフォルト",
-      "never": "なし",
-      "fullAccess": "フルアクセス",
-      "sending": "送信中..."
-    },
-    "empty": {
-      "readyTitle": "Codex",
-      "installTitle": "ホストに Codex をインストール",
-      "readyBody": "プロンプトで Codex 会話を開始し、画像を貼り付け、ファイルを参照するには @ を使用し、ローカルには / を使用します作曲家のコマンド。",
-      "installBody": "Redeven は、Codex をインストールしません。ホスト `codex` バイナリを PATH に配置し、このページを更新して専用の Codex チャットを開始します。"
-    },
-    "loadingState": {
-      "preparingThread": "選択した Codex スレッドを準備しています。",
-      "loadingThread": "選択した Codex スレッドをロードしています。"
-    },
-    "controls": {
-      "model": "モデル",
-      "effort": "工数",
-      "approval": "承認",
-      "sandbox": "サンドボックス",
-      "reasoningEffort": {
-        "low": "低",
-        "medium": "中",
-        "high": "高",
-        "max": "最大"
-      },
-      "approvalPolicy": {
-        "untrusted": "信頼できない",
-        "onFailure": "障害時",
-        "onRequest": "リクエストに応じて",
-        "never": "なし",
-        "granular": "詳細"
-      },
-      "sandboxMode": {
-        "readOnly": "読み取り専用",
-        "workspaceWrite": "ワークスペース書き込み",
-        "dangerFullAccess": "フルアクセス",
-        "externalSandbox": "外部サンドボックス"
-      }
-    },
-    "disabledReasons": {
-      "archivedThreadHidden": "アーカイブされたスレッドは会話リストから非表示になります。",
-      "stopRequestInProgress": "停止要求が進行中です。",
-      "waitingForActiveTurn": "アクティブなターンの開始を待っています。",
-      "waitingForInterruptibleTurn": "Codex が割り込み可能なターンを公開するのを待っています。",
-      "turnInterruptionUnavailable": "このホストではターン中断は利用できません。",
-      "queueAfterThreadStarts": "現在のスレッドの開始後にキューが使用可能になります。",
-      "addPromptImageOrMention": "送信するプロンプト、画像、またはファイルのメンションを追加します。",
-      "guideWhileRunning": "ガイドは、Codex がターンを実行しているときに使用できます。",
-      "guideStopInProgress": "停止要求の進行中はガイドを利用できません。",
-      "currentTurnStarting": "Codex はまだ現在のターンを開始しています。",
-      "sameTurnGuidanceUnsupported": "この Codex ホストは、同一ターン ガイダンスをサポートしていません。",
-      "turnCannotAcceptGuidedInput": "このターンはガイド入力を受け付けません。",
-      "turnKindCannotAcceptGuidedInput": "この {kind} ターンはガイド付き入力を受け入れることができません。",
-      "archiveUnavailable": "アーカイブはこのホストでは使用できません。",
-      "archiveInProgress": "アーカイブが進行中です。",
-      "forkUnavailable": "このホストではフォークを使用できません。",
-      "forkInProgress": "フォークが進行中です。",
-      "reviewUnavailable": "このホストではレビューを利用できません。",
-      "reviewInProgress": "レビューはすでに進行中です。",
-      "stopAvailableAfterTurnStarts": "ターン開始後にストップが可能になります。"
-    },
-    "actions": {
-      "archive": "アーカイブ",
-      "archiving": "アーカイブ中...",
-      "fork": "フォーク",
-      "forking": "フォーク...",
-      "review": "レビュー",
-      "reviewing": "レビュー中...",
-      "stop": "停止",
-      "stopping": "停止中...",
-      "guide": "ガイド",
-      "approveOnce": "1 回承認",
-      "approveForSession": "セッションの承認",
-      "decline": "拒否",
-      "cancel": "キャンセル",
-      "submitResponse": "応答の送信",
-      "reviewApproval": "承認のレビュー",
-      "browseFiles": "ファイルの参照"
-    },
-    "header": {
-      "installRequired": "インストールが必要",
-      "pendingCount": {
-        "one": "{count} 保留中",
-        "other": "{count} 保留中"
-      },
-      "archiveThreadAria": "アーカイブ Codex スレッド",
-      "forkThreadAria": "フォークCodex スレッド",
-      "reviewWorkspaceAria": "現在のワークスペースの変更を確認する",
-      "stopTurnAria": "アクティブを停止する Codex を回す"
-    },
-    "composer": {
-      "fileReferenceSuggestions": "ファイル参照の提案",
-      "commandParameterOptions": "コマンド パラメーター オプション",
-      "commandSuggestions": "コマンドの提案",
-      "optionsForControl": "{label} オプション",
-      "stopActiveTurn": "アクティブを停止 Codex で",
-      "queueNextTurn": "を順番にキューに入れる 次の Codex で",
-      "sendToCodex": "を回す Codex に送信",
-      "workingDirectoryLocked": "作業ディレクトリはロックされています",
-      "selectWorkingDirectory": "作業ディレクトリを選択します",
-      "lockedToThisThread": "{path} (このスレッドにロックされています)",
-      "installHostToEnable": "`codex` をホストにインストールして、Codex チャットを有効にします。",
-      "selectedModelNoImages": "選択されたモデルは現在画像入力を受け付けていません。",
-      "placeholderWithImages": "Codex に、変更のレビュー、障害の検査、差分の要約、または次のステップの計画を依頼します。ファイル コンテキストには @、コマンドには / を使用するか、画像を貼り付けます。",
-      "placeholderTextOnly": "Codex に、変更のレビュー、障害の検査、差分の要約、または次のステップの計画を依頼します。ファイルコンテキストには @ を、コマンドには / を使用します。",
-      "noOptionsAvailable": "このコマンドでは使用できるオプションはありません。",
-      "indexingFiles": "現在の作業ディレクトリ内のファイルにインデックスを付けています...",
-      "noMatchingFiles": "現在の作業ディレクトリに一致するファイルが見つかりません。",
-      "inputControls": "Codex 入力コントロール",
-      "moreControls": "追加",
-      "moreInputControls": "追加 Codex 入力コントロール",
-      "addAttachments": "添付ファイルの追加",
-      "removeAttachment": "削除 {name}",
-      "removeMention": "削除{name}",
-      "slashDescriptions": {
-        "mention": "@ を挿入して、ファイル参照ピッカーを開きます。",
-        "new": "新しい Codex スレッド ドラフトを開始します。",
-        "clear": "現在のコンポーザー テキスト、添付ファイル、およびファイル参照をクリアします。",
-        "cwd": "新しいチャットの作業ディレクトリ ピッカーを開きます。",
-        "model": "次の Codex ターンのモデルを選択します。",
-        "effort": "次の Codex ターンの推論努力を選択します。",
-        "approval": "次の Codex ターンの承認ポリシーを選択します。",
-        "sandbox": "次の Codex ターンのサンドボックス モードを選択します。"
-      }
-    },
-    "sidebar": {
-      "hostReady": "ホスト準備完了",
-      "installRequired": "インストールが必要です",
-      "hostAvailable": "ホスト Codex ランタイムが使用可能です。",
-      "installHostBinary": "Codex チャットを使用するには、ホスト `codex` バイナリをインストールします。",
-      "pendingCount": {
-        "one": "{count} 保留中",
-        "other": "{count} 保留中"
-      },
-      "noConversations": "会話はまだありません",
-      "notAvailableYet": "Codex はまだ利用できません",
-      "startNewChat": "開始するには、新しい Codex チャットを開始してください。",
-      "installThenRefresh": "ホストに `codex` をインストールし、このパネルを更新します。",
-      "conversations": "会話",
-      "loadingChats": "チャットを読み込み中...",
-      "today": "今日",
-      "yesterday": "昨日",
-      "thisWeek": "今週",
-      "older": "以前",
-      "unread": "未読",
-      "archiveChatAria": "アーカイブ チャット {title}"
-    },
-    "notifications": {
-      "requestFailed": "リクエストは失敗しました。",
-      "errorCode": "Codex エラー コード: {code}",
-      "failedToReadFile": "{name}",
-      "attachmentFailedTitle": "添付ファイルの失敗",
-      "unsupportedAttachmentTitle": "サポートされていない添付ファイル",
-      "unsupportedAttachmentBody": "Codex 添付ファイルは現在イメージをサポートしていますのみ。",
-      "refreshFailedTitle": "更新に失敗しました",
-      "hostNotDetectedTitle": "ホスト Codex が検出されません",
-      "hostInstallHint": "ホストに `codex` をインストールし、診断を更新します。",
-      "threadArchivedTitle": "スレッドはアーカイブされました",
-      "queueUnavailableTitle": "キューは使用できません",
-      "sendFailedTitle": "送信失敗",
-      "guideUnavailableTitle": "ガイドは利用できません",
-      "guideUnsupportedBody": "この Codex ホストは、キューに入れられたプロンプトからの同一ターン ガイダンスをサポートしていません。",
-      "guideFailedTitle": "ガイドが失敗しました",
-      "actionUnavailableTitle": "アクションを利用できません",
-      "archiveUnsupportedBody": "この Codex ホストは、Redeven からのスレッド アーカイブをまだサポートしていません。",
-      "forkUnsupportedBody": "この Codex ホストは、Redeven からのスレッド フォークをまだサポートしていません。",
-      "interruptUnsupportedBody": "この Codex ホストは、Redeven からのターン割り込みをまだサポートしていません。",
-      "reviewUnsupportedBody": "この Codex ホストは、Redeven からのインライン レビューをまだサポートしていません。",
-      "archiveFailedTitle": "アーカイブに失敗しました",
-      "forkFailedTitle": "フォークに失敗しました",
-      "interruptFailedTitle": "割り込みに失敗しました",
-      "reviewFailedTitle": "レビューが失敗しました",
-      "queuedFollowupFailedTitle": "キューに登録されたフォローアップが失敗しました"
-    },
-    "statusBanner": {
-      "statusError": "ステータス エラー",
-      "threadLoading": "スレッドの読み込み中",
-      "liveEventStream": "ライブ イベント ストリーム",
-      "disconnectedReconnecting": "ライブ イベント ストリームが切断されました。再接続中...",
-      "droppedUpdates": {
-        "one": "ライブ イベント ストリームが追いつきながら、ベスト エフォート型の更新を {count} つドロップしました。",
-        "other": "ライブ イベント ストリームは、追いつく間に {count} つのベスト エフォート型更新をドロップしました。"
-      },
-      "lostContinuity": "ライブ イベント ストリームは連続性を失い、スレッド状態をリロードしています。",
-      "hostDiagnostics": "ホスト診断",
-      "hostDiagnosticsBody": "Redeven は、ホストの `codex` バイナリを直接使用します。ここで管理するための個別のアプリ内 Codex ランタイム切り替えはありません。",
-      "binary": "バイナリ",
-      "codexHome": "Codex ホーム",
-      "runtime": "ランタイム",
-      "platform": "プラットフォーム",
-      "lastStderr": "最終 stderr"
-    },
-    "pendingInputs": {
-      "ariaLabel": "保留中 Codex 入力",
-      "attachmentAndFileContext": "添付ファイルとファイル コンテキスト",
-      "attachmentContext": "添付ファイル コンテキスト",
-      "fileContext": "ファイル コンテキスト",
-      "pendingInput": "入力保留中",
-      "sending": "送信中",
-      "guiding": "ガイド中",
-      "guideUnavailable": "ガイドは使用できません",
-      "retryQueued": "キューに入れられた再試行",
-      "queued": "キューに入れられた",
-      "restoreQueuedInput": "キューに入れられた入力をコンポーザーに復元する",
-      "moveEarlier": "キューに入れられた入力を先に移動する",
-      "moveLater": "キューに入れられた入力を後で移動する",
-      "guideQueuedInput": "キューに入れられた入力を現在のターンにガイドする",
-      "removeQueuedInput": "キューに入れられた入力を削除する"
-    },
-    "pendingRequests": {
-      "title": "保留中の Codex リクエスト",
-      "description": "アクティブな Codex の実行を続行する前に、これらを解決してください。",
-      "promptsCount": {
-        "one": "{count} プロンプト",
-        "other": "{count} プロンプト"
-      },
-      "itemLabel": "項目 {id}",
-      "workingDirectoryUnavailable": "作業ディレクトリが使用できません",
-      "enterResponse": "応答を入力してください",
-      "type": {
-        "userInput": "ユーザー入力",
-        "commandApproval": "コマンド承認",
-        "fileChangeApproval": "ファイル変更承認",
-        "permissions": "権限"
-      },
-      "titleByType": {
-        "userInput": "ユーザー入力が必要です",
-        "commandApproval": "コマンド承認が必要です",
-        "fileChangeApproval": "ファイル変更の承認が必要です",
-        "permissions": "権限の更新が必要です",
-        "default": "{type} が必要です"
-      },
-      "fallbackDetail": {
-        "userInput": "Codex を続行するには、さらに入力が必要です。",
-        "commandApproval": "Codex を続行する前に、このコマンドを確認してください。",
-        "fileChangeApproval": "Codex を続行する前に、提案されたファイルの変更を確認してください。",
-        "permissions": "Codex を続行する前に、要求された権限の変更を確認してください。",
-        "default": "Codex は続行する前に応答が必要です。"
-      }
-    },
-    "workingDirPicker": {
-      "home": "ホーム",
-      "title": "作業ディレクトリを選択",
-      "confirm": "選択"
-    },
-    "context": {
-      "contextLeft": "を選択 {percent}% コンテキストが残っています",
-      "usedTokens": "{count} が使用されています",
-      "usedAndLastTokens": "{used} が使用されています · {last} 最後",
-      "lastTurnTokens": "{count} 最終ターン"
-    }
+  "terminalAgentActivity": {
+    "working": "作業中",
+    "userInputRequired": "ユーザー入力が必要です"
   },
   "flowerTurnLauncher": {
     "windowTitle": "Flower に質問",
@@ -1725,103 +1449,6 @@
     "newMessages": {
       "one": "{count} 件の新しいメッセージ",
       "other": "{count} 件の新規メッセージ"
-    }
-  },
-  "codexActivity": {
-    "title": {
-      "userMessage": "レビュー要求",
-      "agentMessage": "Codex レビュー",
-      "commandExecution": "コマンド証拠",
-      "fileChange": "アーティファクト変更",
-      "webSearch": "Web 検索",
-      "reasoning": "推論メモ",
-      "plan": "実行計画",
-      "emptyResponse": "応答なしで回転完了",
-      "turnDiagnostic": "回転診断",
-      "event": "イベント"
-    },
-    "field": {
-      "query": "クエリ",
-      "queries": "クエリ",
-      "openedPage": "開いたページ",
-      "pattern": "パターン",
-      "page": "ページ"
-    },
-    "statusLabel": {
-      "idle": "アイドル状態",
-      "working": "動作中"
-    },
-    "working": {
-      "thinking": "思考中",
-      "planning": "計画中",
-      "finalizing": "完了中",
-      "recovering": "復旧中",
-      "waitingApproval": "をリカバリ中 承認待ち",
-      "readingFiles": "ファイルの読み取り中",
-      "readingFile": "読み取り {name}",
-      "editingFiles": "ファイルの編集",
-      "creatingFile": "作成 {name}",
-      "deletingFile": "削除 {name}",
-      "renamingFile": "名前変更 {name}",
-      "editingFile": "編集{name}",
-      "runningCommand": "コマンドの実行",
-      "searchingWeb": "Web の検索"
-    },
-    "status": {
-      "working": "作業中",
-      "needsAttention": "確認が必要",
-      "done": "完了"
-    },
-    "fileAction": {
-      "created": "作成",
-      "deleted": "削除",
-      "renamed": "名前変更",
-      "edited": "編集"
-    },
-    "linesChanged": "{additions} 行追加、{deletions} 行削除",
-    "activity": {
-      "openedPage": "開かれた {target}",
-      "openedPageFallback": "開かれたページ",
-      "searchedPageFor": "「{query}」の検索されたページ",
-      "searchedPage": "検索されたページ",
-      "searchedFor": "「{query}」を検索",
-      "searchedWeb": "Web を検索",
-      "ranCommand": "実行 {command}",
-      "ranCommandWithMeta": "実行 {command} · {meta}",
-      "commandFailed": "失敗",
-      "commandExit": "終了 {exitCode}",
-      "plannedNextSteps": "計画された次のステップ",
-      "thoughtThroughApproach": "アプローチを通じて考えられた",
-      "worked": "は機能した",
-      "planned": "計画された",
-      "reasoned": "推論された",
-      "searchCount": {
-        "one": "{count} 件の検索",
-        "other": "{count} 検索"
-      },
-      "commandCount": {
-        "one": "{count} コマンド",
-        "other": "{count} コマンド"
-      },
-      "failedCommandCount": {
-        "one": "{count} 失敗",
-        "other": "{count} 失敗"
-      }
-    },
-    "detail": {
-      "fileDiff": "ファイルの差分",
-      "commandOutput": "コマンド出力",
-      "searchDetails": "検索詳細",
-      "reasoning": "推論",
-      "plan": "計画",
-      "itemDetails": "項目詳細",
-      "details": "詳細",
-      "close": "閉じる",
-      "closeAria": "activity 詳細を閉じる",
-      "unavailable": "詳細は利用できなくなりました。",
-      "noFileChangeDetails": "ファイル変更の詳細は提供されていません。",
-      "commandUnavailable": "コマンドは利用できません",
-      "noContent": "詳細内容は提供されていません。"
     }
   },
   "filePreview": {
@@ -2739,39 +2366,6 @@
     "levelLabel": "レベル",
     "defaultJson": "デフォルト (json)",
     "defaultInfo": "デフォルト (info)"
-  },
-  "codexSettings": {
-    "title": "Codex",
-    "description": "ホスト管理の Codex 診断。 Redeven はここでホスト コーデックス バイナリ ステータスを読み取りますが、Codex ランタイム設定は保持しません。",
-    "hostDetected": "ホストを検出済み",
-    "needsHostInstall": "ホストへのインストールが必要",
-    "refreshing": "更新中...",
-    "rows": {
-      "binary": "バイナリ",
-      "binaryPath": "バイナリパス",
-      "agentHomeDir": "エージェント ホーム ディレクトリ",
-      "bridge": "ブリッジ",
-      "error": "エラー"
-    },
-    "status": {
-      "notAvailable": "利用不可",
-      "statusNotLoaded": "状態が読み込まれていません",
-      "detected": "検出済み",
-      "notFound": "見つかりません",
-      "connected": "接続済み",
-      "startsOnDemand": "オンデマンドで起動",
-      "none": "なし"
-    },
-    "pills": {
-      "hostBinaryDetected": "ホストバイナリを検出済み",
-      "installCodexOnHost": "ホストに Codex をインストール",
-      "bridgeConnected": "Bridge 接続済み",
-      "bridgeStartsOnDemand": "Bridge はオンデマンドで起動"
-    },
-    "installNotice": "Redeven はホストの codex バイナリを待っています。ホストにインストールし、PATH に公開してください。",
-    "notesTitle": "メモ",
-    "notesHostRuntimeDefaults": "Codex は、ホスト上で独自のランタイムのデフォルトを保持します。 Redeven はそれらを config.json にミラーリングしません。",
-    "notesActivityIsolation": "専用の Codex activity entry と local API namespace は Flower から分離されたままです。"
   },
   "codeRuntime": {
     "title": "Browser Editor",
@@ -4453,8 +4047,18 @@
         "backgroundDescription": "インストールはバックグラウンドで続行されます。プラグインセンターを引き続き使用できます。",
         "declarationNotice": "上記は公開者が申告した権限です。インストール時にパッケージを再検証します。",
         "progressLabel": "インストールの進捗",
-        "stage": {"download": "パッケージを取得", "verify": "セキュリティ検証", "install": "プラグインをインストール", "enable": "プラグインを有効化"},
-        "stageStatus": {"download": "パッケージを取得中...", "verify": "パッケージを検証中...", "install": "インストール中...", "enable": "有効化中..."},
+        "stage": {
+          "download": "パッケージを取得",
+          "verify": "セキュリティ検証",
+          "install": "プラグインをインストール",
+          "enable": "プラグインを有効化"
+        },
+        "stageStatus": {
+          "download": "パッケージを取得中...",
+          "verify": "パッケージを検証中...",
+          "install": "インストール中...",
+          "enable": "有効化中..."
+        },
         "starting": "インストールを準備しています...",
         "authorizing": "インストール時に選択した権限を付与しています...",
         "activationFailed": "プラグインはインストールされ有効ですが、権限設定が完了していません。設定を再試行してください。",

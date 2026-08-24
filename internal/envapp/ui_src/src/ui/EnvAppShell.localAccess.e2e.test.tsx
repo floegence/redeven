@@ -64,12 +64,6 @@ const activitySurfaceLifecycleState = vi.hoisted(() => ({
   fileCleanups: 0,
   flowerMounts: 0,
   flowerCleanups: 0,
-  codexProviderMounts: 0,
-  codexProviderCleanups: 0,
-  codexPageMounts: 0,
-  codexPageCleanups: 0,
-  codexSidebarMounts: 0,
-  codexSidebarCleanups: 0,
 }));
 const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
@@ -1031,7 +1025,6 @@ vi.mock('./accessResume', () => ({
 }));
 
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
-vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
 vi.mock('./workbench/EnvWorkbenchPage', () => ({
   EnvWorkbenchPage: (props: any) => {
     props.registerPluginSurfaceController?.(workbenchPluginSurfaceState);
@@ -1152,39 +1145,9 @@ vi.mock('./pages/EnvAIPage', () => ({
     );
   },
 }));
-vi.mock('./codex/CodexPage', () => ({
-  CodexPage: () => {
-    onMount(() => {
-      activitySurfaceLifecycleState.codexPageMounts += 1;
-    });
-    onCleanup(() => {
-      activitySurfaceLifecycleState.codexPageCleanups += 1;
-    });
-    return <div data-testid="mock-codex-page" />;
-  },
-}));
-vi.mock('./codex/CodexProvider', () => ({
-  CodexProvider: (props: any) => {
-    onMount(() => {
-      activitySurfaceLifecycleState.codexProviderMounts += 1;
-    });
-    onCleanup(() => {
-      activitySurfaceLifecycleState.codexProviderCleanups += 1;
-    });
-    return <>{props.children}</>;
-  },
-}));
-vi.mock('./codex/CodexSidebar', () => ({
-  CodexSidebar: () => {
-    onMount(() => {
-      activitySurfaceLifecycleState.codexSidebarMounts += 1;
-    });
-    onCleanup(() => {
-      activitySurfaceLifecycleState.codexSidebarCleanups += 1;
-    });
-    return <div data-testid="mock-codex-sidebar" />;
-  },
-}));
+
+
+
 vi.mock('./pages/EnvSettingsPage', async () => {
   const { EnvContext } = await import('./pages/EnvContext');
   return {
@@ -1387,12 +1350,6 @@ beforeEach(async () => {
   activitySurfaceLifecycleState.fileCleanups = 0;
   activitySurfaceLifecycleState.flowerMounts = 0;
   activitySurfaceLifecycleState.flowerCleanups = 0;
-  activitySurfaceLifecycleState.codexProviderMounts = 0;
-  activitySurfaceLifecycleState.codexProviderCleanups = 0;
-  activitySurfaceLifecycleState.codexPageMounts = 0;
-  activitySurfaceLifecycleState.codexPageCleanups = 0;
-  activitySurfaceLifecycleState.codexSidebarMounts = 0;
-  activitySurfaceLifecycleState.codexSidebarCleanups = 0;
   protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
   protocolConnectionConfig = null;
   localDirectArtifactSourceOptions = undefined;
@@ -1673,90 +1630,6 @@ describe('EnvAppShell environment entry affordances', () => {
       secondDispose();
     }
   });
-
-  it('keeps visited Activity surfaces mounted while the dedicated Flower page opens', async () => {
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-
-    // Keep this lifecycle test independent of Vitest's dynamic-module transform timing.
-    // Importing the component module does not mount or initialize the Codex provider.
-    await import('./codex/CodexActivitySurface');
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="codex"]')));
-      expect(activitySurfaceLifecycleState.codexProviderMounts).toBe(0);
-      expect(activitySurfaceLifecycleState.codexPageMounts).toBe(0);
-      expect(activitySurfaceLifecycleState.codexSidebarMounts).toBe(0);
-
-      (host.querySelector('[data-activity-id="files"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-testid="mock-file-browser"]')));
-      await flushUntil(() => !host.querySelector('[data-testid="mock-file-loading"]'));
-      const fileBrowser = host.querySelector('[data-testid="mock-file-browser"]') as HTMLElement;
-      const pathInput = host.querySelector('[data-testid="mock-file-path"]') as HTMLInputElement;
-      const filterInput = host.querySelector('[data-testid="mock-file-filter"]') as HTMLInputElement;
-      const scrollViewport = host.querySelector('[data-testid="mock-file-scroll"]') as HTMLElement;
-
-      pathInput.value = '/workspace/src';
-      pathInput.dispatchEvent(new Event('input', { bubbles: true }));
-      filterInput.value = 'main.ts';
-      filterInput.dispatchEvent(new Event('input', { bubbles: true }));
-      (host.querySelector('[data-testid="mock-file-expand"]') as HTMLButtonElement).click();
-      (host.querySelector('[data-testid="mock-file-grid"]') as HTMLButtonElement).click();
-      (host.querySelector('[data-testid="mock-file-select"]') as HTMLButtonElement).click();
-      scrollViewport.scrollTop = 176;
-
-      for (const target of ['terminal', 'monitor', 'ai', 'codex']) {
-        (host.querySelector(`[data-activity-id="${target}"]`) as HTMLButtonElement | null)?.click();
-        if (target === 'ai') {
-          await flushUntil(() => (
-            host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'full_page'
-          ));
-          expect(sidebarActiveTabValue).toBe('ai');
-        } else {
-          await flushUntil(() => sidebarActiveTabValue === target);
-        }
-
-        expect(host.querySelector('[data-testid="mock-file-browser"]')).toBe(fileBrowser);
-        expect(activitySurfaceLifecycleState.fileMounts).toBe(1);
-        expect(activitySurfaceLifecycleState.fileCleanups).toBe(0);
-
-        if (target === 'codex') {
-          await flushUntil(() => activitySurfaceLifecycleState.codexProviderMounts === 1, 60);
-          expect(activitySurfaceLifecycleState.codexPageMounts).toBe(1);
-          expect(activitySurfaceLifecycleState.codexSidebarMounts).toBe(1);
-          expect(host.querySelector('[data-testid="mock-codex-sidebar"]')).toBeTruthy();
-        }
-
-        (host.querySelector('[data-activity-id="files"]') as HTMLButtonElement | null)?.click();
-        expect(host.querySelector('[data-testid="mock-file-loading"]')).toBeNull();
-        await flushUntil(() => sidebarActiveTabValue === 'files');
-
-        expect(host.querySelector('[data-testid="mock-file-browser"]')).toBe(fileBrowser);
-        expect((host.querySelector('[data-testid="mock-file-path"]') as HTMLInputElement).value).toBe('/workspace/src');
-        expect((host.querySelector('[data-testid="mock-file-filter"]') as HTMLInputElement).value).toBe('main.ts');
-        expect(fileBrowser.dataset.expanded).toBe('true');
-        expect(fileBrowser.dataset.viewMode).toBe('grid');
-        expect(fileBrowser.dataset.selection).toBe('/workspace/src/main.ts');
-        expect((host.querySelector('[data-testid="mock-file-scroll"]') as HTMLElement).scrollTop).toBe(176);
-      }
-
-      expect(activitySurfaceLifecycleState.codexProviderMounts).toBe(1);
-      expect(activitySurfaceLifecycleState.codexProviderCleanups).toBe(0);
-      expect(activitySurfaceLifecycleState.codexPageMounts).toBe(1);
-      expect(activitySurfaceLifecycleState.codexPageCleanups).toBe(0);
-      expect(activitySurfaceLifecycleState.codexSidebarMounts).toBe(1);
-      expect(activitySurfaceLifecycleState.codexSidebarCleanups).toBe(0);
-    } finally {
-      dispose();
-    }
-  }, 10000);
 
   it('returns Flower-origin runtime settings to Flower and clears the origin on normal settings entry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -4121,45 +3994,6 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   });
 
-  it('suppresses the desktop sidebar width transition for one frame when opening Codex from a full-screen activity surface', async () => {
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    const storage = createStorageMock();
-    storage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-    vi.stubGlobal('localStorage', storage);
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushAsync();
-
-      const shellSidebar = host.querySelector('[data-testid="shell-sidebar"]');
-      const codexButton = findButtonByText(host, 'Codex');
-
-      expect(shellSidebar?.className).not.toContain('transition-none');
-      expect(codexButton).toBeTruthy();
-
-      codexButton?.click();
-
-      expect(setSidebarActiveTabMock).toHaveBeenCalledWith(
-        'codex',
-        expect.objectContaining({ openSidebar: true, visibilityMotion: 'instant' }),
-      );
-
-      await flushAsync();
-
-      expect(shellSidebar?.className).not.toContain('transition-none');
-    } finally {
-      dispose();
-    }
-  });
-});
-
-describe('EnvAppShell local access gate', () => {
   it('reports an interactive Desktop access gate after the shell paint boundary', async () => {
     installDesktopSessionContext({
       sessionSource: 'ssh_environment',
@@ -4818,41 +4652,6 @@ describe('EnvAppShell local access gate', () => {
       expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeFalsy();
       expect(retryNowMock).not.toHaveBeenCalled();
-    } finally {
-      dispose();
-    }
-  });
-
-  it('restores the persisted Codex activity surface after refresh once permissions are ready', async () => {
-    const storage = createStorageMock();
-    storage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-    storage.setItem('redeven_envapp_active_tab', 'codex');
-    vi.stubGlobal('localStorage', storage);
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushAsync();
-      await flushAsync();
-      await flushAsync();
-      await flushAsync();
-      await flushAsync();
-
-      expect(setSidebarActiveTabMock).toHaveBeenCalledWith(
-        'terminal',
-        expect.objectContaining({ openSidebar: false }),
-      );
-      expect(setSidebarActiveTabMock).toHaveBeenCalledWith(
-        'codex',
-        expect.objectContaining({ openSidebar: true, visibilityMotion: 'instant' }),
-      );
-      expect(sidebarActiveTabValue).toBe('codex');
-      expect(storage.getItem('redeven_envapp_active_tab')).toBe('codex');
     } finally {
       dispose();
     }

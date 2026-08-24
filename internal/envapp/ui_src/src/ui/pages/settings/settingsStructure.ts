@@ -11,7 +11,6 @@ import {
   Zap,
 } from '@floegence/floe-webapp-core/icons';
 
-import { CodexNavigationIcon } from '../../icons/CodexIcon';
 import { FlowerIcon } from '../../icons/FlowerIcon';
 import type { EnvSettingsSection } from '../EnvContext';
 
@@ -51,7 +50,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
   { id: 'permission_policy', navLabel: 'Permission Policy', icon: Shield, group: 'security' },
   { id: 'ai', navLabel: 'Flower', icon: FlowerIcon, group: 'ai_extensions' },
   { id: 'skills', navLabel: 'Skills', icon: Layers, group: 'ai_extensions' },
-  { id: 'codex', navLabel: 'Codex', icon: CodexNavigationIcon, group: 'ai_extensions' },
   { id: 'debug_console', navLabel: 'Debug Console', icon: RefreshIcon, group: 'diagnostics' },
 ]);
 
@@ -66,7 +64,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
   { id: 'overview', title: 'Overview', sections: ['config', 'connection', 'agent'] },
   { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['runtime', 'codespaces', 'logging'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },
-  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'skills', 'codex'] },
+  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'skills'] },
   { id: 'diagnostics', title: 'Diagnostics', sections: ['debug_console'] },
 ]);
 

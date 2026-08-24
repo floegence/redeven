@@ -1,12 +1,5 @@
 {
   "sources": {
-    "codex": {
-      "pass_rate": 0.88,
-      "loop_safety_rate": 0.97,
-      "recovery_success_rate": 0.9,
-      "fallback_free_rate": 0.98,
-      "average_accuracy": 86
-    },
     "cline": {
       "pass_rate": 0.85,
       "loop_safety_rate": 0.95,

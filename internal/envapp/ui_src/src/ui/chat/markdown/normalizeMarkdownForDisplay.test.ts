@@ -83,7 +83,7 @@ describe('normalizeMarkdownForDisplay', () => {
       'Evidence lives at',
       '[PROJECT_GUIDE.md#L121](/Users/tangjianyin/Downloads/code/redeven/PROJECT_GUIDE.md#L121)',
       'and',
-      '[CodexTranscript.tsx#L248](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/codex/CodexTranscript.tsx#L248).',
+      '[TerminalPanel.tsx#L248](/workspace/redeven/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L248).',
     ].join(' ');
 
     expect(normalizeMarkdownForDisplay(input)).toBe(input);

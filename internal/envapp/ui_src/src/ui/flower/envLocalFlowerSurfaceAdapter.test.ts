@@ -1102,7 +1102,7 @@ describe('Env local Flower surface adapter', () => {
       context_action: {
         schema_version: 2,
         action_id: 'assistant.ask.flower',
-        provider: 'codex',
+        provider: 'other',
         target: { target_id: 'current', locality: 'auto' },
         source: { surface: 'file_browser' },
         context: [],

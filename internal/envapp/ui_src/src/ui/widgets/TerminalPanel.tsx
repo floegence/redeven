@@ -3338,7 +3338,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           : item.failureKind === 'runtime'
             ? i18n.t('terminal.terminalUnavailable')
             : item.attentionState === 'waiting'
-              ? i18n.t('codex.pendingRequests.titleByType.userInput')
+              ? i18n.t('terminalAgentActivity.userInputRequired')
               : '';
         if (status) {
           const label = item.label.trim();
@@ -4364,7 +4364,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!item) return '';
     if (item.outputState !== 'none') {
       const activity = item.activitySource === 'semantic'
-        ? i18n.t('codexActivity.status.working')
+        ? i18n.t('terminalAgentActivity.working')
         : i18n.t('terminal.outputStreaming');
       return item.attentionState === 'unread'
         ? i18n.t('terminal.activityWithUnreadOutput', {
@@ -4374,7 +4374,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         : activity;
     }
     if (item.attentionState === 'waiting') {
-      return i18n.t('codex.pendingRequests.titleByType.userInput');
+      return i18n.t('terminalAgentActivity.userInputRequired');
     }
     if (item.attentionState === 'unread') {
       return i18n.t('terminal.unreadOutputDescription');
@@ -4400,7 +4400,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (attention === 'waiting') {
       return i18n.t('terminal.sessionsWithWaitingAttention', {
         sessions: i18n.t('terminal.sessions'),
-        attention: i18n.t('codex.pendingRequests.titleByType.userInput'),
+        attention: i18n.t('terminalAgentActivity.userInputRequired'),
       });
     }
     if (attention === 'unread') {

@@ -191,12 +191,6 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
     ({ lineSource }) => /(?:stop-color|\bfill|\bstroke)=/u.test(lineSource),
   ),
   exception(
-    'internal/envapp/ui_src/src/ui/icons/CodexIcon.tsx',
-    'brand',
-    'Codex icon artwork retains its authored SVG palette.',
-    ({ lineSource }) => /(?:stop-color|\bfill|\bstroke)=/u.test(lineSource),
-  ),
-  exception(
     'internal/flower_ui/src/icons/FlowerIcon.tsx',
     'brand',
     'Flower icon artwork retains its authored petal and center palette.',

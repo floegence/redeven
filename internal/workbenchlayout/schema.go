@@ -1,16 +1,19 @@
 package workbenchlayout
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 const (
 	schemaKind           = "workbench_layout_runtime"
-	currentSchemaVersion = 3
+	currentSchemaVersion = 4
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -22,6 +25,7 @@ func schemaSpec() sqliteutil.Spec {
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateToV4},
 		},
 		Verify: verifySchema,
 	}
@@ -141,6 +145,164 @@ func migrateToV3(tx *sql.Tx) error {
   ON workbench_layout_background_layers(z_index ASC, created_at_unix_ms ASC, id ASC);
 `)
 	return err
+}
+
+const legacyCodexWidgetType = "redeven.codex"
+
+func migrateToV4(tx *sql.Tx) error {
+	if err := verifyWorkbenchSchema(tx, 3); err != nil {
+		return fmt.Errorf("verify workbench layout v3 schema: %w", err)
+	}
+	changed := false
+	for _, query := range []string{
+		`DELETE FROM workbench_layout_widgets WHERE widget_type = ?`,
+		`DELETE FROM workbench_widget_states WHERE widget_type = ?`,
+	} {
+		result, err := tx.Exec(query, legacyCodexWidgetType)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		changed = changed || count > 0
+	}
+
+	rows, err := tx.Query(`SELECT seq, event_type, payload_json FROM workbench_layout_events ORDER BY seq ASC`)
+	if err != nil {
+		return err
+	}
+	type eventRow struct {
+		seq       int64
+		eventType string
+		payload   string
+	}
+	events := make([]eventRow, 0)
+	for rows.Next() {
+		var event eventRow
+		if err := rows.Scan(&event.seq, &event.eventType, &event.payload); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	for _, event := range events {
+		switch event.eventType {
+		case EventTypeLayoutReplaced:
+			payload, removed, err := scrubLayoutEventPayload([]byte(event.payload))
+			if err != nil {
+				return fmt.Errorf("scrub workbench layout event %d: %w", event.seq, err)
+			}
+			if !removed {
+				continue
+			}
+			if _, err := tx.Exec(`UPDATE workbench_layout_events SET payload_json = ? WHERE seq = ?`, string(payload), event.seq); err != nil {
+				return err
+			}
+			changed = true
+		case EventTypeWidgetStateUpserted:
+			var state struct {
+				WidgetType string `json:"widget_type"`
+			}
+			if err := json.Unmarshal([]byte(event.payload), &state); err != nil {
+				return fmt.Errorf("decode workbench widget event %d: %w", event.seq, err)
+			}
+			if state.WidgetType != legacyCodexWidgetType {
+				continue
+			}
+			if _, err := tx.Exec(`DELETE FROM workbench_layout_events WHERE seq = ?`, event.seq); err != nil {
+				return err
+			}
+			changed = true
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+	current, err := snapshotTx(context.Background(), tx)
+	if err != nil {
+		return err
+	}
+	nowUnixMs := time.Now().UnixMilli()
+	result, err := tx.Exec(`INSERT INTO workbench_layout_events(event_type, payload_json, created_at_unix_ms) VALUES (?, ?, ?)`, EventTypeLayoutReplaced, "", nowUnixMs)
+	if err != nil {
+		return err
+	}
+	seq, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE workbench_layout_snapshot SET revision = ?, seq = ?, updated_at_unix_ms = ? WHERE singleton = 1`, current.Revision+1, seq, nowUnixMs); err != nil {
+		return err
+	}
+	current.Revision++
+	current.Seq = seq
+	current.UpdatedAtUnixMs = nowUnixMs
+	payload, err := json.Marshal(current)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`UPDATE workbench_layout_events SET payload_json = ? WHERE seq = ?`, string(payload), seq)
+	return err
+}
+
+func scrubLayoutEventPayload(raw []byte) ([]byte, bool, error) {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, false, err
+	}
+	removed := false
+	for _, field := range []string{"widgets", "widget_states"} {
+		value, ok := payload[field]
+		if !ok {
+			continue
+		}
+		var items []map[string]json.RawMessage
+		if err := json.Unmarshal(value, &items); err != nil {
+			return nil, false, err
+		}
+		filtered := items[:0]
+		fieldRemoved := false
+		for _, item := range items {
+			typeValue, ok := item["widget_type"]
+			if !ok {
+				filtered = append(filtered, item)
+				continue
+			}
+			var widgetType string
+			if err := json.Unmarshal(typeValue, &widgetType); err != nil {
+				return nil, false, err
+			}
+			if widgetType == legacyCodexWidgetType {
+				removed = true
+				fieldRemoved = true
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		if fieldRemoved {
+			encoded, err := json.Marshal(filtered)
+			if err != nil {
+				return nil, false, err
+			}
+			payload[field] = encoded
+		}
+	}
+	if !removed {
+		return raw, false, nil
+	}
+	encoded, err := json.Marshal(payload)
+	return encoded, true, err
 }
 
 func verifySchema(tx *sql.Tx) error {

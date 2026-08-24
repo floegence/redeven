@@ -110,7 +110,7 @@ func TestContainersVolumeCreatePreflightMatchesSignedV4Contract(t *testing.T) {
 		Arguments: map[string]any{
 			"engine":      "docker",
 			"endpoint_id": capabilityTestEndpointID,
-			"name":        "codex-plugin-acceptance-volume",
+			"name":        "plugin-acceptance-volume",
 			"driver":      "local",
 			"options":     []any{},
 		},

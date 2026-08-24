@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -15,7 +14,6 @@ type Surface string
 
 const (
 	SurfaceFlower Surface = "flower"
-	SurfaceCodex  Surface = "codex"
 )
 
 type Store struct {
@@ -44,11 +42,6 @@ type FlowerSnapshot struct {
 	WaitingPromptID     string
 }
 
-type CodexSnapshot struct {
-	UpdatedAtUnixS    int64
-	ActivitySignature string
-}
-
 func Open(path string) (*Store, error) {
 	db, err := sqliteutil.Open(path, schemaSpec())
 	if err != nil {
@@ -70,16 +63,7 @@ func (s *Store) EnsureFlower(
 	userPublicID string,
 	snapshots map[string]FlowerSnapshot,
 ) (map[string]Record, error) {
-	return s.ensure(ctx, endpointID, userPublicID, SurfaceFlower, snapshots, nil)
-}
-
-func (s *Store) EnsureCodex(
-	ctx context.Context,
-	endpointID string,
-	userPublicID string,
-	snapshots map[string]CodexSnapshot,
-) (map[string]Record, error) {
-	return s.ensure(ctx, endpointID, userPublicID, SurfaceCodex, nil, snapshots)
+	return s.ensure(ctx, endpointID, userPublicID, SurfaceFlower, snapshots)
 }
 
 func (s *Store) AdvanceFlower(
@@ -94,26 +78,7 @@ func (s *Store) AdvanceFlower(
 		ScopeID:    userPublicID,
 		Surface:    SurfaceFlower,
 		ThreadID:   threadID,
-	}, snapshot, CodexSnapshot{})
-	if err != nil {
-		return Record{}, err
-	}
-	return record, nil
-}
-
-func (s *Store) AdvanceCodex(
-	ctx context.Context,
-	endpointID string,
-	userPublicID string,
-	threadID string,
-	snapshot CodexSnapshot,
-) (Record, error) {
-	record, err := s.advance(ctx, recordKey{
-		EndpointID: endpointID,
-		ScopeID:    userPublicID,
-		Surface:    SurfaceCodex,
-		ThreadID:   threadID,
-	}, FlowerSnapshot{}, snapshot)
+	}, snapshot)
 	if err != nil {
 		return Record{}, err
 	}
@@ -174,8 +139,7 @@ func (s *Store) ensure(
 	endpointID string,
 	scopeID string,
 	surface Surface,
-	flowerSnapshots map[string]FlowerSnapshot,
-	codexSnapshots map[string]CodexSnapshot,
+	snapshots map[string]FlowerSnapshot,
 ) (map[string]Record, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("thread read state store not initialized")
@@ -185,23 +149,13 @@ func (s *Store) ensure(
 		return nil, err
 	}
 
-	threadIDs := make([]string, 0, max(len(flowerSnapshots), len(codexSnapshots)))
-	if surface == SurfaceFlower {
-		for threadID := range flowerSnapshots {
-			threadID = normalizeThreadID(threadID)
-			if threadID == "" {
-				continue
-			}
-			threadIDs = append(threadIDs, threadID)
+	threadIDs := make([]string, 0, len(snapshots))
+	for threadID := range snapshots {
+		threadID = normalizeThreadID(threadID)
+		if threadID == "" {
+			continue
 		}
-	} else {
-		for threadID := range codexSnapshots {
-			threadID = normalizeThreadID(threadID)
-			if threadID == "" {
-				continue
-			}
-			threadIDs = append(threadIDs, threadID)
-		}
+		threadIDs = append(threadIDs, threadID)
 	}
 	if len(threadIDs) == 0 {
 		return map[string]Record{}, nil
@@ -233,11 +187,7 @@ func (s *Store) ensure(
 			ThreadID:        threadID,
 			UpdatedAtUnixMs: nowUnixMs,
 		}
-		if surface == SurfaceFlower {
-			record = applyFlowerSeed(record, flowerSnapshots[threadID])
-		} else {
-			record = applyCodexSeed(record, codexSnapshots[threadID])
-		}
+		record = applyFlowerSeed(record, snapshots[threadID])
 		if err := upsertRecordTx(ctx, tx, record); err != nil {
 			return nil, err
 		}
@@ -253,8 +203,7 @@ func (s *Store) ensure(
 func (s *Store) advance(
 	ctx context.Context,
 	key recordKey,
-	flowerSnapshot FlowerSnapshot,
-	codexSnapshot CodexSnapshot,
+	snapshot FlowerSnapshot,
 ) (Record, error) {
 	if s == nil || s.db == nil {
 		return Record{}, errors.New("thread read state store not initialized")
@@ -287,14 +236,10 @@ func (s *Store) advance(
 
 	next := *current
 	next.UpdatedAtUnixMs = time.Now().UnixMilli()
-	switch key.Surface {
-	case SurfaceFlower:
-		next = applyFlowerAdvance(next, flowerSnapshot)
-	case SurfaceCodex:
-		next = applyCodexAdvance(next, codexSnapshot)
-	default:
-		return Record{}, fmt.Errorf("unsupported surface %q", key.Surface)
+	if key.Surface != SurfaceFlower {
+		return Record{}, errors.New("unsupported surface")
 	}
+	next = applyFlowerAdvance(next, snapshot)
 	if err := upsertRecordTx(ctx, tx, next); err != nil {
 		return Record{}, err
 	}
@@ -522,8 +467,6 @@ func normalizeSurface(surface Surface) Surface {
 	switch Surface(strings.ToLower(strings.TrimSpace(string(surface)))) {
 	case SurfaceFlower:
 		return SurfaceFlower
-	case SurfaceCodex:
-		return SurfaceCodex
 	default:
 		return ""
 	}
@@ -544,25 +487,11 @@ func normalizeFlowerSnapshot(snapshot FlowerSnapshot) FlowerSnapshot {
 	}
 }
 
-func normalizeCodexSnapshot(snapshot CodexSnapshot) CodexSnapshot {
-	return CodexSnapshot{
-		UpdatedAtUnixS:    maxInt64(0, snapshot.UpdatedAtUnixS),
-		ActivitySignature: strings.TrimSpace(snapshot.ActivitySignature),
-	}
-}
-
 func applyFlowerSeed(record Record, snapshot FlowerSnapshot) Record {
 	snapshot = normalizeFlowerSnapshot(snapshot)
 	record.LastSeenActivityRevision = snapshot.ActivityRevision
 	record.LastReadMessageAtUnixMs = snapshot.LastMessageAtUnixMs
 	record.LastSeenWaitingPromptID = snapshot.WaitingPromptID
-	record.LastSeenActivitySignature = snapshot.ActivitySignature
-	return record
-}
-
-func applyCodexSeed(record Record, snapshot CodexSnapshot) Record {
-	snapshot = normalizeCodexSnapshot(snapshot)
-	record.LastReadUpdatedAtUnixS = snapshot.UpdatedAtUnixS
 	record.LastSeenActivitySignature = snapshot.ActivitySignature
 	return record
 }
@@ -575,15 +504,6 @@ func applyFlowerAdvance(record Record, snapshot FlowerSnapshot) Record {
 		record.LastSeenWaitingPromptID = snapshot.WaitingPromptID
 	}
 	record.LastReadMessageAtUnixMs = maxInt64(record.LastReadMessageAtUnixMs, snapshot.LastMessageAtUnixMs)
-	return record
-}
-
-func applyCodexAdvance(record Record, snapshot CodexSnapshot) Record {
-	snapshot = normalizeCodexSnapshot(snapshot)
-	record.LastReadUpdatedAtUnixS = maxInt64(record.LastReadUpdatedAtUnixS, snapshot.UpdatedAtUnixS)
-	if snapshot.ActivitySignature != "" {
-		record.LastSeenActivitySignature = snapshot.ActivitySignature
-	}
 	return record
 }
 

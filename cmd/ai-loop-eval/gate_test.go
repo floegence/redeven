@@ -18,7 +18,7 @@ func TestEvaluateGate_RejectBelowBaseline(t *testing.T) {
 		AverageAccuracy:     65,
 	}
 	baselines := benchmarkBaselines{Sources: map[string]benchmarkMetrics{
-		"codex": {
+		"openai": {
 			PassRate:            0.85,
 			LoopSafetyRate:      0.95,
 			RecoverySuccessRate: 0.85,

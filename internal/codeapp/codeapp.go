@@ -18,7 +18,6 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codeapp/registry"
 	"github.com/floegence/redeven/internal/codeapp/ui"
-	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
@@ -103,7 +102,6 @@ type Service struct {
 	notes   *notes.Service
 	layouts *workbenchlayout.Service
 	aiReady *aiReadinessController
-	codex   *codexbridge.Manager
 	reads   *threadreadstate.Store
 	appSrv  *appserver.Server
 
@@ -254,27 +252,12 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		},
 	}, opts.newAIService, opts.closeAIService)
 
-	codexSvc, err := codexbridge.NewManager(codexbridge.Options{
-		Logger:       logger,
-		AgentHomeDir: agentHomeDir,
-		Shell:        strings.TrimSpace(opts.Shell),
-		Diagnostics:  opts.Diagnostics,
-	})
-	if err != nil {
-		_ = reg.Close()
-		_ = pfSvc.Close()
-		_ = aiReady.Close()
-		_ = threadReadStateStore.Close()
-		return nil, err
-	}
-
 	notesPath := filepath.Join(stateAbs, "apps", "notes", "notes.sqlite")
 	notesSvc, err := notes.Open(notesPath)
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = aiReady.Close()
-		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
@@ -285,7 +268,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
 		_ = aiReady.Close()
-		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
@@ -295,7 +277,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
@@ -313,7 +294,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
@@ -344,7 +324,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
@@ -361,7 +340,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		Notes:                   notesSvc,
 		WorkbenchLayout:         workbenchLayoutSvc,
 		Terminal:                opts.Terminal,
-		Codex:                   codexSvc,
 		Audit:                   opts.Audit,
 		Diagnostics:             opts.Diagnostics,
 		ResolveSessionMeta:      opts.ResolveSessionMeta,
@@ -387,7 +365,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
@@ -399,7 +376,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
@@ -407,7 +383,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
 	svc.aiReady = aiReady
-	svc.codex = codexSvc
 	svc.reads = threadReadStateStore
 	svc.pluginIntegration = pluginIntegration
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
@@ -449,9 +424,6 @@ func (s *Service) Close() error {
 	}
 	if s.pluginIntegration != nil {
 		_ = s.pluginIntegration.Close()
-	}
-	if s.codex != nil {
-		_ = s.codex.Close()
 	}
 	return nil
 }

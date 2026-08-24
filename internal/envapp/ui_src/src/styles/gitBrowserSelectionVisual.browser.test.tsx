@@ -199,20 +199,20 @@ describe('Git browser rendered selection contract', () => {
                 currentRef: 'main',
                 local: [
                   { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true, subject: 'Stable product branch' },
-                  { name: 'codex/git-selection', fullName: 'refs/heads/codex/git-selection', kind: 'local', subject: 'Improve Git browser selection contrast' },
+                  { name: 'feature/git-selection', fullName: 'refs/heads/feature/git-selection', kind: 'local', subject: 'Improve Git browser selection contrast' },
                 ],
                 remote: [
                   { name: 'origin/main', fullName: 'refs/remotes/origin/main', kind: 'remote', subject: 'Published product branch' },
                 ],
               }}
-              selectedBranchKey="refs/heads/codex/git-selection"
+              selectedBranchKey="refs/heads/feature/git-selection"
             />
           </LayoutProvider>
         ), host);
 
         try {
           const current = host.querySelector<HTMLElement>('.git-browser-current-chip');
-          const selected = host.querySelector<HTMLElement>('[data-git-sidebar-branch-key="refs/heads/codex/git-selection"]');
+          const selected = host.querySelector<HTMLElement>('[data-git-sidebar-branch-key="refs/heads/feature/git-selection"]');
           expect(current?.textContent, `${themeName} ${width}px current`).toBe('Current');
           expect(selected?.className, `${themeName} ${width}px selected`).toContain('git-browser-selection-row');
           expect(

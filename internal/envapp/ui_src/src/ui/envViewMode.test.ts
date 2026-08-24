@@ -26,6 +26,5 @@ describe('envViewMode', () => {
 
   it('maps surface ids to the shared widget catalog', () => {
     expect(envWidgetTypeForSurface('terminal')).toBe('redeven.terminal');
-    expect(envWidgetTypeForSurface('codex')).toBe('redeven.codex');
   });
 });

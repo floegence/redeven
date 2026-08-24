@@ -230,7 +230,6 @@
       "permissionPolicy": "权限策略",
       "flower": "Flower",
       "skills": "技能",
-      "codex": "Codex",
       "debugConsole": "调试控制台"
     },
     "groups": {
@@ -362,8 +361,7 @@
       "codespaces": "Codespaces",
       "browserEditor": "Browser Editor",
       "webServices": "Web服务",
-      "flower": "Flower",
-      "codex": "Codex"
+      "flower": "Flower"
     },
     "topbar": {
       "backToDashboard": "返回 Dashboard",
@@ -553,8 +551,6 @@
       "goToWebServicesDescription": "打开 Web服务注册",
       "goToFlowerTitle": "前往 Flower",
       "goToFlowerDescription": "打开 Flower",
-      "goToCodexTitle": "前往 Codex",
-      "goToCodexDescription": "打开 Codex",
       "openEnvironmentTitle": "打开环境...",
       "openEnvironmentDescription": "打开 Redeven Desktop 环境启动器。",
       "backToDashboardTitle": "返回 Dashboard",
@@ -684,7 +680,6 @@
   },
   "aiChrome": {
     "flowerTitle": "Flower",
-    "codexTitle": "Codex",
     "newChat": "新建对话",
     "copyMessage": "复制消息",
     "retryMessage": "重试",
@@ -735,288 +730,17 @@
       "flower": {
         "label": "Flower",
         "defaultTitle": "Flower"
-      },
-      "codex": {
-        "label": "Codex",
-        "defaultTitle": "Codex"
       }
     },
     "notices": {
       "flowerRwxTitle": "Flower 需要读、写和执行权限",
       "flowerRwxDescription": "为此环境授予 RWX 权限，以便在 Workbench 模式中使用内嵌的 Flower 工作区。",
-      "flowerThreads": "Flower 对话",
-      "codexRwxTitle": "Codex 需要读、写和执行权限",
-      "codexRwxDescription": "为此环境授予 RWX 权限，以便在 Workbench 模式中使用内嵌的 Codex 工作区。",
-      "codexThreads": "Codex 对话"
+      "flowerThreads": "Flower 对话"
     }
   },
-  "codex": {
-    "title": "Codex",
-    "loading": "正在加载 Codex...",
-    "common": {
-      "idle": "空闲",
-      "working": "工作中",
-      "request": "请求",
-      "file": "文件",
-      "image": "图片",
-      "newThread": "新线程",
-      "untitledThread": "未命名线程",
-      "newChat": "新建对话",
-      "noConversationPreview": "尚无对话预览。",
-      "workingDirectory": "工作目录",
-      "workingDir": "工作目录",
-      "default": "默认",
-      "never": "从不",
-      "fullAccess": "完全访问权限",
-      "sending": "正在发送..."
-    },
-    "empty": {
-      "readyTitle": "Codex",
-      "installTitle": "在主机上安装 Codex",
-      "readyBody": "输入 prompt 开始 Codex 对话，粘贴图片，用 @ 引用文件，或用 / 执行本地 composer 命令。",
-      "installBody": "Redeven 不会为您安装 Codex。将主机 `codex` 二进制文件放在 PATH 上，然后刷新此页面以启动专用的 Codex 聊天。"
-    },
-    "loadingState": {
-      "preparingThread": "正在准备选中的 Codex 线程。",
-      "loadingThread": "正在加载选中的 Codex 线程。"
-    },
-    "controls": {
-      "model": "模型",
-      "effort": "工作量",
-      "approval": "批准",
-      "sandbox": "沙盒",
-      "reasoningEffort": {
-        "low": "低",
-        "medium": "中",
-        "high": "高",
-        "max": "最大值"
-      },
-      "approvalPolicy": {
-        "untrusted": "不受信任",
-        "onFailure": "失败时",
-        "onRequest": "根据请求",
-        "never": "从不",
-        "granular": "粒度"
-      },
-      "sandboxMode": {
-        "readOnly": "只读",
-        "workspaceWrite": "工作区写入",
-        "dangerFullAccess": "完全访问",
-        "externalSandbox": "外部沙箱"
-      }
-    },
-    "disabledReasons": {
-      "archivedThreadHidden": "已归档线程会从对话列表中隐藏。",
-      "stopRequestInProgress": "停止请求进行中。",
-      "waitingForActiveTurn": "等待主动轮开始。",
-      "waitingForInterruptibleTurn": "等待 Codex 暴露可中断回合。",
-      "turnInterruptionUnavailable": "该主机不支持转向中断。",
-      "queueAfterThreadStarts": "当前线程启动后才能排队。",
-      "addPromptImageOrMention": "添加 prompt、图片或文件引用后才能发送。",
-      "guideWhileRunning": "指南在 Codex 转弯时可用。",
-      "guideStopInProgress": "当停止请求正在进行时，指南不可用。",
-      "currentTurnStarting": "Codex 仍在启动当前回合。",
-      "sameTurnGuidanceUnsupported": "该Codex主机不支持同转弯引导。",
-      "turnCannotAcceptGuidedInput": "该回合无法接受引导输入。",
-      "turnKindCannotAcceptGuidedInput": "此 {kind} 轮无法接受引导输入。",
-      "archiveUnavailable": "此主机不支持归档。",
-      "archiveInProgress": "正在归档。",
-      "forkUnavailable": "创建分支副本在此主机上不可用。",
-      "forkInProgress": "分叉正在进行中。",
-      "reviewUnavailable": "在此主机上无法进行审核。",
-      "reviewInProgress": "审查已在进行中。",
-      "stopAvailableAfterTurnStarts": "转弯开始后即可使用停止。"
-    },
-    "actions": {
-      "archive": "归档",
-      "archiving": "正在归档...",
-      "fork": "叉子",
-      "forking": "分叉...",
-      "review": "评论",
-      "reviewing": "正在审核...",
-      "stop": "停止",
-      "stopping": "正在停止...",
-      "guide": "指南",
-      "approveOnce": "批准一次",
-      "approveForSession": "批准会话",
-      "decline": "拒绝",
-      "cancel": "取消",
-      "submitResponse": "提交回复",
-      "reviewApproval": "查看批准项",
-      "browseFiles": "浏览文件"
-    },
-    "header": {
-      "installRequired": "需要安装",
-      "pendingCount": {
-        "one": "{count} 个待处理",
-        "other": "{count} 个待处理"
-      },
-      "archiveThreadAria": "归档 Codex 线程",
-      "forkThreadAria": "分叉 Codex 线程",
-      "reviewWorkspaceAria": "审查当前工作区更改",
-      "stopTurnAria": "停止活动 Codex 转向"
-    },
-    "composer": {
-      "fileReferenceSuggestions": "文件引用建议",
-      "commandParameterOptions": "命令参数选项",
-      "commandSuggestions": "命令建议",
-      "optionsForControl": "{label} 选项",
-      "stopActiveTurn": "停止活动 Codex 转",
-      "queueNextTurn": "队列下一个 Codex 转",
-      "sendToCodex": "发送到 Codex",
-      "workingDirectoryLocked": "工作目录已锁定",
-      "selectWorkingDirectory": "选择工作目录",
-      "lockedToThisThread": "{path}（锁定到此线程）",
-      "installHostToEnable": "在主机上安装 `codex` 以启用 Codex 聊天。",
-      "selectedModelNoImages": "所选型号当前不接受图像输入。",
-      "placeholderWithImages": "要求 Codex 审查变更、检查故障、总结差异或计划下一步。使用@表示文件上下文，使用/表示命令，或粘贴图像。",
-      "placeholderTextOnly": "要求 Codex 审查变更、检查故障、总结差异或计划下一步。使用@表示文件上下文或使用/表示命令。",
-      "noOptionsAvailable": "此命令没有可用选项。",
-      "indexingFiles": "正在索引当前工作目录中的文件...",
-      "noMatchingFiles": "当前工作目录中没有匹配文件。",
-      "inputControls": "Codex 输入控件",
-      "moreControls": "更多",
-      "moreInputControls": "更多 Codex 输入控件",
-      "addAttachments": "添加附件",
-      "removeAttachment": "移除 {name}",
-      "removeMention": "移除 {name}",
-      "slashDescriptions": {
-        "mention": "插入 @ 并打开文件引用选择器。",
-        "new": "开始新的 Codex 线程草稿。",
-        "clear": "清空当前 composer 文本、附件和文件引用。",
-        "cwd": "为新对话打开工作目录选择器。",
-        "model": "选择下一个 Codex 转弯的模型。",
-        "effort": "选择下一个 Codex 回合的推理工作。",
-        "approval": "选择下一个 Codex 回合的批准策略。",
-        "sandbox": "选择下一个Codex回合的沙盒模式。"
-      }
-    },
-    "sidebar": {
-      "hostReady": "主机就绪",
-      "installRequired": "需要安装",
-      "hostAvailable": "主机 Codex 运行时可用。",
-      "installHostBinary": "安装主机 `codex` 二进制文件以使用 Codex 聊天。",
-      "pendingCount": {
-        "one": "{count} 个待处理",
-        "other": "{count} 个待处理"
-      },
-      "noConversations": "还没有对话",
-      "notAvailableYet": "Codex 暂不可用",
-      "startNewChat": "开始新的 Codex 聊天。",
-      "installThenRefresh": "在主机安装 `codex` 后刷新此面板。",
-      "conversations": "对话",
-      "loadingChats": "正在加载聊天...",
-      "today": "今天",
-      "yesterday": "昨天",
-      "thisWeek": "本周",
-      "older": "更早",
-      "unread": "未读",
-      "archiveChatAria": "存档聊天 {title}"
-    },
-    "notifications": {
-      "requestFailed": "请求失败。",
-      "errorCode": "Codex 错误码：{code}",
-      "failedToReadFile": "无法读取 {name}",
-      "attachmentFailedTitle": "附件失败",
-      "unsupportedAttachmentTitle": "不支持的附件",
-      "unsupportedAttachmentBody": "Codex 附件当前仅支持图片。",
-      "refreshFailedTitle": "刷新失败",
-      "hostNotDetectedTitle": "未检测到主机 Codex",
-      "hostInstallHint": "在主机上安装 `codex` 并刷新诊断。",
-      "threadArchivedTitle": "线程已归档",
-      "queueUnavailableTitle": "队列不可用",
-      "sendFailedTitle": "发送失败",
-      "guideUnavailableTitle": "指南不可用",
-      "guideUnsupportedBody": "该 Codex 主机不支持来自排队提示的同轮指导。",
-      "guideFailedTitle": "引导失败",
-      "actionUnavailableTitle": "操作不可用",
-      "archiveUnsupportedBody": "此 Codex 主机尚不支持从 Redeven 归档线程。",
-      "forkUnsupportedBody": "此 Codex 主机尚不支持从 Redeven fork 线程。",
-      "interruptUnsupportedBody": "该 Codex 主机尚不支持来自 Redeven 的转向中断。",
-      "reviewUnsupportedBody": "此 Codex 主机尚不支持从 Redeven 执行 inline review。",
-      "archiveFailedTitle": "归档失败",
-      "forkFailedTitle": "分叉失败",
-      "interruptFailedTitle": "中断失败",
-      "reviewFailedTitle": "审核失败",
-      "queuedFollowupFailedTitle": "排队 follow-up 失败"
-    },
-    "statusBanner": {
-      "statusError": "状态错误",
-      "threadLoading": "线程加载",
-      "liveEventStream": "实时事件流",
-      "disconnectedReconnecting": "实时事件流已断开，正在重新连接...",
-      "droppedUpdates": {
-        "one": "实时事件流在追赶时丢弃了 {count} 个尽力更新。",
-        "other": "实时事件流在追赶时丢弃了 {count} 个尽力更新。"
-      },
-      "lostContinuity": "实时事件流失去连续性，正在重新加载线程状态。",
-      "hostDiagnostics": "主机诊断",
-      "hostDiagnosticsBody": "Redeven 直接使用主机的 `codex` 二进制文件。此处没有单独的应用内 Codex 运行时切换来管理。",
-      "binary": "二进制",
-      "codexHome": "Codex 主页",
-      "runtime": "运行时",
-      "platform": "平台",
-      "lastStderr": "最后 stderr"
-    },
-    "pendingInputs": {
-      "ariaLabel": "待处理 Codex 输入",
-      "attachmentAndFileContext": "附件和文件上下文",
-      "attachmentContext": "附件上下文",
-      "fileContext": "文件上下文",
-      "pendingInput": "待处理输入",
-      "sending": "正在发送",
-      "guiding": "指导",
-      "guideUnavailable": "指南不可用",
-      "retryQueued": "已排队重试",
-      "queued": "已排队",
-      "restoreQueuedInput": "恢复排队输入到 composer",
-      "moveEarlier": "将排队输入前移",
-      "moveLater": "将排队输入后移",
-      "guideQueuedInput": "将排队输入引导到当前回合",
-      "removeQueuedInput": "移除排队输入"
-    },
-    "pendingRequests": {
-      "title": "待处理 Codex 请求",
-      "description": "先处理这些请求，当前 Codex run 才能继续。",
-      "promptsCount": {
-        "one": "{count} 个 prompt",
-        "other": "{count} 个 prompt"
-      },
-      "itemLabel": "项目{id}",
-      "workingDirectoryUnavailable": "工作目录不可用",
-      "enterResponse": "输入回复",
-      "type": {
-        "userInput": "用户输入",
-        "commandApproval": "命令批准",
-        "fileChangeApproval": "文件更改批准",
-        "permissions": "权限"
-      },
-      "titleByType": {
-        "userInput": "需要用户输入",
-        "commandApproval": "需要命令批准",
-        "fileChangeApproval": "需要文件更改批准",
-        "permissions": "需要权限更新",
-        "default": "需要处理 {type}"
-      },
-      "fallbackDetail": {
-        "userInput": "Codex 需要更多输入才能继续。",
-        "commandApproval": "Codex 继续前请先 review 此命令。",
-        "fileChangeApproval": "Codex 继续前请先 review 提议的文件更改。",
-        "permissions": "Codex 继续前请先 review 请求的权限更改。",
-        "default": "Codex 需要响应后才能继续。"
-      }
-    },
-    "workingDirPicker": {
-      "home": "主页",
-      "title": "选择工作目录",
-      "confirm": "选择"
-    },
-    "context": {
-      "contextLeft": "剩余 {percent}% context",
-      "usedTokens": "已用 {count}",
-      "usedAndLastTokens": "已用 {used} · 上次 {last}",
-      "lastTurnTokens": "{count} 最后回合"
-    }
+  "terminalAgentActivity": {
+    "working": "工作中",
+    "userInputRequired": "需要用户输入"
   },
   "flowerTurnLauncher": {
     "windowTitle": "询问 Flower",
@@ -1725,103 +1449,6 @@
     "newMessages": {
       "one": "{count} 条新消息",
       "other": "{count} 条新消息"
-    }
-  },
-  "codexActivity": {
-    "title": {
-      "userMessage": "请求 review",
-      "agentMessage": "Codex 评论",
-      "commandExecution": "命令证据",
-      "fileChange": "Artifact 变更",
-      "webSearch": "网页搜索",
-      "reasoning": "Reasoning 记录",
-      "plan": "执行计划",
-      "emptyResponse": "本轮已完成但无回复",
-      "turnDiagnostic": "Turn 诊断",
-      "event": "事件"
-    },
-    "field": {
-      "query": "查询",
-      "queries": "查询",
-      "openedPage": "已打开页面",
-      "pattern": "匹配模式",
-      "page": "页面"
-    },
-    "statusLabel": {
-      "idle": "空闲",
-      "working": "工作中"
-    },
-    "working": {
-      "thinking": "思考中",
-      "planning": "规划中",
-      "finalizing": "收尾中",
-      "recovering": "恢复中",
-      "waitingApproval": "等待批准",
-      "readingFiles": "正在读取文件",
-      "readingFile": "正在读取 {name}",
-      "editingFiles": "正在编辑文件",
-      "creatingFile": "正在创建 {name}",
-      "deletingFile": "正在删除 {name}",
-      "renamingFile": "正在重命名 {name}",
-      "editingFile": "正在编辑 {name}",
-      "runningCommand": "正在运行命令",
-      "searchingWeb": "正在搜索 web"
-    },
-    "status": {
-      "working": "工作中",
-      "needsAttention": "需要处理",
-      "done": "完成"
-    },
-    "fileAction": {
-      "created": "已创建",
-      "deleted": "已删除",
-      "renamed": "已重命名",
-      "edited": "已编辑"
-    },
-    "linesChanged": "新增 {additions} 行，删除 {deletions} 行",
-    "activity": {
-      "openedPage": "已打开 {target}",
-      "openedPageFallback": "已打开页面",
-      "searchedPageFor": "在页面中搜索 “{query}”",
-      "searchedPage": "已搜索页面",
-      "searchedFor": "搜索 “{query}”",
-      "searchedWeb": "已搜索 web",
-      "ranCommand": "已运行 {command}",
-      "ranCommandWithMeta": "已运行 {command} · {meta}",
-      "commandFailed": "失败",
-      "commandExit": "退出码 {exitCode}",
-      "plannedNextSteps": "已规划下一步",
-      "thoughtThroughApproach": "已思考方案",
-      "worked": "已执行",
-      "planned": "已规划",
-      "reasoned": "已推理",
-      "searchCount": {
-        "one": "{count} 次搜索",
-        "other": "{count} 次搜索"
-      },
-      "commandCount": {
-        "one": "{count} 条命令",
-        "other": "{count} 条命令"
-      },
-      "failedCommandCount": {
-        "one": "{count} 条失败",
-        "other": "{count} 条失败"
-      }
-    },
-    "detail": {
-      "fileDiff": "文件差异",
-      "commandOutput": "命令输出",
-      "searchDetails": "搜索详情",
-      "reasoning": "推理",
-      "plan": "计划",
-      "itemDetails": "条目详情",
-      "details": "详情",
-      "close": "关闭",
-      "closeAria": "关闭 activity 详情",
-      "unavailable": "详情已不可用。",
-      "noFileChangeDetails": "未提供文件变更详情。",
-      "commandUnavailable": "命令不可用",
-      "noContent": "未提供详情内容。"
     }
   },
   "filePreview": {
@@ -2739,39 +2366,6 @@
     "levelLabel": "级别",
     "defaultJson": "默认 (json)",
     "defaultInfo": "默认 (info)"
-  },
-  "codexSettings": {
-    "title": "Codex",
-    "description": "主机管理的 Codex 诊断。 Redeven 在此读取主机 codex 二进制状态，但不保留 Codex 运行时设置。",
-    "hostDetected": "已检测到主机",
-    "needsHostInstall": "需要安装到主机",
-    "refreshing": "正在刷新...",
-    "rows": {
-      "binary": "二进制",
-      "binaryPath": "二进制路径",
-      "agentHomeDir": "Agent home 目录",
-      "bridge": "桥接",
-      "error": "错误"
-    },
-    "status": {
-      "notAvailable": "不可用",
-      "statusNotLoaded": "状态未加载",
-      "detected": "已检测到",
-      "notFound": "未找到",
-      "connected": "已连接",
-      "startsOnDemand": "按需启动",
-      "none": "无"
-    },
-    "pills": {
-      "hostBinaryDetected": "已检测到主机二进制",
-      "installCodexOnHost": "在主机上安装 Codex",
-      "bridgeConnected": "Bridge 已连接",
-      "bridgeStartsOnDemand": "Bridge 按需启动"
-    },
-    "installNotice": "Redeven 正在等待主机上的 codex 二进制。请在主机上安装它，并将其暴露到 PATH。",
-    "notesTitle": "说明",
-    "notesHostRuntimeDefaults": "Codex 在主机上保留自己的运行时默认值； Redeven 不会将它们镜像到 config.json 中。",
-    "notesActivityIsolation": "专用 Codex activity entry 和 local API namespace 会与 Flower 保持隔离。"
   },
   "codeRuntime": {
     "title": "Browser Editor",
@@ -4453,8 +4047,18 @@
         "backgroundDescription": "安装将在后台继续，你可以继续使用插件中心。",
         "declarationNotice": "以上为发布方声明的权限，安装时会再次验证插件包。",
         "progressLabel": "安装进度",
-        "stage": {"download": "获取安装包", "verify": "安全校验", "install": "安装插件", "enable": "启用插件"},
-        "stageStatus": {"download": "正在获取安装包...", "verify": "正在校验插件包...", "install": "正在安装...", "enable": "正在启用..."},
+        "stage": {
+          "download": "获取安装包",
+          "verify": "安全校验",
+          "install": "安装插件",
+          "enable": "启用插件"
+        },
+        "stageStatus": {
+          "download": "正在获取安装包...",
+          "verify": "正在校验插件包...",
+          "install": "正在安装...",
+          "enable": "正在启用..."
+        },
         "starting": "正在准备安装...",
         "authorizing": "正在授予安装时选择的权限...",
         "activationFailed": "插件已安装并启用，但权限设置尚未完成。请重试设置。",

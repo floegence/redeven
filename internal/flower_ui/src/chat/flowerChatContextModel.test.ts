@@ -132,7 +132,7 @@ describe('Flower chat linked context parser', () => {
   });
 
   it('rejects wrong envelope identity and known surface-kind mismatches', () => {
-    expect(parseChatContextAction({ ...baseAction, provider: 'codex' })).toBeNull();
+    expect(parseChatContextAction({ ...baseAction, provider: 'other' })).toBeNull();
     expect(parseChatContextAction({
       ...baseAction,
       context: [{

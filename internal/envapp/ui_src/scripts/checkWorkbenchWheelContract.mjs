@@ -12,7 +12,6 @@ const srcRoot = process.env.REDEVEN_WORKBENCH_WHEEL_CONTRACT_SRC_ROOT
   : path.join(packageRoot, 'src');
 
 const scanEntries = [
-  'ui/codex',
   'ui/pages/EnvAIPage.tsx',
   'ui/pages/EnvCodespacesPage.tsx',
   'ui/pages/EnvPortForwardsPage.tsx',
@@ -40,9 +39,8 @@ const wheelRoleAttr = 'data-redeven-workbench-wheel-role';
 const layoutOnlyRole = 'layout-only';
 const boundedScrollClassPattern = /\boverflow(?:-[xy])?-(?:auto|scroll)\b/u;
 const boundedViewportConstraintPattern = /\b(?:min-h-0|h-full|flex-1)\b/u;
-const knownWorkbenchScrollClassPattern = /\b(?:codex-page-transcript-main|flower-chat-transcript-main)\b/u;
+const knownWorkbenchScrollClassPattern = /\bflower-chat-transcript-main\b/u;
 const knownWorkbenchScrollAttrs = new Set([
-  'data-codex-transcript-scroll-region',
 ]);
 
 function walkFiles(dir, out = []) {

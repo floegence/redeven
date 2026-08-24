@@ -1079,7 +1079,6 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 		"User" + "ProvidedContext",
 	}
 	allowedPrefixes := []string{
-		filepath.Join(root, "internal", "codexbridge") + string(os.PathSeparator),
 		filepath.Join(root, "okf", "dist") + string(os.PathSeparator),
 	}
 	allowedFiles := map[string]bool{

@@ -338,7 +338,6 @@ describe('shared Flower UI boundary', () => {
       '.fm-',
       '.file-markdown',
       '.chat-md-',
-      '.codex-chat-markdown',
     ];
 
     for (const file of listSourceFiles(flowerRoot)) {

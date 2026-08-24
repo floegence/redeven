@@ -8,54 +8,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Marked } from 'marked';
 
 import { createMarkdownRenderer } from '../markdown/markedConfig';
-import type { MarkdownRendererVariant } from '../markdown/markdownRendererOptions';
 import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { MarkdownBlock } from './MarkdownBlock';
-import { FilePreviewContext } from '../../widgets/FilePreviewContext';
+const chatStyles = readFileSync(resolve(process.cwd(), 'src/ui/chat/chat.css'), 'utf8');
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
 }));
 
 const renderMarkdownSnapshotMock = vi.fn();
-const openPreviewMock = vi.fn();
-const closePreviewMock = vi.fn();
-const chatStyles = readFileSync(resolve(process.cwd(), 'src/ui/chat/chat.css'), 'utf8');
-const codexStyles = readFileSync(resolve(process.cwd(), 'src/ui/codex/codex.css'), 'utf8');
 
 vi.mock('../workers/markdownWorkerClient', () => ({
   renderMarkdownSnapshot: (...args: unknown[]) => renderMarkdownSnapshotMock(...args),
 }));
 
-function createMarked(rendererVariant: MarkdownRendererVariant = 'default'): Marked<string, string> {
+function createSnapshot(content: string, streaming: boolean) {
   const marked = new Marked<string, string>();
-  marked.use({ renderer: createMarkdownRenderer({ variant: rendererVariant }) });
-  return marked;
-}
-
-function createSnapshot(
-  content: string,
-  streaming: boolean,
-  rendererVariant: MarkdownRendererVariant = 'default',
-) {
-  return buildMarkdownRenderSnapshot(createMarked(rendererVariant), content, streaming);
-}
-
-function renderWithFilePreviewContext(factory: () => any, host: Element) {
-  return render(() => (
-    <FilePreviewContext.Provider
-      value={{
-        controller: {} as any,
-        openPreview: async (item) => {
-          openPreviewMock(item);
-        },
-        closePreview: closePreviewMock,
-      }}
-    >
-      {factory()}
-    </FilePreviewContext.Provider>
-  ), host);
+  marked.use({ renderer: createMarkdownRenderer() });
+  return buildMarkdownRenderSnapshot(marked, content, streaming);
 }
 
 function deferred<T>() {
@@ -90,8 +61,6 @@ async function waitFor(check: () => void): Promise<void> {
 
 beforeEach(() => {
   renderMarkdownSnapshotMock.mockReset();
-  openPreviewMock.mockReset();
-  closePreviewMock.mockReset();
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
 });
@@ -362,122 +331,7 @@ describe('MarkdownBlock', () => {
     expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L1113');
   });
 
-  it('renders codex file links with hash-style line labels without splitting them into headings', async () => {
-    const content = [
-      'Evidence in',
-      '[PROJECT_GUIDE.md#L121](/Users/tangjianyin/Downloads/code/redeven/PROJECT_GUIDE.md#L121)',
-      'stays a file reference.',
-    ].join(' ');
-    const normalized = normalizeMarkdownForDisplay(content);
-    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />, host);
-
-    await waitFor(() => {
-      expect(host.querySelectorAll('.chat-md-file-ref')).toHaveLength(1);
-    });
-
-    const fileRef = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
-    expect(fileRef?.getAttribute('href')).toContain('#L121');
-    expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('PROJECT_GUIDE.md');
-    expect(fileRef?.querySelector('.chat-md-file-ref-line')?.textContent).toBe('L121');
-    expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L121');
-    expect(host.querySelector('h2')?.textContent ?? '').not.toContain('L121');
-  });
-
-  it('renders compact file-reference chips for codex markdown links', async () => {
-    const content = [
-      'Current path is',
-      '[controlplaneApi.ts',
-      'L278](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278).',
-    ].join(' ');
-    const normalized = normalizeMarkdownForDisplay(content);
-    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />, host);
-
-    await waitFor(() => {
-      expect(host.querySelectorAll('.chat-md-file-ref')).toHaveLength(1);
-    });
-
-    const fileRef = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
-    expect(fileRef?.getAttribute('href')).toContain('#L278');
-    expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('controlplaneApi.ts');
-    expect(fileRef?.querySelector('.chat-md-file-ref-line')?.textContent).toBe('L278');
-    expect(fileRef?.dataset.filePath).toBe('/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts');
-    expect(fileRef?.dataset.fileLine).toBe('278');
-    expect(renderMarkdownSnapshotMock).toHaveBeenCalledWith(normalized, {
-      streaming: false,
-      rendererVariant: 'codex',
-    });
-  });
-
-  it('renders colon-style codex file links as file references with clean preview paths', async () => {
-    const content = '[exec.rs](/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs:1306)';
-    const normalized = normalizeMarkdownForDisplay(content);
-    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    renderWithFilePreviewContext(
-      () => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />,
-      host,
-    );
-
-    await waitFor(() => {
-      expect(host.querySelectorAll('.chat-md-file-ref')).toHaveLength(1);
-    });
-
-    const fileRef = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
-    expect(fileRef?.getAttribute('href')).toBe('/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs:1306');
-    expect(fileRef?.dataset.filePath).toBe('/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs');
-    expect(fileRef?.dataset.fileLine).toBe('1306');
-    expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('exec.rs');
-    expect(fileRef?.querySelector('.chat-md-file-ref-line')?.textContent).toBe('L1306');
-
-    fileRef?.click();
-    await flushAsync();
-
-    expect(openPreviewMock).toHaveBeenCalledWith({
-      id: '/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs',
-      name: 'exec.rs',
-      path: '/Users/tangjianyin/Downloads/code/codex/codex-rs/core/src/exec.rs',
-      type: 'file',
-    });
-  });
-
-  it('shows short path prefixes when codex file refs share the same basename', async () => {
-    const content = [
-      '[controlplaneApi.ts',
-      'L278](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)',
-      'and',
-      '[controlplaneApi.ts',
-      'L330](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts#L330).',
-    ].join(' ');
-    const normalized = normalizeMarkdownForDisplay(content);
-    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />, host);
-
-    await waitFor(() => {
-      expect(host.querySelectorAll('.chat-md-file-ref')).toHaveLength(2);
-    });
-
-    const prefixes = Array.from(host.querySelectorAll('.chat-md-file-ref-prefix')).map((node) => node.textContent);
-    expect(prefixes).toEqual(['…/services/', '…/api/']);
-  });
-
-  it('keeps default markdown link rendering outside codex', async () => {
+  it('keeps default markdown link rendering', async () => {
     const content = '[controlplaneApi.ts\nL278](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)';
     const normalized = normalizeMarkdownForDisplay(content);
     renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false));
@@ -491,7 +345,6 @@ describe('MarkdownBlock', () => {
       expect(host.querySelectorAll('a.chat-md-link')).toHaveLength(1);
     });
 
-    expect(host.querySelector('.chat-md-file-ref')).toBeNull();
     expect((host.querySelector('a.chat-md-link') as HTMLAnchorElement | null)?.textContent).toContain('controlplaneApi.ts');
   });
 
@@ -514,36 +367,7 @@ describe('MarkdownBlock', () => {
     expect(chatStyles).toContain('.chat-md-link .chat-md-inline-code {');
     expect(chatStyles).toMatch(/\.chat-md-link \{[\s\S]*color: var\(--redeven-link-fg\);[\s\S]*cursor: pointer;/);
     expect(chatStyles).toMatch(/\.chat-md-link \.chat-md-inline-code \{[\s\S]*color: inherit;/);
-    expect(codexStyles).toMatch(/\.codex-chat-markdown-block \.chat-md-link \{[\s\S]*color: var\(--redeven-link-fg\);[\s\S]*cursor: pointer;/);
-    expect(codexStyles).toMatch(/\.codex-chat-markdown-block \.chat-md-link \.chat-md-inline-code \{[\s\S]*color: inherit;/);
   });
 
-  it('opens the floating file preview instead of navigating local codex links', async () => {
-    const content = '[auth.json\nL3](/Users/tangjianyin/.codex-cc/auth.json#L3)';
-    const normalized = normalizeMarkdownForDisplay(content);
-    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
 
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    renderWithFilePreviewContext(
-      () => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />,
-      host,
-    );
-
-    await waitFor(() => {
-      expect(host.querySelector('.chat-md-file-ref')).toBeTruthy();
-    });
-
-    const fileLink = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
-    fileLink?.click();
-    await flushAsync();
-
-    expect(openPreviewMock).toHaveBeenCalledWith({
-      id: '/Users/tangjianyin/.codex-cc/auth.json',
-      name: 'auth.json',
-      path: '/Users/tangjianyin/.codex-cc/auth.json',
-      type: 'file',
-    });
-  });
 });

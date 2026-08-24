@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestApplyUnifiedDiff_AcceptsCodexBeginPatchAddFile(t *testing.T) {
+func TestApplyUnifiedDiff_AcceptsBeginPatchAddFile(t *testing.T) {
 	t.Parallel()
 
 	workingDir := t.TempDir()
@@ -50,7 +50,7 @@ func TestApplyUnifiedDiff_AddFileErrorExplainsContentLinePrefix(t *testing.T) {
 	}
 }
 
-func TestApplyUnifiedDiff_CodexUpdateWithoutLineNumbers(t *testing.T) {
+func TestApplyUnifiedDiff_BeginPatchUpdateWithoutLineNumbers(t *testing.T) {
 	t.Parallel()
 
 	workingDir := t.TempDir()
@@ -91,7 +91,7 @@ func TestApplyUnifiedDiff_CodexUpdateWithoutLineNumbers(t *testing.T) {
 	}
 }
 
-func TestSummarizeUnifiedDiff_CodexPatch(t *testing.T) {
+func TestSummarizeUnifiedDiff_BeginPatch(t *testing.T) {
 	t.Parallel()
 
 	patch := strings.Join([]string{

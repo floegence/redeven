@@ -230,7 +230,6 @@
       "permissionPolicy": "Política de permisos",
       "flower": "Flower",
       "skills": "Habilidades",
-      "codex": "Codex",
       "debugConsole": "Consola de depuración"
     },
     "groups": {
@@ -362,8 +361,7 @@
       "codespaces": "Codespaces",
       "browserEditor": "Browser Editor",
       "webServices": "Servicios web",
-      "flower": "Flower",
-      "codex": "Codex"
+      "flower": "Flower"
     },
     "topbar": {
       "backToDashboard": "Volver al panel",
@@ -553,8 +551,6 @@
       "goToWebServicesDescription": "Abrir registros de Servicios web",
       "goToFlowerTitle": "Ir a Flower",
       "goToFlowerDescription": "Abrir Flower",
-      "goToCodexTitle": "Ir a Codex",
-      "goToCodexDescription": "Abrir Codex",
       "openEnvironmentTitle": "Abrir entorno...",
       "openEnvironmentDescription": "Abrir el lanzador de entorno Desktop.",
       "backToDashboardTitle": "Volver al panel",
@@ -684,7 +680,6 @@
   },
   "aiChrome": {
     "flowerTitle": "Flower",
-    "codexTitle": "Codex",
     "newChat": "Nuevo chat",
     "copyMessage": "Copiar mensaje",
     "retryMessage": "Reintentar",
@@ -735,288 +730,17 @@
       "flower": {
         "label": "Flower",
         "defaultTitle": "Flower"
-      },
-      "codex": {
-        "label": "Codex",
-        "defaultTitle": "Codex"
       }
     },
     "notices": {
       "flowerRwxTitle": "Flower necesita acceso de lectura, escritura y ejecución",
       "flowerRwxDescription": "Concede permisos RWX a este entorno para usar el espacio de trabajo de Flower integrado en el modo Workbench.",
-      "flowerThreads": "Flower subprocesos",
-      "codexRwxTitle": "Codex necesita acceso de lectura, escritura y ejecución",
-      "codexRwxDescription": "Concede permisos RWX a este entorno para usar el espacio de trabajo de Codex integrado en el modo Workbench.",
-      "codexThreads": "Codex subprocesos"
+      "flowerThreads": "Flower subprocesos"
     }
   },
-  "codex": {
-    "title": "Codex",
-    "loading": "Cargando Codex...",
-    "common": {
-      "idle": "inactivo",
-      "working": "trabajando",
-      "request": "solicitud",
-      "file": "Archivo",
-      "image": "Imagen",
-      "newThread": "Nuevo hilo",
-      "untitledThread": "Hilo sin título",
-      "newChat": "Nuevo chat",
-      "noConversationPreview": "Aún no hay vista previa de conversación.",
-      "workingDirectory": "Directorio de trabajo",
-      "workingDir": "Directorio de trabajo",
-      "default": "Predeterminado",
-      "never": "Nunca",
-      "fullAccess": "Acceso completo",
-      "sending": "Enviando..."
-    },
-    "empty": {
-      "readyTitle": "Codex",
-      "installTitle": "Instalar Codex en el host",
-      "readyBody": "Inicie una conversación Codex con un mensaje, pegue una imagen, use @ para hacer referencia a archivos o use / para comandos del compositor local.",
-      "installBody": "Redeven no instala Codex por usted. Coloque el binario del host `codex` en PATH, luego actualice esta página para iniciar una conversación dedicada a Codex."
-    },
-    "loadingState": {
-      "preparingThread": "Preparando el hilo Codex seleccionado.",
-      "loadingThread": "Cargando el hilo Codex seleccionado."
-    },
-    "controls": {
-      "model": "Modelo",
-      "effort": "Esfuerzo",
-      "approval": "Aprobación",
-      "sandbox": "Sandbox",
-      "reasoningEffort": {
-        "low": "Bajo",
-        "medium": "Medio",
-        "high": "Alto",
-        "max": "Máx."
-      },
-      "approvalPolicy": {
-        "untrusted": "No confiable",
-        "onFailure": "En caso de falla",
-        "onRequest": "A pedido",
-        "never": "Nunca",
-        "granular": "Granular"
-      },
-      "sandboxMode": {
-        "readOnly": "Sólo lectura",
-        "workspaceWrite": "Escritura en el espacio de trabajo",
-        "dangerFullAccess": "Acceso completo",
-        "externalSandbox": "Zona de pruebas externa"
-      }
-    },
-    "disabledReasons": {
-      "archivedThreadHidden": "Los hilos archivados están ocultos de la lista de conversaciones.",
-      "stopRequestInProgress": "Detener solicitud en curso.",
-      "waitingForActiveTurn": "Esperando que comience el turno activo.",
-      "waitingForInterruptibleTurn": "Esperando a que Codex exponga un giro interrumpible.",
-      "turnInterruptionUnavailable": "La interrupción de turno no está disponible en este host.",
-      "queueAfterThreadStarts": "La cola está disponible después de que se inicia el hilo actual.",
-      "addPromptImageOrMention": "Agregue un mensaje, una imagen o una mención de archivo para enviar. La guía",
-      "guideWhileRunning": "está disponible mientras Codex realiza un giro. La guía",
-      "guideStopInProgress": "no está disponible mientras hay una solicitud de detención en curso.",
-      "currentTurnStarting": "Codex todavía está comenzando el turno actual.",
-      "sameTurnGuidanceUnsupported": "Este host Codex no admite guía en el mismo giro.",
-      "turnCannotAcceptGuidedInput": "Este turno no puede aceptar entrada guiada.",
-      "turnKindCannotAcceptGuidedInput": "Este giro {kind} no puede aceptar entrada guiada.",
-      "archiveUnavailable": "El archivo no está disponible en este host.",
-      "archiveInProgress": "Archivado en curso.",
-      "forkUnavailable": "La bifurcación no está disponible en este host.",
-      "forkInProgress": "Horquilla en progreso.",
-      "reviewUnavailable": "La revisión no está disponible en este host.",
-      "reviewInProgress": "Revisión ya en curso.",
-      "stopAvailableAfterTurnStarts": "La parada estará disponible una vez que comience el turno."
-    },
-    "actions": {
-      "archive": "Archivo",
-      "archiving": "Archivando...",
-      "fork": "Horquilla",
-      "forking": "Bifurcando...",
-      "review": "Revisar",
-      "reviewing": "Revisando...",
-      "stop": "Detener",
-      "stopping": "Parada...",
-      "guide": "Guía",
-      "approveOnce": "Aprobar una vez",
-      "approveForSession": "Aprobar sesión",
-      "decline": "Rechazar",
-      "cancel": "Cancelar",
-      "submitResponse": "Enviar respuesta",
-      "reviewApproval": "Revisar aprobación",
-      "browseFiles": "Examinar archivos"
-    },
-    "header": {
-      "installRequired": "Instalación requerida",
-      "pendingCount": {
-        "one": "{count} pendiente",
-        "other": "{count} pendiente"
-      },
-      "archiveThreadAria": "Archivar hilo Codex",
-      "forkThreadAria": "Bifurcar hilo Codex",
-      "reviewWorkspaceAria": "Revisar los cambios actuales en el espacio de trabajo",
-      "stopTurnAria": "Detener activo Codex girar"
-    },
-    "composer": {
-      "fileReferenceSuggestions": "Sugerencias de referencia de archivos",
-      "commandParameterOptions": "Opciones de parámetros de comando",
-      "commandSuggestions": "Sugerencias de comando",
-      "optionsForControl": "{label} opciones",
-      "stopActiveTurn": "Detener activo Codex girar",
-      "queueNextTurn": "Cola siguiente Codex girar",
-      "sendToCodex": "Enviar a Codex",
-      "workingDirectoryLocked": "Directorio de trabajo bloqueado",
-      "selectWorkingDirectory": "Seleccione el directorio de trabajo",
-      "lockedToThisThread": "{path} (bloqueado en este hilo)",
-      "installHostToEnable": "Instale `codex` en el host para habilitar la conversación Codex.",
-      "selectedModelNoImages": "El modelo seleccionado actualmente no acepta entrada de imágenes.",
-      "placeholderWithImages": "Solicite a Codex que revise un cambio, inspeccione una falla, resuma una diferencia o planifique el siguiente paso. Utilice @ para el contexto del archivo, / para comandos o pegue una imagen.",
-      "placeholderTextOnly": "Solicite a Codex que revise un cambio, inspeccione una falla, resuma una diferencia o planifique el siguiente paso. Utilice @ para el contexto del archivo o / para los comandos.",
-      "noOptionsAvailable": "No hay opciones disponibles para este comando.",
-      "indexingFiles": "Indexando archivos en el directorio de trabajo actual...",
-      "noMatchingFiles": "No se encontraron archivos coincidentes en el directorio de trabajo actual.",
-      "inputControls": "Codex controles de entrada",
-      "moreControls": "Más",
-      "moreInputControls": "Más controles de entrada Codex",
-      "addAttachments": "Agregar archivos adjuntos",
-      "removeAttachment": "Eliminar {name}",
-      "removeMention": "Eliminar {name}",
-      "slashDescriptions": {
-        "mention": "Insertar @ y abrir el selector de referencia de archivos.",
-        "new": "Inicie un nuevo borrador de hilo Codex.",
-        "clear": "Borre el texto del compositor actual, los archivos adjuntos y las referencias de archivos.",
-        "cwd": "Abra el selector del directorio de trabajo para una nueva conversación.",
-        "model": "Elige el modelo para el siguiente turno Codex.",
-        "effort": "Elige el esfuerzo de razonamiento para el siguiente turno Codex.",
-        "approval": "Elija la política de aprobación para el próximo turno Codex.",
-        "sandbox": "Elige el modo sandbox para el próximo turno Codex."
-      }
-    },
-    "sidebar": {
-      "hostReady": "Host listo",
-      "installRequired": "Se requiere instalación",
-      "hostAvailable": "El tiempo de ejecución del host Codex está disponible.",
-      "installHostBinary": "Instale el binario del host `codex` para utilizar la conversación Codex.",
-      "pendingCount": {
-        "one": "{count} pendiente",
-        "other": "{count} pendiente"
-      },
-      "noConversations": "Aún no hay conversaciones",
-      "notAvailableYet": "Codex aún no está disponible",
-      "startNewChat": "Inicie una nueva conversación Codex para comenzar.",
-      "installThenRefresh": "Instale `codex` en el host y luego actualice este panel.",
-      "conversations": "Conversaciones",
-      "loadingChats": "Cargando conversaciones...",
-      "today": "Hoy",
-      "yesterday": "Ayer",
-      "thisWeek": "Esta semana",
-      "older": "Anterior",
-      "unread": "No leído",
-      "archiveChatAria": "Archivar conversación {title}"
-    },
-    "notifications": {
-      "requestFailed": "La solicitud falló.",
-      "errorCode": "Codex código de error: {code}",
-      "failedToReadFile": "No se pudo leer {name}",
-      "attachmentFailedTitle": "Error al adjuntar",
-      "unsupportedAttachmentTitle": "Archivo adjunto no compatible",
-      "unsupportedAttachmentBody": "Codex Actualmente, los archivos adjuntos solo admiten imágenes.",
-      "refreshFailedTitle": "Error de actualización",
-      "hostNotDetectedTitle": "Host Codex no detectado",
-      "hostInstallHint": "Instale `codex` en el host y actualice los diagnósticos.",
-      "threadArchivedTitle": "Hilo archivado",
-      "queueUnavailableTitle": "Cola no disponible",
-      "sendFailedTitle": "Envío fallido",
-      "guideUnavailableTitle": "Guía no disponible",
-      "guideUnsupportedBody": "Este host Codex no admite orientación en el mismo giro desde mensajes en cola.",
-      "guideFailedTitle": "Error en la guía",
-      "actionUnavailableTitle": "Acción no disponible",
-      "archiveUnsupportedBody": "Este host Codex aún no admite el archivado de subprocesos desde Redeven.",
-      "forkUnsupportedBody": "Este host Codex aún no admite la bifurcación de subprocesos de Redeven.",
-      "interruptUnsupportedBody": "Este host Codex aún no admite la interrupción de turnos desde Redeven.",
-      "reviewUnsupportedBody": "Este host Codex aún no admite la revisión en línea desde Redeven.",
-      "archiveFailedTitle": "Error en el archivo",
-      "forkFailedTitle": "Error en la bifurcación",
-      "interruptFailedTitle": "Error en la interrupción",
-      "reviewFailedTitle": "Error en la revisión",
-      "queuedFollowupFailedTitle": "Error en el seguimiento en cola"
-    },
-    "statusBanner": {
-      "statusError": "Error de estado",
-      "threadLoading": "Carga de subprocesos",
-      "liveEventStream": "Transmisión de eventos en vivo",
-      "disconnectedReconnecting": "Transmisión de eventos en vivo desconectada. Reconectando...",
-      "droppedUpdates": {
-        "one": "La transmisión de eventos en vivo eliminó {count} actualización de mejor esfuerzo mientras se ponía al día.",
-        "other": "La transmisión de eventos en vivo lanzó {count} actualizaciones de mejor esfuerzo mientras se ponía al día."
-      },
-      "lostContinuity": "La transmisión de eventos en vivo perdió continuidad y está recargando el estado del hilo.",
-      "hostDiagnostics": "Diagnóstico del host",
-      "hostDiagnosticsBody": "Redeven utiliza el binario `codex` del host directamente. No hay una opción separada de tiempo de ejecución de Codex en la aplicación para administrar aquí.",
-      "binary": "Binario",
-      "codexHome": "Codex Inicio",
-      "runtime": "Tiempo de ejecución",
-      "platform": "Plataforma",
-      "lastStderr": "Último stderr"
-    },
-    "pendingInputs": {
-      "ariaLabel": "Entradas pendientes de Codex",
-      "attachmentAndFileContext": "Contexto del archivo adjunto y",
-      "attachmentContext": "Contexto del archivo adjunto",
-      "fileContext": "Contexto del archivo",
-      "pendingInput": "Entrada pendiente",
-      "sending": "Enviando",
-      "guiding": "Guía",
-      "guideUnavailable": "Guía no disponible",
-      "retryQueued": "Reintento en cola",
-      "queued": "En cola",
-      "restoreQueuedInput": "Restaurar la entrada en cola al compositor",
-      "moveEarlier": "Mover la entrada en cola antes",
-      "moveLater": "Mover la entrada en cola más tarde",
-      "guideQueuedInput": "Guíe la entrada en cola al turno actual",
-      "removeQueuedInput": "Quite la entrada en cola"
-    },
-    "pendingRequests": {
-      "title": "Solicitudes Codex pendientes",
-      "description": "Resuelva estas antes de que la ejecución activa de Codex pueda continuar.",
-      "promptsCount": {
-        "one": "{count} mensaje",
-        "other": "{count} mensajes"
-      },
-      "itemLabel": "Elemento {id}",
-      "workingDirectoryUnavailable": "Directorio de trabajo no disponible",
-      "enterResponse": "Ingrese respuesta",
-      "type": {
-        "userInput": "Entrada de usuario",
-        "commandApproval": "Aprobación de comando",
-        "fileChangeApproval": "Aprobación de cambio de archivo",
-        "permissions": "Permisos"
-      },
-      "titleByType": {
-        "userInput": "Se requiere entrada del usuario",
-        "commandApproval": "Se requiere aprobación de comando",
-        "fileChangeApproval": "Se requiere aprobación de cambio de archivo",
-        "permissions": "Se requiere actualización de permiso",
-        "default": "{type} se requiere"
-      },
-      "fallbackDetail": {
-        "userInput": "Codex necesita más información antes de poder continuar.",
-        "commandApproval": "Revise este comando antes de que Codex continúe.",
-        "fileChangeApproval": "Revise los cambios de archivo propuestos antes de que Codex continúe.",
-        "permissions": "Revise los cambios de permisos solicitados antes de que Codex continúe.",
-        "default": "Codex necesita una respuesta antes de poder continuar."
-      }
-    },
-    "workingDirPicker": {
-      "home": "Inicio",
-      "title": "Seleccionar Directorio de Trabajo",
-      "confirm": "Seleccionar"
-    },
-    "context": {
-      "contextLeft": "{percent}% contexto izquierdo",
-      "usedTokens": "{count} usado",
-      "usedAndLastTokens": "{used} usado · {last} último",
-      "lastTurnTokens": "{count} último turno"
-    }
+  "terminalAgentActivity": {
+    "working": "Trabajando",
+    "userInputRequired": "Se requiere entrada del usuario"
   },
   "flowerTurnLauncher": {
     "windowTitle": "Preguntar a Flower",
@@ -1725,103 +1449,6 @@
     "newMessages": {
       "one": "{count} mensaje nuevo",
       "other": "{count} mensajes nuevos"
-    }
-  },
-  "codexActivity": {
-    "title": {
-      "userMessage": "Revisión solicitada",
-      "agentMessage": "Revisión de Codex",
-      "commandExecution": "Evidencia de comando",
-      "fileChange": "Cambios de artefactos",
-      "webSearch": "Búsqueda web",
-      "reasoning": "Nota de razonamiento",
-      "plan": "Plan de ejecución",
-      "emptyResponse": "Turno completado sin respuesta",
-      "turnDiagnostic": "Diagnóstico de giro",
-      "event": "Evento"
-    },
-    "field": {
-      "query": "Consulta",
-      "queries": "Consultas",
-      "openedPage": "Página abierta",
-      "pattern": "Patrón",
-      "page": "Página"
-    },
-    "statusLabel": {
-      "idle": "Inactivo",
-      "working": "trabajando"
-    },
-    "working": {
-      "thinking": "Pensando",
-      "planning": "Planificando",
-      "finalizing": "Finalizando",
-      "recovering": "Recuperando",
-      "waitingApproval": "Esperando aprobación",
-      "readingFiles": "Leyendo archivos",
-      "readingFile": "Lectura {name}",
-      "editingFiles": "Edición de archivos",
-      "creatingFile": "Creando {name}",
-      "deletingFile": "Eliminando {name}",
-      "renamingFile": "Cambiando el nombre de {name}",
-      "editingFile": "Editando {name}",
-      "runningCommand": "Ejecutando el comando",
-      "searchingWeb": "Buscando en la web"
-    },
-    "status": {
-      "working": "Trabajando",
-      "needsAttention": "Requiere atención",
-      "done": "Hecho"
-    },
-    "fileAction": {
-      "created": "Creado",
-      "deleted": "Eliminado",
-      "renamed": "Renombrado",
-      "edited": "Editado"
-    },
-    "linesChanged": "{additions} líneas añadidas, {deletions} líneas eliminadas",
-    "activity": {
-      "openedPage": "Abierto {target}",
-      "openedPageFallback": "Página abierta",
-      "searchedPageFor": "Página buscada \"{query}\"",
-      "searchedPage": "Página buscada",
-      "searchedFor": "Búsqueda \"{query}\"",
-      "searchedWeb": "Web buscada",
-      "ranCommand": "Corrió {command}",
-      "ranCommandWithMeta": "Corrió {command} · {meta}",
-      "commandFailed": "falló",
-      "commandExit": "salida {exitCode}",
-      "plannedNextSteps": "Próximos pasos planificados",
-      "thoughtThroughApproach": "Pensó en el enfoque",
-      "worked": "funcionó",
-      "planned": "planificado",
-      "reasoned": "razonado",
-      "searchCount": {
-        "one": "{count} búsqueda",
-        "other": "{count} búsquedas"
-      },
-      "commandCount": {
-        "one": "{count} comando",
-        "other": "{count} comandos"
-      },
-      "failedCommandCount": {
-        "one": "{count} falló",
-        "other": "{count} falló"
-      }
-    },
-    "detail": {
-      "fileDiff": "Diff de archivo",
-      "commandOutput": "Salida del comando",
-      "searchDetails": "Detalles de búsqueda",
-      "reasoning": "Razonamiento",
-      "plan": "Plan",
-      "itemDetails": "Detalles del elemento",
-      "details": "Detalles",
-      "close": "Cerrar",
-      "closeAria": "Cerrar detalle de activity",
-      "unavailable": "Los detalles ya no están disponibles.",
-      "noFileChangeDetails": "No se proporcionaron detalles de cambios de archivo.",
-      "commandUnavailable": "Comando no disponible",
-      "noContent": "No se proporcionó contenido detallado."
     }
   },
   "filePreview": {
@@ -2739,39 +2366,6 @@
     "levelLabel": "Nivel",
     "defaultJson": "Predeterminado (json)",
     "defaultInfo": "Predeterminado (info)"
-  },
-  "codexSettings": {
-    "title": "Codex",
-    "description": "Diagnóstico Codex administrado por host. Redeven lee aquí el estado binario del códice del host, pero no conserva la configuración de tiempo de ejecución de Codex.",
-    "hostDetected": "Host detectado",
-    "needsHostInstall": "Instalación en host necesaria",
-    "refreshing": "Actualizando...",
-    "rows": {
-      "binary": "Binario",
-      "binaryPath": "Ruta del binario",
-      "agentHomeDir": "Directorio principal del agente",
-      "bridge": "Puente",
-      "error": "Error"
-    },
-    "status": {
-      "notAvailable": "No disponible",
-      "statusNotLoaded": "Estado no cargado",
-      "detected": "Detectado",
-      "notFound": "No encontrado",
-      "connected": "Conectado",
-      "startsOnDemand": "Se inicia bajo demanda",
-      "none": "Ninguno"
-    },
-    "pills": {
-      "hostBinaryDetected": "Binario del host detectado",
-      "installCodexOnHost": "Instalar Codex en el host",
-      "bridgeConnected": "Bridge conectado",
-      "bridgeStartsOnDemand": "Bridge se inicia bajo demanda"
-    },
-    "installNotice": "Redeven está esperando el binario codex del host. Instálalo en el host y expónlo en PATH.",
-    "notesTitle": "Notas",
-    "notesHostRuntimeDefaults": "Codex mantiene sus propios valores predeterminados de tiempo de ejecución en el host; Redeven no los refleja en config.json.",
-    "notesActivityIsolation": "La entrada de actividad Codex dedicada y el local API namespace permanecen aislados de Flower."
   },
   "codeRuntime": {
     "title": "Browser Editor",
@@ -4453,8 +4047,18 @@
         "backgroundDescription": "La instalación continúa en segundo plano. Puedes seguir usando el centro de plugins.",
         "declarationNotice": "Estos permisos los declara el editor. El paquete se verificará de nuevo durante la instalación.",
         "progressLabel": "Progreso de instalación",
-        "stage": {"download": "Obtener paquete", "verify": "Comprobación de seguridad", "install": "Instalar plugin", "enable": "Activar plugin"},
-        "stageStatus": {"download": "Obteniendo paquete...", "verify": "Comprobando paquete...", "install": "Instalando...", "enable": "Activando..."},
+        "stage": {
+          "download": "Obtener paquete",
+          "verify": "Comprobación de seguridad",
+          "install": "Instalar plugin",
+          "enable": "Activar plugin"
+        },
+        "stageStatus": {
+          "download": "Obteniendo paquete...",
+          "verify": "Comprobando paquete...",
+          "install": "Instalando...",
+          "enable": "Activando..."
+        },
         "starting": "Preparando la instalación...",
         "authorizing": "Concediendo los permisos seleccionados durante la instalación...",
         "activationFailed": "El complemento está instalado y activado, pero no se completó la configuración de permisos. Reintenta la configuración.",

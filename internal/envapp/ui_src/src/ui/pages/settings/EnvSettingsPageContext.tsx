@@ -33,7 +33,7 @@ import {
   type BrowserEditorSetupProgress,
 } from '../../services/browserEditorSetupProgress';
 import { useEnvContext, type EnvSettingsSection } from '../EnvContext';
-import type { AgentSettingsResponse, CodexHostStatus, SettingsUpdateResponse } from './types';
+import type { AgentSettingsResponse, SettingsUpdateResponse } from './types';
 import { useI18n } from '../../i18n';
 
 // ── Helpers ──
@@ -78,8 +78,6 @@ export interface EnvSettingsPageContextValue {
   mutateSettings: (v: AgentSettingsResponse | null) => void;
   saveSettings: (body: any) => Promise<SettingsUpdateResponse>;
 
-  codexStatus: Resource<CodexHostStatus | null>;
-  refreshCodexStatus: () => void;
   codeRuntimeStatus: Resource<CodeRuntimeStatus | null>;
   refreshCodeRuntimeStatus: () => void;
 
@@ -162,10 +160,6 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const [settings, { mutate: mutateSettings, refetch }] = createResource<AgentSettingsResponse | null, number | null>(
     () => key(),
     async (k) => (k == null ? null : await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
-  );
-  const [codexStatus, { refetch: refetchCodexStatus }] = createResource<CodexHostStatus | null, number | null>(
-    () => key(),
-    async (k) => (k == null ? null : await fetchLocalApiJSON<CodexHostStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' })),
   );
   const [codeRuntimeStatus, { mutate: mutateCodeRuntimeStatus, refetch: refetchCodeRuntimeStatus }] = createResource<CodeRuntimeStatus | null, number | null>(
     () => key(),
@@ -409,7 +403,6 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const value: EnvSettingsPageContextValue = {
     env, protocol, notify, runtimeUpdate,
     settings, refreshSettings: refreshSettingsPage, mutateSettings, saveSettings,
-    codexStatus, refreshCodexStatus: () => { void refetchCodexStatus(); },
     codeRuntimeStatus, refreshCodeRuntimeStatus: () => { void refetchCodeRuntimeStatus(); },
     canInteract, canAdmin,
     activeSection, setActiveSection,

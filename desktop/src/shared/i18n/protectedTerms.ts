@@ -2,7 +2,6 @@ export const REDEVEN_I18N_PROTECTED_TERMS = [
   'Redeven',
   'Redeven Desktop',
   'Flower',
-  'Codex',
   'Env App',
   'Codespaces',
   'Browser Editor',

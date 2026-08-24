@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 	_ "modernc.org/sqlite"
 )
 
@@ -1413,6 +1414,232 @@ func TestServiceMigratesV2DatabaseToV3(t *testing.T) {
 	}
 	if len(next.StickyNotes) != 1 || next.StickyNotes[0].ID != "sticky-1" {
 		t.Fatalf("next sticky notes = %#v, want persisted sticky note", next.StickyNotes)
+	}
+}
+
+func TestServiceMigratesV3DatabaseAndRemovesLegacyCodexLayout(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "layout-v3.sqlite")
+	createWorkbenchLayoutV3DatabaseWithLegacyCodex(t, dbPath)
+
+	svc, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open(v3) error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := svc.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	})
+
+	snapshot, err := svc.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	for _, widget := range snapshot.Widgets {
+		if widget.WidgetType == legacyCodexWidgetType {
+			t.Fatalf("legacy Codex widget survived migration: %#v", widget)
+		}
+	}
+	if len(snapshot.Widgets) != 2 {
+		t.Fatalf("migrated widgets = %#v, want files and Flower widgets", snapshot.Widgets)
+	}
+	for _, state := range snapshot.WidgetStates {
+		if state.WidgetType == legacyCodexWidgetType {
+			t.Fatalf("legacy Codex widget state survived migration: %#v", state)
+		}
+	}
+
+	events, _, err := svc.Subscribe(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	for _, event := range events {
+		if strings.Contains(string(event.Payload), legacyCodexWidgetType) {
+			t.Fatalf("event %d retained legacy Codex payload: %s", event.Seq, event.Payload)
+		}
+	}
+	if snapshot.Revision != 2 || snapshot.Seq <= 3 {
+		t.Fatalf("migrated snapshot revision=%d seq=%d, want revision 2 and synthetic event", snapshot.Revision, snapshot.Seq)
+	}
+	for index := 1; index < len(events); index++ {
+		if events[index].Seq <= events[index-1].Seq {
+			t.Fatalf("events are not ordered by ascending sequence: %#v", events)
+		}
+	}
+}
+
+func TestService_CodexMigrationRollsBackOnMalformedEvent(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "layout-v3.sqlite")
+	createWorkbenchLayoutV3DatabaseWithLegacyCodex(t, dbPath)
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	if _, err := raw.Exec(`UPDATE workbench_layout_events SET payload_json = '{' WHERE event_type = 'layout.replaced'`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("corrupt event payload: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw database: %v", err)
+	}
+
+	if _, err := Open(dbPath); err == nil {
+		t.Fatal("Open succeeded, want malformed event error")
+	}
+	raw, err = sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("reopen raw database: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	var widgetRows, stateRows, version int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM workbench_layout_widgets WHERE widget_type = 'redeven.codex'`).Scan(&widgetRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM workbench_widget_states WHERE widget_type = 'redeven.codex'`).Scan(&stateRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if widgetRows != 1 || stateRows != 1 || version != 3 {
+		t.Fatalf("failed migration changed database: widgets=%d states=%d version=%d", widgetRows, stateRows, version)
+	}
+}
+
+func TestService_RejectsFutureVersionWithoutChangingCodexLayout(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "layout-v3.sqlite")
+	createWorkbenchLayoutV3DatabaseWithLegacyCodex(t, dbPath)
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	if _, err := raw.Exec(`PRAGMA user_version = 5`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("set future version: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw database: %v", err)
+	}
+
+	if _, err := Open(dbPath); err == nil {
+		t.Fatal("Open succeeded, want future version error")
+	} else {
+		var tooNew *sqliteutil.DatabaseTooNewError
+		if !errors.As(err, &tooNew) {
+			t.Fatalf("error = %v, want DatabaseTooNewError", err)
+		}
+	}
+	raw, err = sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("reopen raw database: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	var widgetRows, version int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM workbench_layout_widgets WHERE widget_type = 'redeven.codex'`).Scan(&widgetRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if widgetRows != 1 || version != 5 {
+		t.Fatalf("future database changed: widgets=%d version=%d", widgetRows, version)
+	}
+}
+
+func TestService_RejectsSchemaDriftWithoutChangingCodexLayout(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "layout-v3.sqlite")
+	createWorkbenchLayoutV3DatabaseWithLegacyCodex(t, dbPath)
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	if _, err := raw.Exec(`CREATE TABLE unexpected_schema_drift(id INTEGER PRIMARY KEY)`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("create schema drift: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw database: %v", err)
+	}
+
+	if _, err := Open(dbPath); err == nil {
+		t.Fatal("Open succeeded, want schema verification error")
+	}
+	raw, err = sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("reopen raw database: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	var widgetRows, driftTables, version int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM workbench_layout_widgets WHERE widget_type = 'redeven.codex'`).Scan(&widgetRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'unexpected_schema_drift'`).Scan(&driftTables); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if widgetRows != 1 || driftTables != 1 || version != 3 {
+		t.Fatalf("schema-drifted database changed: widgets=%d drift_tables=%d version=%d", widgetRows, driftTables, version)
+	}
+}
+
+func createWorkbenchLayoutV3DatabaseWithLegacyCodex(t *testing.T, dbPath string) {
+	t.Helper()
+	createWorkbenchLayoutV2Database(t, dbPath)
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open(v3) error = %v", err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`
+CREATE TABLE workbench_layout_sticky_notes (
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, body TEXT NOT NULL, color TEXT NOT NULL,
+  x REAL NOT NULL, y REAL NOT NULL, width REAL NOT NULL, height REAL NOT NULL,
+  z_index INTEGER NOT NULL, created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_workbench_layout_sticky_notes_order
+  ON workbench_layout_sticky_notes(z_index ASC, created_at_unix_ms ASC, id ASC);
+CREATE TABLE workbench_layout_annotations (
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, text TEXT NOT NULL, font_family TEXT NOT NULL,
+  font_size INTEGER NOT NULL, font_weight INTEGER NOT NULL, color TEXT NOT NULL, align TEXT NOT NULL,
+  x REAL NOT NULL, y REAL NOT NULL, width REAL NOT NULL, height REAL NOT NULL,
+  z_index INTEGER NOT NULL, created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_workbench_layout_annotations_order
+  ON workbench_layout_annotations(z_index ASC, created_at_unix_ms ASC, id ASC);
+CREATE TABLE workbench_layout_background_layers (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, fill TEXT NOT NULL, opacity REAL NOT NULL, material TEXT NOT NULL,
+  x REAL NOT NULL, y REAL NOT NULL, width REAL NOT NULL, height REAL NOT NULL,
+  z_index INTEGER NOT NULL, created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_workbench_layout_background_layers_order
+  ON workbench_layout_background_layers(z_index ASC, created_at_unix_ms ASC, id ASC);
+INSERT INTO workbench_layout_widgets(widget_id, widget_type, x, y, width, height, z_index, created_at_unix_ms)
+VALUES ('widget-flower-1', 'redeven.ai', 900, 80, 760, 560, 2, 1700000000001),
+       ('widget-codex-1', 'redeven.codex', 1800, 80, 760, 560, 3, 1700000000002);
+INSERT INTO workbench_widget_states(widget_id, widget_type, revision, state_json, updated_at_unix_ms)
+VALUES ('widget-codex-1', 'redeven.codex', 1, '{}', 1700000000202);
+INSERT INTO workbench_layout_events(seq, event_type, payload_json, created_at_unix_ms)
+VALUES
+  (2, 'layout.replaced', '{"widgets":[{"widget_id":"widget-files-1","widget_type":"redeven.files"},{"widget_id":"widget-codex-1","widget_type":"redeven.codex"}],"widget_states":[]}', 1700000000300),
+  (3, 'widget_state.upserted', '{"widget_id":"widget-codex-1","widget_type":"redeven.codex","state":{}}', 1700000000301);
+UPDATE workbench_layout_snapshot SET revision = 1, seq = 3, updated_at_unix_ms = 1700000000301;
+UPDATE __redeven_db_meta SET last_migrated_from_version = 2, last_migrated_to_version = 3;
+PRAGMA user_version = 3;
+`)
+	if err != nil {
+		t.Fatalf("create v3 database error = %v", err)
 	}
 }
 

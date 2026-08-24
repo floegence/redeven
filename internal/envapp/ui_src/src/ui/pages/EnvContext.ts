@@ -32,8 +32,7 @@ export type EnvSettingsSection =
   | 'codespaces'
   | 'permission_policy'
   | 'skills'
-  | 'ai'
-  | 'codex';
+  | 'ai';
 
 export type EnvSettingsOrigin =
   | {

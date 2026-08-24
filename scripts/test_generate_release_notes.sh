@@ -40,7 +40,7 @@ git -C "$tmpdir" config user.email "release-notes-test@example.com"
 commit_with_message "$tmpdir" "chore: bootstrap release flow"
 git -C "$tmpdir" tag v0.1.0
 
-commit_with_message "$tmpdir" "feat(codex): render user turns from structured inputs"
+commit_with_message "$tmpdir" "feat(envapp): render user turns from structured inputs"
 commit_with_message "$tmpdir" "fix(git-browser): lazy-load diff content"
 commit_with_message "$tmpdir" "feat(envapp): add debug console mode"
 commit_with_message "$tmpdir" "chore(deps): bump floeterm to v0.4.9"
@@ -53,8 +53,7 @@ release_notes_path="${tmpdir}/release-notes-v0.1.1.md"
 )
 
 assert_contains "$release_notes_path" "## Release Highlights"
-assert_contains "$release_notes_path" "- Codex workspace: render user turns from structured inputs."
-assert_contains "$release_notes_path" "- Workspace UI: add debug console mode."
+assert_contains "$release_notes_path" "- Workspace UI: add debug console mode; render user turns from structured inputs."
 assert_contains "$release_notes_path" "- Git tools: lazy-load diff content."
 assert_contains "$release_notes_path" "- Maintenance: bump floeterm to v0.4.9."
 assert_contains "$release_notes_path" "- Full commit diff: [v0.1.0...v0.1.1](https://github.com/test/redeven/compare/v0.1.0...v0.1.1)"

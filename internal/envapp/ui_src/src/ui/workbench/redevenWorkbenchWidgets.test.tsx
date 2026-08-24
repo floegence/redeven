@@ -16,7 +16,6 @@ import {
   WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR,
 } from '@floegence/floe-webapp-core/ui';
 
-import { CodexWorkbenchIcon } from '../icons/CodexIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { RedevenWorkbenchSurface } from './surface/RedevenWorkbenchSurface';
 
@@ -185,7 +184,6 @@ describe('redevenWorkbenchWidgets default geometry', () => {
       'redeven.codespaces': { width: 1040, height: 660 },
       'redeven.ports': { width: 1000, height: 620 },
       'redeven.ai': { width: 1200, height: 760 },
-      'redeven.codex': { width: 1200, height: 760 },
     });
   });
 });
@@ -478,19 +476,13 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
 });
 
 describe('redevenWorkbenchWidgets assistant metadata', () => {
-  it('uses compact singleton icons for Flower and Codex workbench widgets', () => {
+  it('uses a compact singleton icon for the Flower workbench widget', () => {
     const flower = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.ai');
-    const codex = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.codex');
 
     expect(flower).toMatchObject({
       label: 'Flower',
       singleton: true,
       icon: FlowerWorkbenchIcon,
-    });
-    expect(codex).toMatchObject({
-      label: 'Codex',
-      singleton: true,
-      icon: CodexWorkbenchIcon,
     });
   });
 
@@ -508,17 +500,6 @@ describe('redevenWorkbenchWidgets assistant metadata', () => {
           z_index: 1,
           created_at_unix_ms: 1,
         },
-        {
-          id: 'widget-codex-1',
-          type: 'redeven.codex',
-          title: 'Codex',
-          x: 1040,
-          y: 0,
-          width: 980,
-          height: 620,
-          z_index: 2,
-          created_at_unix_ms: 2,
-        },
       ]));
 
       const model = useWorkbenchModel({
@@ -535,7 +516,6 @@ describe('redevenWorkbenchWidgets assistant metadata', () => {
         .map((item) => item.label);
 
       expect(labels).toContain('Go to Flower');
-      expect(labels).toContain('Go to Codex');
       expect(labels).toContain('Add Terminal');
 
       dispose();

@@ -273,7 +273,6 @@ vi.mock('./accessResume', () => ({
 }));
 
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
-vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
 vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <div data-testid="workbench-page" /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
@@ -281,30 +280,7 @@ vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div />
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div /> }));
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div /> }));
 vi.mock('./pages/EnvAIPage', () => ({ EnvAIPage: () => <div /> }));
-vi.mock('./codex/CodexPage', () => ({ CodexPage: () => <div /> }));
-vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{props.children}</> }));
-vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
-vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
-vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
-vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
-vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({ FlowerTurnLauncherWindow: () => <div /> }));
-vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
-vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
-vi.mock('./utils/askFlowerPath', () => ({
-  basenameFromAbsolutePath: (value: string) => {
-    const normalized = String(value ?? '').trim().replace(/\/+$/, '');
-    if (!normalized || normalized === '/') return 'File';
-    const parts = normalized.split('/').filter(Boolean);
-    return parts[parts.length - 1] || 'File';
-  },
-  normalizeAbsolutePath: (value: string) => {
-    const raw = String(value ?? '').trim().replace(/\\+/g, '/');
-    if (!raw.startsWith('/')) return '';
-    if (raw === '/') return '/';
-    return raw.replace(/\/+$/, '') || '/';
-  },
-  resolveSuggestedWorkingDirAbsolute: () => '',
-}));
+
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: vi.fn(),
   localApiRequestCredentials: () => 'same-origin',

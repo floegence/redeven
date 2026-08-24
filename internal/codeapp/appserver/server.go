@@ -30,7 +30,6 @@ import (
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
-	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -59,7 +58,6 @@ type Options struct {
 	Notes                   *notes.Service
 	WorkbenchLayout         *workbenchlayout.Service
 	Terminal                *terminal.Manager
-	Codex                   CodexBackend
 	Audit                   *auditlog.Store
 	Diagnostics             *diagnostics.Store
 	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
@@ -120,25 +118,7 @@ type workbenchTerminalSessionManager interface {
 	AddSessionLifecycleHook(hook terminal.SessionLifecycleHook) func()
 }
 
-type CodexBackend interface {
-	Status(ctx context.Context) codexbridge.Status
-	ReadCapabilities(ctx context.Context, cwd string) (*codexbridge.Capabilities, error)
-	ListThreads(ctx context.Context, req codexbridge.ListThreadsRequest) ([]codexbridge.Thread, error)
-	ReadThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
-	StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
-	StartTurn(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
-	SteerTurn(ctx context.Context, req codexbridge.SteerTurnRequest) (*codexbridge.Turn, error)
-	ArchiveThread(ctx context.Context, threadID string) error
-	UnarchiveThread(ctx context.Context, threadID string) error
-	ForkThread(ctx context.Context, req codexbridge.ForkThreadRequest) (*codexbridge.ThreadDetail, error)
-	InterruptTurn(ctx context.Context, req codexbridge.InterruptTurnRequest) error
-	StartReview(ctx context.Context, req codexbridge.StartReviewRequest) (*codexbridge.ThreadDetail, error)
-	SubscribeThreadEvents(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error)
-	RespondToRequest(ctx context.Context, threadID string, requestID string, resp codexbridge.PendingRequestResponse) error
-}
-
 const (
-	codexEventBatchWindow               = 16 * time.Millisecond
 	portForwardProxyErrorHeader         = "X-Redeven-Proxy-Error"
 	portForwardProxyUpstreamUnavailable = "port-forward-upstream-unavailable"
 )
@@ -235,7 +215,6 @@ type Server struct {
 	notes      *notes.Service
 	layouts    *workbenchlayout.Service
 	term       workbenchTerminalSessionManager
-	codex      CodexBackend
 	audit      *auditlog.Store
 	diag       *diagnostics.Store
 
@@ -390,7 +369,6 @@ func New(opts Options) (*Server, error) {
 		notes:                   opts.Notes,
 		layouts:                 opts.WorkbenchLayout,
 		term:                    opts.Terminal,
-		codex:                   opts.Codex,
 		audit:                   opts.Audit,
 		diag:                    opts.Diagnostics,
 		resolveSessionMeta:      opts.ResolveSessionMeta,
@@ -1442,29 +1420,6 @@ func writeAIApprovalError(w http.ResponseWriter, err error) {
 	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 }
 
-func writeCodexError(w http.ResponseWriter, err error) {
-	var status int
-	errorCode := ""
-	errorDetails := ""
-	switch {
-	case err == nil:
-		status = http.StatusOK
-	case errors.Is(err, codexbridge.ErrUnavailable):
-		status = http.StatusServiceUnavailable
-	case errors.Is(err, codexbridge.ErrThreadNotFound), errors.Is(err, codexbridge.ErrRequestNotFound):
-		status = http.StatusNotFound
-	case errors.Is(err, codexbridge.ErrInvalidResponse):
-		status = http.StatusBadRequest
-	default:
-		status = http.StatusBadRequest
-	}
-	errorCode = codexbridge.CodexErrorCode(err)
-	if turnErr := codexbridge.TurnErrorFromError(err); turnErr != nil {
-		errorDetails = strings.TrimSpace(turnErr.AdditionalDetails)
-	}
-	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode, ErrorDetails: errorDetails})
-}
-
 func aiThreadActionHTTPStatus(err error) int {
 	switch {
 	case err == nil:
@@ -1862,184 +1817,6 @@ func (g *Server) buildDiagnosticsExportView(sourceLimit int, summaryLimit int) (
 	view.DesktopEvents = desktopEvents
 	view.Snapshot = diagnostics.BuildSnapshot(sourceLimit, summaryLimit, agentEvents, desktopEvents)
 	return view, nil
-}
-
-func (g *Server) handleCodexEventStream(w http.ResponseWriter, r *http.Request, threadID string) {
-	if g == nil || g.codex == nil {
-		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
-		return
-	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming not supported"})
-		return
-	}
-	afterSeq := int64(0)
-	if raw := strings.TrimSpace(r.URL.Query().Get("after_seq")); raw != "" {
-		value, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil || value < 0 {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
-			return
-		}
-		afterSeq = value
-	}
-	snapshot, ch, err := g.codex.SubscribeThreadEvents(r.Context(), threadID, afterSeq)
-	if err != nil {
-		writeCodexError(w, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Connection", "keep-alive")
-	if err := flushCodexSSEEvents(w, flusher, snapshot); err != nil {
-		return
-	}
-
-	keepAlive := time.NewTicker(20 * time.Second)
-	defer keepAlive.Stop()
-	var (
-		pendingEvents []codexbridge.Event
-		batchTimer    *time.Timer
-		batchTimerCh  <-chan time.Time
-	)
-	stopBatchTimer := func() {
-		if batchTimer == nil {
-			return
-		}
-		if !batchTimer.Stop() {
-			select {
-			case <-batchTimer.C:
-			default:
-			}
-		}
-		batchTimer = nil
-		batchTimerCh = nil
-	}
-	flushPending := func() bool {
-		if len(pendingEvents) == 0 {
-			stopBatchTimer()
-			return true
-		}
-		events := pendingEvents
-		pendingEvents = nil
-		stopBatchTimer()
-		return flushCodexSSEEvents(w, flusher, events) == nil
-	}
-	for {
-		select {
-		case <-r.Context().Done():
-			flushPending()
-			return
-		case <-keepAlive.C:
-			if !flushPending() {
-				return
-			}
-			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
-				return
-			}
-			flusher.Flush()
-		case <-batchTimerCh:
-			if !flushPending() {
-				return
-			}
-		case ev, ok := <-ch:
-			if !ok {
-				flushPending()
-				return
-			}
-			pendingEvents = append(pendingEvents, ev)
-			if batchTimer == nil {
-				batchTimer = time.NewTimer(codexEventBatchWindow)
-				batchTimerCh = batchTimer.C
-			}
-		}
-	}
-}
-
-func flushCodexSSEEvents(w io.Writer, flusher http.Flusher, events []codexbridge.Event) error {
-	compacted := compactCodexEvents(events)
-	if len(compacted) == 0 {
-		return nil
-	}
-	for _, ev := range compacted {
-		if err := writeCodexSSEEvent(w, ev); err != nil {
-			return err
-		}
-	}
-	flusher.Flush()
-	return nil
-}
-
-func compactCodexEvents(events []codexbridge.Event) []codexbridge.Event {
-	if len(events) <= 1 {
-		return append([]codexbridge.Event(nil), events...)
-	}
-	compacted := make([]codexbridge.Event, 0, len(events))
-	for _, event := range events {
-		if len(compacted) == 0 {
-			compacted = append(compacted, event)
-			continue
-		}
-		lastIndex := len(compacted) - 1
-		if !canCompactCodexEvent(compacted[lastIndex], event) {
-			compacted = append(compacted, event)
-			continue
-		}
-		compacted[lastIndex].Seq = event.Seq
-		compacted[lastIndex].Stream = event.Stream
-		compacted[lastIndex].Transport = event.Transport
-		compacted[lastIndex].Delta += event.Delta
-	}
-	return compacted
-}
-
-func canCompactCodexEvent(left codexbridge.Event, right codexbridge.Event) bool {
-	if left.Transport != nil || right.Transport != nil {
-		return false
-	}
-	if left.Type != right.Type {
-		return false
-	}
-	switch left.Type {
-	case "agent_message_delta", "command_output_delta", "file_change_delta", "plan_delta":
-		return sameCodexEventTarget(left, right)
-	case "reasoning_delta":
-		return sameCodexEventTarget(left, right) && sameOptionalInt64(left.ContentIndex, right.ContentIndex)
-	case "reasoning_summary_delta":
-		return sameCodexEventTarget(left, right) && sameOptionalInt64(left.SummaryIndex, right.SummaryIndex)
-	default:
-		return false
-	}
-}
-
-func sameCodexEventTarget(left codexbridge.Event, right codexbridge.Event) bool {
-	return left.ThreadID == right.ThreadID && left.TurnID == right.TurnID && left.ItemID == right.ItemID
-}
-
-func sameOptionalInt64(left *int64, right *int64) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right
-}
-
-func writeCodexSSEEvent(w io.Writer, ev codexbridge.Event) error {
-	b, err := json.Marshal(ev)
-	if err != nil {
-		return err
-	}
-	if _, err := io.WriteString(w, "event: codex_event\n"); err != nil {
-		return err
-	}
-	if _, err := io.WriteString(w, "data: "); err != nil {
-		return err
-	}
-	if _, err := w.Write(b); err != nil {
-		return err
-	}
-	_, err = io.WriteString(w, "\n\n")
-	return err
 }
 
 func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsView {
@@ -2934,7 +2711,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			CodeServerPortMax *int `json:"code_server_port_max,omitempty"`
 
 			PermissionPolicy json.RawMessage `json:"permission_policy,omitempty"`
-			Codex            json.RawMessage `json:"codex,omitempty"`
 		}
 
 		dec := json.NewDecoder(r.Body)
@@ -2948,14 +2724,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		if len(body.Codex) > 0 {
-			writeJSON(w, http.StatusBadRequest, apiResp{
-				OK:    false,
-				Error: "Codex is host-managed and cannot be configured from Runtime Settings. Install and configure `codex` on the host instead.",
-			})
-			return
-		}
-
 		if body.AgentHomeDir == nil && body.Shell == nil && body.FilesystemScope == nil &&
 			body.LogFormat == nil && body.LogLevel == nil &&
 			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
@@ -3088,17 +2856,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				Settings: g.toSettingsView(updated, aiSvc),
 			},
 		})
-		return
-
-	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/status":
-		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
-			return
-		}
-		if g.codex == nil {
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: codexbridge.Status{AgentHomeDir: ""}})
-			return
-		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.codex.Status(r.Context())})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/code-runtime/status":
@@ -3294,369 +3051,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return
-
-	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/capabilities":
-		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
-			return
-		}
-		if g.codex == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
-			return
-		}
-		capabilities, err := g.codex.ReadCapabilities(r.Context(), strings.TrimSpace(r.URL.Query().Get("cwd")))
-		if err != nil {
-			writeCodexError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: capabilities})
-		return
-
-	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/threads":
-		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-		if !ok {
-			return
-		}
-		if g.codex == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
-			return
-		}
-		limit := 100
-		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-			if v, err := strconv.Atoi(raw); err == nil {
-				limit = v
-			}
-		}
-		var archived *bool
-		if raw := strings.TrimSpace(r.URL.Query().Get("archived")); raw != "" {
-			v, err := strconv.ParseBool(raw)
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid archived filter"})
-				return
-			}
-			archived = &v
-		}
-		threads, err := g.codex.ListThreads(r.Context(), codexbridge.ListThreadsRequest{
-			Limit:    limit,
-			Archived: archived,
-		})
-		if err != nil {
-			writeCodexError(w, err)
-			return
-		}
-		view, err := g.buildCodexThreadListView(r.Context(), meta, threads)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"threads": view}})
-		return
-
-	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/codex/threads":
-		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
-			return
-		}
-		if g.codex == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
-			return
-		}
-		type reqBody struct {
-			CWD               string `json:"cwd"`
-			Model             string `json:"model"`
-			ApprovalPolicy    string `json:"approval_policy"`
-			SandboxMode       string `json:"sandbox_mode"`
-			ApprovalsReviewer string `json:"approvals_reviewer"`
-		}
-		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
-		var body reqBody
-		if err := dec.Decode(&body); err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-			return
-		}
-		if err := dec.Decode(&struct{}{}); err != io.EOF {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-			return
-		}
-		detail, err := g.codex.StartThread(r.Context(), codexbridge.StartThreadRequest{
-			CWD:               strings.TrimSpace(body.CWD),
-			Model:             strings.TrimSpace(body.Model),
-			ApprovalPolicy:    strings.TrimSpace(body.ApprovalPolicy),
-			SandboxMode:       strings.TrimSpace(body.SandboxMode),
-			ApprovalsReviewer: strings.TrimSpace(body.ApprovalsReviewer),
-		})
-		if err != nil {
-			writeCodexError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
-		return
-
-	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/codex/threads/"):
-		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
-			return
-		}
-		if g.codex == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
-			return
-		}
-		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/codex/threads/")
-		parts := strings.Split(rest, "/")
-		if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-			return
-		}
-		threadID, err := url.PathUnescape(parts[0])
-		if err != nil || strings.TrimSpace(threadID) == "" {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-			return
-		}
-		if len(parts) == 1 {
-			if r.Method != http.MethodGet {
-				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-				return
-			}
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			detail, err := g.codex.ReadThread(r.Context(), threadID)
-			if err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			view, err := g.buildCodexThreadDetailView(r.Context(), meta, detail)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
-			return
-		}
-		switch {
-		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "read":
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body codexMarkThreadReadRequest
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			resp, err := g.markCodexThreadRead(r.Context(), meta, threadID, body)
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
-			return
-		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "archive":
-			if err := g.codex.ArchiveThread(r.Context(), threadID); err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
-			return
-		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "unarchive":
-			if err := g.codex.UnarchiveThread(r.Context(), threadID); err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
-			return
-		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "fork":
-			type reqBody struct {
-				Model             string `json:"model"`
-				LastTurnID        string `json:"last_turn_id"`
-				ApprovalPolicy    string `json:"approval_policy"`
-				SandboxMode       string `json:"sandbox_mode"`
-				ApprovalsReviewer string `json:"approvals_reviewer"`
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body reqBody
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			detail, err := g.codex.ForkThread(r.Context(), codexbridge.ForkThreadRequest{
-				ThreadID:          threadID,
-				LastTurnID:        strings.TrimSpace(body.LastTurnID),
-				Model:             strings.TrimSpace(body.Model),
-				ApprovalPolicy:    strings.TrimSpace(body.ApprovalPolicy),
-				SandboxMode:       strings.TrimSpace(body.SandboxMode),
-				ApprovalsReviewer: strings.TrimSpace(body.ApprovalsReviewer),
-			})
-			if err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
-			return
-		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "interrupt":
-			type reqBody struct {
-				TurnID string `json:"turn_id"`
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body reqBody
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := g.codex.InterruptTurn(r.Context(), codexbridge.InterruptTurnRequest{
-				ThreadID: threadID,
-				TurnID:   strings.TrimSpace(body.TurnID),
-			}); err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
-			return
-		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "review":
-			type reqBody struct {
-				Target string `json:"target"`
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body reqBody
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			detail, err := g.codex.StartReview(r.Context(), codexbridge.StartReviewRequest{
-				ThreadID: threadID,
-				Target:   strings.TrimSpace(body.Target),
-			})
-			if err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
-			return
-		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "turns":
-			type reqBody struct {
-				InputText         string                       `json:"input_text"`
-				Inputs            []codexbridge.UserInputEntry `json:"inputs"`
-				CWD               string                       `json:"cwd"`
-				Model             string                       `json:"model"`
-				Effort            string                       `json:"effort"`
-				ApprovalPolicy    string                       `json:"approval_policy"`
-				SandboxMode       string                       `json:"sandbox_mode"`
-				ApprovalsReviewer string                       `json:"approvals_reviewer"`
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body reqBody
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			turn, err := g.codex.StartTurn(r.Context(), codexbridge.StartTurnRequest{
-				ThreadID:          threadID,
-				InputText:         strings.TrimSpace(body.InputText),
-				Inputs:            body.Inputs,
-				CWD:               strings.TrimSpace(body.CWD),
-				Model:             strings.TrimSpace(body.Model),
-				Effort:            strings.TrimSpace(body.Effort),
-				ApprovalPolicy:    strings.TrimSpace(body.ApprovalPolicy),
-				SandboxMode:       strings.TrimSpace(body.SandboxMode),
-				ApprovalsReviewer: strings.TrimSpace(body.ApprovalsReviewer),
-			})
-			if err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"turn": turn}})
-			return
-		case len(parts) == 3 && r.Method == http.MethodPost && parts[1] == "turns" && parts[2] == "steer":
-			type reqBody struct {
-				ExpectedTurnID string                       `json:"expected_turn_id"`
-				Inputs         []codexbridge.UserInputEntry `json:"inputs"`
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body reqBody
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			turn, err := g.codex.SteerTurn(r.Context(), codexbridge.SteerTurnRequest{
-				ThreadID:       threadID,
-				ExpectedTurnID: strings.TrimSpace(body.ExpectedTurnID),
-				Inputs:         body.Inputs,
-			})
-			if err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"turn": turn}})
-			return
-		case len(parts) == 2 && r.Method == http.MethodGet && parts[1] == "events":
-			g.handleCodexEventStream(w, r, threadID)
-			return
-		case len(parts) == 4 && r.Method == http.MethodPost && parts[1] == "requests" && parts[3] == "response":
-			requestID, err := url.PathUnescape(parts[2])
-			if err != nil || strings.TrimSpace(requestID) == "" {
-				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-				return
-			}
-			type reqBody struct {
-				Type     string              `json:"type"`
-				Decision string              `json:"decision"`
-				Answers  map[string][]string `json:"answers"`
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body reqBody
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := g.codex.RespondToRequest(r.Context(), threadID, requestID, codexbridge.PendingRequestResponse{
-				Type:     strings.TrimSpace(body.Type),
-				Decision: strings.TrimSpace(body.Decision),
-				Answers:  body.Answers,
-			}); err != nil {
-				writeCodexError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
-			return
-		default:
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-			return
-		}
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/readiness":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {

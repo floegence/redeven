@@ -54,7 +54,7 @@ Redeven 是一个单文件二进制程序，可将您的电脑和服务器汇集
 它可以运行在您的本机、远程服务器或任何可访问的 SSH 主机上。文件、进程、API 密钥和凭据始终留在它们应在的位置；Redeven 不会通过任何第三方基础设施传输您的明文数据。
 
 - **客户端连接到端点运行时**：浏览器、Desktop、CLI 和基于 SSH 主机的会话都会进入由同一运行时管理的工作区。
-- **运行时是信任边界**：一个 Go 二进制程序统一负责文件、终端、监控、Git、Web 服务转发、Workbench 布局、笔记、Browser Editor 设置、Flower 和 Codex 桥接访问。
+- **运行时是信任边界**：一个 Go 二进制程序统一负责文件、终端、监控、Git、Web 服务转发、Workbench 布局、笔记、Browser Editor 设置和 Flower 访问。
 - **传输与策略始终明确**：Flowersec 承载加密的 RPC 与流式通信流量；会话授权、本地权限策略、文件系统范围和本地机密信息共同限制每个会话可执行的操作。
 
 ![Redeven 架构概览](assets/readme/architecture-overview.png)
@@ -108,7 +108,7 @@ redeven run
 | 监控 | 来自端点运行时的 CPU、内存、磁盘、网络和进程视图。 |
 | Browser Editor | 由 Desktop 明确设置、按工作区隔离的浏览器编辑器会话。 |
 | Web 服务 | 由运行时管理的服务注册和端口转发访问，无需手写 SSH 隧道。 |
-| Flower 与 Codex | 可选的 AI 界面，使用经运行时验证的工具及本地模型和主机配置。 |
+| Flower | 可选的 AI 界面，使用经运行时验证的工具及本地模型和主机配置。 |
 | Desktop | 用于本地环境、provider 托管环境、通过 SSH 引导的环境和已保存 Local UI 环境的原生启动器。 |
 
 <!-- readme-section:security -->

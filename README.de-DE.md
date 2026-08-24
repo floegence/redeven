@@ -54,7 +54,7 @@ Redeven ist eine einzelne Binärdatei, die deine Computer und Server in einem Br
 Redeven läuft auf deinem Rechner, auf entfernten Servern oder auf jedem erreichbaren SSH-Host. Deine Dateien, Prozesse, API-Schlüssel und Zugangsdaten bleiben dort, wo sie hingehören. Redeven überträgt deine Klartextdaten nicht durch fremde Infrastruktur.
 
 - **Clients verbinden sich mit einer Endpunkt-Laufzeit**: Browser, Desktop, CLI und über SSH gehostete Sitzungen greifen auf denselben von der Laufzeit verwalteten Arbeitsbereich zu.
-- **Die Laufzeit ist die Vertrauensgrenze**: Eine einzelne Go-Binärdatei verwaltet Dateien, Terminals, Monitoring, Git, die Weiterleitung von Webdiensten, das Workbench-Layout, Notizen, die Einrichtung von Browser Editor, Flower und den Codex-Bridge-Zugriff.
+- **Die Laufzeit ist die Vertrauensgrenze**: Eine einzelne Go-Binärdatei verwaltet Dateien, Terminals, Monitoring, Git, die Weiterleitung von Webdiensten, das Workbench-Layout, Notizen, die Einrichtung von Browser Editor und Flower.
 - **Transport und Richtlinien bleiben explizit**: Flowersec transportiert verschlüsselten RPC- und Stream-Datenverkehr. Sitzungsfreigaben, lokale Berechtigungsrichtlinien, Dateisystemumfang und lokale Geheimnisse begrenzen die Möglichkeiten jeder Sitzung.
 
 ![Architekturübersicht von Redeven](assets/readme/architecture-overview.png)
@@ -108,7 +108,7 @@ Weitere Ausführungsmodi und den optionalen lokalen Passwortschutz beschreibt `r
 | Monitoring | Ansichten für CPU, Arbeitsspeicher, Datenträger, Netzwerk und Prozesse aus der Endpunkt-Laufzeit. |
 | Browser Editor | Von Desktop ausdrücklich eingerichtete und nach Arbeitsbereich isolierte Browser-Editor-Sitzungen. |
 | Webdienste | Von der Laufzeit verwaltete Dienstregistrierung und Portweiterleitung ohne manuell erstellte SSH-Tunnel. |
-| Flower und Codex | Optionale KI-Oberflächen mit von der Laufzeit geprüften Werkzeugen und lokaler Modell- und Hostkonfiguration. |
+| Flower | Optionale KI-Oberflächen mit von der Laufzeit geprüften Werkzeugen und lokaler Modell- und Hostkonfiguration. |
 | Desktop | Nativer Starter für lokale, bei einem provider gehostete, per SSH initialisierte und gespeicherte Local UI-Umgebungen. |
 
 <!-- readme-section:security -->

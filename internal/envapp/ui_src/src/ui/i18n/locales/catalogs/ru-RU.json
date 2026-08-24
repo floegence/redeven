@@ -230,7 +230,6 @@
       "permissionPolicy": "Политика разрешений",
       "flower": "Flower",
       "skills": "Навыки",
-      "codex": "Codex",
       "debugConsole": "Консоль отладки"
     },
     "groups": {
@@ -362,8 +361,7 @@
       "codespaces": "Codespaces",
       "browserEditor": "Browser Editor",
       "webServices": "Веб-сервисы",
-      "flower": "Flower",
-      "codex": "Codex"
+      "flower": "Flower"
     },
     "topbar": {
       "backToDashboard": "Назад к панели",
@@ -569,8 +567,6 @@
       "goToWebServicesDescription": "Открыть регистрации веб-сервисов",
       "goToFlowerTitle": "Перейти к Flower",
       "goToFlowerDescription": "Открыть Flower",
-      "goToCodexTitle": "Перейти к Codex",
-      "goToCodexDescription": "Открыть Codex",
       "openEnvironmentTitle": "Открыть среду...",
       "openEnvironmentDescription": "Открыть средство запуска среды Desktop.",
       "backToDashboardTitle": "Назад к панели",
@@ -700,7 +696,6 @@
   },
   "aiChrome": {
     "flowerTitle": "Flower",
-    "codexTitle": "Codex",
     "newChat": "Новый чат",
     "copyMessage": "Копировать сообщение",
     "retryMessage": "Повторить",
@@ -751,296 +746,17 @@
       "flower": {
         "label": "Flower",
         "defaultTitle": "Flower"
-      },
-      "codex": {
-        "label": "Codex",
-        "defaultTitle": "Codex"
       }
     },
     "notices": {
       "flowerRwxTitle": "Flower требует доступа для чтения, записи и выполнения",
       "flowerRwxDescription": "Предоставьте этому окружению разрешения RWX, чтобы использовать встроенное рабочее пространство Flower в режиме Workbench.",
-      "flowerThreads": "Flower потоки",
-      "codexRwxTitle": "Codex необходимы права на чтение, запись и выполнение.",
-      "codexRwxDescription": "Предоставьте этому окружению разрешения RWX, чтобы использовать встроенное рабочее пространство Codex в режиме Workbench.",
-      "codexThreads": "Codex темы"
+      "flowerThreads": "Flower потоки"
     }
   },
-  "codex": {
-    "title": "Codex",
-    "loading": "Загрузка Codex...",
-    "common": {
-      "idle": "ожидание",
-      "working": "в работе",
-      "request": "запрос",
-      "file": "Файл",
-      "image": "Изображение",
-      "newThread": "Новая тема",
-      "untitledThread": "Thread без названия",
-      "newChat": "Новый чат",
-      "noConversationPreview": "Предпросмотра беседы пока нет.",
-      "workingDirectory": "Рабочий каталог",
-      "workingDir": "Рабочий каталог",
-      "default": "По умолчанию",
-      "never": "Никогда",
-      "fullAccess": "Полный доступ",
-      "sending": "Отправка..."
-    },
-    "empty": {
-      "readyTitle": "Codex",
-      "installTitle": "Установите Codex на хост",
-      "readyBody": "Начните диалог Codex с подсказкой, вставьте изображение, используйте @ для ссылки на файлы или используйте / для локальных команд композитора.",
-      "installBody": "Redeven не устанавливает Codex автоматически. Поместите двоичный файл хоста `codex` в PATH, затем обновите эту страницу, чтобы начать специальный чат Codex."
-    },
-    "loadingState": {
-      "preparingThread": "Подготовка выбранного потока Codex.",
-      "loadingThread": "Загрузка выбранного потока Codex."
-    },
-    "controls": {
-      "model": "Модель",
-      "effort": "Усилие",
-      "approval": "Утверждение",
-      "sandbox": "Песочница",
-      "reasoningEffort": {
-        "low": "Низкий",
-        "medium": "Средний",
-        "high": "Высокий",
-        "max": "Макс."
-      },
-      "approvalPolicy": {
-        "untrusted": "Ненадежный",
-        "onFailure": "При сбое",
-        "onRequest": "По запросу",
-        "never": "Никогда",
-        "granular": "Детальный"
-      },
-      "sandboxMode": {
-        "readOnly": "Только чтение",
-        "workspaceWrite": "Запись в рабочую область",
-        "dangerFullAccess": "Полный доступ",
-        "externalSandbox": "Внешняя песочница"
-      }
-    },
-    "disabledReasons": {
-      "archivedThreadHidden": "Архивированные темы скрыты из списка бесед.",
-      "stopRequestInProgress": "Выполняется запрос остановки.",
-      "waitingForActiveTurn": "Ожидание начала активного хода.",
-      "waitingForInterruptibleTurn": "Ожидание Codex для открытия прерываемого поворота.",
-      "turnInterruptionUnavailable": "Прерывание поворота на этом хосте недоступно.",
-      "queueAfterThreadStarts": "Очередь доступна после запуска текущего потока.",
-      "addPromptImageOrMention": "Добавьте приглашение, изображение или упоминание файла для отправки.",
-      "guideWhileRunning": "Руководство доступно, пока Codex выполняет ход.",
-      "guideStopInProgress": "Руководство недоступно, пока выполняется запрос на остановку.",
-      "currentTurnStarting": "Codex все еще начинает текущий ход.",
-      "sameTurnGuidanceUnsupported": "Этот хост Codex не поддерживает наведение на одном повороте.",
-      "turnCannotAcceptGuidedInput": "Этот ход не может принимать управляемый ввод.",
-      "turnKindCannotAcceptGuidedInput": "Этот поворот {kind} не может принимать управляемый ввод.",
-      "archiveUnavailable": "Архив недоступен на этом хосте.",
-      "archiveInProgress": "Архив в процессе.",
-      "forkUnavailable": "Форк недоступен на этом хосте.",
-      "forkInProgress": "Форк находится в стадии разработки.",
-      "reviewUnavailable": "Обзор недоступен на этом хосте.",
-      "reviewInProgress": "Обзор уже ведется.",
-      "stopAvailableAfterTurnStarts": "Стоп будет доступен после начала поворота."
-    },
-    "actions": {
-      "archive": "Архив",
-      "archiving": "Архивирование...",
-      "fork": "Форк",
-      "forking": "Разветвление...",
-      "review": "Обзор",
-      "reviewing": "Рассмотрение...",
-      "stop": "Остановить",
-      "stopping": "Остановка...",
-      "guide": "Руководство",
-      "approveOnce": "Одобрить один раз",
-      "approveForSession": "Одобрить сеанс",
-      "decline": "Отклонить",
-      "cancel": "Отменить",
-      "submitResponse": "Отправить ответ",
-      "reviewApproval": "Рассмотрение утверждения",
-      "browseFiles": "Просмотр файлов"
-    },
-    "header": {
-      "installRequired": "Установить необходимый",
-      "pendingCount": {
-        "one": "{count} ожидает",
-        "few": "{count} ожидают",
-        "many": "{count} ожидают",
-        "other": "{count} ожидают"
-      },
-      "archiveThreadAria": "Архив Codex поток",
-      "forkThreadAria": "Разветвление Codex поток",
-      "reviewWorkspaceAria": "Просмотр текущих изменений в рабочем пространстве",
-      "stopTurnAria": "Остановить активный Codex поворот"
-    },
-    "composer": {
-      "fileReferenceSuggestions": "Предложения по ссылкам на файлы",
-      "commandParameterOptions": "Опции параметров команды",
-      "commandSuggestions": "Варианты команд",
-      "optionsForControl": "{label} Опции",
-      "stopActiveTurn": "Остановить активный Codex Turn",
-      "queueNextTurn": "Поставить в очередь следующий Codex повернуть",
-      "sendToCodex": "Отправить в Codex",
-      "workingDirectoryLocked": "Рабочий каталог заблокирован",
-      "selectWorkingDirectory": "Выберите рабочий каталог",
-      "lockedToThisThread": "{path} (заблокирован для этой темы)",
-      "installHostToEnable": "Установите `codex` на хосте, чтобы включить чат Codex.",
-      "selectedModelNoImages": "Выбранная модель в настоящее время не поддерживает ввод изображений.",
-      "placeholderWithImages": "Попросите Codex просмотреть изменение, проверить сбой, суммировать различия или спланировать следующий шаг. Используйте @ для контекста файла, / для команд или вставьте изображение.",
-      "placeholderTextOnly": "Попросите Codex просмотреть изменение, проверить сбой, суммировать различия или спланировать следующий шаг. Используйте @ для контекста файла или / для команд.",
-      "noOptionsAvailable": "Для этой команды параметры недоступны.",
-      "indexingFiles": "Индексирование файлов в текущем рабочем каталоге...",
-      "noMatchingFiles": "В текущем рабочем каталоге не найдено соответствующих файлов.",
-      "inputControls": "Codex элементы управления вводом",
-      "moreControls": "Больше",
-      "moreInputControls": "Дополнительные элементы управления вводом Codex",
-      "addAttachments": "Добавить вложения",
-      "removeAttachment": "Удалить {name}",
-      "removeMention": "Удалить {name}",
-      "slashDescriptions": {
-        "mention": "Вставьте @ и откройте средство выбора ссылок на файлы.",
-        "new": "Создайте новый черновик темы Codex.",
-        "clear": "Очистить текущий текст композитора, вложения и ссылки на файлы.",
-        "cwd": "Откройте средство выбора рабочего каталога для нового чата.",
-        "model": "Выберите модель для следующего хода Codex.",
-        "effort": "Выберите попытку рассуждения для следующего хода Codex.",
-        "approval": "Выберите политику утверждения для следующего хода Codex.",
-        "sandbox": "Выберите режим песочницы для следующего хода Codex."
-      }
-    },
-    "sidebar": {
-      "hostReady": "Хост готов",
-      "installRequired": "Требуется установка.",
-      "hostAvailable": "Хост. Доступна среда выполнения Codex.",
-      "installHostBinary": "Установите двоичный файл хоста `codex`, чтобы использовать чат Codex.",
-      "pendingCount": {
-        "one": "{count} ожидает",
-        "few": "{count} ожидают",
-        "many": "{count} ожидают",
-        "other": "{count} ожидают"
-      },
-      "noConversations": "Бесед пока нет",
-      "notAvailableYet": "Codex пока недоступен",
-      "startNewChat": "Для начала запустите новый чат Codex.",
-      "installThenRefresh": "Установите `codex` на хост, затем обновите эту панель.",
-      "conversations": "Беседы",
-      "loadingChats": "Загрузка чатов...",
-      "today": "Сегодня",
-      "yesterday": "Вчера",
-      "thisWeek": "На этой неделе",
-      "older": "Ранее",
-      "unread": "Не прочитано",
-      "archiveChatAria": "Архивный чат {title}"
-    },
-    "notifications": {
-      "requestFailed": "Не удалось выполнить запрос.",
-      "errorCode": "Codex Код ошибки: {code}",
-      "failedToReadFile": "Не удалось прочитать {name}",
-      "attachmentFailedTitle": "Не удалось прикрепить",
-      "unsupportedAttachmentTitle": "Неподдерживаемое вложение",
-      "unsupportedAttachmentBody": "Вложения Codex в настоящее время поддерживают только изображения.",
-      "refreshFailedTitle": "Не удалось обновить",
-      "hostNotDetectedTitle": "Хост Codex не обнаружен",
-      "hostInstallHint": "Установите `codex` на хост и обновите диагностику.",
-      "threadArchivedTitle": "Тема в архиве",
-      "queueUnavailableTitle": "Очередь недоступна",
-      "sendFailedTitle": "Не удалось отправить",
-      "guideUnavailableTitle": "Руководство недоступно",
-      "guideUnsupportedBody": "Этот хост Codex не поддерживает указания по одному повороту из подсказок в очереди.",
-      "guideFailedTitle": "Руководство не выполнено.",
-      "actionUnavailableTitle": "Действие недоступно",
-      "archiveUnsupportedBody": "Этот хост Codex пока не поддерживает архивирование потоков из Redeven.",
-      "forkUnsupportedBody": "Этот хост Codex пока не поддерживает ответвление потока от Redeven.",
-      "interruptUnsupportedBody": "Этот хост Codex пока не поддерживает прерывание поворота от Redeven.",
-      "reviewUnsupportedBody": "Этот хост Codex пока не поддерживает встроенную проверку от Redeven.",
-      "archiveFailedTitle": "Ошибка архивирования",
-      "forkFailedTitle": "Ошибка вилки",
-      "interruptFailedTitle": "Ошибка прерывания",
-      "reviewFailedTitle": "Ошибка просмотра",
-      "queuedFollowupFailedTitle": "Ошибка последующего выполнения в очереди"
-    },
-    "statusBanner": {
-      "statusError": "Ошибка статуса",
-      "threadLoading": "Загрузка потока",
-      "liveEventStream": "Прямая трансляция событий",
-      "disconnectedReconnecting": "Прямая трансляция событий отключена. Повторное подключение...",
-      "droppedUpdates": {
-        "one": "Поток событий пропустил {count} обновление с негарантированной доставкой во время догоняющей синхронизации.",
-        "few": "Поток событий пропустил {count} обновления с негарантированной доставкой во время догоняющей синхронизации.",
-        "many": "Поток событий пропустил {count} обновлений с негарантированной доставкой во время догоняющей синхронизации.",
-        "other": "Поток событий пропустил {count} обновления с негарантированной доставкой во время догоняющей синхронизации."
-      },
-      "lostContinuity": "Поток событий в реальном времени потерял непрерывность и перезагружает состояние потока.",
-      "hostDiagnostics": "Диагностика хоста",
-      "hostDiagnosticsBody": "Redeven напрямую использует двоичный файл `codex` хоста. Здесь нет отдельного переключателя времени выполнения Codex в приложении, которым можно было бы управлять.",
-      "binary": "Двоичный файл",
-      "codexHome": "Codex Домашняя страница",
-      "runtime": "Среда выполнения",
-      "platform": "Платформа",
-      "lastStderr": "Последний stderr"
-    },
-    "pendingInputs": {
-      "ariaLabel": "Ожидающие входы Codex",
-      "attachmentAndFileContext": "Вложение и контекст файла",
-      "attachmentContext": "Контекст вложения",
-      "fileContext": "Контекст файла",
-      "pendingInput": "Ожидание ввода",
-      "sending": "Отправка",
-      "guiding": "Руководство",
-      "guideUnavailable": "Руководство недоступно",
-      "retryQueued": "Повторить в очереди",
-      "queued": "В очереди",
-      "restoreQueuedInput": "Восстановить входные данные в очереди композитору",
-      "moveEarlier": "Переместить входные данные в очереди ранее",
-      "moveLater": "Переместить ввод из очереди позже",
-      "guideQueuedInput": "Направить ввод из очереди в текущий ход",
-      "removeQueuedInput": "Удалить ввод из очереди"
-    },
-    "pendingRequests": {
-      "title": "Ожидающие запросы Codex",
-      "description": "Устраните их, прежде чем активный запуск Codex сможет продолжиться.",
-      "promptsCount": {
-        "one": "{count} запрос",
-        "few": "{count} запроса",
-        "many": "{count} запросов",
-        "other": "{count} запросов"
-      },
-      "itemLabel": "Элемент {id}",
-      "workingDirectoryUnavailable": "Рабочий каталог недоступен",
-      "enterResponse": "Enter ответ",
-      "type": {
-        "userInput": "Пользовательский ввод",
-        "commandApproval": "Утверждение команды",
-        "fileChangeApproval": "Утверждение изменения файла",
-        "permissions": "Разрешения"
-      },
-      "titleByType": {
-        "userInput": "Требуется ввод пользователя",
-        "commandApproval": "Требуется одобрение команды",
-        "fileChangeApproval": "Требуется одобрение изменения файла",
-        "permissions": "Требуется обновление разрешений",
-        "default": "{type} Требуется"
-      },
-      "fallbackDetail": {
-        "userInput": "Codex требуется больше входных данных, прежде чем он сможет продолжить работу.",
-        "commandApproval": "Просмотрите эту команду, прежде чем Codex продолжит работу.",
-        "fileChangeApproval": "Прежде чем продолжить Codex, просмотрите предлагаемые изменения файла.",
-        "permissions": "Прежде чем продолжить Codex, просмотрите запрошенные изменения разрешений.",
-        "default": "Codex требуется ответ, прежде чем он сможет продолжить работу."
-      }
-    },
-    "workingDirPicker": {
-      "home": "Домашняя страница",
-      "title": "Выбор рабочего каталога",
-      "confirm": "Выбрать"
-    },
-    "context": {
-      "contextLeft": "{percent}% контекста слева",
-      "usedTokens": "{count} использовано",
-      "usedAndLastTokens": "{used} использовано · {last} последний",
-      "lastTurnTokens": "{count} последний ход"
-    }
+  "terminalAgentActivity": {
+    "working": "В работе",
+    "userInputRequired": "Требуется ввод пользователя"
   },
   "flowerTurnLauncher": {
     "windowTitle": "Спросить Flower",
@@ -1777,109 +1493,6 @@
       "few": "{count} новых сообщения",
       "many": "{count} новых сообщений",
       "other": "{count} новых сообщения"
-    }
-  },
-  "codexActivity": {
-    "title": {
-      "userMessage": "Запрошенная проверка",
-      "agentMessage": "Codex проверка",
-      "commandExecution": "Свидетельство команды",
-      "fileChange": "Изменения артефактов",
-      "webSearch": "Поиск в Интернете",
-      "reasoning": "Аргументация",
-      "plan": "План выполнения",
-      "emptyResponse": "Поворот завершен без ответа",
-      "turnDiagnostic": "Диагностика поворота",
-      "event": "Событие"
-    },
-    "field": {
-      "query": "Запрос",
-      "queries": "Запросы",
-      "openedPage": "Открытая страница",
-      "pattern": "Шаблон",
-      "page": "Страница"
-    },
-    "statusLabel": {
-      "idle": "Ожидание",
-      "working": "Работа"
-    },
-    "working": {
-      "thinking": "Мышление",
-      "planning": "Планирование",
-      "finalizing": "Завершение",
-      "recovering": "Восстановление",
-      "waitingApproval": "Ожидание одобрения",
-      "readingFiles": "Чтение файлов",
-      "readingFile": "Чтение {name}",
-      "editingFiles": "Редактирование файлов",
-      "creatingFile": "Создание {name}",
-      "deletingFile": "Удаление {name}",
-      "renamingFile": "Переименование {name}",
-      "editingFile": "Редактирование {name}",
-      "runningCommand": "Выполнение команды",
-      "searchingWeb": "Поиск в Интернете"
-    },
-    "status": {
-      "working": "В работе",
-      "needsAttention": "Требует внимания",
-      "done": "Готово"
-    },
-    "fileAction": {
-      "created": "Создан",
-      "deleted": "Удален",
-      "renamed": "Переименован",
-      "edited": "Изменен"
-    },
-    "linesChanged": "Добавлено строк: {additions}, удалено строк: {deletions}",
-    "activity": {
-      "openedPage": "Открыто: {target}",
-      "openedPageFallback": "Страница открыта",
-      "searchedPageFor": "Поиск на странице: «{query}»",
-      "searchedPage": "Поиск на странице",
-      "searchedFor": "Поиск: «{query}»",
-      "searchedWeb": "Поиск в web",
-      "ranCommand": "Выполнено: {command}",
-      "ranCommandWithMeta": "Выполнено: {command} · {meta}",
-      "commandFailed": "ошибка",
-      "commandExit": "код выхода {exitCode}",
-      "plannedNextSteps": "Следующие шаги спланированы",
-      "thoughtThroughApproach": "Подход продуман",
-      "worked": "выполнено",
-      "planned": "спланировано",
-      "reasoned": "обдумано",
-      "searchCount": {
-        "one": "{count} поиск",
-        "few": "{count} поиска",
-        "many": "{count} поисков",
-        "other": "{count} поиска"
-      },
-      "commandCount": {
-        "one": "{count} команда",
-        "few": "{count} команды",
-        "many": "{count} команд",
-        "other": "{count} команды"
-      },
-      "failedCommandCount": {
-        "one": "{count} с ошибкой",
-        "few": "{count} с ошибкой",
-        "many": "{count} с ошибкой",
-        "other": "{count} с ошибкой"
-      }
-    },
-    "detail": {
-      "fileDiff": "Diff файла",
-      "commandOutput": "Вывод команды",
-      "searchDetails": "Детали поиска",
-      "reasoning": "Обоснование",
-      "plan": "План",
-      "itemDetails": "Детали элемента",
-      "details": "Детали",
-      "close": "Закрыть",
-      "closeAria": "Закрыть детали activity",
-      "unavailable": "Детали больше недоступны.",
-      "noFileChangeDetails": "Детали изменения файла не предоставлены.",
-      "commandUnavailable": "Команда недоступна",
-      "noContent": "Подробное содержимое не предоставлено."
     }
   },
   "filePreview": {
@@ -2843,39 +2456,6 @@
     "levelLabel": "Уровень",
     "defaultJson": "По умолчанию (json)",
     "defaultInfo": "По умолчанию (info)"
-  },
-  "codexSettings": {
-    "title": "Codex",
-    "description": "Диагностика Codex, управляемая хостом. Redeven считывает здесь двоичный статус кодека хоста, но не сохраняет настройки времени выполнения Codex.",
-    "hostDetected": "Хост обнаружен",
-    "needsHostInstall": "Требуется установка на хосте",
-    "refreshing": "Обновление...",
-    "rows": {
-      "binary": "Бинарный файл",
-      "binaryPath": "Путь к бинарному файлу",
-      "agentHomeDir": "Домашний каталог агента",
-      "bridge": "Мост",
-      "error": "Ошибка"
-    },
-    "status": {
-      "notAvailable": "Недоступно",
-      "statusNotLoaded": "Статус не загружен",
-      "detected": "Обнаружено",
-      "notFound": "Не найдено",
-      "connected": "Подключено",
-      "startsOnDemand": "Запускается по требованию",
-      "none": "Нет"
-    },
-    "pills": {
-      "hostBinaryDetected": "Бинарный файл хоста обнаружен",
-      "installCodexOnHost": "Установите Codex на хосте",
-      "bridgeConnected": "Bridge подключен",
-      "bridgeStartsOnDemand": "Bridge запускается по требованию"
-    },
-    "installNotice": "Redeven ожидает бинарный файл codex на хосте. Установите его на хосте и сделайте доступным через PATH.",
-    "notesTitle": "Примечания",
-    "notesHostRuntimeDefaults": "Codex сохраняет на хосте свои собственные настройки времени выполнения по умолчанию; Redeven не отражает их в config.json.",
-    "notesActivityIsolation": "Выделенная запись активности Codex и local API namespace остаются изолированными от Flower."
   },
   "codeRuntime": {
     "title": "Browser Editor",
@@ -4565,8 +4145,18 @@
         "backgroundDescription": "Установка продолжается в фоне. Вы можете продолжить работу с центром плагинов.",
         "declarationNotice": "Это разрешения, заявленные издателем. Пакет будет повторно проверен при установке.",
         "progressLabel": "Ход установки",
-        "stage": {"download": "Получить пакет", "verify": "Проверка безопасности", "install": "Установить плагин", "enable": "Включить плагин"},
-        "stageStatus": {"download": "Получение пакета...", "verify": "Проверка пакета...", "install": "Установка...", "enable": "Включение..."},
+        "stage": {
+          "download": "Получить пакет",
+          "verify": "Проверка безопасности",
+          "install": "Установить плагин",
+          "enable": "Включить плагин"
+        },
+        "stageStatus": {
+          "download": "Получение пакета...",
+          "verify": "Проверка пакета...",
+          "install": "Установка...",
+          "enable": "Включение..."
+        },
         "starting": "Подготовка установки...",
         "authorizing": "Выдача разрешений, выбранных при установке...",
         "activationFailed": "Плагин установлен и включён, но настройка разрешений не завершена. Повторите настройку.",

@@ -243,7 +243,7 @@ function terminalActivityTooltip(
   t: ReturnType<typeof useI18n>['t'],
 ): string {
   const activity = source === 'semantic'
-    ? t('codexActivity.status.working')
+    ? t('terminalAgentActivity.working')
     : t('terminal.outputStreaming');
   return unread
     ? t('terminal.activityWithUnreadOutput', {
@@ -281,9 +281,9 @@ export function describeTerminalSessionNavigationItem(
     item.failureKind === 'creation' ? t('terminal.creationFailedStatus') : '',
     item.failureKind === 'runtime' ? t('terminal.terminalUnavailable') : '',
     item.processRunning && item.transitionState === 'none' ? t('terminal.processRunningDescription') : '',
-    item.outputState !== 'none' && item.activitySource === 'semantic' ? t('codexActivity.status.working') : '',
+    item.outputState !== 'none' && item.activitySource === 'semantic' ? t('terminalAgentActivity.working') : '',
     item.outputState !== 'none' && item.activitySource === 'output' ? t('terminal.outputStreaming') : '',
-    item.attentionState === 'waiting' ? t('codex.pendingRequests.titleByType.userInput') : '',
+    item.attentionState === 'waiting' ? t('terminalAgentActivity.userInputRequired') : '',
     item.attentionState === 'unread' ? t('terminal.unreadOutputDescription') : '',
   ].filter(Boolean).map((description) => terminalStatusSentence(description, t));
   return joinTerminalStatusAnnouncements(descriptions, t);
@@ -672,7 +672,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                       )}
                                     >
                                       <Tooltip
-                                        content={i18n.t('codex.pendingRequests.titleByType.userInput')}
+                                        content={i18n.t('terminalAgentActivity.userInputRequired')}
                                         placement="top"
                                         delay={0}
                                         clickToToggle
@@ -680,7 +680,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                         <button
                                           type="button"
                                           class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-warning transition-colors duration-75 hover:bg-warning/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring forced-colors:border forced-colors:border-current"
-                                          aria-label={i18n.t('codex.pendingRequests.titleByType.userInput')}
+                                          aria-label={i18n.t('terminalAgentActivity.userInputRequired')}
                                           data-terminal-attention-trigger={sessionId}
                                         >
                                           <span

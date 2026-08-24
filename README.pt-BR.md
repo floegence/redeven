@@ -54,7 +54,7 @@ O Redeven é um único binário que reúne seus computadores e servidores em uma
 Ele é executado na sua máquina, em servidores remotos ou em qualquer host SSH acessível. Seus arquivos, processos, chaves de API e credenciais permanecem onde devem estar: o Redeven não transporta seus dados em texto simples pela infraestrutura de terceiros.
 
 - **Os clientes se conectam a um ambiente de execução do endpoint**: navegador, Desktop, CLI e sessões hospedadas por SSH entram na mesma área de trabalho gerenciada pelo ambiente de execução.
-- **O ambiente de execução é o limite de confiança**: um único binário Go gerencia arquivos, terminais, monitoramento, Git, encaminhamento de serviços web, o layout do Workbench, notas, a configuração do Browser Editor, o Flower e o acesso à ponte do Codex.
+- **O ambiente de execução é o limite de confiança**: um único binário Go gerencia arquivos, terminais, monitoramento, Git, encaminhamento de serviços web, o layout do Workbench, notas, a configuração do Browser Editor e o Flower.
 - **Transporte e políticas permanecem explícitos**: o Flowersec transporta tráfego RPC e de streams criptografado, enquanto concessões de sessão, política local de permissões, escopo do sistema de arquivos e segredos locais limitam o que cada sessão pode fazer.
 
 ![Visão geral da arquitetura do Redeven](assets/readme/architecture-overview.png)
@@ -108,7 +108,7 @@ Execute `redeven help run` para conhecer outros modos de execução e a proteç�
 | Monitor | Visualizações de CPU, memória, disco, rede e processos fornecidas pelo ambiente de execução do endpoint. |
 | Browser Editor | Sessões de editor no navegador configuradas explicitamente pelo Desktop e isoladas por área de trabalho. |
 | Serviços web | Registro de serviços e acesso por encaminhamento de portas gerenciados pelo ambiente de execução, sem túneis SSH escritos manualmente. |
-| Flower e Codex | Superfícies opcionais de IA que usam ferramentas validadas pelo ambiente de execução e configuração local do modelo e do host. |
+| Flower | Superfícies opcionais de IA que usam ferramentas validadas pelo ambiente de execução e configuração local do modelo e do host. |
 | Desktop | Inicializador nativo para ambientes locais, ambientes hospedados por um provider, ambientes inicializados por SSH e ambientes de Local UI salvos. |
 
 <!-- readme-section:security -->
