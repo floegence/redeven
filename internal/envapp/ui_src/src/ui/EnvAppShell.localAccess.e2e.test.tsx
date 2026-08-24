@@ -1420,6 +1420,11 @@ beforeEach(async () => {
   pluginLifecycleMocks.loadInventoryProjection.mockReset();
   pluginLifecycleMocks.recoverEnabled.mockReset();
   pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: true, results: [] });
+  pluginLifecycleMocks.retryRecovery.mockReset();
+  pluginLifecycleMocks.retryRecovery.mockImplementation(async (pluginInstanceID: string) => ({
+    plugin_instance_id: pluginInstanceID,
+    status: 'ready' as const,
+  }));
   pluginLifecycleMocks.execute.mockReset();
   pluginLifecycleMocks.execute.mockImplementation(async (_command: any) => ({}));
   pluginLifecycleMocks.installOfficialRelease.mockReset();
@@ -2420,6 +2425,78 @@ describe('EnvAppShell environment entry affordances', () => {
 
       expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[officialContainersCatalog.pluginInstanceID]).toEqual({ state: 'ready' });
       expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('drops a single-plugin retry result when its session is replaced', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    pluginLifecycleMocks.recoverEnabled
+      .mockResolvedValueOnce({
+        revision: 1,
+        complete: true,
+        results: [{
+          plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+          status: 'failed',
+          reason: 'recovery_timeout',
+          action: 'retry',
+        }],
+      } satisfies PluginRecoverySnapshot)
+      .mockResolvedValueOnce({
+        revision: 2,
+        complete: true,
+        results: [{
+          plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+          status: 'ready',
+        }],
+      } satisfies PluginRecoverySnapshot);
+    let resolveRetry!: (result: { plugin_instance_id: string; status: 'ready' | 'failed'; reason?: string }) => void;
+    let retrySignal: AbortSignal | undefined;
+    pluginLifecycleMocks.retryRecovery.mockImplementationOnce((pluginInstanceID: string, options?: { signal?: AbortSignal }) => {
+      retrySignal = options?.signal;
+      return new Promise((resolve) => {
+        resolveRetry = resolve as typeof resolveRetry;
+      });
+    });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => pluginLifecycleMocks.recoverEnabled.mock.calls.length === 1, 40);
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.runtimeRecoveryByInstanceID?.[officialContainersCatalog.pluginInstanceID]), 40);
+
+      pluginCenterViewState.lastProps.onRetryRuntimeRecovery(officialContainersCatalog.pluginInstanceID);
+      await flushUntil(() => pluginLifecycleMocks.retryRecovery.mock.calls.length === 1, 40);
+      expect(retrySignal?.aborted).toBe(false);
+
+      publishProtocolSnapshot({
+        ...protocolSnapshot,
+        state: 'connected',
+        currentSession: { id: 'client-replaced' },
+      });
+      await flushUntil(() => pluginLifecycleMocks.recoverEnabled.mock.calls.length === 2, 40);
+      await flushAsync();
+      expect(retrySignal?.aborted).toBe(true);
+
+      resolveRetry({
+        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+        status: 'failed',
+        reason: 'recovery_canceled',
+      });
+      await flushAsync();
+      await flushUntil(() => pluginCenterViewState.lastProps?.runtimeRecoveryByInstanceID?.[officialContainersCatalog.pluginInstanceID]?.state === 'ready', 40);
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[officialContainersCatalog.pluginInstanceID]).toEqual({ state: 'ready' });
     } finally {
       dispose();
     }
