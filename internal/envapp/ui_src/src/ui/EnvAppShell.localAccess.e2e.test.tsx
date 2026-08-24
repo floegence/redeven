@@ -4556,6 +4556,30 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
+  it('moves to connection recovery when readiness times out without a plugin notification', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: true });
+    waitForLocalPluginSessionReadyMock.mockRejectedValueOnce(Object.assign(
+      new Error('Plugin session is still starting.'),
+      { status: 503, code: 'LOCAL_PLUGIN_SESSION_STARTING' },
+    ));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => waitForLocalPluginSessionReadyMock.mock.calls.length === 1);
+      await flushUntil(() => disconnectMock.mock.calls.length === 1);
+      expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
+      expect(pluginLifecycleMocks.loadInventoryProjection).not.toHaveBeenCalled();
+      expect(pluginLifecycleMocks.recoverEnabled).not.toHaveBeenCalled();
+      expect(host.textContent).not.toContain('Plugin session is still starting.');
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps the first Activity Flower instance hidden and inert across recovery and the access gate', async () => {
     vi.useFakeTimers();
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
