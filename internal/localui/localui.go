@@ -444,7 +444,9 @@ func (s *Server) configureAcceptor() error {
 				PluginCredentialHash:      pending.pluginCredentialHash,
 				HasPluginCredential:       true,
 				AccessSessionID:           pending.accessSessionID,
-				OnPluginSessionReady:      func() { s.markAcceptedPluginSessionReady(channelID) },
+				OnPluginSessionReady: func() {
+					s.markAcceptedPluginSessionReady(channelID, pending.accessSessionID, pending.pluginCredentialHash)
+				},
 			})
 			if err != nil && s.log != nil {
 				s.log.Warn("local Flowersec session ended with an error", "channel_id", channelID, "error", err)
@@ -1191,7 +1193,11 @@ func (s *Server) pluginSessionReadiness(channelID, credential, requestAccessSess
 	return binding.state, binding.settled
 }
 
-func (s *Server) markAcceptedPluginSessionReady(channelID string) {
+func (s *Server) markAcceptedPluginSessionReady(
+	channelID string,
+	accessSessionID string,
+	credentialHash [sha256.Size]byte,
+) {
 	if s == nil {
 		return
 	}
@@ -1201,7 +1207,9 @@ func (s *Server) markAcceptedPluginSessionReady(channelID string) {
 	}
 	s.directMu.Lock()
 	binding, ok := s.activePluginSession[channelID]
-	if ok && binding.state == pluginSessionBindingInitializing && binding.settled != nil {
+	if ok && binding.state == pluginSessionBindingInitializing && binding.settled != nil &&
+		binding.accessSessionID == strings.TrimSpace(accessSessionID) &&
+		subtle.ConstantTimeCompare(binding.credentialHash[:], credentialHash[:]) == 1 {
 		binding.state = pluginSessionBindingReady
 		close(binding.settled)
 		s.activePluginSession[channelID] = binding

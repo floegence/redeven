@@ -50,7 +50,7 @@ func TestPluginSessionReadyWaitsForExactBinding(t *testing.T) {
 		t.Fatal("readiness request completed before the plugin session became ready")
 	case <-time.After(20 * time.Millisecond):
 	}
-	server.markAcceptedPluginSessionReady("channel")
+	server.markAcceptedPluginSessionReady("channel", "access", sha256.Sum256([]byte("credential")))
 
 	select {
 	case response := <-done:
@@ -59,6 +59,17 @@ func TestPluginSessionReadyWaitsForExactBinding(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("readiness request did not complete after activation")
+	}
+}
+
+func TestPluginSessionReadyIgnoresSupersededActivationCallback(t *testing.T) {
+	server := newPluginSessionReadyTestServer("credential", 10*time.Millisecond)
+	server.markAcceptedPluginSessionReady("channel", "old-access", sha256.Sum256([]byte("old-credential")))
+
+	response := httptest.NewRecorder()
+	server.handlePluginSessionReady(response, newPluginSessionReadyHTTPRequest("credential"))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%q", response.Code, response.Body.String())
 	}
 }
 
