@@ -1,11 +1,12 @@
 import { cn } from '@floegence/floe-webapp-core';
 import { Settings } from '@floegence/floe-webapp-core/icons';
-import { Show, createEffect, createSignal, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
 import type { PluginInventoryItem } from './pluginTypes';
 import { pluginLifecycleLabel, pluginTrustLabel } from './pluginPresentation';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
+import { acquireCachedPluginIcon, loadPluginIcon, type LoadedPluginIcon, type PluginIconLoadState } from './pluginIconLoader';
 
 export type PluginIconSize = 'row' | 'card' | 'detail' | 'launcher' | 'dock';
 
@@ -14,7 +15,8 @@ export function PluginIcon(props: {
   size?: PluginIconSize;
   class?: string;
 }): JSX.Element {
-  const [imageFailed, setImageFailed] = createSignal(false);
+  const [loadState, setLoadState] = createSignal<'idle' | PluginIconLoadState | 'ready' | 'failed'>('idle');
+  const [loadedIconURL, setLoadedIconURL] = createSignal<string>();
   const size = () => props.size ?? 'row';
   const iconURL = () => props.item.iconURL;
   const iconClass = () => size() === 'launcher' || size() === 'dock'
@@ -23,9 +25,48 @@ export function PluginIcon(props: {
       ? 'h-5 w-5'
       : 'h-4 w-4';
   createEffect(() => {
-    iconURL();
-    setImageFailed(false);
+    let current = true;
+    let request: AbortController | undefined;
+    let releaseLoadedIcon: (() => void) | undefined;
+    onCleanup(() => {
+      current = false;
+      request?.abort();
+      releaseLoadedIcon?.();
+    });
+    const sourceURL = iconURL();
+    setLoadedIconURL(undefined);
+    if (!sourceURL) {
+      setLoadState('failed');
+      return;
+    }
+    const cached = acquireCachedPluginIcon(sourceURL);
+    if (cached) {
+      setLoadedIconURL(cached.url);
+      setLoadState('ready');
+      releaseLoadedIcon = cached.release;
+      return;
+    }
+    request = new AbortController();
+    setLoadState('loading');
+    void loadPluginIcon(sourceURL, {
+      signal: request.signal,
+      onState: (state) => {
+        if (current) setLoadState(state);
+      },
+    }).then((icon: LoadedPluginIcon) => {
+      if (!current) {
+        icon.release();
+        return;
+      }
+      setLoadedIconURL(icon.url);
+      setLoadState('ready');
+      releaseLoadedIcon = icon.release;
+    }).catch(() => {
+      if (current) setLoadState('failed');
+    });
   });
+  const showingFallback = () => !iconURL() || loadState() === 'failed';
+  const showingPlaceholder = () => Boolean(iconURL()) && !loadedIconURL() && !showingFallback();
   return (
     <span
       class={cn(
@@ -37,20 +78,21 @@ export function PluginIcon(props: {
         size() === 'row' && 'h-10 w-10 rounded-lg',
         props.class,
       )}
+      aria-busy={showingPlaceholder() ? 'true' : undefined}
     >
-      <Show when={!props.item.iconURL || imageFailed()}>
+      <Show when={showingFallback()}>
         <Settings class={iconClass()} />
       </Show>
-      <Show when={props.item.iconURL && !imageFailed()}>
+      <Show when={showingPlaceholder()}>
+        <span aria-hidden="true" class="absolute inset-1 animate-pulse rounded-md bg-muted-foreground/15 motion-reduce:animate-none" />
+      </Show>
+      <Show when={loadedIconURL()}>
         <img
-          src={props.item.iconURL ?? ''}
+          src={loadedIconURL()}
           alt=""
           draggable={false}
           class="absolute inset-0 h-full w-full object-cover"
           onDragStart={(event) => event.preventDefault()}
-          onError={() => {
-            setImageFailed(true);
-          }}
         />
       </Show>
     </span>

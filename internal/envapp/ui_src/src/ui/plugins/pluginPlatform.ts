@@ -277,12 +277,17 @@ export async function fetchAuthenticatedReDevPlugin(
     const headers = new Headers(init.headers);
     headers.set(redevPluginCSRFHeader, redevPluginCSRFProof);
     applyPluginSessionCredential(headers);
-    return fetch(input, await prepareLocalApiRequestInit({
+    const prepared = await prepareLocalApiRequestInit({
       method: init.method,
       headers,
       body: init.body,
       credentials: init.credentials,
       signal: init.signal,
       keepalive: init.keepalive,
-    }));
+      cache: init.cache,
+    });
+    return fetch(input, {
+      ...prepared,
+      cache: init.cache ?? prepared.cache,
+    });
 }

@@ -7,7 +7,6 @@ import {
 import { officialPluginCatalog } from './officialPluginCatalog';
 import { fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
-import { fetchAuthenticatedReDevPlugin } from './pluginPlatform';
 import type {
   OfficialPluginCatalogItem,
   ExternalPluginCommitResult,
@@ -22,7 +21,6 @@ import type {
 } from './pluginTypes';
 
 const INVENTORY_MARKET_TIMEOUT_MS = 5_000;
-const INVENTORY_ICON_TIMEOUT_MS = 5_000;
 
 export type PluginLifecycleAPI = ReturnType<typeof createPluginLifecycleAPI>;
 
@@ -32,16 +30,11 @@ export function createPluginLifecycleAPI(
   client: PluginPlatformClient,
   catalogSeed?: readonly OfficialPluginCatalogItem[],
   loadMarket: (signal?: AbortSignal) => Promise<PluginMarketSnapshot> = loadPluginMarketSnapshot,
-  loadInstalledIcon: (url: string, signal?: AbortSignal) => Promise<string> = loadInstalledPluginIcon,
 ) {
   let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
   let marketUnavailable = false;
   let marketGeneration: number | undefined;
   let marketRefreshPromise: Promise<boolean> | undefined;
-  const installedIconLoads = new Map<string, Promise<void>>();
-  const installedIconURLBySource = new Map<string, string>();
-  const loadedInstalledIconURLs = new Set<string>();
-  let disposed = false;
   const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
   const listInstalledPlugins = async (options: PluginRequestOptions = {}): Promise<ReDevPluginRecord[]> => {
     const result = await client.catalog(options);
@@ -150,34 +143,9 @@ export function createPluginLifecycleAPI(
       permissionRequirements,
       securityPolicies: securityPoliciesResult.status === 'fulfilled' ? securityPoliciesResult.value.security_policies : [],
     });
-    const items = projection.items.map((item) => {
-      if (!item.pluginInstanceID || !item.iconURL?.startsWith('/_redevplugin/api/plugins/')) return item;
-      const sourceURL = item.iconURL;
-      const loadedIconURL = installedIconURLBySource.get(sourceURL);
-      if (loadedIconURL) return { ...item, iconURL: loadedIconURL };
-      if (!installedIconLoads.has(sourceURL)) {
-        const load = withAbortTimeout(
-            (signal) => loadInstalledIcon(item.iconURL!, signal),
-            options.signal,
-            INVENTORY_ICON_TIMEOUT_MS,
-            `Loading the icon for ${item.pluginInstanceID}`,
-          )
-          .then((objectURL) => {
-            if (disposed) URL.revokeObjectURL(objectURL);
-            else {
-              installedIconURLBySource.set(sourceURL, objectURL);
-              loadedInstalledIconURLs.add(objectURL);
-            }
-          })
-          .catch(() => undefined)
-          .finally(() => installedIconLoads.delete(sourceURL));
-        installedIconLoads.set(sourceURL, load);
-      }
-      return { ...item, iconURL: undefined };
-    });
     return {
       ...projection,
-      items: items.map((item) => (
+      items: projection.items.map((item) => (
         item.pluginInstanceID && (supplementalUnavailable || unavailablePluginIDs.has(item.pluginInstanceID))
           ? { ...item, lifecycleState: 'needs_attention' as const, attentionReason: 'diagnostic_error' as const }
           : item
@@ -347,15 +315,6 @@ export function createPluginLifecycleAPI(
     }
   };
 
-  const dispose = () => {
-    if (disposed) return;
-    disposed = true;
-    installedIconLoads.clear();
-    installedIconURLBySource.clear();
-    for (const objectURL of loadedInstalledIconURLs) URL.revokeObjectURL(objectURL);
-    loadedInstalledIconURLs.clear();
-  };
-
   return Object.freeze({
     listInstalledPlugins,
     refreshMarketCatalog,
@@ -372,25 +331,7 @@ export function createPluginLifecycleAPI(
     recoverEnabled,
     retryRecovery,
     execute,
-    dispose,
   });
-}
-
-async function loadInstalledPluginIcon(url: string, signal?: AbortSignal): Promise<string> {
-  const response = await fetchAuthenticatedReDevPlugin(url, { method: 'GET', signal });
-  if (!response.ok) throw new Error(`Installed plugin icon request failed with HTTP ${response.status}`);
-  const blob = await response.blob();
-  if (blob.type !== 'image/png' && blob.type !== 'image/webp') throw new Error('Installed plugin icon media type is invalid');
-  const objectURL = URL.createObjectURL(blob);
-  try {
-    const image = new Image();
-    image.src = objectURL;
-    await image.decode();
-    return objectURL;
-  } catch (error) {
-    URL.revokeObjectURL(objectURL);
-    throw error;
-  }
 }
 
 async function withAbortTimeout<T>(
