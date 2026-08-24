@@ -27,7 +27,8 @@ Redeven does not wait on authority barriers, admission receipts, recovery handle
 
 - `redeven:internal/ai/floret_effect_authorization.go` - Binds one-shot effect authorization to the exact Floret attempt.
 - `redeven:internal/ai/terminal_process.go` - Owns bounded PTY resources, output, reap, and termination.
-- `redeven:internal/ai/runtime_lifecycle_admission_test.go` - Proves post-fence rejection and release only after canonical turn or process terminal state.
+- `redeven:internal/ai/runtime_lifecycle_admission.go:1` - Admits and releases AI turn and terminal process workloads at their canonical lifecycle boundaries.
+- `redeven:internal/ai/workload_admission_test.go` - Proves post-fence rejection and release only after canonical turn or process terminal state.
 - `redeven:internal/ai/terminal_process_service.go` - Adapts process completion to the canonical effect result.
 - `redeven:internal/ai/builtin_tool_handlers.go` - Declares terminal schemas and safe presentation.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Maps typed Activity presentation into the Shell row.

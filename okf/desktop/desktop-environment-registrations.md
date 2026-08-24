@@ -9,11 +9,15 @@ timestamp: 2026-08-23T00:00:00Z
 
 Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; SSH host and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.
 
-# Registration contract
+# Contract
 
 Every actionable card carries an explicit `EnvironmentRegistrationRef`. Create, edit, rename, pin, and remove route through the generic registration actions and that reference; Renderer presentation kinds and placement fields never select a persistence action. An SSH destination is connection identity, while the Runtime Target label is user-visible metadata; changing the label does not change the SSH destination. Removal deletes only the Desktop registration, publishes the new snapshot before background session and bridge cleanup, and never deletes remote Redeven data. A missing registration is a typed failure rather than a successful no-op.
 
 Preferences mutations form one serialized queue. Each mutation reads the latest committed value and writes only its owner fields. Long-running Open, probe, and lifecycle work may update health, operation, or `last_used_at` only while the registration still exists. Removal advances the Launcher subject generation before background cleanup, so results from an earlier generation cannot reintroduce a card. Pinning and use-time updates never upsert a missing registration.
+
+# Boundaries
+
+Desktop owns registration metadata, persistence, and presentation. Runtime, Gateway, and remote targets retain ownership of remote data, lifecycle authority, and access policy; removing or changing a Desktop registration never mutates those upstream resources.
 
 # Legacy SSH migration
 
