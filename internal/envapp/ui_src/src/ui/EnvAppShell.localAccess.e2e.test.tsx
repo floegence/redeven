@@ -2558,7 +2558,6 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
 
       pluginCenterViewState.lastProps.onRetryRuntimeRecovery();
-      pluginCenterViewState.lastProps.onRetryRuntimeRecovery();
       expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
 
       await flushAsync();
@@ -2567,6 +2566,66 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginLifecycleMocks.recoverEnabled).toHaveBeenCalledTimes(2);
       expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
       expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('does not let a single-plugin recovery retry from an old session overwrite the replacement session', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    pluginLifecycleMocks.recoverEnabled.mockResolvedValueOnce({
+      revision: 1,
+      complete: true,
+      results: [{
+        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+        status: 'failed',
+        reason: 'recovery_timeout',
+        action: 'retry',
+      }],
+    } satisfies PluginRecoverySnapshot);
+    const retryDeferred = deferred<{ plugin_instance_id: string; status: 'ready' }>();
+    const retrySignals: AbortSignal[] = [];
+    pluginLifecycleMocks.retryRecovery.mockImplementationOnce((pluginInstanceID: string, options?: { signal?: AbortSignal }) => {
+      if (options?.signal) retrySignals.push(options.signal);
+      return retryDeferred.promise;
+    });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginLifecycleMocks.recoverEnabled.mock.calls.length === 1, 40);
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      await flushUntil(() => (
+        pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID?.[officialContainersCatalog.pluginInstanceID]?.state === 'failed'
+      ), 40);
+
+      pluginCenterViewState.lastProps.onRetryRuntimeRecovery(officialContainersCatalog.pluginInstanceID);
+      await flushUntil(() => pluginLifecycleMocks.retryRecovery.mock.calls.length === 1, 40);
+      expect(retrySignals).toHaveLength(1);
+
+      publishProtocolSnapshot({
+        ...protocolSnapshot,
+        state: 'connected',
+        currentSession: { id: 'client-replaced-for-retry' },
+      });
+      await flushUntil(() => pluginLifecycleMocks.recoverEnabled.mock.calls.length === 2, 40);
+      await flushAsync();
+      expect(retrySignals[0]?.aborted).toBe(true);
+
+      retryDeferred.resolve({
+        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+        status: 'ready',
+      });
+      await flushAsync();
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID?.[officialContainersCatalog.pluginInstanceID]).toBeUndefined();
     } finally {
       dispose();
     }
