@@ -897,8 +897,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         existingThreadID ? Promise.resolve<FlowerSettingsSnapshot | null>(null) : loadCachedSettings(),
         existingThreadID ? Promise.resolve<ModelsResponse | null>(null) : loadCachedModels(),
       ]);
-      const permissionType = snapshot || trim(input.permission_type)
-        ? normalizePermissionType(input.permission_type ?? snapshot?.defaults.permission_type)
+      const permissionType = trim(input.permission_type)
+        ? normalizePermissionType(input.permission_type)
         : undefined;
       const clientRequestID = trim(input.client_request_id);
       if (!clientRequestID) throw new Error('Missing client request id.');
@@ -920,7 +920,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           client_request_id: clientRequestID,
           title: '',
           model_id: turnModelID,
-          permission_type: permissionType,
+          ...(permissionType ? { permission_type: permissionType } : {}),
         };
         const reasoningSelection = serializeFlowerReasoningSelection(input.reasoning_selection);
         if (reasoningSelection) {

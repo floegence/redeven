@@ -903,6 +903,7 @@ export type FlowerTurnLaunchInput = Readonly<{
   attachment_ids?: readonly string[];
   working_dir?: string;
   model_id?: string;
+  /** Explicit permission override for a new Thread; omitted uses the environment default. */
   permission_type?: FlowerPermissionType;
   reasoning_selection?: FlowerReasoningSelection;
 }>;

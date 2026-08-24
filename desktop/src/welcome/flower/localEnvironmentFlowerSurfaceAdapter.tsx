@@ -683,8 +683,8 @@ export async function launchLocalEnvironmentFlowerTurn(
   const models = existingThreadID ? null : await loadModels(bridge);
   const modelID = trim(input.model_id) || (snapshot && models ? currentModelID(snapshot, models) : '');
   if (!existingThreadID && !modelID) throw new Error('Select a Flower model before starting a chat.');
-  const permissionType = snapshot || trim(input.permission_type)
-    ? normalizePermissionType(input.permission_type ?? snapshot?.defaults.permission_type)
+  const permissionType = trim(input.permission_type)
+    ? normalizePermissionType(input.permission_type)
     : undefined;
   const clientRequestID = trim(input.client_request_id);
   if (!clientRequestID) throw new Error('Missing client request id.');
@@ -702,7 +702,7 @@ export async function launchLocalEnvironmentFlowerTurn(
       client_request_id: clientRequestID,
       title: '',
       model_id: modelID,
-      permission_type: permissionType ?? 'approval_required',
+      ...(permissionType ? { permission_type: permissionType } : {}),
     };
     const reasoningSelection = serializeFlowerReasoningSelection(input.reasoning_selection);
     if (reasoningSelection) createBody.reasoning_selection = reasoningSelection;

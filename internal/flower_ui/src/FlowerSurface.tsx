@@ -1590,7 +1590,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     inputDrafts: { ...(value.input_drafts ?? {}) },
     activeInputQuestionID: value.active_input_question_id ?? '',
     modelIDOverride: value.model_id,
-    permissionTypeOverride: value.permission_type,
+    permissionTypeOverride: value.permission_type_override,
     reasoningOverride: value.reasoning_selection,
     workingDirDraft: value.working_dir,
   });
@@ -1643,7 +1643,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         input_drafts: next.inputDrafts,
         active_input_question_id: next.activeInputQuestionID || undefined,
         model_id: next.modelIDOverride,
-        permission_type: next.permissionTypeOverride,
+        permission_type_override: next.permissionTypeOverride,
         reasoning_selection: next.reasoningOverride,
         working_dir: next.workingDirDraft,
       };
@@ -1715,6 +1715,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerPermissionInteractive = createMemo(() => (
     !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
+    && (Boolean(selectedThreadID()) || snapshot() !== null)
     && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
   ));
   type ComposerDraftOperation = Readonly<{
@@ -1772,7 +1773,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       draft.chatDraft === sharedText
         && JSON.stringify(draft.references) === JSON.stringify(sharedDraft.references)
         && draft.modelIDOverride === sharedDraft.model_id
-        && draft.permissionTypeOverride === sharedDraft.permission_type
+        && draft.permissionTypeOverride === sharedDraft.permission_type_override
         && sameFlowerReasoningSelection(draft.reasoningOverride, sharedDraft.reasoning_selection)
         && draft.workingDirDraft === sharedDraft.working_dir
         ? draft
@@ -1781,7 +1782,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           chatDraft: sharedText,
           references: sharedDraft.references,
           modelIDOverride: sharedDraft.model_id,
-          permissionTypeOverride: sharedDraft.permission_type,
+          permissionTypeOverride: sharedDraft.permission_type_override,
           reasoningOverride: sharedDraft.reasoning_selection,
           workingDirDraft: sharedDraft.working_dir,
         }
@@ -1826,13 +1827,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (composerReferenceMutationCount() > 0) return;
     const projectedAttachments = flowerComposerDraftAttachments(attachments);
     const projectedModelID = selectedComposerModelID();
-    const projectedPermissionType = composerPermissionType();
+    const projectedPermissionTypeOverride = currentComposerSessionDraft().permissionTypeOverride;
     const projectedReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
     const projectedWorkingDir = draftWorkingDirectory();
     const projectedCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
     const unchanged = shared.value.mode === mode
       && shared.value.model_id === projectedModelID
-      && shared.value.permission_type === projectedPermissionType
+      && shared.value.permission_type_override === projectedPermissionTypeOverride
       && JSON.stringify(shared.value.reasoning_selection) === JSON.stringify(projectedReasoningSelection)
       && shared.value.working_dir === projectedWorkingDir
       && shared.value.capability_revision === projectedCapabilityRevision
@@ -1845,7 +1846,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       attachments: projectedAttachments,
       mode,
       model_id: projectedModelID,
-      permission_type: projectedPermissionType,
+      permission_type_override: projectedPermissionTypeOverride,
       reasoning_selection: projectedReasoningSelection,
       working_dir: projectedWorkingDir,
       capability_revision: projectedCapabilityRevision,
@@ -2174,10 +2175,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = trimString(selectedThreadID());
     closePermissionMenu(true);
     if (!threadID) {
+      const nextOverride = permissionType === defaultComposerPermissionType()
+        ? undefined
+        : permissionType;
       updateCurrentComposerSessionDraft((draft) => (
-        draft.permissionTypeOverride === permissionType
+        draft.permissionTypeOverride === nextOverride
           ? draft
-          : { ...draft, permissionTypeOverride: permissionType }
+          : { ...draft, permissionTypeOverride: nextOverride }
       ));
       return;
     }
@@ -4317,7 +4321,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : 'ordinary' as const;
     const selectedID = trimString(selectedThreadID());
     const frozenModelID = selectedComposerModelID();
-    const frozenPermissionType = composerPermissionType();
     const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
     const frozenWorkingDir = draftWorkingDirectory();
     const frozenCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
@@ -4330,7 +4333,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           mode: operationMode,
           client_request_id: clientRequestID,
           model_id: frozenModelID,
-          permission_type: frozenPermissionType,
           reasoning_selection: frozenReasoningSelection,
           working_dir: frozenWorkingDir,
           capability_revision: frozenCapabilityRevision,
@@ -4354,7 +4356,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const draftReasoningSelection = !selectedID ? frozenDraft.reasoning_selection : undefined;
     const draftModelID = !selectedID ? frozenDraft.model_id ?? '' : '';
     const launchModelID = frozenDraft.model_id ?? frozenModelID;
-    const draftPermissionType = !selectedID ? frozenDraft.permission_type : undefined;
+    const draftPermissionType = !selectedID ? frozenDraft.permission_type_override : undefined;
     const draftWorkingDir = !selectedID ? frozenDraft.working_dir ?? '' : '';
     let cancelRequested = false;
     // Transport ownership is request-scoped. Once the immutable request has

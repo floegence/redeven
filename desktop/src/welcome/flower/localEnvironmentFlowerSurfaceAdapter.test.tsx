@@ -384,8 +384,8 @@ describe('Local Environment Flower surface adapter', () => {
       staging_scope_id: 'staging_client_desktop-message',
       model: 'default/gpt-4.1',
       input: { text: 'hello', attachments: [] },
-      options: { permission_type: 'approval_required' },
-      create: { client_request_id: 'client_desktop-message', title: '', model_id: 'default/gpt-4.1', permission_type: 'approval_required' },
+      options: {},
+      create: { client_request_id: 'client_desktop-message', title: '', model_id: 'default/gpt-4.1' },
     });
     expect(calls.at(-1)).toMatchObject({
       staging_scope_id: 'staging_client_desktop-message',
@@ -574,7 +574,6 @@ describe('Local Environment Flower surface adapter', () => {
           client_request_id: clientRequestID,
           title: '',
           model_id: 'default/gpt-4.1',
-          permission_type: 'approval_required',
         },
       },
     });
