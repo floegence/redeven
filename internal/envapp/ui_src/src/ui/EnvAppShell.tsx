@@ -79,6 +79,7 @@ import { PluginCenterView } from './plugins/PluginCenterView';
 import { PluginPanel } from './plugins/PluginPanel';
 import { addPluginDockPin, loadPluginDockPins, pluginDockPinsStorageKey, savePluginDockPins } from './plugins/pluginDockPins';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
+import { clearPluginIconCache } from './plugins/pluginIconLoader';
 import {
   createPluginInstallCoordinator,
   type PluginInstallCoordinator,
@@ -630,6 +631,7 @@ export function EnvAppShell() {
     setPluginSessionReady(false);
     setPluginRuntimeRecoveryComplete(false);
     clearPluginSessionCredential();
+    clearPluginIconCache();
     setActivityPluginWindows([]);
     return true;
   };
@@ -666,7 +668,7 @@ export function EnvAppShell() {
     clearPluginSessionCredential();
     pluginInventoryAbort?.abort('Env App shell disposed');
     pluginInstallCoordinator?.dispose();
-    pluginLifecycle.dispose();
+    clearPluginIconCache();
     pluginConfirmationQueue.cancelAll();
     void disposePluginPlatform().catch(reportPluginSurfaceRetirementError);
   });
