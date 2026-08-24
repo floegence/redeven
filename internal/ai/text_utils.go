@@ -28,17 +28,6 @@ func anyToString(v any) string {
 	}
 }
 
-func anyToBool(v any) bool {
-	switch x := v.(type) {
-	case bool:
-		return x
-	case string:
-		return x == "true" || x == "TRUE" || x == "True"
-	default:
-		return false
-	}
-}
-
 func readIntField(obj map[string]any, keys ...string) int {
 	value := readInt64Field(obj, keys...)
 	maxInt := int64(^uint(0) >> 1)

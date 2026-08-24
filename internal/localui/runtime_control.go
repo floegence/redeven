@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -230,20 +229,6 @@ func (s *runtimeControlServer) handleRuntimeHealth(w http.ResponseWriter, r *htt
 		"status": "ok", "service_protocol": runtimeservice.ProtocolVersion,
 		"compatibility_epoch": runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch,
 	}})
-}
-
-func decodeRuntimeControlJSON(w http.ResponseWriter, r *http.Request, output any) bool {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(output); err != nil {
-		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_INVALID_REQUEST", "Runtime control request JSON is invalid.")
-		return false
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_INVALID_REQUEST", "Runtime control request JSON is invalid.")
-		return false
-	}
-	return true
 }
 
 func (s *runtimeControlServer) handleProviderLink(w http.ResponseWriter, r *http.Request) {

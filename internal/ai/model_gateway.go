@@ -3002,14 +3002,6 @@ func joinToolAndSignalNames(tools []string, signals []string) string {
 	return strings.Join(names, ",")
 }
 
-func requestUserInputQuestionChoiceCount(questions []RequestUserInputQuestion) int {
-	total := 0
-	for _, question := range normalizeRequestUserInputQuestions(questions) {
-		total += len(question.Choices)
-	}
-	return total
-}
-
 func extractOpenAIResponseText(resp oresponses.Response) string {
 	var sb strings.Builder
 	for _, item := range resp.Output {
