@@ -135,7 +135,7 @@ check_local_source_wiring() {
       --glob '!scripts/check_redevplugin_release_artifacts.sh' \
       --glob '!scripts/check_redevplugin_consumption_gate.sh' \
       --glob '!scripts/stage_redevplugin_release_artifacts.sh' \
-      '(?i)(\.\./redevplugin(?:/|$)|(?:^|[[:space:]"'"'"'(:=])/(?:[^\n[:space:]"'"'"']+/)*redevplugin(?:/|$)|file:[^\n]*redevplugin|link:[^\n]*redevplugin|workspace:[^\n]*redevplugin|portal:[^\n]*redevplugin)' "${scan_paths[@]}" 2>/dev/null)
+      '(?i)(\.\./redevplugin(?:/|$)|(?<!https)(?<!http)(?:^|[[:space:]"'"'"'(:=])/(?:[^\n[:space:]"'"'"']+/)*redevplugin(?:/|$)|file:[^\n]*redevplugin|link:[^\n]*redevplugin|workspace:[^\n]*redevplugin|portal:[^\n]*redevplugin)' "${scan_paths[@]}" 2>/dev/null)
     rg_exit=$?
     set -e
     case "$rg_exit" in
