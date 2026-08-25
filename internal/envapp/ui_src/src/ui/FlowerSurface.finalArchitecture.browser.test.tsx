@@ -115,11 +115,16 @@ describe('Flower final thread cache and workspace transport', () => {
         text: 'hi',
       }],
     };
+    let minVisibleUserRows = Number.POSITIVE_INFINITY;
     let maxVisibleUserRows = 0;
+    let emptyStateObservedAfterSend = false;
     const observeVisibleRows = () => {
-      maxVisibleUserRows = Math.max(maxVisibleUserRows, runtime.querySelectorAll(
+      const visibleUserRows = runtime.querySelectorAll(
         '[data-flower-message-role="user"], [data-flower-transport-outbox-id]',
-      ).length);
+      ).length;
+      minVisibleUserRows = Math.min(minVisibleUserRows, visibleUserRows);
+      maxVisibleUserRows = Math.max(maxVisibleUserRows, visibleUserRows);
+      emptyStateObservedAfterSend ||= runtime.querySelector('.flower-empty-state') !== null;
     };
     const observer = new MutationObserver(observeVisibleRows);
     observer.observe(runtime, { childList: true, subtree: true });
@@ -132,6 +137,9 @@ describe('Flower final thread cache and workspace transport', () => {
       current,
     });
     await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) === null);
+    observeVisibleRows();
+    expect(runtime.querySelector(`[data-flower-message-id="user:${requestID}"]`)).not.toBeNull();
+    expect(runtime.querySelector('.flower-empty-state')).toBeNull();
     launchResponse.resolve({ ...receipt, current });
 
     await waitFor(() => runtime.querySelector(`[data-flower-message-id="user:${requestID}"]`) !== null);
@@ -141,7 +149,64 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(launchTurn).toHaveBeenCalledTimes(1);
     expect(runtime.querySelectorAll(`[data-flower-message-id="user:${requestID}"]`)).toHaveLength(1);
     expect(runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`)).toBeNull();
+    expect(minVisibleUserRows).toBe(1);
     expect(maxVisibleUserRows).toBe(1);
+    expect(emptyStateObservedAfterSend).toBe(false);
+  });
+
+  it('keeps a newer New Chat draft selected when an earlier admission arrives late', async () => {
+    const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [] }]);
+    const launchResponse = deferred<FlowerTurnLaunchReceipt>();
+    const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchResponse.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      launchTurn,
+      connectLiveStream: stream.connect,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'first request';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const submit = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(submit && !submit.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    const requestID = launchTurn.mock.calls[0]![0].client_request_id;
+    await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) !== null);
+    (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();
+    textarea.value = 'second draft';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+
+    const receipt = launchReceipt('thread-late-admission', 'turn-late-admission', 'start', requestID);
+    const current = {
+      ...receipt.current,
+      items: [{
+        id: `user:${requestID}`,
+        turn_id: 'turn-late-admission',
+        ordinal: 1,
+        kind: 'user' as const,
+        text: 'first request',
+      }],
+    };
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: receipt.thread_id,
+      current,
+    });
+    await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) === null);
+    launchResponse.resolve({ ...receipt, current });
+    await waitFor(() => (runtime.querySelector('textarea') as HTMLTextAreaElement | null)?.value === 'second draft');
+
+    expect(runtime.querySelector('[data-flower-thread-active="true"]')).toBeNull();
+    expect(runtime.querySelector(`[data-flower-message-id="user:${requestID}"]`)).toBeNull();
+    expect(runtime.querySelector('.flower-empty-state')).not.toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('second draft');
   });
 
   it('renders the complete six-item terminal fixture on first detail load', async () => {

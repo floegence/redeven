@@ -19,54 +19,81 @@ describe('TransportOutbox', () => {
     });
 
     expect(outbox.entries.get('request-1')?.input.prompt).toBe('hello');
-    outbox = outbox.confirm({
+    const reconciliation = outbox.reconcile({
       thread_id: 'thread-a',
       view_version: 2,
       items: [{ id: 'user:request-1', ordinal: 1, kind: 'user', text: 'hello' }],
     });
+    outbox = reconciliation.outbox;
+    expect(reconciliation.admitted.map((entry) => entry.requestId)).toEqual(['request-1']);
     expect(outbox.entries.has('request-1')).toBe(false);
   });
 
   it('confirms a new-thread request directly from its canonical identity', () => {
-    const outbox = createTransportOutbox().put({
+    const pending = createTransportOutbox().put({
       requestId: 'req-new',
       threadId: '__new_thread__',
       input: { client_request_id: 'req-new', prompt: 'hello' },
       attachmentLabels: [],
       createdAtMs: 1,
-    }).confirm({
+    });
+    const reconciliation = pending.reconcile({
       thread_id: 'thread-created',
       view_version: 1,
       items: [{ id: 'user:req-new', ordinal: 1, kind: 'user', text: 'hello' }],
     });
 
-    expect(outbox.entries.has('req-new')).toBe(false);
+    expect(reconciliation.admitted).toEqual([pending.entries.get('req-new')]);
+    expect(reconciliation.outbox.entries.has('req-new')).toBe(false);
+  });
+
+  it('retains a new-thread request until its presentation handoff can commit', () => {
+    const pending = createTransportOutbox().put({
+      requestId: 'req-new',
+      threadId: '__new_thread__',
+      input: { client_request_id: 'req-new', prompt: 'hello' },
+      attachmentLabels: [],
+      createdAtMs: 1,
+    });
+    const reconciliation = pending.reconcile({
+      thread_id: 'thread-created',
+      view_version: 1,
+      items: [{ id: 'user:req-new', ordinal: 1, kind: 'user', text: 'hello' }],
+    }, {
+      canConfirm: () => false,
+    });
+
+    expect(reconciliation.admitted).toEqual([]);
+    expect(reconciliation.outbox).toBe(pending);
+    expect(reconciliation.outbox.entries.has('req-new')).toBe(true);
   });
 
   it('does not confirm an existing-thread request from another thread', () => {
-    const outbox = createTransportOutbox().put({
+    const pending = createTransportOutbox().put({
       requestId: 'request-a',
       threadId: 'thread-a',
       input: { client_request_id: 'request-a', thread_id: 'thread-a', prompt: 'same text' },
       attachmentLabels: [],
       createdAtMs: 1,
-    }).confirm({
+    });
+    const reconciliation = pending.reconcile({
       thread_id: 'thread-b',
       view_version: 2,
       items: [{ id: 'user:request-a', ordinal: 1, kind: 'user', text: 'same text' }],
     });
 
-    expect(outbox.entries.has('request-a')).toBe(true);
+    expect(reconciliation.admitted).toEqual([]);
+    expect(reconciliation.outbox.entries.has('request-a')).toBe(true);
   });
 
   it('confirms a busy send from the canonical queue without modeling queue state', () => {
     let outbox = createTransportOutbox().put({
       requestId: 'request-queued', threadId: 'thread-a', input: { client_request_id: 'request-queued', thread_id: 'thread-a', prompt: 'later' }, attachmentLabels: [], createdAtMs: 10,
     });
-    outbox = outbox.confirm({
+    outbox = outbox.reconcile({
       thread_id: 'thread-a', view_version: 3,
       queue: [{ id: 'queue:request-queued', request_key: 'request-queued', input: { text: 'later' } }],
-    });
+    }).outbox;
     expect(outbox.entries.size).toBe(0);
   });
 
@@ -178,11 +205,11 @@ describe('TransportOutbox', () => {
         return request;
       }),
     });
-    const recovered = outbox.confirm({
+    const recovered = outbox.reconcile({
       thread_id: 'thread-a',
       view_version: 2,
       items: [{ id: 'user:transport-unknown', ordinal: 1, kind: 'user', text: 'keep me' }],
-    });
+    }).outbox;
 
     await expect(recovered.flushPersistence()).resolves.toBeUndefined();
     expect(recovered.persistenceError()).toBeNull();

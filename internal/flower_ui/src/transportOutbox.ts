@@ -12,13 +12,25 @@ export type TransportOutboxEntry = Readonly<{
   terminalError?: 'attachments_unavailable_after_restart';
 }>;
 
+export type TransportOutboxReconciliation = Readonly<{
+  outbox: TransportOutbox;
+  admitted: readonly TransportOutboxEntry[];
+}>;
+
+export type TransportOutboxReconciliationOptions = Readonly<{
+  canConfirm?: (entry: TransportOutboxEntry) => boolean;
+}>;
+
 export type TransportOutbox = Readonly<{
   entries: ReadonlyMap<string, TransportOutboxEntry>;
   put(entry: TransportOutboxEntry): TransportOutbox;
   dropThread(threadId: string): TransportOutbox;
   drop(requestId: string): TransportOutbox;
   pruneExpired(nowMs?: number): TransportOutbox;
-  confirm(current: FlowerRuntimeCurrentView): TransportOutbox;
+  reconcile(
+    current: FlowerRuntimeCurrentView,
+    options?: TransportOutboxReconciliationOptions,
+  ): TransportOutboxReconciliation;
   forThread(threadId: string): readonly TransportOutboxEntry[];
   persistenceError(): Error | null;
   flushPersistence(): Promise<void>;
@@ -188,9 +200,9 @@ function create(
       if (next.size === currentEntries.size) return this;
       return replace(next);
     },
-    confirm(current) {
+    reconcile(current, options) {
       const threadId = clean(current.thread_id);
-      if (!threadId || currentEntries.size === 0) return this;
+      if (!threadId || currentEntries.size === 0) return { outbox: this, admitted: [] };
       const confirmed = new Set<string>();
       for (const item of current.items ?? []) {
         if (item.kind !== 'user') continue;
@@ -198,17 +210,20 @@ function create(
         if (id.startsWith('user:')) confirmed.add(id.slice('user:'.length));
       }
       for (const queued of current.queue ?? []) confirmed.add(clean(queued.request_key));
-      if (confirmed.size === 0) return this;
+      if (confirmed.size === 0) return { outbox: this, admitted: [] };
       const next = new Map(currentEntries);
+      const admitted: TransportOutboxEntry[] = [];
       for (const requestId of confirmed) {
         const entry = next.get(requestId);
         if (!entry) continue;
         const admittedThreadId = clean(entry.input.thread_id);
         if (admittedThreadId && admittedThreadId !== threadId) continue;
+        if (options?.canConfirm && !options.canConfirm(entry)) continue;
+        admitted.push(entry);
         next.delete(requestId);
       }
-      if (next.size === currentEntries.size) return this;
-      return replace(next);
+      if (next.size === currentEntries.size) return { outbox: this, admitted: [] };
+      return { outbox: replace(next), admitted };
     },
     forThread(threadId) {
       const id = clean(threadId);
