@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -23,6 +24,20 @@ import {
 
 const version = '1.2.3';
 const productCommit = '2'.repeat(40);
+const staticPIELinker = path.resolve(import.meta.dirname, 'link_redevplugin_runtime_static_pie.sh');
+
+function writeExecutable(filePath, source) {
+  writeFileSync(filePath, source);
+  chmodSync(filePath, 0o700);
+}
+
+function runStaticPIELinker(arguments_, environment) {
+  const result = spawnSync(staticPIELinker, arguments_, {
+    encoding: 'utf8',
+    env: environment,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
 
 test('runtime staging derives its release tag from the published Go dependency', () => {
   const source = readFileSync(path.resolve(import.meta.dirname, 'stage_redevplugin_release_artifacts.sh'), 'utf8');
@@ -38,10 +53,87 @@ test('runtime staging derives its release tag from the published Go dependency',
   assert.match(source, /release manifest version does not match Go module version/u);
   assert.match(source, /redevplugin_release_contract\.mjs" verify-elf "\$runtime" "\$target"/u);
   assert.match(source, /link_redevplugin_runtime_static_pie\.sh/u);
-  assert.doesNotMatch(source, /-nostartfiles\|-nodefaultlibs/u);
   assert.doesNotMatch(source, /\breadelf\b/u);
   assert.doesNotMatch(source, /\bmapfile\b/u);
   assert.doesNotMatch(source, /read_redevplugin_release_manifest/u);
+});
+
+test('static PIE compiler driver keeps driver arguments', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-static-pie-cc-'));
+  try {
+    const bin = path.join(root, 'bin');
+    const capture = path.join(root, 'arguments.txt');
+    const compiler = path.join(bin, 'cc');
+    mkdirSync(bin);
+    writeExecutable(path.join(bin, 'uname'), '#!/usr/bin/env bash\nprintf "Linux\\n"\n');
+    writeExecutable(compiler, '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$LINK_CAPTURE"\n');
+
+    runStaticPIELinker(
+      ['-m64', '-Wl,--as-needed', '-nostartfiles', '-static', '-no-pie', '-nodefaultlibs', 'input.o'],
+      {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        REDEVPLUGIN_STATIC_PIE_CC: compiler,
+        LINK_CAPTURE: capture,
+      },
+    );
+
+    assert.deepEqual(readFileSync(capture, 'utf8').trim().split('\n'), [
+      '-m64',
+      '-Wl,--as-needed',
+      '-nostartfiles',
+      '-nodefaultlibs',
+      'input.o',
+      '-static-pie',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Darwin direct LLD removes compiler driver arguments', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-static-pie-lld-'));
+  try {
+    const bin = path.join(root, 'bin');
+    const sysroot = path.join(root, 'rust');
+    const capture = path.join(root, 'arguments.txt');
+    const rustLLD = path.join(sysroot, 'lib', 'rustlib', 'aarch64-apple-darwin', 'bin', 'rust-lld');
+    mkdirSync(bin);
+    mkdirSync(path.dirname(rustLLD), { recursive: true });
+    writeExecutable(path.join(bin, 'uname'), '#!/usr/bin/env bash\nprintf "Darwin\\n"\n');
+    writeExecutable(path.join(bin, 'rustc'), `#!/usr/bin/env bash
+if [[ "$1" == "--print" ]]; then
+  printf "%s\\n" "$FAKE_RUST_SYSROOT"
+else
+  printf "host: aarch64-apple-darwin\\n"
+fi
+`);
+    writeExecutable(rustLLD, '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$LINK_CAPTURE"\n');
+
+    const environment = {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      FAKE_RUST_SYSROOT: sysroot,
+      LINK_CAPTURE: capture,
+    };
+    delete environment.REDEVPLUGIN_STATIC_PIE_CC;
+    runStaticPIELinker(
+      ['-m64', '-Wl,--as-needed,-z,relro', '-nostartfiles', '-static', '-no-pie', '-nodefaultlibs', 'input.o'],
+      environment,
+    );
+
+    assert.deepEqual(readFileSync(capture, 'utf8').trim().split('\n'), [
+      '-flavor',
+      'gnu',
+      '-pie',
+      '--as-needed',
+      '-z',
+      'relro',
+      'input.o',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 const manifest = {
   platform_version: version,

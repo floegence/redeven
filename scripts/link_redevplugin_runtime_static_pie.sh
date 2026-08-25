@@ -2,24 +2,25 @@
 set -euo pipefail
 
 # Rust 1.88 downgrades static PIE to StaticNoPicExe for built-in Linux GNU
-# targets. Remove the conflicting driver flags so GCC selects static PIE.
-darwin_link=false
-[[ "$(uname -s)" == "Darwin" ]] && darwin_link=true
+# targets. The compiler driver and direct LLD interfaces require different
+# argument shapes, so select the interface once before converting arguments.
+direct_lld=false
+if [[ "$(uname -s)" == "Darwin" && -z "${REDEVPLUGIN_STATIC_PIE_CC:-}" ]]; then
+  direct_lld=true
+fi
+
 link_args=()
 for argument in "$@"; do
   case "$argument" in
-    -m64)
-      # Rust LLD's GNU frontend does not implement the GCC emulation switch;
-      # the target triple already selects x86_64 for the cross-link.
-      if [[ "$(uname -s)" == "Darwin" && -z "${REDEVENPLUGIN_STATIC_PIE_CC:-}" ]]; then
-        continue
-      fi
-      link_args+=("$argument")
-      ;;
     -static|-no-pie)
       ;;
+    -m64|-nostartfiles|-nodefaultlibs)
+      if [[ "$direct_lld" == false ]]; then
+        link_args+=("$argument")
+      fi
+      ;;
     -Wl,*)
-      if [[ "$darwin_link" == true ]]; then
+      if [[ "$direct_lld" == true ]]; then
         IFS=',' read -r -a linker_arguments <<< "${argument#-Wl,}"
         link_args+=("${linker_arguments[@]}")
       else
@@ -32,10 +33,7 @@ for argument in "$@"; do
   esac
 done
 
-compiler_args=()
-compiler="${REDEVPLUGIN_STATIC_PIE_CC:-cc}"
-link_mode=(-static-pie)
-if [[ "$darwin_link" == true && -z "${REDEVPLUGIN_STATIC_PIE_CC:-}" ]]; then
+if [[ "$direct_lld" == true ]]; then
   rust_sysroot="$(rustc --print sysroot)"
   rust_host="$(rustc -vV | sed -n 's/^host: //p')"
   compiler="$rust_sysroot/lib/rustlib/$rust_host/bin/rust-lld"
@@ -43,11 +41,7 @@ if [[ "$darwin_link" == true && -z "${REDEVPLUGIN_STATIC_PIE_CC:-}" ]]; then
     echo "Rust LLD is required for Darwin Linux runtime cross-linking" >&2
     exit 127
   }
-  compiler_args=(-flavor gnu -pie)
-  link_mode=()
+  exec "$compiler" -flavor gnu -pie "${link_args[@]}"
 fi
 
-if [[ "${#link_mode[@]}" -gt 0 ]]; then
-  exec "$compiler" "${compiler_args[@]}" "${link_args[@]}" "${link_mode[@]}"
-fi
-exec "$compiler" "${compiler_args[@]}" "${link_args[@]}"
+exec "${REDEVPLUGIN_STATIC_PIE_CC:-cc}" "${link_args[@]}" -static-pie
