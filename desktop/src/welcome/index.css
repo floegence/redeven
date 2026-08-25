@@ -2693,8 +2693,11 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-environment-progress__body {
+  display: grid;
   min-width: 0;
   min-height: 0;
+  align-content: start;
+  gap: 0.55rem;
   padding: 1.125rem;
   overflow: auto;
   overscroll-behavior: contain;
