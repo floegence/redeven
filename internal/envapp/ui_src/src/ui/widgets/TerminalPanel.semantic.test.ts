@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RedevenTerminalTransport } from '../services/terminalTransport';
 import {
   clearSemanticTerminalContent,
+  preserveStableTerminalSessionReferences,
   resolvePendingTerminalSessions,
   resolveSystemTerminalThemeColors,
 } from './TerminalPanel';
@@ -67,6 +68,24 @@ describe('TerminalPanel semantic contracts', () => {
       pendingSessionId: 'pending-1',
       sessionId: 'session-1',
     })]);
+  });
+
+  it('publishes a new session reference when its group changes', () => {
+    const previous = {
+      id: 'session-1',
+      groupId: 'default',
+      name: 'Terminal',
+      workingDir: '/workspace',
+      createdAtMs: 11,
+      lastActiveAtMs: 11,
+      isActive: true,
+    };
+    const moved = { ...previous, groupId: 'group-services' };
+
+    const next = preserveStableTerminalSessionReferences([moved], [previous]);
+
+    expect(next[0]).toBe(moved);
+    expect(next[0]).not.toBe(previous);
   });
 
   it('lets view-local theme defaults change without replacing explicit ANSI colors', () => {

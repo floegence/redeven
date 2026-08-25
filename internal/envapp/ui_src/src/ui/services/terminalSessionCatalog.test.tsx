@@ -283,6 +283,29 @@ describe('TerminalSessionCatalogProvider', () => {
     dispose();
   });
 
+  it('keeps one shared in-memory session order for every catalog projection', async () => {
+    rpcState.sessions = [
+      rpcState.sessions[0],
+      { ...rpcState.sessions[0], id: 's2', name: 'Terminal 2', createdAtMs: 2, lastActiveAtMs: 2 },
+      { ...rpcState.sessions[0], id: 's3', name: 'Terminal 3', createdAtMs: 3, lastActiveAtMs: 3 },
+    ];
+    rpcState.list.mockResolvedValue({ sessions: rpcState.sessions });
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    latest.reorderSession('s3', 's1');
+    expect(latest.sessions().map((session: any) => session.id)).toEqual(['s3', 's1', 's2']);
+    latest.reorderSession('s3', null);
+    expect(latest.sessions().map((session: any) => session.id)).toEqual(['s1', 's2', 's3']);
+    dispose();
+  });
+
   it('keeps group edits and moves optimistic while fencing stale or failed operations', async () => {
     rpcState.groups = [
       ...rpcState.groups,

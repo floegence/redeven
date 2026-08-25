@@ -1,6 +1,6 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { BugIcon, Copy, Download, Folder, Link, Menu, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { BugIcon, Copy, Download, Folder, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
 
 import {
@@ -134,6 +134,7 @@ import { TerminalSearchOverlay } from './TerminalSearchOverlay';
 import { TerminalSharedGeometryNotice } from './TerminalSharedGeometryNotice';
 import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometryPresentation';
 import { REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR } from '../workbench/surface/workbenchInputRouting';
+import { createDirectoryPickerDataSource } from '../../../../../flower_ui/src/filePicker/createDirectoryPickerDataSource';
 
 type pending_terminal_session_status = 'creating' | 'failed';
 
@@ -343,9 +344,16 @@ type terminal_session_avatar_tone = Readonly<{
 }>;
 
 type terminal_sidebar_context_menu = Readonly<{
+  kind: 'session';
   x: number;
   y: number;
   sessionId: string;
+  triggerElement: HTMLElement | null;
+}> | Readonly<{
+  kind: 'group';
+  x: number;
+  y: number;
+  groupId: string;
   triggerElement: HTMLElement | null;
 }> | null;
 
@@ -666,6 +674,7 @@ function sameTerminalSessionInfo(a: TerminalSessionInfo | null | undefined, b: T
     a
     && b
     && a.id === b.id
+    && a.groupId === b.groupId
     && a.name === b.name
     && a.workingDir === b.workingDir
     && a.createdAtMs === b.createdAtMs
@@ -679,7 +688,7 @@ function sameTerminalSessionInfo(a: TerminalSessionInfo | null | undefined, b: T
   );
 }
 
-function preserveStableTerminalSessionReferences(
+export function preserveStableTerminalSessionReferences(
   nextSessions: readonly TerminalSessionInfo[],
   previousSessions: readonly TerminalSessionInfo[] = [],
 ): TerminalSessionInfo[] {
@@ -1024,6 +1033,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   ensureTerminalPreferencesInitialized(floe.persist);
   const terminalPrefs = useTerminalPreferences();
   const terminalCatalog = useTerminalSessionCatalog();
+  const groupPathPicker = createDirectoryPickerDataSource({
+    homePath: () => '/',
+    listDirectory: async (absolutePath) => {
+      if (!protocol.session?.()) return [];
+      const response = await rpc.fs.list({ path: absolutePath, showHidden: false });
+      return response.entries ?? [];
+    },
+  });
+  createEffect(() => {
+    String(env.env_id() ?? '');
+    protocol.session?.();
+    groupPathPicker.reset();
+  });
 
   const terminalLive = createRedevenTerminalLiveBundle(rpc, () => protocol.session?.(), connId);
   const transport = terminalLive.transport;
@@ -1411,15 +1433,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return list;
     }
 
-    const sessionsById = new Map(list.map((session) => [session.id, session]));
-    const orderedVisibleSessions: TerminalSessionInfo[] = [];
-    for (const sessionId of placementSessionIds) {
-      const session = sessionsById.get(sessionId);
-      if (session) {
-        orderedVisibleSessions.push(session);
-      }
-    }
-    return orderedVisibleSessions;
+    const placedIds = new Set(placementSessionIds);
+    return list.filter((session) => placedIds.has(session.id));
   });
 
   const foregroundPresentationScheduler = createTerminalForegroundPresentationScheduler({
@@ -3365,7 +3380,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const sessionListItemById = createMemo(() => new Map(sessionListItems().map((item) => [item.id, item])));
   createEffect(() => {
     const menu = terminalSidebarMenu();
-    if (menu && !sessionListItemById().has(menu.sessionId)) {
+    if (menu?.kind === 'session' && !sessionListItemById().has(menu.sessionId)) {
       setTerminalSidebarMenu(null);
     }
   });
@@ -3379,6 +3394,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return sameSessionIdList(previous, next) ? previous : next;
   });
   const terminalGroups = createMemo<readonly TerminalGroup[]>(() => terminalCatalog?.groups() ?? []);
+  createEffect(() => {
+    const menu = terminalSidebarMenu();
+    if (menu?.kind === 'group' && !terminalGroups().some((group) => group.id === menu.groupId)) {
+      setTerminalSidebarMenu(null);
+    }
+  });
   const groupIdBySessionItem = createMemo(() => {
     const byId = new Map(sessions().map((session) => [session.id, session.groupId]));
     for (const pending of visiblePendingTerminalSessions()) byId.set(pending.id, pending.groupId);
@@ -3476,11 +3497,24 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
-  const moveSessionToGroup = (sessionId: string, groupId: string) => {
+  const relocateSession = (sessionId: string, groupId: string, beforeSessionId: string | null) => {
     if (!terminalCatalog) return;
+    const previousOrder = terminalCatalog.sessions().map((session) => session.id);
+    const previousIndex = previousOrder.indexOf(sessionId);
+    const previousBeforeSessionId = previousIndex >= 0 ? previousOrder[previousIndex + 1] ?? null : null;
+    const sourceGroupId = terminalCatalog.sessions().find((session) => session.id === sessionId)?.groupId;
+
+    terminalCatalog.reorderSession(sessionId, beforeSessionId);
+
+    if (!sourceGroupId || sourceGroupId === groupId) return;
     void terminalCatalog.moveSession(sessionId, groupId).catch((cause) => {
+      terminalCatalog.reorderSession(sessionId, previousBeforeSessionId);
       notify.error(i18n.t('terminal.groupMoveFailedTitle'), cause instanceof Error ? cause.message : String(cause));
     });
+  };
+
+  const moveSessionToGroup = (sessionId: string, groupId: string) => {
+    relocateSession(sessionId, groupId, null);
   };
   let statusBoundaryBySessionId = new Map<string, 'none' | 'waiting' | 'failed'>();
   let statusBoundaryConnectionEpoch = terminalCatalog?.connectionEpoch() ?? 0;
@@ -4046,6 +4080,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       .catch(notifyTerminalCopyFailure);
   };
 
+  const copyTerminalGroupPath = (groupId: string) => {
+    const group = terminalGroups().find((candidate) => candidate.id === groupId);
+    const path = normalizeAskFlowerAbsolutePath(group?.defaultWorkingDir ?? '');
+    if (!group || !path) return;
+    setTerminalSidebarMenu(null);
+    void writeTextToClipboard(path).catch(notifyTerminalCopyFailure);
+  };
+
   const duplicateSidebarItemSession = (item: TerminalSessionNavigationItem) => {
     const currentItem = sessionListItemById().get(item.id);
     const fullPath = currentItem?.remote
@@ -4198,6 +4240,46 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const buildTerminalSidebarMenuItems = (menu: NonNullable<ReturnType<typeof terminalSidebarMenu>>): FloatingContextMenuItem[] => {
+    if (menu.kind === 'group') {
+      const group = terminalGroups().find((candidate) => candidate.id === menu.groupId);
+      if (!group) return [];
+      return [
+        {
+          id: 'group-copy-path',
+          kind: 'action',
+          label: i18n.t('terminal.copyPath'),
+          icon: Copy,
+          onSelect: () => copyTerminalGroupPath(group.id),
+        },
+        {
+          id: 'group-edit',
+          kind: 'action',
+          label: i18n.t('terminal.editGroup'),
+          icon: Pencil,
+          onSelect: () => {
+            setTerminalSidebarMenu(null);
+            openGroupEditor(group.id);
+          },
+        },
+        ...(!group.isDefault ? [
+          {
+            id: 'group-danger-separator',
+            kind: 'separator' as const,
+          },
+          {
+            id: 'group-delete',
+            kind: 'action' as const,
+            label: i18n.t('terminal.deleteGroup'),
+            icon: Trash,
+            destructive: true,
+            onSelect: () => {
+              setTerminalSidebarMenu(null);
+              setGroupDeleteTarget(group);
+            },
+          },
+        ] : []),
+      ];
+    }
     const item = sessionListItemById().get(menu.sessionId);
     if (!item) return [];
     const moveTargets = terminalGroups()
@@ -4286,6 +4368,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     markSessionMounted(item.id);
     setTerminalAskMenu(null);
     setTerminalSidebarMenu({
+      kind: 'session',
       x: event.clientX,
       y: event.clientY,
       sessionId: item.id,
@@ -4303,9 +4386,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     markSessionMounted(item.id);
     setTerminalAskMenu(null);
     setTerminalSidebarMenu({
+      kind: 'session',
       x: rect ? rect.left + Math.min(rect.width - 16, 64) : 0,
       y: rect ? rect.top + Math.min(rect.height - 8, 44) : 0,
       sessionId: item.id,
+      triggerElement: target,
+    });
+  };
+
+  const openTerminalGroupMenu = (event: MouseEvent, groupId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const rect = target?.getBoundingClientRect();
+    const fromContextMenu = event.type === 'contextmenu';
+    setTerminalAskMenu(null);
+    setTerminalSidebarMenu({
+      kind: 'group',
+      x: fromContextMenu ? event.clientX : rect?.right ?? event.clientX,
+      y: fromContextMenu ? event.clientY : rect?.bottom ?? event.clientY,
+      groupId,
       triggerElement: target,
     });
   };
@@ -4515,7 +4615,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
-  const terminalShortcutModLabel = createMemo(() => (isMacLikePlatform() ? 'Cmd' : 'Ctrl'));
   const terminalDisclosureFallbackFocus = () => {
     if (variant === 'workbench') {
       const widgetRoot = rootEl?.closest<HTMLElement>(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}]`);
@@ -4640,7 +4739,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             refreshing={refreshing()}
             activeTitle={activeToolbarTitle()}
             activeAvatar={activeToolbarAvatar()}
-            shortcutModLabel={terminalShortcutModLabel()}
             filterQuery={sessionFilterQuery()}
             itemIds={sessionListItemIds()}
             itemById={sessionListItemById()}
@@ -4658,16 +4756,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               || terminalAskMenuEl?.contains(target),
             )}
             onCloseDrawer={dismissSessionDrawer}
-            onCreateSession={createSession}
             onCreateSessionInGroup={(groupId) => void createSessionInGroup(groupId)}
             onCreateGroup={() => setGroupEditorTarget('create')}
             onToggleGroup={toggleNavigationGroup}
-            onEditGroup={openGroupEditor}
-            onDeleteGroup={(groupId) => {
-              const group = terminalGroups().find((candidate) => candidate.id === groupId);
-              if (group && !group.isDefault) setGroupDeleteTarget(group);
-            }}
-            onMoveSession={moveSessionToGroup}
+            onRelocateSession={relocateSession}
+            onOpenGroupContextMenu={openTerminalGroupMenu}
             onRefresh={handleRefresh}
             onFilterQueryChange={setSessionFilterQuery}
             onPreviewSession={previewSidebarSessionSelection}
@@ -5054,6 +5147,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               open={groupEditorTarget() !== null}
               group={groupEditorTarget() === 'create' ? null : groupEditorTarget() as TerminalGroup | null}
               defaultWorkingDir={agentHomePathAbs() || '/'}
+              pickerFiles={groupPathPicker.files()}
+              pickerHomePath="/"
+              pickerHomeLabel={i18n.t('files.filesystemRootFallback')}
+              onPickerOpen={() => { void groupPathPicker.ensureRootLoaded(); }}
+              onPickerExpand={(path) => groupPathPicker.expandPath(path)}
+              ensurePickerPath={groupPathPicker.ensurePath}
               onCancel={() => {
                 setGroupEditorTarget(null);
               }}
@@ -5216,9 +5315,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             id={terminalSidebarMenuId}
             x={menu.x}
             y={menu.y}
-            ariaLabel={i18n.t('terminal.sessions')}
+            ariaLabel={menu.kind === 'group'
+              ? i18n.t('terminal.groupActions', { group: terminalGroups().find((group) => group.id === menu.groupId)?.name ?? '' })
+              : i18n.t('terminal.sessions')}
             focusAnchor={menu.triggerElement}
-            focusDisabledItems={sessionListItemById().get(menu.sessionId)?.remote === true}
+            focusDisabledItems={menu.kind === 'session' && sessionListItemById().get(menu.sessionId)?.remote === true}
             restoreFocusOnTab={isMobileLayout() && sessionDrawerOpen()}
             items={buildTerminalSidebarMenuItems(menu)}
             onDismiss={dismissTerminalSidebarMenu}

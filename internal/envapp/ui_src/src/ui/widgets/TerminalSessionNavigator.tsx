@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, onCleanup } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { Check, Copy, FolderOpen, FolderPlus, Link, MoreHorizontal, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
@@ -68,7 +68,6 @@ export type TerminalSessionNavigatorProps = Readonly<{
   refreshing: boolean;
   activeTitle: string;
   activeAvatar: TerminalSessionChromeAvatar;
-  shortcutModLabel: string;
   filterQuery: string;
   itemIds: readonly string[];
   itemById: ReadonlyMap<string, TerminalSessionNavigationItem>;
@@ -80,13 +79,11 @@ export type TerminalSessionNavigatorProps = Readonly<{
   ownedLayerIds?: readonly string[];
   isFocusWithinOwnedLayer?: (target: Node | null) => boolean;
   onCloseDrawer: () => void;
-  onCreateSession: () => void;
   onCreateSessionInGroup?: (groupId: string) => void;
   onCreateGroup?: () => void;
   onToggleGroup?: (groupId: string) => void;
-  onEditGroup?: (groupId: string) => void;
-  onDeleteGroup?: (groupId: string) => void;
-  onMoveSession?: (sessionId: string, groupId: string) => void;
+  onRelocateSession?: (sessionId: string, groupId: string, beforeSessionId: string | null) => void;
+  onOpenGroupContextMenu?: (event: MouseEvent, groupId: string) => void;
   onRefresh: () => void;
   onFilterQueryChange: (value: string) => void;
   onPreviewSession: (event: PointerEvent, sessionId: string) => void;
@@ -320,6 +317,52 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     itemIds: props.itemIds,
     totalSessionCount: props.itemIds.length,
   }]);
+  const [draggedSessionId, setDraggedSessionId] = createSignal<string | null>(null);
+  const [dropIntent, setDropIntent] = createSignal<Readonly<{
+    groupId: string;
+    beforeSessionId: string | null;
+    targetSessionId: string | null;
+    position: 'group' | 'before' | 'after';
+  }> | null>(null);
+  const clearDragState = () => {
+    setDraggedSessionId(null);
+    setDropIntent(null);
+  };
+  const draggedSessionTitle = createMemo(() => {
+    const sessionId = draggedSessionId();
+    return sessionId ? props.itemById.get(sessionId)?.title ?? '' : '';
+  });
+  const dropAnnouncement = createMemo(() => {
+    const intent = dropIntent();
+    if (!intent) return i18n.t('terminal.draggingSession', { session: draggedSessionTitle() });
+    const group = navigationGroups().find((candidate) => candidate.id === intent.groupId);
+    if (intent.position === 'group') {
+      return i18n.t('terminal.moveToGroupNamed', { group: group?.name ?? '' });
+    }
+    const target = intent.targetSessionId ? props.itemById.get(intent.targetSessionId) : null;
+    return i18n.t(
+      intent.position === 'before' ? 'terminal.placeBeforeSession' : 'terminal.placeAfterSession',
+      { session: target?.title ?? '' },
+    );
+  });
+  const draggedSessionFromEvent = (event: DragEvent): string => (
+    draggedSessionId()
+    || event.dataTransfer?.getData('application/x-redeven-terminal-session').trim()
+    || ''
+  );
+  const acceptsTerminalSessionDrag = (event: DragEvent): boolean => Boolean(
+    draggedSessionId()
+    || event.dataTransfer?.types.includes('application/x-redeven-terminal-session'),
+  );
+  const commitDrop = (event: DragEvent) => {
+    const intent = dropIntent();
+    const sessionId = draggedSessionFromEvent(event);
+    if (!intent || !sessionId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onRelocateSession?.(sessionId, intent.groupId, intent.beforeSessionId);
+    clearDragState();
+  };
 
   const drawerFocusableElements = () => {
     if (!drawerDialogEl) return [];
@@ -491,18 +534,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                 </div>
                 <Button
                   size="sm"
-                  variant="outline"
-                  class="h-7 max-w-[98px] cursor-pointer gap-1.5 px-2 text-[10px] font-semibold disabled:cursor-not-allowed"
-                  data-testid="terminal-sidebar-add-session"
-                  onClick={props.onCreateSession}
-                  disabled={!props.connected}
-                  title={i18n.t('terminal.newSession')}
-                >
-                  <Plus class="h-3.5 w-3.5" />
-                  <span class="truncate">{i18n.t('terminal.newSession')}</span>
-                </Button>
-                <Button
-                  size="sm"
                   variant="ghost"
                   class="h-7 w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
                   data-testid="terminal-sidebar-refresh"
@@ -540,7 +571,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                 <Show when={props.filterQuery.length > 0}>
                   <button
                     type="button"
-                    class="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground"
+                    class="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground"
                     aria-label={i18n.t('terminal.clearSessionSearch')}
                     title={i18n.t('terminal.clearSessionSearch')}
                     onClick={() => props.onFilterQueryChange('')}
@@ -556,7 +587,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
               actions={(
                 <button
                   type="button"
-                  class="flex h-6 max-w-[96px] items-center gap-1 rounded-md px-1.5 text-[10px] font-semibold normal-case tracking-normal text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  class="flex h-6 max-w-[96px] cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-semibold normal-case tracking-normal text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed disabled:opacity-50"
                   data-testid="terminal-sidebar-add-group"
                   onClick={() => props.onCreateGroup?.()}
                   disabled={!props.connected}
@@ -581,21 +612,42 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         data-terminal-tree-group={navigationGroup().id}
                         data-terminal-group-pending={navigationGroup().pending ? 'true' : 'false'}
                         aria-busy={navigationGroup().pending ? 'true' : undefined}
-                        onDragOver={(event) => {
-                          if (navigationGroup().pending) return;
-                          if (!event.dataTransfer?.types.includes('application/x-redeven-terminal-session')) return;
-                          event.preventDefault();
-                          event.dataTransfer.dropEffect = 'move';
-                        }}
-                        onDrop={(event) => {
-                          if (navigationGroup().pending) return;
-                          const sessionId = event.dataTransfer?.getData('application/x-redeven-terminal-session').trim() ?? '';
-                          if (!sessionId) return;
-                          event.preventDefault();
-                          props.onMoveSession?.(sessionId, navigationGroup().id);
+                        onDragLeave={(event) => {
+                          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+                          if (dropIntent()?.groupId === navigationGroup().id) setDropIntent(null);
                         }}
                       >
-                        <div class="relative flex min-h-11 items-center gap-1 rounded-lg border border-[color-mix(in_srgb,var(--primary)_22%,var(--sidebar-border))] bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_34%,transparent),0_1px_2px_color-mix(in_srgb,var(--foreground)_5%,transparent)] transition-[border-color,background-color,box-shadow] duration-150 hover:border-[color-mix(in_srgb,var(--primary)_36%,var(--sidebar-border))] hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]" data-terminal-group-header={navigationGroup().id} classList={{ 'opacity-65': navigationGroup().pending }}>
+                        <div
+                          class="relative flex min-h-11 items-center gap-1 rounded-lg border border-[color-mix(in_srgb,var(--primary)_22%,var(--sidebar-border))] bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_34%,transparent),0_1px_2px_color-mix(in_srgb,var(--foreground)_5%,transparent)] transition-[border-color,background-color,box-shadow,transform] duration-150 hover:border-[color-mix(in_srgb,var(--primary)_36%,var(--sidebar-border))] hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]"
+                          data-terminal-group-header={navigationGroup().id}
+                          data-terminal-group-drop-target={dropIntent()?.groupId === navigationGroup().id ? dropIntent()?.position : undefined}
+                          classList={{
+                            'opacity-65': navigationGroup().pending,
+                            'scale-[1.01] border-primary/70 bg-primary/15 ring-2 ring-primary/30 shadow-[0_5px_16px_color-mix(in_srgb,var(--primary)_14%,transparent)]': dropIntent()?.groupId === navigationGroup().id,
+                            '!cursor-grabbing': draggedSessionId() !== null,
+                          }}
+                          onContextMenu={(event) => props.onOpenGroupContextMenu?.(event, navigationGroup().id)}
+                          onDragOver={(event) => {
+                            if (navigationGroup().pending || !acceptsTerminalSessionDrag(event)) return;
+                            const draggedId = draggedSessionFromEvent(event);
+                            if (!draggedId) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+                            const sourceGroup = navigationGroups().find((group) => group.itemIds.includes(draggedId));
+                            if (sourceGroup?.id === navigationGroup().id && navigationGroup().itemIds.at(-1) === draggedId) {
+                              setDropIntent(null);
+                              return;
+                            }
+                            setDropIntent({
+                              groupId: navigationGroup().id,
+                              beforeSessionId: null,
+                              targetSessionId: null,
+                              position: 'group',
+                            });
+                          }}
+                          onDrop={commitDrop}
+                        >
                           <Show when={navigationGroup().expanded && navigationGroup().itemIds.length > 0}>
                             <span
                               class="pointer-events-none absolute bottom-[-5px] left-[18px] top-1/2 w-px bg-[color-mix(in_srgb,var(--primary)_34%,var(--sidebar-border))]"
@@ -605,7 +657,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </Show>
                           <button
                             type="button"
-                            class="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] border border-[color-mix(in_srgb,var(--primary)_28%,var(--sidebar-border))] bg-sidebar text-[13px] font-semibold leading-none text-primary shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_7%,transparent)] hover:border-[color-mix(in_srgb,var(--primary)_48%,var(--sidebar-border))] hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            class="relative z-10 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-[5px] border border-[color-mix(in_srgb,var(--primary)_28%,var(--sidebar-border))] bg-sidebar text-[13px] font-semibold leading-none text-primary shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_7%,transparent)] hover:border-[color-mix(in_srgb,var(--primary)_48%,var(--sidebar-border))] hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                             data-testid={`terminal-group-toggle-${navigationGroup().id}`}
                             aria-expanded={navigationGroup().expanded}
                             aria-label={navigationGroup().expanded ? i18n.t('terminal.collapseGroup') : i18n.t('terminal.expandGroup')}
@@ -615,7 +667,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </button>
                           <button
                             type="button"
-                            class="min-w-0 flex-1 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            class="min-w-0 flex-1 cursor-pointer text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                             title={`${navigationGroup().name}\n${navigationGroup().defaultWorkingDir}`}
                             onClick={() => props.onToggleGroup?.(navigationGroup().id)}
                           >
@@ -627,7 +679,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </button>
                           <button
                             type="button"
-                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed"
                             title={i18n.t('terminal.newSessionInGroup', { group: navigationGroup().name })}
                             aria-label={i18n.t('terminal.newSessionInGroup', { group: navigationGroup().name })}
                             onClick={() => props.onCreateSessionInGroup?.(navigationGroup().id)}
@@ -636,31 +688,23 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             <Plus class="h-3.5 w-3.5" />
                           </button>
                           <Show when={!navigationGroup().pending}>
-                          <details class="relative">
-                            <summary
-                              class="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring [&::-webkit-details-marker]:hidden"
-                              role="button"
+                            <button
+                              type="button"
+                              class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                               aria-label={i18n.t('terminal.groupActions', { group: navigationGroup().name })}
+                              aria-haspopup="menu"
+                              data-testid={`terminal-group-actions-${navigationGroup().id}`}
+                              onClick={(event) => props.onOpenGroupContextMenu?.(event, navigationGroup().id)}
                             >
                               <MoreHorizontal class="h-3.5 w-3.5" />
-                            </summary>
-                            <div class="absolute right-0 top-8 z-30 min-w-36 rounded-md border border-popover-border bg-popover p-1 text-popover-foreground shadow-xl">
-                              <button type="button" class="flex h-8 w-full items-center rounded px-2 text-left text-xs hover:bg-accent" onClick={(event) => {
-                                event.currentTarget.closest('details')?.removeAttribute('open');
-                                props.onEditGroup?.(navigationGroup().id);
-                              }}>
-                                {i18n.t('terminal.editGroup')}
-                              </button>
-                              <Show when={!navigationGroup().isDefault}>
-                                <button type="button" class="flex h-8 w-full items-center rounded px-2 text-left text-xs text-error hover:bg-error/10" onClick={(event) => {
-                                  event.currentTarget.closest('details')?.removeAttribute('open');
-                                  props.onDeleteGroup?.(navigationGroup().id);
-                                }}>
-                                  {i18n.t('terminal.deleteGroup')}
-                                </button>
-                              </Show>
-                            </div>
-                          </details>
+                            </button>
+                          </Show>
+                          <Show when={dropIntent()?.groupId === navigationGroup().id && dropIntent()?.position === 'group'}>
+                            <span class="pointer-events-none absolute inset-x-2 -bottom-2.5 z-20 flex justify-center" data-terminal-group-drop-hint={navigationGroup().id}>
+                              <span class="rounded-full border border-primary/35 bg-primary px-2 py-0.5 text-[9px] font-semibold text-primary-foreground shadow-lg">
+                                {i18n.t('terminal.moveToGroupNamed', { group: navigationGroup().name })}
+                              </span>
+                            </span>
                           </Show>
                         </div>
                         <Show when={navigationGroup().expanded}>
@@ -691,8 +735,55 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         : null);
                       const statusDescription = createMemo(() => describeTerminalSessionNavigationItem(item(), i18n.t));
                       const filesTooltip = createMemo(() => terminalFilesTooltip(item(), i18n.t));
+                      const rowDropIntent = createMemo(() => {
+                        const intent = dropIntent();
+                        return intent?.targetSessionId === sessionId ? intent : null;
+                      });
                       return (
-                        <div class="relative mb-1 last:mb-0" data-terminal-tree-child={sessionId}>
+                        <div
+                          class="relative mb-1 transition-transform duration-150 last:mb-0"
+                          classList={{
+                            'scale-[0.985] opacity-45': draggedSessionId() === sessionId,
+                            'translate-y-0.5': rowDropIntent()?.position === 'after',
+                            '-translate-y-0.5': rowDropIntent()?.position === 'before',
+                          }}
+                          data-terminal-tree-child={sessionId}
+                          data-terminal-session-drop-position={rowDropIntent()?.position}
+                          onDragOver={(event) => {
+                            if (!acceptsTerminalSessionDrag(event)) return;
+                            const draggedId = draggedSessionFromEvent(event);
+                            if (!draggedId || draggedId === sessionId) {
+                              setDropIntent(null);
+                              return;
+                            }
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+                            const orderedTargets = navigationGroup().itemIds.filter((candidate) => candidate !== draggedId);
+                            const targetIndex = orderedTargets.indexOf(sessionId);
+                            const beforeSessionId = position === 'before'
+                              ? sessionId
+                              : orderedTargets[targetIndex + 1] ?? null;
+                            if (navigationGroup().itemIds.includes(draggedId)) {
+                              const projected = [...orderedTargets];
+                              const projectedIndex = beforeSessionId ? projected.indexOf(beforeSessionId) : -1;
+                              projected.splice(projectedIndex >= 0 ? projectedIndex : projected.length, 0, draggedId);
+                              if (projected.every((candidate, index) => candidate === navigationGroup().itemIds[index])) {
+                                setDropIntent(null);
+                                return;
+                              }
+                            }
+                            setDropIntent({
+                              groupId: navigationGroup().id,
+                              beforeSessionId,
+                              targetSessionId: sessionId,
+                              position,
+                            });
+                          }}
+                          onDrop={commitDrop}
+                        >
                           <span
                             class="pointer-events-none absolute -left-5 top-1/2 h-px w-5 bg-[color-mix(in_srgb,var(--primary)_34%,var(--sidebar-border))]"
                             data-terminal-tree-connector={sessionId}
@@ -703,10 +794,30 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             data-terminal-tree-junction={sessionId}
                             aria-hidden="true"
                           />
+                          <Show when={rowDropIntent()} keyed>
+                            {(intent) => (
+                              <span
+                                class={`pointer-events-none absolute -left-5 right-0 z-30 flex items-center ${intent.position === 'before' ? '-top-[3px]' : '-bottom-[3px]'}`}
+                                data-terminal-session-drop-hint={sessionId}
+                                data-terminal-session-drop-hint-position={intent.position}
+                                aria-hidden="true"
+                              >
+                                <span class="h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_18%,transparent)]" />
+                                <span class="h-0.5 min-w-2 flex-1 bg-primary shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_48%,transparent)]" />
+                                <span class="ml-1 max-w-[128px] truncate rounded-full border border-primary/30 bg-primary px-1.5 py-0.5 text-[8px] font-semibold text-primary-foreground shadow-md">
+                                  {i18n.t(
+                                    intent.position === 'before' ? 'terminal.placeBeforeSession' : 'terminal.placeAfterSession',
+                                    { session: item().title },
+                                  )}
+                                </span>
+                              </span>
+                            )}
+                          </Show>
                         <div
                           data-terminal-session-row={sessionId}
                           draggable={item().transitionState === 'none'}
-                          class={`group relative grid items-center overflow-hidden rounded-md border text-xs transition-[background-color,border-color,color,box-shadow] duration-150 ${props.mobile
+                          aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
+                          class={`group relative grid cursor-grab items-center overflow-hidden rounded-md border text-xs transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-150 active:cursor-grabbing ${props.mobile
                             ? 'min-h-[68px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
                             : 'min-h-[52px] grid-cols-[32px_minmax(0,1fr)_40px] gap-x-1.5 px-1.5 py-1'} ${sidebarActive()
                             ? 'border-primary/35 bg-sidebar text-sidebar-accent-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent),0_1px_3px_color-mix(in_srgb,var(--foreground)_7%,transparent)]'
@@ -716,7 +827,11 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             if (!event.dataTransfer) return;
                             event.dataTransfer.effectAllowed = 'move';
                             event.dataTransfer.setData('application/x-redeven-terminal-session', sessionId);
+                            setDraggedSessionId(sessionId);
+                            setDropIntent(null);
                           }}
+                          onDragEnd={clearDragState}
+                          classList={{ '!cursor-grabbing': draggedSessionId() === sessionId }}
                         >
                           <Tooltip
                             content={(
@@ -732,7 +847,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           >
                             <button
                               type="button"
-                              class="h-full w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
+                              draggable={item().transitionState === 'none'}
+                              class="h-full w-full cursor-grab rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring active:cursor-grabbing"
+                              classList={{ '!cursor-grabbing': draggedSessionId() === sessionId }}
                               data-terminal-session-id={sessionId}
                               data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                               data-terminal-session-index={navigationIndex() + 1}
@@ -1002,6 +1119,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                 </SidebarItemList>
               </div>
             </SidebarSection>
+            <span class="sr-only" aria-live="polite" data-terminal-drag-announcement>
+              {draggedSessionId() ? dropAnnouncement() : ''}
+            </span>
           </SidebarContent>
         </Sidebar>
       </div>

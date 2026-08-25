@@ -23,7 +23,8 @@ afterEach(() => {
 function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = vi.fn(), options?: {
   groups?: Parameters<typeof TerminalSessionNavigator>[0]['groups'];
   additionalItems?: readonly TerminalSessionNavigationItem[];
-  onMoveSession?: (sessionId: string, groupId: string) => void;
+  onRelocateSession?: (sessionId: string, groupId: string, beforeSessionId: string | null) => void;
+  onOpenGroupContextMenu?: (event: MouseEvent, groupId: string) => void;
   onToggleGroup?: (groupId: string) => void;
 }) {
   const host = document.createElement('div');
@@ -39,7 +40,6 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
       refreshing={false}
       activeTitle={item.title}
       activeAvatar={item.avatar}
-      shortcutModLabel="Ctrl"
       filterQuery=""
       itemIds={items.map((navigationItem) => navigationItem.id)}
       itemById={itemById}
@@ -49,8 +49,8 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
       copiedPathSessionId={null}
       emptyListLoading={false}
       onCloseDrawer={() => undefined}
-      onCreateSession={() => undefined}
-      onMoveSession={options?.onMoveSession}
+      onRelocateSession={options?.onRelocateSession}
+      onOpenGroupContextMenu={options?.onOpenGroupContextMenu}
       onToggleGroup={options?.onToggleGroup}
       onRefresh={() => undefined}
       onFilterQueryChange={() => undefined}
@@ -67,9 +67,10 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
   return { host, onSelectSession };
 }
 
-function dispatchDragEvent(target: Element, type: 'dragstart' | 'dragover' | 'drop', dataTransfer: DataTransfer) {
+function dispatchDragEvent(target: Element, type: 'dragstart' | 'dragover' | 'drop' | 'dragend', dataTransfer: DataTransfer, clientY = 0) {
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+  Object.defineProperty(event, 'clientY', { value: clientY });
   target.dispatchEvent(event);
   return event;
 }
@@ -143,7 +144,6 @@ describe('TerminalSessionNavigator agent status presentation', () => {
         refreshing={false}
         activeTitle="alpha"
         activeAvatar={{ kind: 'initial' }}
-        shortcutModLabel="Ctrl"
         filterQuery=""
         itemIds={itemIds()}
         itemById={itemById()}
@@ -152,7 +152,6 @@ describe('TerminalSessionNavigator agent status presentation', () => {
         copiedPathSessionId={null}
         emptyListLoading={false}
         onCloseDrawer={() => undefined}
-        onCreateSession={() => undefined}
         onRefresh={() => undefined}
         onFilterQueryChange={() => undefined}
         onPreviewSession={() => undefined}
@@ -564,19 +563,18 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-tree-child="session-2"]')).not.toBeNull();
   });
 
-  it('labels session and group creation as distinct actions', () => {
+  it('keeps group creation explicit without a competing global session action', () => {
     const { host } = renderNavigator(navigationItem());
     const newSession = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-session"]');
     const newGroup = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-group"]');
 
-    expect(newSession?.textContent).toContain('New session');
+    expect(newSession).toBeNull();
     expect(newGroup?.textContent).toContain('New group');
-    expect(newSession?.parentElement).not.toBe(newGroup?.parentElement);
     expect(newGroup?.querySelector('svg')).not.toBeNull();
   });
 
-  it('moves a dragged session to the group that receives the drop', () => {
-    const onMoveSession = vi.fn();
+  it('moves a dragged session to a highlighted group target', () => {
+    const onRelocateSession = vi.fn();
     const item = navigationItem({ id: 'session-1' });
     const { host } = renderNavigator(item, vi.fn(), {
       groups: [{
@@ -596,20 +594,79 @@ describe('TerminalSessionNavigator agent status presentation', () => {
         itemIds: ['session-1'],
         totalSessionCount: 1,
       }],
-      onMoveSession,
+      onRelocateSession,
     });
     const sessionRow = host.querySelector<HTMLElement>('[data-terminal-session-row="session-1"]')!;
-    const defaultGroup = host.querySelector<HTMLElement>('[data-terminal-group-id="default"]')!;
+    const defaultGroup = host.querySelector<HTMLElement>('[data-terminal-group-header="default"]')!;
     const dataTransfer = createDataTransfer();
 
     dispatchDragEvent(sessionRow, 'dragstart', dataTransfer);
     const dragOver = dispatchDragEvent(defaultGroup, 'dragover', dataTransfer);
+    expect(defaultGroup.getAttribute('data-terminal-group-drop-target')).toBe('group');
+    expect(host.querySelector('[data-terminal-group-drop-hint="default"]')?.textContent).toContain('Move to Default');
     const drop = dispatchDragEvent(defaultGroup, 'drop', dataTransfer);
 
     expect(dataTransfer.effectAllowed).toBe('move');
     expect(dataTransfer.dropEffect).toBe('move');
     expect(dragOver.defaultPrevented).toBe(true);
     expect(drop.defaultPrevented).toBe(true);
-    expect(onMoveSession).toHaveBeenCalledWith('session-1', 'default');
+    expect(onRelocateSession).toHaveBeenCalledWith('session-1', 'default', null);
+  });
+
+  it('shows before and after placement lines while reordering sessions', () => {
+    const onRelocateSession = vi.fn();
+    const firstItem = navigationItem({ id: 'session-1', title: 'alpha' });
+    const secondItem = navigationItem({ id: 'session-2', title: 'beta' });
+    const { host } = renderNavigator(firstItem, vi.fn(), {
+      additionalItems: [secondItem],
+      groups: [{
+        id: 'default',
+        name: 'Default',
+        defaultWorkingDir: '/workspace',
+        isDefault: true,
+        expanded: true,
+        itemIds: ['session-1', 'session-2'],
+        totalSessionCount: 2,
+      }],
+      onRelocateSession,
+    });
+    const secondRow = host.querySelector<HTMLElement>('[data-terminal-session-row="session-2"]')!;
+    const firstTreeRow = host.querySelector<HTMLElement>('[data-terminal-tree-child="session-1"]')!;
+    Object.defineProperty(firstTreeRow, 'getBoundingClientRect', {
+      value: () => ({ top: 100, height: 52, bottom: 152, left: 0, right: 200, width: 200, x: 0, y: 100, toJSON: () => ({}) }),
+    });
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(secondRow, 'dragstart', dataTransfer);
+    dispatchDragEvent(firstTreeRow, 'dragover', dataTransfer, 110);
+    expect(firstTreeRow.getAttribute('data-terminal-session-drop-position')).toBe('before');
+    expect(host.querySelector('[data-terminal-session-drop-hint="session-1"]')?.textContent).toContain('Place before alpha');
+    dispatchDragEvent(firstTreeRow, 'drop', dataTransfer, 110);
+    expect(onRelocateSession).toHaveBeenCalledWith('session-2', 'default', 'session-1');
+  });
+
+  it('opens the same group menu from right click and the overflow action', () => {
+    const onOpenGroupContextMenu = vi.fn();
+    const { host } = renderNavigator(navigationItem({ id: 'session-1' }), vi.fn(), {
+      groups: [{
+        id: 'group-services',
+        name: 'Services',
+        defaultWorkingDir: '/workspace/services',
+        isDefault: false,
+        expanded: true,
+        itemIds: ['session-1'],
+        totalSessionCount: 1,
+      }],
+      onOpenGroupContextMenu,
+    });
+    const groupHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="group-services"]')!;
+    groupHeader.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-group-actions-group-services"]')?.click();
+
+    expect(onOpenGroupContextMenu).toHaveBeenCalledTimes(2);
+    expect(onOpenGroupContextMenu.mock.calls.map((call) => call[1])).toEqual(['group-services', 'group-services']);
+    expect(groupHeader.querySelectorAll('.cursor-pointer').length).toBeGreaterThanOrEqual(4);
+    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('cursor-grab');
+    expect(host.querySelector('[data-terminal-session-id="session-1"]')?.getAttribute('draggable')).toBe('true');
   });
 });
