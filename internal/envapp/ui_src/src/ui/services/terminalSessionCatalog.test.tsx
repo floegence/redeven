@@ -412,6 +412,39 @@ describe('TerminalSessionCatalogProvider', () => {
     dispose();
   });
 
+  it('allows a settled session move to return to its original group without a refresh', async () => {
+    rpcState.groups = [
+      ...rpcState.groups,
+      { id: 'services', name: 'Services', defaultWorkingDir: '/services', sortOrder: 1, createdAtMs: 2, updatedAtMs: 2, isDefault: false },
+    ];
+    rpcState.groupRevision = 2;
+    rpcState.moveSession.mockImplementation(async ({ sessionId, groupId }: any) => {
+      rpcState.groupRevision += 1;
+      rpcState.sessions = rpcState.sessions.map((session) => (
+        session.id === sessionId ? { ...session, groupId } : session
+      ));
+      return { revision: rpcState.groupRevision, sessionId, groupId };
+    });
+    rpcState.list.mockImplementation(async () => ({ sessions: rpcState.sessions }));
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.groupRevision()).toBe(2));
+
+    await latest.moveSession('s1', 'services');
+    expect(latest.sessions()[0]?.groupId).toBe('services');
+    await latest.moveSession('s1', 'default');
+
+    await vi.waitFor(() => expect(latest.sessions()[0]?.groupId).toBe('default'));
+    expect(rpcState.moveSession).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
   it('does not roll back or reject when a superseded move fails late', async () => {
     rpcState.groups = [
       ...rpcState.groups,
