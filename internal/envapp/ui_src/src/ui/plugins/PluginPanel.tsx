@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX 
 import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { Package, Search, X } from '@floegence/floe-webapp-core/icons';
+import type { BarItemContextMenuRequest } from '@floegence/floe-webapp-core/layout';
 import { WorkbenchDockPopoverSurface, type WorkbenchCanvasWidgetPlacement, type WorkbenchExternalDockDragController } from '@floegence/floe-webapp-core/workbench';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
@@ -17,6 +18,8 @@ import { isolateDocumentBranch } from './modalIsolation';
 import { PluginIcon, PluginUpdateBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel } from './pluginPresentation';
+import { PluginPinContextMenu } from './PluginPinContextMenu';
+import type { PluginPinPlacement } from './pluginDockPins';
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const CATEGORY_FILTER_THRESHOLD = 6;
@@ -42,7 +45,8 @@ export type PluginPanelProps = {
   onOpenPluginDetails: (inventoryKey: string) => void;
   onDropPlugin?: (target: PluginSurfaceLaunchTarget, placement: WorkbenchCanvasWidgetPlacement) => void;
   externalDockDragController?: WorkbenchExternalDockDragController | null;
-  onPinPlugin?: (inventoryKey: string) => void;
+  pinnedInventoryKeys?: readonly string[];
+  onSetPluginPin?: (placement: PluginPinPlacement, inventoryKey: string, pinned: boolean) => void | Promise<void>;
 };
 
 export function PluginPanel(props: PluginPanelProps): JSX.Element {
@@ -51,7 +55,12 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const [category, setCategory] = createSignal<PluginPresentationCategory | 'all'>('all');
   const [mounted, setMounted] = createSignal(props.open);
   const [closing, setClosing] = createSignal(false);
+  const [pinMenu, setPinMenu] = createSignal<Readonly<{
+    inventoryKey: string;
+    request: BarItemContextMenuRequest;
+  }> | null>(null);
   let panelRef: HTMLDivElement | undefined;
+  let pinMenuRef: HTMLDivElement | null = null;
   let searchRef: HTMLInputElement | undefined;
   let gridRef: HTMLUListElement | undefined;
   let restoreFocusAfterClose = false;
@@ -72,6 +81,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       setClosing(false);
       return;
     }
+    setPinMenu(null);
     if (!mounted()) return;
     setClosing(true);
     closeTimer = window.setTimeout(() => {
@@ -135,7 +145,11 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     const onPointerDown = (event: PointerEvent) => {
       if (!isWorkbenchPopup() || !panelRef) return;
       const trigger = props.trigger?.isConnected ? props.trigger : null;
-      if (panelRef.contains(event.target as Node) || trigger?.contains(event.target as Node)) return;
+      if (
+        panelRef.contains(event.target as Node)
+        || pinMenuRef?.contains(event.target as Node)
+        || trigger?.contains(event.target as Node)
+      ) return;
       dismiss();
     };
     document.addEventListener('keydown', onKeyDown);
@@ -177,9 +191,23 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
           dismiss();
         },
       } : undefined,
-      onDropToDock: props.onPinPlugin ? () => props.onPinPlugin?.(tile.item.inventoryKey) : undefined,
+      onDropToDock: props.onSetPluginPin
+        ? () => void props.onSetPluginPin?.('workbench', tile.item.inventoryKey, true)
+        : undefined,
     });
   };
+
+  const requestPinMenu = (
+    inventoryKey: string,
+    request: BarItemContextMenuRequest,
+  ) => {
+    if (!props.onSetPluginPin) return;
+    setPinMenu({ inventoryKey, request });
+  };
+
+  const isPinContextMenuKey = (event: KeyboardEvent) => (
+    event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')
+  );
 
   const activateTile = (tile: PluginPanelTile) => {
     restoreFocusAfterClose = false;
@@ -285,9 +313,34 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                         type="button"
                         data-plugin-panel-tile={tile.item.inventoryKey}
                         aria-describedby={`plugin-launcher-tile-status-${index()}`}
+                        aria-haspopup={props.onSetPluginPin ? 'menu' : undefined}
+                        aria-expanded={pinMenu()?.inventoryKey === tile.item.inventoryKey ? 'true' : undefined}
                         class={cn('flex w-full min-w-0 cursor-pointer touch-none select-none flex-col items-center rounded-md border border-transparent text-center hover:border-border hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', isWorkbenchPopup() ? 'gap-1 px-1 py-2' : 'gap-2.5 px-2 py-3', PLUGIN_PRESS_MOTION_CLASS)}
                         onKeyDown={(event) => {
+                          if (props.onSetPluginPin && isPinContextMenuKey(event)) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            requestPinMenu(tile.item.inventoryKey, {
+                              trigger: event.currentTarget,
+                              clientX: rect.left + rect.width / 2,
+                              clientY: rect.top + rect.height / 2,
+                              source: 'keyboard',
+                            });
+                            return;
+                          }
                           moveGridFocus(event, index());
+                        }}
+                        onContextMenu={(event) => {
+                          if (!props.onSetPluginPin) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          requestPinMenu(tile.item.inventoryKey, {
+                            trigger: event.currentTarget,
+                            clientX: event.clientX,
+                            clientY: event.clientY,
+                            source: 'pointer',
+                          });
                         }}
                         onPointerDown={(event) => beginTileDrag(event, tile)}
                         onClick={() => activateTile(tile)}
@@ -403,6 +456,25 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
           </div>
         </Portal>
       </Show>
+      <PluginPinContextMenu
+        request={pinMenu()?.request ?? null}
+        label={pinMenu() && (props.pinnedInventoryKeys ?? []).includes(pinMenu()!.inventoryKey)
+          ? (props.placement === 'workbench'
+              ? i18n.t('uiCopy.plugin.unpinFromWorkbenchDock')
+              : i18n.t('uiCopy.plugin.unpinFromActivityBar'))
+          : (props.placement === 'workbench'
+              ? i18n.t('uiCopy.plugin.pinToWorkbenchDock')
+              : i18n.t('uiCopy.plugin.pinToActivityBar'))}
+        onLayerRef={(element) => { pinMenuRef = element; }}
+        onClose={() => setPinMenu(null)}
+        onSelect={() => {
+          const menu = pinMenu();
+          if (!menu) return;
+          const placement = props.placement === 'workbench' ? 'workbench' : 'activity';
+          const pinned = (props.pinnedInventoryKeys ?? []).includes(menu.inventoryKey);
+          return props.onSetPluginPin?.(placement, menu.inventoryKey, !pinned);
+        }}
+      />
     </>
   );
 }

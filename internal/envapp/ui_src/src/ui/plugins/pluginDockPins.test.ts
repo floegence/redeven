@@ -3,43 +3,90 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
-  addPluginDockPin,
-  loadPluginDockPins,
+  hasPluginPlacementPin,
+  loadPluginPlacementPins,
   pluginDockPinsStorageKey,
-  savePluginDockPins,
+  savePluginPlacementPins,
+  setPluginPlacementPin,
 } from './pluginDockPins';
 
 afterEach(() => {
-  localStorage.clear();
+  window.localStorage.clear();
 });
 
-describe('plugin Dock pins', () => {
-  it('persists ordered pins and restores them after a renderer remount', () => {
+describe('plugin placement pins', () => {
+  it('persists independent ordered Activity and Workbench pins', () => {
     const key = pluginDockPinsStorageKey('env-123');
-    savePluginDockPins(key, ['instance:containers', 'instance:database']);
+    savePluginPlacementPins(key, {
+      activityInventoryKeys: ['instance:database', 'instance:containers'],
+      workbenchInventoryKeys: ['instance:containers', 'instance:database'],
+    });
 
-    expect(loadPluginDockPins(key)).toEqual([
-      'instance:containers',
-      'instance:database',
-    ]);
+    expect(loadPluginPlacementPins(key)).toEqual({
+      activityInventoryKeys: ['instance:database', 'instance:containers'],
+      workbenchInventoryKeys: ['instance:containers', 'instance:database'],
+    });
   });
 
-  it('adds a pin idempotently without changing the existing order', () => {
-    expect(addPluginDockPin(['instance:containers'], 'instance:database')).toEqual([
-      'instance:containers',
-      'instance:database',
-    ]);
-    expect(addPluginDockPin(['instance:containers'], 'instance:containers')).toEqual([
-      'instance:containers',
-    ]);
+  it('migrates the v1 Dock order into the Workbench list exactly once', () => {
+    const key = pluginDockPinsStorageKey('env-123');
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 1,
+      inventoryKeys: ['instance:containers', '', 7, 'instance:database', 'instance:containers'],
+    }));
+
+    expect(loadPluginPlacementPins(key)).toEqual({
+      activityInventoryKeys: [],
+      workbenchInventoryKeys: ['instance:containers', 'instance:database'],
+    });
+    expect(JSON.parse(window.localStorage.getItem(key) ?? '{}')).toEqual({
+      schemaVersion: 2,
+      activityInventoryKeys: [],
+      workbenchInventoryKeys: ['instance:containers', 'instance:database'],
+    });
   });
 
-  it('fails closed for malformed and future persisted state', () => {
-    const key = pluginDockPinsStorageKey('env-123');
-    localStorage.setItem(key, JSON.stringify({ schemaVersion: 2, inventoryKeys: ['instance:containers'] }));
-    expect(loadPluginDockPins(key)).toEqual([]);
+  it('adds and removes each placement idempotently without disturbing the other list', () => {
+    const initial = {
+      activityInventoryKeys: ['instance:containers'],
+      workbenchInventoryKeys: ['instance:database'],
+    };
+    const activityAdded = setPluginPlacementPin(initial, 'activity', 'instance:database', true);
+    expect(activityAdded).toEqual({
+      activityInventoryKeys: ['instance:containers', 'instance:database'],
+      workbenchInventoryKeys: ['instance:database'],
+    });
+    expect(setPluginPlacementPin(activityAdded, 'activity', 'instance:database', true)).toEqual(activityAdded);
+    expect(setPluginPlacementPin(activityAdded, 'workbench', 'instance:database', false)).toEqual({
+      activityInventoryKeys: ['instance:containers', 'instance:database'],
+      workbenchInventoryKeys: [],
+    });
+    expect(hasPluginPlacementPin(activityAdded, 'activity', 'instance:database')).toBe(true);
+    expect(hasPluginPlacementPin(activityAdded, 'workbench', 'instance:containers')).toBe(false);
+  });
 
-    localStorage.setItem(key, JSON.stringify({ schemaVersion: 1, inventoryKeys: ['', 7, 'instance:containers', 'instance:containers'] }));
-    expect(loadPluginDockPins(key)).toEqual(['instance:containers']);
+  it('fails closed for malformed and future persisted state without rewriting it', () => {
+    const key = pluginDockPinsStorageKey('env-123');
+    const future = JSON.stringify({
+      schemaVersion: 3,
+      activityInventoryKeys: ['instance:containers'],
+      workbenchInventoryKeys: ['instance:database'],
+    });
+    window.localStorage.setItem(key, future);
+    expect(loadPluginPlacementPins(key)).toEqual({
+      activityInventoryKeys: [],
+      workbenchInventoryKeys: [],
+    });
+    expect(window.localStorage.getItem(key)).toBe(future);
+
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 2,
+      activityInventoryKeys: ['', 7, 'instance:containers', 'instance:containers'],
+      workbenchInventoryKeys: 'not-an-array',
+    }));
+    expect(loadPluginPlacementPins(key)).toEqual({
+      activityInventoryKeys: ['instance:containers'],
+      workbenchInventoryKeys: [],
+    });
   });
 });

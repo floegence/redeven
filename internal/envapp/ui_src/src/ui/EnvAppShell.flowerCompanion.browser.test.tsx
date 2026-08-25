@@ -236,6 +236,7 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
     floeRegistryComponents = () => props.components;
     return <>{props.children}</>;
   },
+  FloeRegistryContributions: () => null,
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({

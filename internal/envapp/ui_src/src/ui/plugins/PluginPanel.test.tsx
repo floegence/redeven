@@ -251,6 +251,79 @@ describe('PluginPanel', () => {
     expect(onOpenCenter).toHaveBeenCalledTimes(1);
   });
 
+  it('opens the mode-specific Activity pin action without closing the panel', async () => {
+    const onSetPluginPin = vi.fn();
+    mountPanel({ placement: 'activity', onSetPluginPin });
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+
+    tile.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 120,
+      clientY: 160,
+    }));
+    await Promise.resolve();
+
+    const action = document.querySelector<HTMLButtonElement>('[data-plugin-pin-menu-action]')!;
+    expect(tile.getAttribute('aria-haspopup')).toBe('menu');
+    expect(action.textContent).toContain('Pin to Activity Bar');
+    action.click();
+    await Promise.resolve();
+    expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_containers', true);
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it('projects the Workbench Dock action through the owning surface floating layer', async () => {
+    const { surface, trigger } = createWorkbenchTrigger();
+    mountPanel({ placement: 'workbench', trigger, onSetPluginPin: vi.fn() });
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+
+    tile.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 600,
+      clientY: 620,
+    }));
+    await Promise.resolve();
+
+    const menu = surface.querySelector<HTMLElement>('[data-plugin-pin-menu]')!;
+    expect(menu).not.toBeNull();
+    expect(menu.className).toContain('absolute');
+    expect(menu.className).not.toContain('fixed');
+    expect(menu.textContent).toContain('Pin to Workbench Dock');
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it('supports the keyboard menu key, arrows, Enter, Escape, and focus restoration', async () => {
+    const onSetPluginPin = vi.fn();
+    mountPanel({
+      placement: 'activity',
+      pinnedInventoryKeys: ['instance:plugininst_containers'],
+      onSetPluginPin,
+    });
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    tile.focus();
+    tile.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ContextMenu' }));
+    await Promise.resolve();
+
+    const menu = document.querySelector<HTMLElement>('[data-plugin-pin-menu]')!;
+    const action = document.querySelector<HTMLButtonElement>('[data-plugin-pin-menu-action]')!;
+    expect(action.textContent).toContain('Unpin from Activity Bar');
+    menu.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }));
+    menu.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+    await Promise.resolve();
+    expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_containers', false);
+
+    tile.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'F10', shiftKey: true }));
+    await Promise.resolve();
+    document.querySelector<HTMLElement>('[data-plugin-pin-menu]')?.dispatchEvent(
+      new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }),
+    );
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-pin-menu]')).toBeNull();
+    expect(document.activeElement).toBe(tile);
+  });
+
   it('mounts the Workbench launcher in the local floating layer with the Dock material', () => {
     const { surface, trigger } = createWorkbenchTrigger();
     mountPanel({ placement: 'workbench', trigger });
@@ -274,13 +347,13 @@ describe('PluginPanel', () => {
   it('delegates canvas placement and Dock pinning to the unified Workbench drag transaction', () => {
     const { trigger } = createWorkbenchTrigger();
     const onDropPlugin = vi.fn();
-    const onPinPlugin = vi.fn();
+    const onSetPluginPin = vi.fn();
     let dragItem: any;
     mountPanel({
       placement: 'workbench',
       trigger,
       onDropPlugin,
-      onPinPlugin,
+      onSetPluginPin,
       externalDockDragController: { begin: (_event, item) => { dragItem = item; } },
     });
 
@@ -301,7 +374,7 @@ describe('PluginPanel', () => {
     expect(document.querySelector('[data-plugin-workbench-drag-ghost]')).toBeNull();
 
     dragItem.onDropToDock();
-    expect(onPinPlugin).toHaveBeenCalledWith('instance:plugininst_containers');
+    expect(onSetPluginPin).toHaveBeenCalledWith('workbench', 'instance:plugininst_containers', true);
   });
 
   it('opens on the first normal click after a canvas drop and panel reopen', async () => {

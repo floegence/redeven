@@ -611,12 +611,18 @@ The current released platform contract also fixes the host-integration shape:
   `PluginSurfaceSlot` instances. Redeven must not construct a surface host,
   bootstrap document, iframe, bridge token, or asset session itself.
 - Activity and Workbench are Redeven placement choices, not manifest surface
-  kinds. ReDevPlugin manifests remain host-neutral. Activity places each
-  SDK-owned surface in a stable Shell-root floating window; responsive desktop
-  and mobile chrome must not remount or reuse its slot. Workbench places the
-  SDK-owned surface in the standard projected `redeven.plugin` widget and uses
-  only the released, source/port-bound interaction-ownership callback to drive
-  Redeven's local-interaction policy.
+  kinds. ReDevPlugin manifests remain host-neutral. A normal Activity launch
+  places each SDK-owned surface in a stable Shell-root floating window. A
+  desktop Activity pin projects the current default surface as a stable,
+  full-screen Activity contribution through the released Floe registry; the
+  Activity chrome remains visible and `ActivityAppsMain` keeps a visited page
+  mounted while sending released `visible` and `hidden` lifecycle changes.
+  Mobile keeps the Launcher flow and must not project dynamic plugin entries
+  into its tab bar. Workbench places the SDK-owned surface in the standard
+  projected `redeven.plugin` widget and uses only the released,
+  source/port-bound interaction-ownership callback to drive Redeven's local-
+  interaction policy. Responsive chrome, pinning, and placement changes must
+  never move or reuse an existing slot.
   Manifest surface kinds remain the closed
   `view|command|background` set with `primary|secondary|utility` roles; do not
   add Activity, Workbench, widget, settings-placement, or other Redeven layout
@@ -627,11 +633,22 @@ The current released platform contract also fixes the host-integration shape:
   active full-screen window may remain visible to pointer, keyboard, and
   accessibility input, while hidden windows retain their stable DOM and receive
   the released `hidden` lifecycle.
+- Activity Bar and Workbench Dock pins are product-owned, renderer- and
+  environment-scoped shortcuts bound to exact `inventoryKey` values. Their
+  ordered lists are independent. A pinned record whose current inventory item
+  is disabled, removed, or lacks a launchable default target remains dormant
+  and hidden until it becomes launchable again. Unpinning an Activity entry
+  must await exact full-page close and retain the entry on failure; unpinning a
+  Workbench Dock shortcut must not remove an already placed widget. Product
+  menus use the released bar-item request and surface-aware floating layer,
+  including keyboard menu keys, focus restoration, and Workbench-local
+  projection.
 - Moving a plugin surface between Activity and Workbench must await closure of
-  the old slot and open a fresh slot lease and iframe. Redeven must not move,
-  adopt, or reuse an existing iframe or `surface_instance_id`. Placement changes
-  are globally serialized, and the new placement or persisted Workbench widget
-  state must not commit until the old slot has closed successfully.
+  the old floating-window, full-page, or widget slot and open a fresh slot lease
+  and iframe. Redeven must not move, adopt, or reuse an existing iframe or
+  `surface_instance_id`. Placement changes are globally serialized, and the new
+  placement or persisted Workbench widget state must not commit until the old
+  slot has closed successfully.
 - Workbench wheel, text-selection, action, activation, focus, and floating-layer
   markers remain Redeven-owned product interaction policy around the SDK-owned
   element. They must not be encoded into the plugin manifest or implemented by

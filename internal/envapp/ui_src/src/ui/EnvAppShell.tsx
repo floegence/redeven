@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
-import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
+import { ActivityAppsMain, FloeRegistryContributions, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
   AlertTriangle,
@@ -44,6 +44,7 @@ import {
   StatusIndicator,
   TopBarIconButton,
   type ActivityBarItem,
+  type BarItemContextMenuRequest,
   type BottomBarCompanionDismissReason,
   type BottomBarCompanionPhase,
 } from '@floegence/floe-webapp-core/layout';
@@ -76,7 +77,15 @@ import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import { PluginCenterView } from './plugins/PluginCenterView';
 import { PluginPanel } from './plugins/PluginPanel';
-import { addPluginDockPin, loadPluginDockPins, pluginDockPinsStorageKey, savePluginDockPins } from './plugins/pluginDockPins';
+import {
+  hasPluginPlacementPin,
+  loadPluginPlacementPins,
+  pluginDockPinsStorageKey,
+  savePluginPlacementPins,
+  setPluginPlacementPin,
+  type PluginPinPlacement,
+  type PluginPlacementPins,
+} from './plugins/pluginDockPins';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
 import { clearPluginIconCache } from './plugins/pluginIconLoader';
 import {
@@ -101,6 +110,8 @@ import type {
   PluginSurfaceLaunchTarget,
 } from './plugins/pluginTypes';
 import { PluginIcon } from './plugins/PluginPresentationPrimitives';
+import { ActivityPluginSurfacePage } from './plugins/ActivityPluginSurfacePage';
+import { PluginPinContextMenu } from './plugins/PluginPinContextMenu';
 import type { WorkbenchPluginSurfaceController } from './workbench/WorkbenchPluginSurfaceContext';
 import {
   MAX_ACTIVITY_PLUGIN_WINDOWS,
@@ -269,6 +280,11 @@ const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 
 const PLUGIN_CENTER_ACTIVITY_ID = 'plugin-center';
+const PLUGIN_ACTIVITY_COMPONENT_PREFIX = 'redeven.plugin.activity:';
+
+function pluginActivityComponentID(inventoryKey: string): string {
+  return `${PLUGIN_ACTIVITY_COMPONENT_PREFIX}${encodeURIComponent(inventoryKey)}`;
+}
 const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
 const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module) => ({ default: module.EnvMonitorPage })));
 const EnvFileBrowserPage = lazy(() => import('./pages/EnvFileBrowserPage').then((module) => ({ default: module.EnvFileBrowserPage })));
@@ -298,6 +314,13 @@ type PluginPanelState = Readonly<{
   open: boolean;
   placement: 'activity' | 'workbench';
   trigger: HTMLButtonElement | null;
+}>;
+
+type ActivityPluginPageRuntime = Readonly<{
+  target: Accessor<PluginSurfaceLaunchTarget | null>;
+  setTarget: Setter<PluginSurfaceLaunchTarget | null>;
+  close: Accessor<(() => Promise<boolean>) | null>;
+  setClose: Setter<(() => Promise<boolean>) | null>;
 }>;
 
 function createActivityPluginWindow(
@@ -566,6 +589,7 @@ export function EnvAppShell() {
       }
       pendingPluginUnknownOutcomeCleanup = (async () => {
         try {
+          await retireActivityPluginPages(pluginInstanceID || undefined);
           if (pluginInstanceID) {
             await pluginSurfaceCoordinator.invalidatePlugin(pluginInstanceID);
             await workbenchPluginSurfaceController?.closePlugin(pluginInstanceID);
@@ -594,6 +618,7 @@ export function EnvAppShell() {
   let pluginInstallCoordinator: PluginInstallCoordinator | undefined;
   const performEndPluginSession = async (): Promise<boolean> => {
     pluginConfirmationQueue.cancelAll();
+    await retireActivityPluginPages();
     const localCleanup = await Promise.allSettled([
       pluginSurfaceCoordinator.dispose(),
       workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
@@ -1064,21 +1089,59 @@ export function EnvAppShell() {
   const pluginsPanelPlacement = () => pluginPanelState().placement;
   const [externalDockDragController, setExternalDockDragController] = createSignal<WorkbenchExternalDockDragController | null>(null);
   const pluginDockPinsKey = createMemo(() => pluginDockPinsStorageKey(String(envId() ?? 'default')));
-  const [pluginDockPins, setPluginDockPins] = createSignal<string[]>([]);
-  createEffect(() => setPluginDockPins(loadPluginDockPins(pluginDockPinsKey())));
-  const pinPlugin = (inventoryKey: string) => {
-    const next = addPluginDockPin(pluginDockPins(), inventoryKey);
-    setPluginDockPins(next);
-    savePluginDockPins(pluginDockPinsKey(), next);
+  const [pluginPlacementPins, setPluginPlacementPins] = createSignal<PluginPlacementPins>({
+    activityInventoryKeys: [],
+    workbenchInventoryKeys: [],
+  });
+  const [pluginPinMenu, setPluginPinMenu] = createSignal<Readonly<{
+    placement: PluginPinPlacement;
+    inventoryKey: string;
+    request: BarItemContextMenuRequest;
+  }> | null>(null);
+  createEffect(() => setPluginPlacementPins(loadPluginPlacementPins(pluginDockPinsKey())));
+  const persistPluginPlacementPins = (pins: PluginPlacementPins) => {
+    setPluginPlacementPins(pins);
+    savePluginPlacementPins(pluginDockPinsKey(), pins);
   };
-  const pluginDockItems = createMemo<readonly WorkbenchHostDockItem[]>(() => pluginDockPins()
+  const setPluginPin = async (
+    placement: PluginPinPlacement,
+    inventoryKey: string,
+    pinned: boolean,
+  ) => {
+    if (hasPluginPlacementPin(pluginPlacementPins(), placement, inventoryKey) === pinned) return;
+    if (placement === 'activity' && !pinned) {
+      try {
+        await retireActivityPluginPage(inventoryKey);
+      } catch (error) {
+        reportPluginSurfaceRetirementError(error);
+        return;
+      }
+      if (layout.sidebarActiveTab() === pluginActivityComponentID(inventoryKey)) {
+        activateActivitySurface(lastActivitySurface(), { persist: false });
+      }
+    }
+    persistPluginPlacementPins(setPluginPlacementPin(
+      pluginPlacementPins(),
+      placement,
+      inventoryKey,
+      pinned,
+    ));
+  };
+  const pluginDockItems = createMemo<readonly WorkbenchHostDockItem[]>(() => pluginPlacementPins().workbenchInventoryKeys
     .map((inventoryKey) => pluginPanelModel().tiles.find((tile) => tile.kind === 'plugin' && tile.item.inventoryKey === inventoryKey))
-    .filter((tile): tile is Extract<PluginPanelModel['tiles'][number], { kind: 'plugin' }> => Boolean(tile))
+    .filter((tile): tile is Extract<PluginPanelModel['tiles'][number], { kind: 'plugin' }> => (
+      tile?.kind === 'plugin' && tile.action === 'open_surface' && Boolean(tile.item.defaultLaunchTarget)
+    ))
     .map((tile) => ({
       id: tile.item.inventoryKey,
       label: tile.item.displayName,
       icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
       active: false,
+      onContextMenu: (request) => setPluginPinMenu({
+        placement: 'workbench',
+        inventoryKey: tile.item.inventoryKey,
+        request,
+      }),
       onActivate: () => tile.item.defaultLaunchTarget && void openPluginSurface({ ...tile.item.defaultLaunchTarget, preferredPlacement: 'workbench' }).catch(reportPluginNavigationFailure),
       canvasPlacement: tile.item.defaultLaunchTarget ? {
         widgetType: 'redeven.plugin',
@@ -1093,6 +1156,52 @@ export function EnvAppShell() {
   const [activityPluginWindows, setActivityPluginWindows] = createSignal<readonly ActivityPluginWindow[]>([]);
   const [activityPluginFocusRequests, setActivityPluginFocusRequests] = createSignal<Readonly<Record<string, number>>>({});
   const activityPluginCloseRequests = new Map<string, () => Promise<void>>();
+  const activityPluginPageRuntimes = new Map<string, ActivityPluginPageRuntime>();
+  const ensureActivityPluginPageRuntime = (inventoryKey: string): ActivityPluginPageRuntime => {
+    const existing = activityPluginPageRuntimes.get(inventoryKey);
+    if (existing) return existing;
+    const [target, setTarget] = createSignal<PluginSurfaceLaunchTarget | null>(null);
+    const [close, setClose] = createSignal<(() => Promise<boolean>) | null>(null);
+    const runtime = { target, setTarget, close, setClose };
+    activityPluginPageRuntimes.set(inventoryKey, runtime);
+    return runtime;
+  };
+  const retireActivityPluginPage = async (inventoryKey: string): Promise<void> => {
+    const runtime = activityPluginPageRuntimes.get(inventoryKey);
+    if (!runtime) return;
+    const close = runtime.close();
+    if (close && !(await close())) {
+      throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
+    }
+    runtime.setClose(null);
+    runtime.setTarget(null);
+  };
+  const retireMatchingActivityPluginPages = async (
+    target: Pick<PluginSurfaceLaunchTarget, 'pluginInstanceID' | 'surfaceID'>,
+  ): Promise<void> => {
+    for (const [inventoryKey, runtime] of activityPluginPageRuntimes) {
+      const current = runtime.target();
+      if (
+        current?.pluginInstanceID !== target.pluginInstanceID
+        || current.surfaceID !== target.surfaceID
+      ) continue;
+      await retireActivityPluginPage(inventoryKey);
+    }
+  };
+  const activityPluginPageTargets = (
+    pluginInstanceID?: string,
+  ): readonly Readonly<{ inventoryKey: string; target: PluginSurfaceLaunchTarget }>[] => (
+    [...activityPluginPageRuntimes.entries()].flatMap(([inventoryKey, runtime]) => {
+      const target = runtime.target();
+      if (!target || (pluginInstanceID && target.pluginInstanceID !== pluginInstanceID)) return [];
+      return [{ inventoryKey, target }];
+    })
+  );
+  const retireActivityPluginPages = async (pluginInstanceID?: string): Promise<void> => {
+    for (const { inventoryKey } of activityPluginPageTargets(pluginInstanceID)) {
+      await retireActivityPluginPage(inventoryKey);
+    }
+  };
   let workbenchPluginSurfaceController: WorkbenchPluginSurfaceController | null = null;
   let nextActivityPluginWindowID = 0;
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
@@ -1437,6 +1546,59 @@ export function EnvAppShell() {
       loading: pluginInventoryInitialPending(),
     },
   ));
+  const pinnedActivityPluginTiles = createMemo(() => pluginPlacementPins().activityInventoryKeys
+    .map((inventoryKey) => pluginPanelModel().tiles.find((tile) => (
+      tile.kind === 'plugin' && tile.item.inventoryKey === inventoryKey
+    )))
+    .filter((tile): tile is Extract<PluginPanelModel['tiles'][number], { kind: 'plugin' }> => (
+      tile?.kind === 'plugin' && tile.action === 'open_surface' && Boolean(tile.item.defaultLaunchTarget)
+    )));
+  const activityPluginContributions = createMemo<readonly FloeComponent[]>(() => (
+    pinnedActivityPluginTiles().map((tile, index) => {
+      const inventoryKey = tile.item.inventoryKey;
+      const runtime = ensureActivityPluginPageRuntime(inventoryKey);
+      const ActivityPluginPage = () => {
+        let ownedClose: (() => Promise<boolean>) | null = null;
+        return (
+          <ActivityPluginSurfacePage
+            coordinator={pluginSurfaceCoordinator}
+            confirmationQueue={pluginConfirmationQueue}
+            target={runtime.target}
+            registerClose={(close) => {
+              if (close) {
+                ownedClose = close;
+                runtime.setClose(() => close);
+                return;
+              }
+              if (runtime.close() === ownedClose) runtime.setClose(null);
+              ownedClose = null;
+            }}
+            onRetirementError={reportPluginSurfaceRetirementError}
+          />
+        );
+      };
+      return {
+        id: pluginActivityComponentID(inventoryKey),
+        name: tile.item.displayName,
+        icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
+        component: ActivityPluginPage,
+        sidebar: {
+          order: 20 + index,
+          fullScreen: true,
+          hiddenOnMobile: true,
+          collapseBehavior: 'preserve',
+        },
+        onUnmount: () => retireActivityPluginPage(inventoryKey),
+      } satisfies FloeComponent;
+    })
+  ));
+
+  createEffect(() => {
+    const activeID = layout.sidebarActiveTab();
+    if (!activeID.startsWith(PLUGIN_ACTIVITY_COMPONENT_PREFIX)) return;
+    if (activityPluginContributions().some((component) => component.id === activeID)) return;
+    activateActivitySurface(lastActivitySurface(), { persist: false });
+  });
 
   const openPluginCenter = async (selectedInventoryKey?: string) => {
     updatePluginPanel({ open: false });
@@ -1544,6 +1706,7 @@ export function EnvAppShell() {
     if (currentTarget.preferredPlacement === 'workbench') {
       setViewMode('workbench', { surfaceId: lastActivitySurface() });
       const controller = await resolveWorkbenchPluginSurfaceController();
+      await retireMatchingActivityPluginPages(currentTarget);
       await closeMatchingActivityPluginWindows(currentTarget);
       if (options.workbenchPlacement) {
         await controller.open(currentTarget, options.workbenchPlacement);
@@ -1555,6 +1718,7 @@ export function EnvAppShell() {
     if (workbenchPluginSurfaceController) {
       await workbenchPluginSurfaceController.close(currentTarget);
     }
+    await retireMatchingActivityPluginPages(currentTarget);
     const staleActivityWindow = activityPluginWindows().find((window) => (
       window.target().pluginInstanceID === currentTarget.pluginInstanceID
       && window.target().surfaceID === currentTarget.surfaceID
@@ -1610,6 +1774,45 @@ export function EnvAppShell() {
   ): Promise<void> => (
     serializePluginPlacementOperation(() => performOpenPluginSurface(target, options))
   );
+  const performOpenPinnedActivityPlugin = async (inventoryKey: string): Promise<void> => {
+    const tile = pluginPanelModel().tiles.find((candidate) => (
+      candidate.kind === 'plugin'
+      && candidate.item.inventoryKey === inventoryKey
+      && candidate.action === 'open_surface'
+      && candidate.item.defaultLaunchTarget
+    ));
+    if (!tile || tile.kind !== 'plugin' || !tile.item.defaultLaunchTarget) {
+      throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    }
+    const requestedTarget = {
+      ...tile.item.defaultLaunchTarget,
+      preferredPlacement: 'activity' as const,
+    };
+    const currentTarget = resolveCurrentPluginSurfaceTarget(requestedTarget);
+    if (!currentTarget) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+
+    updatePluginPanel({ open: false });
+    setPluginCenterSelectedInventoryKey(undefined);
+    if (workbenchPluginSurfaceController) {
+      await workbenchPluginSurfaceController.close(currentTarget);
+    }
+    await closeMatchingActivityPluginWindows(currentTarget);
+
+    const runtime = ensureActivityPluginPageRuntime(inventoryKey);
+    const mountedTarget = runtime.target();
+    if (mountedTarget && pluginSurfaceTargetKey(mountedTarget) !== pluginSurfaceTargetKey(currentTarget)) {
+      await retireActivityPluginPage(inventoryKey);
+    }
+    if (!runtime.target()) runtime.setTarget({ ...currentTarget });
+
+    if (viewMode() !== 'activity') {
+      setViewMode('activity', { surfaceId: lastActivitySurface() });
+    }
+    setEnvSidebarActiveTab(pluginActivityComponentID(inventoryKey), { openSidebar: false });
+  };
+  const openPinnedActivityPlugin = (inventoryKey: string): Promise<void> => (
+    serializePluginPlacementOperation(() => performOpenPinnedActivityPlugin(inventoryKey))
+  );
 
   const performPluginCenterManagementCommand = async (
     command: Exclude<PluginLifecycleCommand, { type: 'open_surface' } | { type: 'install' }>,
@@ -1622,6 +1825,7 @@ export function EnvAppShell() {
     const invalidatesPluginSurfaces = (
       (
         activityPluginWindows().some((window) => window.target().pluginInstanceID === command.pluginInstanceID)
+        || activityPluginPageTargets(command.pluginInstanceID).length > 0
         || (workbenchPluginSurfaceController?.listPluginTargets(command.pluginInstanceID).length ?? 0) > 0
       )
     );
@@ -1632,6 +1836,9 @@ export function EnvAppShell() {
       ? activityPluginWindows().filter((window) => (
         window.target().pluginInstanceID === permissionMutationPluginInstanceID
       )).map((window) => window.target()) : [];
+    const preservedActivityPageTargets = permissionMutationPluginInstanceID
+      ? activityPluginPageTargets(permissionMutationPluginInstanceID)
+      : [];
     const preservedWorkbenchPermissionTargets = permissionMutationPluginInstanceID
       ? workbenchPluginSurfaceController?.listPluginTargets(permissionMutationPluginInstanceID) ?? []
       : [];
@@ -1663,6 +1870,7 @@ export function EnvAppShell() {
       if (invalidatesPluginSurfaces && pluginMutationOutcome(mutationError) === 'committed') {
         pluginConfirmationQueue.cancelAll();
         try {
+          await retireActivityPluginPages(command.pluginInstanceID);
           await pluginSurfaceCoordinator.invalidatePlugin(command.pluginInstanceID);
           await workbenchPluginSurfaceController?.closePlugin(command.pluginInstanceID);
         } catch (error) {
@@ -1684,6 +1892,7 @@ export function EnvAppShell() {
     if (invalidatesPluginSurfaces) {
       pluginConfirmationQueue.cancelAll();
       try {
+        await retireActivityPluginPages(command.pluginInstanceID);
         await pluginSurfaceCoordinator.invalidatePlugin(command.pluginInstanceID);
         await workbenchPluginSurfaceController?.closePlugin(command.pluginInstanceID);
       } catch (error) {
@@ -1744,6 +1953,21 @@ export function EnvAppShell() {
         }
       }
     }
+    if (permissionMutationPluginInstanceID && preservedActivityPageTargets.length > 0) {
+      const refreshedItem = refreshedProjection?.items.find((item) => (
+        item.pluginInstanceID === permissionMutationPluginInstanceID
+      ));
+      const nextTarget = refreshedItem?.defaultLaunchTarget;
+      if (nextTarget) {
+        for (const preserved of preservedActivityPageTargets) {
+          if (!hasPluginPlacementPin(pluginPlacementPins(), 'activity', preserved.inventoryKey)) continue;
+          ensureActivityPluginPageRuntime(preserved.inventoryKey).setTarget({
+            ...nextTarget,
+            preferredPlacement: 'activity',
+          });
+        }
+      }
+    }
   };
 
   const handlePluginCenterCommand = (
@@ -1788,6 +2012,7 @@ export function EnvAppShell() {
       if (!updatePluginInstanceID || cleanup) return cleanup;
       pluginConfirmationQueue.cancelAll();
       cleanup = (async () => {
+        await retireActivityPluginPages(updatePluginInstanceID);
         const results = await Promise.allSettled([
           pluginSurfaceCoordinator.invalidatePlugin(updatePluginInstanceID),
           workbenchPluginSurfaceController?.closePlugin(updatePluginInstanceID) ?? Promise.resolve(),
@@ -2515,6 +2740,7 @@ export function EnvAppShell() {
           setPluginRuntimeRecoveryComplete(false);
           if (!readPluginSessionCredential()) return;
           pluginConfirmationQueue.cancelAll();
+          await retireActivityPluginPages();
           await Promise.allSettled([
             pluginSurfaceCoordinator.closeAll(),
             workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
@@ -3843,6 +4069,23 @@ export function EnvAppShell() {
           placement: 'activity',
         }),
     });
+    if (!layout.isMobile()) {
+      for (const tile of pinnedActivityPluginTiles()) {
+        items.push({
+          id: pluginActivityComponentID(tile.item.inventoryKey),
+          icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
+          label: tile.item.displayName,
+          collapseBehavior: 'preserve',
+          onClick: () => void openPinnedActivityPlugin(tile.item.inventoryKey)
+            .catch(reportPluginNavigationFailure),
+          onContextMenu: (request) => setPluginPinMenu({
+            placement: 'activity',
+            inventoryKey: tile.item.inventoryKey,
+            request,
+          }),
+        });
+      }
+    }
     if (canUseFlower()) {
       items.push({
         id: 'ai',
@@ -5030,7 +5273,22 @@ export function EnvAppShell() {
         }).catch(reportPluginNavigationFailure)}
         onDropPlugin={(target, placement) => void openPluginSurface(target, { workbenchPlacement: placement }).catch(reportPluginNavigationFailure)}
         externalDockDragController={externalDockDragController()}
-        onPinPlugin={pinPlugin}
+        pinnedInventoryKeys={pluginsPanelPlacement() === 'workbench'
+          ? pluginPlacementPins().workbenchInventoryKeys
+          : pluginPlacementPins().activityInventoryKeys}
+        onSetPluginPin={setPluginPin}
+      />
+      <PluginPinContextMenu
+        request={pluginPinMenu()?.request ?? null}
+        label={pluginPinMenu()?.placement === 'workbench'
+          ? i18n.t('uiCopy.plugin.unpinFromWorkbenchDock')
+          : i18n.t('uiCopy.plugin.unpinFromActivityBar')}
+        onClose={() => setPluginPinMenu(null)}
+        onSelect={() => {
+          const menu = pluginPinMenu();
+          if (!menu) return;
+          return setPluginPin(menu.placement, menu.inventoryKey, false);
+        }}
       />
       <TerminalSessionCatalogProvider>
         <DownloadContext.Provider value={downloadManager}>
@@ -5045,6 +5303,10 @@ export function EnvAppShell() {
               }}
             >
               <FloeRegistryRuntime components={components()}>
+                <FloeRegistryContributions
+                  components={activityPluginContributions()}
+                  onError={reportPluginSurfaceRetirementError}
+                />
                 {renderMainShell()}
                   <Show when={viewMode() !== 'workbench' && filePreviewHostRequested()}>
                     <FilePreviewHost />
