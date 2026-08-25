@@ -89,6 +89,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     envLabel: trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'),
     desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
     rpc,
+    settingsRevision: env.settingsSeq,
     canMutate: Boolean(
       env.env()?.permissions?.can_read
       && env.env()?.permissions?.can_write
@@ -179,6 +180,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
         }}
         copy={surfaceCopy()}
         draftCoordinator={props.draftCoordinator}
+        settingsRevision={env.settingsSeq}
         presentation={props.presentation}
         engaged={props.engaged}
         transcriptVisible={props.transcriptVisible}

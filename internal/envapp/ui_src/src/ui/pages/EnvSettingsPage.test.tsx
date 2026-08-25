@@ -685,6 +685,7 @@ describe('EnvSettingsPage', () => {
           refreshSettings: async () => undefined,
           mutateSettings: () => undefined,
           saveSettings: async () => ({ settings: null, aiUpdate: null }) as any,
+          saveDefaultAIPermission: async () => ({ settings: null, aiUpdate: null }) as any,
           codeRuntimeStatus: Object.assign(() => null, { loading: false, error: null, state: 'ready' }) as EnvSettingsPageContextValue['codeRuntimeStatus'],
           refreshCodeRuntimeStatus: () => undefined,
           codeRuntimeInstallMethod: () => 'desktop_transfer' as const,
@@ -880,6 +881,7 @@ describe('EnvSettingsPage', () => {
     protocolMocks.status.mockReturnValue('connected');
     settingsResponse = {
       config_path: '/tmp/config.json',
+      connection: { controlplane_base_url: '', environment_id: '', agent_instance_id: '', direct: { artifact_provisioned: false, expires_at_unix_s: 0 } },
       runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' },
       logging: { log_format: 'plain', log_level: 'info' },
       codespaces: { code_server_port_min: 0, code_server_port_max: 0 },

@@ -33,8 +33,9 @@ import {
   type BrowserEditorSetupProgress,
 } from '../../services/browserEditorSetupProgress';
 import { useEnvContext, type EnvSettingsSection } from '../EnvContext';
-import type { AgentSettingsResponse, SettingsUpdateResponse } from './types';
+import type { AIPermissionType, AgentSettingsResponse, SettingsUpdateResponse } from './types';
 import { useI18n } from '../../i18n';
+import { updateDefaultAIPermission } from '../../services/aiDefaultPermission';
 
 // ── Helpers ──
 
@@ -77,6 +78,7 @@ export interface EnvSettingsPageContextValue {
   refreshSettings: () => Promise<void>;
   mutateSettings: (v: AgentSettingsResponse | null) => void;
   saveSettings: (body: any) => Promise<SettingsUpdateResponse>;
+  saveDefaultAIPermission: (permissionType: AIPermissionType) => Promise<SettingsUpdateResponse>;
 
   codeRuntimeStatus: Resource<CodeRuntimeStatus | null>;
   refreshCodeRuntimeStatus: () => void;
@@ -275,6 +277,13 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
     return normalized as any;
   };
 
+  const saveDefaultAIPermission = async (permissionType: AIPermissionType): Promise<SettingsUpdateResponse> => {
+    const response = await updateDefaultAIPermission(permissionType);
+    mutateSettings(response.settings);
+    env.bumpSettingsSeq();
+    return response;
+  };
+
   const refreshSettingsPage = async () => {
     await Promise.allSettled([
       refetch(),
@@ -402,7 +411,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
 
   const value: EnvSettingsPageContextValue = {
     env, protocol, notify, runtimeUpdate,
-    settings, refreshSettings: refreshSettingsPage, mutateSettings, saveSettings,
+    settings, refreshSettings: refreshSettingsPage, mutateSettings, saveSettings, saveDefaultAIPermission,
     codeRuntimeStatus, refreshCodeRuntimeStatus: () => { void refetchCodeRuntimeStatus(); },
     canInteract, canAdmin,
     activeSection, setActiveSection,

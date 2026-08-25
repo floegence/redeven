@@ -629,6 +629,8 @@ export type FlowerSurfaceProps = Readonly<{
   notify: (notification: FlowerSurfaceNotification) => void;
   copy?: FlowerSurfaceCopy;
   draftCoordinator: FlowerComposerDraftCoordinator;
+  /** External settings version used to refresh environment defaults in place. */
+  settingsRevision?: Accessor<number>;
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
@@ -3871,21 +3873,58 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     return request;
   };
-  const loadSurface = async () => {
-    try {
-      const next = await props.adapter.loadSettings();
+  let settingsRefreshRequest: Promise<void> | null = null;
+  let settingsRefreshGeneration = 0;
+  const refreshSettingsForRevision = (invalidateInFlight = false) => {
+    if (invalidateInFlight) settingsRefreshGeneration += 1;
+    if (settingsRefreshRequest) return settingsRefreshRequest;
+    const generation = ++settingsRefreshGeneration;
+    const request = props.adapter.loadSettings().then((next) => {
+      if (generation !== settingsRefreshGeneration || surfaceDisposed) return;
       setSnapshot(next);
       setLoadError('');
+    }).catch((error) => {
+      if (generation === settingsRefreshGeneration && !surfaceDisposed) setLoadError(getErrorMessage(error));
+      throw error;
+    }).finally(() => {
+      if (settingsRefreshRequest === request) settingsRefreshRequest = null;
+    });
+    settingsRefreshRequest = request;
+    return request;
+  };
+
+  const loadSurface = async () => {
+    try {
+      await refreshSettingsForRevision();
       await resolveHandlerDecision().catch(() => undefined);
       await refreshThreads();
-    } catch (error) {
-      setLoadError(getErrorMessage(error));
+    } catch {
+      // refreshSettingsForRevision records the user-visible load error.
     }
   };
+
+  createEffect(on(
+    () => props.settingsRevision?.() ?? 0,
+    (revision, previousRevision) => {
+      if (previousRevision === undefined || revision === previousRevision) return;
+      const hadInFlightRefresh = settingsRefreshRequest !== null;
+      void refreshSettingsForRevision(true).catch(() => undefined).finally(() => {
+        if (!surfaceDisposed && (hadInFlightRefresh || (props.settingsRevision?.() ?? 0) !== revision)) {
+          void refreshSettingsForRevision(true).catch(() => undefined);
+        }
+      });
+    },
+    { defer: true },
+  ));
 
   onMount(() => {
     setThreadRailWidth(loadThreadRailWidth());
     void loadSurface();
+  });
+
+  onCleanup(() => {
+    settingsRefreshGeneration += 1;
+    settingsRefreshRequest = null;
   });
 
   createEffect(() => {

@@ -8,6 +8,7 @@ import {
   uploadLocalApiAttachment,
 } from '../services/localApi';
 import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
+import { updateDefaultAIPermission } from '../services/aiDefaultPermission';
 import type {
   FlowerApprovalCommandResult,
   FlowerAttachmentUploadInput,
@@ -58,6 +59,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   desktopSessionTargetRoute?: 'local_host' | 'remote_desktop';
   rpc: RedevenV1Rpc;
   canMutate?: boolean;
+  settingsRevision?: () => number;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
   onSettingsChanged?: () => void | Promise<unknown>;
   uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
@@ -665,6 +667,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
   let modelsCache: Readonly<{ value: ModelsResponse; expiresAtMS: number }> | null = null;
   let settingsRequest: Promise<FlowerSettingsSnapshot> | null = null;
   let modelsRequest: Promise<ModelsResponse> | null = null;
+  let observedSettingsRevision = options.settingsRevision?.() ?? 0;
   const loadCachedModels = (): Promise<ModelsResponse> => {
     const now = Date.now();
     if (modelsCache && modelsCache.expiresAtMS > now) return Promise.resolve(modelsCache.value);
@@ -680,6 +683,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     return request;
   };
   const loadCachedSettings = (): Promise<FlowerSettingsSnapshot> => {
+    const externalRevision = options.settingsRevision?.() ?? 0;
+    if (externalRevision !== observedSettingsRevision) {
+      observedSettingsRevision = externalRevision;
+      invalidateSettingsCache();
+    }
     const now = Date.now();
     if (settingsCache && settingsCache.expiresAtMS > now) return Promise.resolve(settingsCache.value);
     if (settingsRequest) return settingsRequest;
@@ -802,12 +810,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     mapperOptions: envLiveMapperOptions(options),
     loadSettings: loadCachedSettings,
     saveDefaultPermission: async (permissionType) => {
-      await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/default_permission', {
-        method: 'PUT',
-        body: JSON.stringify({ permission_type: normalizePermissionType(permissionType) }),
-      });
+      await updateDefaultAIPermission(normalizePermissionType(permissionType));
       invalidateSettingsCache();
-      return loadCachedSettings();
+      const snapshot = await loadCachedSettings();
+      if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      return snapshot;
     },
     saveModelProfile: async (draft) => {
       const providerAPIKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
