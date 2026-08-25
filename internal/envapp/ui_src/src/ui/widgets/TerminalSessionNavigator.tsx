@@ -976,26 +976,12 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         <div
                           data-terminal-session-row={sessionId}
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
-                          class={`group relative grid cursor-grab items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 active:cursor-grabbing ${props.mobile
+                          class={`group relative grid cursor-pointer items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 ${props.mobile
                             ? 'min-h-[68px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
-                            : 'min-h-[52px] grid-cols-[32px_minmax(0,1fr)_40px] gap-x-1.5 px-1.5 py-1'} ${sidebarActive()
+                            : 'min-h-[52px] grid-cols-[36px_minmax(0,1fr)_40px] gap-x-1.5 px-1.5 py-1'} ${sidebarActive()
                             ? 'border-primary/15 bg-[color-mix(in_srgb,var(--primary)_6%,var(--sidebar))] text-sidebar-accent-foreground'
                             : 'bg-transparent text-sidebar-foreground/78 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
-                          onDragStart={(event) => {
-                            if (!event.dataTransfer) return;
-                            event.dataTransfer.effectAllowed = 'move';
-                            event.dataTransfer.setData('application/x-redeven-terminal-session', sessionId);
-                            installCompactDragPreview(event, 'session');
-                            setDraggedSessionId(sessionId);
-                            setDraggedGroupId(null);
-                            setDropIntent(null);
-                            setGroupDropIntent(null);
-                          }}
-                          onDragEnd={clearDragState}
-                          classList={{
-                            '!cursor-grabbing [&_*]:!cursor-grabbing': draggedSessionId() !== null || draggedGroupId() !== null,
-                          }}
                         >
                           <Tooltip
                             content={(
@@ -1012,8 +998,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           >
                             <button
                               type="button"
-                              draggable={item().transitionState === 'none'}
-                              class="h-full w-full cursor-grab rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring active:cursor-grabbing"
+                              class="h-full w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
                               data-terminal-session-id={sessionId}
                               data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                               data-terminal-session-index={navigationIndex() + 1}
@@ -1044,37 +1029,62 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           <Show when={sidebarActive()}>
                             <span class="absolute left-0 top-2.5 bottom-2.5 z-10 w-[2px] rounded-full bg-primary" aria-hidden="true" />
                           </Show>
-                          <Show
-                            when={agentIdentity()}
-                            fallback={(
-                              <span
-                                class="pointer-events-none relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
-                                style={{
-                                  background: item().avatarTone.background,
-                                  'border-color': item().avatarTone.border,
-                                  color: item().avatarTone.foreground,
-                                }}
-                                data-terminal-session-avatar={sessionId}
-                                aria-hidden="true"
-                              >
-                                <Show
-                                  when={item().avatar.kind === 'link'}
-                                  fallback={item().avatarInitial}
-                                >
-                                  <Link class="h-4 w-4" />
-                                </Show>
-                                <TerminalSessionTransitionBadge state={item().transitionIndicator} />
-                              </span>
-                            )}
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            draggable={item().transitionState === 'none'}
+                            class="relative z-10 flex h-9 w-9 shrink-0 cursor-grab select-none items-center justify-center rounded-full transition-colors duration-150 hover:bg-sidebar-accent/60 focus:outline-none active:cursor-grabbing"
+                            classList={{ '!cursor-grabbing': draggedSessionId() === sessionId }}
+                            data-terminal-session-drag-handle={sessionId}
+                            aria-label={`${item().label}: ${item().title}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              props.onSelectSession(sessionId);
+                            }}
+                            onDragStart={(event) => {
+                              if (!event.dataTransfer) return;
+                              event.dataTransfer.effectAllowed = 'move';
+                              event.dataTransfer.setData('application/x-redeven-terminal-session', sessionId);
+                              installCompactDragPreview(event, 'session');
+                              setDraggedSessionId(sessionId);
+                              setDraggedGroupId(null);
+                              setDropIntent(null);
+                              setGroupDropIntent(null);
+                            }}
+                            onDragEnd={clearDragState}
                           >
-                            {(identity) => (
-                              <TerminalAgentIdentity
-                                identity={identity()}
-                                sessionId={sessionId}
-                                transitionIndicator={item().transitionIndicator}
-                              />
-                            )}
-                          </Show>
+                            <Show
+                              when={agentIdentity()}
+                              fallback={(
+                                <span
+                                  class="pointer-events-none relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
+                                  style={{
+                                    background: item().avatarTone.background,
+                                    'border-color': item().avatarTone.border,
+                                    color: item().avatarTone.foreground,
+                                  }}
+                                  data-terminal-session-avatar={sessionId}
+                                  aria-hidden="true"
+                                >
+                                  <Show
+                                    when={item().avatar.kind === 'link'}
+                                    fallback={item().avatarInitial}
+                                  >
+                                    <Link class="h-4 w-4" />
+                                  </Show>
+                                  <TerminalSessionTransitionBadge state={item().transitionIndicator} />
+                                </span>
+                              )}
+                            >
+                              {(identity) => (
+                                <TerminalAgentIdentity
+                                  identity={identity()}
+                                  sessionId={sessionId}
+                                  transitionIndicator={item().transitionIndicator}
+                                />
+                              )}
+                            </Show>
+                          </button>
                           <span
                             class="pointer-events-none relative z-10 grid min-h-11 min-w-0 content-center overflow-hidden text-left"
                             data-terminal-session-content={sessionId}

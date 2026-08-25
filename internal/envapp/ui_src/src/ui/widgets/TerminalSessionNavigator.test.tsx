@@ -75,7 +75,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
 
 function dispatchDragEvent(target: Element, type: 'dragstart' | 'dragover' | 'drop' | 'dragend', dataTransfer: DataTransfer, clientY = 0) {
   const dispatchTarget = type === 'dragstart'
-    ? target.querySelector('[data-terminal-session-id]') ?? target
+    ? target.querySelector('[data-terminal-session-drag-handle]') ?? target
     : target;
   if (type === 'dragstart') {
     dispatchMouseInteraction(dispatchTarget, 'mousedown', { clientX: 0, clientY: 0 });
@@ -565,7 +565,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-tree-junction="session-1"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="terminal-group-toggle-group-services"]')?.className).toContain('text-primary');
     expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('min-h-[52px]');
-    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('grid-cols-[32px_minmax(0,1fr)_40px]');
+    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('grid-cols-[36px_minmax(0,1fr)_40px]');
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-group-toggle-group-services"]')?.click();
     expect(onToggleGroup).toHaveBeenCalledWith('group-services');
   });
@@ -603,19 +603,30 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(newGroup?.querySelector('svg')).not.toBeNull();
   });
 
-  it('keeps a quick session click below the drag activation threshold', () => {
+  it('keeps the session row selection-only and reserves dragging for the avatar handle', () => {
     const onSelectSession = vi.fn();
     const { host } = renderNavigator(navigationItem({ id: 'session-1' }), onSelectSession);
     const sessionRow = host.querySelector<HTMLElement>('[data-terminal-session-row="session-1"]')!;
     const sessionButton = host.querySelector<HTMLButtonElement>('[data-terminal-session-id="session-1"]')!;
+    const dragHandle = host.querySelector<HTMLButtonElement>('[data-terminal-session-drag-handle="session-1"]')!;
 
     dispatchMouseInteraction(sessionButton, 'mousedown', { clientX: 10, clientY: 10 });
     dispatchMouseInteraction(sessionButton, 'mousemove', { clientX: 13, clientY: 12 });
     dispatchMouseInteraction(sessionButton, 'mouseup', { clientX: 13, clientY: 12 });
     sessionButton.click();
 
+    expect(sessionRow.className).toContain('cursor-pointer');
+    expect(sessionRow.className).not.toContain('cursor-grab');
+    expect(sessionButton.className).toContain('cursor-pointer');
+    expect(sessionButton.getAttribute('draggable')).not.toBe('true');
+    expect(dragHandle.getAttribute('draggable')).toBe('true');
+    expect(dragHandle.className).toContain('cursor-grab');
+    expect(dragHandle.className).toContain('h-9 w-9');
     expect(sessionRow.getAttribute('aria-grabbed')).toBe('false');
     expect(onSelectSession).toHaveBeenCalledOnce();
+
+    dragHandle.click();
+    expect(onSelectSession).toHaveBeenCalledTimes(2);
   });
 
   it('moves a dragged session to a highlighted group target', () => {
@@ -871,9 +882,10 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(onOpenGroupContextMenu).toHaveBeenCalledTimes(2);
     expect(onOpenGroupContextMenu.mock.calls.map((call) => call[1])).toEqual(['group-services', 'group-services']);
     expect(groupHeader.querySelectorAll('.cursor-pointer').length).toBeGreaterThanOrEqual(4);
-    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('cursor-grab');
+    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('cursor-pointer');
     expect(host.querySelector('[data-terminal-session-row="session-1"]')?.hasAttribute('draggable')).toBe(false);
-    expect(host.querySelector('[data-terminal-session-id="session-1"]')?.getAttribute('draggable')).toBe('true');
+    expect(host.querySelector('[data-terminal-session-id="session-1"]')?.hasAttribute('draggable')).toBe(false);
+    expect(host.querySelector('[data-terminal-session-drag-handle="session-1"]')?.getAttribute('draggable')).toBe('true');
   });
 
   it('opens group creation only from the session tree blank area', () => {
