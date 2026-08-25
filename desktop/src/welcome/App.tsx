@@ -351,6 +351,7 @@ import {
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
   selectedSnapshotReinstallTargetProgressForEnvironment,
+  progressForEnvironmentFocusRequest,
   selectedFlowerWarmupProgress,
   gatewaySourceMatchesRuntimeLifecycleProgress,
   type DesktopLauncherBusyState,
@@ -3628,6 +3629,48 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  function focusEnvironmentOperationProgress(
+    environmentID: string,
+    result: DesktopLauncherActionSuccess,
+  ): void {
+    if (
+      result.outcome !== 'previewed_reinstall_target'
+      && result.outcome !== 'reinstall_target_in_progress'
+    ) {
+      return;
+    }
+    const operationKey = trimString(result.operation_key || result.reinstall_preview?.operation_key);
+    const startedAtUnixMS = Number(result.operation_started_at_unix_ms);
+    if (
+      operationKey === ''
+      || !Number.isFinite(startedAtUnixMS)
+      || startedAtUnixMS <= 0
+    ) {
+      return;
+    }
+    setActiveCenterTab('environments');
+    setLibrarySourceFilter('');
+    setLibraryQuery('');
+    lifecycleProgressFocusRequestSequence += 1;
+    setLifecycleProgressFocusRequest({
+      request_id: lifecycleProgressFocusRequestSequence,
+      operation_key: operationKey,
+      started_at_unix_ms: Math.floor(startedAtUnixMS),
+      subject_kind: 'environment',
+      subject_id: environmentID,
+    });
+  }
+
+  function clearOperationProgressFocus(operationKey: string): void {
+    const cleanOperationKey = trimString(operationKey);
+    if (cleanOperationKey === '') {
+      return;
+    }
+    setLifecycleProgressFocusRequest((current) => (
+      current?.operation_key === cleanOperationKey ? null : current
+    ));
+  }
+
   async function performLauncherActionSilently(
     request: DesktopLauncherActionRequest,
   ): Promise<
@@ -4223,6 +4266,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (operationKey === '') {
       return;
     }
+    clearOperationProgressFocus(operationKey);
     runtimeOpenContinuationByOperationKey.delete(operationKey);
     const result = await performLauncherAction({
       kind: 'cancel_launcher_operation',
@@ -4238,6 +4282,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (operationKey === '') {
       return;
     }
+    clearOperationProgressFocus(operationKey);
     runtimeOpenContinuationByOperationKey.delete(operationKey);
     if (operationKey.startsWith('ui:gateway:')) {
       setRetainedGatewayFailures((current) => current.filter((item) => trimString(item.operation_key) !== operationKey));
@@ -4944,6 +4989,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               mode: continuation.reinstall_mode ?? 'wipe_data',
               impact_acknowledged: true,
             }, errorTarget);
+            if (result) {
+              focusEnvironmentOperationProgress(environment.id, result);
+            }
             return result?.outcome === 'reinstalled_target'
               || result?.outcome === 'reinstall_target_in_progress';
           }
@@ -4952,6 +5000,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             environment_id: environment.id,
             mode: action.reinstall_mode ?? 'wipe_data',
           }, errorTarget);
+          if (result) {
+            focusEnvironmentOperationProgress(environment.id, result);
+          }
           return result?.outcome === 'previewed_reinstall_target';
         }
       case 'review_network_exposure':
@@ -7385,7 +7436,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     if (!environment) {
       return;
     }
-    const progress = selectedSnapshotRuntimeLifecycleProgressForEnvironment(environment, props.actionProgress);
+    const progress = progressForEnvironmentFocusRequest(environment, props.actionProgress, request);
     if (
       trimString(progress?.operation_key) !== request.operation_key
       || (progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms
@@ -9678,7 +9729,11 @@ function EnvironmentSplitActionButton(props: Readonly<{
                             }
                           }}
                           runPrimaryAction={(action) => {
-                            props.onProgressOpenChange(false);
+                            // Reinstall confirmation and execution are one timeline. Keep the
+                            // existing panel open while the confirmed operation advances.
+                            if (action.intent !== 'reinstall_target') {
+                              props.onProgressOpenChange(false);
+                            }
                             closeMenu();
                             props.onRunAction(action);
                           }}
@@ -10194,11 +10249,6 @@ function EnvironmentConnectionCard(props: Readonly<{
               ) {
                 props.onLifecycleProgressOpenChange(true);
                 return;
-              }
-              if (action.intent === 'reinstall_target') {
-                // Keep the shared timeline visible while direct SSH/container
-                // preflight runs and transitions into confirmation.
-                props.onLifecycleProgressOpenChange(true);
               }
               if (action.intent === 'update_desktop') {
                 props.setGuidanceSession(null);

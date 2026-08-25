@@ -31,9 +31,11 @@ import {
   reconcileBusyStateWithActionProgressSnapshot,
   selectedSnapshotGatewayProgress,
   selectedSnapshotOpenConnectionProgressForEnvironment,
+  selectedSnapshotReinstallTargetProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForGateway,
   selectedFlowerWarmupProgress,
+  progressForEnvironmentFocusRequest,
 } from './launcherBusyState';
 import type { RuntimeProgressEnvironmentMatch } from './launcherBusyState';
 import { environmentProgressPrimaryPresentation } from './environmentProgressPrimaryPresentation';
@@ -168,7 +170,88 @@ function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
   };
 }
 
+function localReinstallProgress(input: Readonly<{
+  status: LauncherProgressStatus;
+  operationKey: string;
+  startedAt: number;
+  updatedAt: number;
+}>): DesktopLauncherActionProgress {
+  return {
+    action: 'reinstall_target',
+    environment_id: 'local',
+    environment_label: 'Local Environment',
+    operation_key: input.operationKey,
+    subject_kind: 'runtime_target',
+    subject_id: 'local',
+    started_at_unix_ms: input.startedAt,
+    updated_at_unix_ms: input.updatedAt,
+    status: input.status,
+    phase: 'confirmation',
+    title: 'Reinstall Redeven',
+    detail: 'Review the deletion list before continuing.',
+  };
+}
+
 describe('launcherBusyState', () => {
+  it('selects the newest reinstall attempt when an older failure remains visible', () => {
+    const environment = {
+      kind: 'local_environment' as const,
+      id: 'local',
+      managed_runtime_host_access: { kind: 'local_host' as const },
+      managed_runtime_placement: undefined,
+    } as never;
+    const oldFailure = localReinstallProgress({
+      status: 'failed',
+      operationKey: 'reinstall:old',
+      startedAt: 100,
+      updatedAt: 200,
+    });
+    const currentConfirmation = localReinstallProgress({
+      status: 'needs_confirmation',
+      operationKey: 'reinstall:current',
+      startedAt: 300,
+      updatedAt: 400,
+    });
+
+    expect(selectedSnapshotReinstallTargetProgressForEnvironment(
+      environment,
+      [oldFailure, currentConfirmation],
+    )).toBe(currentConfirmation);
+  });
+
+  it('keeps an exact reinstall focus request pending until its delayed snapshot arrives', () => {
+    const environment = {
+      kind: 'local_environment' as const,
+      id: 'local',
+      managed_runtime_host_access: { kind: 'local_host' as const },
+      managed_runtime_placement: undefined,
+    } as never;
+    const oldFailure = localReinstallProgress({
+      status: 'failed',
+      operationKey: 'reinstall:old',
+      startedAt: 100,
+      updatedAt: 200,
+    });
+    const currentConfirmation = localReinstallProgress({
+      status: 'needs_confirmation',
+      operationKey: 'reinstall:current',
+      startedAt: 300,
+      updatedAt: 400,
+    });
+
+    const focusRequest = {
+      operation_key: 'reinstall:current',
+      started_at_unix_ms: 300,
+    };
+
+    expect(progressForEnvironmentFocusRequest(environment, [oldFailure], focusRequest)).toBeNull();
+    expect(progressForEnvironmentFocusRequest(
+      environment,
+      [oldFailure, currentConfirmation],
+      focusRequest,
+    )).toBe(currentConfirmation);
+  });
+
   it('maps environment-scoped requests to the matching environment id', () => {
     const state = busyStateForLauncherRequest({
       kind: 'refresh_environment_runtime',

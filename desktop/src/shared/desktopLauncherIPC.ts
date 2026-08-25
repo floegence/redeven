@@ -881,6 +881,7 @@ export type DesktopLauncherActionSuccess = Readonly<{
   ok: true;
   outcome: DesktopLauncherActionOutcome;
   operation_key?: string;
+  operation_started_at_unix_ms?: number;
   session_key?: string;
   utility_window_kind?: 'launcher' | 'environment_settings';
   reinstall_preview?: DesktopReinstallTargetPreview;

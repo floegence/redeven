@@ -432,11 +432,36 @@ export function selectedSnapshotReinstallTargetProgressForEnvironment(
     environment.managed_runtime_placement_target_id,
     environment.provider_runtime_link_target?.runtime_key,
   ].map((value) => String(value ?? '').trim()).filter(Boolean);
-  return selectLauncherProgress(
-    progressItems,
-    (progress) => progress.action === 'reinstall_target'
-      && targetIDs.some((targetID) => environmentMatchesActionProgress(targetID, progress)),
-  );
+  const matches = progressItems.filter((progress) => progress.action === 'reinstall_target'
+    && targetIDs.some((targetID) => environmentMatchesActionProgress(targetID, progress)));
+  if (matches.length === 0) {
+    return null;
+  }
+  // A target may retain an older failed operation while a newer reinstall is
+  // waiting for confirmation. Reinstall progress is target-owned, so the
+  // newest operation identity is the only one that can drive this card.
+  return [...matches].sort((left, right) => (
+    launcherProgressStartedAt(right) - launcherProgressStartedAt(left)
+      || launcherProgressTimestamp(right) - launcherProgressTimestamp(left)
+      || String(right.operation_key ?? '').localeCompare(String(left.operation_key ?? ''))
+  ))[0] ?? null;
+}
+
+export function progressForEnvironmentFocusRequest(
+  environment: DesktopEnvironmentEntry,
+  progressItems: readonly DesktopLauncherActionProgress[],
+  identity: Readonly<{ operation_key: string; started_at_unix_ms: number }>,
+): DesktopLauncherActionProgress | null {
+  return progressItems.find((candidate) => {
+    if (
+      String(candidate.operation_key ?? '').trim() !== identity.operation_key
+      || (candidate.started_at_unix_ms ?? 0) !== identity.started_at_unix_ms
+    ) {
+      return false;
+    }
+    return selectedSnapshotRuntimeLifecycleProgressForEnvironment(environment, [candidate]) === candidate
+      || selectedSnapshotReinstallTargetProgressForEnvironment(environment, [candidate]) === candidate;
+  }) ?? null;
 }
 
 export function selectedFlowerWarmupProgress(
@@ -544,6 +569,11 @@ function launcherProgressOwnsSameSurface(
 function launcherProgressStartedAt(progress: DesktopLauncherActionProgress): number {
   const startedAt = Number(progress.started_at_unix_ms);
   return Number.isFinite(startedAt) && startedAt > 0 ? startedAt : 0;
+}
+
+function launcherProgressTimestamp(progress: DesktopLauncherActionProgress): number {
+  const updatedAt = Number(progress.updated_at_unix_ms);
+  return Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0;
 }
 
 function selectLauncherProgress(

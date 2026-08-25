@@ -1726,7 +1726,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('openConnectionProgress() ?? rememberedOpenConnectionProgress()');
     expect(appSrc).toContain("if (progress.status === 'succeeded' || progress.status === 'canceled') {");
     expect(appSrc).toContain('setRememberedOpenConnectionProgress(progress);');
-    expect(appSrc).toContain('props.onProgressOpenChange(false);\n                            closeMenu();\n                            props.onRunAction(action);');
+    expect(appSrc).toContain('props.onProgressOpenChange(false);');
+    expect(appSrc).toContain("if (action.intent !== 'reinstall_target')");
     expect(appSrc).toContain('createRuntimeLifecycleStepAnimation');
     expect(appSrc).toContain('<Index each={phaseSequence()}>');
     expect(appSrc).toContain('data-step-key={step().key}');
@@ -2429,6 +2430,19 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('runtimeTakeover');
     expect(appSrc).not.toContain('RuntimeProcessTakeover');
     expect(appSrc).not.toContain('owner_evidence');
+  });
+
+  it('focuses the exact reinstall operation after preview instead of relying on card refresh timing', () => {
+    const appSrc = readWelcomeSource();
+    expect(appSrc).toContain('function focusEnvironmentOperationProgress(');
+    expect(appSrc).toContain('result.operation_started_at_unix_ms');
+    expect(appSrc).toContain("result.outcome !== 'previewed_reinstall_target'");
+    expect(appSrc).toContain("result.outcome !== 'reinstall_target_in_progress'");
+    expect(appSrc).toContain('progressForEnvironmentFocusRequest(environment, props.actionProgress, request)');
+    expect(appSrc).toContain('function clearOperationProgressFocus(operationKey: string)');
+    expect(appSrc).toContain('clearOperationProgressFocus(operationKey);');
+    expect(appSrc).toContain("if (action.intent !== 'reinstall_target')");
+    expect(appSrc).not.toContain('Keep the shared timeline visible while direct SSH/container');
   });
 
   it('localizes structured local Runtime target details', () => {

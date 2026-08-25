@@ -63,6 +63,20 @@ describe('environmentLibraryOverlayState', () => {
     expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(state);
   });
 
+  it('does not reopen lifecycle progress after the user closes it and a normal snapshot refresh arrives', () => {
+    const local = testLocalEnvironment({ label: 'Local Environment' });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const open = openEnvironmentLibraryOverlayState('lifecycle_progress', local.id);
+    const closed = closeEnvironmentLibraryOverlayState(open, 'lifecycle_progress', local.id);
+
+    expect(closed).toEqual(closedEnvironmentLibraryOverlayState());
+    expect(reconcileEnvironmentLibraryOverlayState(closed, snapshot.environments)).toEqual(closed);
+  });
+
   it('keeps an endpoints popover open across refresh while endpoints remain available', () => {
     const local = testLocalEnvironment({
       label: 'Local Environment',

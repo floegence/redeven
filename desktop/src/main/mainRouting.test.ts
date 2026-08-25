@@ -7,6 +7,10 @@ function readMainSource(): string {
   return fs.readFileSync(path.join(__dirname, 'main.ts'), 'utf8');
 }
 
+function readSharedLauncherIPCSource(): string {
+  return fs.readFileSync(path.join(__dirname, '..', 'shared', 'desktopLauncherIPC.ts'), 'utf8');
+}
+
 function readMainModuleSource(filename: string): string {
   return fs.readFileSync(path.join(__dirname, filename), 'utf8');
 }
@@ -1709,6 +1713,17 @@ describe('main routing', () => {
     const childUpdate = executeSrc.indexOf('launcherOperations.updateCurrentAttempt(input.operation_key, owner, {', standaloneBranch);
     expect(childUpdate).toBeGreaterThan(standaloneBranch);
     expect(executeSrc.slice(childUpdate)).not.toContain('scheduleCurrentLauncherOperationRemoval(input.operation_key, owner);');
+  });
+
+  it('returns the exact reinstall operation identity after preview and continuation', () => {
+    const mainSrc = readMainSource();
+    const reinstallStart = mainSrc.indexOf('async function previewReinstallTargetFromLauncher(');
+    const reinstallEnd = mainSrc.indexOf('async function deleteGatewayFromLauncher(', reinstallStart);
+    const reinstallSrc = mainSrc.slice(reinstallStart, reinstallEnd);
+
+    expect(reinstallSrc).toContain('operationStartedAtUnixMS: operation.started_at_unix_ms');
+    expect(reinstallSrc).toContain('operationStartedAtUnixMS: existing.started_at_unix_ms');
+    expect(readSharedLauncherIPCSource()).toContain('operation_started_at_unix_ms?: number;');
   });
 
   it('routes legacy Gateway refresh requests through the unified Refresh workflow', () => {
