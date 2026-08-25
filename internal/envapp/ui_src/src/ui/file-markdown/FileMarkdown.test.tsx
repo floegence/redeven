@@ -212,8 +212,8 @@ describe('FileMarkdown', () => {
       expect(host.querySelector<HTMLButtonElement>('.fm-text-size-value')?.textContent).toBe('160%');
       expect(increase?.disabled).toBe(true);
 
-      for (let index = 0; index < 8; index += 1) decrease!.click();
-      expect(host.querySelector<HTMLButtonElement>('.fm-text-size-value')?.textContent).toBe('80%');
+      for (let index = 0; index < 11; index += 1) decrease!.click();
+      expect(host.querySelector<HTMLButtonElement>('.fm-text-size-value')?.textContent).toBe('50%');
       expect(decrease?.disabled).toBe(true);
     } finally {
       dispose();

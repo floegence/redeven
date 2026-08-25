@@ -4,7 +4,7 @@ import { readUIStorageJSON, writeUIStorageJSON } from './uiStorage';
 
 export const MARKDOWN_PREVIEW_TEXT_SCALE_STORAGE_KEY = 'markdown-preview:text-scale-percent';
 export const DEFAULT_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT = 100;
-export const MIN_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT = 80;
+export const MIN_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT = 50;
 export const MAX_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT = 160;
 export const MARKDOWN_PREVIEW_TEXT_SCALE_STEP_PERCENT = 10;
 
