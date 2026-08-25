@@ -27,11 +27,11 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
-    "@floegence/floe-webapp-boot": "0.43.0",
-    "@floegence/floe-webapp-core": "0.43.0",
-    "@floegence/floe-webapp-protocol": "0.43.0",
+    "@floegence/floe-webapp-boot": "0.44.0",
+    "@floegence/floe-webapp-core": "0.44.0",
+    "@floegence/floe-webapp-protocol": "0.44.0",
     "@floegence/floeterm-terminal-web": "0.17.0",
-    "@floegence/flowersec-core": "2.5.2",
+    "@floegence/flowersec-core": "3.1.1",
     "@floegence/redevplugin-contracts": "3.0.16",
     "@floegence/redevplugin-ui": "3.0.16",
     "@fontsource/iosevka": "^5.2.5",
@@ -54,7 +54,7 @@
     "solid-motionone": "^1.0.4"
   },
   "overrides": {
-    "@floegence/flowersec-core": "2.5.2",
+    "@floegence/flowersec-core": "3.1.1",
     "@babel/core": "^7.29.7",
     "brace-expansion": "^5.0.9",
     "dompurify": "^3.4.13",
@@ -76,7 +76,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@floegence/flowersec-core": "2.5.2",
+      "@floegence/flowersec-core": "3.1.1",
       "@babel/core": "^7.29.7",
       "brace-expansion": "^5.0.9",
       "dompurify": "^3.4.13",

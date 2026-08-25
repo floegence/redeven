@@ -402,7 +402,7 @@ function writeRuntimeStatus() {
     password_required: false,
     exposure: {
       scope: 'loopback',
-      transport: 'plaintext',
+      transport: 'tls',
       password_required: false,
     },
     effective_run_mode: 'local',
@@ -618,7 +618,7 @@ if (args.includes('-M') && args.includes('-N')) {
         password_required: false,
         exposure: {
           scope: 'loopback',
-          transport: 'plaintext',
+          transport: 'tls',
           password_required: false,
         },
         effective_run_mode: 'local',

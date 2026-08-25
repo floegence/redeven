@@ -54,9 +54,8 @@ export type AgentLatestVersion = {
 };
 
 export type LocalRuntimeInfo = {
-  mode: 'local';
-  env_public_id: string;
-  direct_ws_url?: string;
+	mode: 'local';
+	env_public_id: string;
   effective_run_mode?: 'local' | 'hybrid' | 'remote';
   remote_enabled?: boolean;
   runtime_service?: unknown;
@@ -66,9 +65,9 @@ export type LocalRuntimeInfo = {
 export type LocalAccessStatus = {
   password_required: boolean;
   unlocked: boolean;
-  exposure?: {
-    scope: 'loopback' | 'network';
-    transport: 'plaintext';
+	exposure?: {
+		scope: 'loopback' | 'network';
+		transport: 'tls';
     password_required: boolean;
   };
   urls?: readonly string[];
@@ -343,11 +342,6 @@ async function fetchJSON<T>(input: RequestInfo | URL, init: RequestInit & { bear
   return (data?.data ?? data) as T;
 }
 
-function buildLocalDirectWSURLBestEffort(): string {
-  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${scheme}//${window.location.host}/_redeven_direct/ws`;
-}
-
 async function fetchLocalJSON<T>(input: RequestInfo | URL, init: RequestInit & { bearerToken?: string }): Promise<T> {
   const headers = new Headers(init.headers);
   applyLocalAccessResumeHeader(headers);
@@ -370,10 +364,9 @@ function normalizeLocalRuntimeInfo(raw: unknown): LocalRuntimeInfo {
   const effectiveRunMode = effectiveRunModeRaw === 'hybrid' || effectiveRunModeRaw === 'remote' || effectiveRunModeRaw === 'local'
     ? effectiveRunModeRaw
     : undefined;
-  return {
-    mode,
-    env_public_id: envPublicID,
-    direct_ws_url: asString(data.direct_ws_url) || buildLocalDirectWSURLBestEffort(),
+	return {
+		mode,
+		env_public_id: envPublicID,
     effective_run_mode: effectiveRunMode,
     remote_enabled: typeof data.remote_enabled === 'boolean' ? data.remote_enabled : undefined,
     runtime_service: data.runtime_service,
@@ -389,11 +382,10 @@ async function loadLocalRuntimeInfo(): Promise<LocalRuntimeInfo | null> {
     return { ...normalizeLocalRuntimeInfo(out), access_status: access };
   } catch (error) {
     if ((error instanceof APIError && error.status === 423) || error instanceof AccessUnlockError) {
-      return {
-        mode: 'local',
-        env_public_id: 'env_local',
-        direct_ws_url: buildLocalDirectWSURLBestEffort(),
-        access_status: access,
+		return {
+			mode: 'local',
+			env_public_id: 'env_local',
+			access_status: access,
       };
     }
     throw error;
@@ -406,7 +398,7 @@ export async function getLocalAccessStatus(): Promise<LocalAccessStatus | null> 
     if (typeof out?.password_required === 'boolean' && typeof out?.unlocked === 'boolean') {
       const exposure = out.exposure && typeof out.exposure === 'object'
         && (out.exposure.scope === 'loopback' || out.exposure.scope === 'network')
-        && out.exposure.transport === 'plaintext'
+			&& out.exposure.transport === 'tls'
         && typeof out.exposure.password_required === 'boolean'
         ? out.exposure
         : undefined;
@@ -486,10 +478,9 @@ export async function createLocalDirectArtifactSource(
   options: LocalDirectArtifactSourceOptions = {},
 ): Promise<ArtifactSource> {
   const { createControlplaneArtifactSource } = await import('@floegence/floe-webapp-boot/artifact-source');
-  return createControlplaneArtifactSource({
-    baseUrl: window.location.origin,
-    endpointId: 'env_local',
-    ...(window.location.protocol === 'http:' ? { allowLoopbackHTTP: true } : {}),
+	return createControlplaneArtifactSource({
+		baseUrl: window.location.origin,
+		endpointId: 'env_local',
     fetch: async (_input, init) => {
       const signal = init?.signal ?? new AbortController().signal;
       await options.beforeAcquire?.({ signal });
@@ -705,7 +696,6 @@ export type EnvProxyArtifactSourceOptions = Readonly<{
   endpointId: () => string;
   floeApp: string;
   codeSpaceId: string;
-  allowLoopbackHTTP?: boolean;
   traceId?: string;
   prepareAcquire?: (context: Readonly<{ endpointId: string; signal: AbortSignal }>) => void | Promise<void>;
 }>;
@@ -726,7 +716,6 @@ export async function createEnvProxyArtifactSource(args: EnvProxyArtifactSourceO
       floe_app: floeApp,
     },
     ...(args.traceId === undefined ? {} : { correlation: { traceId: args.traceId } }),
-    ...(args.allowLoopbackHTTP === true ? { allowLoopbackHTTP: true } : {}),
     fetch: async (_input, init) => {
       if (typeof fetchImpl !== 'function') throw new Error('Fetch unavailable');
       const signal = init?.signal ?? new AbortController().signal;

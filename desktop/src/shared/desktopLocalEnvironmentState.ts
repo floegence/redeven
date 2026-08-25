@@ -5,16 +5,10 @@ import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from './
 import type { DesktopRuntimeControlEndpoint } from './runtimeControl';
 import type { LocalUIExposure } from './localUIExposure';
 
-export type DesktopPlaintextNetworkExposureAcknowledgement = Readonly<{
-  version: 1;
-  bind: string;
-}>;
-
 export type DesktopLocalEnvironmentAccess = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
   local_ui_password_configured: boolean;
-  plaintext_network_exposure_acknowledgement?: DesktopPlaintextNetworkExposureAcknowledgement;
 }>;
 
 export type DesktopLocalEnvironmentPreferredOpenRoute = 'auto' | 'local_host' | 'remote_desktop';
@@ -104,7 +98,6 @@ export function defaultDesktopLocalEnvironmentAccess(): DesktopLocalEnvironmentA
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: '',
     local_ui_password_configured: false,
-    plaintext_network_exposure_acknowledgement: undefined,
   };
 }
 

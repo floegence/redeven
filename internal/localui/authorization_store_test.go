@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	flowercontrol "github.com/floegence/flowersec/flowersec-go/v2/controlplane"
+	flowercontrol "github.com/floegence/flowersec/flowersec-go/v3/controlplane"
 )
 
 func TestLocalAuthorizationStoreBootGenerationRevokesOldRows(t *testing.T) {
@@ -673,7 +673,9 @@ func newTestAuthorizationStore(t *testing.T, path string) *localAuthorizationSto
 
 func issueTestAuthorization(t *testing.T, store *localAuthorizationStore, accessSessionID string) (flowercontrol.IssuedArtifact, string, time.Time) {
 	t.Helper()
-	endpoints, err := flowercontrol.NewEndpointSet("wss://example.com/flowersec/v2/direct")
+	endpoints, err := flowercontrol.NewEndpointSet(flowercontrol.EndpointConfig{
+		ID: "websocket", URL: "wss://example.com/flowersec/v3/direct", TLS: flowercontrol.CAPolicy(),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

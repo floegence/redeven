@@ -86,10 +86,14 @@ Redeven은 컴퓨터와 서버를 하나의 브라우저 탭으로 가져오는 
 # 1. 설치
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. 실행
+# 2. Local UI 기기 CA 생성 및 신뢰 설정(최초 1회)
+redeven local-authority device-ca generate --state-root ~/.redeven
+redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# 3. 실행
 redeven run
 
-# 3. 브라우저에서 http://localhost:23998 열기
+# 4. 브라우저에서 https://localhost:23998 열기
 ```
 
 `redeven run`을 처음 실행하면 `~/.redeven/local-environment/`에 로컬 상태를 초기화하고 로컬 모드로 시작합니다. 부트스트랩이나 컨트롤 플레인 설정은 필요하지 않습니다. Local UI는 `localhost:23998`에서만 연결을 수신하므로 이 기기에서만 사용할 수 있습니다. LAN 또는 공용 네트워크를 통한 직접 접근은 지원하지 않습니다. Ctrl+C를 누르면 런타임이 중지됩니다.
@@ -120,7 +124,7 @@ Redeven은 기능을 앞세우지만, 런타임이 실제 호스트를 제어하
 
 - 런타임은 엔드포인트에 존재하며 평문을 그곳에 유지합니다.
 - 컨트롤 플레인은 부트스트랩 페이로드, 권한, 변경 불가능한 세션 메타데이터를 발급합니다.
-- [Flowersec](https://github.com/floegence/flowersec)은 클라이언트와 엔드포인트 런타임 사이에서 암호화된 바이트를 전송합니다. 브라우저 통합은 공개된 2.5.2 API를, Go 소비 모듈은 `flowersec-go/v2@v2.5.2`을 사용합니다.
+- [Flowersec](https://github.com/floegence/flowersec)은 클라이언트와 엔드포인트 런타임 사이에서 암호화된 바이트를 전송합니다. 브라우저 화면은 Flowersec Core 3.1.1을, Go 소비 모듈은 `flowersec-go/v3@v3.1.1`을 사용합니다.
 - 유효 권한은 서버가 발급한 세션 권한에서 나오며 로컬 권한 정책으로 제한됩니다(`read`, `write`, `execute`, `admin`; 어떤 범주도 다른 범주를 암시하지 않습니다).
 - 로컬 설정, E2EE 자료, 감사 로그, 진단 정보는 엔드포인트 상태 디렉터리에 남습니다.
 - GitHub Releases는 바이너리, 체크섬, 서명, OKF 검증 자산의 공개 기준 정보입니다.

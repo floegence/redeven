@@ -392,7 +392,6 @@ describe('desktopPreferences', () => {
     expect(validateDesktopSettingsDraft(draft({
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password_mode: 'keep',
-      plaintext_network_exposure_acknowledgement_bind: '0.0.0.0:24000',
     }), {
       currentLocalUIPassword: 'secret',
       currentLocalUIPasswordConfigured: true,
@@ -766,7 +765,6 @@ describe('desktopPreferences', () => {
       const initialAccess = validateDesktopSettingsDraft(draft({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'super-secret',
-        plaintext_network_exposure_acknowledgement_bind: '0.0.0.0:24000',
       }));
       const initial = testDesktopPreferences({
         local_environment: testLocalEnvironment({
@@ -1761,7 +1759,6 @@ describe('desktopPreferences', () => {
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password: '',
       local_ui_password_mode: 'keep',
-      plaintext_network_exposure_acknowledgement_bind: '',
       auto_runtime_probe_enabled: true,
     });
   });

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
-	flowercontrol "github.com/floegence/flowersec/flowersec-go/v2/controlplane"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowercontrol "github.com/floegence/flowersec/flowersec-go/v3/controlplane"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -453,7 +453,9 @@ func makeControlPoolResponse(t *testing.T, generation int64, bindingID string, e
 
 func issuePoolTestArtifact(t *testing.T, suffix string) (json.RawMessage, string) {
 	t.Helper()
-	endpoints, err := flowercontrol.NewEndpointSet("wss://example.com/flowersec/v2/direct")
+	endpoints, err := flowercontrol.NewEndpointSet(flowercontrol.EndpointConfig{
+		ID: "websocket", URL: "wss://example.com/flowersec/v3/direct", TLS: flowercontrol.CAPolicy(),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -36,6 +36,6 @@ Runtime-control is also not a plugin grant, plugin management, or plugin capabil
 - `redeven:internal/localui/runtime_control.go:134` - Runtime-control routes are limited to provider-link, code-workspace-engine, and Desktop model source handlers.
 - `redeven:internal/ai/desktop_model_source.go:1132` - Desktop builds the model capability from the local provider profile before publishing the model snapshot.
 - `redeven:internal/ai/model_gateway_result.go:36` - One validator owns final ToolCall completeness for provider, Desktop RPC, and Floret mapping boundaries.
-- `redeven:internal/config/catalog.go:117` - Runtime catalog writeback preserves bind-scoped plaintext acknowledgement across managed restart.
+- `redeven:internal/localui/device_ca.go:39` - Local UI device trust is an explicit generated CA lifecycle, independent of Desktop session routing.
 - `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:1173` - Desktop and Env App implement the same split settings adapter contract.
 - `redeven:internal/envapp/ui_src/src/ui/services/desktopSessionContext.ts:71` - Env App independently validates the required route before consuming Desktop session context.

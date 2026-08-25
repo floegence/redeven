@@ -60,27 +60,17 @@ describe('desktopAccessModel', () => {
     expect(model.next_start_address_kind).toBe('lan_ip_port');
     expect(model.password_state_id).toBe('required');
     expect(model.password_requirement_satisfied).toBe(false);
-    expect(model.network_exposure_review_required).toBe(true);
+    expect(model.network_exposure).toBe(true);
   });
 
-  it('allows review with an effective password and keeps acknowledgement bound to the listener', () => {
-    const pendingReview = deriveDesktopAccessDraftModel(draft({
+  it('accepts a password-protected network listener without an acknowledgement state machine', () => {
+    const model = deriveDesktopAccessDraftModel(draft({
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password: 'secret',
     }));
 
-    expect(pendingReview.password_requirement_satisfied).toBe(true);
-    expect(pendingReview.network_exposure_acknowledged).toBe(false);
-    expect(pendingReview.network_exposure_review_required).toBe(true);
-
-    const reviewed = deriveDesktopAccessDraftModel(draft({
-      local_ui_bind: '0.0.0.0:23998',
-      local_ui_password: 'secret',
-      plaintext_network_exposure_acknowledgement_bind: '0.0.0.0:23998',
-    }));
-
-    expect(reviewed.network_exposure_acknowledged).toBe(true);
-    expect(reviewed.network_exposure_review_required).toBe(false);
+    expect(model.password_requirement_satisfied).toBe(true);
+    expect(model.network_exposure).toBe(true);
   });
 
   it('treats a write-only kept password as custom exposure on loopback', () => {
@@ -172,20 +162,15 @@ describe('desktopAccessModel', () => {
     })).toBe(true);
   });
 
-  it('detects password removal and acknowledgement changes without treating an empty replacement as a change', () => {
+  it('detects password removal without treating an empty replacement as a change', () => {
     const passwordBaseline = draft({
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password_mode: 'keep',
-      plaintext_network_exposure_acknowledgement_bind: '0.0.0.0:23998',
     });
 
     expect(desktopSettingsDraftRequiresRuntimeRestart(passwordBaseline, {
       ...passwordBaseline,
       local_ui_password_mode: 'clear',
-    })).toBe(true);
-    expect(desktopSettingsDraftRequiresRuntimeRestart(passwordBaseline, {
-      ...passwordBaseline,
-      plaintext_network_exposure_acknowledgement_bind: '',
     })).toBe(true);
     expect(desktopSettingsDraftRequiresRuntimeRestart(draft({}), draft({
       local_ui_password: '',

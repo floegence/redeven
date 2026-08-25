@@ -2,7 +2,7 @@ import { readDesktopHostBridge } from './desktopHostWindow';
 
 export type LocalUIExposure = Readonly<{
   scope: 'loopback' | 'network';
-  transport: 'plaintext';
+  transport: 'tls';
   password_required: boolean;
 }>;
 
@@ -86,7 +86,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
     const exposure = candidate.local_ui_exposure;
     if (!exposure || typeof exposure !== 'object') return undefined;
     return exposure.scope === 'network' || exposure.scope === 'loopback'
-      ? exposure.transport === 'plaintext' && typeof exposure.password_required === 'boolean'
+		? exposure.transport === 'tls' && typeof exposure.password_required === 'boolean'
         ? { scope: exposure.scope, transport: exposure.transport, password_required: exposure.password_required }
         : undefined
       : undefined;

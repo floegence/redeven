@@ -3,18 +3,16 @@ package localui
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 )
@@ -145,18 +143,6 @@ func TestDesktopBridgeAcceptsOnlyLoopbackAuthority(t *testing.T) {
 		}
 	}
 
-	originReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/_redeven_direct/ws", nil)
-	originReq.Host = "127.0.0.1:24000"
-	originReq.Header.Set("Connection", "Upgrade")
-	originReq.Header.Set("Upgrade", "websocket")
-	originReq.Header.Set("Sec-WebSocket-Key", strings.Repeat("a", 24))
-	originReq.Header.Set("Sec-WebSocket-Version", "13")
-	originReq.Header.Set("Origin", "http://127.0.0.1:24001")
-	originRes := httptest.NewRecorder()
-	s.HandlerForDesktopBridge().ServeHTTP(originRes, originReq)
-	if originRes.Code != http.StatusForbidden {
-		t.Fatalf("mismatched bridge Origin status = %d, want %d", originRes.Code, http.StatusForbidden)
-	}
 }
 
 func TestConfigureNetworkAuthoritiesUsesResolvedWildcardHosts(t *testing.T) {
@@ -179,7 +165,7 @@ func TestConfigureNetworkAuthoritiesUsesResolvedWildcardHosts(t *testing.T) {
 	if err := s.configureNetworkAuthorities([]net.Listener{listener}); err != nil {
 		t.Fatalf("configureNetworkAuthorities() error = %v", err)
 	}
-	if got, want := s.DisplayURLs(), []string{"http://10.0.0.8:23998/", "http://192.168.1.20:23998/"}; !reflect.DeepEqual(got, want) {
+	if got, want := s.DisplayURLs(), []string{"https://10.0.0.8:23998/", "https://192.168.1.20:23998/"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("DisplayURLs() = %#v, want %#v", got, want)
 	}
 	for _, host := range []string{"10.0.0.8:23998", "192.168.1.20:23998"} {
@@ -197,15 +183,15 @@ func TestConfigureNetworkAuthoritiesUsesResolvedWildcardHosts(t *testing.T) {
 func TestStrictSameOriginWSRequest(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:23998/_redeven_direct/ws", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://127.0.0.1:23998/socket", nil)
 	req.Host = "127.0.0.1:23998"
-	for _, origin := range []string{"http://evil.example", "http://localhost:23998", "https://127.0.0.1:23998", "http://127.0.0.1:23998/path"} {
+	for _, origin := range []string{"https://evil.example", "https://localhost:23998", "http://127.0.0.1:23998", "https://127.0.0.1:23998/path"} {
 		req.Header.Set("Origin", origin)
 		if strictSameOriginWSRequest(req, true) {
 			t.Fatalf("Origin %q unexpectedly accepted", origin)
 		}
 	}
-	req.Header.Set("Origin", "http://127.0.0.1:23998")
+	req.Header.Set("Origin", "https://127.0.0.1:23998")
 	if !strictSameOriginWSRequest(req, true) {
 		t.Fatal("exact loopback Origin was rejected")
 	}
@@ -217,98 +203,45 @@ func TestStrictSameOriginWSRequest(t *testing.T) {
 		t.Fatal("authenticated non-browser websocket request without Origin was rejected")
 	}
 
-	networkReq := httptest.NewRequest(http.MethodGet, "http://192.168.1.10:23998/_redeven_direct/ws", nil)
+	networkReq := httptest.NewRequest(http.MethodGet, "https://192.168.1.10:23998/socket", nil)
 	networkReq.Host = "192.168.1.10:23998"
-	networkReq.Header.Set("Origin", "http://192.168.1.10:23998")
+	networkReq.Header.Set("Origin", "https://192.168.1.10:23998")
 	if !strictSameOriginWSRequest(networkReq, true) {
 		t.Fatal("exact network Origin was rejected")
 	}
 }
 
-func TestDirectWSURLFromRequestUsesVerifiedPlaintextLocalhostListener(t *testing.T) {
+func TestDirectWSURLFromRequestUsesConfiguredWSSAuthority(t *testing.T) {
 	bind, err := ParseBind("localhost:23998")
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := newTestServer(t, nil)
 	s.bind = bind
-	s.networkAuthorities = map[string]struct{}{
-		"localhost:23998": {},
-		"127.0.0.1:23998": {},
-		"[::1]:23998":     {},
+	s.resolveDirectAuthority = nil
+	s.directAuthorities = map[string]string{
+		"localhost:23998": "localhost:34101",
+		"127.0.0.1:23998": "127.0.0.1:34102",
+		"[::1]:23998":     "[::1]:34103",
 	}
 
-	requestWithLocalAddr := func(rawURL string, localAddr *net.TCPAddr) *http.Request {
-		req := httptest.NewRequest(http.MethodGet, rawURL, nil)
-		return req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, localAddr))
+	localhostRequest := httptest.NewRequest(http.MethodGet, "https://localhost:23998/api/local/runtime", nil)
+	if got, err := s.directWSURLFromRequest(localhostRequest); err != nil || got != "wss://localhost:34101"+flowersec.WebSocketDirectPath {
+		t.Fatalf("localhost Flowersec WSS URL = %q, %v", got, err)
 	}
 
-	plaintextIPv4 := requestWithLocalAddr("http://localhost:23998/api/local/runtime", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 23998})
-	if got, err := s.directWSURLFromRequest(plaintextIPv4); err != nil || got != "ws://127.0.0.1:23998"+flowersec.WebSocketDirectPath {
-		t.Fatalf("IPv4 plaintext localhost direct URL = %q, %v", got, err)
-	}
-
-	plaintextIPv6 := requestWithLocalAddr("http://localhost:23998/api/local/runtime", &net.TCPAddr{IP: net.ParseIP("::1"), Port: 23998})
-	if got, err := s.directWSURLFromRequest(plaintextIPv6); err != nil || got != "ws://[::1]:23998"+flowersec.WebSocketDirectPath {
-		t.Fatalf("IPv6 plaintext localhost direct URL = %q, %v", got, err)
-	}
-
-	tlsRequest := httptest.NewRequest(http.MethodGet, "https://localhost:23998/api/local/runtime", nil)
-	tlsRequest.TLS = &tls.ConnectionState{}
-	if got, err := s.directWSURLFromRequest(tlsRequest); err != nil || got != "wss://localhost:23998"+flowersec.WebSocketDirectPath {
-		t.Fatalf("TLS localhost direct URL = %q, %v", got, err)
-	}
-
-	ipRequest := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:23998/api/local/runtime", nil)
-	if got, err := s.directWSURLFromRequest(ipRequest); err != nil || got != "ws://127.0.0.1:23998"+flowersec.WebSocketDirectPath {
-		t.Fatalf("plaintext IP direct URL = %q, %v", got, err)
+	ipRequest := httptest.NewRequest(http.MethodGet, "https://127.0.0.1:23998/api/local/runtime", nil)
+	if got, err := s.directWSURLFromRequest(ipRequest); err != nil || got != "wss://127.0.0.1:34102"+flowersec.WebSocketDirectPath {
+		t.Fatalf("IPv4 Flowersec WSS URL = %q, %v", got, err)
 	}
 
 	for name, req := range map[string]*http.Request{
-		"missing listener": httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/runtime", nil),
-		"wrong port":       requestWithLocalAddr("http://localhost:23998/api/local/runtime", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 24000}),
-		"non-loopback":     requestWithLocalAddr("http://localhost:23998/api/local/runtime", &net.TCPAddr{IP: net.ParseIP("192.168.1.10"), Port: 23998}),
+		"wrong port":   httptest.NewRequest(http.MethodGet, "https://localhost:24000/api/local/runtime", nil),
+		"unknown host": httptest.NewRequest(http.MethodGet, "https://192.0.2.10:23998/api/local/runtime", nil),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if got, err := s.directWSURLFromRequest(req); err == nil {
 				t.Fatalf("directWSURLFromRequest() = %q, nil; want rejection", got)
-			}
-		})
-	}
-}
-
-func TestSameOriginWSRequestAllowsOnlyVerifiedLocalhostListenerAlias(t *testing.T) {
-	bind, err := ParseBind("localhost:23998")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := newTestServer(t, nil)
-	s.bind = bind
-	s.networkAuthorities = map[string]struct{}{
-		"localhost:23998": {},
-		"127.0.0.1:23998": {},
-	}
-
-	request := func(host, origin string, localAddr *net.TCPAddr) *http.Request {
-		req := httptest.NewRequest(http.MethodGet, "http://"+host+flowersec.WebSocketDirectPath, nil)
-		req.Host = host
-		req.Header.Set("Origin", origin)
-		return req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, localAddr))
-	}
-	exactListener := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 23998}
-	if !s.sameOriginWSRequest(request("127.0.0.1:23998", "http://localhost:23998", exactListener)) {
-		t.Fatal("verified localhost-to-listener alias was rejected")
-	}
-
-	for name, req := range map[string]*http.Request{
-		"wrong request port":  request("127.0.0.1:24000", "http://localhost:24000", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 24000}),
-		"wrong listener port": request("127.0.0.1:23998", "http://localhost:23998", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 24000}),
-		"wrong origin port":   request("127.0.0.1:23998", "http://localhost:24000", exactListener),
-		"external origin":     request("127.0.0.1:23998", "http://example.com:23998", exactListener),
-	} {
-		t.Run(name, func(t *testing.T) {
-			if s.sameOriginWSRequest(req) {
-				t.Fatal("mismatched localhost listener alias was accepted")
 			}
 		})
 	}

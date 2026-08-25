@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
 	"github.com/floegence/redeven/internal/sessionrpc"
 )
 

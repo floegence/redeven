@@ -194,7 +194,6 @@ export type EnvironmentActionIntent =
   | 'refresh_runtime'
   | 'reinstall_target'
   | 'pair_gateway'
-  | 'review_network_exposure'
   | 'unavailable';
 
 export type EnvironmentActionModel = Readonly<{
@@ -901,9 +900,6 @@ function environmentRuntimeDisplayState(environment: DesktopEnvironmentEntry): E
   if (environment.window_state === 'opening') {
     return 'window_opening';
   }
-  if (environment.local_environment_network_exposure_review_required === true) {
-    return 'blocked';
-  }
   if (environment.kind === 'gateway_environment') {
     if (environment.gateway_status === 'online' && environment.gateway_environment_state === 'available') {
       return 'ready_to_open';
@@ -1062,9 +1058,6 @@ function environmentDisplayStatusLabel(
       }
       return 'RUNTIME OFFLINE';
     case 'blocked': {
-      if (environment.local_environment_network_exposure_review_required === true) {
-        return 'REVIEW NETWORK EXPOSURE';
-      }
       if (environment.runtime_health.freshness === 'failed') {
         return 'CHECK FAILED';
       }
@@ -1170,14 +1163,6 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
       intent: 'opening',
       label: 'Open',
       enabled: false,
-      variant: 'default',
-    };
-  }
-  if (environment.local_environment_network_exposure_review_required === true) {
-    return {
-      intent: 'review_network_exposure',
-      label: 'Open',
-      enabled: true,
       variant: 'default',
     };
   }

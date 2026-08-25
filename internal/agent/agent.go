@@ -22,7 +22,7 @@ import (
 	"time"
 
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessproxy"
 	"github.com/floegence/redeven/internal/accessrpc"
@@ -119,8 +119,9 @@ type Options struct {
 	OnControlConnected func()
 	// OnControlConnecting is called before a control-channel connection attempt.
 	OnControlConnecting func()
-	// OnControlRetry is called after a failed control-channel attempt with the retry delay.
-	OnControlRetry func(error, time.Duration)
+	// OnControlRetry is called after a failed control-channel attempt with a
+	// redacted Flowersec diagnostic and the retry delay.
+	OnControlRetry func(flowersec.ConnectionDiagnostic, time.Duration)
 	// OnControlDisabled is called when the runtime starts without a control channel.
 	OnControlDisabled func()
 
@@ -175,7 +176,7 @@ type Agent struct {
 	controlLifecycleMu   sync.Mutex
 	onControlConnected   func()
 	onControlConnecting  func()
-	onControlRetry       func(error, time.Duration)
+	onControlRetry       func(flowersec.ConnectionDiagnostic, time.Duration)
 	onControlDisabled    func()
 	runCtx               context.Context
 	controlCancel        context.CancelFunc
@@ -647,57 +648,85 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		a.mu.Unlock()
 	}()
 
-	if a.onControlConnecting != nil {
-		a.onControlConnecting()
-	}
 	controller.Start(ctx)
-	snapshot := controller.Snapshot()
-	var sessionCancel context.CancelFunc
-	for snapshot.State != flowersec.ConnectionClosed && snapshot.State != flowersec.ConnectionFailed {
-		next, waitErr := controller.WaitForSnapshotChange(ctx, snapshot)
+	diagnosticCtx, stopDiagnostics := context.WithCancel(ctx)
+	diagnosticsDone := make(chan struct{})
+	go func() {
+		defer close(diagnosticsDone)
+		a.observeControlConnection(diagnosticCtx, controller)
+	}()
+
+	for ctx.Err() == nil {
+		current, waitErr := controller.WaitForSession(ctx)
 		if waitErr != nil {
+			var controllerErr *flowersec.ConnectionControllerError
+			if errors.As(waitErr, &controllerErr) && controllerErr.Code() == flowersec.ConnectionControllerFailed {
+				a.log.Error("control channel failed", "diagnostic", controllerErr.Diagnostic())
+			}
 			break
 		}
-		if next.State == flowersec.ConnectionConnecting && a.onControlConnecting != nil {
-			a.onControlConnecting()
+		sessionCtx, cancelSession := context.WithCancel(ctx)
+		businessDone := make(chan error, 1)
+		go func() { businessDone <- a.runControlSession(sessionCtx, current) }()
+		_, terminationErr := current.WaitTermination(ctx)
+		cancelSession()
+		businessErr := <-businessDone
+		if businessErr != nil && !errors.Is(businessErr, context.Canceled) && ctx.Err() == nil {
+			a.log.Warn("control channel business session ended", "error", businessErr)
+			_ = current.Close()
 		}
-		if next.State == flowersec.ConnectionWaiting && next.Failure != nil {
-			a.log.Warn("control channel disconnected; Flowersec is retrying", "error", next.Failure.Error)
-			if a.onControlRetry != nil {
-				delay := time.Duration(0)
-				if !next.Failure.Disposition.RetryAt.IsZero() {
-					delay = time.Until(next.Failure.Disposition.RetryAt)
-					if delay < 0 {
-						delay = 0
-					}
-				}
-				a.onControlRetry(next.Failure.Error, delay)
+		if terminationErr != nil || ctx.Err() != nil {
+			break
+		}
+		// Wait for the controller to retire the terminated session before asking
+		// WaitForSession for its replacement. This observes one lifecycle edge;
+		// Flowersec remains the sole reconnect and retry owner.
+		snapshot := controller.Snapshot()
+		if snapshot.State == flowersec.ConnectionConnected && snapshot.CurrentSession == current {
+			if _, err := controller.WaitForSnapshotChange(ctx, snapshot); err != nil {
+				break
 			}
 		}
-		if next.State == flowersec.ConnectionConnected && next.CurrentSession != nil && next.CurrentSession != snapshot.CurrentSession {
-			if sessionCancel != nil {
-				sessionCancel()
-			}
-			var sessionCtx context.Context
-			sessionCtx, sessionCancel = context.WithCancel(ctx)
-			go func(current flowersec.Session) {
-				if sessionErr := a.runControlSession(sessionCtx, current); sessionErr != nil && sessionCtx.Err() == nil {
-					a.log.Warn("control channel business session ended", "error", sessionErr)
-					_ = current.Close()
-				}
-			}(next.CurrentSession)
-		}
-		snapshot = next
 	}
-	if sessionCancel != nil {
-		sessionCancel()
-	}
-	if snapshot.State == flowersec.ConnectionFailed && snapshot.Failure != nil {
-		a.log.Error("control channel failed", "error", snapshot.Failure.Error)
-	}
+	stopDiagnostics()
+	<-diagnosticsDone
 	closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = controller.Close(closeCtx)
+}
+
+func (a *Agent) observeControlConnection(ctx context.Context, controller *flowersec.ConnectionController) {
+	snapshot := controller.Snapshot()
+	for {
+		diagnostic := snapshot.Diagnostic()
+		switch snapshot.State {
+		case flowersec.ConnectionConnecting:
+			if a.onControlConnecting != nil {
+				a.onControlConnecting()
+			}
+		case flowersec.ConnectionWaiting:
+			a.log.Warn("control channel disconnected; Flowersec is retrying", "diagnostic", diagnostic)
+			if a.onControlRetry != nil {
+				a.onControlRetry(diagnostic, controlRetryDelay(diagnostic))
+			}
+		}
+		next, err := controller.WaitForSnapshotChange(ctx, snapshot)
+		if err != nil {
+			return
+		}
+		snapshot = next
+	}
+}
+
+func controlRetryDelay(diagnostic flowersec.ConnectionDiagnostic) time.Duration {
+	if diagnostic.RetryDisposition == nil || diagnostic.RetryDisposition.Kind != flowersec.RetryDispositionRetryAfter {
+		return 0
+	}
+	delay := time.Until(time.UnixMilli(diagnostic.RetryDisposition.RetryAtUnixMilliseconds))
+	if delay < 0 {
+		return 0
+	}
+	return delay
 }
 
 func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session) error {

@@ -36,7 +36,7 @@ func TestParseBind_IPv4LoopbackRange(t *testing.T) {
 		t.Fatalf("ListenLabel() = %q, want %q", bind.ListenLabel(), "127.42.0.9:12345")
 	}
 	urls := bind.DisplayURLs()
-	if len(urls) != 1 || urls[0] != "http://127.42.0.9:12345/" {
+	if len(urls) != 1 || urls[0] != "https://127.42.0.9:12345/" {
 		t.Fatalf("DisplayURLs() = %#v", urls)
 	}
 }

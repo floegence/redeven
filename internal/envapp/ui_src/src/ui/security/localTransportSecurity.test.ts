@@ -1,41 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  allowLoopbackControlplaneHTTP,
-  resolveLocalTransportSecurityPolicy,
+	resolveLocalTransportSecurityPolicy,
 } from './localTransportSecurity';
 
 describe('resolveLocalTransportSecurityPolicy', () => {
-  it.each(['localhost', '127.0.0.1', '127.42.0.9', '[::1]'])('uses the loopback policy for %s', (hostname) => {
-    const resolved = resolveLocalTransportSecurityPolicy(hostname);
-    expect(resolved).toMatchObject({ loopback: true, network: false, error: '' });
-	expect(resolved.policy).toBe(true);
-  });
+	it.each(['localhost', '127.0.0.1', '127.42.0.9', '[::1]'])('uses trusted TLS for loopback host %s', (hostname) => {
+		const resolved = resolveLocalTransportSecurityPolicy('https:', hostname);
+		expect(resolved).toMatchObject({ loopback: true, network: false, error: '' });
+		expect(resolved.policy).toBe(true);
+	});
 
-  it('rejects plaintext network hosts because the published profile is loopback-only', () => {
-    const resolved = resolveLocalTransportSecurityPolicy('192.168.1.20');
-	expect(resolved).toMatchObject({ loopback: false, network: true, policy: null });
-	expect(resolved.error).not.toBe('');
-  });
+	it('uses trusted TLS for a network host', () => {
+		const resolved = resolveLocalTransportSecurityPolicy('https:', '192.168.1.20');
+		expect(resolved).toMatchObject({ loopback: false, network: true, policy: true, error: '' });
+	});
 
-  it.each(['example.com', '0.0.0.0', '::', '::ffff:127.0.0.1'])('fails closed for invalid network hostname %s', (hostname) => {
-    const resolved = resolveLocalTransportSecurityPolicy(hostname);
-    expect(resolved.policy).toBeNull();
-    expect(resolved.loopback).toBe(false);
-	expect(resolved.network).toBe(true);
-    expect(resolved.error).not.toBe('');
-  });
-});
-
-describe('allowLoopbackControlplaneHTTP', () => {
-  it('allows only HTTP pages whose transport resolution is canonical loopback', () => {
-    const loopback = resolveLocalTransportSecurityPolicy('127.0.0.1');
-    const network = resolveLocalTransportSecurityPolicy('192.168.1.20');
-    const invalid = resolveLocalTransportSecurityPolicy('example.com');
-
-    expect(allowLoopbackControlplaneHTTP('http:', loopback)).toBe(true);
-    expect(allowLoopbackControlplaneHTTP('https:', loopback)).toBe(false);
-    expect(allowLoopbackControlplaneHTTP('http:', network)).toBe(false);
-    expect(allowLoopbackControlplaneHTTP('http:', invalid)).toBe(false);
-  });
+	it.each(['localhost', '127.0.0.1', '192.168.1.20'])('fails closed for plaintext host %s', (hostname) => {
+		const resolved = resolveLocalTransportSecurityPolicy('http:', hostname);
+		expect(resolved.policy).toBeNull();
+		expect(resolved.error).not.toBe('');
+	});
 });

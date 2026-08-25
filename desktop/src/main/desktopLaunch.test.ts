@@ -31,7 +31,6 @@ describe('desktopLaunch', () => {
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
-        plaintext_network_exposure_acknowledgement: { version: 1, bind: '0.0.0.0:24000' },
       }),
     });
 
@@ -43,30 +42,19 @@ describe('desktopLaunch', () => {
       'machine',
       '--local-ui-bind',
       '0.0.0.0:24000',
-      '--acknowledge-plaintext-network-exposure',
       '--startup-secrets-stdin',
     ]);
   });
 
-  it('blocks a saved network bind until its exact canonical bind is reviewed', () => {
-    const missingReview = testLocalEnvironment({
+  it('starts a password-protected TLS network listener without a compatibility flag', () => {
+    const environment = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
       }),
     });
-    expect(() => buildDesktopRuntimeArgs(missingReview)).toThrow('Review network exposure');
-
-    const staleReview = testLocalEnvironment({
-      access: testLocalAccess({
-        local_ui_bind: '0.0.0.0:24001',
-        local_ui_password: 'secret',
-        local_ui_password_configured: true,
-        plaintext_network_exposure_acknowledgement: { version: 1, bind: '0.0.0.0:24000' },
-      }),
-    });
-    expect(() => buildDesktopRuntimeArgs(staleReview)).toThrow('Review network exposure');
+    expect(buildDesktopRuntimeArgs(environment)).toContain('--startup-secrets-stdin');
   });
 
   it('still rejects a configured-but-empty password for network access', () => {
@@ -75,7 +63,6 @@ describe('desktopLaunch', () => {
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: '',
         local_ui_password_configured: true,
-        plaintext_network_exposure_acknowledgement: { version: 1, bind: '0.0.0.0:24000' },
       }),
     });
 

@@ -110,7 +110,7 @@ func TestWriteEnvironmentCatalogRecordKeepsLocalIdentityWithoutProviderID(t *tes
 	}
 }
 
-func TestWriteEnvironmentCatalogRecordPersistsExactPlaintextNetworkAcknowledgement(t *testing.T) {
+func TestWriteEnvironmentCatalogRecordPersistsTLSNetworkAccess(t *testing.T) {
 	stateRoot := t.TempDir()
 	layout, err := LocalEnvironmentStateLayout(stateRoot)
 	if err != nil {
@@ -118,21 +118,16 @@ func TestWriteEnvironmentCatalogRecordPersistsExactPlaintextNetworkAcknowledgeme
 	}
 
 	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, EnvironmentCatalogAccess{
-		LocalUIBind:                          "0.0.0.0:24000",
-		LocalUIPasswordConfigured:            true,
-		PlaintextNetworkExposureAcknowledged: true,
+		LocalUIBind:               "0.0.0.0:24000",
+		LocalUIPasswordConfigured: true,
 	}); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 
 	recordPath := filepath.Join(stateRoot, "catalog", "local-environment.json")
 	record := readCatalogEnvironmentFile(t, recordPath)
-	acknowledgement := record.LocalHosting.Access.PlaintextNetworkExposureAcknowledgement
-	if acknowledgement == nil {
-		t.Fatal("PlaintextNetworkExposureAcknowledgement = nil")
-	}
-	if acknowledgement.Version != 1 || acknowledgement.Bind != "0.0.0.0:24000" {
-		t.Fatalf("PlaintextNetworkExposureAcknowledgement = %#v", acknowledgement)
+	if record.LocalHosting.Access.LocalUIBind != "0.0.0.0:24000" || !record.LocalHosting.Access.LocalUIPasswordConfigured {
+		t.Fatalf("LocalHosting.Access = %#v", record.LocalHosting.Access)
 	}
 
 	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, EnvironmentCatalogAccess{
@@ -141,11 +136,8 @@ func TestWriteEnvironmentCatalogRecordPersistsExactPlaintextNetworkAcknowledgeme
 		t.Fatalf("WriteEnvironmentCatalogRecord(loopback) error = %v", err)
 	}
 	record = readCatalogEnvironmentFile(t, recordPath)
-	if record.LocalHosting.Access.PlaintextNetworkExposureAcknowledgement != nil {
-		t.Fatalf(
-			"PlaintextNetworkExposureAcknowledgement = %#v, want nil",
-			record.LocalHosting.Access.PlaintextNetworkExposureAcknowledgement,
-		)
+	if record.LocalHosting.Access.LocalUIBind != "localhost:24000" || record.LocalHosting.Access.LocalUIPasswordConfigured {
+		t.Fatalf("LocalHosting.Access = %#v", record.LocalHosting.Access)
 	}
 }
 

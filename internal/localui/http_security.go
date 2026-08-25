@@ -71,7 +71,7 @@ func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
 		for _, host := range accessHosts {
 			authority := net.JoinHostPort(host.String(), strconv.Itoa(addr.Port))
 			allowed[authority] = struct{}{}
-			displayURLs = append(displayURLs, formatHTTPURL(host.String(), addr.Port))
+			displayURLs = append(displayURLs, formatHTTPSURL(host.String(), addr.Port))
 		}
 	}
 	if len(allowed) == 0 {
@@ -169,45 +169,6 @@ func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
 	// Public listeners always install networkHandler after configuring authorities.
 	_, err := canonicalLocalUIAuthority(r.Host)
 	return err == nil
-}
-
-func localLoopbackAuthorityFromRequest(r *http.Request) (string, error) {
-	if r == nil {
-		return "", fmt.Errorf("missing request")
-	}
-	localAddr, ok := r.Context().Value(http.LocalAddrContextKey).(*net.TCPAddr)
-	if !ok || localAddr == nil || localAddr.IP == nil || localAddr.Port <= 0 || localAddr.Zone != "" {
-		return "", fmt.Errorf("missing Local UI listener address")
-	}
-	addr, err := netip.ParseAddr(localAddr.IP.String())
-	if err != nil || !addr.IsLoopback() || addr.Is4In6() {
-		return "", fmt.Errorf("invalid Local UI listener address")
-	}
-	return net.JoinHostPort(addr.String(), strconv.Itoa(localAddr.Port)), nil
-}
-
-func (s *Server) directEndpointAuthority(r *http.Request) (string, error) {
-	if r == nil || s == nil || !s.isTrustedOrAllowedAuthority(r) {
-		return "", fmt.Errorf("invalid Local UI authority")
-	}
-	requestAuthority, err := canonicalLocalUIAuthority(r.Host)
-	if err != nil {
-		return "", fmt.Errorf("invalid Local UI authority")
-	}
-	requestHost, requestPort, err := net.SplitHostPort(requestAuthority)
-	if err != nil || r.TLS != nil || !strings.EqualFold(requestHost, "localhost") || isTrustedLocalUIBridge(r) {
-		return requestAuthority, err
-	}
-
-	listenerAuthority, err := localLoopbackAuthorityFromRequest(r)
-	if err != nil {
-		return "", err
-	}
-	_, listenerPort, err := net.SplitHostPort(listenerAuthority)
-	if err != nil || listenerPort != requestPort || !s.isAllowedNetworkAuthority(listenerAuthority) {
-		return "", fmt.Errorf("Local UI listener does not match request authority")
-	}
-	return listenerAuthority, nil
 }
 
 func (s *Server) networkHandler() http.Handler {

@@ -5,13 +5,6 @@ export type LocalTransportSecurityResolution = Readonly<{
   error: string;
 }>;
 
-export function allowLoopbackControlplaneHTTP(
-  protocol: string,
-  resolution: LocalTransportSecurityResolution,
-): boolean {
-  return protocol === 'http:' && resolution.loopback;
-}
-
 function normalizeHostname(raw: string): string {
   return String(raw ?? '').trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
 }
@@ -24,15 +17,16 @@ function hostnameIsLoopback(hostname: string): boolean {
     && Number(parts[0]) === 127;
 }
 
-export function resolveLocalTransportSecurityPolicy(rawHostname: string): LocalTransportSecurityResolution {
-  const hostname = normalizeHostname(rawHostname);
-  if (hostnameIsLoopback(hostname)) {
-    return { policy: true, loopback: true, network: false, error: '' };
-  }
-  return {
-    policy: null,
-    loopback: false,
-    network: true,
-    error: 'Flowersec plaintext direct sessions are restricted to canonical loopback hosts.',
-  };
+export function resolveLocalTransportSecurityPolicy(protocol: string, rawHostname: string): LocalTransportSecurityResolution {
+	const hostname = normalizeHostname(rawHostname);
+	const loopback = hostnameIsLoopback(hostname);
+	if (String(protocol).trim().toLowerCase() === 'https:') {
+		return { policy: true, loopback, network: !loopback, error: '' };
+	}
+	return {
+		policy: null,
+		loopback,
+		network: !loopback,
+		error: 'Redeven Local UI requires trusted HTTPS and Flowersec WSS.',
+	};
 }

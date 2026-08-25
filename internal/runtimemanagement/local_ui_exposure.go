@@ -7,7 +7,7 @@ type LocalUIExposureScope string
 const (
 	LocalUIExposureScopeLoopback LocalUIExposureScope = "loopback"
 	LocalUIExposureScopeNetwork  LocalUIExposureScope = "network"
-	LocalUITransportPlaintext                         = "plaintext"
+	LocalUITransportTLS                               = "tls"
 )
 
 // LocalUIExposure is the canonical runtime security posture projected to every
@@ -25,7 +25,7 @@ func NewLocalUIExposure(network bool, passwordRequired bool) LocalUIExposure {
 	}
 	return LocalUIExposure{
 		Scope:            scope,
-		Transport:        LocalUITransportPlaintext,
+		Transport:        LocalUITransportTLS,
 		PasswordRequired: passwordRequired,
 	}
 }
@@ -34,7 +34,7 @@ func (e LocalUIExposure) Validate() error {
 	if e.Scope != LocalUIExposureScopeLoopback && e.Scope != LocalUIExposureScopeNetwork {
 		return fmt.Errorf("invalid Local UI exposure scope %q", e.Scope)
 	}
-	if e.Transport != LocalUITransportPlaintext {
+	if e.Transport != LocalUITransportTLS {
 		return fmt.Errorf("invalid Local UI exposure transport %q", e.Transport)
 	}
 	if e.Scope == LocalUIExposureScopeNetwork && !e.PasswordRequired {

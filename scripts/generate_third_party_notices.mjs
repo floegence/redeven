@@ -146,7 +146,7 @@ const npmCoordinateLicenseOverrides = new Map([
 
 const goLicenseOverrides = new Map([
   ['github.com/floegence/floeterm/terminal-go', { license: 'MIT', note: 'Floegence first-party dependency.' }],
-  ['github.com/floegence/flowersec/flowersec-go/v2', { license: 'MIT', note: 'Floegence first-party dependency.' }],
+  ['github.com/floegence/flowersec/flowersec-go/v3', { license: 'MIT', note: 'Floegence first-party dependency.' }],
   ['github.com/floegence/redevplugin/v3', { license: 'MIT', note: 'Floegence first-party dependency.' }],
   ['github.com/coder/websocket', { license: 'BSD-style', note: 'coder/websocket is distributed under a BSD-style license.' }],
 ]);
@@ -504,24 +504,31 @@ function splitGoModuleJSON(output) {
   return chunks.map((chunk) => JSON.parse(chunk));
 }
 
-function goListModules() {
+function goModRequirements() {
   const env = { ...process.env, GOFLAGS: appendGoFlag(process.env.GOFLAGS, '-mod=readonly') };
-  const output = execFileSync('go', ['list', '-m', '-json', 'all'], {
+  const output = execFileSync('go', ['mod', 'edit', '-json'], {
+    cwd: repoRoot,
+    env,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const goMod = JSON.parse(output);
+  return (goMod.Require ?? []).map(({ Path: modulePath, Version: version }) => ({
+    Path: modulePath,
+    Version: version,
+  }));
+}
+
+function downloadGoModules(requirements) {
+  const env = { ...process.env, GOFLAGS: appendGoFlag(process.env.GOFLAGS, '-mod=readonly') };
+  const coordinates = requirements.map(({ Path: modulePath, Version: version }) => `${modulePath}@${version}`);
+  const output = execFileSync('go', ['mod', 'download', '-json', ...coordinates], {
     cwd: repoRoot,
     env,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return splitGoModuleJSON(output);
-}
-
-function hydrateGoModuleSources() {
-  const env = { ...process.env, GOFLAGS: appendGoFlag(process.env.GOFLAGS, '-mod=readonly') };
-  execFileSync('go', ['mod', 'download', 'all'], {
-    cwd: repoRoot,
-    env,
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
 }
 
 function appendGoFlag(current, next) {
@@ -579,9 +586,8 @@ function detectGoLicense(moduleInfo) {
 
 function collectGoEntries() {
   const entries = [];
-  hydrateGoModuleSources();
-  for (const moduleInfo of goListModules()) {
-    if (moduleInfo.Main) continue;
+  const requirements = goModRequirements();
+  for (const moduleInfo of downloadGoModules(requirements)) {
     const version = String(moduleInfo.Version ?? '').trim();
     if (!moduleInfo.Path || !version) continue;
 
