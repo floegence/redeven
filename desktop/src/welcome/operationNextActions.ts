@@ -29,23 +29,50 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
   }
 }
 
-export function operationNextActionsByKind(
-  progress: DesktopLauncherActionProgress,
-): Map<DesktopLauncherOperationNextAction['kind'], DesktopLauncherOperationNextAction> {
-  const actions = new Map<DesktopLauncherOperationNextAction['kind'], DesktopLauncherOperationNextAction>();
-  for (const action of progress.next_actions ?? []) {
-    if (!actions.has(action.kind)) {
-      actions.set(action.kind, action);
-    }
-  }
-  return actions;
+function operationCanDismiss(progress: DesktopLauncherActionProgress): boolean {
+  return progress.status === 'failed'
+    || progress.status === 'cleanup_failed'
+    || progress.status === 'canceled'
+    || progress.status === 'needs_confirmation';
 }
 
 export function visibleOperationNextActions(
   progress: DesktopLauncherActionProgress,
 ): readonly DesktopLauncherOperationNextAction[] {
   const actions: DesktopLauncherOperationNextAction[] = [];
-  const byKind = operationNextActionsByKind(progress);
+  const normalizedActions: DesktopLauncherOperationNextAction[] = [...(progress.next_actions ?? [])];
+  const operationKey = progress.operation_key?.trim() ?? '';
+  if (
+    operationKey !== ''
+    && progress.failure !== undefined
+    && !normalizedActions.some((action) => action.kind === 'copy_diagnostics')
+  ) {
+    normalizedActions.push({
+      kind: 'copy_diagnostics',
+      operation_key: operationKey,
+      label: 'Copy log',
+      label_key: 'progress.copyLog',
+    });
+  }
+  if (
+    operationKey !== ''
+    && progress.subject_kind !== 'gateway'
+    && operationCanDismiss(progress)
+    && !normalizedActions.some((action) => action.kind === 'dismiss')
+  ) {
+    normalizedActions.push({
+      kind: 'dismiss',
+      operation_key: operationKey,
+      label: 'Dismiss',
+      label_key: 'progress.dismiss',
+    });
+  }
+  const byKind = new Map<DesktopLauncherOperationNextAction['kind'], DesktopLauncherOperationNextAction>();
+  for (const action of normalizedActions) {
+    if (!byKind.has(action.kind)) {
+      byKind.set(action.kind, action);
+    }
+  }
   const push = (kind: DesktopLauncherOperationNextAction['kind']) => {
     const action = byKind.get(kind);
     if (action && actions.every((item) => operationNextActionKey(item) !== operationNextActionKey(action))) {

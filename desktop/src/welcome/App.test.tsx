@@ -1089,7 +1089,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-card__summary-detail');
     expect(styles).toContain('.redeven-gateway-card__catalog-summary');
     expect(styles).toContain('.redeven-gateway-action-panel__hero');
-    expect(styles).toContain(".redeven-action-popover__action-stack[data-subject-kind='gateway'] .redeven-action-popover__actions[data-layout='secondary']");
+    expect(styles).not.toContain(".redeven-action-popover__action-stack[data-subject-kind='gateway']");
     expect(styles).toContain('.redeven-gateway-action-panel__section-label');
     expect(styles).toContain('.redeven-gateway-action-panel__result-facts');
     expect(styles).toContain(".redeven-gateway-action-panel__result-fact[data-tone='success']");
@@ -1646,6 +1646,8 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain(".redeven-action-popover__actions[data-layout='primary']");
     expect(styles).toContain(".redeven-action-popover__actions[data-layout='secondary']");
     expect(styles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(styles).toContain(".redeven-action-popover__actions[data-layout='secondary'] > :only-child");
+    expect(styles).toContain('grid-column: 1 / -1;');
     expect(styles).toContain('.redeven-action-popover__notice');
   });
 
@@ -1751,6 +1753,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<For each={nextActionGroups()}>');
     expect(appSrc).toContain('data-layout={group.kind}');
     expect(appSrc).toContain('<For each={group.actions}>');
+    expect(appSrc.match(/class="redeven-action-popover__action-stack"/gu)).toHaveLength(1);
+    expect(appSrc).not.toContain('showFallbackCopyAction');
+    expect(appSrc).not.toContain('showFallbackDismissAction');
+    expect(appSrc).not.toContain('showFallbackActions');
+    expect(appSrc).not.toContain('data-subject-kind={props.progress.subject_kind}');
     expect(appSrc).toContain("case 'refresh_status':");
     expect(appSrc).toContain("case 'copy_diagnostics':");
     expect(appSrc).toContain("case 'dismiss':");
@@ -1882,12 +1889,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('props.progress.subject_kind !== \'gateway\'');
     expect(appSrc).toContain('props.progress.cancelable === true');
     expect(appSrc).toContain('props.progress.status === \'running\'');
-    expect(appSrc).toContain("props.progress.subject_kind !== 'gateway' && !nextActionsByKind().has('dismiss')");
+    expect(appSrc).not.toContain('nextActionsByKind');
+    expect(appSrc).not.toContain('showFallbackDismissAction');
     expect(appSrc).toContain('onClick={() => props.cancelOperation(props.progress)}');
     expect(appSrc).not.toContain("props.progress.status === 'awaiting_confirmation'");
     expect(appSrc).not.toContain('onClick={() => props.continueOperation(props.progress)}');
-    expect(appSrc).toContain('onClick={() => props.dismissOperation(props.progress)}');
-    expect(appSrc).toContain("props.i18n.t('progress.copyLog')");
+    expect(appSrc).not.toContain('onClick={() => props.dismissOperation(props.progress)}');
+    expect(appSrc).toContain('onClick={() => props.runNextAction?.(action, props.progress)}');
+    expect(appSrc).toContain("case 'copy_diagnostics':\n      return i18n.t('progress.copyLog');");
     expect(appSrc).toContain('<Stop class="h-3.5 w-3.5" />');
     expect(appSrc).toContain('localizedProgressInterruptLabel(props.i18n, props.progress)');
     expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-welcome-loading-shimmer-overlay'}");

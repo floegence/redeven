@@ -2654,6 +2654,7 @@ html:not(.dark) .redeven-header-separator {
 .redeven-action-popover__actions button {
   min-width: 0;
   white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .redeven-action-popover__action-stack .redeven-action-popover__actions {
@@ -2672,13 +2673,13 @@ html:not(.dark) .redeven-header-separator {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.redeven-action-popover__action-stack[data-subject-kind='gateway'] .redeven-action-popover__actions[data-layout='secondary'] {
-  grid-template-columns: minmax(0, 1fr);
+.redeven-action-popover__actions[data-layout='secondary'] > :only-child {
+  grid-column: 1 / -1;
 }
 
 .redeven-action-popover__action-stack button {
+  height: 100%;
   width: 100%;
-  white-space: normal;
 }
 
 .redeven-action-popover__action-stack svg {
