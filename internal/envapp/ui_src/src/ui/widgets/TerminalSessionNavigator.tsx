@@ -85,6 +85,7 @@ export type TerminalSessionNavigatorProps = Readonly<{
   onRelocateSession?: (sessionId: string, groupId: string, beforeSessionId: string | null) => void;
   onReorderGroup?: (groupId: string, beforeGroupId: string | null) => void;
   onOpenGroupContextMenu?: (event: MouseEvent, groupId: string) => void;
+  onOpenTreeContextMenu?: (event: MouseEvent) => void;
   onRefresh: () => void;
   onFilterQueryChange: (value: string) => void;
   onPreviewSession: (event: PointerEvent, sessionId: string) => void;
@@ -353,7 +354,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   }> | null>(null);
   const [groupDropIntent, setGroupDropIntent] = createSignal<Readonly<{
     beforeGroupId: string | null;
-    targetGroupId: string;
+    targetGroupId: string | null;
     position: 'before' | 'after';
   }> | null>(null);
   const clearDragState = () => {
@@ -662,10 +663,18 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
               )}
               class="min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden"
             >
-              <div data-testid="terminal-session-list" class="min-h-0 flex-1 overflow-hidden">
+              <div
+                data-testid="terminal-session-list"
+                class="min-h-0 flex-1 overflow-hidden"
+                onContextMenu={(event) => {
+                  const target = event.target instanceof Element ? event.target : null;
+                  if (!target || target.closest('[data-terminal-tree-group], button, input, [role="menu"]')) return;
+                  props.onOpenTreeContextMenu?.(event);
+                }}
+              >
                 <SidebarItemList
                   {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
-                  class="min-h-0 h-full overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]"
+                  class="flex min-h-0 h-full flex-col overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]"
                 >
                   <Index each={navigationGroups()}>
                     {(navigationGroup) => (
@@ -822,6 +831,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           <button
                             type="button"
                             class="min-w-0 flex-1 cursor-pointer text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            data-terminal-group-drag-handle={navigationGroup().id}
                             title={draggedSessionId() || draggedGroupId()
                               ? undefined
                               : `${navigationGroup().name}\n${navigationGroup().defaultWorkingDir}`}
@@ -893,8 +903,8 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           class="relative mb-0.5 transition-[transform,opacity] duration-150 last:mb-0"
                           classList={{
                             'opacity-35': draggedSessionId() === sessionId,
-                            'translate-y-[3px]': rowDropIntent()?.position === 'after',
-                            '-translate-y-[3px]': rowDropIntent()?.position === 'before',
+                            'translate-y-[3px]': rowDropIntent()?.position === 'before',
+                            '-translate-y-[3px]': rowDropIntent()?.position === 'after',
                           }}
                           data-terminal-tree-child={sessionId}
                           data-terminal-session-drop-position={rowDropIntent()?.position}
@@ -965,7 +975,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </Show>
                         <div
                           data-terminal-session-row={sessionId}
-                          draggable={item().transitionState === 'none'}
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
                           class={`group relative grid cursor-grab items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 active:cursor-grabbing ${props.mobile
                             ? 'min-h-[68px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
@@ -1264,6 +1273,45 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       </div>
                     )}
                   </Index>
+                  <div
+                    class="relative min-h-6 flex-1"
+                    data-terminal-group-list-end
+                    onDragOver={(event) => {
+                      if (!acceptsTerminalGroupDrag(event)) return;
+                      const draggedId = draggedGroupFromEvent(event);
+                      const originalOrder = navigationGroups()
+                        .filter((group) => !group.isDefault && !group.pending)
+                        .map((group) => group.id);
+                      if (!draggedId || !originalOrder.includes(draggedId) || originalOrder.at(-1) === draggedId) {
+                        setGroupDropIntent(null);
+                        return;
+                      }
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+                      setGroupDropIntent({
+                        beforeGroupId: null,
+                        targetGroupId: null,
+                        position: 'after',
+                      });
+                    }}
+                    onDragLeave={(event) => {
+                      if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+                      if (groupDropIntent()?.targetGroupId === null) setGroupDropIntent(null);
+                    }}
+                    onDrop={commitGroupDrop}
+                  >
+                    <Show when={groupDropIntent()?.targetGroupId === null}>
+                      <span
+                        class="pointer-events-none absolute left-1 right-1 top-1 z-40 flex items-center"
+                        data-terminal-group-list-end-drop-hint
+                        aria-hidden="true"
+                      >
+                        <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                        <span class="h-px min-w-2 flex-1 bg-primary" />
+                      </span>
+                    </Show>
+                  </div>
                   <Show when={navigationGroups().length === 0}>
                     <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/25 px-2.5 py-3 text-xs text-muted-foreground">
                       {props.emptyListLoading

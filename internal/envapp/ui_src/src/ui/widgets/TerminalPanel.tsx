@@ -1,6 +1,6 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { BugIcon, Copy, Download, Folder, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
 
 import {
@@ -242,6 +242,16 @@ function writeCollapsedTerminalGroupIds(storageKey: string, groupIds: ReadonlySe
   writeUIStorageJSON(storageKey, [...groupIds]);
 }
 
+export function expandTerminalGroupInCollapsedSet(
+  collapsedGroupIds: ReadonlySet<string>,
+  groupId: string,
+): ReadonlySet<string> {
+  if (!collapsedGroupIds.has(groupId)) return collapsedGroupIds;
+  const next = new Set(collapsedGroupIds);
+  next.delete(groupId);
+  return next;
+}
+
 function readActiveSessionId(storageKey: string): string | null {
   try {
     const v = sessionStorage.getItem(storageKey);
@@ -354,6 +364,11 @@ type terminal_sidebar_context_menu = Readonly<{
   x: number;
   y: number;
   groupId: string;
+  triggerElement: HTMLElement | null;
+}> | Readonly<{
+  kind: 'tree';
+  x: number;
+  y: number;
   triggerElement: HTMLElement | null;
 }> | null;
 
@@ -993,6 +1008,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (storageKey !== loadedCollapsedGroupsStorageKey) return;
     writeCollapsedTerminalGroupIds(storageKey, collapsed);
   });
+  const expandNavigationGroup = (groupId: string) => {
+    setCollapsedGroupIds((current) => expandTerminalGroupInCollapsedSet(current, groupId));
+  };
 
   const [groupEditorTarget, setGroupEditorTarget] = createSignal<TerminalGroup | 'create' | null>(null);
   const [groupDeleteTarget, setGroupDeleteTarget] = createSignal<TerminalGroup | null>(null);
@@ -2965,6 +2983,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       void terminalCatalog?.refreshGroups().catch(() => undefined);
       return;
     }
+    expandNavigationGroup(group.id);
     void beginCreateSession(i18n.t('terminal.terminalName', { index: nextIndex }), group.defaultWorkingDir, group.id);
   };
 
@@ -3499,6 +3518,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const relocateSession = (sessionId: string, groupId: string, beforeSessionId: string | null) => {
     if (!terminalCatalog) return;
+    expandNavigationGroup(groupId);
     const previousOrder = terminalCatalog.sessions().map((session) => session.id);
     const previousIndex = previousOrder.indexOf(sessionId);
     const previousBeforeSessionId = previousIndex >= 0 ? previousOrder[previousIndex + 1] ?? null : null;
@@ -4251,6 +4271,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const buildTerminalSidebarMenuItems = (menu: NonNullable<ReturnType<typeof terminalSidebarMenu>>): FloatingContextMenuItem[] => {
+    if (menu.kind === 'tree') {
+      return [{
+        id: 'group-create',
+        kind: 'action',
+        label: i18n.t('terminal.newGroup'),
+        icon: FolderPlus,
+        disabled: !connected(),
+        onSelect: () => {
+          setTerminalSidebarMenu(null);
+          setGroupEditorTarget('create');
+        },
+      }];
+    }
     if (menu.kind === 'group') {
       const group = terminalGroups().find((candidate) => candidate.id === menu.groupId);
       if (!group) return [];
@@ -4417,6 +4450,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       x: fromContextMenu ? event.clientX : rect?.right ?? event.clientX,
       y: fromContextMenu ? event.clientY : rect?.bottom ?? event.clientY,
       groupId,
+      triggerElement: target,
+    });
+  };
+
+  const openTerminalTreeMenu = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    setTerminalAskMenu(null);
+    setTerminalSidebarMenu({
+      kind: 'tree',
+      x: event.clientX,
+      y: event.clientY,
       triggerElement: target,
     });
   };
@@ -4773,6 +4819,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             onRelocateSession={relocateSession}
             onReorderGroup={reorderTerminalGroup}
             onOpenGroupContextMenu={openTerminalGroupMenu}
+            onOpenTreeContextMenu={openTerminalTreeMenu}
             onRefresh={handleRefresh}
             onFilterQueryChange={setSessionFilterQuery}
             onPreviewSession={previewSidebarSessionSelection}
@@ -5329,7 +5376,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             y={menu.y}
             ariaLabel={menu.kind === 'group'
               ? i18n.t('terminal.groupActions', { group: terminalGroups().find((group) => group.id === menu.groupId)?.name ?? '' })
-              : i18n.t('terminal.sessions')}
+              : menu.kind === 'tree'
+                ? i18n.t('terminal.newGroup')
+                : i18n.t('terminal.sessions')}
             focusAnchor={menu.triggerElement}
             focusDisabledItems={menu.kind === 'session' && sessionListItemById().get(menu.sessionId)?.remote === true}
             restoreFocusOnTab={isMobileLayout() && sessionDrawerOpen()}

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RedevenTerminalTransport } from '../services/terminalTransport';
 import {
   clearSemanticTerminalContent,
+  expandTerminalGroupInCollapsedSet,
   preserveStableTerminalSessionReferences,
   resolvePendingTerminalSessions,
   resolveSystemTerminalThemeColors,
@@ -25,6 +26,16 @@ const transport = (clearSemanticContent?: RedevenTerminalTransport['clearSemanti
 }) as unknown as RedevenTerminalTransport;
 
 describe('TerminalPanel semantic contracts', () => {
+  it('expands only the requested terminal group without disturbing other panel-local state', () => {
+    const collapsed = new Set(['group-api', 'group-web']);
+
+    const expanded = expandTerminalGroupInCollapsedSet(collapsed, 'group-api');
+
+    expect([...expanded]).toEqual(['group-web']);
+    expect([...collapsed]).toEqual(['group-api', 'group-web']);
+    expect(expandTerminalGroupInCollapsedSet(expanded, 'group-api')).toBe(expanded);
+  });
+
   it('clears through the actor-owned semantic control exactly once', async () => {
     const clear = vi.fn(async () => ({ presentationSequence: 19, contentEpoch: 4 }));
     await expect(clearSemanticTerminalContent(transport(clear), ' session-1 ')).resolves.toEqual({
