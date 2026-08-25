@@ -53,7 +53,7 @@ describe('markdownPreviewPreferences', () => {
       preferences.DEFAULT_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT,
     );
     expect(preferences.normalizeMarkdownPreviewTextScalePercent(Number.NaN)).toBe(100);
-    expect(preferences.normalizeMarkdownPreviewTextScalePercent(74)).toBe(80);
+    expect(preferences.normalizeMarkdownPreviewTextScalePercent(44)).toBe(50);
     expect(preferences.normalizeMarkdownPreviewTextScalePercent(166)).toBe(160);
     expect(preferences.normalizeMarkdownPreviewTextScalePercent(114)).toBe(110);
     expect(preferences.normalizeMarkdownPreviewTextScalePercent(115)).toBe(120);
