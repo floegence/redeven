@@ -1652,6 +1652,11 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('min-height: 1.75rem;');
     expect(styles).toContain('height: auto;');
     expect(styles).toContain('padding-block: 0.25rem;');
+    expect(styles).toContain('.redeven-environment-progress__body');
+    expect(styles).toContain('.redeven-action-popover__action-footer');
+    expect(styles).toContain('max-height: var(--redeven-anchored-overlay-max-height, none);');
+    expect(styles).toContain('flex: 0 0 auto;');
+    expect(styles).toContain('overflow: auto;');
     expect(styles).toContain('.redeven-action-popover__notice');
   });
 
@@ -1819,11 +1824,18 @@ describe('DesktopWelcomeShell', () => {
     expect(steppedProgressSrc.indexOf('{renderFailureNotice()}')).toBeGreaterThan(
       steppedProgressSrc.indexOf('class="redeven-environment-progress__steps"'),
     );
-    expect(steppedProgressSrc.indexOf('{renderNextActionGroups()}')).toBeGreaterThan(
-      steppedProgressSrc.indexOf('class="redeven-environment-progress__steps"'),
-    );
+    const progressBodyEnd = appSrc.indexOf('</div>\n      <Show when={hasPanelActions()}>', steppedProgressStart);
+    const actionFooterStart = appSrc.indexOf('class="redeven-action-popover__action-footer"', progressBodyEnd);
+    expect(progressBodyEnd).toBeGreaterThan(steppedProgressStart);
+    expect(actionFooterStart).toBeGreaterThan(progressBodyEnd);
+    expect(appSrc.indexOf('{renderNextActionGroups()}', actionFooterStart)).toBeGreaterThan(actionFooterStart);
+    expect(appSrc).toContain('const hasPanelActions = createMemo(() => (');
+    expect(appSrc).toContain('|| canCancel()');
+    expect(appSrc).toContain('|| panelPrimaryAction() !== null');
     expect(appSrc).toContain("data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}");
-    expect(styles).toContain(".redeven-action-popover__action-stack[data-placement='after-steps']");
+    expect(appSrc).not.toContain('class="redeven-action-popover__action-stack"\n        data-placement=');
+    expect(styles).not.toContain(".redeven-action-popover__action-stack[data-placement='after-steps']");
+    expect(styles).toContain('.redeven-action-popover__action-footer .redeven-action-popover__action-stack');
     expect(styles).toContain(".redeven-environment-progress .redeven-action-popover__notice[data-placement='after-steps']");
     expect(styles).toContain(".redeven-environment-progress__meter[data-plan-state='planning'] span");
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');

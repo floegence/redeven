@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createLocalRuntimeHostExecutor } from './runtimeHostAccess';
 import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
-import type { PreparedComponentBatch } from './managedComponentBatchInstaller';
+import type { PreparedReinstallRuntimePackage } from './reinstallRuntimePackage';
 import {
   ReinstallTargetCoordinator,
   ReinstallTargetCoordinatorError,
@@ -43,17 +43,18 @@ function emptyInventory(targetRoot: string): ReinstallTargetProcessInventory {
   };
 }
 
-function preparedBatch(operationID = 'test-operation'): PreparedComponentBatch {
+function preparedPackage(operationID = 'test-operation'): PreparedReinstallRuntimePackage {
   return {
     operation_id: operationID,
-    tasks: [],
-    runtime_manifest: {
-      release_tag: 'v1',
-      commit: 'abc',
-      platform: 'darwin',
-      architecture: 'arm64',
-      components: [],
-    },
+    staging_root: `/tmp/${operationID}-runtime`,
+    strategy: 'desktop_upload',
+    release_tag: 'v1',
+    commit: 'abc',
+    platform: 'darwin',
+    architecture: 'arm64',
+    archive_sha256: 'a'.repeat(64),
+    archive_size_bytes: 1,
+    executable_sha256: 'b'.repeat(64),
   };
 }
 
@@ -92,10 +93,15 @@ function coordinatorDependencies(
     mark_in_progress: async () => { events.push('mark_in_progress'); },
     close_sessions: async () => { events.push('close_sessions'); },
     clear_desktop_state: async () => { events.push('clear_desktop_state'); },
-    install_fresh: async (_descriptor, targetRoot) => {
-      events.push('install_fresh');
+    prepare_runtime_package: async () => {
+      events.push('prepare_runtime_package');
+      return preparedPackage();
+    },
+    install_runtime: async (_descriptor, targetRoot) => {
+      events.push('install_runtime');
       await fs.writeFile(path.join(targetRoot, 'fresh-component'), 'current');
     },
+    start_runtime: async () => { events.push('start_runtime'); },
     verify_fresh_identity: async (_descriptor, targetRoot) => {
       events.push('verify_fresh_identity');
       expect(await fs.readFile(path.join(targetRoot, 'fresh-component'), 'utf8')).toBe('current');
@@ -129,11 +135,13 @@ describe('ReinstallTargetCoordinator', () => {
 
     const journal = await coordinator.execute(preview.preflight_id);
     expect(events).toEqual([
+      'prepare_runtime_package',
       'mark_in_progress',
       'close_sessions',
       'inventory',
       'clear_desktop_state',
-      'install_fresh',
+      'install_runtime',
+      'start_runtime',
       'verify_fresh_identity',
       'verify_catalog_and_local_ui',
       'clear_completed_marker',
@@ -155,8 +163,7 @@ describe('ReinstallTargetCoordinator', () => {
     const phases: string[] = [];
     const coordinator = new ReinstallTargetCoordinator({
       ...dependencies,
-      install_fresh: async (_descriptor, freshRoot, report) => {
-        await report?.('runtime_installed');
+      install_runtime: async (_descriptor, freshRoot) => {
         await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
       },
     });
@@ -186,12 +193,12 @@ describe('ReinstallTargetCoordinator', () => {
     let releasePackage!: () => void;
     let packageStarted!: () => void;
     const packageStartedPromise = new Promise<void>((resolve) => { packageStarted = resolve; });
-    const packageGate = new Promise<PreparedComponentBatch | null>((resolve) => {
-      releasePackage = () => resolve(null);
+    const packageGate = new Promise<PreparedReinstallRuntimePackage>((resolve) => {
+      releasePackage = () => resolve(preparedPackage());
     });
     const coordinator = new ReinstallTargetCoordinator({
       ...coordinatorDependencies(journalRoot, () => current, []),
-      prepare_packages: async () => {
+      prepare_runtime_package: async () => {
         packageStarted();
         return packageGate;
       },
@@ -211,29 +218,68 @@ describe('ReinstallTargetCoordinator', () => {
     const journalRoot = path.join(parent, 'journal');
     await fs.mkdir(targetRoot);
     const current = descriptor(targetRoot);
-    let installStarted!: () => void;
-    let releaseInstall!: () => void;
-    const installStartedPromise = new Promise<void>((resolve) => { installStarted = resolve; });
-    const installGate = new Promise<void>((resolve) => { releaseInstall = resolve; });
+    let startCommandStarted!: () => void;
+    let releaseStartCommand!: () => void;
+    const startCommandStartedPromise = new Promise<void>((resolve) => { startCommandStarted = resolve; });
+    const startCommandGate = new Promise<void>((resolve) => { releaseStartCommand = resolve; });
     const coordinator = new ReinstallTargetCoordinator({
       ...coordinatorDependencies(journalRoot, () => current, []),
-      prepare_packages: async () => preparedBatch(),
-      install_fresh: async (_descriptor, freshRoot, report) => {
+      prepare_runtime_package: async () => preparedPackage(),
+      install_runtime: async (_descriptor, freshRoot) => {
         await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
-        await report?.('runtime_installed');
-        installStarted();
-        await installGate;
+      },
+      start_runtime: async () => {
+        startCommandStarted();
+        await startCommandGate;
       },
     });
     const preview = await coordinator.preview({ environment_id: current.environment_id });
     const execution = coordinator.execute(preview.preflight_id);
-    await installStartedPromise;
+    await startCommandStartedPromise;
 
-    const [duringInstall] = await coordinator.readPersistedJournals();
-    expect(duringInstall?.phase).toBe('old_root_isolated_or_cleared');
+    const [duringStart] = await coordinator.readPersistedJournals();
+    expect(duringStart?.phase).toBe('runtime_installed');
 
-    releaseInstall();
+    releaseStartCommand();
     await execution;
+  });
+
+  it('resumes a committed Runtime installation by executing the real start stage', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    const journalRoot = path.join(parent, 'journal');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    let installAttempts = 0;
+    let startAttempts = 0;
+    const dependencies: ReinstallTargetCoordinatorDependencies = {
+      ...coordinatorDependencies(journalRoot, () => current, []),
+      install_runtime: async (_descriptor, freshRoot) => {
+        installAttempts++;
+        await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
+      },
+      start_runtime: async () => {
+        startAttempts++;
+        if (startAttempts === 1) {
+          throw new Error('simulated Desktop interruption before Runtime startup');
+        }
+      },
+    };
+    let coordinator = new ReinstallTargetCoordinator(dependencies);
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+
+    await expect(coordinator.execute(preview.preflight_id)).rejects.toMatchObject({
+      code: 'reinstall_retryable',
+      recommended_mode: 'wipe_data',
+    });
+    await expect(coordinator.readPersistedJournals()).resolves.toEqual([
+      expect.objectContaining({ phase: 'runtime_installed' }),
+    ]);
+
+    coordinator = new ReinstallTargetCoordinator(dependencies);
+    await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
+    expect(installAttempts).toBe(1);
+    expect(startAttempts).toBe(2);
   });
 
   it('rolls back preserve-data replacement failures and recommends wipe reinstall', async () => {
@@ -244,12 +290,14 @@ describe('ReinstallTargetCoordinator', () => {
     const current = descriptor(targetRoot);
     const rollback = vi.fn(async () => undefined);
     const finalize = vi.fn(async () => undefined);
+    const restartRestoredRuntime = vi.fn(async () => undefined);
     const coordinator = new ReinstallTargetCoordinator({
       ...coordinatorDependencies(journalRoot, () => current, []),
-      prepare_packages: async () => preparedBatch(),
-      install_fresh: async () => {
+      prepare_runtime_package: async () => preparedPackage(),
+      install_runtime: async () => {
         throw new Error('fresh runtime did not become healthy');
       },
+      start_runtime: restartRestoredRuntime,
       rollback_install: rollback,
       finalize_install: finalize,
     });
@@ -263,6 +311,7 @@ describe('ReinstallTargetCoordinator', () => {
       recommended_mode: 'wipe_data',
     });
     expect(rollback).toHaveBeenCalledOnce();
+    expect(restartRestoredRuntime).toHaveBeenCalledOnce();
     expect(finalize).toHaveBeenCalledOnce();
     await expect(fs.lstat(path.join(journalRoot, `${preview.preflight_id}.json`)))
       .rejects.toMatchObject({ code: 'ENOENT' });
@@ -395,7 +444,7 @@ describe('ReinstallTargetCoordinator', () => {
     let failInstall = true;
     const coordinator = new ReinstallTargetCoordinator({
       ...dependencies,
-      install_fresh: async (_descriptor, freshRoot) => {
+      install_runtime: async (_descriptor, freshRoot) => {
         if (failInstall) {
           events.push('install_failed');
           throw new Error('package verification failed');
@@ -445,7 +494,7 @@ describe('ReinstallTargetCoordinator', () => {
           processSessionAttempts++;
           return dependencies.prepare_process_session(...args);
         },
-        install_fresh: async (_descriptor, freshRoot) => {
+        install_runtime: async (_descriptor, freshRoot) => {
           installAttempts++;
           await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
         },
@@ -519,8 +568,8 @@ describe('ReinstallTargetCoordinator', () => {
     let finalizeAttempts = 0;
     const coordinator = new ReinstallTargetCoordinator({
       ...coordinatorDependencies(path.join(parent, 'journal'), () => current, []),
-      prepare_packages: async () => preparedBatch(),
-      install_fresh: async (_descriptor, freshRoot) => {
+      prepare_runtime_package: async () => preparedPackage(),
+      install_runtime: async (_descriptor, freshRoot) => {
         installAttempts++;
         await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
       },
@@ -810,7 +859,7 @@ describe('ReinstallTargetCoordinator', () => {
         run: async () => ({ stdout: '/home/ops/.redeven\n0\n', stderr: '' }),
         release: async () => undefined,
       }),
-      install_fresh: async () => undefined,
+      install_runtime: async () => undefined,
       verify_fresh_identity: async () => undefined,
     });
 

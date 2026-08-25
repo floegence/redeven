@@ -27,16 +27,16 @@ import {
   currentReinstallTargetJournals,
 } from './reinstallTargetJournalSelection';
 import {
-  prepareAndStageBatch,
-  type PreparedComponentBatch,
-  type ManagedComponentTask,
-} from './managedComponentBatchInstaller';
-import {
-  activateManagedComponentBatch,
-  cleanupManagedComponentBatch,
-  rollbackManagedComponentBatch,
-  stageManagedComponent,
-} from './reinstallComponentStaging';
+  cleanupReinstallRuntimePackage,
+  installReinstallRuntimePackage,
+  prepareReinstallRuntimePackage,
+  rollbackReinstallRuntimePackage,
+  startReinstallRuntime,
+  verifyReinstallRuntimeReady,
+  type PreparedReinstallRuntimePackage,
+  type ReinstallRuntimePackageProgress,
+  type ReinstallRuntimePackageStrategy,
+} from './reinstallRuntimePackage';
 import {
   reinstallTargetStepProgress,
   type ReinstallTargetProgressPhase,
@@ -115,7 +115,6 @@ import { buildDesktopRuntimeLaunchPlan, desktopAutoStartRuntimeEnabled } from '.
 import { loadDesktopBundle, type DesktopBundle } from './desktopBundle';
 import {
   DesktopWelcomeRuntimeHealthStore,
-  desktopWelcomeRuntimeHealthForEnvironment,
   type DesktopWelcomeRuntimeHealthProbeEvent,
   type DesktopWelcomeRuntimeHealthProbeResult,
   type DesktopWelcomeRuntimeHealthTarget,
@@ -323,10 +322,6 @@ import {
   openContainerRuntimeProcessSession,
   type RuntimePlacementProgress,
 } from './runtimePlacementManager';
-import {
-  waitForDesktopRuntimeLifecycleReadiness,
-  type DesktopRuntimeLifecycleReadinessOperation,
-} from './runtimeLifecycleReadiness';
 import {
   type ManagedRuntimeLifecycleOperation,
 } from './environmentOpenCoordinator';
@@ -2829,13 +2824,12 @@ function reinstallFailureForPhase(
       case 'package_batch_prepared_and_verified':
         return {
           code: 'reinstall_package_batch_failed' as const,
-          title: 'Redeven package batch failed',
+          title: 'Redeven Runtime package preparation failed',
           titleKey: 'progress.reinstallPackageBatchFailedTitle' as const,
           summary: `Desktop could not prepare and verify the Runtime package for "${targetLabel}".`,
           summaryKey: 'progress.reinstallPackageBatchFailedSummary' as const,
         };
       case 'old_root_isolated_or_cleared':
-      case 'runtime_installed':
       case 'old_data_cleaned':
         return {
           code: 'reinstall_filesystem_failed' as const,
@@ -2844,15 +2838,37 @@ function reinstallFailureForPhase(
           summary: `The operating system refused to replace the exact confirmed Redeven root on "${targetLabel}".`,
           summaryKey: 'progress.reinstallFilesystemFailedSummary' as const,
         };
+      case 'runtime_installed':
+        return {
+          code: 'reinstall_runtime_install_failed' as const,
+          title: 'Fresh Runtime installation failed',
+          titleKey: 'progress.reinstallRuntimeInstallFailedTitle' as const,
+          summary: `Desktop could not install the verified Runtime package on "${targetLabel}".`,
+          summaryKey: 'progress.reinstallRuntimeInstallFailedSummary' as const,
+        };
       case 'runtime_started':
-      case 'runtime_verified':
-      case 'catalog_and_local_ui_verified':
         return {
           code: 'reinstall_runtime_start_failed' as const,
           title: 'Fresh Runtime start failed',
           titleKey: 'progress.reinstallRuntimeStartFailedTitle' as const,
-          summary: `The freshly installed Runtime did not become ready on "${targetLabel}".`,
+          summary: `The freshly installed Runtime did not start on "${targetLabel}".`,
           summaryKey: 'progress.reinstallRuntimeStartFailedSummary' as const,
+        };
+      case 'runtime_verified':
+        return {
+          code: 'reinstall_runtime_verification_failed' as const,
+          title: 'Fresh Runtime verification failed',
+          titleKey: 'progress.reinstallRuntimeVerificationFailedTitle' as const,
+          summary: `Desktop could not verify one ready current Runtime process on "${targetLabel}".`,
+          summaryKey: 'progress.reinstallRuntimeVerificationFailedSummary' as const,
+        };
+      case 'catalog_and_local_ui_verified':
+        return {
+          code: 'reinstall_runtime_access_failed' as const,
+          title: 'Fresh Runtime access verification failed',
+          titleKey: 'progress.reinstallRuntimeAccessFailedTitle' as const,
+          summary: `Desktop could not verify the bridge, Catalog, and Local UI on "${targetLabel}".`,
+          summaryKey: 'progress.reinstallRuntimeAccessFailedSummary' as const,
         };
       default:
         return {
@@ -3248,7 +3264,24 @@ async function clearDesktopStateForReinstallTarget(
   }
 }
 
-async function prepareFreshReinstallPackages(
+function resolvedReinstallRuntimePlacement(
+  descriptor: ReinstallTargetDescriptor,
+  targetRoot: string,
+): DesktopRuntimePlacement {
+  const declaredStateRoot = desktopRuntimePlacementStateRoot(descriptor.placement);
+  const stateRoot = declaredStateRoot === descriptor.placement.runtime_root
+    || declaredStateRoot === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
+    || declaredStateRoot === '~/.redeven'
+    ? targetRoot
+    : declaredStateRoot;
+  return {
+    ...descriptor.placement,
+    runtime_root: targetRoot,
+    runtime_state_root: stateRoot,
+  };
+}
+
+async function prepareFreshReinstallRuntimePackage(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
   operationID: string,
@@ -3256,240 +3289,161 @@ async function prepareFreshReinstallPackages(
   platform: DesktopSSHRemotePlatform,
   onProgress?: (tasks: readonly DesktopComponentTaskProgress[]) => void,
   signal?: AbortSignal,
-): Promise<PreparedComponentBatch | null> {
-    const strategy: ManagedComponentTask['strategy'] = descriptor.host_access.kind === 'ssh_host'
-      && descriptor.placement.kind === 'host_process'
-      && descriptor.placement.bootstrap_strategy === 'remote_install'
-      ? 'remote_install'
-      : 'desktop_upload';
-    const releaseTag = resolveSSHRuntimeReleaseTag();
-    const commit = requireDesktopBundle().commit;
-    const releaseBaseURL = descriptor.placement.kind === 'host_process'
-      ? descriptor.placement.release_base_url ?? PUBLIC_REDEVEN_RELEASE_BASE_URL
-      : PUBLIC_REDEVEN_RELEASE_BASE_URL;
-    const remoteManifestPromise = strategy === 'remote_install'
-      ? ensureDesktopSSHVerifiedReleaseManifest({
-          releaseTag,
-          releaseBaseURL,
-          cacheRoot: desktopRuntimePackageCacheRoot(),
-          fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
-        })
-      : null;
-    const tasks: readonly ManagedComponentTask[] = [
-      {
-        component: 'runtime',
-        strategy,
-        release_tag: releaseTag,
-        commit,
-        platform: platform.goos,
-        architecture: platform.goarch,
-      },
-    ];
-    const initial: Array<DesktopComponentTaskProgress & Readonly<{
-      id: ManagedComponentTask['component'];
-    }>> = tasks.map((task) => ({
-      id: task.component,
-      status: 'running' as const,
-      phase: 'preparing' as const,
-      strategy: task.strategy,
-      detail_key: task.strategy === 'remote_install' ? 'common.remoteInstall' as const : 'common.desktopUpload' as const,
-    }));
-    const current = new Map<ManagedComponentTask['component'], DesktopComponentTaskProgress>(
-      initial.map((task) => [task.id, task]),
-    );
-    onProgress?.(initial);
-    return await prepareAndStageBatch(tasks, signal ?? new AbortController().signal, (progress) => {
-      current.set(progress.id, progress);
-      onProgress?.(tasks.map((task) => current.get(task.component)!).filter(Boolean));
-    }, {
-      operation_id: operationID,
-      run: async (task, signal, report) => {
-        report({
-          id: task.component,
-          status: 'running',
-          phase: 'preparing',
-          strategy: task.strategy,
-          detail_key: task.strategy === 'remote_install' ? 'common.remoteInstall' : 'common.desktopUpload',
-        });
-        if (task.strategy === 'remote_install') {
-          const manifest = await remoteManifestPromise;
-          const packageName = desktopSSHReleasePackageName(platform, task.component);
-          const archiveSHA256 = manifest?.sha256_by_asset_name.get(packageName) ?? '';
-          if (!manifest || !/^[a-f0-9]{64}$/u.test(archiveSHA256)) {
-            throw new Error(`Verified release manifest does not include ${packageName}.`);
-          }
-          return stageManagedComponent({
-            executor, placement: descriptor.placement, target_root: targetRoot, operation_id: operationID, task,
-            archive_sha256: archiveSHA256,
-            remote_url: buildDesktopSSHReleaseAssetURL(releaseBaseURL, task.release_tag, packageName),
-            signal, on_progress: report,
-          });
-        }
-        const asset = await prepareDesktopRuntimeUploadAsset({
-          runtimeReleaseTag: task.release_tag,
-          releaseBaseURL,
-          assetCacheRoot: desktopRuntimePackageCacheRoot(),
-          packageKind: task.component,
-          sourceRuntimeRoot: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined,
-          platform,
-          fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
-          signal,
-        });
-        return stageManagedComponent({
-          executor,
-          placement: descriptor.placement,
-          target_root: targetRoot,
-          operation_id: operationID,
-          task,
-          archive: asset.archiveData,
-          archive_sha256: asset.cacheEntry?.sha256 ?? crypto.createHash('sha256').update(asset.archiveData).digest('hex'),
-          archive_size_bytes: asset.archiveData.byteLength,
-          signal,
-          on_progress: report,
-        });
-      },
-      discard: async () => {
-        await cleanupManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID, signal).catch(() => undefined);
-      },
-    });
-}
-
-async function installFreshDirectReinstallTarget(
-  descriptor: ReinstallTargetDescriptor,
-  targetRoot: string,
-  onProgress?: (phase: ReinstallTargetProgressPhase, detailKey?: string, tasks?: readonly DesktopComponentTaskProgress[]) => Promise<void>,
-  mode: 'wipe_data' | 'preserve_data' = 'wipe_data',
-  preparedBatch?: PreparedComponentBatch | null,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (!preparedBatch) {
-    throw new Error('Managed component batch is unavailable.');
-  }
-  const runtimeComponent = preparedBatch.runtime_manifest.components
-    .find((entry) => entry.component === 'runtime');
-  if (!runtimeComponent) {
-    throw new Error('Managed Runtime component is unavailable.');
-  }
-  const stateRoot = targetRoot;
-  const placement: DesktopRuntimePlacement = {
-    ...descriptor.placement,
-    runtime_root: targetRoot,
-    runtime_state_root: stateRoot,
+): Promise<PreparedReinstallRuntimePackage> {
+  const strategy: ReinstallRuntimePackageStrategy = descriptor.host_access.kind === 'ssh_host'
+    && descriptor.placement.kind === 'host_process'
+    && descriptor.placement.bootstrap_strategy === 'remote_install'
+    ? 'remote_install'
+    : 'desktop_upload';
+  const releaseTag = resolveSSHRuntimeReleaseTag();
+  const commit = requireDesktopBundle().commit;
+  const releaseBaseURL = descriptor.placement.kind === 'host_process'
+    ? descriptor.placement.release_base_url ?? PUBLIC_REDEVEN_RELEASE_BASE_URL
+    : PUBLIC_REDEVEN_RELEASE_BASE_URL;
+  const initial: ReinstallRuntimePackageProgress = {
+    id: 'runtime',
+    status: 'running',
+    phase: 'preparing',
+    strategy,
+    detail_key: strategy === 'remote_install' ? 'common.remoteInstall' : 'common.desktopUpload',
   };
-  const executor = runtimeHostExecutor(
-    descriptor.host_access,
-    descriptor.environment_id,
-    descriptor.ssh_password,
-  );
-  try {
-    await activateManagedComponentBatch(executor, placement, targetRoot, preparedBatch, mode, signal);
-    await onProgress?.('runtime_installed');
-  } finally {
-    await executor.release();
+  onProgress?.([initial]);
+  const report = (progress: ReinstallRuntimePackageProgress) => onProgress?.([progress]);
+  if (strategy === 'remote_install') {
+    const manifest = await ensureDesktopSSHVerifiedReleaseManifest({
+      releaseTag,
+      releaseBaseURL,
+      cacheRoot: desktopRuntimePackageCacheRoot(),
+      fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
+    });
+    const packageName = desktopSSHReleasePackageName(platform, 'runtime');
+    const archiveSHA256 = manifest.sha256_by_asset_name.get(packageName) ?? '';
+    if (!/^[a-f0-9]{64}$/u.test(archiveSHA256)) {
+      throw new Error(`Verified release manifest does not include ${packageName}.`);
+    }
+    return prepareReinstallRuntimePackage({
+      executor,
+      placement: descriptor.placement,
+      target_root: targetRoot,
+      operation_id: operationID,
+      release_tag: releaseTag,
+      commit,
+      platform: platform.goos,
+      architecture: platform.goarch,
+      strategy,
+      archive_sha256: archiveSHA256,
+      remote_url: buildDesktopSSHReleaseAssetURL(releaseBaseURL, releaseTag, packageName),
+      signal,
+      on_progress: report,
+    });
   }
-  const runtimeBinaryPath = `${targetRoot.replace(/\/$/u, '')}/runtime/managed/bin/redeven`;
-  const bridge = await startRuntimePlacementBridgeSession({
-    host_access: descriptor.host_access,
-    placement,
-    runtime_binary_path: runtimeBinaryPath,
-    ssh_password: descriptor.ssh_password,
-    ssh_credential_scope: descriptor.environment_id,
-    ssh_transport_manager: desktopSSHTransportManager,
-    fallback_local_id: descriptor.environment_id,
+  const asset = await prepareDesktopRuntimeUploadAsset({
+    runtimeReleaseTag: releaseTag,
+    releaseBaseURL,
+    assetCacheRoot: desktopRuntimePackageCacheRoot(),
+    packageKind: 'runtime',
+    sourceRuntimeRoot: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined,
+    platform,
+    fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
     signal,
   });
-  await bridge.disconnect().catch(() => undefined);
-  await onProgress?.('runtime_started');
+  return prepareReinstallRuntimePackage({
+    executor,
+    placement: descriptor.placement,
+    target_root: targetRoot,
+    operation_id: operationID,
+    release_tag: releaseTag,
+    commit,
+    platform: platform.goos,
+    architecture: platform.goarch,
+    strategy,
+    archive: asset.archiveData,
+    archive_sha256: asset.cacheEntry?.sha256 ?? crypto.createHash('sha256').update(asset.archiveData).digest('hex'),
+    archive_size_bytes: asset.archiveData.byteLength,
+    signal,
+    on_progress: report,
+  });
 }
 
-async function finalizeFreshReinstallBatch(
+async function installFreshReinstallRuntime(
+  descriptor: ReinstallTargetDescriptor,
+  targetRoot: string,
+  mode: 'wipe_data' | 'preserve_data',
+  preparedPackage: PreparedReinstallRuntimePackage,
+  executor: ReturnType<typeof runtimeHostExecutor>,
+  signal?: AbortSignal,
+): Promise<void> {
+  const placement = resolvedReinstallRuntimePlacement(descriptor, targetRoot);
+  await installReinstallRuntimePackage(executor, placement, targetRoot, preparedPackage, mode, signal);
+}
+
+async function startFreshReinstallRuntime(
+  descriptor: ReinstallTargetDescriptor,
+  targetRoot: string,
+  executor: ReturnType<typeof runtimeHostExecutor>,
+  signal?: AbortSignal,
+): Promise<void> {
+  const placement = resolvedReinstallRuntimePlacement(descriptor, targetRoot);
+  await startReinstallRuntime({
+    executor,
+    placement,
+    target_root: targetRoot,
+    state_root: desktopRuntimePlacementStateRoot(placement),
+    signal,
+  });
+}
+
+async function finalizeFreshReinstallRuntime(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
   operationID: string,
+  executor: ReturnType<typeof runtimeHostExecutor>,
   signal?: AbortSignal,
 ): Promise<void> {
-  const executor = runtimeHostExecutor(descriptor.host_access, descriptor.environment_id, descriptor.ssh_password);
-  try {
-    await cleanupManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID, signal);
-  } finally {
-    await executor.release();
-  }
+  await cleanupReinstallRuntimePackage(executor, descriptor.placement, targetRoot, operationID, signal);
 }
 
-async function rollbackFreshReinstallBatch(
+async function rollbackFreshReinstallRuntime(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
   operationID: string,
+  executor: ReturnType<typeof runtimeHostExecutor>,
   signal?: AbortSignal,
 ): Promise<void> {
-  const executor = runtimeHostExecutor(descriptor.host_access, descriptor.environment_id, descriptor.ssh_password);
-  try {
-    await rollbackManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID, signal);
-  } finally {
-    await executor.release();
-  }
+  await rollbackReinstallRuntimePackage(executor, descriptor.placement, targetRoot, operationID, signal);
 }
 
 async function verifyFreshDirectReinstallTarget(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
+  executor: ReturnType<typeof runtimeHostExecutor>,
   signal?: AbortSignal,
 ): Promise<void> {
-  const placement: DesktopRuntimePlacement = {
-    ...descriptor.placement,
-    runtime_root: targetRoot,
-    runtime_state_root: targetRoot,
-  };
-  const registeredTargetID = desktopRuntimeTargetID(
-    descriptor.host_access,
-    descriptor.placement,
-    descriptor.environment_id,
-  );
-  const runtimeBinaryPath = `${targetRoot.replace(/\/$/u, '')}/runtime/managed/bin/redeven`;
-  const bridge = await startRuntimePlacementBridgeSession({
-    host_access: descriptor.host_access,
+  const placement = resolvedReinstallRuntimePlacement(descriptor, targetRoot);
+  const ready = await verifyReinstallRuntimeReady({
+    executor,
     placement,
-    runtime_binary_path: runtimeBinaryPath,
-    ssh_password: descriptor.ssh_password,
-    ssh_credential_scope: descriptor.environment_id,
-    ssh_transport_manager: desktopSSHTransportManager,
-    fallback_local_id: descriptor.environment_id,
+    target_root: targetRoot,
+    state_root: desktopRuntimePlacementStateRoot(placement),
     signal,
   });
-  try {
-    if (!runtimeServiceIsOpenable(bridge.startup.runtime_service)) {
-      throw new Error('Desktop could not verify the fresh Runtime identity.');
-    }
-    const affectedIDs = new Set(descriptor.affected_environment_ids);
-    const registeredDescriptors = directReinstallTargetDescriptors(await loadDesktopPreferencesCached())
-      .filter((candidate) => affectedIDs.has(candidate.environment_id));
-    const targets = registeredDescriptors.length > 0 ? registeredDescriptors : [descriptor];
-    for (const target of targets) {
-      const targetID = desktopRuntimeTargetID(
-        target.host_access,
-        target.placement,
-        target.environment_id,
-      );
-      runtimePlacementReadyByTargetID.set(targetID, {
-        runtime_key: targetID,
-        environment_id: target.environment_id,
-        label: target.label,
-        target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.host_access, targetID),
-        host_access: target.host_access,
-        placement: {
-          ...target.placement,
-          runtime_root: targetRoot,
-          runtime_state_root: targetRoot,
-        },
-        runtime_binary_path: runtimeBinaryPath,
-        startup: bridge.startup,
-      });
-    }
-  } finally {
-    await bridge.disconnect().catch(() => undefined);
-  }
-  if (!runtimePlacementReadyByTargetID.get(registeredTargetID)?.startup) {
-    throw new Error('Desktop could not verify the fresh Runtime identity.');
+  const affectedIDs = new Set(descriptor.affected_environment_ids);
+  const registeredDescriptors = directReinstallTargetDescriptors(await loadDesktopPreferencesCached())
+    .filter((candidate) => affectedIDs.has(candidate.environment_id));
+  const targets = registeredDescriptors.length > 0 ? registeredDescriptors : [descriptor];
+  const runtimeBinaryPath = `${targetRoot.replace(/\/$/u, '')}/runtime/managed/bin/redeven`;
+  for (const target of targets) {
+    const targetID = desktopRuntimeTargetID(target.host_access, target.placement, target.environment_id);
+    runtimePlacementReadyByTargetID.set(targetID, {
+      runtime_key: targetID,
+      environment_id: target.environment_id,
+      label: target.label,
+      target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.host_access, targetID),
+      host_access: target.host_access,
+      placement: resolvedReinstallRuntimePlacement(target, targetRoot),
+      runtime_binary_path: runtimeBinaryPath,
+      startup: ready.startup,
+    });
   }
 }
 
@@ -3498,12 +3452,7 @@ async function verifyReinstallTargetCatalogAndLocalUI(
   targetRoot: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  await verifyFreshDirectReinstallTarget(descriptor, targetRoot, signal);
-  const placement: DesktopRuntimePlacement = {
-    ...descriptor.placement,
-    runtime_root: targetRoot,
-    runtime_state_root: targetRoot,
-  };
+  const placement = resolvedReinstallRuntimePlacement(descriptor, targetRoot);
   const targetID = desktopRuntimeTargetID(
     descriptor.host_access,
     descriptor.placement,
@@ -3532,8 +3481,9 @@ async function verifyReinstallTargetCatalogAndLocalUI(
   try {
     const localUI = await probeExternalLocalUIStartup(bridge.startup.local_ui_url, {
       timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+      signal,
     });
-    if (!localUI.ok) {
+    if (!localUI.ok || !runtimeServiceIsOpenable(localUI.value.runtime_service)) {
       throw new Error('Desktop could not verify the fresh Local UI through the direct channel.');
     }
   } finally {
@@ -3572,10 +3522,11 @@ function reinstallTargetCoordinator(): ReinstallTargetCoordinator {
       }),
       close_sessions: closeDesktopSessionsForReinstallTarget,
       clear_desktop_state: clearDesktopStateForReinstallTarget,
-      prepare_packages: prepareFreshReinstallPackages,
-      install_fresh: installFreshDirectReinstallTarget,
-      finalize_install: finalizeFreshReinstallBatch,
-      rollback_install: rollbackFreshReinstallBatch,
+      prepare_runtime_package: prepareFreshReinstallRuntimePackage,
+      install_runtime: installFreshReinstallRuntime,
+      start_runtime: startFreshReinstallRuntime,
+      finalize_install: finalizeFreshReinstallRuntime,
+      rollback_install: rollbackFreshReinstallRuntime,
       verify_fresh_identity: verifyFreshDirectReinstallTarget,
       verify_catalog_and_local_ui: verifyReinstallTargetCatalogAndLocalUI,
       clear_completed_marker: clearReinstallTargetRequired,
@@ -4463,34 +4414,6 @@ async function refreshWelcomeRuntimeHealthForEnvironment(
     force: options.force !== false,
     mode: 'manual',
     targetEnvironmentIDs: cleanEnvironmentID ? [cleanEnvironmentID] : [],
-  });
-}
-
-function welcomeRuntimeHealthForEnvironment(environmentID: string): DesktopRuntimeHealth | undefined {
-  return desktopWelcomeRuntimeHealthForEnvironment(
-    welcomeRuntimeHealthStore.snapshot(),
-    environmentID,
-  );
-}
-
-async function _awaitEnvironmentRuntimeLifecycleReadiness(
-  environmentID: string,
-  operation: DesktopRuntimeLifecycleReadinessOperation,
-): Promise<void> {
-  const preferences = await loadDesktopPreferencesCached();
-  const tracked = buildWelcomeRuntimeHealthTargets(preferences, openSessionSummaries())
-    .some((target) => target.environment_id === environmentID && target.slot !== 'external_local_ui');
-  if (!tracked) {
-    return;
-  }
-  await waitForDesktopRuntimeLifecycleReadiness({
-    operation,
-    observe: async () => {
-      await refreshWelcomeRuntimeHealthForEnvironment(environmentID, {
-        force: true,
-      });
-      return welcomeRuntimeHealthForEnvironment(environmentID);
-    },
   });
 }
 
@@ -6951,7 +6874,7 @@ async function reinstallTargetFromLauncher(
     phase: 'direct_channel_open',
     title: 'Reinstall Redeven',
     title_key: 'environmentAction.reinstallRedeven',
-    detail: 'Desktop is connecting to the confirmed target and applying the selected package batch.',
+    detail: 'Desktop is connecting to the confirmed target and preparing the Runtime package.',
     detail_key: 'progress.reinstallCheckingDetail',
     step_progress: reinstallTargetStepProgress('direct_channel_open'),
     cancelable: false,
@@ -13366,6 +13289,75 @@ function savedRuntimePlacementReadyRecord(
   return readyRecord;
 }
 
+async function verifyManagedRuntimeLifecycleAccess(args: Readonly<{
+  targetID: DesktopRuntimeTargetID;
+  environmentID: string;
+  label: string;
+  hostAccess: DesktopRuntimeHostAccess;
+  placement: DesktopRuntimePlacement;
+  sshPassword?: string;
+  signal?: AbortSignal;
+}>): Promise<void> {
+  if (args.hostAccess.kind === 'local_host' && args.placement.kind === 'host_process') {
+    // The Local Environment launcher already verifies its trusted bridge and
+    // Local UI before returning a ready Runtime record.
+    return;
+  }
+  const ready = savedRuntimePlacementReadyRecord(
+    args.targetID,
+    args.environmentID,
+    args.label,
+    args.hostAccess,
+    args.placement,
+  );
+  if (!ready?.startup || !runtimeServiceIsOpenable(ready.startup.runtime_service)) {
+    throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
+      code: 'runtime_access_verification_failed',
+      title: 'Runtime access verification failed',
+      summary: `Desktop could not verify the bridge and Local UI on "${args.label}".`,
+      detail: 'The lifecycle command finished without a ready Runtime Service record.',
+      targetLabel: args.label,
+    }));
+  }
+  const bridge = await startRuntimePlacementBridgeSession({
+    host_access: args.hostAccess,
+    placement: ready.placement,
+    runtime_binary_path: ready.runtime_binary_path,
+    ssh_password: args.sshPassword,
+    ssh_credential_scope: args.environmentID,
+    ssh_transport_manager: desktopSSHTransportManager,
+    fallback_local_id: args.environmentID,
+    signal: args.signal,
+  });
+  try {
+    const localUI = await probeExternalLocalUIStartup(bridge.startup.local_ui_url, {
+      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+      signal: args.signal,
+    });
+    if (!localUI.ok || !runtimeServiceIsOpenable(localUI.value.runtime_service)) {
+      throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
+        code: 'runtime_access_verification_failed',
+        title: 'Runtime access verification failed',
+        summary: `Desktop could not verify the bridge and Local UI on "${args.label}".`,
+        detail: localUI.ok
+          ? 'The Local UI responded without an openable Runtime Service.'
+          : `Local UI probe failed (${localUI.failure.kind}${localUI.failure.stage ? `:${localUI.failure.stage}` : ''}).`,
+        targetLabel: args.label,
+      }));
+    }
+    runtimePlacementReadyByTargetID.set(args.targetID, {
+      ...ready,
+      startup: {
+        ...bridge.startup,
+        ...localUI.value,
+        local_ui_bridge_url: bridge.startup.local_ui_bridge_url,
+      },
+    });
+  } finally {
+    await bridge.disconnect().catch(() => undefined);
+  }
+}
+
 function runtimeBridgeStartCanRecover(error: unknown): boolean {
   return error instanceof DesktopSSHRemoteCommandError
     || error instanceof DesktopSSHTransportInterruptedError
@@ -14539,6 +14531,23 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
             startup: ready.startup,
           });
         }
+      }
+      if (input.operation !== 'stop') {
+        await verifyManagedRuntimeLifecycleAccess({
+          targetID,
+          environmentID: input.environment_id,
+          label: input.label,
+          hostAccess: input.host_access,
+          placement: input.placement,
+          sshPassword: savedRuntimePlacementSSHPassword(
+            preferences,
+            input.host_access,
+            input.placement,
+            targetID,
+            input.environment_id,
+          ) || undefined,
+          signal: lifecycleSignal,
+        });
       }
       await refreshWelcomeRuntimeHealthForEnvironment(input.environment_id, { force: true }).catch(() => undefined);
       const phase = input.operation === 'stop' ? 'runtime_stopped' : input.operation === 'update' ? 'runtime_updated' : input.operation === 'restart' ? 'runtime_restarted' : 'runtime_started';

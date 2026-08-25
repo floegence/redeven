@@ -26,9 +26,11 @@ Lifecycle execution is selected only from the saved Local, SSH, or container pla
 - Start is idempotent when one verified Runtime is already healthy.
 - Stop is idempotent when inventory is empty and verifies the stopped result.
 - Restart stops the observed Runtime when present, starts the installed Runtime, and verifies readiness.
-- Update prepares and verifies the current Runtime package before replacement, restores the prior running/stopped intent, and verifies the result.
+- Update prepares and verifies the current Runtime package before replacement, starts it even when the previous Runtime was stopped, and verifies the result.
 - Refresh performs a fresh direct observation without changing installation or process state.
 - Reinstall follows the dedicated direct recovery contract.
+
+Start, Restart, Update, and Reinstall share one successful terminal contract: the installed package is valid, exactly one current Runtime process is running, Runtime Service is openable, and Desktop can access the bridge and Local UI. A process launch or package switch alone is never success. Stop is the only operation that succeeds with no Runtime process; Refresh reports observed state without manufacturing readiness.
 
 The Runtime package contains `redeven` and required Runtime companions only. Runtime package preparation never builds, bundles, installs, starts, or verifies Gateway. A package preparation failure occurs before a remote target is modified.
 

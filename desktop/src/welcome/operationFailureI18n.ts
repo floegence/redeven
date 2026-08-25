@@ -43,8 +43,14 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
       return 'progress.reinstallPackageBatchFailedTitle';
     case 'reinstall_filesystem_failed':
       return 'progress.reinstallFilesystemFailedTitle';
+    case 'reinstall_runtime_install_failed':
+      return 'progress.reinstallRuntimeInstallFailedTitle';
     case 'reinstall_runtime_start_failed':
       return 'progress.reinstallRuntimeStartFailedTitle';
+    case 'reinstall_runtime_verification_failed':
+      return 'progress.reinstallRuntimeVerificationFailedTitle';
+    case 'reinstall_runtime_access_failed':
+      return 'progress.reinstallRuntimeAccessFailedTitle';
     case 'local_runtime_stop_failed':
     case 'container_runtime_stop_failed':
     case 'ssh_runtime_stop_failed':
@@ -58,6 +64,8 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
       return 'progress.runtimeHostCommandFailedTitle';
     case 'runtime_update_required':
       return 'runtimeMessage.runtimeUpdateRequired';
+    case 'runtime_access_verification_failed':
+      return 'progress.runtimeAccessVerificationFailedTitle';
     case 'desktop_update_required':
       return 'runtimeMessage.desktopUpdateRequired';
     case 'environment_open_failed':
@@ -105,8 +113,14 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
       return 'progress.reinstallPackageBatchFailedSummary';
     case 'reinstall_filesystem_failed':
       return 'progress.reinstallFilesystemFailedSummary';
+    case 'reinstall_runtime_install_failed':
+      return 'progress.reinstallRuntimeInstallFailedSummary';
     case 'reinstall_runtime_start_failed':
       return 'progress.reinstallRuntimeStartFailedSummary';
+    case 'reinstall_runtime_verification_failed':
+      return 'progress.reinstallRuntimeVerificationFailedSummary';
+    case 'reinstall_runtime_access_failed':
+      return 'progress.reinstallRuntimeAccessFailedSummary';
     case 'local_runtime_stop_failed':
     case 'container_runtime_stop_failed':
     case 'ssh_runtime_stop_failed':
@@ -131,6 +145,8 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
     case 'runtime_update_required':
     case 'desktop_update_required':
       return undefined;
+    case 'runtime_access_verification_failed':
+      return 'progress.runtimeAccessVerificationFailedSummary';
   }
 }
 

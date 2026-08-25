@@ -66,9 +66,13 @@ describe('operationFailureI18n', () => {
 
   it.each([
     ['reinstall_direct_channel_failed', 'Redeven 直连失败', 'Desktop 无法打开到“gzcom”的已确认直连通道。'],
-    ['reinstall_package_batch_failed', 'Redeven 软件包批次失败', 'Desktop 无法为“gzcom”准备并校验运行时软件包。'],
+    ['reinstall_package_batch_failed', 'Redeven 运行时软件包准备失败', 'Desktop 无法为“gzcom”准备并校验运行时软件包。'],
     ['reinstall_filesystem_failed', '无法替换 Redeven 目标目录', '操作系统拒绝替换“gzcom”上已确认的精确 Redeven 根目录。'],
-    ['reinstall_runtime_start_failed', '新运行时启动失败', '“gzcom”上全新安装的运行时未能就绪。'],
+    ['reinstall_runtime_install_failed', '新运行时安装失败', 'Desktop 无法在“gzcom”上安装已校验的运行时软件包。'],
+    ['reinstall_runtime_start_failed', '新运行时启动失败', '“gzcom”上全新安装的运行时未能启动。'],
+    ['reinstall_runtime_verification_failed', '新运行时验证失败', 'Desktop 无法确认“gzcom”上只有一个已就绪的当前运行时进程。'],
+    ['reinstall_runtime_access_failed', '新运行时访问验证失败', 'Desktop 无法验证“gzcom”上的 bridge、Catalog 和 Local UI。'],
+    ['runtime_access_verification_failed', '运行时访问验证失败', 'Desktop 无法验证“gzcom”上的 bridge 和 Local UI。'],
   ] as const)('localizes structured reinstall failure %s', (code, title, summary) => {
     const failure: DesktopOperationFailurePresentation = {
       code,

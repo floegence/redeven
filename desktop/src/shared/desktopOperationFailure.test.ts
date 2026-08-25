@@ -101,7 +101,11 @@ describe('desktopOperationFailure', () => {
     'reinstall_direct_channel_failed',
     'reinstall_package_batch_failed',
     'reinstall_filesystem_failed',
+    'reinstall_runtime_install_failed',
     'reinstall_runtime_start_failed',
+    'reinstall_runtime_verification_failed',
+    'reinstall_runtime_access_failed',
+    'runtime_access_verification_failed',
   ] as const)('preserves the typed SSH failure code %s', (code) => {
     expect(normalizeDesktopOperationFailurePresentation({
       code,
