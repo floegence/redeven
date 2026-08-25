@@ -5,6 +5,7 @@ import { fileItemFromPath } from '../utils/filePreviewItem';
 import { FileMarkdown } from '../file-markdown/FileMarkdown';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { useI18n } from '../i18n';
+import { useMarkdownPreviewPreferences } from '../services/markdownPreviewPreferences';
 
 const CodeEditor = lazy(async () => {
   const module = await import('@floegence/floe-webapp-core/editor');
@@ -45,6 +46,7 @@ export interface MarkdownPreviewPaneProps {
 export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
   const i18n = useI18n();
   const filePreview = useFilePreviewContext();
+  const markdownPreviewPreferences = useMarkdownPreviewPreferences();
   const [monacoFailed, setMonacoFailed] = createSignal(false);
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const resolvedLanguage = createMemo(() => props.descriptor.language ?? 'markdown');
@@ -65,6 +67,8 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
       content={props.text}
       filePath={props.path}
       showToc={true}
+      textScalePercent={markdownPreviewPreferences.textScalePercent()}
+      onTextScalePercentChange={markdownPreviewPreferences.setTextScalePercent}
       onOpenFileLink={(target) => {
         void filePreview.openPreview(fileItemFromPath(target.path), {
           reusePolicy: 'same_file_or_create',

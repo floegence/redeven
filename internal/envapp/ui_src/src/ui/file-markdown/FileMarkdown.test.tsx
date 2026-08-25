@@ -140,6 +140,86 @@ describe('FileMarkdown', () => {
     }
   });
 
+  it('adjusts and resets text size without rebuilding the rendered document or losing scroll', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [textScalePercent, setTextScalePercent] = createSignal(100);
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'# Start\n\n```ts\nconst value = 1;\n```'}
+        textScalePercent={textScalePercent()}
+        onTextScalePercentChange={setTextScalePercent}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      const body = host.querySelector<HTMLElement>('.file-markdown-body');
+      const heading = host.querySelector<HTMLElement>('#start');
+      const increase = host.querySelector<HTMLButtonElement>('button[aria-label="Increase text size"]');
+      expect(body).toBeTruthy();
+      expect(heading).toBeTruthy();
+      expect(increase).toBeTruthy();
+      expect(body?.style.getPropertyValue('--fm-markdown-reading-font-size')).toBe('16.5px');
+      expect(body?.style.getPropertyValue('--fm-markdown-code-font-size')).toBe('13px');
+
+      body!.scrollTop = 240;
+      const renderCount = runMermaidMock.mock.calls.length;
+      increase!.click();
+      await flushAsync();
+
+      expect(textScalePercent()).toBe(110);
+      expect(host.querySelector<HTMLElement>('.file-markdown-body')).toBe(body);
+      expect(host.querySelector<HTMLElement>('#start')).toBe(heading);
+      expect(body!.scrollTop).toBe(240);
+      expect(body?.style.getPropertyValue('--fm-markdown-reading-font-size')).toBe('18.15px');
+      expect(body?.style.getPropertyValue('--fm-markdown-code-font-size')).toBe('14.3px');
+      expect(runMermaidMock).toHaveBeenCalledTimes(renderCount);
+
+      const reset = host.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reset to default (currently 110%)"]',
+      );
+      expect(reset).toBeTruthy();
+      reset!.click();
+      await flushAsync();
+
+      expect(textScalePercent()).toBe(100);
+      expect(body?.style.getPropertyValue('--fm-markdown-reading-font-size')).toBe('16.5px');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps text size controls within the supported range', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <FileMarkdown filePath="/workspace/README.md" content="# Start" />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      const increase = host.querySelector<HTMLButtonElement>('button[aria-label="Increase text size"]');
+      const decrease = host.querySelector<HTMLButtonElement>('button[aria-label="Decrease text size"]');
+      expect(increase).toBeTruthy();
+      expect(decrease).toBeTruthy();
+
+      for (let index = 0; index < 6; index += 1) increase!.click();
+      expect(host.querySelector<HTMLButtonElement>('.fm-text-size-value')?.textContent).toBe('160%');
+      expect(increase?.disabled).toBe(true);
+
+      for (let index = 0; index < 8; index += 1) decrease!.click();
+      expect(host.querySelector<HTMLButtonElement>('.fm-text-size-value')?.textContent).toBe('80%');
+      expect(decrease?.disabled).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
   it('re-renders diagrams and code blocks when the app theme preset changes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
