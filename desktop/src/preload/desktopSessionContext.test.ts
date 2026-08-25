@@ -48,6 +48,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
         renderer_storage_scope_id: 'local',
         target_kind: 'local_environment',
         target_route: 'local_host',
+        document_transport: 'desktop_private_bridge_v1',
       };
     });
   });
@@ -63,6 +64,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
       renderer_storage_scope_id: 'local',
       target_kind: 'local_environment',
       target_route: 'local_host',
+      document_transport: 'desktop_private_bridge_v1',
     });
 
     bridge.notifyAppReady({ state: 'access_gate_interactive' });
@@ -96,6 +98,18 @@ describe('bootstrapDesktopSessionContextBridge', () => {
       },
     );
     expect(ipcRendererSend).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops malformed document transport provenance', async () => {
+    ipcRendererSendSync.mockReturnValue({
+      local_environment_id: 'local',
+      renderer_storage_scope_id: 'local',
+      target_route: 'local_host',
+      document_transport: 'desktop_private_bridge_v2',
+    });
+    const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
+    bootstrapDesktopSessionContextBridge();
+    expect(exposedBridge().getSnapshot()).not.toHaveProperty('document_transport');
   });
 
   it('exposes provider session identity fields through the session bridge', async () => {

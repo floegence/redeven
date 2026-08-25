@@ -10,18 +10,21 @@ import (
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
+const testLocalUIBridgeToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
 func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	reportPath := filepath.Join(t.TempDir(), "startup", "report.json")
 	err := writeDesktopLaunchReport(reportPath, desktopLaunchReport{
-		Status:           desktopLaunchStatusReady,
-		LocalUIURL:       "http://127.0.0.1:43210/",
-		LocalUIURLs:      []string{"http://127.0.0.1:43210/", "", "http://127.0.0.1:43210/"},
-		LocalUIBridgeURL: "http://127.0.0.1:43211/",
-		PasswordRequired: true,
-		Exposure:         runtimemanagement.NewLocalUIExposure(false, true),
-		EffectiveRunMode: "hybrid",
-		RemoteEnabled:    true,
-		StartedAtUnixMS:  1778751234567,
+		Status:             desktopLaunchStatusReady,
+		LocalUIURL:         "http://127.0.0.1:43210/",
+		LocalUIURLs:        []string{"http://127.0.0.1:43210/", "", "http://127.0.0.1:43210/"},
+		LocalUIBridgeURL:   "http://127.0.0.1:43211/",
+		LocalUIBridgeToken: testLocalUIBridgeToken,
+		PasswordRequired:   true,
+		Exposure:           runtimemanagement.NewLocalUIExposure(false, true),
+		EffectiveRunMode:   "hybrid",
+		RemoteEnabled:      true,
+		StartedAtUnixMS:    1778751234567,
 		RuntimeService: runtimeservice.Snapshot{
 			RuntimeVersion:   "v1.2.3",
 			ProtocolVersion:  runtimeservice.ProtocolVersion,
@@ -60,6 +63,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	}
 	if report.LocalUIBridgeURL != "http://127.0.0.1:43211/" {
 		t.Fatalf("LocalUIBridgeURL = %q", report.LocalUIBridgeURL)
+	}
+	if report.LocalUIBridgeToken != testLocalUIBridgeToken {
+		t.Fatalf("LocalUIBridgeToken was not preserved in the private report")
 	}
 	info, err := os.Stat(reportPath)
 	if err != nil {
@@ -144,13 +150,31 @@ func TestWriteDesktopLaunchReportRejectsInvalidLocalUIBridgeURL(t *testing.T) {
 	} {
 		t.Run(raw, func(t *testing.T) {
 			err := writeDesktopLaunchReport(filepath.Join(t.TempDir(), "report.json"), desktopLaunchReport{
-				Status:           desktopLaunchStatusReady,
-				LocalUIURL:       "http://127.0.0.1:43122/",
-				LocalUIBridgeURL: raw,
-				Exposure:         runtimemanagement.NewLocalUIExposure(true, false),
+				Status:             desktopLaunchStatusReady,
+				LocalUIURL:         "http://127.0.0.1:43122/",
+				LocalUIBridgeURL:   raw,
+				LocalUIBridgeToken: testLocalUIBridgeToken,
+				Exposure:           runtimemanagement.NewLocalUIExposure(true, false),
 			})
 			if err == nil {
 				t.Fatalf("writeDesktopLaunchReport() accepted bridge URL %q", raw)
+			}
+		})
+	}
+}
+
+func TestWriteDesktopLaunchReportRejectsInvalidLocalUIBridgeToken(t *testing.T) {
+	for _, raw := range []string{"", "too-short", testLocalUIBridgeToken + "A", testLocalUIBridgeToken[:42] + "B"} {
+		t.Run(raw, func(t *testing.T) {
+			err := writeDesktopLaunchReport(filepath.Join(t.TempDir(), "report.json"), desktopLaunchReport{
+				Status:             desktopLaunchStatusReady,
+				LocalUIURL:         "http://127.0.0.1:43122/",
+				LocalUIBridgeURL:   "http://127.0.0.1:43123/",
+				LocalUIBridgeToken: raw,
+				Exposure:           runtimemanagement.NewLocalUIExposure(true, false),
+			})
+			if err == nil {
+				t.Fatalf("writeDesktopLaunchReport() accepted bridge token %q", raw)
 			}
 		})
 	}

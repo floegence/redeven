@@ -86,15 +86,22 @@ Redeven 是單一二進位檔，可將您的電腦與伺服器集中到一個瀏
 # 1. 安裝
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. 產生並信任 Local UI 裝置 CA（只需一次）
+# 2. 產生 Local UI 裝置 CA（只需一次）
 redeven local-authority device-ca generate --state-root ~/.redeven
+
+# macOS 或 Windows：安裝到目前使用者的信任儲存區
 redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# Linux：匯出公開憑證，然後手動匯入
+redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
 # 3. 執行
 redeven run
 
 # 4. 在瀏覽器中開啟 https://localhost:23998。
 ```
+
+在 Linux 上，請將匯出的公開憑證匯入瀏覽器或用戶端實際使用的信任儲存區。`install --scope user` 在 Linux 上會刻意傳回 `manual_required`；Redeven 絕不會執行 `sudo`，也不會修改系統層級的信任儲存區。執行階段會在提供 HTTPS/WSS 前驗證 CA 身分與產生的伺服器憑證，但無法代替你建立用戶端信任。在該瀏覽器或用戶端信任此 CA 之前，用戶端 TLS 會以安全方式失敗。
 
 首次執行 `redeven run` 會初始化 `~/.redeven/local-environment/` 下的本機狀態，並以本機模式啟動。無需進行引導初始化或控制平面設定。Local UI 僅監聽 `localhost:23998`，只能從目前的裝置存取；不支援從區域網路或公用網路直接存取。按 Ctrl+C 可停止執行階段。
 

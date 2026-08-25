@@ -63,6 +63,7 @@ function readyStatus(): string {
     local_ui_url: 'http://127.0.0.1:43123/',
     local_ui_urls: ['http://127.0.0.1:43123/'],
     local_ui_bridge_url: 'http://127.0.0.1:43124/',
+    local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     pid: 71,
     runtime_service: {
       runtime_version: 'v1',

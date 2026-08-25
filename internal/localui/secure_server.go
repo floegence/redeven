@@ -28,9 +28,6 @@ func (s *Server) prepareSecureNetwork(listeners []net.Listener) error {
 		if err != nil {
 			return fmt.Errorf("load Local UI device CA: %w", err)
 		}
-		if err := verifyLocalUIDeviceCATrust(ca); err != nil {
-			return fmt.Errorf("verify Local UI device CA trust: %w", err)
-		}
 	}
 	hosts, err := s.secureCertificateHosts()
 	if err != nil {

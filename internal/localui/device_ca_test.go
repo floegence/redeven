@@ -4,8 +4,11 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -58,6 +61,53 @@ func TestLocalUIDeviceCALifecycle(t *testing.T) {
 	}
 	if string(exported) == string(mustReadTestFile(t, filepath.Join(localUIDeviceCADir(stateDir), localUIDeviceCAKeyName))) {
 		t.Fatal("public export contains the private key")
+	}
+}
+
+func TestPrepareSecureNetworkRequiresServingIdentityWithoutClaimingClientTrust(t *testing.T) {
+	stateDir := t.TempDir()
+	if _, err := GenerateLocalUIDeviceCA(stateDir); err != nil {
+		t.Fatalf("GenerateLocalUIDeviceCA() error = %v", err)
+	}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+	defer listener.Close()
+	bind, err := ParseBind(listener.Addr().String())
+	if err != nil {
+		t.Fatalf("ParseBind() error = %v", err)
+	}
+	s := newTestServer(t, nil)
+	s.bind = bind
+	s.stateDir = stateDir
+	s.deviceCA = nil
+	if err := s.prepareSecureNetwork([]net.Listener{listener}); err != nil {
+		t.Fatalf("prepareSecureNetwork() rejected a valid serving identity: %v", err)
+	}
+	t.Cleanup(s.closePreparedDirectListeners)
+	if s.deviceCA == nil || s.tlsConfig == nil || len(s.tlsConfig.Certificates) != 1 {
+		t.Fatal("prepareSecureNetwork() did not retain the validated CA-backed serving identity")
+	}
+}
+
+func TestInspectLocalUIDeviceCAReportsManualClientTrustOnLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-specific trust projection")
+	}
+	stateDir := t.TempDir()
+	if _, err := GenerateLocalUIDeviceCA(stateDir); err != nil {
+		t.Fatalf("GenerateLocalUIDeviceCA() error = %v", err)
+	}
+	status, err := InspectLocalUIDeviceCA(stateDir)
+	if err != nil {
+		t.Fatalf("InspectLocalUIDeviceCA() error = %v", err)
+	}
+	if status.Identity != "ready" || status.Trust != "manual_required" {
+		t.Fatalf("status = %#v", status)
+	}
+	if !strings.Contains(status.Remedy, "every browser or client trust store") {
+		t.Fatalf("remedy = %q", status.Remedy)
 	}
 }
 

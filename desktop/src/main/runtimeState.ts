@@ -11,12 +11,23 @@ import {
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import { parseLocalUIExposure, type LocalUIExposure } from '../shared/localUIExposure';
+import {
+  DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER,
+  normalizeDesktopPrivateBridgeToken,
+} from './desktopPrivateBridge';
 
 export const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 
 export type RuntimeProbeOptions = Readonly<{
   timeoutMs?: number;
   signal?: AbortSignal;
+  headers?: Readonly<Record<string, string>>;
+}>;
+
+type NormalizedRuntimeProbeOptions = Readonly<{
+  timeoutMs: number;
+  signal?: AbortSignal;
+  headers?: Readonly<Record<string, string>>;
 }>;
 
 export type RuntimeProbeFailureStage = 'runtime_health' | 'env_app_shell' | 'env_app_asset';
@@ -78,6 +89,7 @@ function request(
     signal?: AbortSignal;
     method?: 'GET' | 'HEAD';
     accept?: string;
+    headers?: Readonly<Record<string, string>>;
   }>,
 ): Promise<RuntimeProbeResponse> {
   return new Promise((resolve, reject) => {
@@ -89,6 +101,7 @@ function request(
       signal: options.signal,
       headers: {
         Accept: options.accept ?? 'application/json;q=1.0,text/html;q=0.8,*/*;q=0.5',
+        ...options.headers,
       },
     }, (response) => {
       const statusCode = typeof response.statusCode === 'number' ? response.statusCode : 0;
@@ -193,7 +206,7 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
 
 async function probeRedevenLocalUIHealth(
   baseURL: string,
-  options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
+  options: NormalizedRuntimeProbeOptions,
 ): Promise<RuntimeProbeResult<RuntimeProbeStatus>> {
   if (!isAllowedAppNavigation(baseURL, baseURL)) {
     return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
@@ -276,13 +289,14 @@ function startingEnvAppShellStatus(status: RuntimeProbeStatus): RuntimeProbeStat
 
 async function probeEnvAppShell(
   baseURL: string,
-  options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
+  options: NormalizedRuntimeProbeOptions,
 ): Promise<EnvAppShellProbeOutcome> {
   const deadline = Date.now() + options.timeoutMs;
   const shellResponse = await request(new URL('/_redeven_proxy/env/', baseURL), {
     timeoutMs: Math.max(1, deadline - Date.now()),
     signal: options.signal,
     accept: 'text/html;q=1.0,*/*;q=0.5',
+    headers: options.headers,
   });
   if (!shellResponse.ok && shellResponse.failure.kind !== 'invalid_response') {
     return { result: 'unavailable' };
@@ -302,6 +316,7 @@ async function probeEnvAppShell(
       signal: options.signal,
       method: 'HEAD',
       accept: '*/*',
+      headers: options.headers,
     });
   }));
   if (assetResponses.some((response) => !response.ok && response.failure.kind !== 'invalid_response')) {
@@ -346,7 +361,7 @@ function rememberEnvAppShellSuccess(
 async function probeEnvAppShellCached(
   baseURL: string,
   status: RuntimeProbeStatus,
-  options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
+  options: NormalizedRuntimeProbeOptions,
 ): Promise<EnvAppShellProbeResult> {
   const runtimeIdentity = envAppShellRuntimeIdentity(baseURL, status);
   const cachedFingerprint = envAppShellFingerprintByRuntimeIdentity.get(runtimeIdentity);
@@ -366,7 +381,7 @@ async function probeEnvAppShellCached(
 async function applyEnvAppShellReadiness(
   baseURL: string,
   status: RuntimeProbeStatus,
-  options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
+  options: NormalizedRuntimeProbeOptions,
 ): Promise<RuntimeProbeStatus> {
   if (!runtimeServiceIsOpenable(status.runtime_service)) {
     return status;
@@ -405,12 +420,39 @@ function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
   };
 }
 
-function normalizedProbeOptions(options: RuntimeProbeOptions): Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'> {
+function normalizedProbeOptions(options: RuntimeProbeOptions): NormalizedRuntimeProbeOptions {
   const timeoutMs = Number(options.timeoutMs ?? DEFAULT_RUNTIME_PROBE_TIMEOUT_MS);
   return {
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
     ...(options.signal ? { signal: options.signal } : {}),
+    ...(options.headers ? { headers: options.headers } : {}),
   };
+}
+
+function privateBridgeProbeInput(
+  startup: StartupReport,
+  options: RuntimeProbeOptions,
+): Readonly<{ bridgeURL: string; bridgeToken: string; options: RuntimeProbeOptions }> | null {
+  const rawBridgeURL = String(startup.local_ui_bridge_url ?? '').trim();
+  const bridgeToken = normalizeDesktopPrivateBridgeToken(startup.local_ui_bridge_token);
+  if (!rawBridgeURL || !bridgeToken) {
+    return null;
+  }
+  try {
+    return {
+      bridgeURL: normalizeLocalUIBridgeURL(rawBridgeURL),
+      bridgeToken,
+      options: {
+        ...options,
+        headers: {
+          ...options.headers,
+          [DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER]: bridgeToken,
+        },
+      },
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function probeExternalLocalUIHealth(
@@ -434,17 +476,44 @@ export async function probeLocalRuntimeBridgeHealth(
   startup: StartupReport,
   options: RuntimeProbeOptions = {},
 ): Promise<RuntimeProbeResult<StartupReport>> {
-  const rawBridgeURL = String(startup.local_ui_bridge_url ?? '').trim();
-  if (!rawBridgeURL) {
+  const bridge = privateBridgeProbeInput(startup, options);
+  if (!bridge) {
     return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
-  let bridgeURL: string;
-  try {
-    bridgeURL = normalizeLocalUIBridgeURL(rawBridgeURL);
-  } catch {
+  const result = await probeExternalLocalUIHealth(bridge.bridgeURL, bridge.options);
+  if (!result.ok) {
+    return result;
+  }
+  return {
+    ok: true,
+    value: {
+      ...result.value,
+      local_ui_bridge_url: bridge.bridgeURL,
+      local_ui_bridge_token: bridge.bridgeToken,
+    },
+  };
+}
+
+export async function probeLocalRuntimeBridgeStartup(
+  startup: StartupReport,
+  options: RuntimeProbeOptions = {},
+): Promise<RuntimeProbeResult<StartupReport>> {
+  const bridge = privateBridgeProbeInput(startup, options);
+  if (!bridge) {
     return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
-  return probeExternalLocalUIHealth(bridgeURL, options);
+  const result = await probeExternalLocalUIStartup(bridge.bridgeURL, bridge.options);
+  if (!result.ok) {
+    return result;
+  }
+  return {
+    ok: true,
+    value: {
+      ...result.value,
+      local_ui_bridge_url: bridge.bridgeURL,
+      local_ui_bridge_token: bridge.bridgeToken,
+    },
+  };
 }
 
 async function validateExternalLocalUIShellAtBaseURL(

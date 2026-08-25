@@ -91,6 +91,7 @@ function writeHello(
       local_ui: {
         available: true,
         base_path: '/',
+        bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       },
       runtime_control: {
         available: true,

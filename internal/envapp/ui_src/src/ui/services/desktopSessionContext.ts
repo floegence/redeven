@@ -17,6 +17,7 @@ export interface DesktopSessionContextSnapshot {
   env_public_id?: string;
   label?: string;
   local_ui_exposure?: LocalUIExposure;
+  document_transport?: 'desktop_private_bridge_v1';
 }
 
 export type DesktopTransportRecoveryFailureCode =
@@ -82,6 +83,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   const providerID = compact(candidate.provider_id);
   const envPublicID = compact(candidate.env_public_id);
   const label = compact(candidate.label);
+  const documentTransport = compact(candidate.document_transport);
   const localUIExposure = (() => {
     const exposure = candidate.local_ui_exposure;
     if (!exposure || typeof exposure !== 'object') return undefined;
@@ -109,6 +111,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
     ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
     ...(label !== '' ? { label } : {}),
     ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
+    ...(documentTransport === 'desktop_private_bridge_v1' ? { document_transport: documentTransport } : {}),
   };
 }
 

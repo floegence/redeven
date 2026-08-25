@@ -86,15 +86,22 @@ Redeven 是一个单文件二进制程序，可将您的电脑和服务器汇集
 # 1. 安装
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. 生成并信任 Local UI 设备 CA（仅需一次）
+# 2. 生成 Local UI 设备 CA（仅需一次）
 redeven local-authority device-ca generate --state-root ~/.redeven
+
+# macOS 或 Windows：安装到当前用户的信任库
 redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# Linux：导出公共证书，然后手动导入
+redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
 # 3. 运行
 redeven run
 
 # 4. 在浏览器中打开 https://localhost:23998。
 ```
+
+在 Linux 上，请将导出的公共证书导入浏览器或客户端实际使用的信任库。`install --scope user` 在 Linux 上会有意返回 `manual_required`；Redeven 绝不运行 `sudo`，也不修改系统级信任库。运行时会在提供 HTTPS/WSS 前验证 CA 身份和生成的服务器证书，但无法代替你建立客户端信任。在该浏览器或客户端信任此 CA 之前，客户端 TLS 会以安全方式失败。
 
 首次执行 `redeven run` 会初始化 `~/.redeven/local-environment/` 下的本地状态，并以本地模式启动。无需进行引导初始化或控制平面配置。Local UI 仅监听 `localhost:23998`，只能从当前设备访问；不支持从局域网或公网直接访问。按 Ctrl+C 可停止运行时。
 

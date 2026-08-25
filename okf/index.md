@@ -27,7 +27,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Security
 
-- [Local UI network exposure](security/local-ui-network-exposure.md) - Explicit device trust, HTTPS/WSS transport, exact authority checks, and fail-closed startup.
+- [Local UI network exposure](security/local-ui-network-exposure.md) - Explicit device identity and client trust, HTTPS/WSS transport, exact authority checks, and fail-closed TLS.
 - [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.
 - [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.
 

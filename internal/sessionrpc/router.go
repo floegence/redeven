@@ -1,7 +1,7 @@
 // Package sessionrpc contains Redeven's application RPC registrations.
 //
 // It deliberately owns no transport, framing, connection, or session
-// lifecycle. Flowersec v2 supplies those concerns through SessionHandlers and
+// lifecycle. Flowersec v3 supplies those concerns through SessionHandlers and
 // RPCPeer; this package only keeps product type IDs and JSON handlers together.
 package sessionrpc
 

@@ -42,8 +42,9 @@ const (
 	// LocalEnvPublicID is the fixed env_public_id used for Local UI mode.
 	LocalEnvPublicID = "env_local"
 
-	localAccessResumeHeader = "X-Redeven-Access-Resume"
-	localAccessResumeQuery  = "redeven_access_resume"
+	localAccessResumeHeader       = "X-Redeven-Access-Resume"
+	localAccessResumeQuery        = "redeven_access_resume"
+	localDesktopBridgeTokenHeader = "X-Redeven-Desktop-Bridge-Token"
 
 	localNamespacePublicID = "ns_local"
 	localUserPublicID      = "user_local"
@@ -86,7 +87,7 @@ type Options struct {
 	AccessGate *accessgate.Gate
 
 	// deviceCA is supplied only by package tests. Production startup always
-	// loads and verifies the explicitly generated device CA from StateDir.
+	// loads and validates the explicitly generated serving identity from StateDir.
 	deviceCA *deviceCA
 }
 
@@ -144,6 +145,7 @@ type Server struct {
 	desktopBridgeListener net.Listener
 	desktopBridgeServer   *http.Server
 	localUIBridgeURL      string
+	localUIBridgeToken    string
 
 	runtimeControl *runtimeControlServer
 	runtimeStatus  *runtimemanagement.Server
@@ -246,6 +248,12 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 			http.Error(w, "invalid Local UI bridge authority", http.StatusMisdirectedRequest)
 			return
 		}
+		expectedToken := strings.TrimSpace(s.localUIBridgeToken)
+		presentedToken := strings.TrimSpace(r.Header.Get(localDesktopBridgeTokenHeader))
+		if expectedToken == "" || len(presentedToken) != len(expectedToken) || subtle.ConstantTimeCompare([]byte(presentedToken), []byte(expectedToken)) != 1 {
+			http.Error(w, "Local UI bridge authorization required", http.StatusUnauthorized)
+			return
+		}
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, localUIBodyLimit)
 		}
@@ -258,6 +266,13 @@ func (s *Server) LocalUIBridgeURLForDesktop() string {
 		return ""
 	}
 	return s.localUIBridgeURL
+}
+
+func (s *Server) LocalUIBridgeTokenForDesktop() string {
+	if s == nil {
+		return ""
+	}
+	return s.localUIBridgeToken
 }
 
 func newLocalUIHTTPServer(handler http.Handler) *http.Server {
@@ -666,6 +681,12 @@ func (s *Server) startDesktopBridgeListener() error {
 		_ = listener.Close()
 		return errors.New("trusted Local UI bridge listener must use loopback TCP")
 	}
+	bridgeToken, err := randomB64u(32)
+	if err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("generate trusted Local UI bridge authorization: %w", err)
+	}
+	s.localUIBridgeToken = bridgeToken
 	server := newLocalUIHTTPServer(s.HandlerForDesktopBridge())
 	s.desktopBridgeListener = listener
 	s.desktopBridgeServer = server
@@ -730,12 +751,13 @@ func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
 			BinaryPath:      s.a.BinaryPath(),
 		},
 		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
-			LocalUIURL:       firstNonEmptyString(s.DisplayURLs()),
-			LocalUIURLs:      s.DisplayURLs(),
-			LocalUIBridgeURL: s.localUIBridgeURL,
-			RuntimeControl:   runtimeControlEndpoint(s.runtimeControl),
-			PasswordRequired: s.accessEnabled(),
-			Exposure:         s.LocalUIExposure(),
+			LocalUIURL:         firstNonEmptyString(s.DisplayURLs()),
+			LocalUIURLs:        s.DisplayURLs(),
+			LocalUIBridgeURL:   s.localUIBridgeURL,
+			LocalUIBridgeToken: s.localUIBridgeToken,
+			RuntimeControl:     runtimeControlEndpoint(s.runtimeControl),
+			PasswordRequired:   s.accessEnabled(),
+			Exposure:           s.LocalUIExposure(),
 		},
 		RuntimeService: runtimeService,
 		Diagnostics: runtimemanagement.RuntimeAttachDiagnostics{
@@ -795,6 +817,7 @@ func (s *Server) Close() error {
 	s.desktopBridgeServer = nil
 	s.desktopBridgeListener = nil
 	s.localUIBridgeURL = ""
+	s.localUIBridgeToken = ""
 	s.runtimeControl = nil
 	s.runtimeStatus = nil
 	if s.authStore != nil {

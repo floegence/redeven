@@ -34,11 +34,12 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 				StartedAtUnixMS: 1778751234567,
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
-				LocalUIURL:       "http://127.0.0.1:23998/",
-				LocalUIURLs:      []string{"http://127.0.0.1:23998/"},
-				LocalUIBridgeURL: "http://127.0.0.1:43123/",
-				PasswordRequired: true,
-				Exposure:         runtimemanagement.NewLocalUIExposure(false, true),
+				LocalUIURL:         "http://127.0.0.1:23998/",
+				LocalUIURLs:        []string{"http://127.0.0.1:23998/"},
+				LocalUIBridgeURL:   "http://127.0.0.1:43123/",
+				LocalUIBridgeToken: testLocalUIBridgeToken,
+				PasswordRequired:   true,
+				Exposure:           runtimemanagement.NewLocalUIExposure(false, true),
 			},
 			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
 				EffectiveRunMode: "hybrid",
@@ -77,6 +78,9 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	}
 	if report.LocalUIBridgeURL != "http://127.0.0.1:43123/" {
 		t.Fatalf("LocalUIBridgeURL = %q", report.LocalUIBridgeURL)
+	}
+	if report.LocalUIBridgeToken != testLocalUIBridgeToken {
+		t.Fatal("attached report did not preserve private bridge authorization")
 	}
 	if !report.PasswordRequired {
 		t.Fatalf("PasswordRequired = false, want true")

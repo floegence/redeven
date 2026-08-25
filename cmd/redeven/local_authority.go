@@ -113,6 +113,11 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 			writeLocalAuthorityReport(c.stderr, report)
 			return 1
 		}
+		if status.Trust == "manual_required" {
+			report.Status = "manual_required"
+			report.Code = "local_ui_device_ca_manual_install_required"
+			report.Message = status.Remedy
+		}
 		writeLocalAuthorityReport(c.stdout, report)
 		return 0
 	case "export":

@@ -59,6 +59,10 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	}))
 	defer publicLocalUIServer.Close()
 	trustedBridgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Redeven-Desktop-Bridge-Token") != testLocalUIBridgeToken {
+			http.Error(w, "missing private bridge authorization", http.StatusUnauthorized)
+			return
+		}
 		if r.URL.Path == "/api/local/runtime/health" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"data":{"status":"online","password_required":false}}`))
@@ -77,10 +81,11 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 				StartedAtUnixMS: 1778751234567,
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
-				LocalUIURL:       publicLocalUIServer.URL + "/",
-				LocalUIURLs:      []string{publicLocalUIServer.URL + "/"},
-				LocalUIBridgeURL: trustedBridgeServer.URL + "/",
-				PasswordRequired: false,
+				LocalUIURL:         publicLocalUIServer.URL + "/",
+				LocalUIURLs:        []string{publicLocalUIServer.URL + "/"},
+				LocalUIBridgeURL:   trustedBridgeServer.URL + "/",
+				LocalUIBridgeToken: testLocalUIBridgeToken,
+				PasswordRequired:   false,
 				RuntimeControl: &runtimemanagement.RuntimeControlEndpoint{
 					ProtocolVersion: "runtime-control-v1",
 					BaseURL:         controlServer.URL + "/",
@@ -131,6 +136,9 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	if hello.StartedAtUnixMS != 1778751234567 {
 		t.Fatalf("hello StartedAtUnixMS = %d", hello.StartedAtUnixMS)
 	}
+	if hello.LocalUI.BridgeToken != testLocalUIBridgeToken {
+		t.Fatal("hello did not preserve private Local UI bridge authorization")
+	}
 
 	openPayload, err := json.Marshal(desktopbridge.StreamOpen{Surface: desktopbridge.StreamSurfaceLocalUI})
 	if err != nil {
@@ -139,7 +147,7 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	if err := desktopbridge.WriteFrame(bridgeInputWriter, desktopbridge.FrameHeader{StreamID: "local-ui-health", Type: desktopbridge.FrameTypeStreamOpen}, openPayload); err != nil {
 		t.Fatalf("WriteFrame(stream open) error = %v", err)
 	}
-	request := "GET /api/local/runtime/health HTTP/1.1\r\nHost: 127.0.0.1:54321\r\nConnection: close\r\n\r\n"
+	request := "GET /api/local/runtime/health HTTP/1.1\r\nHost: 127.0.0.1:54321\r\nX-Redeven-Desktop-Bridge-Token: " + testLocalUIBridgeToken + "\r\nConnection: close\r\n\r\n"
 	if err := desktopbridge.WriteFrame(bridgeInputWriter, desktopbridge.FrameHeader{StreamID: "local-ui-health", Type: desktopbridge.FrameTypeStreamData}, []byte(request)); err != nil {
 		t.Fatalf("WriteFrame(stream data) error = %v", err)
 	}

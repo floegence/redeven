@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveDesktopSessionTransport, shouldFailDesktopSessionMainDocument } from './desktopSessionTransport';
+import {
+  desktopPrivateBridgeRequestHeaders,
+  resolveDesktopSessionTransport,
+  shouldFailDesktopSessionMainDocument,
+} from './desktopSessionTransport';
 import type { DesktopSessionTarget } from './desktopTarget';
 import type { StartupReport } from './startup';
 
@@ -19,6 +23,7 @@ const localStartup: StartupReport = {
   local_ui_url: 'http://100.126.191.114:23998/',
   local_ui_urls: ['http://100.126.191.114:23998/', 'http://192.168.1.20:23998/'],
   local_ui_bridge_url: 'http://127.0.0.1:43123/',
+  local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
 };
 
 describe('resolveDesktopSessionTransport', () => {
@@ -32,6 +37,13 @@ describe('resolveDesktopSessionTransport', () => {
       proxyPolicy: 'direct',
       partition: 'redeven-direct:env%3Alocal%3Alocal_host',
     });
+  });
+
+  it('rejects a private bridge startup that omits authorization', () => {
+    expect(() => resolveDesktopSessionTransport(localTarget, {
+      ...localStartup,
+      local_ui_bridge_token: undefined,
+    })).toThrow(/authorization/iu);
   });
 
   it('fails closed when a native Local Environment omits the bridge URL', () => {
@@ -68,6 +80,8 @@ describe('resolveDesktopSessionTransport', () => {
     const transport = resolveDesktopSessionTransport(target, {
       local_ui_url: 'http://127.0.0.1:44000/',
       local_ui_urls: ['http://127.0.0.1:44000/'],
+      local_ui_bridge_url: 'http://127.0.0.1:44000/',
+      local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     });
     expect(transport.kind).toBe('placement_bridge');
     expect(transport.proxyPolicy).toBe('direct');
@@ -145,5 +159,50 @@ describe('shouldFailDesktopSessionMainDocument', () => {
     expect(shouldFailDesktopSessionMainDocument({ ...response, resourceType: 'xhr' })).toBe(false);
     expect(shouldFailDesktopSessionMainDocument({ ...response, webContentsID: 43 })).toBe(false);
     expect(shouldFailDesktopSessionMainDocument({ ...response, lifecycle: 'open' })).toBe(false);
+  });
+});
+
+describe('desktopPrivateBridgeRequestHeaders', () => {
+  it('injects private authorization only on the exact bridge origin', () => {
+    const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+    expect(desktopPrivateBridgeRequestHeaders(
+      transport,
+      localStartup,
+      'http://127.0.0.1:43123/_redeven_proxy/env/assets/app.js',
+      { Accept: '*/*' },
+    )).toEqual({
+      Accept: '*/*',
+      'X-Redeven-Desktop-Bridge-Token': localStartup.local_ui_bridge_token,
+    });
+    expect(desktopPrivateBridgeRequestHeaders(
+      transport,
+      localStartup,
+      'https://127.0.0.1:43123/flowersec/v3/direct',
+      { Accept: '*/*' },
+    )).toEqual({ Accept: '*/*' });
+    expect(desktopPrivateBridgeRequestHeaders(
+      transport,
+      localStartup,
+      'http://127.0.0.1:43124/external',
+      { Accept: '*/*' },
+    )).toEqual({ Accept: '*/*' });
+  });
+
+  it('does not inject authorization for non-private transports', () => {
+    const remoteTarget: DesktopSessionTarget = {
+      ...localTarget,
+      session_key: 'env:remote:remote_desktop',
+      route: 'remote_desktop',
+    };
+    const transport = resolveDesktopSessionTransport(remoteTarget, {
+      ...localStartup,
+      local_ui_url: 'https://provider.example.invalid/',
+    });
+    expect(desktopPrivateBridgeRequestHeaders(
+      transport,
+      localStartup,
+      'https://provider.example.invalid/',
+      { Accept: '*/*' },
+    )).toEqual({ Accept: '*/*' });
   });
 });

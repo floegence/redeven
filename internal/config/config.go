@@ -39,7 +39,7 @@ const (
 )
 
 // DirectConnectInfo is the control-plane artifact envelope persisted by
-// Redeven. The opaque artifact bytes are interpreted only by Flowersec v2.
+// Redeven. The opaque artifact bytes are interpreted only by Flowersec v3.
 type DirectConnectInfo struct {
 	ArtifactJSON   json.RawMessage `json:"artifact_json"`
 	ExpiresAtUnixS int64           `json:"expires_at_unix_s"`

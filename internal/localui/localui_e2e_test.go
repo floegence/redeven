@@ -390,6 +390,7 @@ func TestServer_E2E_DesktopBridgeSecurityDoesNotExpandPublicListener(t *testing.
 			req.Header.Set("Upgrade", "websocket")
 			req.Header.Set("Sec-WebSocket-Key", "AAAAAAAAAAAAAAAAAAAAAA==")
 			req.Header.Set("Sec-WebSocket-Version", "13")
+			req.Header.Set(localDesktopBridgeTokenHeader, s.localUIBridgeToken)
 			if origin != "" {
 				req.Header.Set("Origin", origin)
 			}
@@ -534,12 +535,33 @@ type desktopBridgeTestEndpoint struct {
 	client *http.Client
 }
 
+type desktopBridgeAuthorizationTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (transport desktopBridgeAuthorizationTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	clone := request.Clone(request.Context())
+	clone.Header = request.Header.Clone()
+	clone.Header.Set(localDesktopBridgeTokenHeader, transport.token)
+	return transport.base.RoundTrip(clone)
+}
+
 func desktopBridgeEndpointForServer(t *testing.T, s *Server) *desktopBridgeTestEndpoint {
 	t.Helper()
 	if s == nil || strings.TrimSpace(s.localUIBridgeURL) == "" {
 		t.Fatal("trusted Local UI bridge is unavailable")
 	}
-	return &desktopBridgeTestEndpoint{URL: strings.TrimRight(s.localUIBridgeURL, "/"), client: &http.Client{}}
+	if strings.TrimSpace(s.localUIBridgeToken) == "" {
+		t.Fatal("trusted Local UI bridge authorization is unavailable")
+	}
+	return &desktopBridgeTestEndpoint{
+		URL: strings.TrimRight(s.localUIBridgeURL, "/"),
+		client: &http.Client{Transport: desktopBridgeAuthorizationTransport{
+			token: s.localUIBridgeToken,
+			base:  http.DefaultTransport,
+		}},
+	}
 }
 
 func (bridge *desktopBridgeTestEndpoint) Client() *http.Client { return bridge.client }

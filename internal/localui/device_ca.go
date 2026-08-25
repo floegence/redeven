@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -120,8 +121,8 @@ func GenerateLocalUIDeviceCA(stateDir string) (DeviceCAStatus, error) {
 	return inspectLocalUIDeviceCA(stateDir, false)
 }
 
-// InspectLocalUIDeviceCA reports identity and current-user trust without
-// exposing the CA key or a generated server certificate.
+// InspectLocalUIDeviceCA reports the serving identity and platform-specific
+// client-trust guidance without exposing the CA key or a generated certificate.
 func InspectLocalUIDeviceCA(stateDir string) (DeviceCAStatus, error) {
 	return inspectLocalUIDeviceCA(stateDir, true)
 }
@@ -146,6 +147,11 @@ func inspectLocalUIDeviceCA(stateDir string, checkTrust bool) (DeviceCAStatus, e
 		CertPath: localUIDeviceCACertificatePath(stateDir),
 	}
 	if !checkTrust {
+		return status, nil
+	}
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		status.Trust = "manual_required"
+		status.Remedy = "Export the public CA certificate and import it into every browser or client trust store that will open this Local UI."
 		return status, nil
 	}
 	if err := verifyLocalUIDeviceCATrust(ca); err != nil {
