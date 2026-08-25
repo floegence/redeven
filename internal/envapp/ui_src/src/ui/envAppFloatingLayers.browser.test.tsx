@@ -47,6 +47,7 @@ function LayerSurface(props: Readonly<{
 function FloatingLayerHarness() {
   const [flowerVisible, setFlowerVisible] = createSignal(false);
   const [panelVisible, setPanelVisible] = createSignal(false);
+  const [pluginMenuVisible, setPluginMenuVisible] = createSignal(false);
   const [modalVisible, setModalVisible] = createSignal(false);
   const [commandVisible, setCommandVisible] = createSignal(false);
 
@@ -55,6 +56,7 @@ function FloatingLayerHarness() {
       <div style={{ position: 'fixed', left: '16px', top: '16px', display: 'flex', gap: '8px' }}>
         <button type="button" onClick={() => setFlowerVisible(true)}>Show Flower</button>
         <button type="button" onClick={() => setPanelVisible(true)}>Show plugin Panel</button>
+        <button type="button" onClick={() => setPluginMenuVisible(true)}>Show plugin menu</button>
         <button type="button" onClick={() => setModalVisible(true)}>Show product modal</button>
         <button type="button" onClick={() => setCommandVisible(true)}>Show command palette</button>
       </div>
@@ -89,6 +91,11 @@ function FloatingLayerHarness() {
         testId="plugin-panel-layer"
         zIndex={ENV_APP_FLOATING_LAYER.pluginPanel}
         visible={panelVisible()}
+      />
+      <LayerSurface
+        testId="plugin-menu-layer"
+        zIndex={ENV_APP_FLOATING_LAYER.pluginContextMenu}
+        visible={pluginMenuVisible()}
       />
       <LayerSurface
         testId="product-modal-layer"
@@ -130,7 +137,7 @@ beforeEach(async () => {
 });
 
 describe('Env App global floating layer contract', () => {
-  it('uses click-ordered windows below Flower, plugin Panel, product modals, and command palette', async () => {
+  it('uses click-ordered windows below Flower, plugin Panel and menu, product modals, and command palette', async () => {
     const host = document.createElement('div');
     host.style.position = 'fixed';
     host.style.inset = '0';
@@ -155,6 +162,10 @@ describe('Env App global floating layer contract', () => {
     await page.getByRole('button', { name: 'Show plugin Panel' }).click();
     await settle();
     expect(hitTestId(200, 200)).toBe('plugin-panel-layer');
+
+    await page.getByRole('button', { name: 'Show plugin menu' }).click();
+    await settle();
+    expect(hitTestId(200, 200)).toBe('plugin-menu-layer');
 
     await page.getByRole('button', { name: 'Show product modal' }).click();
     await settle();

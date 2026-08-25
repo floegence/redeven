@@ -751,6 +751,29 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  focusMenuItem: (menu: HTMLElement | null, target: 'first' | 'last') => {
+    const items = Array.from(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? []);
+    (target === 'last' ? items.at(-1) : items[0])?.focus();
+  },
+  handleMenuKeyboardNavigation: (event: KeyboardEvent, options: any) => {
+    const menu = event.currentTarget as HTMLElement;
+    const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const delta = event.key === 'ArrowDown' ? 1 : -1;
+      items[(currentIndex + delta + items.length) % items.length]?.focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      (event.key === 'Home' ? items[0] : items.at(-1))?.focus();
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (document.activeElement instanceof HTMLElement) options.onActivate?.(document.activeElement);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      options.onDismiss?.('escape');
+    }
+  },
   Button: (props: any) => (
     <button
       type={props.type ?? 'button'}
@@ -792,7 +815,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         ref={layer}
         role={props.role}
         aria-label={props['aria-label']}
-        data-plugin-pin-menu={props['data-plugin-pin-menu']}
+        data-context-menu-kind={props['data-context-menu-kind']}
         onKeyDown={props.onKeyDown}
       >
         {props.children}
@@ -3426,8 +3449,8 @@ describe('EnvAppShell environment entry affordances', () => {
 
       activityPluginPageState.failClose = true;
       pinnedButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-      await flushUntil(() => Boolean(document.querySelector('[data-plugin-pin-menu-action]')));
-      (document.querySelector('[data-plugin-pin-menu-action]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]')));
+      (document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]') as HTMLButtonElement).click();
       await flushAsync();
       expect(findActivityButton(host, activityID)).not.toBeNull();
       expect(host.querySelector('[data-activity-plugin-surface-page]')).not.toBeNull();
@@ -3436,8 +3459,8 @@ describe('EnvAppShell environment entry affordances', () => {
 
       activityPluginPageState.failClose = false;
       pinnedButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-      await flushUntil(() => Boolean(document.querySelector('[data-plugin-pin-menu-action]')));
-      (document.querySelector('[data-plugin-pin-menu-action]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]')));
+      (document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]') as HTMLButtonElement).click();
       await flushUntil(() => findActivityButton(host, activityID) === null, 60);
       expect(host.querySelector('[data-activity-plugin-surface-page]')).toBeNull();
       expect(sidebarActiveTabValue).toBe('terminal');
@@ -3475,8 +3498,8 @@ describe('EnvAppShell environment entry affordances', () => {
       dockButton.click();
       await flushUntil(() => workbenchPluginSurfaceState.open.mock.calls.length === 1);
       dockButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-      await flushUntil(() => Boolean(document.querySelector('[data-plugin-pin-menu-action]')));
-      (document.querySelector('[data-plugin-pin-menu-action]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]')));
+      (document.querySelector('[data-floating-menu-item-id="plugin-pin-toggle"]') as HTMLButtonElement).click();
       await flushUntil(() => host.querySelector(`[data-workbench-dock-item="${inventoryKey}"]`) === null, 60);
 
       const afterUnpin = JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}');
@@ -3484,6 +3507,40 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(afterUnpin.workbenchInventoryKeys).toEqual([]);
       expect(workbenchPluginSurfaceState.close).not.toHaveBeenCalled();
       expect(workbenchPluginSurfaceState.closePlugin).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('opens the selected Plugin Center details from a pinned Activity item context menu', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      const inventoryKey = 'instance:plugini_redeven_official_containers';
+      const activityID = 'redeven.plugin.activity:instance%3Aplugini_redeven_official_containers';
+      await pluginPanelState.lastProps.onSetPluginPin('activity', inventoryKey, true);
+      await flushUntil(() => Boolean(findActivityButton(host, activityID)), 60);
+
+      findActivityButton(host, activityID)!.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+      }));
+      await flushUntil(() => Boolean(document.querySelector('[data-floating-menu-item-id="plugin-information"]')));
+      (document.querySelector('[data-floating-menu-item-id="plugin-information"]') as HTMLButtonElement).click();
+
+      await flushUntil(() => pluginCenterViewState.lastProps?.selectedInventoryKey === inventoryKey, 60);
+      expect(sidebarActiveTabValue).toBe('plugin-center');
+      expect(pluginCenterViewState.lastProps.selectedInventoryKey).toBe(inventoryKey);
+      expect(host.querySelector(`[data-plugin-center-item="${inventoryKey}"]`)).not.toBeNull();
     } finally {
       dispose();
     }

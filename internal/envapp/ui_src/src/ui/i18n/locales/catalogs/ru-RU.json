@@ -4251,6 +4251,8 @@
       "categoryProductivity": "Продуктивность",
       "categoryOther": "Другое",
       "closePanel": "Закрыть плагины",
+      "pluginMenuLabel": "Действия с плагином {plugin}",
+      "pluginInformation": "Информация о плагине",
       "pinToActivityBar": "Закрепить на Activity Bar",
       "unpinFromActivityBar": "Открепить от Activity Bar",
       "pinToWorkbenchDock": "Закрепить на панели Workbench",

@@ -4153,6 +4153,8 @@
       "categoryProductivity": "效率",
       "categoryOther": "其他",
       "closePanel": "关闭插件",
+      "pluginMenuLabel": "{plugin} 操作",
+      "pluginInformation": "插件信息",
       "pinToActivityBar": "固定到 Activity Bar",
       "unpinFromActivityBar": "从 Activity Bar 取消固定",
       "pinToWorkbenchDock": "固定到 Workbench Dock",

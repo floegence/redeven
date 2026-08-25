@@ -42,10 +42,15 @@ content is inert, and arrow/Home/End navigation remains within the visible grid.
 Each plugin is a semantic list item containing a native primary button. The
 compact launcher header exposes one market icon action for Plugin Center;
 plugin tiles do not render a visible overflow button. Right-click, Context Menu,
-and Shift+F10 expose exactly one mode-specific pin or unpin action, with arrow,
-Home/End, Enter, Escape, outside dismissal, and focus restoration. The menu uses
-the released `SurfaceFloatingLayer`; Workbench requests project into the owning
-surface rather than viewport-fixed coordinates. In Workbench placement, installed
+and Shift+F10 expose a compact icon-and-text menu with `Plugin information` and
+exactly one mode-specific pin or unpin action, with arrow, Home/End, Enter,
+Escape, outside dismissal, and focus restoration. `Plugin information` carries
+the exact `inventoryKey` into Plugin Center and opens that item's inspector. The
+menu reuses the file-browser context-menu sizing and the released
+`SurfaceFloatingLayer`; global Activity and Launcher menus remain above plugin
+windows and the Launcher, while Workbench requests project into the owning
+surface rather than using a global z-index or viewport-fixed coordinates. In
+Workbench placement, installed
 tiles and pinned Dock items use the released Floe Webapp drag transaction. Over
 the canvas it projects the standard `redeven.plugin` frame from its 1120 by 760
 world-unit definition; pointer release commits the same resolved world center,
@@ -253,8 +258,13 @@ remain visibly absent.
 
 Install starts only from the review footer. Development builds and external
 replacements require a concise adjacent risk acknowledgement; ordinary verified
-version upgrades need no redundant checkbox. Install prevents close and duplicate
-submission. The Host rebinds the exact owner/session and revalidates the exact
+version upgrades need no redundant checkbox. Source inspection and official
+review preparation remain cancellable through both the header close control and
+footer Cancel action; closing aborts the exact in-flight inspection and cannot
+publish a late candidate. Once mutation submission begins, installing and
+reconciling prevent close and duplicate submission because hiding an observer
+must not be presented as cancelling a durable Host operation. The Host rebinds
+the exact owner/session and revalidates the exact
 bytes and expected hash before its atomic control-database transaction. An unknown
 transport outcome retires stale UI authority and requires inventory refresh; it
 does not create receipt/query state or resubmit the mutation. Successful install

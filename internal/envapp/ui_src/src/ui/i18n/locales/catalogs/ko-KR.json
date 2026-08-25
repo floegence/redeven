@@ -4153,6 +4153,8 @@
       "categoryProductivity": "생산성",
       "categoryOther": "기타",
       "closePanel": "플러그인 닫기",
+      "pluginMenuLabel": "{plugin} 작업",
+      "pluginInformation": "플러그인 정보",
       "pinToActivityBar": "Activity Bar에 고정",
       "unpinFromActivityBar": "Activity Bar에서 고정 해제",
       "pinToWorkbenchDock": "Workbench Dock에 고정",

@@ -264,13 +264,32 @@ describe('PluginPanel', () => {
     }));
     await Promise.resolve();
 
-    const action = document.querySelector<HTMLButtonElement>('[data-plugin-pin-menu-action]')!;
+    const action = document.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="plugin-pin-toggle"]')!;
     expect(tile.getAttribute('aria-haspopup')).toBe('menu');
     expect(action.textContent).toContain('Pin to Activity Bar');
     action.click();
     await Promise.resolve();
     expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_containers', true);
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it('opens Plugin Center details for the selected plugin from the context menu', async () => {
+    const onOpenPluginDetails = vi.fn();
+    mountPanel({ placement: 'activity', onOpenPluginDetails, onSetPluginPin: vi.fn() });
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+
+    tile.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 120,
+      clientY: 160,
+    }));
+    await Promise.resolve();
+
+    const information = document.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="plugin-information"]')!;
+    expect(information.textContent).toContain('Plugin information');
+    information.click();
+    expect(onOpenPluginDetails).toHaveBeenCalledWith('instance:plugininst_containers');
   });
 
   it('projects the Workbench Dock action through the owning surface floating layer', async () => {
@@ -286,7 +305,7 @@ describe('PluginPanel', () => {
     }));
     await Promise.resolve();
 
-    const menu = surface.querySelector<HTMLElement>('[data-plugin-pin-menu]')!;
+    const menu = surface.querySelector<HTMLElement>('[data-context-menu-kind="plugin-pin"]')!;
     expect(menu).not.toBeNull();
     expect(menu.className).toContain('absolute');
     expect(menu.className).not.toContain('fixed');
@@ -306,21 +325,23 @@ describe('PluginPanel', () => {
     tile.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ContextMenu' }));
     await Promise.resolve();
 
-    const menu = document.querySelector<HTMLElement>('[data-plugin-pin-menu]')!;
-    const action = document.querySelector<HTMLButtonElement>('[data-plugin-pin-menu-action]')!;
+    const information = document.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="plugin-information"]')!;
+    const action = document.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="plugin-pin-toggle"]')!;
     expect(action.textContent).toContain('Unpin from Activity Bar');
-    menu.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }));
-    menu.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+    information.focus();
+    information.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }));
+    expect(document.activeElement).toBe(action);
+    action.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
     await Promise.resolve();
     expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_containers', false);
 
     tile.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'F10', shiftKey: true }));
     await Promise.resolve();
-    document.querySelector<HTMLElement>('[data-plugin-pin-menu]')?.dispatchEvent(
+    document.querySelector<HTMLElement>('[data-context-menu-kind="plugin-pin"]')?.dispatchEvent(
       new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }),
     );
     await Promise.resolve();
-    expect(document.querySelector('[data-plugin-pin-menu]')).toBeNull();
+    expect(document.querySelector('[data-context-menu-kind="plugin-pin"]')).toBeNull();
     expect(document.activeElement).toBe(tile);
   });
 

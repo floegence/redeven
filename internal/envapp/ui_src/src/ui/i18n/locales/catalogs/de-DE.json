@@ -4153,6 +4153,8 @@
       "categoryProductivity": "Produktivität",
       "categoryOther": "Sonstige",
       "closePanel": "Plugins schließen",
+      "pluginMenuLabel": "Aktionen für {plugin}",
+      "pluginInformation": "Plugininformationen",
       "pinToActivityBar": "An die Activity Bar anheften",
       "unpinFromActivityBar": "Von der Activity Bar lösen",
       "pinToWorkbenchDock": "An das Workbench-Dock anheften",
