@@ -40,6 +40,7 @@ const (
 	TypeID_TERMINAL_GROUP_DELETE              uint32 = 2020
 	TypeID_TERMINAL_SESSION_MOVE              uint32 = 2021
 	TypeID_TERMINAL_GROUP_CATALOG_CHANGED     uint32 = 2022 // notify (agent -> client): group catalog or membership changed
+	TypeID_TERMINAL_GROUP_REORDER             uint32 = 2023
 
 	terminalSemanticHistoryRPCPayloadBudget = 96 * 1024
 )

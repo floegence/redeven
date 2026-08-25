@@ -90,6 +90,23 @@ func (m *Manager) UpdateGroup(groupID string, name *string, defaultWorkingDir *s
 	return snapshot, group, nil
 }
 
+func (m *Manager) ReorderGroup(groupID string, beforeGroupID string) (GroupCatalogSnapshot, error) {
+	if m == nil || m.groupCatalog == nil {
+		return GroupCatalogSnapshot{}, errors.New("terminal group catalog is unavailable")
+	}
+	m.groupOperationMu.Lock()
+	previousRevision := m.groupCatalog.Snapshot().Revision
+	snapshot, err := m.groupCatalog.Reorder(groupID, beforeGroupID)
+	m.groupOperationMu.Unlock()
+	if err != nil {
+		return GroupCatalogSnapshot{}, err
+	}
+	if snapshot.Revision > previousRevision {
+		m.broadcastGroupCatalogChanged("reordered", strings.TrimSpace(groupID), "", snapshot.Revision)
+	}
+	return snapshot, nil
+}
+
 func (m *Manager) MoveSessionToGroup(sessionID string, groupID string) (uint64, error) {
 	if m == nil || m.groupCatalog == nil {
 		return 0, errors.New("terminal group catalog is unavailable")
@@ -300,6 +317,19 @@ func registerTerminalGroupRPCs(m *Manager, r *sessionrpc.Router, meta *session.M
 		}
 		return &terminalSessionMoveResp{Revision: revision, SessionID: strings.TrimSpace(req.SessionID), GroupID: strings.TrimSpace(req.GroupID)}, nil
 	})
+	accessgate.RegisterTyped[terminalGroupReorderReq, terminalGroupListResp](r, TypeID_TERMINAL_GROUP_REORDER, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalGroupReorderReq) (*terminalGroupListResp, error) {
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
+		}
+		if req == nil {
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
+		}
+		snapshot, err := m.ReorderGroup(req.GroupID, req.BeforeGroupID)
+		if err != nil {
+			return nil, terminalGroupRPCError(err)
+		}
+		return &terminalGroupListResp{Revision: snapshot.Revision, Groups: snapshot.Groups}, nil
+	})
 }
 
 func terminalGroupRPCError(err error) error {
@@ -359,6 +389,11 @@ type terminalSessionMoveResp struct {
 	Revision  uint64 `json:"revision"`
 	SessionID string `json:"session_id"`
 	GroupID   string `json:"group_id"`
+}
+
+type terminalGroupReorderReq struct {
+	GroupID       string `json:"group_id"`
+	BeforeGroupID string `json:"before_group_id,omitempty"`
 }
 
 type terminalGroupCatalogChangedPayload struct {

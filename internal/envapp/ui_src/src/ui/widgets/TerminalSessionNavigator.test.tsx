@@ -24,6 +24,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
   groups?: Parameters<typeof TerminalSessionNavigator>[0]['groups'];
   additionalItems?: readonly TerminalSessionNavigationItem[];
   onRelocateSession?: (sessionId: string, groupId: string, beforeSessionId: string | null) => void;
+  onReorderGroup?: (groupId: string, beforeGroupId: string | null) => void;
   onOpenGroupContextMenu?: (event: MouseEvent, groupId: string) => void;
   onToggleGroup?: (groupId: string) => void;
 }) {
@@ -50,6 +51,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
       emptyListLoading={false}
       onCloseDrawer={() => undefined}
       onRelocateSession={options?.onRelocateSession}
+      onReorderGroup={options?.onReorderGroup}
       onOpenGroupContextMenu={options?.onOpenGroupContextMenu}
       onToggleGroup={options?.onToggleGroup}
       onRefresh={() => undefined}
@@ -88,6 +90,7 @@ function createDataTransfer(): DataTransfer {
       entries.set(type, value);
       transfer.types = [...entries.keys()];
     },
+    setDragImage: vi.fn(),
   };
   return transfer as unknown as DataTransfer;
 }
@@ -193,7 +196,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).not.toContain('rgba(');
     expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-7 w-7');
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
-    expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('border-primary/35');
+    expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('border-primary/15');
     const descriptionId = rowButton.getAttribute('aria-describedby');
     expect(descriptionId).toBe('terminal-panel-test-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output');
@@ -649,6 +652,95 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-session-drop-hint="session-1"]')?.textContent?.trim()).toBe('');
     dispatchDragEvent(firstTreeRow, 'drop', dataTransfer, 110);
     expect(onRelocateSession).toHaveBeenCalledWith('session-2', 'default', 'session-1');
+  });
+
+  it('canonicalizes adjacent session halves to one shared placement slot', () => {
+    const onRelocateSession = vi.fn();
+    const items = [
+      navigationItem({ id: 'session-1', title: 'one' }),
+      navigationItem({ id: 'session-2', title: 'two' }),
+      navigationItem({ id: 'session-3', title: 'three' }),
+      navigationItem({ id: 'session-4', title: 'four' }),
+    ];
+    const { host } = renderNavigator(items[0]!, vi.fn(), {
+      additionalItems: items.slice(1),
+      groups: [{
+        id: 'default',
+        name: 'Default',
+        defaultWorkingDir: '/workspace',
+        isDefault: true,
+        expanded: true,
+        itemIds: items.map((item) => item.id),
+        totalSessionCount: items.length,
+      }],
+      onRelocateSession,
+    });
+    const source = host.querySelector<HTMLElement>('[data-terminal-session-row="session-4"]')!;
+    const second = host.querySelector<HTMLElement>('[data-terminal-tree-child="session-2"]')!;
+    const third = host.querySelector<HTMLElement>('[data-terminal-tree-child="session-3"]')!;
+    for (const [row, top] of [[second, 100], [third, 152]] as const) {
+      Object.defineProperty(row, 'getBoundingClientRect', {
+        value: () => ({ top, height: 52, bottom: top + 52, left: 0, right: 200, width: 200, x: 0, y: top, toJSON: () => ({}) }),
+      });
+    }
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(source, 'dragstart', dataTransfer);
+    dispatchDragEvent(second, 'dragover', dataTransfer, 145);
+    expect(host.querySelectorAll('[data-terminal-session-drop-hint]')).toHaveLength(1);
+    expect(third.getAttribute('data-terminal-session-drop-position')).toBe('before');
+    expect(second.getAttribute('data-terminal-session-drop-position')).toBeNull();
+
+    dispatchDragEvent(third, 'dragover', dataTransfer, 160);
+    expect(host.querySelectorAll('[data-terminal-session-drop-hint]')).toHaveLength(1);
+    expect(third.getAttribute('data-terminal-session-drop-position')).toBe('before');
+    dispatchDragEvent(third, 'drop', dataTransfer, 160);
+    expect(onRelocateSession).toHaveBeenCalledWith('session-4', 'default', 'session-3');
+  });
+
+  it('reorders movable groups with one canonical boundary and a compact textless preview', () => {
+    const onReorderGroup = vi.fn();
+    const { host } = renderNavigator(navigationItem({ id: 'session-1' }), vi.fn(), {
+      groups: [{
+        id: 'default', name: 'Default', defaultWorkingDir: '/workspace', isDefault: true,
+        expanded: false, itemIds: [], totalSessionCount: 0,
+      }, {
+        id: 'alpha', name: 'Alpha', defaultWorkingDir: '/alpha', isDefault: false,
+        expanded: false, itemIds: [], totalSessionCount: 0,
+      }, {
+        id: 'beta', name: 'Beta', defaultWorkingDir: '/beta', isDefault: false,
+        expanded: false, itemIds: [], totalSessionCount: 0,
+      }, {
+        id: 'gamma', name: 'Gamma', defaultWorkingDir: '/gamma', isDefault: false,
+        expanded: false, itemIds: ['session-1'], totalSessionCount: 1,
+      }],
+      onReorderGroup,
+    });
+    const defaultHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="default"]')!;
+    const alphaHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="alpha"]')!;
+    const betaHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="beta"]')!;
+    const gammaHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="gamma"]')!;
+    expect(defaultHeader.getAttribute('draggable')).toBe('false');
+    expect(gammaHeader.getAttribute('draggable')).toBe('true');
+    for (const [row, top] of [[alphaHeader, 100], [betaHeader, 144]] as const) {
+      Object.defineProperty(row, 'getBoundingClientRect', {
+        value: () => ({ top, height: 44, bottom: top + 44, left: 0, right: 200, width: 200, x: 0, y: top, toJSON: () => ({}) }),
+      });
+    }
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(gammaHeader, 'dragstart', dataTransfer);
+    expect(dataTransfer.setDragImage).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector('[data-terminal-drag-preview="group"]')?.textContent).toBe('');
+    dispatchDragEvent(alphaHeader, 'dragover', dataTransfer, 140);
+    expect(host.querySelectorAll('[data-terminal-group-order-drop-hint]')).toHaveLength(1);
+    expect(host.querySelector('[data-terminal-group-order-drop-hint="beta"]')?.getAttribute('data-terminal-group-order-drop-position')).toBe('before');
+
+    dispatchDragEvent(betaHeader, 'dragover', dataTransfer, 150);
+    expect(host.querySelectorAll('[data-terminal-group-order-drop-hint]')).toHaveLength(1);
+    expect(host.querySelector('[data-terminal-group-order-drop-hint="beta"]')?.getAttribute('data-terminal-group-order-drop-position')).toBe('before');
+    dispatchDragEvent(betaHeader, 'drop', dataTransfer, 150);
+    expect(onReorderGroup).toHaveBeenCalledWith('gamma', 'beta');
   });
 
   it('clears every drag affordance when a native drag ends outside the navigator', () => {

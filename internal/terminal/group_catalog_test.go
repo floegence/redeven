@@ -53,6 +53,76 @@ func TestPersistentGroupCatalogCreatesAndRetainsDefault(t *testing.T) {
 	}
 }
 
+func TestPersistentGroupCatalogReordersGroupsAtomicallyAndKeepsDefaultPinned(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(t.TempDir(), "groups.sqlite")
+	catalog, err := openPersistentGroupCatalog(path, home)
+	if err != nil {
+		t.Fatalf("openPersistentGroupCatalog() error = %v", err)
+	}
+	_, first, err := catalog.Create("First", home)
+	if err != nil {
+		t.Fatalf("Create(First) error = %v", err)
+	}
+	_, second, err := catalog.Create("Second", home)
+	if err != nil {
+		t.Fatalf("Create(Second) error = %v", err)
+	}
+	_, third, err := catalog.Create("Third", home)
+	if err != nil {
+		t.Fatalf("Create(Third) error = %v", err)
+	}
+
+	reordered, err := catalog.Reorder(third.ID, first.ID)
+	if err != nil {
+		t.Fatalf("Reorder() error = %v", err)
+	}
+	if got, want := groupIDs(reordered.Groups), []string{DefaultTerminalGroupID, third.ID, first.ID, second.ID}; !equalStrings(got, want) {
+		t.Fatalf("reordered groups = %v, want %v", got, want)
+	}
+	if reordered.Groups[0].SortOrder != 0 || reordered.Groups[1].SortOrder != 1 {
+		t.Fatalf("reordered sort orders = %#v", reordered.Groups)
+	}
+	if _, err := catalog.Reorder(DefaultTerminalGroupID, ""); !errors.Is(err, ErrDefaultTerminalGroupLocked) {
+		t.Fatalf("Reorder(Default) error = %v", err)
+	}
+	if _, err := catalog.Reorder(second.ID, DefaultTerminalGroupID); !errors.Is(err, ErrDefaultTerminalGroupLocked) {
+		t.Fatalf("Reorder(before Default) error = %v", err)
+	}
+
+	if err := catalog.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	reopened, err := openPersistentGroupCatalog(path, home)
+	if err != nil {
+		t.Fatalf("reopen catalog error = %v", err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	if got, want := groupIDs(reopened.Snapshot().Groups), []string{DefaultTerminalGroupID, third.ID, first.ID, second.ID}; !equalStrings(got, want) {
+		t.Fatalf("restarted groups = %v, want %v", got, want)
+	}
+}
+
+func groupIDs(groups []Group) []string {
+	ids := make([]string, 0, len(groups))
+	for _, group := range groups {
+		ids = append(ids, group.ID)
+	}
+	return ids
+}
+
+func equalStrings(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestPersistentGroupCatalogRejectsFutureVersionAndDrift(t *testing.T) {
 	for _, test := range []struct {
 		name   string

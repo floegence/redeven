@@ -47,6 +47,7 @@ export type TerminalSessionCatalogValue = Readonly<{
   createGroup: (request: TerminalGroupCreateRequest) => Promise<TerminalGroup>;
   updateGroup: (request: TerminalGroupUpdateRequest) => Promise<TerminalGroup>;
   deleteGroup: (groupId: string) => Promise<TerminalGroupDeleteResponse>;
+  reorderGroup: (groupId: string, beforeGroupId: string | null) => Promise<void>;
   moveSession: (sessionId: string, groupId: string) => Promise<void>;
   reorderSession: (sessionId: string, beforeSessionId: string | null) => void;
   upsertSession: (session: TerminalSessionInfo) => void;
@@ -1158,6 +1159,51 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     }
   };
 
+  const reorderGroup = async (groupIdInput: string, beforeGroupIdInput: string | null): Promise<void> => {
+    const groupId = String(groupIdInput ?? '').trim();
+    const beforeGroupId = String(beforeGroupIdInput ?? '').trim() || null;
+    const previousGroups = groups();
+    const source = previousGroups.find((group) => group.id === groupId);
+    if (!source || source.isDefault || source.pending || beforeGroupId === groupId) return;
+    if (beforeGroupId && previousGroups.find((group) => group.id === beforeGroupId)?.isDefault) return;
+
+    const movable = previousGroups.filter((group) => !group.isDefault && !group.pending && group.id !== groupId);
+    const insertIndex = beforeGroupId ? movable.findIndex((group) => group.id === beforeGroupId) : -1;
+    movable.splice(insertIndex >= 0 ? insertIndex : movable.length, 0, source);
+    const nextGroupIds = [
+      ...previousGroups.filter((group) => group.isDefault).map((group) => group.id),
+      ...movable.map((group) => group.id),
+      ...previousGroups.filter((group) => group.pending).map((group) => group.id),
+    ];
+    if (nextGroupIds.every((candidate, index) => candidate === previousGroups[index]?.id)) return;
+
+    const groupById = new Map(previousGroups.map((group) => [group.id, group]));
+    setGroups(nextGroupIds.flatMap((id, index) => {
+      const group = groupById.get(id);
+      return group ? [{ ...group, sortOrder: group.isDefault ? 0 : index }] : [];
+    }));
+
+    const previousRevision = groupRevision();
+    const scheduledLifecycleRevision = lifecycleRevision;
+    const operationKey = 'group-order';
+    const operationSequence = beginGroupOperation(operationKey);
+    try {
+      const result = await rpc.terminal.reorderGroup({ groupId, beforeGroupId });
+      if (scheduledLifecycleRevision !== lifecycleRevision
+        || !groupOperationIsCurrent(operationKey, operationSequence)) return;
+      applyGroupSnapshot(result.groups, result.revision);
+      void refreshGroupsAtLeast(result.revision).catch(() => undefined);
+    } catch (cause) {
+      if (scheduledLifecycleRevision !== lifecycleRevision
+        || !groupOperationIsCurrent(operationKey, operationSequence)) return;
+      if (groupRevision() === previousRevision) {
+        setGroups(previousGroups);
+      }
+      void refreshGroups().catch(() => undefined);
+      throw cause;
+    }
+  };
+
   const moveSession = async (sessionIdInput: string, groupIdInput: string): Promise<void> => {
     const sessionId = String(sessionIdInput ?? '').trim();
     const groupId = String(groupIdInput ?? '').trim();
@@ -1361,6 +1407,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     createGroup,
     updateGroup,
     deleteGroup,
+    reorderGroup,
     moveSession,
     reorderSession,
     upsertSession,

@@ -19,6 +19,7 @@ import type {
   wire_terminal_group_delete_resp,
   wire_terminal_group_list_resp,
   wire_terminal_group_mutation_resp,
+  wire_terminal_group_reorder_req,
   wire_terminal_group_update_req,
   wire_terminal_name_update_notify,
   wire_terminal_output_activity_info,
@@ -49,6 +50,7 @@ import type {
   TerminalGroupDeleteRequest,
   TerminalGroupDeleteResponse,
   TerminalGroupMutationResponse,
+  TerminalGroupReorderRequest,
   TerminalGroupUpdateRequest,
   TerminalNameUpdateEvent,
   TerminalOutputActivityUpdateEvent,
@@ -315,6 +317,15 @@ export function fromWireTerminalGroupDeleteResponse(resp: wire_terminal_group_de
   return { revision: terminalCatalogRevision(resp?.revision), failedSessionIds };
 }
 
+export function toWireTerminalGroupReorderRequest(req: TerminalGroupReorderRequest): wire_terminal_group_reorder_req {
+  const groupId = String(req.groupId ?? '').trim();
+  const beforeGroupId = String(req.beforeGroupId ?? '').trim();
+  return {
+    group_id: groupId,
+    ...(beforeGroupId ? { before_group_id: beforeGroupId } : {}),
+  };
+}
+
 export function toWireTerminalSessionMoveRequest(req: TerminalSessionMoveRequest): wire_terminal_session_move_req {
   return { session_id: req.sessionId.trim(), group_id: req.groupId.trim() };
 }
@@ -330,7 +341,7 @@ export function fromWireTerminalGroupCatalogChangedNotify(
   payload: wire_terminal_group_catalog_changed_notify,
 ): TerminalGroupCatalogChangedEvent | null {
   const reason = payload?.reason;
-  if (reason !== 'created' && reason !== 'updated' && reason !== 'deleted' && reason !== 'session_moved') return null;
+  if (reason !== 'created' && reason !== 'updated' && reason !== 'deleted' && reason !== 'reordered' && reason !== 'session_moved') return null;
   const revision = Number(payload?.revision);
   if (!Number.isSafeInteger(revision) || revision < 1) return null;
   const groupId = String(payload?.group_id ?? '').trim();

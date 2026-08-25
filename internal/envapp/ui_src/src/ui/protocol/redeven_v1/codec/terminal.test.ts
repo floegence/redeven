@@ -15,6 +15,7 @@ import {
   fromWireTerminalWorkStateUpdateNotify,
   toWireTerminalSemanticClearRequest,
   toWireTerminalSemanticHistoryRequest,
+  toWireTerminalGroupReorderRequest,
   toWireTerminalSessionMoveRequest,
 } from './terminal';
 
@@ -524,6 +525,13 @@ describe('terminal codec', () => {
     })).toThrow('ungrouped');
     expect(toWireTerminalSessionMoveRequest({ sessionId: ' session-1 ', groupId: ' group-2 ' }))
       .toEqual({ session_id: 'session-1', group_id: 'group-2' });
+    expect(toWireTerminalGroupReorderRequest({ groupId: ' group-2 ', beforeGroupId: ' group-1 ' }))
+      .toEqual({ group_id: 'group-2', before_group_id: 'group-1' });
+    expect(toWireTerminalGroupReorderRequest({ groupId: ' group-2 ', beforeGroupId: null }))
+      .toEqual({ group_id: 'group-2' });
+    expect(fromWireTerminalGroupCatalogChangedNotify({
+      reason: 'reordered', group_id: 'group-2', revision: 5,
+    })).toEqual({ reason: 'reordered', groupId: 'group-2', revision: 5 });
     expect(fromWireTerminalGroupCatalogChangedNotify({
       reason: 'session_moved', session_id: 'session-1', group_id: 'group-2', revision: 5,
     })).toEqual({ reason: 'session_moved', sessionId: 'session-1', groupId: 'group-2', revision: 5 });
