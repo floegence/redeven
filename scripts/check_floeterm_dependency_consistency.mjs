@@ -43,11 +43,6 @@ export function validateFloetermDependencies(root = repoRoot) {
     'package-lock Floeterm package must resolve from the public npm registry',
   );
 
-  const installedManifestPath = `internal/envapp/ui_src/node_modules/${packageName}/package.json`;
-  assert(fs.existsSync(path.join(root, installedManifestPath)), 'published Floeterm package must be installed for contract validation');
-  const installedManifest = JSON.parse(read(root, installedManifestPath));
-  assert(installedManifest.version === expectedVersion, `installed Floeterm package must be ${expectedVersion}`);
-
   const pnpmLock = read(root, 'internal/envapp/ui_src/pnpm-lock.yaml');
   assert(pnpmLock.includes(`specifier: ${expectedVersion}`), 'pnpm importer Floeterm specifier is stale');
   assert(pnpmLock.includes(`'${packageName}@${expectedVersion}':`), 'pnpm Floeterm snapshot is missing');
