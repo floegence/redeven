@@ -80,13 +80,9 @@ function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function terminalSessionsWithGroups(
-  snapshot: readonly FloetermTerminalSessionInfo[],
-): TerminalSessionInfo[] {
-  return snapshot.flatMap((session) => {
-    const groupId = String((session as Partial<TerminalSessionInfo>).groupId ?? '').trim();
-    return groupId ? [{ ...session, groupId } as TerminalSessionInfo] : [];
-  });
+function terminalRuntimeSession(session: TerminalSessionInfo): FloetermTerminalSessionInfo {
+  const { groupId: _groupId, ...runtime } = session;
+  return runtime;
 }
 
 function conflictedExecutionContext(
@@ -152,6 +148,19 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   let groupSnapshotRevision = 0;
   let nextGroupOperationSequence = 0;
   const latestGroupOperationByKey = new Map<string, number>();
+  let nextSessionListRequestSequence = 0;
+  let latestAppliedSessionListRequestSequence = 0;
+  let latestAppliedSessionListMembershipRevision = 0;
+  let sessionMembershipRevision = 0;
+  const sessionGroupIdById = new Map<string, string>();
+  const sessionGroupWriteRevisionById = new Map<string, number>();
+  const sessionGroupCatalogRevisionById = new Map<string, number>();
+  const pendingSessionGroupMoveById = new Map<string, Readonly<{
+    operationSequence: number;
+    previousGroupId: string;
+    targetGroupId: string;
+    startedCatalogRevision: number;
+  }>>();
   let groupRefreshPromise: Promise<void> | null = null;
   let sessionOrderIds: string[] = [];
   let providerDisposed = false;
@@ -545,6 +554,79 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     setSessions(frozen);
   };
 
+  const markSessionGroupWrite = (sessionId: string) => {
+    sessionMembershipRevision += 1;
+    sessionGroupWriteRevisionById.set(sessionId, sessionMembershipRevision);
+  };
+
+  const commitSessionGroup = (
+    sessionIdInput: string,
+    groupIdInput: string,
+    catalogRevision?: number,
+  ): boolean => {
+    const sessionId = String(sessionIdInput ?? '').trim();
+    const groupId = String(groupIdInput ?? '').trim();
+    if (!sessionId || !groupId) return false;
+    const currentCatalogRevision = sessionGroupCatalogRevisionById.get(sessionId) ?? 0;
+    if (catalogRevision != null && catalogRevision < currentCatalogRevision) return false;
+    sessionGroupIdById.set(sessionId, groupId);
+    if (catalogRevision != null) {
+      sessionGroupCatalogRevisionById.set(sessionId, catalogRevision);
+    }
+    markSessionGroupWrite(sessionId);
+    return true;
+  };
+
+  const projectSessionGroups = (
+    snapshot: readonly FloetermTerminalSessionInfo[],
+  ): TerminalSessionInfo[] => snapshot.flatMap((session) => {
+    const pendingMove = pendingSessionGroupMoveById.get(session.id);
+    const groupId = pendingMove?.targetGroupId ?? sessionGroupIdById.get(session.id) ?? '';
+    return groupId ? [{ ...session, groupId } as TerminalSessionInfo] : [];
+  });
+
+  const publishProjectedSessions = (authoritative = false) => {
+    const runtimeSnapshot = activeCoordinator?.getSnapshot()
+      ?? sessions().map(terminalRuntimeSession);
+    applySnapshot(projectSessionGroups(runtimeSnapshot), authoritative);
+  };
+
+  const applyListedSessionGroups = (
+    listedSessions: readonly TerminalSessionInfo[],
+    fence: Readonly<{
+      requestSequence: number;
+      membershipRevision: number;
+      lifecycleRevision: number;
+    }> | null,
+  ) => {
+    if (!fence
+      || fence.lifecycleRevision !== lifecycleRevision
+      || fence.requestSequence <= latestAppliedSessionListRequestSequence) return;
+    latestAppliedSessionListRequestSequence = fence.requestSequence;
+    latestAppliedSessionListMembershipRevision = fence.membershipRevision;
+    const listedIds = new Set<string>();
+    for (const session of listedSessions) {
+      const sessionId = String(session.id ?? '').trim();
+      const groupId = String(session.groupId ?? '').trim();
+      if (!sessionId || !groupId) continue;
+      listedIds.add(sessionId);
+      if ((sessionGroupWriteRevisionById.get(sessionId) ?? 0) > fence.membershipRevision) continue;
+      sessionGroupIdById.set(sessionId, groupId);
+    }
+    for (const sessionId of [...sessionGroupIdById.keys()]) {
+      if (listedIds.has(sessionId)) continue;
+      if ((sessionGroupWriteRevisionById.get(sessionId) ?? 0) > fence.membershipRevision) continue;
+      sessionGroupIdById.delete(sessionId);
+      sessionGroupCatalogRevisionById.delete(sessionId);
+    }
+    publishProjectedSessions();
+  };
+
+  const observeCreatedSession = (session: TerminalSessionInfo) => {
+    if (!commitSessionGroup(session.id, session.groupId)) return;
+    publishProjectedSessions();
+  };
+
   const applyGroupSnapshot = (nextGroups: readonly TerminalGroup[], revision: number) => {
     if (!Number.isSafeInteger(revision) || revision <= groupSnapshotRevision) return;
     const snapshotIds = new Set(nextGroups.map((group) => group.id));
@@ -574,6 +656,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const disposeConnection = (preserveSnapshot: boolean) => {
     lifecycleRevision += 1;
     refreshRequestSequence += 1;
+    pendingSessionGroupMoveById.clear();
+    if (preserveSnapshot) untrack(() => publishProjectedSessions());
     unsubscribeCoordinator?.();
     unsubscribeCoordinator = null;
     unsubscribeForegroundCommand?.();
@@ -614,6 +698,9 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     setCoordinator(null);
     if (!preserveSnapshot) {
       removedSessionIds.clear();
+      sessionGroupIdById.clear();
+      sessionGroupWriteRevisionById.clear();
+      sessionGroupCatalogRevisionById.clear();
       applySnapshot([]);
       setGroups([]);
       groupSnapshotRevision = 0;
@@ -672,18 +759,36 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     if (activeCoordinator && activeClient === client) return activeCoordinator;
     disposeConnection(true);
     activeClient = client;
+    const coordinatorLifecycleRevision = lifecycleRevision;
     const next = createRedevenTerminalSessionsCoordinator({
-      transport: createRedevenTerminalCatalogTransport(rpc),
+      transport: createRedevenTerminalCatalogTransport(rpc, {
+        beginListSessions: () => ({
+          requestSequence: ++nextSessionListRequestSequence,
+          membershipRevision: sessionMembershipRevision,
+          lifecycleRevision: coordinatorLifecycleRevision,
+        }),
+        onSessionsListed: (listedSessions, fence) => {
+          if (coordinatorLifecycleRevision !== lifecycleRevision) return;
+          applyListedSessionGroups(listedSessions, fence);
+        },
+        onSessionCreated: (session) => {
+          if (coordinatorLifecycleRevision !== lifecycleRevision) return;
+          observeCreatedSession(session);
+        },
+      }),
       logger: buildLogger(),
       // Disable periodic polling; explicit provider refreshes track catalog state transitions.
       pollMs: 0,
     });
-    for (const session of sessions()) next.upsertSession(session);
+    for (const session of sessions()) {
+      if (!sessionGroupIdById.has(session.id)) sessionGroupIdById.set(session.id, session.groupId);
+      next.upsertSession(terminalRuntimeSession(session));
+    }
     activeCoordinator = next;
     setCoordinator(next);
     unsubscribeCoordinator = next.subscribe((snapshot) => {
       if (!coordinatorHydrated && snapshot.length === 0) return;
-      applySnapshot(terminalSessionsWithGroups(snapshot));
+      applySnapshot(projectSessionGroups(snapshot));
     });
     const terminalRpc = (rpc as { terminal?: Partial<(typeof rpc)['terminal']> }).terminal;
     if (terminalRpc && typeof terminalRpc.onForegroundCommandUpdate === 'function') {
@@ -717,15 +822,17 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     if (terminalRpc && typeof terminalRpc.onGroupCatalogChanged === 'function') {
       unsubscribeGroupCatalog = terminalRpc.onGroupCatalogChanged((event) => {
         if (event.revision <= groupRevision()) return;
+        let movedSessionWriteRevision = 0;
         if (event.reason === 'session_moved' && event.sessionId && event.groupId) {
-          const currentSession = sessions().find((session) => session.id === event.sessionId);
-          if (currentSession) {
-            const movedSession: TerminalSessionInfo = { ...currentSession, groupId: event.groupId };
-            activeCoordinator?.upsertSession(movedSession);
-          }
+          commitSessionGroup(event.sessionId, event.groupId, event.revision);
+          movedSessionWriteRevision = sessionGroupWriteRevisionById.get(event.sessionId) ?? 0;
+          publishProjectedSessions();
         }
+        setGroupRevision((current) => Math.max(current, event.revision));
         void refreshGroupsAtLeast(event.revision).catch(() => undefined);
-        if (event.reason === 'deleted' || event.reason === 'session_moved') {
+        if (event.reason === 'session_moved') {
+          void refreshAfterSessionMembershipWrite(movedSessionWriteRevision).catch(() => undefined);
+        } else if (event.reason === 'deleted') {
           void refresh().catch(() => undefined);
         }
       });
@@ -758,7 +865,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       convergeContextAndWork(current);
       flushPendingMetadata(current);
       coordinatorHydrated = true;
-      const refreshedSessions = terminalSessionsWithGroups(current.getSnapshot());
+      const refreshedSessions = projectSessionGroups(current.getSnapshot());
       applySnapshot(refreshedSessions, true);
       const knownGroupIds = new Set(groups().map((group) => group.id));
       if (refreshedSessions.some((session) => !knownGroupIds.has(session.groupId))) {
@@ -799,6 +906,15 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     }
   };
 
+  const refreshAfterSessionMembershipWrite = async (writeRevision: number): Promise<void> => {
+    const scheduledLifecycleRevision = lifecycleRevision;
+    await refresh();
+    if (providerDisposed
+      || scheduledLifecycleRevision !== lifecycleRevision
+      || latestAppliedSessionListMembershipRevision >= writeRevision) return;
+    await refresh();
+  };
+
   schedulePendingMetadataReconcile = () => {
     if (pendingMetadataReconcile || providerDisposed) return;
     const scheduledLifecycleRevision = lifecycleRevision;
@@ -836,7 +952,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         }
         const reconciledCoordinator = activeCoordinator;
         if (reconciledCoordinator && scheduledLifecycleRevision === lifecycleRevision) {
-          applySnapshot(terminalSessionsWithGroups(reconciledCoordinator.getSnapshot()), true);
+          applySnapshot(projectSessionGroups(reconciledCoordinator.getSnapshot()), true);
         }
         pendingMetadataRetryDelayMs = 50;
       }
@@ -870,11 +986,14 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   };
 
   const upsertSession = (session: TerminalSessionInfo) => {
-    removedSessionIds.delete(String(session.id ?? '').trim());
+    const sessionId = String(session.id ?? '').trim();
+    removedSessionIds.delete(sessionId);
+    commitSessionGroup(sessionId, session.groupId);
     const current = getCoordinator();
     if (current) {
-      current.upsertSession(session);
+      current.upsertSession(terminalRuntimeSession(session));
       flushPendingMetadata(current);
+      publishProjectedSessions();
       return;
     }
     applySnapshot([...sessions().filter((candidate) => candidate.id !== session.id), session]);
@@ -884,6 +1003,10 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     const normalized = String(sessionId ?? '').trim();
     if (normalized) {
       removedSessionIds.add(normalized);
+      pendingSessionGroupMoveById.delete(normalized);
+      markSessionGroupWrite(normalized);
+      sessionGroupIdById.delete(normalized);
+      sessionGroupCatalogRevisionById.delete(normalized);
       pendingForegroundCommands.delete(normalized);
       pendingOutputActivities.delete(normalized);
       latestOutputActivities.delete(normalized);
@@ -921,7 +1044,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     const current = getCoordinator();
     if (current) {
       current.updateSessionMeta(normalized, coordinatorPatch);
-      if (replacesLocalPathCapability) applySnapshot(terminalSessionsWithGroups(current.getSnapshot()));
+      if (replacesLocalPathCapability) applySnapshot(projectSessionGroups(current.getSnapshot()));
       return;
     }
     applySnapshot(sessions().map((session) => (
@@ -1027,7 +1150,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         for (const sessionId of hiddenSessionIds) removedSessionIds.delete(sessionId);
         setGroups(previousGroups);
         applySnapshot(activeCoordinator
-          ? terminalSessionsWithGroups(activeCoordinator.getSnapshot())
+          ? projectSessionGroups(activeCoordinator.getSnapshot())
           : [...previousSessions]);
       }
       void refresh().catch(() => undefined);
@@ -1041,23 +1164,48 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     const previous = sessions().find((session) => session.id === sessionId);
     if (!previous || previous.groupId === groupId) return;
     const operationKey = `session:${sessionId}`;
-    const movedSession: TerminalSessionInfo = { ...previous, groupId };
-    activeCoordinator?.upsertSession(movedSession);
-    if (!activeCoordinator) applySnapshot(sessions().map((session) => session.id === sessionId ? { ...session, groupId } : session));
     const scheduledLifecycleRevision = lifecycleRevision;
     const operationSequence = beginGroupOperation(operationKey);
+    const startedCatalogRevision = sessionGroupCatalogRevisionById.get(sessionId) ?? 0;
+    pendingSessionGroupMoveById.set(sessionId, {
+      operationSequence,
+      previousGroupId: previous.groupId,
+      targetGroupId: groupId,
+      startedCatalogRevision,
+    });
+    markSessionGroupWrite(sessionId);
+    publishProjectedSessions();
     try {
       const result = await rpc.terminal.moveSession({ sessionId, groupId });
-      if (scheduledLifecycleRevision === lifecycleRevision && groupOperationIsCurrent(operationKey, operationSequence)) {
-        setGroupRevision((current) => Math.max(current, result.revision));
-        void refreshGroupsAtLeast(result.revision).catch(() => undefined);
+      if (scheduledLifecycleRevision !== lifecycleRevision) return;
+      const currentOperation = groupOperationIsCurrent(operationKey, operationSequence);
+      if (!currentOperation) return;
+      commitSessionGroup(result.sessionId, result.groupId, result.revision);
+      if (pendingSessionGroupMoveById.get(sessionId)?.operationSequence === operationSequence) {
+        pendingSessionGroupMoveById.delete(sessionId);
       }
+      publishProjectedSessions();
+      setGroupRevision((current) => Math.max(current, result.revision));
+      void refreshGroupsAtLeast(result.revision).catch(() => undefined);
+      const writeRevision = sessionGroupWriteRevisionById.get(sessionId) ?? sessionMembershipRevision;
+      void refreshAfterSessionMembershipWrite(writeRevision).catch(() => undefined);
     } catch (cause) {
-      if (scheduledLifecycleRevision === lifecycleRevision && groupOperationIsCurrent(operationKey, operationSequence)) {
-        activeCoordinator?.upsertSession(previous);
-        if (!activeCoordinator) applySnapshot(sessions().map((session) => session.id === sessionId ? previous : session));
+      if (scheduledLifecycleRevision !== lifecycleRevision
+        || !groupOperationIsCurrent(operationKey, operationSequence)) return;
+      const pendingMove = pendingSessionGroupMoveById.get(sessionId);
+      if (pendingMove?.operationSequence === operationSequence) {
+        pendingSessionGroupMoveById.delete(sessionId);
       }
-      void refresh().catch(() => undefined);
+      const confirmedTarget = (sessionGroupCatalogRevisionById.get(sessionId) ?? 0) > startedCatalogRevision
+        && sessionGroupIdById.get(sessionId) === groupId;
+      if (confirmedTarget) {
+        publishProjectedSessions();
+        return;
+      }
+      commitSessionGroup(sessionId, pendingMove?.previousGroupId ?? previous.groupId);
+      publishProjectedSessions();
+      const writeRevision = sessionGroupWriteRevisionById.get(sessionId) ?? sessionMembershipRevision;
+      void refreshAfterSessionMembershipWrite(writeRevision).catch(() => undefined);
       throw cause;
     }
   };

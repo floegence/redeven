@@ -328,6 +328,17 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     setDraggedSessionId(null);
     setDropIntent(null);
   };
+  if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+    const clearNativeDragState = () => clearDragState();
+    document.addEventListener('dragend', clearNativeDragState);
+    document.addEventListener('drop', clearNativeDragState);
+    window.addEventListener('blur', clearNativeDragState);
+    onCleanup(() => {
+      document.removeEventListener('dragend', clearNativeDragState);
+      document.removeEventListener('drop', clearNativeDragState);
+      window.removeEventListener('blur', clearNativeDragState);
+    });
+  }
   const draggedSessionTitle = createMemo(() => {
     const sessionId = draggedSessionId();
     return sessionId ? props.itemById.get(sessionId)?.title ?? '' : '';
@@ -357,11 +368,11 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const commitDrop = (event: DragEvent) => {
     const intent = dropIntent();
     const sessionId = draggedSessionFromEvent(event);
+    clearDragState();
     if (!intent || !sessionId) return;
     event.preventDefault();
     event.stopPropagation();
     props.onRelocateSession?.(sessionId, intent.groupId, intent.beforeSessionId);
-    clearDragState();
   };
 
   const drawerFocusableElements = () => {
@@ -618,13 +629,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         }}
                       >
                         <div
-                          class="relative flex min-h-11 items-center gap-1 rounded-lg border border-[color-mix(in_srgb,var(--primary)_22%,var(--sidebar-border))] bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_34%,transparent),0_1px_2px_color-mix(in_srgb,var(--foreground)_5%,transparent)] transition-[border-color,background-color,box-shadow,transform] duration-150 hover:border-[color-mix(in_srgb,var(--primary)_36%,var(--sidebar-border))] hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]"
+                          class="relative flex min-h-11 items-center gap-1 rounded-lg border border-[color-mix(in_srgb,var(--primary)_22%,var(--sidebar-border))] bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_34%,transparent),0_1px_2px_color-mix(in_srgb,var(--foreground)_5%,transparent)] transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]"
                           data-terminal-group-header={navigationGroup().id}
                           data-terminal-group-drop-target={dropIntent()?.groupId === navigationGroup().id ? dropIntent()?.position : undefined}
                           classList={{
                             'opacity-65': navigationGroup().pending,
-                            'scale-[1.01] border-primary/70 bg-primary/15 ring-2 ring-primary/30 shadow-[0_5px_16px_color-mix(in_srgb,var(--primary)_14%,transparent)]': dropIntent()?.groupId === navigationGroup().id,
-                            '!cursor-grabbing': draggedSessionId() !== null,
+                            '!bg-[color-mix(in_srgb,var(--primary)_15%,var(--sidebar))]': dropIntent()?.groupId === navigationGroup().id,
+                            '!cursor-grabbing [&_*]:!cursor-grabbing': draggedSessionId() !== null,
                           }}
                           onContextMenu={(event) => props.onOpenGroupContextMenu?.(event, navigationGroup().id)}
                           onDragOver={(event) => {
@@ -699,13 +710,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               <MoreHorizontal class="h-3.5 w-3.5" />
                             </button>
                           </Show>
-                          <Show when={dropIntent()?.groupId === navigationGroup().id && dropIntent()?.position === 'group'}>
-                            <span class="pointer-events-none absolute inset-x-2 -bottom-2.5 z-20 flex justify-center" data-terminal-group-drop-hint={navigationGroup().id}>
-                              <span class="rounded-full border border-primary/35 bg-primary px-2 py-0.5 text-[9px] font-semibold text-primary-foreground shadow-lg">
-                                {i18n.t('terminal.moveToGroupNamed', { group: navigationGroup().name })}
-                              </span>
-                            </span>
-                          </Show>
                         </div>
                         <Show when={navigationGroup().expanded}>
                           <div
@@ -741,9 +745,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       });
                       return (
                         <div
-                          class="relative mb-1 transition-transform duration-150 last:mb-0"
+                          class="relative mb-1 transition-[transform,opacity] duration-150 last:mb-0"
                           classList={{
-                            'scale-[0.985] opacity-45': draggedSessionId() === sessionId,
+                            'opacity-50': draggedSessionId() === sessionId,
                             'translate-y-0.5': rowDropIntent()?.position === 'after',
                             '-translate-y-0.5': rowDropIntent()?.position === 'before',
                           }}
@@ -797,19 +801,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           <Show when={rowDropIntent()} keyed>
                             {(intent) => (
                               <span
-                                class={`pointer-events-none absolute -left-5 right-0 z-30 flex items-center ${intent.position === 'before' ? '-top-[3px]' : '-bottom-[3px]'}`}
+                                class={`pointer-events-none absolute -left-[22px] right-0 z-30 flex items-center ${intent.position === 'before' ? '-top-px' : '-bottom-px'}`}
                                 data-terminal-session-drop-hint={sessionId}
                                 data-terminal-session-drop-hint-position={intent.position}
                                 aria-hidden="true"
                               >
-                                <span class="h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_18%,transparent)]" />
-                                <span class="h-0.5 min-w-2 flex-1 bg-primary shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_48%,transparent)]" />
-                                <span class="ml-1 max-w-[128px] truncate rounded-full border border-primary/30 bg-primary px-1.5 py-0.5 text-[8px] font-semibold text-primary-foreground shadow-md">
-                                  {i18n.t(
-                                    intent.position === 'before' ? 'terminal.placeBeforeSession' : 'terminal.placeAfterSession',
-                                    { session: item().title },
-                                  )}
-                                </span>
+                                <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                                <span class="h-px min-w-2 flex-1 bg-primary" />
                               </span>
                             )}
                           </Show>
@@ -831,7 +829,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             setDropIntent(null);
                           }}
                           onDragEnd={clearDragState}
-                          classList={{ '!cursor-grabbing': draggedSessionId() === sessionId }}
+                          classList={{
+                            '!cursor-grabbing [&_*]:!cursor-grabbing': draggedSessionId() !== null,
+                          }}
                         >
                           <Tooltip
                             content={(
@@ -844,12 +844,12 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             )}
                             placement="right"
                             anchorClass="!absolute inset-0 z-0 !block"
+                            disabled={draggedSessionId() !== null}
                           >
                             <button
                               type="button"
                               draggable={item().transitionState === 'none'}
                               class="h-full w-full cursor-grab rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring active:cursor-grabbing"
-                              classList={{ '!cursor-grabbing': draggedSessionId() === sessionId }}
                               data-terminal-session-id={sessionId}
                               data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                               data-terminal-session-index={navigationIndex() + 1}
@@ -943,6 +943,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                         placement="top"
                                         delay={0}
                                         clickToToggle
+                                        disabled={draggedSessionId() !== null}
                                       >
                                         <button
                                           type="button"
@@ -970,6 +971,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                     placement="top"
                                     delay={0}
                                     clickToToggle
+                                    disabled={draggedSessionId() !== null}
                                   >
                                     <button
                                       type="button"
@@ -1074,7 +1076,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               class={`col-start-2 row-start-2 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="files"
                             >
-                              <Tooltip content={filesTooltip()} placement="top" delay={0}>
+                              <Tooltip content={filesTooltip()} placement="top" delay={0} disabled={draggedSessionId() !== null}>
                                 <button
                                   type="button"
                                   class={`flex items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${item().canBrowsePath

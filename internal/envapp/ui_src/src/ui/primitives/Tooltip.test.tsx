@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { Tooltip } from './Tooltip';
 
@@ -174,6 +175,35 @@ describe('Tooltip', () => {
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
 
       trigger.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      await flushPositioning();
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('unmounts and suppresses tooltip content while disabled', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [disabled, setDisabled] = createSignal(false);
+    const dispose = render(() => (
+      <Tooltip content="Session details" placement="right" delay={0} disabled={disabled()}>
+        <button type="button">Session</button>
+      </Tooltip>
+    ), host);
+
+    try {
+      const anchor = host.querySelector('[data-redeven-tooltip-anchor]') as HTMLElement;
+      anchor.dispatchEvent(new MouseEvent('mouseenter'));
+      await flushPositioning();
+      expect(document.body.querySelector('[role="tooltip"]')).toBeTruthy();
+
+      setDisabled(true);
+      await Promise.resolve();
+      expect(anchor.getAttribute('data-redeven-tooltip-disabled')).toBe('true');
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+
+      anchor.dispatchEvent(new MouseEvent('mouseenter'));
       await flushPositioning();
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
     } finally {
