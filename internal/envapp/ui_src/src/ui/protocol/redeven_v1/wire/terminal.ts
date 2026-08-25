@@ -199,11 +199,12 @@ export type wire_terminal_group_mutation_resp = {
 
 export type wire_terminal_group_delete_req = { group_id: string };
 export type wire_terminal_group_delete_resp = { revision: number; failed_session_ids: string[] };
+export type wire_terminal_group_reorder_req = { group_id: string; before_group_id?: string };
 export type wire_terminal_session_move_req = { session_id: string; group_id: string };
 export type wire_terminal_session_move_resp = { revision: number; session_id: string; group_id: string };
 
 export type wire_terminal_group_catalog_changed_notify = {
-  reason: 'created' | 'updated' | 'deleted' | 'session_moved';
+  reason: 'created' | 'updated' | 'deleted' | 'reordered' | 'session_moved';
   group_id?: string;
   session_id?: string;
   revision: number;

@@ -93,6 +93,11 @@ export type TerminalGroupDeleteResponse = Readonly<{
   failedSessionIds: readonly string[];
 }>;
 
+export type TerminalGroupReorderRequest = Readonly<{
+  groupId: string;
+  beforeGroupId: string | null;
+}>;
+
 export type TerminalSessionMoveRequest = Readonly<{ sessionId: string; groupId: string }>;
 
 export type TerminalSessionMoveResponse = Readonly<{
@@ -102,7 +107,7 @@ export type TerminalSessionMoveResponse = Readonly<{
 }>;
 
 export type TerminalGroupCatalogChangedEvent = Readonly<{
-  reason: 'created' | 'updated' | 'deleted' | 'session_moved';
+  reason: 'created' | 'updated' | 'deleted' | 'reordered' | 'session_moved';
   groupId?: string;
   sessionId?: string;
   revision: number;

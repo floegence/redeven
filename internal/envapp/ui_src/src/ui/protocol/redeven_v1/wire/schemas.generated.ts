@@ -5334,6 +5334,10 @@ export const redevenWireSchemas = {
           },
           {
             "kind": "literal",
+            "value": "reordered"
+          },
+          {
+            "kind": "literal",
             "value": "session_moved"
           }
         ]

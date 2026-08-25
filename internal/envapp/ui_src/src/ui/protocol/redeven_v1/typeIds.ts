@@ -61,6 +61,7 @@ export const redevenV1TypeIds = {
     groupDelete: 2020,
     sessionMove: 2021,
     groupCatalogChanged: 2022,
+    groupReorder: 2023,
   },
   monitor: {
     sysMonitor: 3001,

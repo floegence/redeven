@@ -246,6 +246,110 @@ func (c *groupCatalog) Update(groupID string, name *string, defaultWorkingDir *s
 	return c.snapshotLocked(), group, nil
 }
 
+func (c *groupCatalog) Reorder(groupID string, beforeGroupID string) (GroupCatalogSnapshot, error) {
+	if c == nil {
+		return GroupCatalogSnapshot{}, errors.New("terminal group catalog is unavailable")
+	}
+	groupID = strings.TrimSpace(groupID)
+	beforeGroupID = strings.TrimSpace(beforeGroupID)
+	if groupID == "" {
+		return GroupCatalogSnapshot{}, errors.New("group_id is required")
+	}
+	if groupID == DefaultTerminalGroupID || beforeGroupID == DefaultTerminalGroupID {
+		return GroupCatalogSnapshot{}, ErrDefaultTerminalGroupLocked
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.groups[groupID]; !ok {
+		return GroupCatalogSnapshot{}, ErrTerminalGroupNotFound
+	}
+	if beforeGroupID != "" {
+		if _, ok := c.groups[beforeGroupID]; !ok {
+			return GroupCatalogSnapshot{}, ErrTerminalGroupNotFound
+		}
+	}
+	if beforeGroupID == groupID {
+		return c.snapshotLocked(), nil
+	}
+
+	orderedGroups := c.snapshotLocked().Groups
+	orderedMovableIDs := make([]string, 0, len(orderedGroups)-1)
+	for _, group := range orderedGroups {
+		if !group.IsDefault {
+			orderedMovableIDs = append(orderedMovableIDs, group.ID)
+		}
+	}
+	nextOrder := make([]string, 0, len(orderedMovableIDs))
+	for _, candidate := range orderedMovableIDs {
+		if candidate != groupID {
+			nextOrder = append(nextOrder, candidate)
+		}
+	}
+	insertIndex := len(nextOrder)
+	if beforeGroupID != "" {
+		for index, candidate := range nextOrder {
+			if candidate == beforeGroupID {
+				insertIndex = index
+				break
+			}
+		}
+	}
+	nextOrder = append(nextOrder, "")
+	copy(nextOrder[insertIndex+1:], nextOrder[insertIndex:])
+	nextOrder[insertIndex] = groupID
+	unchanged := len(nextOrder) == len(orderedMovableIDs)
+	if unchanged {
+		for index, candidate := range nextOrder {
+			if candidate != orderedMovableIDs[index] {
+				unchanged = false
+				break
+			}
+		}
+	}
+	if unchanged {
+		return c.snapshotLocked(), nil
+	}
+
+	now := time.Now().UnixMilli()
+	nextGroups := make(map[string]Group, len(c.groups))
+	for id, group := range c.groups {
+		nextGroups[id] = group
+	}
+	for index, id := range nextOrder {
+		group := nextGroups[id]
+		group.SortOrder = index + 1
+		if id == groupID {
+			group.UpdatedAtMs = now
+		}
+		nextGroups[id] = group
+	}
+	if err := c.mutateLocked(func(tx *sql.Tx, revision uint64) error {
+		maxSortOrder := 0
+		for _, group := range c.groups {
+			if group.SortOrder > maxSortOrder {
+				maxSortOrder = group.SortOrder
+			}
+		}
+		for index, id := range nextOrder {
+			if _, execErr := tx.Exec(`UPDATE terminal_groups SET sort_order = ? WHERE group_id = ?`, maxSortOrder+index+1, id); execErr != nil {
+				return execErr
+			}
+		}
+		for _, id := range nextOrder {
+			group := nextGroups[id]
+			if _, execErr := tx.Exec(`UPDATE terminal_groups SET sort_order = ?, updated_at_unix_ms = ? WHERE group_id = ?`, group.SortOrder, group.UpdatedAtMs, group.ID); execErr != nil {
+				return execErr
+			}
+		}
+		return nil
+	}); err != nil {
+		return GroupCatalogSnapshot{}, err
+	}
+	c.groups = nextGroups
+	return c.snapshotLocked(), nil
+}
+
 func (c *groupCatalog) Delete(groupID string) (GroupCatalogSnapshot, error) {
 	if c == nil {
 		return GroupCatalogSnapshot{}, errors.New("terminal group catalog is unavailable")

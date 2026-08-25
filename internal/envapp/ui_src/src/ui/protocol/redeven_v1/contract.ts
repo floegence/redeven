@@ -89,7 +89,7 @@ import type {
 } from './sdk/monitor';
 import type { SessionsListActiveResponse } from './sdk/sessions';
 import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from './sdk/sys';
-import type { TerminalExecutionContextUpdateEvent, TerminalForegroundCommandUpdateEvent, TerminalGroupCatalogChangedEvent, TerminalGroupCatalogSnapshot, TerminalGroupCreateRequest, TerminalGroupDeleteRequest, TerminalGroupDeleteResponse, TerminalGroupMutationResponse, TerminalGroupUpdateRequest, TerminalSemanticClearRequest, TerminalSemanticClearResponse, TerminalSemanticHistoryRequest, TerminalSemanticHistoryResponse, TerminalNameUpdateEvent, TerminalOutputActivityUpdateEvent, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionMoveRequest, TerminalSessionMoveResponse, TerminalSessionsChangedEvent, TerminalWorkStateUpdateEvent } from './sdk/terminal';
+import type { TerminalExecutionContextUpdateEvent, TerminalForegroundCommandUpdateEvent, TerminalGroupCatalogChangedEvent, TerminalGroupCatalogSnapshot, TerminalGroupCreateRequest, TerminalGroupDeleteRequest, TerminalGroupDeleteResponse, TerminalGroupMutationResponse, TerminalGroupReorderRequest, TerminalGroupUpdateRequest, TerminalSemanticClearRequest, TerminalSemanticClearResponse, TerminalSemanticHistoryRequest, TerminalSemanticHistoryResponse, TerminalNameUpdateEvent, TerminalOutputActivityUpdateEvent, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionMoveRequest, TerminalSessionMoveResponse, TerminalSessionsChangedEvent, TerminalWorkStateUpdateEvent } from './sdk/terminal';
 import {
   fromWireAIEventNotify,
   fromWireAIListMessagesResponse,
@@ -174,7 +174,7 @@ import {
 } from './codec/monitor';
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
 import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
-import { fromWireTerminalExecutionContextUpdateNotify, fromWireTerminalForegroundCommandUpdateNotify, fromWireTerminalGroupCatalogChangedNotify, fromWireTerminalGroupDeleteResponse, fromWireTerminalGroupListResponse, fromWireTerminalGroupMutationResponse, fromWireTerminalNameUpdateNotify, fromWireTerminalOutputActivityUpdateNotify, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionMoveResponse, fromWireTerminalSemanticClearResponse, fromWireTerminalSemanticHistoryResponse, toWireTerminalGroupCreateRequest, toWireTerminalGroupDeleteRequest, toWireTerminalGroupUpdateRequest, toWireTerminalSemanticClearRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionMoveRequest, toWireTerminalSemanticHistoryRequest, fromWireTerminalSessionsChangedNotify, fromWireTerminalWorkStateUpdateNotify } from './codec/terminal';
+import { fromWireTerminalExecutionContextUpdateNotify, fromWireTerminalForegroundCommandUpdateNotify, fromWireTerminalGroupCatalogChangedNotify, fromWireTerminalGroupDeleteResponse, fromWireTerminalGroupListResponse, fromWireTerminalGroupMutationResponse, fromWireTerminalNameUpdateNotify, fromWireTerminalOutputActivityUpdateNotify, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionMoveResponse, fromWireTerminalSemanticClearResponse, fromWireTerminalSemanticHistoryResponse, toWireTerminalGroupCreateRequest, toWireTerminalGroupDeleteRequest, toWireTerminalGroupReorderRequest, toWireTerminalGroupUpdateRequest, toWireTerminalSemanticClearRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionMoveRequest, toWireTerminalSemanticHistoryRequest, fromWireTerminalSessionsChangedNotify, fromWireTerminalWorkStateUpdateNotify } from './codec/terminal';
 import { redevenWireSchemaNames, type RedevenWireSchemaName } from './wire/schemas.generated';
 import { validateRedevenWireValue } from './wire/validate';
 
@@ -254,6 +254,7 @@ export type RedevenV1Rpc = {
     createGroup: (req: TerminalGroupCreateRequest) => Promise<TerminalGroupMutationResponse>;
     updateGroup: (req: TerminalGroupUpdateRequest) => Promise<TerminalGroupMutationResponse>;
     deleteGroup: (req: TerminalGroupDeleteRequest) => Promise<TerminalGroupDeleteResponse>;
+    reorderGroup: (req: TerminalGroupReorderRequest) => Promise<TerminalGroupCatalogSnapshot>;
     moveSession: (req: TerminalSessionMoveRequest) => Promise<TerminalSessionMoveResponse>;
     onNameUpdate: (handler: (event: TerminalNameUpdateEvent) => void) => () => void;
     onForegroundCommandUpdate: (handler: (event: TerminalForegroundCommandUpdateEvent) => void) => () => void;
@@ -527,6 +528,7 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
       createGroup: async (req) => call(redevenV1TypeIds.terminal.groupCreate, toWireTerminalGroupCreateRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalGroupMutationResponse, fromWireTerminalGroupMutationResponse)),
       updateGroup: async (req) => call(redevenV1TypeIds.terminal.groupUpdate, toWireTerminalGroupUpdateRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalGroupMutationResponse, fromWireTerminalGroupMutationResponse)),
       deleteGroup: async (req) => call(redevenV1TypeIds.terminal.groupDelete, toWireTerminalGroupDeleteRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalGroupDeleteResponse, fromWireTerminalGroupDeleteResponse)),
+      reorderGroup: async (req) => call(redevenV1TypeIds.terminal.groupReorder, toWireTerminalGroupReorderRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalGroupListResponse, fromWireTerminalGroupListResponse)),
       moveSession: async (req) => call(redevenV1TypeIds.terminal.sessionMove, toWireTerminalSessionMoveRequest(req), decodeWire(redevenWireSchemaNames.fromWireTerminalSessionMoveResponse, fromWireTerminalSessionMoveResponse)),
       onNameUpdate: (handler) =>
         helpers.onNotify(redevenV1TypeIds.terminal.nameUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalNameUpdateNotify, fromWireTerminalNameUpdateNotify), (ev) => {

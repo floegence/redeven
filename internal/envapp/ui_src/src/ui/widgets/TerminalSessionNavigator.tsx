@@ -83,6 +83,7 @@ export type TerminalSessionNavigatorProps = Readonly<{
   onCreateGroup?: () => void;
   onToggleGroup?: (groupId: string) => void;
   onRelocateSession?: (sessionId: string, groupId: string, beforeSessionId: string | null) => void;
+  onReorderGroup?: (groupId: string, beforeGroupId: string | null) => void;
   onOpenGroupContextMenu?: (event: MouseEvent, groupId: string) => void;
   onRefresh: () => void;
   onFilterQueryChange: (value: string) => void;
@@ -304,6 +305,31 @@ export function describeTerminalSessionNavigationItem(
   return joinTerminalStatusAnnouncements(descriptions, t);
 }
 
+function installCompactDragPreview(event: DragEvent, kind: 'session' | 'group') {
+  if (typeof document === 'undefined'
+    || !event.dataTransfer
+    || typeof event.dataTransfer.setDragImage !== 'function') return;
+  const preview = document.createElement('span');
+  preview.className = 'fixed -left-[999px] -top-[999px] z-[9999] flex h-9 w-9 items-center justify-center rounded-[10px] border border-border/60 bg-popover/95 shadow-[0_8px_22px_color-mix(in_srgb,var(--foreground)_18%,transparent)]';
+  preview.dataset.terminalDragPreview = kind;
+  preview.setAttribute('aria-hidden', 'true');
+  const glyph = document.createElement('span');
+  glyph.className = kind === 'group'
+    ? 'relative block h-3.5 w-[18px] rounded-[4px] bg-primary/75 before:absolute before:-top-1 before:left-0.5 before:h-1.5 before:w-2 before:rounded-t-[3px] before:bg-primary/75'
+    : 'grid grid-cols-2 gap-[3px]';
+  if (kind === 'session') {
+    for (let index = 0; index < 6; index += 1) {
+      const dot = document.createElement('span');
+      dot.className = 'h-[3px] w-[3px] rounded-full bg-primary/80';
+      glyph.append(dot);
+    }
+  }
+  preview.append(glyph);
+  document.body.append(preview);
+  event.dataTransfer.setDragImage(preview, 18, 18);
+  requestAnimationFrame(() => preview.remove());
+}
+
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const i18n = useI18n();
   const sidebarWidth = () => (props.mobile ? 232 : 286);
@@ -318,15 +344,23 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     totalSessionCount: props.itemIds.length,
   }]);
   const [draggedSessionId, setDraggedSessionId] = createSignal<string | null>(null);
+  const [draggedGroupId, setDraggedGroupId] = createSignal<string | null>(null);
   const [dropIntent, setDropIntent] = createSignal<Readonly<{
     groupId: string;
     beforeSessionId: string | null;
     targetSessionId: string | null;
     position: 'group' | 'before' | 'after';
   }> | null>(null);
+  const [groupDropIntent, setGroupDropIntent] = createSignal<Readonly<{
+    beforeGroupId: string | null;
+    targetGroupId: string;
+    position: 'before' | 'after';
+  }> | null>(null);
   const clearDragState = () => {
     setDraggedSessionId(null);
+    setDraggedGroupId(null);
     setDropIntent(null);
+    setGroupDropIntent(null);
   };
   if (typeof document !== 'undefined' && typeof window !== 'undefined') {
     const clearNativeDragState = () => clearDragState();
@@ -365,6 +399,15 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     draggedSessionId()
     || event.dataTransfer?.types.includes('application/x-redeven-terminal-session'),
   );
+  const draggedGroupFromEvent = (event: DragEvent): string => (
+    draggedGroupId()
+    || event.dataTransfer?.getData('application/x-redeven-terminal-group').trim()
+    || ''
+  );
+  const acceptsTerminalGroupDrag = (event: DragEvent): boolean => Boolean(
+    draggedGroupId()
+    || event.dataTransfer?.types.includes('application/x-redeven-terminal-group'),
+  );
   const commitDrop = (event: DragEvent) => {
     const intent = dropIntent();
     const sessionId = draggedSessionFromEvent(event);
@@ -373,6 +416,15 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     event.preventDefault();
     event.stopPropagation();
     props.onRelocateSession?.(sessionId, intent.groupId, intent.beforeSessionId);
+  };
+  const commitGroupDrop = (event: DragEvent) => {
+    const intent = groupDropIntent();
+    const groupId = draggedGroupFromEvent(event);
+    clearDragState();
+    if (!intent || !groupId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onReorderGroup?.(groupId, intent.beforeGroupId);
   };
 
   const drawerFocusableElements = () => {
@@ -618,7 +670,10 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                   <Index each={navigationGroups()}>
                     {(navigationGroup) => (
                       <div
-                        class="group/tree relative mb-3"
+                        class="group/tree relative mb-3 transition-opacity duration-150"
+                        classList={{
+                          'opacity-35': draggedGroupId() === navigationGroup().id,
+                        }}
                         data-terminal-group-id={navigationGroup().id}
                         data-terminal-tree-group={navigationGroup().id}
                         data-terminal-group-pending={navigationGroup().pending ? 'true' : 'false'}
@@ -626,19 +681,104 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         onDragLeave={(event) => {
                           if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
                           if (dropIntent()?.groupId === navigationGroup().id) setDropIntent(null);
+                          if (groupDropIntent()?.targetGroupId === navigationGroup().id) setGroupDropIntent(null);
                         }}
                       >
+                        <Show when={groupDropIntent()?.targetGroupId === navigationGroup().id}>
+                          <span
+                            class={`pointer-events-none absolute left-1 right-1 z-40 flex items-center ${groupDropIntent()?.position === 'before' ? '-top-1.5' : '-bottom-1.5'}`}
+                            data-terminal-group-order-drop-hint={navigationGroup().id}
+                            data-terminal-group-order-drop-position={groupDropIntent()?.position}
+                            aria-hidden="true"
+                          >
+                            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                            <span class="h-px min-w-2 flex-1 bg-primary" />
+                          </span>
+                        </Show>
                         <div
-                          class="relative flex min-h-11 items-center gap-1 rounded-lg border border-[color-mix(in_srgb,var(--primary)_22%,var(--sidebar-border))] bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_34%,transparent),0_1px_2px_color-mix(in_srgb,var(--foreground)_5%,transparent)] transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]"
+                          class="relative flex min-h-11 items-center gap-1 rounded-lg border border-transparent bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]"
                           data-terminal-group-header={navigationGroup().id}
                           data-terminal-group-drop-target={dropIntent()?.groupId === navigationGroup().id ? dropIntent()?.position : undefined}
+                          data-terminal-group-draggable={!navigationGroup().isDefault && !navigationGroup().pending ? 'true' : 'false'}
+                          draggable={!navigationGroup().isDefault && !navigationGroup().pending}
+                          aria-grabbed={draggedGroupId() === navigationGroup().id ? 'true' : 'false'}
                           classList={{
                             'opacity-65': navigationGroup().pending,
                             '!bg-[color-mix(in_srgb,var(--primary)_15%,var(--sidebar))]': dropIntent()?.groupId === navigationGroup().id,
-                            '!cursor-grabbing [&_*]:!cursor-grabbing': draggedSessionId() !== null,
+                            'cursor-grab active:cursor-grabbing': !navigationGroup().isDefault && !navigationGroup().pending,
+                            '!cursor-grabbing [&_*]:!cursor-grabbing': draggedSessionId() !== null || draggedGroupId() !== null,
                           }}
                           onContextMenu={(event) => props.onOpenGroupContextMenu?.(event, navigationGroup().id)}
+                          onDragStart={(event) => {
+                            if (navigationGroup().isDefault || navigationGroup().pending || !event.dataTransfer) return;
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData('application/x-redeven-terminal-group', navigationGroup().id);
+                            installCompactDragPreview(event, 'group');
+                            setDraggedGroupId(navigationGroup().id);
+                            setDraggedSessionId(null);
+                            setDropIntent(null);
+                            setGroupDropIntent(null);
+                          }}
+                          onDragEnd={clearDragState}
                           onDragOver={(event) => {
+                            if (acceptsTerminalGroupDrag(event)) {
+                              const draggedId = draggedGroupFromEvent(event);
+                              if (!draggedId || draggedId === navigationGroup().id) {
+                                setGroupDropIntent(null);
+                                return;
+                              }
+                              event.preventDefault();
+                              event.stopPropagation();
+                              if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+                              const orderedTargets = navigationGroups()
+                                .filter((group) => !group.isDefault && !group.pending && group.id !== draggedId);
+                              if (navigationGroup().isDefault) {
+                                const firstTarget = orderedTargets[0];
+                                if (!firstTarget) {
+                                  setGroupDropIntent(null);
+                                  return;
+                                }
+                                setGroupDropIntent({
+                                  beforeGroupId: firstTarget.id,
+                                  targetGroupId: firstTarget.id,
+                                  position: 'before',
+                                });
+                                return;
+                              }
+                              const targetIndex = orderedTargets.findIndex((group) => group.id === navigationGroup().id);
+                              if (targetIndex < 0) {
+                                setGroupDropIntent(null);
+                                return;
+                              }
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              const useUpperBoundary = event.clientY < rect.top + rect.height / 2;
+                              const nextTarget = orderedTargets[targetIndex + 1];
+                              const nextIntent = useUpperBoundary || !nextTarget
+                                ? {
+                                    beforeGroupId: useUpperBoundary ? navigationGroup().id : null,
+                                    targetGroupId: navigationGroup().id,
+                                    position: useUpperBoundary ? 'before' as const : 'after' as const,
+                                  }
+                                : {
+                                    beforeGroupId: nextTarget.id,
+                                    targetGroupId: nextTarget.id,
+                                    position: 'before' as const,
+                                  };
+                              const originalOrder = navigationGroups()
+                                .filter((group) => !group.isDefault && !group.pending)
+                                .map((group) => group.id);
+                              const projected = originalOrder.filter((groupId) => groupId !== draggedId);
+                              const projectedIndex = nextIntent.beforeGroupId
+                                ? projected.indexOf(nextIntent.beforeGroupId)
+                                : -1;
+                              projected.splice(projectedIndex >= 0 ? projectedIndex : projected.length, 0, draggedId);
+                              if (projected.every((groupId, index) => groupId === originalOrder[index])) {
+                                setGroupDropIntent(null);
+                                return;
+                              }
+                              setGroupDropIntent(nextIntent);
+                              return;
+                            }
                             if (navigationGroup().pending || !acceptsTerminalSessionDrag(event)) return;
                             const draggedId = draggedSessionFromEvent(event);
                             if (!draggedId) return;
@@ -657,11 +797,14 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               position: 'group',
                             });
                           }}
-                          onDrop={commitDrop}
+                          onDrop={(event) => {
+                            if (acceptsTerminalGroupDrag(event)) commitGroupDrop(event);
+                            else commitDrop(event);
+                          }}
                         >
                           <Show when={navigationGroup().expanded && navigationGroup().itemIds.length > 0}>
                             <span
-                              class="pointer-events-none absolute bottom-[-5px] left-[18px] top-1/2 w-px bg-[color-mix(in_srgb,var(--primary)_34%,var(--sidebar-border))]"
+                              class="pointer-events-none absolute bottom-[-5px] left-[18px] top-1/2 w-px bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))]"
                               data-terminal-tree-trunk={navigationGroup().id}
                               aria-hidden="true"
                             />
@@ -679,7 +822,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           <button
                             type="button"
                             class="min-w-0 flex-1 cursor-pointer text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-                            title={`${navigationGroup().name}\n${navigationGroup().defaultWorkingDir}`}
+                            title={draggedSessionId() || draggedGroupId()
+                              ? undefined
+                              : `${navigationGroup().name}\n${navigationGroup().defaultWorkingDir}`}
                             onClick={() => props.onToggleGroup?.(navigationGroup().id)}
                           >
                             <span class="flex items-center gap-1.5">
@@ -719,7 +864,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           >
                             <Show when={navigationGroup().itemIds.length > 0}>
                               <span
-                                class={`pointer-events-none absolute left-0 top-0 w-px bg-[color-mix(in_srgb,var(--primary)_34%,var(--sidebar-border))] ${props.mobile ? 'bottom-[34px]' : 'bottom-[26px]'}`}
+                                class={`pointer-events-none absolute left-0 top-0 w-px bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))] ${props.mobile ? 'bottom-[34px]' : 'bottom-[26px]'}`}
                                 data-terminal-tree-rail={navigationGroup().id}
                                 aria-hidden="true"
                               />
@@ -745,11 +890,11 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       });
                       return (
                         <div
-                          class="relative mb-1 transition-[transform,opacity] duration-150 last:mb-0"
+                          class="relative mb-0.5 transition-[transform,opacity] duration-150 last:mb-0"
                           classList={{
-                            'opacity-50': draggedSessionId() === sessionId,
-                            'translate-y-0.5': rowDropIntent()?.position === 'after',
-                            '-translate-y-0.5': rowDropIntent()?.position === 'before',
+                            'opacity-35': draggedSessionId() === sessionId,
+                            'translate-y-[3px]': rowDropIntent()?.position === 'after',
+                            '-translate-y-[3px]': rowDropIntent()?.position === 'before',
                           }}
                           data-terminal-tree-child={sessionId}
                           data-terminal-session-drop-position={rowDropIntent()?.position}
@@ -764,15 +909,24 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             event.stopPropagation();
                             if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
                             const rect = event.currentTarget.getBoundingClientRect();
-                            const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+                            const useUpperBoundary = event.clientY < rect.top + rect.height / 2;
                             const orderedTargets = navigationGroup().itemIds.filter((candidate) => candidate !== draggedId);
                             const targetIndex = orderedTargets.indexOf(sessionId);
-                            const beforeSessionId = position === 'before'
-                              ? sessionId
-                              : orderedTargets[targetIndex + 1] ?? null;
+                            const nextTargetSessionId = orderedTargets[targetIndex + 1] ?? null;
+                            const nextIntent = useUpperBoundary || !nextTargetSessionId
+                              ? {
+                                  beforeSessionId: useUpperBoundary ? sessionId : null,
+                                  targetSessionId: sessionId,
+                                  position: useUpperBoundary ? 'before' as const : 'after' as const,
+                                }
+                              : {
+                                  beforeSessionId: nextTargetSessionId,
+                                  targetSessionId: nextTargetSessionId,
+                                  position: 'before' as const,
+                                };
                             if (navigationGroup().itemIds.includes(draggedId)) {
                               const projected = [...orderedTargets];
-                              const projectedIndex = beforeSessionId ? projected.indexOf(beforeSessionId) : -1;
+                              const projectedIndex = nextIntent.beforeSessionId ? projected.indexOf(nextIntent.beforeSessionId) : -1;
                               projected.splice(projectedIndex >= 0 ? projectedIndex : projected.length, 0, draggedId);
                               if (projected.every((candidate, index) => candidate === navigationGroup().itemIds[index])) {
                                 setDropIntent(null);
@@ -781,20 +935,18 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             }
                             setDropIntent({
                               groupId: navigationGroup().id,
-                              beforeSessionId,
-                              targetSessionId: sessionId,
-                              position,
+                              ...nextIntent,
                             });
                           }}
                           onDrop={commitDrop}
                         >
                           <span
-                            class="pointer-events-none absolute -left-5 top-1/2 h-px w-5 bg-[color-mix(in_srgb,var(--primary)_34%,var(--sidebar-border))]"
+                            class="pointer-events-none absolute -left-5 top-1/2 h-px w-5 bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))]"
                             data-terminal-tree-connector={sessionId}
                             aria-hidden="true"
                           />
                           <span
-                            class="pointer-events-none absolute -left-[23px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full border border-[color-mix(in_srgb,var(--primary)_46%,var(--sidebar-border))] bg-sidebar"
+                            class="pointer-events-none absolute -left-[23px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full border border-[color-mix(in_srgb,var(--primary)_38%,var(--sidebar-border))] bg-sidebar"
                             data-terminal-tree-junction={sessionId}
                             aria-hidden="true"
                           />
@@ -815,22 +967,25 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           data-terminal-session-row={sessionId}
                           draggable={item().transitionState === 'none'}
                           aria-grabbed={draggedSessionId() === sessionId ? 'true' : 'false'}
-                          class={`group relative grid cursor-grab items-center overflow-hidden rounded-md border text-xs transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-150 active:cursor-grabbing ${props.mobile
+                          class={`group relative grid cursor-grab items-center overflow-hidden rounded-md border border-transparent text-xs transition-[background-color,border-color,color,transform,opacity] duration-150 active:cursor-grabbing ${props.mobile
                             ? 'min-h-[68px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
                             : 'min-h-[52px] grid-cols-[32px_minmax(0,1fr)_40px] gap-x-1.5 px-1.5 py-1'} ${sidebarActive()
-                            ? 'border-primary/35 bg-sidebar text-sidebar-accent-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent),0_1px_3px_color-mix(in_srgb,var(--foreground)_7%,transparent)]'
-                            : 'border-sidebar-border/45 bg-sidebar/80 text-sidebar-foreground/80 shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_4%,transparent)] hover:border-sidebar-border/70 hover:bg-sidebar hover:text-sidebar-accent-foreground hover:shadow-[0_1px_3px_color-mix(in_srgb,var(--foreground)_7%,transparent)]'}`}
+                            ? 'border-primary/15 bg-[color-mix(in_srgb,var(--primary)_6%,var(--sidebar))] text-sidebar-accent-foreground'
+                            : 'bg-transparent text-sidebar-foreground/78 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
                           onDragStart={(event) => {
                             if (!event.dataTransfer) return;
                             event.dataTransfer.effectAllowed = 'move';
                             event.dataTransfer.setData('application/x-redeven-terminal-session', sessionId);
+                            installCompactDragPreview(event, 'session');
                             setDraggedSessionId(sessionId);
+                            setDraggedGroupId(null);
                             setDropIntent(null);
+                            setGroupDropIntent(null);
                           }}
                           onDragEnd={clearDragState}
                           classList={{
-                            '!cursor-grabbing [&_*]:!cursor-grabbing': draggedSessionId() !== null,
+                            '!cursor-grabbing [&_*]:!cursor-grabbing': draggedSessionId() !== null || draggedGroupId() !== null,
                           }}
                         >
                           <Tooltip
@@ -844,7 +999,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             )}
                             placement="right"
                             anchorClass="!absolute inset-0 z-0 !block"
-                            disabled={draggedSessionId() !== null}
+                            disabled={draggedSessionId() !== null || draggedGroupId() !== null}
                           >
                             <button
                               type="button"
@@ -943,7 +1098,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                         placement="top"
                                         delay={0}
                                         clickToToggle
-                                        disabled={draggedSessionId() !== null}
+                                        disabled={draggedSessionId() !== null || draggedGroupId() !== null}
                                       >
                                         <button
                                           type="button"
@@ -971,7 +1126,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                     placement="top"
                                     delay={0}
                                     clickToToggle
-                                    disabled={draggedSessionId() !== null}
+                                    disabled={draggedSessionId() !== null || draggedGroupId() !== null}
                                   >
                                     <button
                                       type="button"
@@ -1008,7 +1163,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             </Show>
                           </span>
                           <div
-                            class={`pointer-events-none relative z-20 grid self-center justify-self-end gap-1 rounded-md transition-[background-color,box-shadow] duration-150 group-hover:bg-sidebar/65 group-hover:shadow-[0_0_0_1px_color-mix(in_srgb,var(--sidebar-border)_55%,transparent)] group-focus-within:bg-sidebar/65 group-focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--sidebar-border)_55%,transparent)] ${props.mobile
+                            class={`pointer-events-none relative z-20 grid self-center justify-self-end gap-1 ${props.mobile
                               ? 'grid-cols-[28px_28px] grid-rows-[28px_28px]'
                               : 'grid-cols-[20px_20px] grid-rows-[20px_20px]'}`}
                             data-terminal-session-actions={sessionId}
@@ -1019,7 +1174,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               aria-hidden="true"
                             >
                               <Show when={!props.mobile && navigationIndex() >= 0 && navigationIndex() < 9}>
-                                <span class="flex h-5 w-5 items-center justify-center rounded border border-sidebar-border/80 bg-sidebar/35 text-[9px] font-medium leading-none tabular-nums text-muted-foreground/80">
+                                <span class="flex h-5 w-5 items-center justify-center rounded bg-sidebar-accent/45 text-[9px] font-medium leading-none tabular-nums text-muted-foreground/75">
                                   {navigationIndex() + 1}
                                 </span>
                               </Show>
@@ -1076,7 +1231,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               class={`col-start-2 row-start-2 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="files"
                             >
-                              <Tooltip content={filesTooltip()} placement="top" delay={0} disabled={draggedSessionId() !== null}>
+                              <Tooltip content={filesTooltip()} placement="top" delay={0} disabled={draggedSessionId() !== null || draggedGroupId() !== null}>
                                 <button
                                   type="button"
                                   class={`flex items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${item().canBrowsePath

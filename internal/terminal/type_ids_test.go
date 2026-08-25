@@ -31,6 +31,7 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 		"group delete":              TypeID_TERMINAL_GROUP_DELETE,
 		"session move":              TypeID_TERMINAL_SESSION_MOVE,
 		"group catalog changed":     TypeID_TERMINAL_GROUP_CATALOG_CHANGED,
+		"group reorder":             TypeID_TERMINAL_GROUP_REORDER,
 	} {
 		if previous, exists := typeIDs[typeID]; exists {
 			t.Fatalf("terminal RPC Type ID %d is shared by %q and %q", typeID, previous, name)
@@ -55,6 +56,9 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 	}
 	if got, want := TypeID_TERMINAL_GROUP_CATALOG_CHANGED, uint32(2022); got != want {
 		t.Fatalf("group catalog notification Type ID = %d, want %d", got, want)
+	}
+	if got, want := TypeID_TERMINAL_GROUP_REORDER, uint32(2023); got != want {
+		t.Fatalf("group reorder Type ID = %d, want %d", got, want)
 	}
 }
 
@@ -119,6 +123,7 @@ func TestContextWorkAndGroupRPCTypeIDsAreGloballyUnique(t *testing.T) {
 		TypeID_TERMINAL_GROUP_DELETE:             "terminal group delete",
 		TypeID_TERMINAL_SESSION_MOVE:             "terminal session move",
 		TypeID_TERMINAL_GROUP_CATALOG_CHANGED:    "terminal group catalog notification",
+		TypeID_TERMINAL_GROUP_REORDER:            "terminal group reorder",
 	}
 	locations := map[uint32][]string{}
 	files := token.NewFileSet()

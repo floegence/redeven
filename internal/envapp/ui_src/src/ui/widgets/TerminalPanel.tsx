@@ -3516,6 +3516,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const moveSessionToGroup = (sessionId: string, groupId: string) => {
     relocateSession(sessionId, groupId, null);
   };
+
+  const reorderTerminalGroup = (groupId: string, beforeGroupId: string | null) => {
+    if (!terminalCatalog) return;
+    const groupName = terminalGroups().find((group) => group.id === groupId)?.name ?? '';
+    void terminalCatalog.reorderGroup(groupId, beforeGroupId).catch((cause) => {
+      notify.error(
+        i18n.t('terminal.groupActions', { group: groupName }),
+        cause instanceof Error ? cause.message : String(cause),
+      );
+    });
+  };
   let statusBoundaryBySessionId = new Map<string, 'none' | 'waiting' | 'failed'>();
   let statusBoundaryConnectionEpoch = terminalCatalog?.connectionEpoch() ?? 0;
   createEffect(() => {
@@ -4760,6 +4771,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             onCreateGroup={() => setGroupEditorTarget('create')}
             onToggleGroup={toggleNavigationGroup}
             onRelocateSession={relocateSession}
+            onReorderGroup={reorderTerminalGroup}
             onOpenGroupContextMenu={openTerminalGroupMenu}
             onRefresh={handleRefresh}
             onFilterQueryChange={setSessionFilterQuery}

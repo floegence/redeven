@@ -25,6 +25,7 @@ const rpcState = vi.hoisted(() => ({
   createGroup: vi.fn(),
   updateGroup: vi.fn(),
   deleteGroup: vi.fn(),
+  reorderGroup: vi.fn(),
   moveSession: vi.fn(),
   onGroupCatalogChanged: vi.fn(),
   groupCatalogHandler: null as ((event: any) => void) | null,
@@ -187,6 +188,7 @@ vi.mock('../protocol/redeven_v1', () => ({
     createGroup: rpcState.createGroup,
     updateGroup: rpcState.updateGroup,
     deleteGroup: rpcState.deleteGroup,
+    reorderGroup: rpcState.reorderGroup,
     moveSession: rpcState.moveSession,
     onGroupCatalogChanged: rpcState.onGroupCatalogChanged,
     createSession: vi.fn(),
@@ -245,6 +247,7 @@ describe('TerminalSessionCatalogProvider', () => {
     rpcState.createGroup.mockReset();
     rpcState.updateGroup.mockReset();
     rpcState.deleteGroup.mockReset();
+    rpcState.reorderGroup.mockReset();
     rpcState.moveSession.mockReset();
     rpcState.onGroupCatalogChanged.mockReset();
     rpcState.onGroupCatalogChanged.mockImplementation((handler: (event: any) => void) => {
@@ -325,6 +328,52 @@ describe('TerminalSessionCatalogProvider', () => {
     expect(latest.sessions().map((session: any) => session.id)).toEqual(['s3', 's1', 's2']);
     latest.reorderSession('s3', null);
     expect(latest.sessions().map((session: any) => session.id)).toEqual(['s1', 's2', 's3']);
+    dispose();
+  });
+
+  it('keeps optimistic group reorders stable across stale responses and failures', async () => {
+    const defaultGroup = rpcState.groups[0]!;
+    const alpha = { id: 'alpha', name: 'Alpha', defaultWorkingDir: '/alpha', sortOrder: 1, createdAtMs: 2, updatedAtMs: 2, isDefault: false };
+    const beta = { id: 'beta', name: 'Beta', defaultWorkingDir: '/beta', sortOrder: 2, createdAtMs: 3, updatedAtMs: 3, isDefault: false };
+    const gamma = { id: 'gamma', name: 'Gamma', defaultWorkingDir: '/gamma', sortOrder: 3, createdAtMs: 4, updatedAtMs: 4, isDefault: false };
+    rpcState.groups = [defaultGroup, alpha, beta, gamma];
+    rpcState.groupRevision = 4;
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.groupRevision()).toBe(4));
+
+    let resolveFirst!: (value: any) => void;
+    let resolveSecond!: (value: any) => void;
+    rpcState.reorderGroup
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    const first = latest.reorderGroup('gamma', 'alpha');
+    expect(latest.groups().map((group: any) => group.id)).toEqual(['default', 'gamma', 'alpha', 'beta']);
+    const second = latest.reorderGroup('gamma', 'beta');
+    expect(latest.groups().map((group: any) => group.id)).toEqual(['default', 'alpha', 'gamma', 'beta']);
+
+    resolveSecond({
+      revision: 6,
+      groups: [defaultGroup, { ...alpha, sortOrder: 1 }, { ...gamma, sortOrder: 2 }, { ...beta, sortOrder: 3 }],
+    });
+    await second;
+    resolveFirst({
+      revision: 5,
+      groups: [defaultGroup, { ...gamma, sortOrder: 1 }, { ...alpha, sortOrder: 2 }, { ...beta, sortOrder: 3 }],
+    });
+    await first;
+    expect(latest.groups().map((group: any) => group.id)).toEqual(['default', 'alpha', 'gamma', 'beta']);
+
+    rpcState.reorderGroup.mockRejectedValueOnce(new Error('reorder rejected'));
+    const failed = latest.reorderGroup('gamma', null);
+    expect(latest.groups().map((group: any) => group.id)).toEqual(['default', 'alpha', 'beta', 'gamma']);
+    await expect(failed).rejects.toThrow('reorder rejected');
+    expect(latest.groups().map((group: any) => group.id)).toEqual(['default', 'alpha', 'gamma', 'beta']);
     dispose();
   });
 

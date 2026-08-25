@@ -47,6 +47,7 @@ describe('Redeven v1 terminal notifications', () => {
     expect(redevenV1TypeIds.terminal.workStateUpdate).toBe(2016);
     expect(redevenV1TypeIds.terminal.groupList).toBe(2017);
     expect(redevenV1TypeIds.terminal.groupCatalogChanged).toBe(2022);
+    expect(redevenV1TypeIds.terminal.groupReorder).toBe(2023);
     expect(notifyHandlers.has(2013)).toBe(true);
     expect(notifyHandlers.has(2014)).toBe(true);
     expect(notifyHandlers.has(2015)).toBe(true);
