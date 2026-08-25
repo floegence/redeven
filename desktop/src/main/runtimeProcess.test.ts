@@ -403,6 +403,25 @@ describe('runtimeProcess', () => {
     }
   });
 
+  it('does not attach a persisted status report without a live runtime inventory', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-stale-status-'));
+    const stateRoot = path.join(dir, 'state');
+    const statusFile = path.join(dir, 'status.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    try {
+      await writeJSON(statusFile, runtimeStatusPayload('http://127.0.0.1:43123/'));
+      const attached = await attachManagedRuntimeFromStatus({
+        executablePath,
+        stateRoot,
+        runtimeAttachTimeoutMs: 5_000,
+        env: { REDEVEN_TEST_STATUS_FILE: statusFile },
+      });
+      expect(attached).toBeNull();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reports the timed-out inventory phase without retrying the command', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const stateRoot = path.join(dir, 'state');
