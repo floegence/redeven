@@ -26,7 +26,46 @@ function failedProgress(
 }
 
 describe('operationNextActions', () => {
-  it('renders only supported next actions in stable order without duplicating fallbacks', () => {
+  it('normalizes missing utility actions into the same grouped action stack', () => {
+    const progress: DesktopLauncherActionProgress = {
+      ...failedProgress([
+        {
+          kind: 'retry',
+          operation_key: 'local:host:local:open',
+          label: 'Retry',
+        },
+        {
+          kind: 'copy_diagnostics',
+          operation_key: 'local:host:local:open',
+          label: 'Copy log',
+        },
+      ]),
+      failure: {
+        code: 'environment_open_failed',
+        severity: 'error',
+        title: 'Open failed',
+        summary: 'Desktop could not open the local environment.',
+      },
+    };
+
+    expect(groupedVisibleOperationNextActions(progress)).toEqual([
+      {
+        kind: 'primary',
+        actions: [
+          expect.objectContaining({ kind: 'retry', label: 'Retry' }),
+        ],
+      },
+      {
+        kind: 'secondary',
+        actions: [
+          expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
+          expect.objectContaining({ kind: 'dismiss', operation_key: 'local:host:local:open' }),
+        ],
+      },
+    ]);
+  });
+
+  it('renders only supported next actions in stable order without duplicates', () => {
     const progress = failedProgress([
       {
         kind: 'copy_diagnostics',
@@ -72,6 +111,45 @@ describe('operationNextActions', () => {
       expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
+    ]);
+  });
+
+  it('adds missing failure utilities exactly once', () => {
+    const progress: DesktopLauncherActionProgress = {
+      ...failedProgress([]),
+      failure: {
+        code: 'operation_failed',
+        severity: 'error',
+        title: 'Operation failed',
+        summary: 'Desktop could not complete the operation.',
+      },
+    };
+
+    expect(visibleOperationNextActions(progress)).toEqual([
+      expect.objectContaining({
+        kind: 'copy_diagnostics',
+        operation_key: 'local:host:local:open',
+        label_key: 'progress.copyLog',
+      }),
+      expect.objectContaining({
+        kind: 'dismiss',
+        operation_key: 'local:host:local:open',
+        label_key: 'progress.dismiss',
+      }),
+    ]);
+  });
+
+  it('keeps a single secondary action in one layout group', () => {
+    expect(groupedVisibleOperationNextActions(failedProgress([]))).toEqual([
+      {
+        kind: 'secondary',
+        actions: [
+          expect.objectContaining({
+            kind: 'dismiss',
+            operation_key: 'local:host:local:open',
+          }),
+        ],
+      },
     ]);
   });
 
@@ -251,6 +329,7 @@ describe('operationNextActions', () => {
 
     expect(visibleOperationNextActions(progress)).toEqual([
       expect.objectContaining({ kind: 'retry', label: 'Review target' }),
+      expect.objectContaining({ kind: 'dismiss', operation_key: 'reinstall-target:one' }),
     ]);
   });
 

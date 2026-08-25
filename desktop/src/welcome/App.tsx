@@ -291,7 +291,6 @@ import {
 } from './environmentLibraryProjection';
 import {
   groupedVisibleOperationNextActions,
-  operationNextActionsByKind,
 } from './operationNextActions';
 import {
   advanceEnvironmentOpenFlowStage,
@@ -8703,19 +8702,12 @@ function EnvironmentProgressPanel(props: Readonly<{
     && props.progress.cancelable === true
     && props.progress.status === 'running'
   ));
-  const canDismiss = createMemo(() => (
-    props.progress.status === 'failed'
-    || props.progress.status === 'cleanup_failed'
-    || props.progress.status === 'canceled'
-    || props.progress.status === 'needs_confirmation'
-  ));
   const panelPrimaryAction = createMemo(() => localizedProgressPanelPrimaryAction(
     props.i18n,
     props.progress,
     props.primaryAction,
     { busy: props.primaryActionBusy },
   ));
-  const nextActionsByKind = createMemo(() => operationNextActionsByKind(props.progress));
   const nextActionGroups = createMemo(() => {
     const primaryIntent = panelPrimaryAction()?.action.intent;
     return groupedVisibleOperationNextActions(props.progress)
@@ -8728,15 +8720,6 @@ function EnvironmentProgressPanel(props: Readonly<{
       }))
       .filter((group) => group.actions.length > 0);
   });
-  const showFallbackCopyAction = createMemo(() => (
-    props.progress.failure !== undefined && !nextActionsByKind().has('copy_diagnostics')
-  ));
-  const showFallbackDismissAction = createMemo(() => (
-    props.progress.subject_kind !== 'gateway' && !nextActionsByKind().has('dismiss')
-  ));
-  const showFallbackActions = createMemo(() => (
-    canDismiss() && (showFallbackCopyAction() || showFallbackDismissAction())
-  ));
   const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string; detail?: string; tasks?: readonly import('../shared/desktopLauncherIPC').DesktopComponentTaskProgress[] }[]>(() => {
     const steps = stepProgress();
     if (steps) {
@@ -8835,7 +8818,6 @@ function EnvironmentProgressPanel(props: Readonly<{
     <Show when={nextActionGroups().length > 0}>
       <div
         class="redeven-action-popover__action-stack"
-        data-subject-kind={props.progress.subject_kind}
         data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}
       >
         <For each={nextActionGroups()}>
@@ -9095,31 +9077,6 @@ function EnvironmentProgressPanel(props: Readonly<{
             </Button>
           </div>
         )}
-      </Show>
-      <Show when={showFallbackActions()}>
-        <div class="redeven-action-popover__actions">
-          <Show when={showFallbackCopyAction()}>
-            <Button
-              size="sm"
-              variant="outline"
-              class="flex-1 justify-center gap-1.5 whitespace-nowrap"
-              onClick={() => props.copyOperationDiagnostics(props.progress)}
-            >
-              <Copy class="h-3.5 w-3.5" />
-              {props.i18n.t('progress.copyLog')}
-            </Button>
-          </Show>
-          <Show when={showFallbackDismissAction()}>
-            <Button
-              size="sm"
-              variant="outline"
-              class="flex-1 justify-center"
-              onClick={() => props.dismissOperation(props.progress)}
-            >
-              {props.i18n.t('progress.dismiss')}
-            </Button>
-          </Show>
-        </div>
       </Show>
     </div>
   );
