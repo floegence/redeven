@@ -3,7 +3,7 @@ import https from 'node:https';
 
 import { isAllowedAppNavigation } from './navigation';
 import { type StartupReport } from './startup';
-import { normalizeLocalUIBaseURL } from './localUIURL';
+import { normalizeLocalUIBaseURL, normalizeLocalUIBridgeURL } from './localUIURL';
 import {
   envAppShellUnavailableOpenReadiness,
   normalizeRuntimeServiceSnapshot,
@@ -423,6 +423,28 @@ export async function probeExternalLocalUIHealth(
     return result;
   }
   return { ok: true, value: startupReportFromProbeStatus(normalizedBaseURL, result.value) };
+}
+
+/**
+ * A Local Environment is usable by Desktop only when its trusted bridge is
+ * reachable. Runtime status is useful for diagnostics, but it does not prove
+ * that the bridge serving the Desktop session still exists.
+ */
+export async function probeLocalRuntimeBridgeHealth(
+  startup: StartupReport,
+  options: RuntimeProbeOptions = {},
+): Promise<RuntimeProbeResult<StartupReport>> {
+  const rawBridgeURL = String(startup.local_ui_bridge_url ?? '').trim();
+  if (!rawBridgeURL) {
+    return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
+  }
+  let bridgeURL: string;
+  try {
+    bridgeURL = normalizeLocalUIBridgeURL(rawBridgeURL);
+  } catch {
+    return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
+  }
+  return probeExternalLocalUIHealth(bridgeURL, options);
 }
 
 async function validateExternalLocalUIShellAtBaseURL(

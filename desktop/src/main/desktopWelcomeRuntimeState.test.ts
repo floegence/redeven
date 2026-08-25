@@ -389,6 +389,7 @@ describe('desktopWelcomeRuntimeState', () => {
           status: 'ready',
           local_ui_url: `http://127.0.0.1:${address.port}/`,
           local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+          local_ui_bridge_url: `http://127.0.0.1:${address.port}/`,
           exposure: loopbackExposure,
           remote_enabled: true,
           effective_run_mode: 'desktop',

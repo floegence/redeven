@@ -1,5 +1,5 @@
 import { loadManagedRuntimeStartupFromStatus } from './runtimeProcess';
-import { probeExternalLocalUIHealth } from './runtimeState';
+import { probeLocalRuntimeBridgeHealth } from './runtimeState';
 import type { StartupReport } from './startup';
 import type { DesktopPreferences } from './desktopPreferences';
 import type { DesktopSessionSummary } from './desktopTarget';
@@ -72,22 +72,8 @@ async function currentRuntimeFromLocalSession(
   ) {
     return undefined;
   }
-  const candidateURLs = [
-    session.entry_url,
-    session.startup.local_ui_url,
-    ...session.startup.local_ui_urls,
-  ];
-  const seen = new Set<string>();
-  for (const candidateURL of candidateURLs) {
-    const cleanURL = compact(candidateURL);
-    if (cleanURL === '' || seen.has(cleanURL)) {
-      continue;
-    }
-    seen.add(cleanURL);
-    const result = await probeExternalLocalUIHealth(cleanURL, { timeoutMs: probeTimeoutMs });
-    if (!result.ok) {
-      continue;
-    }
+  const result = await probeLocalRuntimeBridgeHealth(session.startup, { timeoutMs: probeTimeoutMs });
+  if (result.ok) {
     const startup = result.value;
     return runtimeStateFromStartup(
       {
@@ -119,9 +105,14 @@ async function currentRuntimeFromStateRoot(
   if (!startup) {
     return undefined;
   }
-  return runtimeStateFromStartup(
-    startup,
-  );
+  const bridge = await probeLocalRuntimeBridgeHealth(startup, { timeoutMs: probeTimeoutMs });
+  if (!bridge.ok) {
+    return undefined;
+  }
+  return runtimeStateFromStartup({
+    ...startup,
+    ...bridge.value,
+  });
 }
 
 function withCurrentRuntime(

@@ -20,6 +20,8 @@ Every Desktop installation includes a managed Local Environment. Desktop uses tw
 
 Start, Auto Start, Open, Stop, Restart, Update, Refresh, and Reinstall use that same pair and the same lifecycle coordinator. Desktop does not append `local-environment` twice or infer one path from the other during attach. A new process that has published listeners but not yet published final status remains in the bounded startup wait. Failure is reported only when the process exits, the state path is inaccessible, the service reports failure, or the readiness deadline expires with the original logs retained.
 
+Desktop never treats a persisted Runtime status report as proof that a Local Environment can open. A current process inventory and the private `local_ui_bridge_url` must both be valid before Desktop attaches or creates a Local session. If the report is stale or the bridge is unreachable, Desktop clears the in-memory record and uses the existing Start/Restart recovery path instead of opening a dead address.
+
 Packaged Desktop validates the Runtime-only bundle manifest, version, commit, platform, architecture, file inventory, executable permissions, sizes, and digests before modifying the Local installation. Missing or mismatched managed files trigger the direct Runtime repair path. Desktop update handoff tells the user that installation restarts Desktop and the Local Runtime and interrupts Local sessions; choosing Later changes nothing.
 
 ## Managed remote readiness

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   probeExternalLocalUIHealth,
   probeExternalLocalUIStartup,
+  probeLocalRuntimeBridgeHealth,
   validateExternalLocalUIShell,
   type RuntimeProbeResult,
 } from './runtimeState';
@@ -72,6 +73,36 @@ async function closeServer(server: http.Server): Promise<void> {
 }
 
 describe('runtimeState', () => {
+  it('requires and probes the trusted Local Runtime bridge', async () => {
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(openableHealthPayload(123));
+    });
+    const bridgeURL = await listenOnLoopback(server);
+    const startup: StartupReport = {
+      local_ui_url: 'http://127.0.0.1:26800/',
+      local_ui_urls: ['http://127.0.0.1:26800/'],
+      local_ui_bridge_url: bridgeURL,
+    };
+
+    try {
+      const result = await probeLocalRuntimeBridgeHealth(startup);
+      expect(expectProbeSuccess(result)).toMatchObject({
+        local_ui_url: bridgeURL,
+        started_at_unix_ms: 123,
+      });
+      await expect(probeLocalRuntimeBridgeHealth({
+        ...startup,
+        local_ui_bridge_url: undefined,
+      })).resolves.toEqual({
+        ok: false,
+        failure: { kind: 'invalid_response', stage: 'runtime_health' },
+      });
+    } finally {
+      await closeServer(server);
+    }
+  });
+
   it('loads an external Local UI startup payload from an explicit local IP url', async () => {
     const server = http.createServer((request, response) => {
       if (request.url === '/api/local/runtime/health') {

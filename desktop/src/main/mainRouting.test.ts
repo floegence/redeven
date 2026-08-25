@@ -679,13 +679,13 @@ describe('main routing', () => {
     expect(providerOccupancySrc).not.toContain('if (localEnvironmentRuntimeRecord)');
     expect(providerOccupancySrc).not.toContain('runtimePlacementBridgeByTargetID');
 
-    const localRecordVerifyStart = mainSrc.indexOf('async function verifyCurrentLocalEnvironmentRuntimeRecord(');
+    const localRecordVerifyStart = mainSrc.indexOf('async function verifyLocalEnvironmentRuntimeRecord(');
     const localRecordVerifyEnd = mainSrc.indexOf('function providerRuntimeHealthMap(', localRecordVerifyStart);
     expect(localRecordVerifyStart).toBeGreaterThanOrEqual(0);
     expect(localRecordVerifyEnd).toBeGreaterThan(localRecordVerifyStart);
     const localRecordVerifySrc = mainSrc.slice(localRecordVerifyStart, localRecordVerifyEnd);
-    expect(localRecordVerifySrc).toContain('started_at_unix_ms: startup.started_at_unix_ms ?? currentRecord.startup.started_at_unix_ms');
-    expect(localRecordVerifySrc).not.toContain('started_at_unix_ms: currentRecord.startup.started_at_unix_ms');
+    expect(localRecordVerifySrc).toContain('started_at_unix_ms: startup.started_at_unix_ms ?? record.startup.started_at_unix_ms');
+    expect(localRecordVerifySrc).not.toContain('started_at_unix_ms: record.startup.started_at_unix_ms');
 
     const bridgeRecordObserveStart = mainSrc.indexOf('async function observeRuntimePlacementBridgeRecord(');
     const bridgeRecordObserveEnd = mainSrc.indexOf('function clearSSHRuntimeReadyState(', bridgeRecordObserveStart);

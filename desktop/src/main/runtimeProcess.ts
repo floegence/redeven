@@ -1166,6 +1166,12 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
     }
     return null;
   }
+  // A persisted status report is not an ownership signal. With a state root,
+  // only attach when the current process inventory confirms the same target is
+  // still running; otherwise this may resurrect a dead bridge from an old run.
+  if (stateRoot && (!inventory || inventory.instances.length === 0)) {
+    return null;
+  }
   return {
     child: null,
     startup,

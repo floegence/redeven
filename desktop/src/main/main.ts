@@ -232,6 +232,7 @@ import { isWebServiceBrowserDevToolsShortcut } from './webServiceBrowserShortcut
 import { buildWebServiceUnavailableDocumentURL } from './webServiceUnavailableDocument';
 import {
   probeExternalLocalUIHealth,
+  probeLocalRuntimeBridgeHealth,
   probeExternalLocalUIStartup,
 } from './runtimeState';
 import { desktopFailureForRuntimePlacementBridgeReadiness } from './runtimePlacementBridgeReadiness';
@@ -1848,6 +1849,37 @@ function clearLocalEnvironmentRuntimeRecord(environment: DesktopLocalEnvironment
   localRuntimeMaintenanceByEnvironmentID.delete(environment.id);
 }
 
+async function verifyLocalEnvironmentRuntimeRecord(
+  environment: DesktopLocalEnvironmentState,
+  record: LocalEnvironmentRuntimeRecord,
+): Promise<LocalEnvironmentRuntimeRecord | null> {
+  try {
+    const result = await probeLocalRuntimeBridgeHealth(record.startup, {
+      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+    });
+    if (result.ok) {
+      const startup = result.value;
+      return updateLocalEnvironmentRuntimeRecordStartup(record, {
+        provider_origin: startup.provider_origin ?? record.startup.provider_origin,
+        controlplane_base_url: startup.controlplane_base_url ?? record.startup.controlplane_base_url,
+        controlplane_provider_id: startup.controlplane_provider_id ?? record.startup.controlplane_provider_id,
+        env_public_id: startup.env_public_id ?? record.startup.env_public_id,
+        local_ui_url: startup.local_ui_url,
+        local_ui_urls: startup.local_ui_urls,
+        password_required: startup.password_required,
+        started_at_unix_ms: startup.started_at_unix_ms ?? record.startup.started_at_unix_ms,
+        effective_run_mode: startup.effective_run_mode ?? record.startup.effective_run_mode,
+        remote_enabled: startup.remote_enabled ?? record.startup.remote_enabled,
+        runtime_service: startup.runtime_service ?? record.startup.runtime_service,
+      });
+    }
+  } catch {
+    // A failed bridge probe means this record must not be used for an open.
+  }
+  clearLocalEnvironmentRuntimeRecord(environment);
+  return null;
+}
+
 async function verifyCurrentLocalEnvironmentRuntimeRecord(
   environment: DesktopLocalEnvironmentState,
 ): Promise<LocalEnvironmentRuntimeRecord | null> {
@@ -1855,31 +1887,7 @@ async function verifyCurrentLocalEnvironmentRuntimeRecord(
   if (!currentRecord) {
     return null;
   }
-  try {
-    const result = await probeExternalLocalUIHealth(requireLocalUIBridgeURL(currentRecord.startup), {
-      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
-    });
-    if (result.ok) {
-      const startup = result.value;
-      return updateLocalEnvironmentRuntimeRecordStartup(currentRecord, {
-        provider_origin: startup.provider_origin ?? currentRecord.startup.provider_origin,
-        controlplane_base_url: startup.controlplane_base_url ?? currentRecord.startup.controlplane_base_url,
-        controlplane_provider_id: startup.controlplane_provider_id ?? currentRecord.startup.controlplane_provider_id,
-        env_public_id: startup.env_public_id ?? currentRecord.startup.env_public_id,
-        local_ui_url: startup.local_ui_url,
-        local_ui_urls: startup.local_ui_urls,
-        password_required: startup.password_required,
-        started_at_unix_ms: startup.started_at_unix_ms ?? currentRecord.startup.started_at_unix_ms,
-        effective_run_mode: startup.effective_run_mode ?? currentRecord.startup.effective_run_mode,
-        remote_enabled: startup.remote_enabled ?? currentRecord.startup.remote_enabled,
-        runtime_service: startup.runtime_service ?? currentRecord.startup.runtime_service,
-      });
-    }
-  } catch {
-    // The in-memory record is only current while its Local UI remains reachable.
-  }
-  clearLocalEnvironmentRuntimeRecord(environment);
-  return null;
+  return verifyLocalEnvironmentRuntimeRecord(environment, currentRecord);
 }
 
 function providerRuntimeHealthMap(
@@ -9249,7 +9257,31 @@ async function prepareManagedEnvironmentRuntime(input: Readonly<{
       },
     };
   }
-  return { ok: true, launch };
+  const bridge = await probeLocalRuntimeBridgeHealth(launch.managedRuntime.startup, {
+    timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+    signal: input.signal,
+  });
+  if (!bridge.ok) {
+    if (launch.spawned) {
+      await launch.managedRuntime.stop().catch(() => undefined);
+    }
+    throw new Error(createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+      .t('runtimeMessage.runtimeStatusCouldNotBeVerified'));
+  }
+  return {
+    ok: true,
+    launch: {
+      ...launch,
+      managedRuntime: {
+        ...launch.managedRuntime,
+        startup: {
+          ...launch.managedRuntime.startup,
+          ...bridge.value,
+          local_ui_bridge_url: launch.managedRuntime.startup.local_ui_bridge_url,
+        },
+      },
+    },
+  };
 }
 
 async function attachLocalEnvironmentRuntime(
@@ -9270,9 +9302,19 @@ async function attachLocalEnvironmentRuntime(
   if (!attachedRuntime) {
     return null;
   }
+  const bridge = await probeLocalRuntimeBridgeHealth(attachedRuntime.startup, {
+    timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+  });
+  if (!bridge.ok) {
+    return null;
+  }
   return updateLocalEnvironmentRuntimeRecord(
     environment,
-    attachedRuntime.startup,
+    {
+      ...attachedRuntime.startup,
+      ...bridge.value,
+      local_ui_bridge_url: attachedRuntime.startup.local_ui_bridge_url,
+    },
     desktopSessionRuntimeHandleFromManagedRuntime(attachedRuntime),
   );
 }
@@ -12388,6 +12430,21 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
           requiredOperation = runtimeServiceNeedsRuntimeUpdate(runtimeRecord.startup.runtime_service)
             ? 'update_runtime'
             : 'restart';
+        }
+      }
+      if (!preflightFailure && runtimeRecord) {
+        runtimeRecord = await verifyLocalEnvironmentRuntimeRecord(environment, runtimeRecord);
+        if (!runtimeRecord) {
+          preflightFailure = launcherActionFailureForRuntimeOpenPreflightMessage(
+            'runtime_not_ready',
+            createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+              .t('runtimeMessage.runtimeRestartRequiredDetail', { subject: environment.label }),
+            {
+              ...failureContext,
+              targetLabel: environment.label,
+            },
+          );
+          requiredOperation = 'restart';
         }
       }
       if (!preflightFailure) {
