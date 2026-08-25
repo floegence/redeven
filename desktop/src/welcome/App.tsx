@@ -6267,6 +6267,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <FlowerIcon class="h-5 w-5" />
               </button>
             </Show>
+            <button
+              type="button"
+              class="redeven-desktop-update-button"
+              data-update-state={desktopUpdateSnapshot().state}
+              aria-label={i18n().t('desktopUpdate.statusButton', {
+                status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
+              })}
+              title={i18n().t('desktopUpdate.statusButton', {
+                status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
+              })}
+              onClick={checkForDesktopUpdates}
+            >
+              <Refresh
+                class={cn(
+                  'h-3.5 w-3.5 shrink-0',
+                  desktopUpdateSnapshot().state === 'checking' ? 'animate-spin' : '',
+                )}
+              />
+              <span>{i18n().t('desktopUpdate.checkForUpdates')}</span>
+              <Show when={desktopUpdateSnapshot().state === 'available' || desktopUpdateSnapshot().state === 'ready'}>
+                <span class="redeven-desktop-update-button__indicator" aria-hidden="true" />
+              </Show>
+            </button>
             <DesktopLanguagePicker
               openRequest={languagePickerOpenRequest()}
               snapshot={languageSnapshot()}
