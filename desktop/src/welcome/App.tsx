@@ -290,6 +290,7 @@ import {
   splitPinnedEnvironmentEntryIDs,
 } from './environmentLibraryProjection';
 import {
+  environmentActionForLauncherRetry,
   groupedVisibleOperationNextActions,
 } from './operationNextActions';
 import {
@@ -4974,18 +4975,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           return false;
         }
         {
-          const continuation = action as EnvironmentActionModel & {
-            operation_key?: string;
-            preflight_id?: string;
-            reinstall_mode?: 'wipe_data' | 'preserve_data';
-          };
-          if (continuation.operation_key && continuation.preflight_id) {
+          if (action.operation_key && action.preflight_id) {
             const result = await performLauncherAction({
               kind: 'reinstall_target',
               environment_id: environment.id,
-              preflight_id: continuation.preflight_id,
-              operation_key: continuation.operation_key,
-              mode: continuation.reinstall_mode ?? 'wipe_data',
+              preflight_id: action.preflight_id,
+              operation_key: action.operation_key,
+              mode: action.reinstall_mode ?? 'wipe_data',
               impact_acknowledged: true,
             }, errorTarget);
             if (result) {
@@ -8585,29 +8581,6 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
   return action.label;
 }
 
-function environmentActionForLauncherRetry(
-  request: DesktopLauncherActionRequest | undefined,
-): EnvironmentActionModel | null {
-  if (!request) {
-    return null;
-  }
-  switch (request.kind) {
-    case 'open_local_environment':
-    case 'open_ssh_environment':
-      return { intent: 'open_with_preflight', label: 'Open', enabled: true, variant: 'default' };
-    case 'start_environment_runtime':
-      return { intent: 'start_runtime', label: 'Start', enabled: true, variant: 'default' };
-    case 'stop_environment_runtime':
-      return { intent: 'stop_runtime', label: 'Stop', enabled: true, variant: 'default' };
-    case 'restart_environment_runtime':
-      return { intent: 'restart_runtime', label: 'Restart', enabled: true, variant: 'default' };
-    case 'update_environment_runtime':
-      return { intent: 'update_runtime', label: 'Update runtime', enabled: true, variant: 'default' };
-    default:
-      return null;
-  }
-}
-
 function localizedProgressPanelPrimaryAction(
   i18n: DesktopI18n,
   progress: DesktopLauncherActionProgress,
@@ -9655,17 +9628,16 @@ function EnvironmentSplitActionButton(props: Readonly<{
                                 break;
                               }
                               case 'reinstall_target': {
-                                const preview = p().reinstall_preview;
-                                if (preview) {
+                                if (action.operation_key && action.preflight_id) {
                                   props.onRunAction({
                                     intent: 'reinstall_target',
                                     label: 'Reinstall Redeven',
                                     enabled: true,
                                     variant: 'outline',
-                                    operation_key: p().operation_key,
-                                    preflight_id: preview.preflight_id,
-                                    reinstall_mode: action.mode ?? preview.mode,
-                                  } as EnvironmentActionModel);
+                                    operation_key: action.operation_key,
+                                    preflight_id: action.preflight_id,
+                                    reinstall_mode: action.mode ?? p().reinstall_preview?.mode ?? 'wipe_data',
+                                  });
                                 }
                                 break;
                               }

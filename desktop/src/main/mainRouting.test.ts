@@ -20,6 +20,25 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
+  it('restores one current reinstall owner and resumes it without presentation inference', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('currentReinstallTargetJournals(');
+    expect(mainSrc).toContain('currentReinstallTargetJournalForEnvironment(');
+    expect(mainSrc).toContain("label_key: 'environmentAction.continueReinstallRedeven'");
+    expect(mainSrc).toContain("titleKey: 'confirm.reinstallInterruptedTitle'");
+    expect(mainSrc).toContain("summaryKey: 'confirm.reinstallInterruptedDescription'");
+    expect(mainSrc).toContain('persistedJournal.preview.mode === (request.mode ?? \'wipe_data\')');
+    expect(mainSrc).toContain('.validatePersistedJournalTarget(persistedJournal)');
+    expect(mainSrc).toContain('removeOtherReinstallOperationsForAffectedEnvironments(');
+    expect(mainSrc).toContain("existing?.reinstall_preview?.preflight_id === request.preflight_id");
+    expect(mainSrc).toContain('recommendedMode && recommendedMode !== request.mode');
+    expect(mainSrc).toContain("const targetReviewRequired = normalizedError instanceof ReinstallTargetCoordinatorError");
+    expect(mainSrc).not.toContain("existing.status === 'needs_confirmation'\n        && existing.environment_id");
+    expect(mainSrc).not.toContain("retry_action: {\n          kind: 'reinstall_target'");
+    expect(mainSrc).not.toContain("existing.next_actions?.some((action) => action.kind === 'reinstall_target')");
+  });
+
   it('owns and injects one Desktop SSH transport manager without direct consumer SSH spawns', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).toContain('const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager();');

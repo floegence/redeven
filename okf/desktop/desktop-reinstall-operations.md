@@ -48,6 +48,8 @@ Old Gateway directories under the confirmed Runtime root are historical residue.
 
 Desktop writes one minimal journal outside the target root. It records the confirmed target, mode, normalized physical root, operation quarantine, and last committed phase. Each committed phase is repeatable. After Desktop or transport interruption, a repeated confirmation resumes from this Desktop journal without consulting an old Gateway API, Runtime database, target-side lock, checkpoint service, or shell state machine.
 
+Desktop presents one current recovery operation per physical target. If several journals remain for that target, the newest committed journal owns the popup and older journals remain cleanup inputs only. A post-confirmation interruption is shown as **Reinstall interrupted** with one direct **Continue reinstall** action bound to the original operation and preflight identity. Target-coordinate changes return to target review instead of reusing that confirmation. Button presentation is not execution authority: the journal, operation identity, and exact-target validation decide whether work can resume.
+
 An old journal or quarantine is input to continuation or cleanup, not a reason to hide or block wipe reinstall. A genuine target-coordinate change still requires new confirmation because continuing against another host, container, user, or explicit root could delete unrelated data.
 
 `manual_recovery_required` is reserved for cases where the direct channel or filesystem prevents continuation and, for preserve mode, also prevents safe rollback. Wipe failures retain the journal and present Continue Reinstall with the original command, exit status, stderr, and filesystem reason in technical details.
