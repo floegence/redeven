@@ -18,6 +18,7 @@ import {
   type ManagedSSHRuntimeReady,
   type StartManagedSSHRuntimeArgs,
 } from './sshRuntime';
+import { DesktopOperationFailureError } from './desktopOperationFailure';
 import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
@@ -37,6 +38,7 @@ type FakeSSHScenario =
   | 'no_report'
   | 'quick_exit_report'
   | 'blocked_report'
+  | 'invalid_report'
   | 'transient_blocked_report'
   | 'status_blocked_without_socket'
   | 'duplicate_verified_runtime';
@@ -572,6 +574,10 @@ if (args.includes('-M') && args.includes('-N')) {
             state_dir: '/remote/redeven/state',
           },
         }));
+        process.exit(0);
+      }
+      if (scenario === 'invalid_report') {
+        process.stdout.write('{invalid');
         process.exit(0);
       }
       if (scenario === 'transient_blocked_report') {
@@ -1223,9 +1229,20 @@ describe('sshRuntime integration', () => {
 
   it('surfaces blocked remote desktop launch reports instead of a generic stopped-before-ready error', async () => {
     const fixture = await createFakeSSHFixture('blocked_report');
-    await expect(startWithFakeSSH(fixture, 'auto')).rejects.toThrow(
-      'Another Redeven runtime instance is already using this state directory.',
-    );
+    try {
+      await startWithFakeSSH(fixture, 'auto');
+      throw new Error('Expected blocked SSH Runtime startup to fail.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      expect((error as DesktopOperationFailureError).presentation).toMatchObject({
+        code: 'ssh_runtime_launch_failed',
+        title: 'SSH Runtime Start Failed',
+        title_key: 'progress.sshRuntimeReportedStartupFailureTitle',
+        summary: 'Another Redeven runtime instance is already using this state directory.',
+        detail: 'Another Redeven runtime instance is already using this state directory.',
+        detail_key: 'progress.sshRuntimeReportedStartupFailureDetail',
+      });
+    }
 
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
@@ -1234,6 +1251,24 @@ describe('sshRuntime integration', () => {
     ]));
     expect(eventNames).not.toContain('stop_runtime');
     await removeFakeSSHFixture(fixture);
+  });
+
+  it('reserves the invalid-report failure for malformed SSH startup reports', async () => {
+    const fixture = await createFakeSSHFixture('invalid_report');
+    try {
+      await startWithFakeSSH(fixture, 'auto');
+      throw new Error('Expected malformed SSH Runtime startup report to fail.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      expect((error as DesktopOperationFailureError).presentation).toMatchObject({
+        code: 'ssh_runtime_launch_failed',
+        title: 'SSH Runtime Startup Report Invalid',
+        title_key: 'progress.sshRuntimeStartupReportInvalidTitle',
+        summary_key: 'progress.sshRuntimeStartupReportInvalidSummary',
+      });
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
   });
 
   it('runs the remote installer when the probe reports a missing runtime', async () => {

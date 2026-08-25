@@ -16,9 +16,16 @@ import {
 } from './runtimeHostAccess';
 import {
   buildManagedSSHStartScript,
-  MANAGED_SSH_RUNTIME_STAMP_FILENAME,
-  MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION,
 } from './sshRuntime';
+import {
+  MANAGED_RUNTIME_DIRECTORY_MODE,
+  MANAGED_RUNTIME_EXECUTABLE_MODE,
+  MANAGED_RUNTIME_LINUX_COMPANION_FILENAMES,
+  MANAGED_RUNTIME_LINUX_EVIDENCE_FILENAMES,
+  MANAGED_RUNTIME_METADATA_MODE,
+  MANAGED_RUNTIME_STAMP_FILENAME,
+  MANAGED_RUNTIME_STAMP_SCHEMA_VERSION,
+} from './managedRuntimeSlot';
 
 export type ReinstallRuntimePackageStrategy = 'desktop_upload' | 'remote_install';
 
@@ -62,6 +69,7 @@ function commandForPlacement(
 
 const stageScript = [
   'set -eu',
+  'umask 077',
   'target_root="$1"; operation_id="$2"; release_tag="$3"; expected_commit="$4"; expected_sha="$5"; expected_size="$6"; strategy="$7"; remote_url="${8:-}"; platform="${9:-}"; architecture="${10:-}"; installed_at_unix_ms="${11:-}"',
   'case "$target_root" in /*) ;; *) echo "target root must be absolute" >&2; exit 3 ;; esac',
   'stage="${target_root}.redeven-staging-${operation_id}-runtime"; [ ! -L "$stage" ] || { echo "staging root is a symbolic link" >&2; exit 4; }; rm -rf -- "$stage"; mkdir -p "$stage/managed/bin"',
@@ -73,22 +81,25 @@ const stageScript = [
   'if command -v sha256sum >/dev/null 2>&1; then executable_sha="$(sha256sum "$binary" | awk "{print \\$1}")"; else executable_sha="$(shasum -a 256 "$binary" | awk "{print \\$1}")"; fi',
   'set -- $version_output; [ "${1:-}" = redeven ] || { echo "Runtime package product mismatch" >&2; exit 8; }; reported_release="${2:-}"; reported_commit="${3:-}"; reported_commit="${reported_commit#(}"; reported_commit="${reported_commit%)}"',
   'case "$reported_release" in v*) ;; *) reported_release="v$reported_release" ;; esac; case "$release_tag" in v*) ;; *) release_tag="v$release_tag" ;; esac; [ "$reported_release" = "$release_tag" ] || { echo "package release mismatch" >&2; exit 9; }; [ "$reported_commit" = "$expected_commit" ] || { echo "package commit mismatch" >&2; exit 10; }',
-  'cp "$binary" "$stage/managed/bin/redeven"; chmod 700 "$stage/managed/bin/redeven"',
-  'if [ "$platform" = linux ]; then for companion in .redevplugin-release-artifacts-verified.json REDEVPLUGIN_THIRD_PARTY_NOTICES.md REDEVPLUGIN_RUNTIME.spdx.json redevplugin-runtime.provenance.json redevplugin-runtime.sig redevplugin-runtime.pem redevplugin-runtime; do [ -e "$extract/$companion" ] || { echo "Runtime package companion is missing: $companion" >&2; exit 11; }; cp "$extract/$companion" "$stage/managed/bin/$companion"; done; chmod 700 "$stage/managed/bin/redevplugin-runtime"; fi',
-  `stamp="$stage/managed/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
-  `{ printf "schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}\\nmanaged_by=redeven-desktop\\nslot_release_tag=%s\\ninstall_strategy=%s\\ninstalled_at_unix_ms=%s\\ncommit=%s\\nplatform=%s\\narchitecture=%s\\narchive_sha256=%s\\nexecutable_sha256=%s\\n" "$reported_release" "$strategy" "$installed_at_unix_ms" "$reported_commit" "$platform" "$architecture" "$actual_sha" "$executable_sha"; } > "$stamp"`,
+  `cp "$binary" "$stage/managed/bin/redeven"; chmod ${MANAGED_RUNTIME_EXECUTABLE_MODE} "$stage/managed/bin/redeven"`,
+  `if [ "$platform" = linux ]; then for companion in ${MANAGED_RUNTIME_LINUX_COMPANION_FILENAMES.join(' ')}; do [ -e "$extract/$companion" ] || { echo "Runtime package companion is missing: $companion" >&2; exit 11; }; cp "$extract/$companion" "$stage/managed/bin/$companion"; done; chmod ${MANAGED_RUNTIME_EXECUTABLE_MODE} "$stage/managed/bin/redevplugin-runtime"; fi`,
+  `stamp="$stage/managed/${MANAGED_RUNTIME_STAMP_FILENAME}"`,
+  `{ printf "schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}\\nmanaged_by=redeven-desktop\\nslot_release_tag=%s\\ninstall_strategy=%s\\ninstalled_at_unix_ms=%s\\ncommit=%s\\nplatform=%s\\narchitecture=%s\\narchive_sha256=%s\\nexecutable_sha256=%s\\n" "$reported_release" "$strategy" "$installed_at_unix_ms" "$reported_commit" "$platform" "$architecture" "$actual_sha" "$executable_sha"; } > "$stamp"`,
+  `chmod ${MANAGED_RUNTIME_DIRECTORY_MODE} "$stage" "$stage/managed" "$stage/managed/bin"`,
+  `if [ "$platform" = linux ]; then for metadata in ${MANAGED_RUNTIME_LINUX_EVIDENCE_FILENAMES.join(' ')}; do chmod ${MANAGED_RUNTIME_METADATA_MODE} "$stage/managed/bin/$metadata"; done; fi`,
+  `chmod ${MANAGED_RUNTIME_METADATA_MODE} "$stamp"`,
   'rm -rf -- "$extract" "$archive"',
   'printf "staging_root=%s\\narchive_sha256=%s\\narchive_size_bytes=%s\\nexecutable_sha256=%s\\nreported_release_tag=%s\\nreported_commit=%s\\n" "$stage" "$actual_sha" "$actual_size" "$executable_sha" "$reported_release" "$reported_commit"',
 ].join('\n');
 
 const installScript = [
-  `set -eu; target_root="$1"; operation_id="$2"; mode="$3"; expected_release="$4"; expected_commit="$5"; package_root="${'${target_root}'}.redeven-staging-${'${operation_id}'}-runtime"; runtime_stage="$package_root/managed"; [ -d "$runtime_stage" ] || { echo "Runtime staging is incomplete" >&2; exit 20; }`,
-  `stamp="$runtime_stage/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"; [ -f "$stamp" ] || { echo "managed runtime stamp is missing" >&2; exit 21; }`,
-  `grep -Fx "schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}" "$stamp" >/dev/null; grep -Fx "managed_by=redeven-desktop" "$stamp" >/dev/null; grep -Fx "slot_release_tag=$expected_release" "$stamp" >/dev/null; grep -Fx "commit=$expected_commit" "$stamp" >/dev/null`,
+  `set -eu; umask 077; target_root="$1"; operation_id="$2"; mode="$3"; expected_release="$4"; expected_commit="$5"; package_root="${'${target_root}'}.redeven-staging-${'${operation_id}'}-runtime"; runtime_stage="$package_root/managed"; [ -d "$runtime_stage" ] || { echo "Runtime staging is incomplete" >&2; exit 20; }`,
+  `stamp="$runtime_stage/${MANAGED_RUNTIME_STAMP_FILENAME}"; [ -f "$stamp" ] || { echo "managed runtime stamp is missing" >&2; exit 21; }`,
+  `grep -Fx "schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}" "$stamp" >/dev/null; grep -Fx "managed_by=redeven-desktop" "$stamp" >/dev/null; grep -Fx "slot_release_tag=$expected_release" "$stamp" >/dev/null; grep -Fx "commit=$expected_commit" "$stamp" >/dev/null`,
   'runtime_live="$target_root/runtime/managed"; rollback_root="$target_root/.managed-runtime-rollback-${operation_id}"; committed_root="$target_root/.managed-runtime-committed-${operation_id}"; mkdir -p "$target_root/runtime"',
   'restore_item() { live="$1"; backup="$2"; absent="$3"; if [ -e "$backup" ] || [ -L "$backup" ]; then rm -rf -- "$live"; mv "$backup" "$live"; elif [ -e "$absent" ]; then rm -rf -- "$live"; fi; }; restore_rollback() { [ -d "$rollback_root" ] || return 0; restore_item "$runtime_live" "$rollback_root/runtime" "$rollback_root/runtime.absent"; rm -rf -- "$rollback_root"; }',
   'if [ -e "$committed_root" ] || [ -L "$committed_root" ]; then rm -rf -- "$committed_root"; fi; if [ "$mode" = preserve_data ]; then restore_rollback; mkdir "$rollback_root"; if [ -e "$runtime_live" ] || [ -L "$runtime_live" ]; then mv "$runtime_live" "$rollback_root/runtime"; else : > "$rollback_root/runtime.absent"; fi; fi',
-  'rm -rf -- "$runtime_live"; mv "$runtime_stage" "$runtime_live"; chmod 700 "$runtime_live" "$runtime_live/bin"',
+  `chmod ${MANAGED_RUNTIME_DIRECTORY_MODE} "$target_root/runtime"; rm -rf -- "$runtime_live"; mv "$runtime_stage" "$runtime_live"`,
 ].join('\n');
 
 const rollbackScript = [
