@@ -574,8 +574,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                   <Index each={navigationGroups()}>
                     {(navigationGroup) => (
                       <div
-                        class="group/tree mb-1"
+                        class="group/tree relative mb-2 rounded-lg border border-sidebar-border/45 bg-sidebar-accent/20 p-1 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_28%,transparent)] transition-[border-color,background-color,box-shadow] duration-150 hover:border-sidebar-border/65 hover:bg-sidebar-accent/30"
                         data-terminal-group-id={navigationGroup().id}
+                        data-terminal-tree-group={navigationGroup().id}
                         data-terminal-group-pending={navigationGroup().pending ? 'true' : 'false'}
                         aria-busy={navigationGroup().pending ? 'true' : undefined}
                         onDragOver={(event) => {
@@ -592,10 +593,17 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           props.onMoveSession?.(sessionId, navigationGroup().id);
                         }}
                       >
-                        <div class="flex min-h-9 items-center gap-1 rounded-md border border-transparent px-1 text-sidebar-foreground hover:border-sidebar-border/35 hover:bg-sidebar-accent/35" classList={{ 'opacity-65': navigationGroup().pending }}>
+                        <div class="relative flex min-h-10 items-center gap-1 rounded-md border border-transparent px-1 text-sidebar-foreground hover:border-sidebar-border/35 hover:bg-sidebar/35" classList={{ 'opacity-65': navigationGroup().pending }}>
+                          <Show when={navigationGroup().expanded && navigationGroup().itemIds.length > 0}>
+                            <span
+                              class="pointer-events-none absolute bottom-[-5px] left-4 top-1/2 w-px bg-sidebar-border/75"
+                              data-terminal-tree-trunk={navigationGroup().id}
+                              aria-hidden="true"
+                            />
+                          </Show>
                           <button
                             type="button"
-                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            class="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] border border-sidebar-border/75 bg-sidebar/85 text-[13px] font-semibold leading-none text-sidebar-foreground shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_7%,transparent)] hover:border-sidebar-border hover:bg-sidebar-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                             data-testid={`terminal-group-toggle-${navigationGroup().id}`}
                             aria-expanded={navigationGroup().expanded}
                             aria-label={navigationGroup().expanded ? i18n.t('terminal.collapseGroup') : i18n.t('terminal.expandGroup')}
@@ -654,9 +662,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </Show>
                         </div>
                         <Show when={navigationGroup().expanded}>
-                          <div class="ml-3 border-l border-sidebar-border/45 pl-1.5" data-terminal-group-sessions={navigationGroup().id}>
+                          <div
+                            class="relative ml-4 mt-0.5 pl-4"
+                            data-terminal-group-sessions={navigationGroup().id}
+                            data-terminal-tree-children={navigationGroup().id}
+                          >
                             <For each={navigationGroup().itemIds}>
-                    {(sessionId) => {
+                    {(sessionId, sessionIndex) => {
                       const navigationIndex = createMemo(() => props.itemIds.indexOf(sessionId));
                       const item = createMemo(() => props.itemById.get(sessionId)!);
                       const sidebarActive = () => props.sidebarActiveSessionId === sessionId;
@@ -671,14 +683,27 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       const statusDescription = createMemo(() => describeTerminalSessionNavigationItem(item(), i18n.t));
                       const filesTooltip = createMemo(() => terminalFilesTooltip(item(), i18n.t));
                       return (
+                        <div class="relative mb-1 last:mb-0" data-terminal-tree-child={sessionId}>
+                          <span
+                            class="pointer-events-none absolute -left-6 top-0 h-1/2 w-6 rounded-bl-[7px] border-b border-l border-sidebar-border/75"
+                            data-terminal-tree-connector={sessionId}
+                            aria-hidden="true"
+                          />
+                          <Show when={sessionIndex() < navigationGroup().itemIds.length - 1}>
+                            <span
+                              class="pointer-events-none absolute -bottom-1 -left-6 top-1/2 w-px bg-sidebar-border/75"
+                              data-terminal-tree-continuation={sessionId}
+                              aria-hidden="true"
+                            />
+                          </Show>
                         <div
                           data-terminal-session-row={sessionId}
                           draggable={item().transitionState === 'none'}
                           class={`group relative grid items-center overflow-hidden rounded-md border text-xs transition-[background-color,border-color,color,box-shadow] duration-150 ${props.mobile
                             ? 'min-h-[68px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
-                            : 'min-h-[52px] grid-cols-[32px_minmax(0,1fr)_44px] gap-x-2 px-2 py-1'} ${sidebarActive()
+                            : 'min-h-[52px] grid-cols-[32px_minmax(0,1fr)_40px] gap-x-1.5 px-1.5 py-1'} ${sidebarActive()
                             ? 'border-sidebar-border/60 bg-sidebar-accent/65 text-sidebar-accent-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_16%,transparent),0_1px_3px_color-mix(in_srgb,var(--foreground)_6%,transparent)]'
-                            : 'border-transparent text-sidebar-foreground/80 hover:border-sidebar-border/35 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground hover:shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_4%,transparent)]'}`}
+                            : 'border-sidebar-border/30 bg-sidebar/55 text-sidebar-foreground/80 shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_3%,transparent)] hover:border-sidebar-border/55 hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground hover:shadow-[0_1px_3px_color-mix(in_srgb,var(--foreground)_6%,transparent)]'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
                           onDragStart={(event) => {
                             if (!event.dataTransfer) return;
@@ -948,6 +973,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Tooltip>
                             </span>
                           </div>
+                        </div>
                         </div>
                       );
                     }}
