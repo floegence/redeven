@@ -1,5 +1,6 @@
 import '../../index.css';
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -44,6 +45,66 @@ afterEach(() => {
 });
 
 describe('FileMarkdown rich rendering', () => {
+  it('scales document typography while preserving rendered content and scroll', async () => {
+    applyTheme('classic-dark', 'dark');
+    const host = document.createElement('div');
+    host.style.width = '900px';
+    host.style.height = '320px';
+    document.body.appendChild(host);
+    const [textScalePercent, setTextScalePercent] = createSignal(100);
+    const content = [
+      '# Typography',
+      '',
+      '```ts',
+      'const answer = 42;',
+      '```',
+      '',
+      ...Array.from({ length: 80 }, (_, index) => `Paragraph ${index + 1} keeps the document scrollable.`),
+    ].join('\n\n');
+    const dispose = render(() => (
+      <FileMarkdown
+        content={content}
+        filePath="/workspace/typography.md"
+        textScalePercent={textScalePercent()}
+        onTextScalePercentChange={setTextScalePercent}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(host.querySelector('pre.fm-code-block')).toBeTruthy();
+      });
+
+      const body = host.querySelector<HTMLElement>('.file-markdown-body');
+      const heading = host.querySelector<HTMLElement>('#typography');
+      const code = host.querySelector<HTMLElement>('pre.fm-code-block');
+      const increase = host.querySelector<HTMLButtonElement>('button[aria-label="Increase text size"]');
+      expect(body).toBeTruthy();
+      expect(heading).toBeTruthy();
+      expect(code).toBeTruthy();
+      expect(increase).toBeTruthy();
+      expect(getComputedStyle(body!).fontSize).toBe('16.5px');
+      expect(getComputedStyle(code!).fontSize).toBe('13px');
+
+      body!.scrollTop = 120;
+      increase!.focus();
+      increase!.click();
+
+      await vi.waitFor(() => {
+        expect(getComputedStyle(body!).fontSize).toBe('18.15px');
+        expect(getComputedStyle(code!).fontSize).toBe('14.3px');
+      });
+
+      expect(textScalePercent()).toBe(110);
+      expect(host.querySelector<HTMLElement>('.file-markdown-body')).toBe(body);
+      expect(host.querySelector<HTMLElement>('#typography')).toBe(heading);
+      expect(body!.scrollTop).toBeGreaterThan(0);
+      expect(increase!.matches(':focus')).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
   it('projects CSS Color 4 theme tokens to Mermaid-compatible sRGB colors', () => {
     applyTheme('classic-dark', 'dark');
 

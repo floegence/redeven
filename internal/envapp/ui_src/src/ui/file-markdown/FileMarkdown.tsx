@@ -30,6 +30,13 @@ import { resolveFileMarkdownLink } from './linkResolver';
 import { buildRedevenFileResourceUrl } from '../utils/filePreviewResource';
 import { useI18n } from '../i18n';
 import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';
+import {
+  DEFAULT_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT,
+  MARKDOWN_PREVIEW_TEXT_SCALE_STEP_PERCENT,
+  MAX_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT,
+  MIN_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT,
+  normalizeMarkdownPreviewTextScalePercent,
+} from '../services/markdownPreviewPreferences';
 import type { JSX } from 'solid-js';
 
 export interface FileMarkdownFileLinkTarget {
@@ -43,6 +50,8 @@ export interface FileMarkdownProps {
   filePath?: string;
   showToc?: boolean;
   class?: string;
+  textScalePercent?: number;
+  onTextScalePercentChange?: (percent: number) => void;
   onOpenFileLink?: (target: FileMarkdownFileLinkTarget) => void | Promise<void>;
   onUnresolvedLocalLink?: (href: string, reason: string) => void;
 }
@@ -157,6 +166,11 @@ function tocItemsEqual(left: readonly TocItem[], right: readonly TocItem[]): boo
 export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   const i18n = useI18n();
   const [readingMode, setReadingMode] = createSignal(true);
+  const [uncontrolledTextScalePercent, setUncontrolledTextScalePercent] = createSignal(
+    normalizeMarkdownPreviewTextScalePercent(
+      props.textScalePercent ?? DEFAULT_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT,
+    ),
+  );
   const [tocVisible, setTocVisible] = createSignal(props.showToc !== false);
   const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
   const [activeTocId, setActiveTocId] = createSignal('');
@@ -175,6 +189,23 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   let disposed = false;
 
   const showToc = () => props.showToc !== false;
+  const textScalePercent = () => (
+    props.textScalePercent === undefined
+      ? uncontrolledTextScalePercent()
+      : normalizeMarkdownPreviewTextScalePercent(props.textScalePercent)
+  );
+
+  const markdownTypographyStyle = createMemo<JSX.CSSProperties>(() => {
+    const scale = textScalePercent() / DEFAULT_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT;
+    return {
+      flex: '1',
+      'min-width': '0',
+      'overflow-y': 'auto',
+      '--fm-markdown-font-size': `${Number((15.5 * scale).toFixed(2))}px`,
+      '--fm-markdown-reading-font-size': `${Number((16.5 * scale).toFixed(2))}px`,
+      '--fm-markdown-code-font-size': `${Number((13 * scale).toFixed(2))}px`,
+    } as JSX.CSSProperties;
+  });
 
   const renderedHtml = createMemo<MarkdownRenderResult>(() => {
     try {
@@ -533,6 +564,17 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     });
   }
 
+  let observedTextScalePercent = textScalePercent();
+  createEffect(() => {
+    const nextTextScalePercent = textScalePercent();
+    if (nextTextScalePercent === observedTextScalePercent) return;
+    observedTextScalePercent = nextTextScalePercent;
+    queueMicrotask(() => {
+      if (disposed || !containerRef?.isConnected) return;
+      scheduleActiveTocFromScroll();
+    });
+  });
+
   function clearTocNavigationReleaseTimer(): void {
     if (tocNavigationReleaseTimer === undefined) return;
     window.clearTimeout(tocNavigationReleaseTimer);
@@ -678,11 +720,65 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     </li>
   );
 
+  function commitTextScalePercent(value: number): void {
+    const next = normalizeMarkdownPreviewTextScalePercent(value);
+    if (next === textScalePercent()) return;
+
+    if (props.onTextScalePercentChange) {
+      props.onTextScalePercentChange(next);
+    } else {
+      setUncontrolledTextScalePercent(next);
+    }
+  }
+
+  const renderTextScaleControls = (): JSX.Element => (
+    <div
+      class="fm-text-size-control"
+      role="group"
+      aria-label={i18n.t('uiCopy.preview.textSize')}
+    >
+      <button
+        type="button"
+        class="fm-toolbar-btn fm-text-size-step"
+        title={i18n.t('uiCopy.preview.decreaseTextSize')}
+        aria-label={i18n.t('uiCopy.preview.decreaseTextSize')}
+        disabled={textScalePercent() <= MIN_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT}
+        onClick={() => commitTextScalePercent(
+          textScalePercent() - MARKDOWN_PREVIEW_TEXT_SCALE_STEP_PERCENT,
+        )}
+      >
+        <span aria-hidden="true">{i18n.t('uiCopy.preview.decreaseTextSizeShort')}</span>
+      </button>
+      <button
+        type="button"
+        class="fm-toolbar-btn fm-text-size-value"
+        title={i18n.t('uiCopy.preview.resetTextSize', { percent: textScalePercent() })}
+        aria-label={i18n.t('uiCopy.preview.resetTextSize', { percent: textScalePercent() })}
+        onClick={() => commitTextScalePercent(DEFAULT_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT)}
+      >
+        {i18n.t('uiCopy.preview.textSizePercent', { percent: textScalePercent() })}
+      </button>
+      <button
+        type="button"
+        class="fm-toolbar-btn fm-text-size-step"
+        title={i18n.t('uiCopy.preview.increaseTextSize')}
+        aria-label={i18n.t('uiCopy.preview.increaseTextSize')}
+        disabled={textScalePercent() >= MAX_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT}
+        onClick={() => commitTextScalePercent(
+          textScalePercent() + MARKDOWN_PREVIEW_TEXT_SCALE_STEP_PERCENT,
+        )}
+      >
+        <span aria-hidden="true">{i18n.t('uiCopy.preview.increaseTextSizeShort')}</span>
+      </button>
+    </div>
+  );
+
   const renderToolbar = (placement: 'toc' | 'floating', inline = false): JSX.Element => (
     <div
       class={`fm-toolbar${placement === 'toc' ? ' fm-toolbar-toc' : ' fm-toolbar-floating'}${inline ? ' fm-toolbar-floating-inline' : ''}`}
       aria-label={i18n.t('uiCopy.preview.markdownControls')}
     >
+      {renderTextScaleControls()}
       <button
         type="button"
         class={`fm-toolbar-btn${readingMode() ? ' fm-toolbar-active' : ''}`}
@@ -818,7 +914,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
             <div
               ref={containerRef!}
               class={`file-markdown-body${readingMode() ? ' file-markdown-reading' : ''}`}
-              style="flex: 1; min-width: 0; overflow-y: auto;"
+              style={markdownTypographyStyle()}
               onClick={handleMarkdownClick}
               onScroll={handleMarkdownScroll}
               onPointerDown={cancelTocNavigation}

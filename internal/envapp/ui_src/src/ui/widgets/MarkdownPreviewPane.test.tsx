@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FilePreviewContextValue } from './FilePreviewContext';
 import { FilePreviewContext } from './FilePreviewContext';
 import { MarkdownPreviewPane } from './MarkdownPreviewPane';
+import { MARKDOWN_PREVIEW_TEXT_SCALE_STORAGE_KEY } from '../services/markdownPreviewPreferences';
+import { readUIStorageItem, removeUIStorageItem } from '../services/uiStorage';
 
 vi.mock('../file-markdown/mermaidPlugin', () => ({
   resolveMermaidThemeContext: vi.fn(() => ({
@@ -77,6 +79,7 @@ function createPreviewContext(openPreview: FilePreviewContextValue['openPreview'
 
 afterEach(() => {
   document.body.innerHTML = '';
+  removeUIStorageItem(MARKDOWN_PREVIEW_TEXT_SCALE_STORAGE_KEY);
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -114,6 +117,49 @@ describe('MarkdownPreviewPane', () => {
         ensureVisible: true,
       });
       expect(window.location.pathname).toBe('/_redeven_proxy/env/');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps all mounted markdown previews in sync and persists the selected size', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const context = createPreviewContext(vi.fn(async () => undefined));
+
+    const dispose = render(() => (
+      <FilePreviewContext.Provider value={context}>
+        <MarkdownPreviewPane
+          path="/workspace/first.md"
+          descriptor={{ mode: 'markdown' }}
+          text="# First"
+        />
+        <MarkdownPreviewPane
+          path="/workspace/second.md"
+          descriptor={{ mode: 'markdown' }}
+          text="# Second"
+        />
+      </FilePreviewContext.Provider>
+    ), host);
+
+    try {
+      await flushAsync();
+
+      const increaseButtons = host.querySelectorAll<HTMLButtonElement>(
+        'button[aria-label="Increase text size"]',
+      );
+      expect(increaseButtons.length).toBeGreaterThanOrEqual(2);
+      increaseButtons[0]?.click();
+      await flushAsync();
+
+      const values = Array.from(host.querySelectorAll<HTMLElement>('.fm-text-size-value'));
+      expect(values.length).toBeGreaterThanOrEqual(2);
+      expect(values.every((value) => value.textContent === '110%')).toBe(true);
+      expect(readUIStorageItem(MARKDOWN_PREVIEW_TEXT_SCALE_STORAGE_KEY)).toBe('110');
+
+      values[0]?.click();
+      await flushAsync();
+      expect(values.every((value) => value.textContent === '100%')).toBe(true);
     } finally {
       dispose();
     }
