@@ -25,10 +25,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const targetDefinitions = Object.freeze([
-  Object.freeze({ goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'] }),
-  Object.freeze({ goos: 'linux', goarch: 'arm64', desktopOS: 'linux', desktopArch: 'arm64', extensions: ['deb', 'rpm'] }),
-  Object.freeze({ goos: 'darwin', goarch: 'amd64', desktopOS: 'mac', desktopArch: 'x64', extensions: ['dmg'] }),
-  Object.freeze({ goos: 'darwin', goarch: 'arm64', desktopOS: 'mac', desktopArch: 'arm64', extensions: ['dmg'] }),
+  Object.freeze({ goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'], updateFiles: ['latest-linux.yml'] }),
+  Object.freeze({ goos: 'linux', goarch: 'arm64', desktopOS: 'linux', desktopArch: 'arm64', extensions: ['deb', 'rpm'], updateFiles: ['latest-linux-arm64.yml'] }),
+  Object.freeze({ goos: 'darwin', goarch: 'amd64', desktopOS: 'mac', desktopArch: 'x64', extensions: ['dmg'], updateFiles: [] }),
+  Object.freeze({ goos: 'darwin', goarch: 'arm64', desktopOS: 'mac', desktopArch: 'arm64', extensions: ['dmg'], updateFiles: [] }),
 ]);
 const markerName = '.redevplugin-release-artifacts-verified.json';
 const packageSharedFiles = Object.freeze([
@@ -97,16 +97,17 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
   mkdirSync(destDir, { recursive: true, mode: 0o755 });
   requireDirectory(destDir, 'release collection destination');
   if (!Number.isInteger(noFollow) || noFollow === 0) fail('O_NOFOLLOW is required for release collection');
+  const version = tag.slice(1);
+  const stableRelease = !version.includes('-');
   const expectedArtifactDirectories = targetDefinitions.flatMap((target) => [
     `package-${target.goos}-${target.goarch}`,
     `desktop-${target.goos}-${target.goarch}`,
-  ]).sort(compareStrings);
+  ]).concat(stableRelease ? ['desktop-sparkle'] : []).sort(compareStrings);
   const actualArtifactDirectories = readdirSync(downloadsDir).sort(compareStrings);
   if (JSON.stringify(actualArtifactDirectories) !== JSON.stringify(expectedArtifactDirectories)) {
     fail(`downloaded artifact directory inventory mismatch; got=${JSON.stringify(actualArtifactDirectories)} want=${JSON.stringify(expectedArtifactDirectories)}`);
   }
 
-  const version = tag.slice(1);
   const canonicalSharedFiles = new Map();
   const targetReceiptProfiles = new Map();
   const outputs = new Map();
@@ -142,7 +143,7 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
       const desktopLabel = `desktop-${target.goos}-${target.goarch}`;
       const installerNames = target.extensions.map((extension) => `Redeven-Desktop-${version}-${target.desktopOS}-${target.desktopArch}.${extension}`);
       const receiptNames = installerNames.map((name) => `${name}.redevplugin-verification.json`);
-      const desktopNames = [...installerNames, ...receiptNames];
+      const desktopNames = [...installerNames, ...receiptNames, ...target.updateFiles];
       requireClosedDirectory(desktopDirectory, desktopNames, desktopLabel);
       sourceInventories.push([desktopDirectory, desktopNames, desktopLabel]);
       for (const installerName of installerNames) {
@@ -160,10 +161,28 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
         addOutput(outputs, installerName, installer);
         addOutput(outputs, receiptName, receipt);
       }
+      for (const updateFile of target.updateFiles) {
+        addOutput(outputs, updateFile, stage(path.join(desktopDirectory, updateFile)));
+      }
+    }
+
+    if (stableRelease) {
+      const sparkleDirectory = path.join(downloadsDir, 'desktop-sparkle');
+      const sparkleNames = [
+        'appcast-mac-x64.xml',
+        'appcast-mac-arm64.xml',
+        `Redeven-Desktop-${version}-mac-x64.md`,
+        `Redeven-Desktop-${version}-mac-arm64.md`,
+      ];
+      requireClosedDirectory(sparkleDirectory, sparkleNames, 'desktop-sparkle');
+      sourceInventories.push([sparkleDirectory, sparkleNames, 'desktop-sparkle']);
+      for (const name of sparkleNames) {
+        addOutput(outputs, name, stage(path.join(sparkleDirectory, name)));
+      }
     }
 
     for (const [directory, names, label] of sourceInventories) requireClosedDirectory(directory, names, label);
-    const expectedOutputNames = expectedReleaseOutputNames(version);
+    const expectedOutputNames = expectedReleaseOutputNames(version, stableRelease);
     if (outputs.size !== expectedOutputNames.length || expectedOutputNames.some((name) => !outputs.has(name))) {
       fail('internal release collection output inventory mismatch');
     }
@@ -321,7 +340,7 @@ function fsyncDirectory(directory) {
   }
 }
 
-function expectedReleaseOutputNames(version) {
+function expectedReleaseOutputNames(version, stableRelease) {
   return [
     ...packageSharedFiles,
     ...targetDefinitions.flatMap((target) => [
@@ -331,7 +350,14 @@ function expectedReleaseOutputNames(version) {
         const installer = `Redeven-Desktop-${version}-${target.desktopOS}-${target.desktopArch}.${extension}`;
         return [installer, `${installer}.redevplugin-verification.json`];
       }),
+      ...target.updateFiles,
     ]),
+    ...(stableRelease ? [
+      'appcast-mac-x64.xml',
+      'appcast-mac-arm64.xml',
+      `Redeven-Desktop-${version}-mac-x64.md`,
+      `Redeven-Desktop-${version}-mac-arm64.md`,
+    ] : []),
   ].sort(compareStrings);
 }
 
@@ -347,7 +373,10 @@ function requireManagedOutputInventory(directory, expectedNames, phase) {
 function isManagedReleaseOutput(name) {
   return name === markerName || packageSharedFiles.includes(name) || /^redeven_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^redeven-gateway_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
-    /^Redeven-Desktop-.+\.(?:deb|rpm|dmg)(?:\.redevplugin-verification\.json)?$/u.test(name);
+    /^Redeven-Desktop-.+\.(?:deb|rpm|dmg)(?:\.redevplugin-verification\.json)?$/u.test(name) ||
+    /^Redeven-Desktop-.+-mac-(?:x64|arm64)\.md$/u.test(name) ||
+    /^latest-linux(?:-arm64)?\.yml$/u.test(name) ||
+    /^appcast-mac-(?:x64|arm64)\.xml$/u.test(name);
 }
 
 function readJSON(file, label = file) {

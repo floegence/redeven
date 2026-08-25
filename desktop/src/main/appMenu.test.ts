@@ -8,6 +8,7 @@ function buildMenu(platform: NodeJS.Platform, locale: RedevenLocale = 'en-US') {
   return buildAppMenuTemplate({
     openConnectionCenter: () => undefined,
     openAdvancedSettings: () => undefined,
+    checkForUpdates: () => undefined,
     requestQuit: () => undefined,
   }, createDesktopI18n(locale), platform);
 }
@@ -20,6 +21,7 @@ describe('appMenu', () => {
     expect(items).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Connect Environment...', accelerator: 'CommandOrControl+Shift+O' }),
       expect.objectContaining({ label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q' }),
+      expect.objectContaining({ label: 'Check for Updates...' }),
     ]));
   });
 
@@ -75,6 +77,12 @@ describe('appMenu', () => {
           expect.objectContaining({ role: 'minimize' }),
           expect.objectContaining({ role: 'zoom' }),
           expect.objectContaining({ role: 'close' }),
+        ]),
+      }),
+      expect.objectContaining({
+        label: 'Help',
+        submenu: expect.arrayContaining([
+          expect.objectContaining({ label: 'Check for Updates...' }),
         ]),
       }),
     ]));

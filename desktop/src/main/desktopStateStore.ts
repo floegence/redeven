@@ -14,12 +14,20 @@ type DesktopStateFile = Readonly<{
   version?: number;
   renderer_storage?: Readonly<Record<string, string>>;
   windows?: Readonly<Record<string, DesktopWindowState>>;
+  updater?: Readonly<{
+    linux_automatic_checks?: boolean;
+    linux_last_automatic_check_at_ms?: number;
+  }>;
 }>;
 
 type DesktopStateSnapshot = {
   version: 1;
   renderer_storage: Record<string, string>;
   windows: Record<string, DesktopWindowState>;
+  updater: {
+    linux_automatic_checks: boolean;
+    linux_last_automatic_check_at_ms: number;
+  };
 };
 
 function compact(value: unknown): string {
@@ -60,6 +68,10 @@ function normalizeSnapshot(value: unknown): DesktopStateSnapshot {
     version: 1,
     renderer_storage: {},
     windows: {},
+    updater: {
+      linux_automatic_checks: true,
+      linux_last_automatic_check_at_ms: 0,
+    },
   };
 
   if (!value || typeof value !== 'object') {
@@ -86,6 +98,14 @@ function normalizeSnapshot(value: unknown): DesktopStateSnapshot {
       }
       snapshot.windows[key] = normalized;
     }
+  }
+
+  if (candidate.updater && typeof candidate.updater === 'object') {
+    snapshot.updater.linux_automatic_checks = candidate.updater.linux_automatic_checks !== false;
+    const lastCheckAtMS = Number(candidate.updater.linux_last_automatic_check_at_ms);
+    snapshot.updater.linux_last_automatic_check_at_ms = Number.isFinite(lastCheckAtMS) && lastCheckAtMS > 0
+      ? Math.trunc(lastCheckAtMS)
+      : 0;
   }
 
   return snapshot;
@@ -188,6 +208,25 @@ export class DesktopStateStore {
       return;
     }
     delete snapshot.windows[cleanKey];
+    this.persist();
+  }
+
+  linuxAutomaticallyChecksForUpdates(): boolean {
+    return this.ensureLoaded().updater.linux_automatic_checks;
+  }
+
+  setLinuxAutomaticallyChecksForUpdates(enabled: boolean): void {
+    this.ensureLoaded().updater.linux_automatic_checks = enabled;
+    this.persist();
+  }
+
+  linuxLastAutomaticUpdateCheckAtMS(): number {
+    return this.ensureLoaded().updater.linux_last_automatic_check_at_ms;
+  }
+
+  setLinuxLastAutomaticUpdateCheckAtMS(value: number): void {
+    const normalized = Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+    this.ensureLoaded().updater.linux_last_automatic_check_at_ms = normalized;
     this.persist();
   }
 }

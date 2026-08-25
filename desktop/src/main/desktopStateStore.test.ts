@@ -35,6 +35,8 @@ describe('DesktopStateStore', () => {
       height: 840,
       maximized: true,
     });
+    store.setLinuxAutomaticallyChecksForUpdates(false);
+    store.setLinuxLastAutomaticUpdateCheckAtMS(1_725_000_000_000);
 
     const nextStore = new DesktopStateStore(filePath);
     expect(nextStore.getRendererItem('layout')).toBe('{"sidebar":240}');
@@ -47,6 +49,8 @@ describe('DesktopStateStore', () => {
       maximized: true,
       full_screen: false,
     });
+    expect(nextStore.linuxAutomaticallyChecksForUpdates()).toBe(false);
+    expect(nextStore.linuxLastAutomaticUpdateCheckAtMS()).toBe(1_725_000_000_000);
   });
 
   it('falls back to an empty snapshot when the file contains invalid data', async () => {
@@ -60,6 +64,8 @@ describe('DesktopStateStore', () => {
     expect(store.getRendererItem('missing')).toBeNull();
     expect(store.rendererKeys()).toEqual([]);
     expect(store.getWindowState('window:main')).toBeNull();
+    expect(store.linuxAutomaticallyChecksForUpdates()).toBe(true);
+    expect(store.linuxLastAutomaticUpdateCheckAtMS()).toBe(0);
   });
 
   it('removes renderer and window entries cleanly', async () => {

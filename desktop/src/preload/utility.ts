@@ -7,6 +7,7 @@ import { bootstrapDesktopShellBridge } from './desktopShell';
 import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';
 import { bootstrapDesktopLanguageBridge } from './desktopLanguage';
 import { bootstrapDesktopThemeBridge } from './windowTheme';
+import { bootstrapDesktopUpdateBridge } from './desktopUpdate';
 
 bootstrapDesktopDownloadsBridge();
 bootstrapDesktopLanguageBridge();
@@ -15,3 +16,4 @@ bootstrapDesktopSettingsBridge();
 bootstrapDesktopShellBridge();
 bootstrapDesktopStateStorageBridge();
 bootstrapDesktopThemeBridge();
+bootstrapDesktopUpdateBridge();

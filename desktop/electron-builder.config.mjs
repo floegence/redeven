@@ -5,6 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const desktopVersion = String(process.env.REDEVEN_DESKTOP_VERSION ?? '').trim() || '0.1.0';
+const desktopUpdateBaseURL = String(process.env.REDEVEN_DESKTOP_UPDATE_BASE_URL ?? '').trim().replace(/\/+$/u, '');
+const sparklePublicKey = String(process.env.REDEVEN_SPARKLE_PUBLIC_ED_KEY ?? '').trim();
+const requireUpdateConfig = String(process.env.REDEVEN_DESKTOP_REQUIRE_UPDATE_CONFIG ?? '').trim() === '1';
 const macIdentity = String(process.env.REDEVEN_DESKTOP_MAC_IDENTITY ?? '')
   .trim()
   .replace(/^Developer ID Application:\s*/u, '')
@@ -13,6 +16,26 @@ const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(desktopDir, '..');
 const buildResourcesDir = path.join(desktopDir, 'build');
 const require = createRequire(import.meta.url);
+
+function requireHTTPSURL(value, label) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${label} must be a valid HTTPS URL.`);
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error(`${label} must be a credential-free HTTPS URL.`);
+  }
+  return parsed.toString().replace(/\/$/u, '');
+}
+
+function validateSparklePublicKey(value) {
+  if (!/^[A-Za-z0-9+/]{43}=$/u.test(value) || Buffer.from(value, 'base64').length !== 32) {
+    throw new Error('REDEVEN_SPARKLE_PUBLIC_ED_KEY must be one base64-encoded Ed25519 public key.');
+  }
+  return value;
+}
 
 function resolveTargetGoos(platform = process.platform) {
   if (platform === 'darwin' || platform === 'linux') {
@@ -79,6 +102,28 @@ const bundledReDevPluginResources = resolveTargetGoos() === 'linux'
     ].map((name) => ({ from: bundledBinaryCandidate(name), to: `bin/${name}` }))
   : [];
 const { normalizeLinuxDesktopArtifactPaths } = loadReleaseArtifactHelpers();
+const resolvedUpdateBaseURL = desktopUpdateBaseURL
+  ? requireHTTPSURL(desktopUpdateBaseURL, 'REDEVEN_DESKTOP_UPDATE_BASE_URL')
+  : '';
+if (requireUpdateConfig && !resolvedUpdateBaseURL) {
+  throw new Error('REDEVEN_DESKTOP_UPDATE_BASE_URL is required for release packaging.');
+}
+const macUpdaterInfo = resolveTargetGoos() === 'darwin' && resolvedUpdateBaseURL && sparklePublicKey
+  ? {
+      SUFeedURL: `${resolvedUpdateBaseURL}/appcast-mac-${process.arch}.xml`,
+      SUPublicEDKey: validateSparklePublicKey(sparklePublicKey),
+      SURequireSignedFeed: true,
+      SUVerifyUpdateBeforeExtraction: true,
+      SUEnableSystemProfiling: false,
+      SUEnableAutomaticChecks: true,
+      SUScheduledCheckInterval: 86400,
+      SUAutomaticallyUpdate: false,
+      SUAllowsAutomaticUpdates: false,
+    }
+  : {};
+if (requireUpdateConfig && resolveTargetGoos() === 'darwin' && Object.keys(macUpdaterInfo).length === 0) {
+  throw new Error('REDEVEN_SPARKLE_PUBLIC_ED_KEY is required for macOS release packaging.');
+}
 
 export default {
   appId: 'com.floegence.redeven.desktop',
@@ -98,6 +143,21 @@ export default {
   afterPack: async (context) => {
     const goos = resolveTargetGoos();
     const goarch = resolveTargetGoarch();
+    if (goos === 'darwin') {
+      const appContents = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents');
+      const updaterStage = path.join(desktopDir, '.bundle', 'macos-updater');
+      const stagedFramework = path.join(updaterStage, 'Sparkle.framework');
+      const stagedAddon = path.join(updaterStage, 'native', 'redeven_sparkle.node');
+      if (!fs.existsSync(stagedFramework) || !fs.existsSync(stagedAddon)) {
+        throw new Error('Prepared Sparkle framework or native bridge is missing. Run npm run prepare:macos-updater.');
+      }
+      const frameworkDestination = path.join(appContents, 'Frameworks', 'Sparkle.framework');
+      const addonDestination = path.join(appContents, 'Resources', 'native', 'redeven_sparkle.node');
+      fs.mkdirSync(path.dirname(frameworkDestination), { recursive: true });
+      fs.mkdirSync(path.dirname(addonDestination), { recursive: true });
+      execFileSync('/usr/bin/ditto', [stagedFramework, frameworkDestination]);
+      fs.copyFileSync(stagedAddon, addonDestination);
+    }
     const resourcesDir = goos === 'darwin'
       ? path.join(context.appOutDir, 'Redeven Desktop.app', 'Contents', 'Resources')
       : path.join(context.appOutDir, 'resources');
@@ -154,6 +214,7 @@ export default {
     forceCodeSigning: true,
     identity: macIdentity || undefined,
     icon: path.join(buildResourcesDir, 'icon.icns'),
+    extendInfo: macUpdaterInfo,
   },
   linux: {
     category: 'Development',
@@ -171,4 +232,7 @@ export default {
   rpm: {
     packageName: 'redeven-desktop',
   },
+  ...(resolveTargetGoos() === 'linux' && resolvedUpdateBaseURL
+    ? { publish: [{ provider: 'generic', url: resolvedUpdateBaseURL, channel: 'latest' }] }
+    : {}),
 };

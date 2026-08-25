@@ -1,0 +1,3 @@
+import Sparkle
+
+enum RedevenMacOSUpdaterDependencyAnchor {}

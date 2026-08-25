@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, webContents as electronWebContents, WebContentsView, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
 import { once } from 'node:events';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import http, { type ClientRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import https from 'node:https';
@@ -49,6 +49,9 @@ import {
   trackRuntimeFlowerAttachmentOperation,
 } from './runtimeFlowerAttachmentOperationLifecycle';
 import { buildAppMenuTemplate } from './appMenu';
+import { DesktopUpdateCoordinator, type DesktopUpdateAdapter } from './desktopUpdateCoordinator';
+import { LinuxPackageUpdateAdapter } from './linuxPackageUpdateAdapter';
+import { MacSparkleUpdateAdapter } from './macSparkleUpdateAdapter';
 import {
   buildDesktopLastWindowCloseConfirmationModel,
   buildDesktopQuitConfirmationModel,
@@ -61,7 +64,6 @@ import {
 import {
   showDesktopConfirmationDialog,
 } from './desktopConfirmation';
-import { buildDesktopUpdateHandoffMessageBoxOptions } from './desktopUpdateHandoff';
 import { DesktopCodeWorkspacePackageJobStore } from './codeWorkspaceEnginePackageJobs';
 import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmationContract';
 import { createDesktopI18n } from '../shared/i18n/desktopI18n';
@@ -442,6 +444,16 @@ import {
   DESKTOP_LANGUAGE_GET_SNAPSHOT_CHANNEL,
   DESKTOP_LANGUAGE_SET_PREFERENCE_CHANNEL,
 } from '../shared/desktopLanguageIPC';
+import {
+  DESKTOP_UPDATE_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_UPDATE_OPEN_REQUESTED_CHANNEL,
+  DESKTOP_UPDATE_PERFORM_ACTION_CHANNEL,
+  DESKTOP_UPDATE_SNAPSHOT_UPDATED_CHANNEL,
+  normalizeDesktopUpdateAction,
+  unsupportedDesktopUpdateSnapshot,
+  type DesktopUpdateActionResponse,
+  type DesktopUpdateSnapshot,
+} from '../shared/desktopUpdateIPC';
 import { DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL } from '../shared/windowChromeIPC';
 import {
   DESKTOP_SHELL_OPEN_WINDOW_CHANNEL,
@@ -884,7 +896,7 @@ const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 const desktopDownloadWriter = new DesktopDownloadWriter(() => desktopLanguageState().getSnapshot().resolved_locale);
 let lastFocusedSessionKey: DesktopSessionKey | null = null;
-let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';
+let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' | 'update_installing' = 'idle';
 let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopPreferencesLoadPromise: Promise<DesktopPreferences> | null = null;
 let desktopPreferencesMutationTail: Promise<void> = Promise.resolve();
@@ -896,6 +908,9 @@ let reinstallOperationsHydrationPromise: Promise<void> | null = null;
 let desktopBundleCache: DesktopBundle | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
 let desktopLanguageStateCache: DesktopLanguageState | null = null;
+let desktopUpdateCoordinatorCache: DesktopUpdateCoordinator | null = null;
+let linuxPackageUpdateAdapterCache: LinuxPackageUpdateAdapter | null = null;
+let desktopUpdatePreparationTask: Promise<void> | null = null;
 const controlPlaneAccessStateByKey = new Map<string, DesktopControlPlaneAccessState>();
 const controlPlaneSyncStateByKey = new Map<string, DesktopControlPlaneSyncRecord>();
 const providerRuntimeHealthByControlPlaneKey = new Map<string, Map<string, DesktopProviderEnvironmentRuntimeHealth>>();
@@ -3606,6 +3621,164 @@ function desktopLanguageState(): DesktopLanguageState {
   return desktopLanguageStateCache;
 }
 
+function macApplicationBundlePath(): string {
+  let current = path.dirname(app.getPath('exe'));
+  while (current !== path.dirname(current)) {
+    if (current.endsWith('.app')) {
+      return current;
+    }
+    current = path.dirname(current);
+  }
+  return '';
+}
+
+function macApplicationIsInstalled(bundlePath: string): boolean {
+  const normalized = path.resolve(bundlePath);
+  return normalized.startsWith(`${path.sep}Applications${path.sep}`);
+}
+
+function broadcastDesktopUpdateSnapshot(snapshot: DesktopUpdateSnapshot): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send(DESKTOP_UPDATE_SNAPSHOT_UPDATED_CHANNEL, snapshot);
+    }
+  }
+}
+
+async function requestDesktopUpdateRendererUI(): Promise<void> {
+  await openDesktopWelcomeWindow({ stealAppFocus: true });
+  const launcher = liveUtilityWindow('launcher');
+  if (!launcher || launcher.webContents.isDestroyed()) {
+    return;
+  }
+  const sendRequest = (): void => {
+    if (!launcher.isDestroyed() && !launcher.webContents.isDestroyed()) {
+      launcher.webContents.send(DESKTOP_UPDATE_OPEN_REQUESTED_CHANNEL);
+    }
+  };
+  if (launcher.webContents.isLoadingMainFrame()) {
+    launcher.webContents.once('did-finish-load', sendRequest);
+  } else {
+    sendRequest();
+  }
+}
+
+async function prepareDesktopForUpdateInstallation(): Promise<void> {
+  if (desktopUpdatePreparationTask) {
+    return desktopUpdatePreparationTask;
+  }
+  if (quitPhase !== 'idle') {
+    throw new Error('Desktop is already closing.');
+  }
+  quitPhase = 'update_installing';
+  desktopUpdatePreparationTask = (async () => {
+    await shutdownDesktopWindowsAndSessions();
+    const preferences = await loadDesktopPreferencesCached();
+    const environment = preferences.local_environment;
+    const inventory = await inspectLocalManagedRuntimeProcesses({
+      executablePath: bundledRuntimeExecutablePath(),
+      runtimeRoot: localEnvironmentRuntimeRoot(environment),
+      stateRoot: localEnvironmentStateRoot(),
+      env: process.env,
+    });
+    if (inventory.summary.blocked > 0) {
+      throw new Error('Desktop found a local Runtime process whose identity cannot be verified. Stop it before installing the update.');
+    }
+    if (inventory.instances.length > 0) {
+      await stopLocalManagedRuntimeProcesses({
+        executablePath: bundledRuntimeExecutablePath(),
+        runtimeRoot: localEnvironmentRuntimeRoot(environment),
+        stateRoot: localEnvironmentStateRoot(),
+        env: process.env,
+        inventory,
+        timeoutMs: 10_000,
+      });
+    }
+    localEnvironmentRuntimeRecord = null;
+    runtimeFlowerAccessCookies.clear();
+  })();
+  try {
+    await desktopUpdatePreparationTask;
+  } catch (error) {
+    quitPhase = 'idle';
+    await requestDesktopUpdateRendererUI().catch((restoreError) => {
+      console.warn(`[redeven:desktop-update] Could not restore the launcher after update preparation failed: ${restoreError instanceof Error ? restoreError.message : String(restoreError)}`);
+    });
+    throw error;
+  } finally {
+    desktopUpdatePreparationTask = null;
+  }
+}
+
+function createDesktopUpdateAdapter(): Readonly<{
+  adapter: DesktopUpdateAdapter | null;
+  blockedMessageKey?: string;
+}> {
+  if (!app.isPackaged) {
+    return { adapter: null, blockedMessageKey: 'desktopUpdate.unsupportedBuild' };
+  }
+  if (process.platform === 'darwin') {
+    const adapter = new MacSparkleUpdateAdapter({ currentVersion: app.getVersion() });
+    const bundlePath = macApplicationBundlePath();
+    if (!bundlePath || !macApplicationIsInstalled(bundlePath)) {
+      return { adapter, blockedMessageKey: 'desktopUpdate.moveToApplications' };
+    }
+    const addonPath = path.join(process.resourcesPath, 'native', 'redeven_sparkle.node');
+    const frameworkPath = path.join(bundlePath, 'Contents', 'Frameworks', 'Sparkle.framework');
+    if (!existsSync(addonPath) || !existsSync(frameworkPath)) {
+      return { adapter, blockedMessageKey: 'desktopUpdate.unsupportedBuild' };
+    }
+    return { adapter };
+  }
+  if (process.platform === 'linux') {
+    linuxPackageUpdateAdapterCache = new LinuxPackageUpdateAdapter({
+      currentVersion: app.getVersion(),
+      automaticallyChecksForUpdates: () => desktopStateStore().linuxAutomaticallyChecksForUpdates(),
+      setAutomaticallyChecksForUpdates: (enabled) => desktopStateStore().setLinuxAutomaticallyChecksForUpdates(enabled),
+    });
+    return { adapter: linuxPackageUpdateAdapterCache };
+  }
+  return { adapter: null, blockedMessageKey: 'desktopUpdate.unsupportedBuild' };
+}
+
+function desktopUpdateCoordinator(): DesktopUpdateCoordinator {
+  if (desktopUpdateCoordinatorCache) {
+    return desktopUpdateCoordinatorCache;
+  }
+  const configuration = createDesktopUpdateAdapter();
+  desktopUpdateCoordinatorCache = new DesktopUpdateCoordinator({
+    ...configuration,
+    currentVersion: app.getVersion(),
+    automaticCheckDue: () => (
+      Date.now() - desktopStateStore().linuxLastAutomaticUpdateCheckAtMS() >= 86_400_000
+    ),
+    recordAutomaticCheck: (checkedAtMS) => desktopStateStore().setLinuxLastAutomaticUpdateCheckAtMS(checkedAtMS),
+    prepareForInstallation: prepareDesktopForUpdateInstallation,
+    onInstallationFailure: async () => {
+      if (quitPhase !== 'update_installing') {
+        return;
+      }
+      quitPhase = 'idle';
+      await requestDesktopUpdateRendererUI().catch((error) => {
+        console.warn(`[redeven:desktop-update] Could not restore the launcher after update installation failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    },
+    openReleasePage: () => openExternalURL(PUBLIC_REDEVEN_RELEASE_BASE_URL),
+    revealApplication: () => shell.showItemInFolder(macApplicationBundlePath() || app.getPath('exe')),
+    openApplicationsFolder: async () => {
+      const error = await shell.openPath('/Applications');
+      if (error) throw new Error(error);
+    },
+    requestRendererUI: () => {
+      void requestDesktopUpdateRendererUI().catch((error) => {
+        console.warn(`[redeven:desktop-update] Could not open update UI: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    },
+    onSnapshotChanged: broadcastDesktopUpdateSnapshot,
+  });
+  return desktopUpdateCoordinatorCache;
+}
+
 function appMenuActions() {
   return {
     openConnectionCenter: () => {
@@ -3622,6 +3795,9 @@ function appMenuActions() {
         const message = error instanceof Error ? error.message : String(error);
         dialog.showErrorBox('Redeven Desktop failed to open Local Environment Settings', message || 'Unknown settings error.');
       });
+    },
+    checkForUpdates: () => {
+      void desktopUpdateCoordinator().perform({ kind: 'check_for_updates' });
     },
     requestQuit: () => {
       void requestQuit();
@@ -15636,16 +15812,7 @@ function desktopShellRuntimeActionUnavailable(
 }
 
 async function showDesktopUpdateHandoffDialog(): Promise<void> {
-  const dialogOptions = buildDesktopUpdateHandoffMessageBoxOptions(
-    createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale),
-  );
-  const parentWindow = currentParentWindow();
-  const result = parentWindow
-    ? await dialog.showMessageBox(parentWindow, dialogOptions)
-    : await dialog.showMessageBox(dialogOptions);
-  if (result.response === 0) {
-    await openExternalURL(PUBLIC_REDEVEN_RELEASE_BASE_URL);
-  }
+  await desktopUpdateCoordinator().perform({ kind: 'open_update_ui' });
 }
 
 async function manageDesktopUpdateFromShell(webContentsID: number): Promise<DesktopShellRuntimeActionResponse> {
@@ -15676,7 +15843,7 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
   return {
     ok: true,
     started: false,
-    message: 'Desktop opened the update handoff.',
+    message: 'Desktop opened application updates.',
   };
 }
 
@@ -16751,6 +16918,22 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on(DESKTOP_LANGUAGE_SET_PREFERENCE_CHANNEL, (event, preference) => {
     event.returnValue = desktopLanguageState().setPreference(preference);
   });
+  ipcMain.handle(DESKTOP_UPDATE_GET_SNAPSHOT_CHANNEL, (): DesktopUpdateSnapshot => (
+    app.isReady()
+      ? desktopUpdateCoordinator().snapshot()
+      : unsupportedDesktopUpdateSnapshot(app.getVersion())
+  ));
+  ipcMain.handle(DESKTOP_UPDATE_PERFORM_ACTION_CHANNEL, async (_event, action): Promise<DesktopUpdateActionResponse> => {
+    const normalized = normalizeDesktopUpdateAction(action);
+    if (!normalized) {
+      return {
+        ok: false,
+        snapshot: desktopUpdateCoordinator().snapshot(),
+        message: 'Invalid Desktop update action.',
+      };
+    }
+    return desktopUpdateCoordinator().perform(normalized);
+  });
   ipcMain.on(DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     event.returnValue = desktopWindowChromeSnapshotForWindow(win, process.platform);
@@ -16925,6 +17108,13 @@ if (!app.requestSingleInstanceLock()) {
     listRuntimeContainersFromLauncher(request)
   ));
   ipcMain.handle(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, async (_event, request): Promise<DesktopLauncherActionResult> => {
+    if (quitPhase === 'update_installing') {
+      return launcherActionFailure(
+        'action_invalid',
+        'global',
+        'Desktop is preparing to install an update and cannot start another operation.',
+      );
+    }
     const normalized = normalizeDesktopLauncherActionRequest(request);
     if (!normalized) {
       return launcherActionFailure(
@@ -17167,6 +17357,7 @@ if (!app.requestSingleInstanceLock()) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[redeven:runtime-package-cache] Cache cleanup failed: ${message}`);
     });
+    desktopUpdateCoordinator().scheduleStartup();
     installOrRefreshAppMenu();
 
     try {
@@ -17245,6 +17436,9 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('before-quit', (event) => {
+    if (quitPhase === 'update_installing') {
+      return;
+    }
     if (quitPhase === 'confirming') {
       event.preventDefault();
       return;
@@ -17269,5 +17463,10 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin' && quitPhase === 'idle') {
       requestImmediateQuit();
     }
+  });
+
+  app.on('will-quit', () => {
+    desktopUpdateCoordinatorCache?.dispose();
+    linuxPackageUpdateAdapterCache?.dispose();
   });
 }

@@ -194,6 +194,23 @@ content-addressed suite, prepares retention, and only then changes the activatio
 symlink. Unknown activation links, unsupported architectures, missing Linux
 runtime evidence, or any Darwin runtime payload are fatal.
 
+## Desktop update publication
+
+The protected `redeven-release` environment supplies Developer ID signing,
+notarization, Sparkle Ed25519, and expected Team ID secrets without committing
+their values. Packaged Desktop builds inject only a credential-free HTTPS feed
+URL and the Sparkle public key. macOS packages are checked for the Sparkle
+framework, native bridge, architecture, hardened runtime, notarization, and
+stapling. Linux packages publish matching `latest-linux.yml` metadata for each
+architecture.
+
+Stable tags run a macOS Sparkle job that generates two appcasts with no delta
+packages, signs the appcasts and release notes, verifies their enclosure and
+release-note signatures, and removes temporary private-key files. Prerelease
+tags skip that job and the release collector rejects any stable-feed asset.
+Appcasts, signed notes, Linux metadata, and installers are included in the
+aggregate checksum and remote readback comparison before publication.
+
 ## Plugin integration gate
 
 The focused plugin gate covers:
