@@ -14,15 +14,11 @@ function makeFixture() {
     cpSync(path.join(repoRoot, relativePath), path.join(fixture, relativePath));
   }
   const uiRoot = path.join(fixture, 'internal/envapp/ui_src');
-  mkdirSync(path.join(uiRoot, 'node_modules/@floegence/floeterm-terminal-web'), { recursive: true });
+  mkdirSync(uiRoot, { recursive: true });
   mkdirSync(path.join(fixture, 'okf/dist'), { recursive: true });
   for (const relativePath of ['package.json', 'package-lock.json', 'pnpm-lock.yaml']) {
     cpSync(path.join(repoRoot, 'internal/envapp/ui_src', relativePath), path.join(uiRoot, relativePath));
   }
-  cpSync(
-    path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floeterm-terminal-web/package.json'),
-    path.join(uiRoot, 'node_modules/@floegence/floeterm-terminal-web/package.json'),
-  );
   return fixture;
 }
 
