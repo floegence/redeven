@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-08-25
+* **Flower New Chat admission handoff**: Canonical request-key confirmation now
+  settles the submitted draft, caches the real thread, transfers a still-current
+  New Chat selection, and removes the optimistic outbox row in one UI batch.
+  Live-current and send-receipt reordering can no longer flash the New Chat
+  empty state, while later user navigation remains authoritative.
+
 * **Desktop model-source ToolCall integrity**: Desktop RPC now preserves
   explicit empty argument objects and reuses one fail-closed validator for
   final ToolCalls across provider completion, RPC transport, and Floret mapping.

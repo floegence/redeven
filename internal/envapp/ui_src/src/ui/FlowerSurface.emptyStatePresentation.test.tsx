@@ -93,14 +93,13 @@ describe('Flower empty-state presentation', () => {
   });
 
   it('omits starter suggestions from the expanded companion', async () => {
-    const { snapshot, surfaceAdapter } = emptyThreadAdapter();
+    const { surfaceAdapter } = emptyThreadAdapter();
     const runtime = renderSurfaceWithAdapterProps(surfaceAdapter, {
       presentation: 'companion',
       companionOpen: true,
       engaged: true,
       transcriptVisible: true,
       companionPresenceOwner: true,
-      focusThreadRequest: { request_id: 'focus-companion-empty', thread_id: snapshot.thread_id },
     });
 
     await waitFor(() => Boolean(runtime.querySelector('.flower-empty-state')));
@@ -113,10 +112,9 @@ describe('Flower empty-state presentation', () => {
   });
 
   it('keeps actionable starter suggestions on the dedicated page', async () => {
-    const { snapshot, surfaceAdapter } = emptyThreadAdapter();
+    const { surfaceAdapter } = emptyThreadAdapter();
     const runtime = renderSurfaceWithAdapterProps(surfaceAdapter, {
       presentation: 'full',
-      focusThreadRequest: { request_id: 'focus-full-empty', thread_id: snapshot.thread_id },
     });
 
     await waitFor(() => Boolean(runtime.querySelector('.flower-empty-state')));
@@ -130,5 +128,19 @@ describe('Flower empty-state presentation', () => {
 
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value)
       .toBe('Review the selected workspace and tell me the highest-value next step.');
+  });
+
+  it('does not reuse New Chat onboarding for a selected canonical thread', async () => {
+    const { snapshot, surfaceAdapter } = emptyThreadAdapter();
+    const runtime = renderSurfaceWithAdapterProps(surfaceAdapter, {
+      presentation: 'full',
+      focusThreadRequest: { request_id: 'focus-full-empty', thread_id: snapshot.thread_id },
+    });
+
+    await waitFor(() => runtime.querySelector('[data-flower-thread-active="true"]') !== null);
+
+    expect(runtime.querySelector('.flower-empty-state')).toBeNull();
+    expect(runtime.querySelector('.flower-thread-loading')).not.toBeNull();
+    expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toContain(snapshot.title);
   });
 });
