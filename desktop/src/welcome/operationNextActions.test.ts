@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import {
+  environmentActionForLauncherRetry,
   groupedVisibleOperationNextActions,
   visibleOperationNextActions,
 } from './operationNextActions';
@@ -33,6 +34,10 @@ describe('operationNextActions', () => {
           kind: 'retry',
           operation_key: 'local:host:local:open',
           label: 'Retry',
+          retry_action: {
+            kind: 'open_local_environment',
+            environment_id: 'local',
+          },
         },
         {
           kind: 'copy_diagnostics',
@@ -76,6 +81,10 @@ describe('operationNextActions', () => {
         kind: 'retry',
         operation_key: 'local:host:local:open',
         label: 'Retry',
+        retry_action: {
+          kind: 'open_local_environment',
+          environment_id: 'local',
+        },
       },
       {
         kind: 'refresh_status',
@@ -330,6 +339,77 @@ describe('operationNextActions', () => {
     expect(visibleOperationNextActions(progress)).toEqual([
       expect.objectContaining({ kind: 'retry', label: 'Review target' }),
       expect.objectContaining({ kind: 'dismiss', operation_key: 'reinstall-target:one' }),
+    ]);
+    expect(environmentActionForLauncherRetry(progress.next_actions?.[0]?.kind === 'retry'
+      ? progress.next_actions[0].retry_action
+      : undefined)).toEqual(expect.objectContaining({
+      intent: 'reinstall_target',
+      reinstall_mode: 'wipe_data',
+    }));
+  });
+
+  it('hides retry actions that do not have an executable Environment mapping', () => {
+    const progress: DesktopLauncherActionProgress = {
+      ...failedProgress([
+        {
+          kind: 'retry',
+          operation_key: 'reinstall-target:one',
+          label: 'Retry',
+          retry_action: {
+            kind: 'reinstall_target',
+            environment_id: 'ssh:gzlight',
+            preflight_id: 'preflight-one',
+            operation_key: 'reinstall-target:one',
+            mode: 'wipe_data',
+            impact_acknowledged: true,
+          },
+        },
+      ]),
+      action: 'reinstall_target',
+      operation_key: 'reinstall-target:one',
+      subject_kind: 'runtime_target',
+      subject_id: 'ssh:gzlight',
+    };
+
+    expect(visibleOperationNextActions(progress)).toEqual([
+      expect.objectContaining({ kind: 'dismiss', operation_key: 'reinstall-target:one' }),
+    ]);
+  });
+
+  it('keeps an exact recovered reinstall continuation as the primary action', () => {
+    const progress: DesktopLauncherActionProgress = {
+      ...failedProgress([
+        {
+          kind: 'reinstall_target',
+          environment_id: 'ssh:gzlight',
+          operation_key: 'reinstall-target:one',
+          preflight_id: 'preflight-one',
+          mode: 'wipe_data',
+          label: 'Continue reinstall',
+        },
+      ]),
+      action: 'reinstall_target',
+      operation_key: 'reinstall-target:one',
+      subject_kind: 'runtime_target',
+      subject_id: 'ssh:gzlight',
+    };
+
+    expect(groupedVisibleOperationNextActions(progress)).toEqual([
+      {
+        kind: 'primary',
+        actions: [expect.objectContaining({
+          kind: 'reinstall_target',
+          operation_key: 'reinstall-target:one',
+          preflight_id: 'preflight-one',
+        })],
+      },
+      {
+        kind: 'secondary',
+        actions: [expect.objectContaining({
+          kind: 'dismiss',
+          operation_key: 'reinstall-target:one',
+        })],
+      },
     ]);
   });
 

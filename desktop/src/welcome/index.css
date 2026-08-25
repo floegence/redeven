@@ -2678,8 +2678,10 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-action-popover__action-stack button {
-  height: 100%;
   width: 100%;
+  min-height: 1.75rem;
+  height: auto;
+  padding-block: 0.25rem;
 }
 
 .redeven-action-popover__action-stack svg {

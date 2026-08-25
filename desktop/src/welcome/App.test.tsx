@@ -1648,6 +1648,10 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(styles).toContain(".redeven-action-popover__actions[data-layout='secondary'] > :only-child");
     expect(styles).toContain('grid-column: 1 / -1;');
+    expect(styles).not.toContain('.redeven-action-popover__action-stack button {\n  height: 100%;');
+    expect(styles).toContain('min-height: 1.75rem;');
+    expect(styles).toContain('height: auto;');
+    expect(styles).toContain('padding-block: 0.25rem;');
     expect(styles).toContain('.redeven-action-popover__notice');
   });
 

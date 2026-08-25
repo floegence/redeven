@@ -1,7 +1,40 @@
 import type {
+  DesktopLauncherActionRequest,
   DesktopLauncherActionProgress,
   DesktopLauncherOperationNextAction,
 } from '../shared/desktopLauncherIPC';
+import type { EnvironmentActionModel } from './viewModel';
+
+export function environmentActionForLauncherRetry(
+  request: DesktopLauncherActionRequest | undefined,
+): EnvironmentActionModel | null {
+  if (!request) {
+    return null;
+  }
+  switch (request.kind) {
+    case 'open_local_environment':
+    case 'open_ssh_environment':
+      return { intent: 'open_with_preflight', label: 'Open', enabled: true, variant: 'default' };
+    case 'start_environment_runtime':
+      return { intent: 'start_runtime', label: 'Start', enabled: true, variant: 'default' };
+    case 'stop_environment_runtime':
+      return { intent: 'stop_runtime', label: 'Stop', enabled: true, variant: 'default' };
+    case 'restart_environment_runtime':
+      return { intent: 'restart_runtime', label: 'Restart', enabled: true, variant: 'default' };
+    case 'update_environment_runtime':
+      return { intent: 'update_runtime', label: 'Update runtime', enabled: true, variant: 'default' };
+    case 'preview_reinstall_target':
+      return {
+        intent: 'reinstall_target',
+        label: 'Review reinstall target',
+        enabled: true,
+        variant: 'default',
+        reinstall_mode: request.mode ?? 'wipe_data',
+      };
+    default:
+      return null;
+  }
+}
 
 function operationNextActionKey(action: DesktopLauncherOperationNextAction): string {
   switch (action.kind) {
@@ -69,6 +102,12 @@ export function visibleOperationNextActions(
   }
   const byKind = new Map<DesktopLauncherOperationNextAction['kind'], DesktopLauncherOperationNextAction>();
   for (const action of normalizedActions) {
+    if (action.kind === 'retry' && !environmentActionForLauncherRetry(action.retry_action)) {
+      continue;
+    }
+    if (action.kind === 'reinstall_target' && (!action.operation_key || !action.preflight_id)) {
+      continue;
+    }
     if (!byKind.has(action.kind)) {
       byKind.set(action.kind, action);
     }

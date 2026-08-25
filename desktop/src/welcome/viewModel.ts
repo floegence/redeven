@@ -212,6 +212,8 @@ export type EnvironmentActionModel = Readonly<{
   runtime_operation_method?: DesktopRuntimeOperationMethod;
   disabled_reason?: string;
   reinstall_mode?: 'wipe_data' | 'preserve_data';
+  operation_key?: string;
+  preflight_id?: string;
 }>;
 
 export type EnvironmentActionMenuItemModel = Readonly<{
