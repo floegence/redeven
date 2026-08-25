@@ -469,6 +469,20 @@ func (c *desktopModelSourceClient) StreamTurn(ctx context.Context, req ModelGate
 		c.mu.Unlock()
 		return ModelGatewayResult{}, err
 	}
+	if err := validateModelGatewayResult(out); err != nil {
+		wrapped := fmt.Errorf("desktop model source RPC result: %w", err)
+		c.mu.Lock()
+		c.lastErr = wrapped.Error()
+		c.mu.Unlock()
+		if c.log != nil {
+			c.log.Error("desktop model source returned an invalid model result",
+				"stage", "rpc_decode",
+				"model_id", strings.TrimSpace(req.Model),
+				"error", err,
+			)
+		}
+		return ModelGatewayResult{}, wrapped
+	}
 	return out, nil
 }
 
@@ -968,7 +982,12 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 	case "ai.turn.stream":
 		result, err := e.streamTurn(ctx, frame, write)
 		if err != nil {
-			sendErr("TURN_STREAM_FAILED", err)
+			code := "TURN_STREAM_FAILED"
+			var contractErr *modelGatewayContractError
+			if errors.As(err, &contractErr) {
+				code = "MODEL_RESULT_INVALID"
+			}
+			sendErr(code, err)
 			return
 		}
 		sendResult(result)
@@ -1030,13 +1049,28 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	}
 	req := body.Request
 	req.Model = strings.TrimSpace(entry.ModelName)
-	return adapter.StreamTurn(ctx, req, func(ev StreamEvent) {
+	result, err := adapter.StreamTurn(ctx, req, func(ev StreamEvent) {
 		_ = write(DesktopModelSourceRPCFrame{
 			Type:  "event",
 			ID:    frame.ID,
 			Event: &ev,
 		})
 	})
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
+	if err := validateModelGatewayResult(result); err != nil {
+		if e.log != nil {
+			e.log.Error("desktop model source provider returned an invalid model result",
+				"stage", "provider_complete",
+				"request_id", strings.TrimSpace(frame.ID),
+				"model_id", publicModelID,
+				"error", err,
+			)
+		}
+		return ModelGatewayResult{}, fmt.Errorf("desktop model source provider result: %w", err)
+	}
+	return result, nil
 }
 
 func (e *desktopModelSourceExecutor) snapshot() (*DesktopModelSourceModelSnapshot, *config.Config, *settings.SecretsStore, map[string]desktopModelSourceRegistryEntry, error) {

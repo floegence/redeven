@@ -19,6 +19,7 @@ const (
 	runErrorCodeProviderUnreachable       = "provider_unreachable"
 	runErrorCodeProviderStreamInterrupted = "provider_stream_interrupted"
 	runErrorCodeProviderModelUnavailable  = "provider_model_unavailable"
+	runErrorCodeModelGatewayContract      = "model_gateway_contract_failed"
 	runErrorCodeFloretEngineFailed        = "floret_engine_failed"
 	runErrorCodeFloretControlContract     = "floret_control_contract_failed"
 	runErrorCodeFloretAdmissionBlocked    = "floret_thread_admission_blocked"
@@ -39,6 +40,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening."
 	case runErrorCodeProviderModelUnavailable:
 		return "The selected model is not available from this provider. Choose another model in the Local AI Profile."
+	case runErrorCodeModelGatewayContract:
+		return "The model source returned an incomplete tool call. No tool was run. Try again or choose another model."
 	case runErrorCodeFloretEngineFailed:
 		return "Flower could not finish this turn because the orchestration engine failed."
 	case runErrorCodeFloretControlContract:
@@ -62,6 +65,10 @@ func classifyRunFailureCode(err error, fallback string) string {
 		if code := providerHTTPStatusRunErrorCode(openAIError.StatusCode); code != "" {
 			return code
 		}
+	}
+	var gatewayContractError *modelGatewayContractError
+	if errors.As(err, &gatewayContractError) {
+		return runErrorCodeModelGatewayContract
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return runErrorCodeProviderUnreachable
@@ -101,6 +108,8 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return runErrorCodeProviderUnreachable
 	case strings.Contains(text, "unexpected eof") || strings.Contains(text, "stream closed") || strings.Contains(text, "response stream"):
 		return runErrorCodeProviderStreamInterrupted
+	case strings.Contains(text, "flower tool call requires id, name, and args") || strings.Contains(text, "model gateway result tool call"):
+		return runErrorCodeModelGatewayContract
 	case strings.Contains(text, "unregistered tool name"):
 		return runErrorCodeFloretControlContract
 	case strings.Contains(text, "thread already has an active turn"):

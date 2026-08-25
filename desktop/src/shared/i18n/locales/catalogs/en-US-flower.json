@@ -115,6 +115,7 @@
     "runErrorProviderUnreachable": "The selected AI provider could not be reached. Check the provider endpoint and network connection.",
     "runErrorProviderStreamInterrupted": "The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.",
     "runErrorProviderModelUnavailable": "The selected model is not available from this provider. Choose another model in the Local AI Profile.",
+    "runErrorModelGatewayContractFailed": "The model source returned an incomplete tool call. No tool was run. Try again or choose another model.",
     "runErrorFloretEngineFailed": "Flower could not finish this turn because the orchestration engine failed.",
     "runErrorFloretControlContractFailed": "Flower could not finish this turn because the model requested an unsupported runtime tool.",
     "runErrorRuntimeRestarted": "The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.",

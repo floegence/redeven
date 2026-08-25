@@ -234,6 +234,11 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 			return
 		}
+		if err := validateModelGatewayResult(result); err != nil {
+			wrapped := fmt.Errorf("model gateway result: %w", err)
+			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: wrapped, Reason: wrapped.Error()})
+			return
+		}
 		if strings.TrimSpace(streamedText.String()) == "" && strings.TrimSpace(result.Text) != "" {
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventDelta, Text: result.Text})
 		}
@@ -569,13 +574,13 @@ func (p *floretProviderAdapter) validateResolvedAttachment(part ContentPart) err
 }
 
 func floretToolCallsFromFlower(calls []ToolCall) ([]flprovider.ToolCall, error) {
+	if err := validateModelGatewayResult(ModelGatewayResult{ToolCalls: calls}); err != nil {
+		return nil, err
+	}
 	out := make([]flprovider.ToolCall, 0, len(calls))
 	for _, call := range calls {
 		id := strings.TrimSpace(call.ID)
 		name := strings.TrimSpace(call.Name)
-		if id == "" || name == "" || call.Args == nil {
-			return nil, errors.New("Flower tool call requires id, name, and args")
-		}
 		b, err := json.Marshal(call.Args)
 		if err != nil || !json.Valid(b) {
 			return nil, fmt.Errorf("invalid Flower tool args for %s", name)

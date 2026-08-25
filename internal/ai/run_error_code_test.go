@@ -41,6 +41,8 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "network timeout", err: timeoutNetError{}, want: runErrorCodeProviderUnreachable},
 		{name: "context timeout", err: context.DeadlineExceeded, want: runErrorCodeProviderUnreachable},
 		{name: "provider stream eof", err: errors.New("unexpected EOF"), want: runErrorCodeProviderStreamInterrupted},
+		{name: "typed model gateway contract", err: &modelGatewayContractError{ToolCallIndex: 0, MissingFields: []string{"args"}}, want: runErrorCodeModelGatewayContract},
+		{name: "historical model gateway contract", err: errors.New("Flower tool call requires id, name, and args"), want: runErrorCodeModelGatewayContract},
 		{name: "unregistered runtime tool", err: errors.New(`provider returned unregistered tool name "task_complete"`), want: runErrorCodeFloretControlContract},
 		{name: "floret effect authorization rejection", err: errors.New("effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret wrapped effect authorization rejection", err: errors.New("floret effect is unauthorized: effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
@@ -108,5 +110,18 @@ func TestUserFacingRunErrorPresentsFloretControlContractFailure(t *testing.T) {
 	}
 	if !strings.Contains(lower, "unsupported") || !strings.Contains(lower, "tool") {
 		t.Fatalf("msg=%q, want unsupported-tool presentation", msg)
+	}
+}
+
+func TestUserFacingRunErrorPresentsModelGatewayContractFailure(t *testing.T) {
+	t.Parallel()
+
+	msg := userFacingRunError(runErrorCodeModelGatewayContract, "Flower tool call requires id, name, and args")
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "requires id") || strings.Contains(lower, "flower tool call") {
+		t.Fatalf("msg=%q exposed internal model gateway contract details", msg)
+	}
+	if !strings.Contains(lower, "model source") || !strings.Contains(lower, "no tool was run") {
+		t.Fatalf("msg=%q, want model-source integrity presentation", msg)
 	}
 }
