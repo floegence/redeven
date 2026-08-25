@@ -371,6 +371,7 @@ func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachS
 		LocalUIURL:               endpoint.LocalUIURL,
 		LocalUIURLs:              append([]string(nil), endpoint.LocalUIURLs...),
 		LocalUIBridgeURL:         endpoint.LocalUIBridgeURL,
+		LocalUIBridgeToken:       endpoint.LocalUIBridgeToken,
 		RuntimeControl:           runtimeControlEndpointFromRuntimeStatus(endpoint.RuntimeControl),
 		PasswordRequired:         endpoint.PasswordRequired,
 		Exposure:                 endpoint.Exposure,

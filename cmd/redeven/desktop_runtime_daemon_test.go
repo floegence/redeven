@@ -145,8 +145,9 @@ func TestDesktopLaunchReportFromRuntimeStatusIncludesStartTime(t *testing.T) {
 			StartedAtUnixMS: 1778751234567,
 		},
 		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
-			LocalUIURL:       "http://127.0.0.1:23998/",
-			LocalUIBridgeURL: "http://127.0.0.1:43123/",
+			LocalUIURL:         "http://127.0.0.1:23998/",
+			LocalUIBridgeURL:   "http://127.0.0.1:43123/",
+			LocalUIBridgeToken: testLocalUIBridgeToken,
 		},
 		RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
 			EffectiveRunMode: "desktop",
@@ -164,5 +165,8 @@ func TestDesktopLaunchReportFromRuntimeStatusIncludesStartTime(t *testing.T) {
 	}
 	if report.LocalUIBridgeURL != "http://127.0.0.1:43123/" {
 		t.Fatalf("LocalUIBridgeURL = %q", report.LocalUIBridgeURL)
+	}
+	if report.LocalUIBridgeToken != testLocalUIBridgeToken {
+		t.Fatal("desktop daemon report omitted private bridge authorization")
 	}
 }

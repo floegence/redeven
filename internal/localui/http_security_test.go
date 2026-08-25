@@ -124,9 +124,11 @@ func TestDesktopBridgeAcceptsOnlyLoopbackAuthority(t *testing.T) {
 	t.Parallel()
 
 	s := newTestServer(t, nil)
+	s.localUIBridgeToken = "test-private-bridge-token"
 	for _, host := range []string{"localhost:24000", "127.0.0.1:24000", "[::1]:24000"} {
 		req := httptest.NewRequest(http.MethodGet, "http://localhost:24000/", nil)
 		req.Host = host
+		req.Header.Set(localDesktopBridgeTokenHeader, s.localUIBridgeToken)
 		res := httptest.NewRecorder()
 		s.HandlerForDesktopBridge().ServeHTTP(res, req)
 		if res.Code != http.StatusFound {
@@ -136,11 +138,27 @@ func TestDesktopBridgeAcceptsOnlyLoopbackAuthority(t *testing.T) {
 	for _, host := range []string{"192.168.1.10:23998", "evil.example:23998", "127.0.0.1", "127.0.0.1:notaport"} {
 		req := httptest.NewRequest(http.MethodGet, "http://localhost:24000/", nil)
 		req.Host = host
+		req.Header.Set(localDesktopBridgeTokenHeader, s.localUIBridgeToken)
 		res := httptest.NewRecorder()
 		s.HandlerForDesktopBridge().ServeHTTP(res, req)
 		if res.Code != http.StatusMisdirectedRequest {
 			t.Fatalf("bridge Host %q status = %d, want %d", host, res.Code, http.StatusMisdirectedRequest)
 		}
+	}
+
+	for name, token := range map[string]string{"missing": "", "wrong": "wrong-token"} {
+		t.Run(name+" authorization", func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/", nil)
+			req.Host = "127.0.0.1:24000"
+			if token != "" {
+				req.Header.Set(localDesktopBridgeTokenHeader, token)
+			}
+			res := httptest.NewRecorder()
+			s.HandlerForDesktopBridge().ServeHTTP(res, req)
+			if res.Code != http.StatusUnauthorized {
+				t.Fatalf("bridge authorization status = %d, want %d", res.Code, http.StatusUnauthorized)
+			}
+		})
 	}
 
 }

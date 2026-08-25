@@ -42,6 +42,7 @@ import {
   type RuntimePlacementBridgeHello,
   type RuntimePlacementBridgeSurface,
 } from './runtimePlacementBridgeProtocol';
+import { normalizeDesktopPrivateBridgeToken } from './desktopPrivateBridge';
 
 const DEFAULT_BRIDGE_RECOVERY_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000] as const;
 
@@ -772,6 +773,13 @@ export async function startRuntimePlacementBridgeSession(
 
   const hello = initialTransport.hello;
   const localUIURL = proxy?.url ?? '';
+  const localUIBridgeToken = requireLocalUI
+    ? normalizeDesktopPrivateBridgeToken(hello.local_ui.bridge_token)
+    : '';
+  if (requireLocalUI && localUIBridgeToken === '') {
+    await settleBridgeSession(new Error('Runtime Placement Bridge is missing private Local UI authorization.'));
+    throw new Error('Runtime Placement Bridge is missing private Local UI authorization.');
+  }
   const runtimeControl = proxy ? runtimeControlEndpointFromBridgeHello(hello, proxy.url) : undefined;
   const runtimeService = hello.runtime_service;
   const placementTargetID = desktopRuntimeTargetID(
@@ -785,6 +793,8 @@ export async function startRuntimePlacementBridgeSession(
   const startup: StartupReport = {
     local_ui_url: localUIURL,
     local_ui_urls: localUIURL ? [localUIURL] : [],
+    ...(localUIURL ? { local_ui_bridge_url: localUIURL } : {}),
+    ...(localUIBridgeToken ? { local_ui_bridge_token: localUIBridgeToken } : {}),
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),
     effective_run_mode: runtimeService?.effective_run_mode,
     remote_enabled: runtimeService?.remote_enabled,

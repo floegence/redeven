@@ -1199,7 +1199,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 	}()
 
 	if len(grant.ArtifactJSON) == 0 {
-		return errors.New("missing Flowersec v2 data artifact")
+		return errors.New("missing Flowersec v3 data artifact")
 	}
 	artifact, err := flowersec.ParseArtifact(grant.ArtifactJSON)
 	if err != nil {

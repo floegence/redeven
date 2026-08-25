@@ -9,6 +9,7 @@ describe('launchReport', () => {
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
       local_ui_bridge_url: 'http://127.0.0.1:43124/',
+      local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       password_required: true,
       effective_run_mode: 'hybrid',
       remote_enabled: true,
@@ -21,6 +22,7 @@ describe('launchReport', () => {
         local_ui_url: 'http://127.0.0.1:43123/',
         local_ui_urls: ['http://127.0.0.1:43123/'],
         local_ui_bridge_url: 'http://127.0.0.1:43124/',
+        local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         password_required: true,
         effective_run_mode: 'hybrid',
         remote_enabled: true,
@@ -37,6 +39,7 @@ describe('launchReport', () => {
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
       local_ui_bridge_url: 'http://127.0.0.1:43124/',
+      local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       password_required: false,
       effective_run_mode: 'local',
       remote_enabled: false,
@@ -48,6 +51,7 @@ describe('launchReport', () => {
         local_ui_url: 'http://127.0.0.1:43123/',
         local_ui_urls: ['http://127.0.0.1:43123/'],
         local_ui_bridge_url: 'http://127.0.0.1:43124/',
+        local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         password_required: false,
         effective_run_mode: 'local',
         remote_enabled: false,
@@ -108,7 +112,21 @@ describe('launchReport', () => {
       local_ui_url: 'http://100.126.191.114:23998/',
       local_ui_urls: ['http://100.126.191.114:23998/'],
       local_ui_bridge_url: 'http://100.126.191.114:43124/',
+      local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     }))).toThrow(/loopback/iu);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', 'too-short'],
+  ])('rejects %s private bridge authorization', (_label, localUIBridgeToken) => {
+    expect(() => parseLaunchReport(JSON.stringify({
+      status: 'ready',
+      local_ui_url: 'http://127.0.0.1:43123/',
+      local_ui_urls: ['http://127.0.0.1:43123/'],
+      local_ui_bridge_url: 'http://127.0.0.1:43124/',
+      local_ui_bridge_token: localUIBridgeToken,
+    }))).toThrow(/matching private Local UI bridge URL and authorization/iu);
   });
 
   it('formats blocked diagnostics for clipboard export', () => {

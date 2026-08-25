@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,6 +63,7 @@ type desktopLaunchReport struct {
 	LocalUIURL               string                            `json:"local_ui_url,omitempty"`
 	LocalUIURLs              []string                          `json:"local_ui_urls,omitempty"`
 	LocalUIBridgeURL         string                            `json:"local_ui_bridge_url,omitempty"`
+	LocalUIBridgeToken       string                            `json:"local_ui_bridge_token,omitempty"`
 	RuntimeControl           *runtimeControlEndpoint           `json:"runtime_control,omitempty"`
 	PasswordRequired         bool                              `json:"password_required"`
 	Exposure                 runtimemanagement.LocalUIExposure `json:"exposure"`
@@ -120,6 +122,10 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 			return fmt.Errorf("invalid local_ui_bridge_url: %w", err)
 		}
 		report.LocalUIBridgeURL = normalizedBridgeURL
+		report.LocalUIBridgeToken = normalizeLocalUIBridgeToken(report.LocalUIBridgeToken)
+		if report.LocalUIBridgeToken == "" {
+			return errors.New("invalid local_ui_bridge_token")
+		}
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
 		report.ProviderOrigin = strings.TrimSpace(report.ProviderOrigin)
 		report.ControlplaneBaseURL = strings.TrimSpace(report.ControlplaneBaseURL)
@@ -157,6 +163,15 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 		return err
 	}
 	return os.Rename(tmpPath, cleanPath)
+}
+
+func normalizeLocalUIBridgeToken(raw string) string {
+	token := strings.TrimSpace(raw)
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(decoded) != 32 || base64.RawURLEncoding.EncodeToString(decoded) != token {
+		return ""
+	}
+	return token
 }
 
 func compactStrings(values []string) []string {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Readable, Writable } from 'node:stream';
 
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
+import { normalizeDesktopPrivateBridgeToken } from './desktopPrivateBridge';
 import {
   normalizeRuntimeServiceSnapshot,
   type RuntimeServiceSnapshot,
@@ -43,6 +44,7 @@ export type RuntimePlacementBridgeHello = Readonly<{
   local_ui: Readonly<{
     available: boolean;
     base_path: string;
+    bridge_token?: string;
   }>;
   runtime_control: Readonly<{
     available: boolean;
@@ -312,14 +314,20 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
   const gatewayService = parsed.gateway_service && typeof parsed.gateway_service === 'object'
     ? parsed.gateway_service as Record<string, unknown>
     : null;
+  const localUIAvailable = localUI.available === true;
+  const localUIBridgeToken = normalizeDesktopPrivateBridgeToken(localUI.bridge_token);
+  if (localUIAvailable && localUIBridgeToken === '') {
+    throw new Error('Runtime Placement Bridge did not provide valid private Local UI authorization.');
+  }
   return {
     protocol_version: RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION,
     runtime_version: compact(parsed.runtime_version),
     runtime_commit: compact(parsed.runtime_commit) || undefined,
     started_at_unix_ms: normalizePositiveInteger(parsed.started_at_unix_ms),
     local_ui: {
-      available: localUI.available === true,
+      available: localUIAvailable,
       base_path: compact(localUI.base_path) || '/',
+      ...(localUIBridgeToken ? { bridge_token: localUIBridgeToken } : {}),
     },
     runtime_control: {
       available: runtimeControl.available === true,

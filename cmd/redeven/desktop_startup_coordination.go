@@ -46,6 +46,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		LocalUIURL:               startup.LocalUIURL,
 		LocalUIURLs:              append([]string(nil), startup.LocalUIURLs...),
 		LocalUIBridgeURL:         startup.LocalUIBridgeURL,
+		LocalUIBridgeToken:       startup.LocalUIBridgeToken,
 		RuntimeControl:           startup.RuntimeControl,
 		PasswordRequired:         startup.PasswordRequired,
 		Exposure:                 startup.Exposure,
@@ -68,6 +69,7 @@ type runtimeStartupReport struct {
 	LocalUIURL               string
 	LocalUIURLs              []string
 	LocalUIBridgeURL         string
+	LocalUIBridgeToken       string
 	RuntimeControl           *runtimeControlEndpoint
 	PasswordRequired         bool
 	Exposure                 runtimemanagement.LocalUIExposure
@@ -91,9 +93,10 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 		endpoint = &runtimemanagement.RuntimeAttachEndpoint{}
 	}
 	return runtimeStartupReport{
-		LocalUIURL:       endpoint.LocalUIURL,
-		LocalUIURLs:      append([]string(nil), endpoint.LocalUIURLs...),
-		LocalUIBridgeURL: endpoint.LocalUIBridgeURL,
+		LocalUIURL:         endpoint.LocalUIURL,
+		LocalUIURLs:        append([]string(nil), endpoint.LocalUIURLs...),
+		LocalUIBridgeURL:   endpoint.LocalUIBridgeURL,
+		LocalUIBridgeToken: endpoint.LocalUIBridgeToken,
 		RuntimeControl: func() *runtimeControlEndpoint {
 			if endpoint.RuntimeControl == nil {
 				return nil

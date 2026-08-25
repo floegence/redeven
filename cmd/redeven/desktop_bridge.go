@@ -47,6 +47,11 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 		fmt.Fprintf(c.stderr, "desktop-bridge failed: %v\n", err)
 		return 1
 	}
+	localUIBridgeToken := normalizeLocalUIBridgeToken(state.Endpoint.LocalUIBridgeToken)
+	if localUIBridgeToken == "" {
+		fmt.Fprintln(c.stderr, "desktop-bridge failed: Runtime did not provide valid private Local UI bridge authorization")
+		return 1
+	}
 	probeCtx, probeCancel := context.WithTimeout(context.Background(), *probeTimeout)
 	probeErr := desktopbridge.ProbeSurface(probeCtx, dialSurface, desktopbridge.StreamSurfaceLocalUI)
 	probeCancel()
@@ -65,8 +70,9 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 			RuntimeCommit:   Commit,
 			StartedAtUnixMS: state.Identity.StartedAtUnixMS,
 			LocalUI: desktopbridge.HelloLocalUI{
-				Available: true,
-				BasePath:  "/",
+				Available:   true,
+				BasePath:    "/",
+				BridgeToken: localUIBridgeToken,
 			},
 			RuntimeControl: desktopbridge.RuntimeControl{
 				Available:       controlEndpoint != nil,

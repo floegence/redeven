@@ -280,7 +280,8 @@ Local UI bind rules:
   - Network examples: 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998
   - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
   - Every Local UI bind uses trusted HTTPS; Flowersec uses an independent runtime-assigned WSS listener.
-  - Runtime startup fails when the explicit device CA is missing, invalid, expired, or untrusted.
+  - Runtime startup fails when the explicit device CA identity is missing, invalid, or expired.
+  - Each browser or client must trust the exported CA; Linux trust import is manual and never uses sudo.
   - Network binds additionally require a fixed port and password authentication.
 
 Password rules:

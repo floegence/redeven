@@ -22,6 +22,17 @@ describe('desktopSessionContext', () => {
     });
   });
 
+  it('publishes document provenance only for private Desktop bridge transports', () => {
+    const target = buildLocalEnvironmentDesktopTarget(testLocalEnvironment());
+    expect(desktopSessionContextSnapshotFromTarget(target, undefined, 'native_local_bridge')).toMatchObject({
+      document_transport: 'desktop_private_bridge_v1',
+    });
+    expect(desktopSessionContextSnapshotFromTarget(target, undefined, 'placement_bridge')).toMatchObject({
+      document_transport: 'desktop_private_bridge_v1',
+    });
+    expect(desktopSessionContextSnapshotFromTarget(target, undefined, 'provider_remote')).not.toHaveProperty('document_transport');
+  });
+
   it('publishes provider identity from the provider target instead of the remote desktop route alone', () => {
     expect(desktopSessionContextSnapshotFromTarget(buildProviderEnvironmentDesktopTarget(testProviderEnvironment(
       'https://provider.example.invalid/path',

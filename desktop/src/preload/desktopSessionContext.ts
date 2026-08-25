@@ -73,6 +73,7 @@ export function bootstrapDesktopSessionContextBridge(): void {
       const providerID = String(candidate.provider_id ?? '').trim();
       const envPublicID = String(candidate.env_public_id ?? '').trim();
       const label = String(candidate.label ?? '').trim();
+      const documentTransport = String(candidate.document_transport ?? '').trim();
       const localUIExposure = (() => {
         try {
           return candidate.local_ui_exposure == null ? undefined : parseLocalUIExposure(candidate.local_ui_exposure);
@@ -98,6 +99,7 @@ export function bootstrapDesktopSessionContextBridge(): void {
         ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
         ...(label !== '' ? { label } : {}),
         ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
+        ...(documentTransport === 'desktop_private_bridge_v1' ? { document_transport: documentTransport } : {}),
       };
     },
     getTransportRecoverySnapshot: () => currentRecoverySnapshot,

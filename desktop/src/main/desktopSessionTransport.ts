@@ -1,6 +1,10 @@
 import type { DesktopSessionTarget } from './desktopTarget';
 import { buildLocalUIEnvAppEntryURL, normalizeLocalUIBridgeURL } from './localUIURL';
 import type { StartupReport } from './startup';
+import {
+  DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER,
+  normalizeDesktopPrivateBridgeToken,
+} from './desktopPrivateBridge';
 
 export type DesktopSessionTransportKind =
   | 'native_local_bridge'
@@ -18,6 +22,38 @@ export type DesktopSessionTransport = Readonly<{
   proxyPolicy: 'direct' | 'system';
   partition: string;
 }>;
+
+export type DesktopRequestHeaders = Record<string, string | string[]>;
+
+export function desktopPrivateBridgeRequestHeaders(
+  transport: DesktopSessionTransport,
+  startup: StartupReport,
+  requestURL: string,
+  requestHeaders: DesktopRequestHeaders,
+): DesktopRequestHeaders {
+  if (transport.kind !== 'native_local_bridge' && transport.kind !== 'placement_bridge') {
+    return requestHeaders;
+  }
+  const token = normalizeDesktopPrivateBridgeToken(startup.local_ui_bridge_token);
+  if (!token) {
+    return requestHeaders;
+  }
+  try {
+    const request = new URL(requestURL);
+    const allowed = new URL(transport.allowedBaseURL);
+    if (request.origin !== allowed.origin || request.protocol !== 'http:') {
+      return requestHeaders;
+    }
+  } catch {
+    return requestHeaders;
+  }
+  const normalizedHeaderName = DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER.toLowerCase();
+  const authorizedHeaders = Object.fromEntries(
+    Object.entries(requestHeaders).filter(([name]) => name.toLowerCase() !== normalizedHeaderName),
+  ) as DesktopRequestHeaders;
+  authorizedHeaders[DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER] = token;
+  return authorizedHeaders;
+}
 
 export function shouldFailDesktopSessionMainDocument(input: Readonly<{
   lifecycle: 'opening' | 'open' | 'closing';
@@ -51,6 +87,14 @@ export function requireLocalUIBridgeURL(startup: StartupReport): string {
   return normalizeLocalUIBridgeURL(startup.local_ui_bridge_url);
 }
 
+function requireLocalUIBridgeToken(startup: StartupReport): string {
+  const token = normalizeDesktopPrivateBridgeToken(startup.local_ui_bridge_token);
+  if (!token) {
+    throw new Error('Desktop startup report is missing private Local UI bridge authorization.');
+  }
+  return token;
+}
+
 export function resolveDesktopSessionTransport(
   target: DesktopSessionTarget,
   startup: StartupReport,
@@ -59,6 +103,7 @@ export function resolveDesktopSessionTransport(
   const displayURL = startup.local_ui_url;
   if (target.kind === 'local_environment' && target.route === 'local_host' && options.placementBridge !== true) {
     const baseURL = requireLocalUIBridgeURL(startup);
+    requireLocalUIBridgeToken(startup);
     return {
       kind: 'native_local_bridge',
       baseURL,
@@ -71,6 +116,7 @@ export function resolveDesktopSessionTransport(
   }
 
   if (options.placementBridge === true || target.kind === 'ssh_environment') {
+    requireLocalUIBridgeToken(startup);
     const baseURL = rootURL(startup.local_ui_url);
     return {
       kind: 'placement_bridge',

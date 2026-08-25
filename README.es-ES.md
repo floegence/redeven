@@ -86,15 +86,22 @@ Para equipos remotos, Desktop puede instalar automáticamente la versión corres
 # 1. Instalar
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Generar y confiar en la CA del dispositivo de Local UI (una vez)
+# 2. Generar la CA del dispositivo de Local UI (una vez)
 redeven local-authority device-ca generate --state-root ~/.redeven
+
+# macOS o Windows: instalarla en el almacén de confianza del usuario actual
 redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# Linux: exportar el certificado público y después importarlo manualmente
+redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
 # 3. Ejecutar
 redeven run
 
 # 4. Abrir https://localhost:23998 en el navegador.
 ```
+
+En Linux, importa el certificado público exportado en el almacén de confianza que use realmente tu navegador o cliente. `install --scope user` devuelve `manual_required` de forma intencionada en Linux; Redeven nunca ejecuta `sudo` ni modifica un almacén de confianza de todo el sistema. El entorno de ejecución valida la identidad de la CA y el certificado de servidor generado antes de servir HTTPS/WSS, pero no puede establecer la confianza del cliente por ti. Por tanto, la conexión TLS del cliente falla de forma segura hasta que ese navegador o cliente confía en la CA.
 
 La primera ejecución de `redeven run` inicializa el estado local en `~/.redeven/local-environment/` y arranca en modo local. No hace falta realizar el bootstrap ni configurar el plano de control. Local UI escucha en `localhost:23998` y solo está disponible desde este dispositivo; no admite el acceso directo desde una LAN ni desde una red pública. Pulsa Ctrl+C para detener el entorno de ejecución.
 

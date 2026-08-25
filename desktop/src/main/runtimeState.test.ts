@@ -6,6 +6,7 @@ import {
   probeExternalLocalUIHealth,
   probeExternalLocalUIStartup,
   probeLocalRuntimeBridgeHealth,
+  probeLocalRuntimeBridgeStartup,
   validateExternalLocalUIShell,
   type RuntimeProbeResult,
 } from './runtimeState';
@@ -74,7 +75,24 @@ async function closeServer(server: http.Server): Promise<void> {
 
 describe('runtimeState', () => {
   it('requires and probes the trusted Local Runtime bridge', async () => {
-    const server = http.createServer((_request, response) => {
+    const authorizedPaths: string[] = [];
+    const server = http.createServer((request, response) => {
+      if (request.headers['x-redeven-desktop-bridge-token'] !== 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') {
+        response.writeHead(401);
+        response.end('authorization required');
+        return;
+      }
+      authorizedPaths.push(request.url ?? '');
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/assets/index.js') {
+        response.writeHead(200, { 'Content-Type': 'application/javascript' });
+        response.end();
+        return;
+      }
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(openableHealthPayload(123));
     });
@@ -83,17 +101,36 @@ describe('runtimeState', () => {
       local_ui_url: 'http://127.0.0.1:26800/',
       local_ui_urls: ['http://127.0.0.1:26800/'],
       local_ui_bridge_url: bridgeURL,
+      local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     };
 
     try {
       const result = await probeLocalRuntimeBridgeHealth(startup);
       expect(expectProbeSuccess(result)).toMatchObject({
         local_ui_url: bridgeURL,
+        local_ui_bridge_url: bridgeURL,
+        local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         started_at_unix_ms: 123,
       });
+      expect(expectProbeSuccess(await probeLocalRuntimeBridgeStartup(startup))).toMatchObject({
+        local_ui_bridge_url: bridgeURL,
+        local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      });
+      expect(authorizedPaths).toEqual(expect.arrayContaining([
+        '/api/local/runtime/health',
+        '/_redeven_proxy/env/',
+        '/_redeven_proxy/env/assets/index.js',
+      ]));
       await expect(probeLocalRuntimeBridgeHealth({
         ...startup,
         local_ui_bridge_url: undefined,
+      })).resolves.toEqual({
+        ok: false,
+        failure: { kind: 'invalid_response', stage: 'runtime_health' },
+      });
+      await expect(probeLocalRuntimeBridgeHealth({
+        ...startup,
+        local_ui_bridge_token: undefined,
       })).resolves.toEqual({
         ok: false,
         failure: { kind: 'invalid_response', stage: 'runtime_health' },

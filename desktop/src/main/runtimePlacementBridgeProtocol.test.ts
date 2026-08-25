@@ -127,6 +127,7 @@ describe('runtimePlacementBridgeProtocol', () => {
       local_ui: {
         available: true,
         base_path: '/',
+        bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       },
       runtime_control: {
         available: true,
@@ -148,6 +149,7 @@ describe('runtimePlacementBridgeProtocol', () => {
       local_ui: {
         available: true,
         base_path: '/',
+        bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       },
       runtime_control: {
         available: false,
@@ -167,6 +169,7 @@ describe('runtimePlacementBridgeProtocol', () => {
       local_ui: {
         available: true,
         base_path: '/',
+        bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       },
       runtime_control: {
         available: false,
@@ -174,5 +177,23 @@ describe('runtimePlacementBridgeProtocol', () => {
     })));
 
     expect(hello.started_at_unix_ms).toBeUndefined();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', 'too-short'],
+  ])('rejects %s private Local UI authorization in bridge hello', (_label, bridgeToken) => {
+    expect(() => parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
+      protocol_version: 'redeven-desktop-bridge-v1',
+      runtime_version: 'test-runtime',
+      local_ui: {
+        available: true,
+        base_path: '/',
+        bridge_token: bridgeToken,
+      },
+      runtime_control: {
+        available: false,
+      },
+    })))).toThrow(/valid private Local UI authorization/iu);
   });
 });

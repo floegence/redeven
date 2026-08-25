@@ -1,14 +1,18 @@
 import type { DesktopSessionContextSnapshot } from '../shared/desktopSessionContextIPC';
 import type { DesktopSessionTarget } from './desktopTarget';
 import type { LocalUIExposure } from '../shared/localUIExposure';
+import type { DesktopSessionTransportKind } from './desktopSessionTransport';
 
 export function desktopSessionContextSnapshotFromTarget(
   target: DesktopSessionTarget | null,
   localUIExposure?: LocalUIExposure,
+  transportKind?: DesktopSessionTransportKind,
 ): DesktopSessionContextSnapshot | null {
   if (!target) {
     return null;
   }
+
+  const privateBridgeDocument = transportKind === 'native_local_bridge' || transportKind === 'placement_bridge';
 
   if (target.kind === 'local_environment') {
     return {
@@ -24,6 +28,7 @@ export function desktopSessionContextSnapshotFromTarget(
       ...(target.provider_id ? { provider_id: target.provider_id } : {}),
       ...(target.env_public_id ? { env_public_id: target.env_public_id } : {}),
       ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
+      ...(privateBridgeDocument ? { document_transport: 'desktop_private_bridge_v1' as const } : {}),
     };
   }
 
@@ -41,5 +46,6 @@ export function desktopSessionContextSnapshotFromTarget(
         : 'external_local_ui',
     label: target.label,
     ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
+    ...(privateBridgeDocument ? { document_transport: 'desktop_private_bridge_v1' as const } : {}),
   };
 }

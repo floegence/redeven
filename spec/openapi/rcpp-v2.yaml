@@ -649,7 +649,7 @@ components:
       properties:
         artifact_json:
           type: object
-          description: Opaque Flowersec v2 artifact JSON; its exact serialized form is limited to 65,536 bytes and consumers must pass it only to the published SDK parser.
+          description: Opaque Flowersec v3 artifact JSON; its exact serialized form is limited to 65,536 bytes and consumers must pass it only to the published SDK parser.
         artifact_channel_id:
           type: string
           minLength: 1

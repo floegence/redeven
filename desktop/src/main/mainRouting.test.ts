@@ -141,7 +141,7 @@ describe('main routing', () => {
     const freshAccessStart = mainSrc.indexOf('async function verifyReinstallTargetCatalogAndLocalUI(');
     const freshAccessEnd = mainSrc.indexOf('function reinstallTargetCoordinator()', freshAccessStart);
     const freshAccessSrc = mainSrc.slice(freshAccessStart, freshAccessEnd);
-    expect(freshAccessSrc).toContain('probeExternalLocalUIStartup(bridge.startup.local_ui_url');
+    expect(freshAccessSrc).toContain('probeLocalRuntimeBridgeStartup(bridge.startup');
     expect(freshAccessSrc).toContain('signal,');
     expect(freshAccessSrc).toContain('runtimeServiceIsOpenable(localUI.value.runtime_service)');
     expect(freshStartSrc).not.toContain('runtimeHostExecutor(');
@@ -1020,7 +1020,7 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain("kind: 'restart_environment_runtime' as const");
     expect(bridgeOpenSrc).toContain('The SSH Runtime stopped while Desktop was connecting.');
     expect(bridgeOpenSrc).toContain("phase: 'checking_env_app_readiness'");
-    expect(bridgeOpenSrc.match(/probeExternalLocalUIStartup\(bridgeSession\.startup\.local_ui_url/gu)).toHaveLength(1);
+    expect(bridgeOpenSrc.match(/probeLocalRuntimeBridgeStartup\(bridgeSession\.startup/gu)).toHaveLength(1);
     expect(bridgeOpenSrc).toContain('desktopFailureForRuntimePlacementBridgeReadiness(');
     expect(bridgeOpenSrc).not.toContain('Runtime Placement Bridge readiness failed (');
     expect(bridgeOpenSrc).toContain('local_ui_url: bridgeSession.startup.local_ui_url');
@@ -1535,6 +1535,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('allowed_base_url: safeAllowedBaseURL');
     expect(mainSrc).toContain('function rendererSafeStartupReport(startup: StartupReport): StartupReport');
     expect(mainSrc).toContain('delete rendererStartup.local_ui_bridge_url;');
+    expect(mainSrc).toContain('delete rendererStartup.local_ui_bridge_token;');
     expect(mainSrc).toContain('entry_url: rendererSafeSessionURL(session)');
     expect(mainSrc).toContain('startup: rendererSafeStartupReport(session.startup)');
     expect(mainSrc).toContain('url.search = \'\';');

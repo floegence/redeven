@@ -147,6 +147,7 @@ func TestServerStartPublishesRuntimeControlStatus(t *testing.T) {
 	}
 	bridgeReq.Host = forwardedAuthority
 	bridgeReq.Header.Set("Origin", "http://"+forwardedAuthority)
+	bridgeReq.Header.Set(localDesktopBridgeTokenHeader, status.Endpoint.LocalUIBridgeToken)
 	bridgeResp, err := http.DefaultClient.Do(bridgeReq)
 	if err != nil {
 		t.Fatalf("Do(bridge) error = %v", err)

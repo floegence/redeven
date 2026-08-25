@@ -224,6 +224,7 @@ import {
   requestRuntimeFlowerAttachmentPreviewWithAccess,
 } from './runtimeFlowerAttachmentPreview';
 import {
+  desktopPrivateBridgeRequestHeaders,
   requireLocalUIBridgeURL,
   resolveDesktopSessionTransport,
   shouldFailDesktopSessionMainDocument,
@@ -238,6 +239,7 @@ import { buildWebServiceUnavailableDocumentURL } from './webServiceUnavailableDo
 import {
   probeExternalLocalUIHealth,
   probeLocalRuntimeBridgeHealth,
+  probeLocalRuntimeBridgeStartup,
   probeExternalLocalUIStartup,
 } from './runtimeState';
 import { desktopFailureForRuntimePlacementBridgeReadiness } from './runtimePlacementBridgeReadiness';
@@ -1207,7 +1209,7 @@ async function startDesktopModelSourceForStartup(args: Readonly<{
 async function refreshStartupReportFromLocalUI(
   startup: StartupReport,
 ): Promise<StartupReport> {
-  const result = await probeExternalLocalUIHealth(requireLocalUIBridgeURL(startup), {
+  const result = await probeLocalRuntimeBridgeHealth(startup, {
     timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
   });
   if (!result.ok) {
@@ -3494,7 +3496,7 @@ async function verifyReinstallTargetCatalogAndLocalUI(
     signal,
   });
   try {
-    const localUI = await probeExternalLocalUIStartup(bridge.startup.local_ui_url, {
+    const localUI = await probeLocalRuntimeBridgeStartup(bridge.startup, {
       timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
       signal,
     });
@@ -3570,6 +3572,7 @@ function stripSensitiveURLPayload(rawURL: string): string {
 function rendererSafeStartupReport(startup: StartupReport): StartupReport {
   const rendererStartup = { ...startup };
   delete rendererStartup.local_ui_bridge_url;
+  delete rendererStartup.local_ui_bridge_token;
   const localUIURL = stripSensitiveURLPayload(startup.local_ui_url);
   const localUIURLs = startup.local_ui_urls
     .map((url) => stripSensitiveURLPayload(url))
@@ -8582,7 +8585,11 @@ function normalizeDesktopSessionAppReadyPayload(value: unknown): DesktopSessionA
 }
 
 function desktopSessionContextSnapshot(sessionRecord: DesktopSessionRecord | null): DesktopSessionContextSnapshot | null {
-  return desktopSessionContextSnapshotFromTarget(sessionRecord?.target ?? null, sessionRecord?.startup.exposure);
+  return desktopSessionContextSnapshotFromTarget(
+    sessionRecord?.target ?? null,
+    sessionRecord?.startup.exposure,
+    sessionRecord?.transport.kind,
+  );
 }
 
 function sendSessionTransportRecoverySnapshot(sessionRecord: DesktopSessionRecord): void {
@@ -13506,7 +13513,7 @@ async function verifyManagedRuntimeLifecycleAccess(args: Readonly<{
     signal: args.signal,
   });
   try {
-    const localUI = await probeExternalLocalUIStartup(bridge.startup.local_ui_url, {
+    const localUI = await probeLocalRuntimeBridgeStartup(bridge.startup, {
       timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
       signal: args.signal,
     });
@@ -14023,7 +14030,7 @@ async function openRuntimePlacementBridgeFromLauncher(
           }
         }
         bridgeProxyDurationMS = Date.now() - bridgeProxyStartedAtUnixMS;
-        let readiness: Awaited<ReturnType<typeof probeExternalLocalUIStartup>>;
+        let readiness: Awaited<ReturnType<typeof probeLocalRuntimeBridgeStartup>>;
         for (;;) {
           updateOpenConnectionOperation(operationKey, {
             hostAccess,
@@ -14036,7 +14043,7 @@ async function openRuntimePlacementBridgeFromLauncher(
             title: 'Checking app readiness',
             detail: 'Desktop is validating Runtime health, Env App HTML, static assets, and protocol readiness through the bridge.',
           });
-          readiness = await probeExternalLocalUIStartup(bridgeSession.startup.local_ui_url, {
+          readiness = await probeLocalRuntimeBridgeStartup(bridgeSession.startup, {
             timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
             signal,
           });
@@ -16401,13 +16408,23 @@ function installDesktopDiagnosticsHooks(webSession: Session): void {
   desktopDiagnosticsHookSessions.add(webSession);
   webSession.webRequest.onBeforeSendHeaders((details, callback) => {
     const sessionRecord = sessionRecordForWebContentsID((details as { webContentsId?: number }).webContentsId ?? -1);
-    const requestHeaders = sessionRecord?.diagnostics.startRequest({
+    const diagnosticHeaders = sessionRecord?.diagnostics.startRequest({
       requestID: details.id,
       method: details.method,
       url: details.url,
       requestHeaders: details.requestHeaders as Record<string, string | string[]>,
     });
-    callback(requestHeaders ? { requestHeaders } : {});
+    if (!sessionRecord) {
+      callback({});
+      return;
+    }
+    const requestHeaders = desktopPrivateBridgeRequestHeaders(
+      sessionRecord.transport,
+      sessionRecord.startup,
+      details.url,
+      diagnosticHeaders ?? details.requestHeaders as Record<string, string | string[]>,
+    );
+    callback({ requestHeaders });
   });
   webSession.webRequest.onCompleted((details) => {
     const sessionRecord = sessionRecordForWebContentsID((details as { webContentsId?: number }).webContentsId ?? -1);

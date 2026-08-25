@@ -53,7 +53,7 @@ func TestServer_ConnectArtifactStoresOnlyPluginCredentialHash(t *testing.T) {
 		t.Fatalf("artifact envelope is incomplete: %+v", envelope)
 	}
 	if _, err := flowersec.ParseArtifact(envelope.ConnectArtifact); err != nil {
-		t.Fatalf("connect artifact is not a Flowersec v2 artifact: %v", err)
+		t.Fatalf("connect artifact is not a Flowersec v3 artifact: %v", err)
 	}
 	channelID := envelope.ChannelID
 	s.pendingMu.Lock()

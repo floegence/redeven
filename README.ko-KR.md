@@ -86,15 +86,22 @@ Redeven은 컴퓨터와 서버를 하나의 브라우저 탭으로 가져오는 
 # 1. 설치
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Local UI 기기 CA 생성 및 신뢰 설정(최초 1회)
+# 2. Local UI 기기 CA 생성(최초 1회)
 redeven local-authority device-ca generate --state-root ~/.redeven
+
+# macOS 또는 Windows: 현재 사용자의 신뢰 저장소에 설치
 redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# Linux: 공개 인증서를 내보낸 다음 수동으로 가져오기
+redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
 # 3. 실행
 redeven run
 
 # 4. 브라우저에서 https://localhost:23998 열기
 ```
+
+Linux에서는 내보낸 공개 인증서를 실제로 사용하는 브라우저 또는 클라이언트의 신뢰 저장소에 가져오세요. Linux에서 `install --scope user`는 의도적으로 `manual_required`를 반환합니다. Redeven은 `sudo`를 실행하거나 시스템 전체의 신뢰 저장소를 변경하지 않습니다. 런타임은 HTTPS/WSS를 제공하기 전에 CA 식별 정보와 생성된 서버 인증서를 검증하지만, 클라이언트의 신뢰를 대신 설정할 수는 없습니다. 해당 브라우저나 클라이언트가 CA를 신뢰할 때까지 클라이언트 TLS는 안전하게 실패합니다.
 
 `redeven run`을 처음 실행하면 `~/.redeven/local-environment/`에 로컬 상태를 초기화하고 로컬 모드로 시작합니다. 부트스트랩이나 컨트롤 플레인 설정은 필요하지 않습니다. Local UI는 `localhost:23998`에서만 연결을 수신하므로 이 기기에서만 사용할 수 있습니다. LAN 또는 공용 네트워크를 통한 직접 접근은 지원하지 않습니다. Ctrl+C를 누르면 런타임이 중지됩니다.
 

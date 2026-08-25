@@ -266,6 +266,7 @@ export function testLocalEnvironmentSession(
       local_ui_url: localUIURL,
       local_ui_urls: [localUIURL],
       local_ui_bridge_url: localUIURL,
+      local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       ...(currentProviderBinding ? {
         provider_origin: currentProviderBinding.provider_origin,
         controlplane_base_url: currentProviderBinding.access_point_origin,

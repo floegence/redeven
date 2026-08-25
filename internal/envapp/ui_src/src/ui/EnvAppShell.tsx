@@ -513,7 +513,12 @@ export function EnvAppShell() {
   const layout = useLayout();
   const theme = useTheme();
   const i18n = useI18n();
-  const localTransportSecurity = resolveLocalTransportSecurityPolicy(window.location.protocol, window.location.hostname);
+  const desktopSessionContext = readDesktopSessionContextSnapshot();
+  const localTransportSecurity = resolveLocalTransportSecurityPolicy(
+    window.location.protocol,
+    window.location.hostname,
+    desktopSessionContext?.document_transport,
+  );
   const [desktopTransportRecovery, setDesktopTransportRecovery] = createSignal(
     readDesktopTransportRecoverySnapshot(),
   );

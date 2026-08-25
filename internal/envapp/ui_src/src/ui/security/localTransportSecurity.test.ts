@@ -21,4 +21,25 @@ describe('resolveLocalTransportSecurityPolicy', () => {
 		expect(resolved.policy).toBeNull();
 		expect(resolved.error).not.toBe('');
 	});
+
+	it.each(['127.0.0.1', '127.42.0.9', '[::1]'])('accepts numeric private Desktop bridge host %s', (hostname) => {
+		const resolved = resolveLocalTransportSecurityPolicy(
+			'http:',
+			hostname,
+			'desktop_private_bridge_v1',
+		);
+		expect(resolved).toEqual({ policy: true, loopback: true, network: false, error: '' });
+	});
+
+	it.each(['localhost', '192.168.1.20'])('rejects private Desktop bridge marker on host %s', (hostname) => {
+		expect(resolveLocalTransportSecurityPolicy(
+			'http:',
+			hostname,
+			'desktop_private_bridge_v1',
+		).policy).toBeNull();
+	});
+
+	it('rejects malformed Desktop bridge provenance', () => {
+		expect(resolveLocalTransportSecurityPolicy('http:', '127.0.0.1', 'desktop_private_bridge_v2').policy).toBeNull();
+	});
 });
