@@ -1,7 +1,7 @@
 import { createContext, useContext, type Accessor } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { WorkbenchWidgetType } from '@floegence/floe-webapp-core/workbench';
-import type { TerminalSessionInfo } from '@floegence/floeterm-terminal-web';
+import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import type { SemanticTerminalViewportHandle } from '../widgets/semanticTerminalViewport';
 
 import type {
@@ -30,7 +30,7 @@ export type EnvWorkbenchInstancesContextValue = Readonly<{
       previous: RedevenWorkbenchTerminalPanelState,
     ) => RedevenWorkbenchTerminalPanelState,
   ) => void;
-  createTerminalSession: (widgetId: string, name: string | undefined, workingDir: string) => Promise<TerminalSessionInfo | null>;
+  createTerminalSession: (widgetId: string, name: string | undefined, workingDir: string, groupId: string) => Promise<TerminalSessionInfo | null>;
   deleteTerminalSession: (widgetId: string, sessionId: string) => Promise<void>;
   registerTerminalViewport: (
     widgetId: string,

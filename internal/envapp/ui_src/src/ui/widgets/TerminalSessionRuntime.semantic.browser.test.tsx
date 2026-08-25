@@ -20,6 +20,7 @@ import {
 
 const SESSION = {
   id: 'semantic-session',
+  groupId: 'default',
   name: 'Semantic terminal',
   workingDir: '/workspace',
   createdAtMs: 1,

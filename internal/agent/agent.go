@@ -274,6 +274,11 @@ func New(opts Options) (*Agent, error) {
 		}
 	}
 	runtimeWorkloads := runtimeservice.NewWorkloadManager()
+	terminalManager := terminal.NewManagerWithScope(shell, filesystemScope, logger)
+	if err := terminalManager.EnablePersistentGroups(filepath.Join(stateDir, "apps", "terminal", "groups.sqlite")); err != nil {
+		terminalManager.Cleanup()
+		return nil, fmt.Errorf("open terminal group catalog: %w", err)
+	}
 	a := &Agent{
 		cfg:                     opts.Config,
 		log:                     logger,
@@ -290,7 +295,7 @@ func New(opts Options) (*Agent, error) {
 		localUIBind:             strings.TrimSpace(opts.LocalUIBind),
 		processStartedAtMs:      time.Now().UnixMilli(),
 		pluginProcessGeneration: pluginProcessGeneration,
-		term:                    terminal.NewManagerWithScope(shell, filesystemScope, logger),
+		term:                    terminalManager,
 		mon:                     monitor.NewService(logger),
 		sessions:                make(map[string]*activeSession),
 		pluginSessions:          newAuthenticatedPluginSessionRegistry(),

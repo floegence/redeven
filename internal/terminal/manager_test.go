@@ -1321,7 +1321,7 @@ func TestWireSessionInfoIncludesExecutionContextAndWorkSnapshots(t *testing.T) {
 			Revision:                  4,
 			UpdatedAt:                 41,
 		},
-	}, "")
+	}, "", DefaultTerminalGroupID)
 	if wire.ExecutionContext.Location.Label != "root@host" || wire.ExecutionContext.Application.Identity != "claude" || wire.ExecutionContext.Revision != 3 {
 		t.Fatalf("execution context snapshot = %#v", wire.ExecutionContext)
 	}
@@ -1348,7 +1348,7 @@ func TestWireSessionInfoPreservesPiAgentExecutionContext(t *testing.T) {
 			Revision:  5,
 			UpdatedAt: 60,
 		},
-	}, "")
+	}, "", DefaultTerminalGroupID)
 
 	if wire.ExecutionContext.Application.Kind != "agent_cli" || wire.ExecutionContext.Application.Identity != "pi" || wire.ExecutionContext.Application.DisplayName != "Pi" || wire.ExecutionContext.Location.WorkingDirectory != "/workspace/pi" {
 		t.Fatalf("Pi execution context snapshot = %#v", wire.ExecutionContext)
@@ -1366,7 +1366,7 @@ func TestWireSessionInfoIncludesForegroundCommandSnapshot(t *testing.T) {
 			Revision:    7,
 			UpdatedAt:   99,
 		},
-	}, "")
+	}, "", DefaultTerminalGroupID)
 
 	if wire.ForegroundCommand.Phase != "running" || wire.ForegroundCommand.DisplayName != "top" || wire.ForegroundCommand.Revision != 7 || wire.ForegroundCommand.UpdatedAtMs != 99 {
 		t.Fatalf("foreground command = %#v", wire.ForegroundCommand)
@@ -1381,7 +1381,7 @@ func TestWireSessionInfoIncludesOptionalOutputActivitySnapshot(t *testing.T) {
 			Revision:  7,
 			UpdatedAt: 99,
 		},
-	}, "")
+	}, "", DefaultTerminalGroupID)
 
 	if wire.OutputActivity == nil {
 		t.Fatal("output activity snapshot is nil")
@@ -1400,7 +1400,7 @@ func TestWireSessionInfoIncludesOptionalOutputActivitySnapshot(t *testing.T) {
 }
 
 func TestWireSessionInfoOutputActivitySupportsMixedVersions(t *testing.T) {
-	wire := toWireSessionInfo(termgo.TerminalSessionInfo{ID: "session-1"}, "")
+	wire := toWireSessionInfo(termgo.TerminalSessionInfo{ID: "session-1"}, "", DefaultTerminalGroupID)
 	payload, err := json.Marshal(wire)
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
@@ -1435,7 +1435,7 @@ func TestWireSessionInfoOutputActivitySupportsMixedVersions(t *testing.T) {
 			Revision:  9,
 			UpdatedAt: 101,
 		},
-	}, "")
+	}, "", DefaultTerminalGroupID)
 	if malformed.OutputActivity == nil || malformed.OutputActivity.Phase != "unknown" || malformed.OutputActivity.Revision != 9 || malformed.OutputActivity.UpdatedAtMs != 101 {
 		t.Fatalf("malformed output_activity = %#v, want normalized unknown snapshot", malformed.OutputActivity)
 	}

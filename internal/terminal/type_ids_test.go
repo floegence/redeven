@@ -25,6 +25,12 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 		"output activity update":    TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE,
 		"execution context update":  TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE,
 		"semantic work update":      TypeID_TERMINAL_WORK_STATE_UPDATE,
+		"group list":                TypeID_TERMINAL_GROUP_LIST,
+		"group create":              TypeID_TERMINAL_GROUP_CREATE,
+		"group update":              TypeID_TERMINAL_GROUP_UPDATE,
+		"group delete":              TypeID_TERMINAL_GROUP_DELETE,
+		"session move":              TypeID_TERMINAL_SESSION_MOVE,
+		"group catalog changed":     TypeID_TERMINAL_GROUP_CATALOG_CHANGED,
 	} {
 		if previous, exists := typeIDs[typeID]; exists {
 			t.Fatalf("terminal RPC Type ID %d is shared by %q and %q", typeID, previous, name)
@@ -43,6 +49,12 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 	}
 	if TypeID_TERMINAL_CLEAR != 2008 {
 		t.Fatalf("semantic clear Type ID = %d, want 2008", TypeID_TERMINAL_CLEAR)
+	}
+	if got, want := TypeID_TERMINAL_GROUP_LIST, uint32(2017); got != want {
+		t.Fatalf("group list Type ID = %d, want %d", got, want)
+	}
+	if got, want := TypeID_TERMINAL_GROUP_CATALOG_CHANGED, uint32(2022); got != want {
+		t.Fatalf("group catalog notification Type ID = %d, want %d", got, want)
 	}
 }
 
@@ -95,12 +107,18 @@ func TestOutputActivityRPCTypeIDIsGloballyUnique(t *testing.T) {
 	}
 }
 
-func TestContextAndWorkRPCTypeIDsAreGloballyUnique(t *testing.T) {
+func TestContextWorkAndGroupRPCTypeIDsAreGloballyUnique(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
 	internalRoot := filepath.Join(repoRoot, "internal")
 	targets := map[uint32]string{
 		TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE: "terminal execution context",
 		TypeID_TERMINAL_WORK_STATE_UPDATE:        "terminal semantic work state",
+		TypeID_TERMINAL_GROUP_LIST:               "terminal group list",
+		TypeID_TERMINAL_GROUP_CREATE:             "terminal group create",
+		TypeID_TERMINAL_GROUP_UPDATE:             "terminal group update",
+		TypeID_TERMINAL_GROUP_DELETE:             "terminal group delete",
+		TypeID_TERMINAL_SESSION_MOVE:             "terminal session move",
+		TypeID_TERMINAL_GROUP_CATALOG_CHANGED:    "terminal group catalog notification",
 	}
 	locations := map[uint32][]string{}
 	files := token.NewFileSet()

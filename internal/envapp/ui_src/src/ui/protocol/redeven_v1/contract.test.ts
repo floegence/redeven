@@ -33,20 +33,25 @@ describe('Redeven v1 terminal notifications', () => {
     const outputHandler = vi.fn();
     const contextHandler = vi.fn();
     const workHandler = vi.fn();
+    const groupHandler = vi.fn();
 
     rpc.terminal.onForegroundCommandUpdate(foregroundHandler);
     rpc.terminal.onOutputActivityUpdate(outputHandler);
     rpc.terminal.onExecutionContextUpdate(contextHandler);
     rpc.terminal.onWorkStateUpdate(workHandler);
+    rpc.terminal.onGroupCatalogChanged(groupHandler);
 
     expect(redevenV1TypeIds.terminal.foregroundCommandUpdate).toBe(2013);
     expect(redevenV1TypeIds.terminal.outputActivityUpdate).toBe(2014);
     expect(redevenV1TypeIds.terminal.executionContextUpdate).toBe(2015);
     expect(redevenV1TypeIds.terminal.workStateUpdate).toBe(2016);
+    expect(redevenV1TypeIds.terminal.groupList).toBe(2017);
+    expect(redevenV1TypeIds.terminal.groupCatalogChanged).toBe(2022);
     expect(notifyHandlers.has(2013)).toBe(true);
     expect(notifyHandlers.has(2014)).toBe(true);
     expect(notifyHandlers.has(2015)).toBe(true);
     expect(notifyHandlers.has(2016)).toBe(true);
+    expect(notifyHandlers.has(2022)).toBe(true);
 
     notifyHandlers.get(2014)?.({
       session_id: 'session-1',
@@ -72,6 +77,18 @@ describe('Redeven v1 terminal notifications', () => {
     });
     expect(contextHandler).toHaveBeenCalledTimes(1);
     expect(workHandler).toHaveBeenCalledTimes(1);
+    notifyHandlers.get(2022)?.({
+      reason: 'session_moved',
+      group_id: 'group-services',
+      session_id: 'session-1',
+      revision: 7,
+    });
+    expect(groupHandler).toHaveBeenCalledWith({
+      reason: 'session_moved',
+      groupId: 'group-services',
+      sessionId: 'session-1',
+      revision: 7,
+    });
   });
 
   it('isolates a malformed output activity notification without poisoning the subscription', () => {

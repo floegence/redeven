@@ -3,10 +3,17 @@ import type {
   TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
   TerminalOutputActivityInfo,
+  TerminalSessionInfo as FloetermTerminalSessionInfo,
   TerminalSessionsCoordinator,
   TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web/sessions';
-import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
+import type {
+  TerminalGroup,
+  TerminalGroupCreateRequest,
+  TerminalGroupDeleteResponse,
+  TerminalGroupUpdateRequest,
+  TerminalSessionInfo,
+} from '../protocol/redeven_v1/sdk/terminal';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { useEnvContext } from '../pages/EnvContext';
@@ -22,6 +29,8 @@ import {
 
 export type TerminalSessionCatalogValue = Readonly<{
   sessions: Accessor<readonly TerminalSessionInfo[]>;
+  groups: Accessor<readonly TerminalGroup[]>;
+  groupRevision: Accessor<number>;
   hydrated: Accessor<boolean>;
   loading: Accessor<boolean>;
   stale: Accessor<boolean>;
@@ -34,6 +43,11 @@ export type TerminalSessionCatalogValue = Readonly<{
   coordinator: Accessor<TerminalSessionsCoordinator | null>;
   getCoordinator: () => TerminalSessionsCoordinator | null;
   refresh: () => Promise<void>;
+  refreshGroups: () => Promise<void>;
+  createGroup: (request: TerminalGroupCreateRequest) => Promise<TerminalGroup>;
+  updateGroup: (request: TerminalGroupUpdateRequest) => Promise<TerminalGroup>;
+  deleteGroup: (groupId: string) => Promise<TerminalGroupDeleteResponse>;
+  moveSession: (sessionId: string, groupId: string) => Promise<void>;
   upsertSession: (session: TerminalSessionInfo) => void;
   removeSession: (sessionId: string) => void;
   updateSessionMeta: (sessionId: string, patch: {
@@ -65,6 +79,15 @@ function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function terminalSessionsWithGroups(
+  snapshot: readonly FloetermTerminalSessionInfo[],
+): TerminalSessionInfo[] {
+  return snapshot.flatMap((session) => {
+    const groupId = String((session as Partial<TerminalSessionInfo>).groupId ?? '').trim();
+    return groupId ? [{ ...session, groupId } as TerminalSessionInfo] : [];
+  });
+}
+
 function conflictedExecutionContext(
   context: TerminalExecutionContextInfo,
 ): TerminalExecutionContextInfo {
@@ -88,6 +111,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const rpc = useRedevenRpc();
   const env = useEnvContext();
   const [sessions, setSessions] = createSignal<readonly TerminalSessionInfo[]>([]);
+  const [groups, setGroups] = createSignal<readonly TerminalGroup[]>([]);
+  const [groupRevision, setGroupRevision] = createSignal(0);
   const [hydrated, setHydrated] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
   const [stale, setStale] = createSignal(false);
@@ -119,8 +144,14 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   let unsubscribeOutputActivity: (() => void) | null = null;
   let unsubscribeExecutionContext: (() => void) | null = null;
   let unsubscribeWorkState: (() => void) | null = null;
+  let unsubscribeGroupCatalog: (() => void) | null = null;
   let lifecycleRevision = 0;
   let refreshRequestSequence = 0;
+  let groupRefreshRequestSequence = 0;
+  let groupSnapshotRevision = 0;
+  let nextGroupOperationSequence = 0;
+  const latestGroupOperationByKey = new Map<string, number>();
+  let groupRefreshPromise: Promise<void> | null = null;
   let providerDisposed = false;
   let coordinatorHydrated = false;
   let deniedClient: object | null = null;
@@ -498,6 +529,18 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     setSessions(frozen);
   };
 
+  const applyGroupSnapshot = (nextGroups: readonly TerminalGroup[], revision: number) => {
+    if (!Number.isSafeInteger(revision) || revision <= groupSnapshotRevision) return;
+    const snapshotIds = new Set(nextGroups.map((group) => group.id));
+    const pendingGroups = groups().filter((group) => group.pending && !snapshotIds.has(group.id));
+    const ordered = [...nextGroups, ...pendingGroups].sort((left, right) => (
+      left.sortOrder - right.sortOrder || left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+    ));
+    setGroups(Object.freeze(ordered));
+    groupSnapshotRevision = revision;
+    setGroupRevision((current) => Math.max(current, revision));
+  };
+
   const clearPermissionDenied = () => {
     deniedClient = null;
     deniedEnvId = '';
@@ -525,6 +568,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     unsubscribeExecutionContext = null;
     unsubscribeWorkState?.();
     unsubscribeWorkState = null;
+    unsubscribeGroupCatalog?.();
+    unsubscribeGroupCatalog = null;
     pendingForegroundCommands.clear();
     pendingOutputActivities.clear();
     latestOutputActivities.clear();
@@ -547,15 +592,65 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     activeCoordinator = null;
     activeClient = null;
     coordinatorHydrated = false;
+    groupRefreshPromise = null;
+    groupRefreshRequestSequence += 1;
+    latestGroupOperationByKey.clear();
     setCoordinator(null);
     if (!preserveSnapshot) {
       removedSessionIds.clear();
       applySnapshot([]);
+      setGroups([]);
+      groupSnapshotRevision = 0;
+      setGroupRevision(0);
       setHydrated(false);
       setError(null);
     }
     setLoading(false);
   };
+
+  const refreshGroups = async (): Promise<void> => {
+    if (providerDisposed) return;
+    if (groupRefreshPromise) return groupRefreshPromise;
+    const client = protocol.session?.();
+    const canUseCatalog = protocol.status() === 'connected'
+      && Boolean(client)
+      && env.env.state === 'ready'
+      && canLaunchProcess(env.env()?.permissions);
+    if (!canUseCatalog || !client) return;
+    const terminalRpc = (rpc as { terminal?: Partial<(typeof rpc)['terminal']> }).terminal;
+    if (!terminalRpc || typeof terminalRpc.listGroups !== 'function') return;
+    const scheduledLifecycleRevision = lifecycleRevision;
+    const requestSequence = ++groupRefreshRequestSequence;
+    const request = (async () => {
+      const snapshot = await terminalRpc.listGroups!();
+      if (providerDisposed
+        || scheduledLifecycleRevision !== lifecycleRevision
+        || requestSequence !== groupRefreshRequestSequence
+        || client !== protocol.session?.()) return;
+      applyGroupSnapshot(snapshot.groups, snapshot.revision);
+    })();
+    groupRefreshPromise = request;
+    try {
+      await request;
+    } finally {
+      if (groupRefreshPromise === request) groupRefreshPromise = null;
+    }
+  };
+
+  const refreshGroupsAtLeast = async (revision: number): Promise<void> => {
+    await refreshGroups();
+    if (!providerDisposed && groupSnapshotRevision < revision) await refreshGroups();
+  };
+
+  const beginGroupOperation = (key: string): number => {
+    const sequence = ++nextGroupOperationSequence;
+    latestGroupOperationByKey.set(key, sequence);
+    return sequence;
+  };
+
+  const groupOperationIsCurrent = (key: string, sequence: number): boolean => (
+    latestGroupOperationByKey.get(key) === sequence
+  );
 
   const ensureCoordinator = (client: object): TerminalSessionsCoordinator => {
     if (activeCoordinator && activeClient === client) return activeCoordinator;
@@ -572,7 +667,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     setCoordinator(next);
     unsubscribeCoordinator = next.subscribe((snapshot) => {
       if (!coordinatorHydrated && snapshot.length === 0) return;
-      applySnapshot(snapshot);
+      applySnapshot(terminalSessionsWithGroups(snapshot));
     });
     const terminalRpc = (rpc as { terminal?: Partial<(typeof rpc)['terminal']> }).terminal;
     if (terminalRpc && typeof terminalRpc.onForegroundCommandUpdate === 'function') {
@@ -603,6 +698,22 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         applyWorkState(sessionId, event.workState);
       });
     }
+    if (terminalRpc && typeof terminalRpc.onGroupCatalogChanged === 'function') {
+      unsubscribeGroupCatalog = terminalRpc.onGroupCatalogChanged((event) => {
+        if (event.revision <= groupRevision()) return;
+        if (event.reason === 'session_moved' && event.sessionId && event.groupId) {
+          const currentSession = sessions().find((session) => session.id === event.sessionId);
+          if (currentSession) {
+            const movedSession: TerminalSessionInfo = { ...currentSession, groupId: event.groupId };
+            activeCoordinator?.upsertSession(movedSession);
+          }
+        }
+        void refreshGroupsAtLeast(event.revision).catch(() => undefined);
+        if (event.reason === 'deleted' || event.reason === 'session_moved') {
+          void refresh().catch(() => undefined);
+        }
+      });
+    }
     setConnectionEpoch((value) => value + 1);
     return next;
   };
@@ -621,7 +732,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     setLoading(true);
     markTerminalPerformance('catalog-start', { connection_epoch: connectionEpoch() });
     try {
-      await current.refresh();
+      await Promise.all([current.refresh(), refreshGroups()]);
       if (
         revision !== lifecycleRevision
         || requestSequence !== refreshRequestSequence
@@ -631,7 +742,12 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       convergeContextAndWork(current);
       flushPendingMetadata(current);
       coordinatorHydrated = true;
-      applySnapshot(current.getSnapshot(), true);
+      const refreshedSessions = terminalSessionsWithGroups(current.getSnapshot());
+      applySnapshot(refreshedSessions, true);
+      const knownGroupIds = new Set(groups().map((group) => group.id));
+      if (refreshedSessions.some((session) => !knownGroupIds.has(session.groupId))) {
+        void refreshGroups().catch(() => undefined);
+      }
       setHydrated(true);
       setStale(false);
       setError(null);
@@ -704,7 +820,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         }
         const reconciledCoordinator = activeCoordinator;
         if (reconciledCoordinator && scheduledLifecycleRevision === lifecycleRevision) {
-          applySnapshot(reconciledCoordinator.getSnapshot(), true);
+          applySnapshot(terminalSessionsWithGroups(reconciledCoordinator.getSnapshot()), true);
         }
         pendingMetadataRetryDelayMs = 50;
       }
@@ -789,12 +905,145 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     const current = getCoordinator();
     if (current) {
       current.updateSessionMeta(normalized, coordinatorPatch);
-      if (replacesLocalPathCapability) applySnapshot(current.getSnapshot());
+      if (replacesLocalPathCapability) applySnapshot(terminalSessionsWithGroups(current.getSnapshot()));
       return;
     }
     applySnapshot(sessions().map((session) => (
       session.id === normalized ? { ...session, ...coordinatorPatch } : session
     )));
+  };
+
+  const createGroup = async (request: TerminalGroupCreateRequest): Promise<TerminalGroup> => {
+    const scheduledLifecycleRevision = lifecycleRevision;
+    const operationSequence = ++nextGroupOperationSequence;
+    const pendingId = `pending_group_${operationSequence}`;
+    const now = Date.now();
+    const pendingGroup: TerminalGroup = {
+      id: pendingId,
+      name: request.name.trim(),
+      defaultWorkingDir: request.defaultWorkingDir.trim(),
+      sortOrder: Math.max(0, ...groups().map((group) => group.sortOrder)) + 1,
+      createdAtMs: now,
+      updatedAtMs: now,
+      isDefault: false,
+      pending: true,
+    };
+    setGroups((current) => [...current, pendingGroup]);
+    try {
+      const result = await rpc.terminal.createGroup(request);
+      if (scheduledLifecycleRevision === lifecycleRevision) {
+        setGroups((current) => current.filter((group) => group.id !== pendingId));
+        if (result.revision >= groupRevision()) {
+          setGroups((current) => [...current.filter((group) => group.id !== result.group.id), result.group]);
+        }
+        setGroupRevision((current) => Math.max(current, result.revision));
+        void refreshGroupsAtLeast(result.revision).catch(() => undefined);
+      }
+      return result.group;
+    } catch (cause) {
+      if (scheduledLifecycleRevision === lifecycleRevision) {
+        setGroups((current) => current.filter((group) => group.id !== pendingId));
+      }
+      void refreshGroups().catch(() => undefined);
+      throw cause;
+    }
+  };
+
+  const updateGroup = async (request: TerminalGroupUpdateRequest): Promise<TerminalGroup> => {
+    const previousGroups = groups();
+    const previousRevision = groupRevision();
+    const groupId = String(request.groupId ?? '').trim();
+    const operationKey = `group:${groupId}`;
+    setGroups((current) => current.map((group) => group.id === groupId ? {
+      ...group,
+      ...(request.name === undefined ? {} : { name: request.name.trim() }),
+      ...(request.defaultWorkingDir === undefined ? {} : { defaultWorkingDir: request.defaultWorkingDir.trim() }),
+    } : group));
+    const scheduledLifecycleRevision = lifecycleRevision;
+    const operationSequence = beginGroupOperation(operationKey);
+    try {
+      const result = await rpc.terminal.updateGroup(request);
+      if (scheduledLifecycleRevision === lifecycleRevision && groupOperationIsCurrent(operationKey, operationSequence)) {
+        if (result.revision >= groupRevision()) {
+          setGroups((current) => current.map((group) => group.id === result.group.id ? result.group : group));
+        }
+        setGroupRevision((current) => Math.max(current, result.revision));
+        void refreshGroupsAtLeast(result.revision).catch(() => undefined);
+      }
+      return result.group;
+    } catch (cause) {
+      if (scheduledLifecycleRevision === lifecycleRevision
+        && groupOperationIsCurrent(operationKey, operationSequence)
+        && groupRevision() === previousRevision) {
+        setGroups(previousGroups);
+      }
+      void refreshGroups().catch(() => undefined);
+      throw cause;
+    }
+  };
+
+  const deleteGroup = async (groupIdInput: string): Promise<TerminalGroupDeleteResponse> => {
+    const groupId = String(groupIdInput ?? '').trim();
+    const previousGroups = groups();
+    const previousSessions = sessions();
+    const hiddenSessionIds = previousSessions
+      .filter((session) => session.groupId === groupId)
+      .map((session) => session.id);
+    const previousRevision = groupRevision();
+    const operationKey = `group:${groupId}`;
+    setGroups((current) => current.filter((group) => group.id !== groupId));
+    for (const sessionId of hiddenSessionIds) removedSessionIds.add(sessionId);
+    applySnapshot(sessions().filter((session) => session.groupId !== groupId));
+    const scheduledLifecycleRevision = lifecycleRevision;
+    const operationSequence = beginGroupOperation(operationKey);
+    try {
+      const result = await rpc.terminal.deleteGroup({ groupId });
+      if (scheduledLifecycleRevision === lifecycleRevision && groupOperationIsCurrent(operationKey, operationSequence)) {
+        setGroupRevision((current) => Math.max(current, result.revision));
+        void refreshGroupsAtLeast(result.revision).catch(() => undefined);
+        void refresh().catch(() => undefined);
+      }
+      return result;
+    } catch (cause) {
+      if (scheduledLifecycleRevision === lifecycleRevision
+        && groupOperationIsCurrent(operationKey, operationSequence)
+        && groupRevision() === previousRevision) {
+        for (const sessionId of hiddenSessionIds) removedSessionIds.delete(sessionId);
+        setGroups(previousGroups);
+        applySnapshot(activeCoordinator
+          ? terminalSessionsWithGroups(activeCoordinator.getSnapshot())
+          : [...previousSessions]);
+      }
+      void refresh().catch(() => undefined);
+      throw cause;
+    }
+  };
+
+  const moveSession = async (sessionIdInput: string, groupIdInput: string): Promise<void> => {
+    const sessionId = String(sessionIdInput ?? '').trim();
+    const groupId = String(groupIdInput ?? '').trim();
+    const previous = sessions().find((session) => session.id === sessionId);
+    if (!previous || previous.groupId === groupId) return;
+    const operationKey = `session:${sessionId}`;
+    const movedSession: TerminalSessionInfo = { ...previous, groupId };
+    activeCoordinator?.upsertSession(movedSession);
+    if (!activeCoordinator) applySnapshot(sessions().map((session) => session.id === sessionId ? { ...session, groupId } : session));
+    const scheduledLifecycleRevision = lifecycleRevision;
+    const operationSequence = beginGroupOperation(operationKey);
+    try {
+      const result = await rpc.terminal.moveSession({ sessionId, groupId });
+      if (scheduledLifecycleRevision === lifecycleRevision && groupOperationIsCurrent(operationKey, operationSequence)) {
+        setGroupRevision((current) => Math.max(current, result.revision));
+        void refreshGroupsAtLeast(result.revision).catch(() => undefined);
+      }
+    } catch (cause) {
+      if (scheduledLifecycleRevision === lifecycleRevision && groupOperationIsCurrent(operationKey, operationSequence)) {
+        activeCoordinator?.upsertSession(previous);
+        if (!activeCoordinator) applySnapshot(sessions().map((session) => session.id === sessionId ? previous : session));
+      }
+      void refresh().catch(() => undefined);
+      throw cause;
+    }
   };
 
   const clearForPermissionDenied = () => {
@@ -914,6 +1163,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
   const value: TerminalSessionCatalogValue = {
     sessions,
+    groups,
+    groupRevision,
     hydrated,
     loading,
     stale,
@@ -926,6 +1177,11 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     coordinator,
     getCoordinator,
     refresh,
+    refreshGroups,
+    createGroup,
+    updateGroup,
+    deleteGroup,
+    moveSession,
     upsertSession,
     removeSession,
     updateSessionMeta,

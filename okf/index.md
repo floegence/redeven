@@ -61,6 +61,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.
 - [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.
 - [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.
+- [Terminal session groups](ui/terminal-session-groups.md) - Persist one Environment group catalog and project it consistently through Activity and Workbench placement trees.
 - [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.
 - [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.

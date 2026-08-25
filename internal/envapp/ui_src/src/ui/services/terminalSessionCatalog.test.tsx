@@ -17,8 +17,17 @@ const envState = vi.hoisted(() => ({
   setId: (() => undefined) as (value: string) => void,
 }));
 const rpcState = vi.hoisted(() => ({
-  sessions: [{ id: 's1', name: 'Terminal 1', workingDir: '/', createdAtMs: 1, lastActiveAtMs: 2, isActive: true }],
+  sessions: [{ id: 's1', groupId: 'default', name: 'Terminal 1', workingDir: '/', createdAtMs: 1, lastActiveAtMs: 2, isActive: true }],
+  groups: [{ id: 'default', name: 'Default', defaultWorkingDir: '/', sortOrder: 0, createdAtMs: 1, updatedAtMs: 1, isDefault: true }],
+  groupRevision: 1,
   list: vi.fn(),
+  listGroups: vi.fn(),
+  createGroup: vi.fn(),
+  updateGroup: vi.fn(),
+  deleteGroup: vi.fn(),
+  moveSession: vi.fn(),
+  onGroupCatalogChanged: vi.fn(),
+  groupCatalogHandler: null as ((event: any) => void) | null,
   onSessionsChanged: vi.fn(),
   lifecycleHandler: null as ((event: any) => void) | null,
   onForegroundCommandUpdate: vi.fn(),
@@ -153,6 +162,12 @@ vi.mock('../protocol/redeven_v1', () => ({
     onOutputActivityUpdate: rpcState.outputSubscriptionAvailable ? rpcState.onOutputActivityUpdate : undefined,
     onExecutionContextUpdate: rpcState.contextSubscriptionAvailable ? rpcState.onExecutionContextUpdate : undefined,
     onWorkStateUpdate: rpcState.workSubscriptionAvailable ? rpcState.onWorkStateUpdate : undefined,
+    listGroups: rpcState.listGroups,
+    createGroup: rpcState.createGroup,
+    updateGroup: rpcState.updateGroup,
+    deleteGroup: rpcState.deleteGroup,
+    moveSession: rpcState.moveSession,
+    onGroupCatalogChanged: rpcState.onGroupCatalogChanged,
     createSession: vi.fn(),
     deleteSession: vi.fn(),
   } }),
@@ -199,9 +214,22 @@ describe('TerminalSessionCatalogProvider', () => {
     envState.setValue = setEnvValue;
     envState.id = envId;
     envState.setId = setEnvId;
-    rpcState.sessions = [{ id: 's1', name: 'Terminal 1', workingDir: '/', createdAtMs: 1, lastActiveAtMs: 2, isActive: true }];
+    rpcState.sessions = [{ id: 's1', groupId: 'default', name: 'Terminal 1', workingDir: '/', createdAtMs: 1, lastActiveAtMs: 2, isActive: true }];
+    rpcState.groups = [{ id: 'default', name: 'Default', defaultWorkingDir: '/', sortOrder: 0, createdAtMs: 1, updatedAtMs: 1, isDefault: true }];
+    rpcState.groupRevision = 1;
     rpcState.list.mockReset();
     rpcState.list.mockResolvedValue({ sessions: rpcState.sessions });
+    rpcState.listGroups.mockReset();
+    rpcState.listGroups.mockImplementation(async () => ({ revision: rpcState.groupRevision, groups: rpcState.groups }));
+    rpcState.createGroup.mockReset();
+    rpcState.updateGroup.mockReset();
+    rpcState.deleteGroup.mockReset();
+    rpcState.moveSession.mockReset();
+    rpcState.onGroupCatalogChanged.mockReset();
+    rpcState.onGroupCatalogChanged.mockImplementation((handler: (event: any) => void) => {
+      rpcState.groupCatalogHandler = handler;
+      return () => { rpcState.groupCatalogHandler = null; };
+    });
     rpcState.onSessionsChanged.mockReset();
     rpcState.onSessionsChanged.mockImplementation((handler: (event: any) => void) => {
       rpcState.lifecycleHandler = handler;
@@ -249,7 +277,90 @@ describe('TerminalSessionCatalogProvider', () => {
     ), host);
     await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
     expect(latest.sessions().map((session: any) => session.id)).toEqual(['s1']);
+    expect(latest.groups().map((group: any) => group.id)).toEqual(['default']);
     expect(rpcState.list).toHaveBeenCalledTimes(1);
+    expect(rpcState.listGroups).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it('keeps group edits and moves optimistic while fencing stale or failed operations', async () => {
+    rpcState.groups = [
+      ...rpcState.groups,
+      { id: 'services', name: 'Services', defaultWorkingDir: '/services', sortOrder: 1, createdAtMs: 2, updatedAtMs: 2, isDefault: false },
+    ];
+    rpcState.groupRevision = 2;
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.groupRevision()).toBe(2));
+
+    let resolveUpdate!: (value: any) => void;
+    rpcState.updateGroup.mockImplementationOnce(() => new Promise((resolve) => { resolveUpdate = resolve; }));
+    const update = latest.updateGroup({ groupId: 'services', name: 'Backend' });
+    expect(latest.groups().find((group: any) => group.id === 'services')?.name).toBe('Backend');
+    resolveUpdate({
+      revision: 3,
+      group: { ...rpcState.groups[1], name: 'Backend', updatedAtMs: 3 },
+    });
+    await update;
+    expect(latest.groupRevision()).toBe(3);
+
+    rpcState.groupCatalogHandler?.({ reason: 'updated', groupId: 'services', revision: 2 });
+    expect(latest.groups().find((group: any) => group.id === 'services')?.name).toBe('Backend');
+
+    rpcState.moveSession.mockRejectedValueOnce(new Error('move rejected'));
+    const move = latest.moveSession('s1', 'services');
+    expect(latest.sessions()[0]?.groupId).toBe('services');
+    await expect(move).rejects.toThrow('move rejected');
+    expect(latest.sessions()[0]?.groupId).toBe('default');
+
+    let resolveCreate!: (value: any) => void;
+    rpcState.createGroup.mockImplementationOnce(() => new Promise((resolve) => { resolveCreate = resolve; }));
+    const create = latest.createGroup({ name: 'Frontend', defaultWorkingDir: '/frontend' });
+    expect(latest.groups().find((group: any) => group.name === 'Frontend')).toMatchObject({ pending: true });
+    resolveCreate({
+      revision: 4,
+      group: { id: 'frontend', name: 'Frontend', defaultWorkingDir: '/frontend', sortOrder: 2, createdAtMs: 4, updatedAtMs: 4, isDefault: false },
+    });
+    await create;
+    expect(latest.groups().find((group: any) => group.id === 'frontend')?.pending).toBeUndefined();
+    dispose();
+  });
+
+  it('keeps optimistically deleted group sessions hidden until a failed delete rolls back', async () => {
+    rpcState.sessions = [{ ...rpcState.sessions[0], groupId: 'services' }];
+    rpcState.groups = [
+      ...rpcState.groups,
+      { id: 'services', name: 'Services', defaultWorkingDir: '/services', sortOrder: 1, createdAtMs: 2, updatedAtMs: 2, isDefault: false },
+    ];
+    rpcState.groupRevision = 2;
+    rpcState.list.mockResolvedValue({ sessions: rpcState.sessions });
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.groupRevision()).toBe(2));
+
+    let rejectDelete!: (reason: Error) => void;
+    rpcState.deleteGroup.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectDelete = reject; }));
+    const deleting = latest.deleteGroup('services');
+    expect(latest.groups().some((group: any) => group.id === 'services')).toBe(false);
+    expect(latest.sessions()).toEqual([]);
+
+    coordinatorState.current?.updateSessionMeta('s1', { name: 'updated while deleting' });
+    expect(latest.sessions()).toEqual([]);
+
+    rejectDelete(new Error('delete rejected'));
+    await expect(deleting).rejects.toThrow('delete rejected');
+    expect(latest.groups().some((group: any) => group.id === 'services')).toBe(true);
+    expect(latest.sessions()).toMatchObject([{ id: 's1', groupId: 'services' }]);
     dispose();
   });
 
@@ -344,6 +455,7 @@ describe('TerminalSessionCatalogProvider', () => {
   it('atomically replaces local path capabilities without deriving them from metadata', async () => {
     rpcState.sessions = [{
       id: 's1',
+      groupId: 'default',
       name: 'Terminal 1',
       workingDir: '/',
       localPathCapability: { workingDir: '/' },
@@ -487,7 +599,7 @@ describe('TerminalSessionCatalogProvider', () => {
       </TerminalSessionCatalogProvider>
     ), host);
     await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
-    latest.upsertSession({ id: 's2', name: 'New', workingDir: '/', createdAtMs: 3, lastActiveAtMs: 3, isActive: true });
+    latest.upsertSession({ id: 's2', groupId: 'default', name: 'New', workingDir: '/', createdAtMs: 3, lastActiveAtMs: 3, isActive: true });
     expect(latest.sessions().map((session: any) => session.id)).toContain('s2');
     rpcState.lifecycleHandler?.({ reason: 'deleted', sessionId: 's2' });
     expect(latest.sessions().map((session: any) => session.id)).not.toContain('s2');
@@ -806,6 +918,7 @@ describe('TerminalSessionCatalogProvider', () => {
     };
     const sessionTwo = {
       id: 's2',
+      groupId: 'default',
       name: 'Terminal 2',
       workingDir: '/workspace/two',
       createdAtMs: 2,
@@ -887,6 +1000,7 @@ describe('TerminalSessionCatalogProvider', () => {
     };
     const authoritativeSessions = Array.from({ length: sessionCount }, (_, index) => ({
       id: `conflict-session-${index}`,
+      groupId: 'default',
       name: `Terminal ${index}`,
       workingDir: '/',
       createdAtMs: index + 1,
@@ -1134,6 +1248,7 @@ describe('TerminalSessionCatalogProvider', () => {
     const sessionCount = 513;
     const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
       id: `output-session-${index}`,
+      groupId: 'default',
       name: `Terminal ${index}`,
       workingDir: '/',
       createdAtMs: index + 1,
@@ -1198,6 +1313,7 @@ describe('TerminalSessionCatalogProvider', () => {
     };
     const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
       id: `context-session-${index}`,
+      groupId: 'default',
       name: `Terminal ${index}`,
       workingDir: '/',
       createdAtMs: index + 1,
@@ -1252,6 +1368,7 @@ describe('TerminalSessionCatalogProvider', () => {
     const sessionCount = 513;
     const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
       id: `retry-output-session-${index}`,
+      groupId: 'default',
       name: `Terminal ${index}`,
       workingDir: '/',
       createdAtMs: index + 1,
@@ -1297,6 +1414,7 @@ describe('TerminalSessionCatalogProvider', () => {
     const sessionCount = 513;
     const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
       id: `session-${index}`,
+      groupId: 'default',
       name: `Terminal ${index}`,
       workingDir: '/',
       createdAtMs: index + 1,
@@ -1348,6 +1466,7 @@ describe('TerminalSessionCatalogProvider', () => {
     const sessionCount = 513;
     const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
       id: `reconnected-${index}`,
+      groupId: 'default',
       name: `Terminal ${index}`,
       workingDir: '/',
       createdAtMs: index + 1,
@@ -1423,7 +1542,7 @@ describe('TerminalSessionCatalogProvider', () => {
     protocolState.setStatus('connecting');
     protocolState.setClient(null);
     await vi.waitFor(() => expect(latest.stale()).toBe(true));
-    latest.upsertSession({ id: 's2', name: 'Pending reconnect', workingDir: '/tmp', createdAtMs: 2, lastActiveAtMs: 2, isActive: true });
+    latest.upsertSession({ id: 's2', groupId: 'default', name: 'Pending reconnect', workingDir: '/tmp', createdAtMs: 2, lastActiveAtMs: 2, isActive: true });
     latest.removeSession('s1');
     latest.updateSessionMeta('s2', { name: 'Updated offline' });
     expect(latest.sessions().map((session: any) => [session.id, session.name])).toEqual([['s2', 'Updated offline']]);
@@ -1437,7 +1556,7 @@ describe('TerminalSessionCatalogProvider', () => {
     expect(coordinatorState.current?.getSnapshot().map((session: any) => session.id)).toEqual(['s2']);
     expect(latest.sessions().map((session: any) => session.id)).toEqual(['s2']);
 
-    resolveReconnect({ sessions: [{ id: 's2', name: 'Canonical', workingDir: '/tmp', createdAtMs: 2, lastActiveAtMs: 3, isActive: true }] });
+    resolveReconnect({ sessions: [{ id: 's2', groupId: 'default', name: 'Canonical', workingDir: '/tmp', createdAtMs: 2, lastActiveAtMs: 3, isActive: true }] });
     await vi.waitFor(() => expect(latest.sessions()[0]?.name).toBe('Canonical'));
     dispose();
   });
@@ -1461,9 +1580,9 @@ describe('TerminalSessionCatalogProvider', () => {
       .mockImplementationOnce(() => new Promise((resolve) => { resolveNewer = resolve; }));
 
     const older = latest.refresh();
-    latest.upsertSession({ id: 's2', name: 'Local', workingDir: '/', createdAtMs: 2, lastActiveAtMs: 2, isActive: true });
+    latest.upsertSession({ id: 's2', groupId: 'default', name: 'Local', workingDir: '/', createdAtMs: 2, lastActiveAtMs: 2, isActive: true });
     const newer = latest.refresh();
-    resolveNewer({ sessions: [{ id: 's2', name: 'Canonical', workingDir: '/', createdAtMs: 2, lastActiveAtMs: 3, isActive: true }] });
+    resolveNewer({ sessions: [{ id: 's2', groupId: 'default', name: 'Canonical', workingDir: '/', createdAtMs: 2, lastActiveAtMs: 3, isActive: true }] });
     await newer;
     rejectOlder(new Error('old request failed'));
     await older;

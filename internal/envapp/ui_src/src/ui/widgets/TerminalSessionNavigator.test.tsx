@@ -20,7 +20,11 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = vi.fn()) {
+function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = vi.fn(), options?: {
+  groups?: Parameters<typeof TerminalSessionNavigator>[0]['groups'];
+  onMoveSession?: (sessionId: string, groupId: string) => void;
+  onToggleGroup?: (groupId: string) => void;
+}) {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const itemById = new Map([[item.id, item]]);
@@ -37,12 +41,15 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
       filterQuery=""
       itemIds={[item.id]}
       itemById={itemById}
+      groups={options?.groups}
       sidebarActiveSessionId={item.id}
       activeSessionId={item.id}
       copiedPathSessionId={null}
       emptyListLoading={false}
       onCloseDrawer={() => undefined}
       onCreateSession={() => undefined}
+      onMoveSession={options?.onMoveSession}
+      onToggleGroup={options?.onToggleGroup}
       onRefresh={() => undefined}
       onFilterQueryChange={() => undefined}
       onPreviewSession={() => undefined}
@@ -56,6 +63,30 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
     />
   ), host));
   return { host, onSelectSession };
+}
+
+function dispatchDragEvent(target: Element, type: 'dragstart' | 'dragover' | 'drop', dataTransfer: DataTransfer) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function createDataTransfer(): DataTransfer {
+  const entries = new Map<string, string>();
+  const transfer = {
+    dropEffect: 'none',
+    effectAllowed: 'none',
+    types: [] as string[],
+    getData(type: string) {
+      return entries.get(type) ?? '';
+    },
+    setData(type: string, value: string) {
+      entries.set(type, value);
+      transfer.types = [...entries.keys()];
+    },
+  };
+  return transfer as unknown as DataTransfer;
 }
 
 function navigationItem(overrides: Partial<TerminalSessionNavigationItem> = {}): TerminalSessionNavigationItem {
@@ -157,7 +188,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
     expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
-    expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).toContain('h-9 w-9');
+    expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).toContain('h-8 w-8');
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).not.toContain('rgba(');
     expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-7 w-7');
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
@@ -474,5 +505,66 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     ]);
     expect(grid?.className).toContain('grid-cols-[20px_20px]');
     expect(grid?.className).toContain('grid-rows-[20px_20px]');
+  });
+
+  it('renders compact sessions beneath an independently collapsible group header', () => {
+    const onToggleGroup = vi.fn();
+    const item = navigationItem({ id: 'session-1' });
+    const { host } = renderNavigator(item, vi.fn(), {
+      groups: [{
+        id: 'group-services',
+        name: 'Services',
+        defaultWorkingDir: '/workspace/services',
+        isDefault: false,
+        expanded: true,
+        itemIds: ['session-1'],
+        totalSessionCount: 3,
+      }],
+      onToggleGroup,
+    });
+
+    expect(host.querySelector('[data-terminal-group-id="group-services"]')?.textContent).toContain('Services');
+    expect(host.querySelector('[data-terminal-group-id="group-services"]')?.textContent).toContain('/workspace/services');
+    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('min-h-[52px]');
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-group-toggle-group-services"]')?.click();
+    expect(onToggleGroup).toHaveBeenCalledWith('group-services');
+  });
+
+  it('moves a dragged session to the group that receives the drop', () => {
+    const onMoveSession = vi.fn();
+    const item = navigationItem({ id: 'session-1' });
+    const { host } = renderNavigator(item, vi.fn(), {
+      groups: [{
+        id: 'default',
+        name: 'Default',
+        defaultWorkingDir: '/workspace',
+        isDefault: true,
+        expanded: true,
+        itemIds: [],
+        totalSessionCount: 0,
+      }, {
+        id: 'group-services',
+        name: 'Services',
+        defaultWorkingDir: '/workspace/services',
+        isDefault: false,
+        expanded: true,
+        itemIds: ['session-1'],
+        totalSessionCount: 1,
+      }],
+      onMoveSession,
+    });
+    const sessionRow = host.querySelector<HTMLElement>('[data-terminal-session-row="session-1"]')!;
+    const defaultGroup = host.querySelector<HTMLElement>('[data-terminal-group-id="default"]')!;
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(sessionRow, 'dragstart', dataTransfer);
+    const dragOver = dispatchDragEvent(defaultGroup, 'dragover', dataTransfer);
+    const drop = dispatchDragEvent(defaultGroup, 'drop', dataTransfer);
+
+    expect(dataTransfer.effectAllowed).toBe('move');
+    expect(dataTransfer.dropEffect).toBe('move');
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(drop.defaultPrevented).toBe(true);
+    expect(onMoveSession).toHaveBeenCalledWith('session-1', 'default');
   });
 });

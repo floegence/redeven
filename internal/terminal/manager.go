@@ -34,6 +34,12 @@ const (
 	TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE    uint32 = 2014 // notify (agent -> client): foreground command output activity changed
 	TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE  uint32 = 2015 // notify (agent -> client): atomic location/application context changed
 	TypeID_TERMINAL_WORK_STATE_UPDATE         uint32 = 2016 // notify (agent -> client): semantic work state changed
+	TypeID_TERMINAL_GROUP_LIST                uint32 = 2017
+	TypeID_TERMINAL_GROUP_CREATE              uint32 = 2018
+	TypeID_TERMINAL_GROUP_UPDATE              uint32 = 2019
+	TypeID_TERMINAL_GROUP_DELETE              uint32 = 2020
+	TypeID_TERMINAL_SESSION_MOVE              uint32 = 2021
+	TypeID_TERMINAL_GROUP_CATALOG_CHANGED     uint32 = 2022 // notify (agent -> client): group catalog or membership changed
 
 	terminalSemanticHistoryRPCPayloadBudget = 96 * 1024
 )
@@ -59,6 +65,8 @@ type Manager struct {
 	term                *termgo.Manager
 	deleteSessionFunc   func(sessionID string) error
 	activateSessionFunc func(ctx context.Context, sessionID string, cols int, rows int) error
+	groupOperationMu    sync.Mutex
+	groupCatalog        *groupCatalog
 
 	mu                    sync.Mutex
 	writers               map[flowersec.RPCPeer]*controlSink
@@ -69,10 +77,13 @@ type Manager struct {
 	nextLifecycleID       int
 	workloadAdmission     func() (func(), error)
 	workloadReleases      map[string]func()
+	sessionGroupIDs       map[string]string
+	deletingGroupIDs      map[string]struct{}
 }
 
 type SessionInfo struct {
 	ID                  string                   `json:"id"`
+	GroupID             string                   `json:"group_id"`
 	Name                string                   `json:"name"`
 	WorkingDir          string                   `json:"working_dir"`
 	CreatedAtMs         int64                    `json:"created_at_ms"`
@@ -228,7 +239,10 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 		deleteOperations:      make(map[string]*sessionDeleteOperation),
 		lifecycleHooks:        make(map[int]SessionLifecycleHook),
 		workloadReleases:      make(map[string]func()),
+		sessionGroupIDs:       make(map[string]string),
+		deletingGroupIDs:      make(map[string]struct{}),
 	}
+	m.groupCatalog = newMemoryGroupCatalog(m.agentHomeAbs)
 
 	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, m.agentHomeAbs, log))
 	m.term.SetEventHandler(&eventHandler{m: m})
@@ -248,16 +262,20 @@ func (m *Manager) SetWorkloadAdmission(admit func() (func(), error)) {
 }
 
 func (m *Manager) CreateSession(name string, workingDir string) (*SessionInfo, error) {
-	sess, err := m.createSession(strings.TrimSpace(name), strings.TrimSpace(workingDir))
+	return m.CreateSessionInGroup("", name, workingDir)
+}
+
+func (m *Manager) CreateSessionInGroup(groupID string, name string, workingDir string) (*SessionInfo, error) {
+	sess, err := m.createSessionInGroup(strings.TrimSpace(groupID), strings.TrimSpace(name), strings.TrimSpace(workingDir))
 	if err != nil {
 		return nil, err
 	}
 	info := sess.ToSessionInfo()
-	return toSessionInfo(info, m.validatedLocalPathCapability(info)), nil
+	return toSessionInfo(info, m.validatedLocalPathCapability(info), m.sessionGroupID(info.ID)), nil
 }
 
 func (m *Manager) DeleteSession(sessionID string) error {
-	return m.requestSessionDelete(sessionID, "", true)
+	return m.requestSessionDelete(sessionID, "", true, false)
 }
 
 func (m *Manager) Register(r *sessionrpc.Router, meta *session.Meta, streamServer flowersec.RPCPeer) func() {
@@ -280,13 +298,13 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 			req = &terminalCreateReq{}
 		}
 
-		sess, err := m.createSession(strings.TrimSpace(req.Name), strings.TrimSpace(req.WorkingDir))
+		sess, err := m.createSessionInGroup(strings.TrimSpace(req.GroupID), strings.TrimSpace(req.Name), strings.TrimSpace(req.WorkingDir))
 		if err != nil {
 			return nil, err
 		}
 
 		info := sess.ToSessionInfo()
-		return &terminalCreateResp{Session: toWireSessionInfo(info, m.validatedLocalPathCapability(info))}, nil
+		return &terminalCreateResp{Session: toWireSessionInfo(info, m.validatedLocalPathCapability(info), m.sessionGroupID(info.ID))}, nil
 	})
 
 	// List sessions
@@ -298,7 +316,11 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		sessions := m.visibleSessionInfos()
 		out := make([]*terminalSessionInfo, 0, len(sessions))
 		for _, s := range sessions {
-			out = append(out, toWireSessionInfo(s, m.validatedLocalPathCapability(s)))
+			groupID := m.sessionGroupID(s.ID)
+			if groupID == "" {
+				continue
+			}
+			out = append(out, toWireSessionInfo(s, m.validatedLocalPathCapability(s), groupID))
 		}
 		return &terminalListResp{Sessions: out}, nil
 	})
@@ -466,6 +488,8 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		return &terminalDeleteResp{OK: true}, nil
 	})
 
+	registerTerminalGroupRPCs(m, r, meta, gate)
+
 	return detachSink
 }
 
@@ -565,7 +589,9 @@ func (m *Manager) Cleanup() {
 	m.mu.Lock()
 	clear(m.sessionLifecycle)
 	clear(m.localPathCapabilities)
+	clear(m.sessionGroupIDs)
 	m.mu.Unlock()
+	_ = m.groupCatalog.Close()
 }
 
 func (m *Manager) ensureWriter(streamServer flowersec.RPCPeer, meta *session.Meta, gate *accessgate.Gate) (*controlSink, bool) {
@@ -838,6 +864,52 @@ func (m *Manager) broadcastSessionsChanged(payload terminalSessionsChangedPayloa
 }
 
 func (m *Manager) createSession(name string, workingDir string) (*termgo.Session, error) {
+	return m.createSessionInGroup(DefaultTerminalGroupID, name, workingDir)
+}
+
+func (m *Manager) createSessionInGroup(groupID string, name string, workingDir string) (*termgo.Session, error) {
+	if m == nil {
+		return nil, &sessionrpc.Error{Code: 500, Message: "internal error"}
+	}
+	m.groupOperationMu.Lock()
+	defer m.groupOperationMu.Unlock()
+	if groupID == "" {
+		groupID = DefaultTerminalGroupID
+	}
+	group, ok := m.groupCatalog.Group(groupID)
+	if !ok {
+		return nil, &sessionrpc.Error{Code: 404, Message: "terminal group not found"}
+	}
+	m.mu.Lock()
+	_, deleting := m.deletingGroupIDs[groupID]
+	m.mu.Unlock()
+	if deleting {
+		return nil, &sessionrpc.Error{Code: 409, Message: "terminal group is being deleted"}
+	}
+	if workingDir == "" {
+		workingDir = group.DefaultWorkingDir
+	}
+	sess, err := m.createTerminalSession(name, workingDir)
+	if err != nil {
+		return nil, err
+	}
+	info := sess.ToSessionInfo()
+	sessionID := strings.TrimSpace(info.ID)
+	m.mu.Lock()
+	m.sessionGroupIDs[sessionID] = groupID
+	m.mu.Unlock()
+	payload := terminalSessionsChangedPayload{
+		Reason:      "created",
+		SessionID:   sessionID,
+		TimestampMs: time.Now().UnixMilli(),
+		Lifecycle:   string(SessionLifecycleOpen),
+	}
+	m.broadcastSessionsChanged(payload)
+	m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
+	return sess, nil
+}
+
+func (m *Manager) createTerminalSession(name string, workingDir string) (*termgo.Session, error) {
 	if m == nil {
 		return nil, &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
@@ -1045,15 +1117,6 @@ func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
 	// grant before any client can observe the newly created session.
 	h.m.reconcileLocalPathCapability(sessionID, info.WorkingDir, &info.ExecutionContext)
 	h.m.trackSessionOpen(sessionID)
-
-	payload := terminalSessionsChangedPayload{
-		Reason:      "created",
-		SessionID:   sessionID,
-		TimestampMs: time.Now().UnixMilli(),
-		Lifecycle:   string(SessionLifecycleOpen),
-	}
-	h.m.broadcastSessionsChanged(payload)
-	h.m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 }
 
 func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
@@ -1094,6 +1157,7 @@ func (h *eventHandler) OnTerminalError(sessionID string, err error) {
 
 type terminalSessionInfo struct {
 	ID                  string                   `json:"id"`
+	GroupID             string                   `json:"group_id"`
 	Name                string                   `json:"name"`
 	WorkingDir          string                   `json:"working_dir"`
 	CreatedAtMs         int64                    `json:"created_at_ms"`
@@ -1106,10 +1170,11 @@ type terminalSessionInfo struct {
 	LocalPathCapability *LocalPathCapabilityInfo `json:"local_path_capability,omitempty"`
 }
 
-func toWireSessionInfo(info termgo.TerminalSessionInfo, localWorkingDir string) *terminalSessionInfo {
+func toWireSessionInfo(info termgo.TerminalSessionInfo, localWorkingDir string, groupID string) *terminalSessionInfo {
 	localPathCapability := localPathCapabilityInfo(localWorkingDir)
 	return &terminalSessionInfo{
 		ID:                  info.ID,
+		GroupID:             strings.TrimSpace(groupID),
 		Name:                info.Name,
 		WorkingDir:          info.WorkingDir,
 		CreatedAtMs:         info.CreatedAt,
@@ -1123,10 +1188,11 @@ func toWireSessionInfo(info termgo.TerminalSessionInfo, localWorkingDir string) 
 	}
 }
 
-func toSessionInfo(info termgo.TerminalSessionInfo, localWorkingDir string) *SessionInfo {
+func toSessionInfo(info termgo.TerminalSessionInfo, localWorkingDir string, groupID string) *SessionInfo {
 	localPathCapability := localPathCapabilityInfo(localWorkingDir)
 	return &SessionInfo{
 		ID:                  info.ID,
+		GroupID:             strings.TrimSpace(groupID),
 		Name:                info.Name,
 		WorkingDir:          info.WorkingDir,
 		CreatedAtMs:         info.CreatedAt,
@@ -1276,6 +1342,7 @@ func toWorkStateInfo(info termgo.TerminalWorkStateInfo) WorkStateInfo {
 type terminalCreateReq struct {
 	Name       string `json:"name,omitempty"`
 	WorkingDir string `json:"working_dir,omitempty"`
+	GroupID    string `json:"group_id,omitempty"`
 }
 
 type terminalCreateResp struct {

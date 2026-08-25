@@ -21,10 +21,11 @@ import {
   type Logger,
   type TerminalExecutionContextInfo,
   type TerminalOutputActivityInfo,
+  type TerminalSessionInfo as FloetermTerminalSessionInfo,
   type TerminalThemeName,
   type TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
-import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
+import type { TerminalGroup, TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import {
   createRedevenTerminalLiveBundle,
   createTerminalConnId,
@@ -83,6 +84,7 @@ import {
   desktopShellExternalURLOpenAvailable,
   openExternalURLInDesktopShell,
 } from '../services/desktopShellBridge';
+import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import type { TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import {
@@ -124,8 +126,10 @@ import {
   terminalStatusSentence,
   type TerminalSessionAttentionState,
   type TerminalSessionNavigationItem,
+  type TerminalSessionNavigationGroup,
   type TerminalSessionTransitionIndicator,
 } from './TerminalSessionNavigator';
+import { TerminalGroupDeleteDialog, TerminalGroupEditorDialog } from './TerminalGroupDialogs';
 import { TerminalSearchOverlay } from './TerminalSearchOverlay';
 import { TerminalSharedGeometryNotice } from './TerminalSharedGeometryNotice';
 import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometryPresentation';
@@ -138,7 +142,7 @@ export type TerminalPanelVariant = 'panel' | 'workbench';
 const TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX = 3.5;
 const TERMINAL_TAB_SHORTCUT_MAX_INDEX = 8;
 
-export type TerminalPanelSessionGroupState = Readonly<{
+export type TerminalPanelSessionPlacementState = Readonly<{
   sessionIds: string[];
   activeSessionId: string | null;
 }>;
@@ -146,7 +150,7 @@ export type TerminalPanelSessionGroupState = Readonly<{
 export type TerminalPanelSessionCreateResult = TerminalSessionInfo | string | null;
 
 export type TerminalPanelSessionOperations = Readonly<{
-  createSession: (name: string | undefined, workingDir: string) => Promise<TerminalPanelSessionCreateResult>;
+  createSession: (name: string | undefined, workingDir: string, groupId: string) => Promise<TerminalPanelSessionCreateResult>;
   deleteSession: (sessionId: string) => Promise<void>;
 }>;
 
@@ -202,8 +206,8 @@ export interface TerminalPanelProps {
     targetMode?: 'activity' | 'workbench';
   } | null;
   onOpenSessionRequestHandled?: (requestId: string) => void;
-  sessionGroupState?: TerminalPanelSessionGroupState;
-  onSessionGroupStateChange?: (next: TerminalPanelSessionGroupState) => void;
+  sessionPlacementState?: TerminalPanelSessionPlacementState;
+  onSessionPlacementStateChange?: (next: TerminalPanelSessionPlacementState) => void;
   sessionOperations?: TerminalPanelSessionOperations;
   terminalGeometryPreferences?: TerminalPanelGeometryPreferences;
   workbenchSelected?: boolean;
@@ -222,6 +226,19 @@ type TerminalPanelInnerProps = TerminalPanelProps & {
 
 function buildActiveSessionStorageKey(panelId: string): string {
   return `redeven_terminal_active_session_id:${panelId}`;
+}
+
+function buildCollapsedTerminalGroupsStorageKey(envId: string, panelId: string): string {
+  return `redeven_terminal_collapsed_groups:${String(envId ?? '').trim()}:${panelId}`;
+}
+
+function readCollapsedTerminalGroupIds(storageKey: string): ReadonlySet<string> {
+  const parsed = readUIStorageJSON<unknown>(storageKey, []);
+  return new Set(Array.isArray(parsed) ? parsed.map((value) => String(value).trim()).filter(Boolean) : []);
+}
+
+function writeCollapsedTerminalGroupIds(storageKey: string, groupIds: ReadonlySet<string>) {
+  writeUIStorageJSON(storageKey, [...groupIds]);
 }
 
 function readActiveSessionId(storageKey: string): string | null {
@@ -251,9 +268,9 @@ function sameSessionIdList(left: readonly string[], right: readonly string[]): b
   return left.every((value, index) => value === right[index]);
 }
 
-function sameTerminalPanelSessionGroupState(
-  left: TerminalPanelSessionGroupState,
-  right: TerminalPanelSessionGroupState,
+function sameTerminalPanelSessionPlacementState(
+  left: TerminalPanelSessionPlacementState,
+  right: TerminalPanelSessionPlacementState,
 ): boolean {
   return left.activeSessionId === right.activeSessionId
     && sameSessionIdList(left.sessionIds, right.sessionIds);
@@ -307,6 +324,7 @@ type pending_terminal_session = {
   createdAtMs: number;
   name: string;
   workingDir: string;
+  groupId: string;
   visibleSessionIdsAtCreate: string[];
   status: pending_terminal_session_status;
   errorMessage?: string;
@@ -599,10 +617,12 @@ function sameTerminalWorkState(
 
 function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessionInfo | null {
   const id = String(value?.id ?? '').trim();
-  if (!id) return null;
+  const groupId = String(value?.groupId ?? '').trim();
+  if (!id || !groupId) return null;
   const localCapabilityWorkingDir = canonicalAbsolutePath(value?.localPathCapability?.workingDir);
   return {
     id,
+    groupId,
     name: String(value?.name ?? '').trim(),
     workingDir: String(value?.workingDir ?? ''),
     createdAtMs: normalizeTerminalSessionTimestamp(value?.createdAtMs),
@@ -745,6 +765,7 @@ function terminalSessionMatchesPendingSession(
   if (pendingSession.visibleSessionIdsAtCreate.includes(session.id)) {
     return false;
   }
+  if (session.groupId !== pendingSession.groupId) return false;
 
   const sessionName = normalizeTerminalSessionMatchName(session.name);
   const pendingName = normalizeTerminalSessionMatchName(pendingSession.name);
@@ -762,6 +783,7 @@ function pendingTerminalSessionsCompete(
   right: pending_terminal_session,
 ): boolean {
   return normalizeTerminalSessionMatchName(left.name) === normalizeTerminalSessionMatchName(right.name)
+    && left.groupId === right.groupId
     && normalizeTerminalSessionMatchWorkingDir(left.workingDir) === normalizeTerminalSessionMatchWorkingDir(right.workingDir);
 }
 
@@ -945,7 +967,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   })();
   const agentAttentionReaderId = createClientId('terminal-agent-reader');
   const activeSessionStorageKey = buildActiveSessionStorageKey(panelId);
-  const sessionGroupState = createMemo<TerminalPanelSessionGroupState | null>(() => props.sessionGroupState ?? null);
+  const sessionPlacementState = createMemo<TerminalPanelSessionPlacementState | null>(() => props.sessionPlacementState ?? null);
+
+  const collapsedGroupsStorageKey = createMemo(() => buildCollapsedTerminalGroupsStorageKey(String(env.env_id() ?? ''), panelId));
+  const [collapsedGroupIds, setCollapsedGroupIds] = createSignal<ReadonlySet<string>>(new Set());
+  let loadedCollapsedGroupsStorageKey = '';
+  createEffect(() => {
+    const storageKey = collapsedGroupsStorageKey();
+    if (storageKey === loadedCollapsedGroupsStorageKey) return;
+    loadedCollapsedGroupsStorageKey = storageKey;
+    setCollapsedGroupIds(readCollapsedTerminalGroupIds(storageKey));
+  });
+  createEffect(() => {
+    const storageKey = collapsedGroupsStorageKey();
+    const collapsed = collapsedGroupIds();
+    if (storageKey !== loadedCollapsedGroupsStorageKey) return;
+    writeCollapsedTerminalGroupIds(storageKey, collapsed);
+  });
+
+  const [groupEditorTarget, setGroupEditorTarget] = createSignal<TerminalGroup | 'create' | null>(null);
+  const [groupDeleteTarget, setGroupDeleteTarget] = createSignal<TerminalGroup | null>(null);
 
   const [searchOpen, setSearchOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
@@ -1338,41 +1379,41 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     viewport.setAppearance(appearance);
   };
 
-  const updateSessionGroupState = (
-    updater: (previous: TerminalPanelSessionGroupState) => TerminalPanelSessionGroupState,
+  const updateSessionPlacementState = (
+    updater: (previous: TerminalPanelSessionPlacementState) => TerminalPanelSessionPlacementState,
   ): boolean => {
-    const current = sessionGroupState();
-    if (!current || !props.onSessionGroupStateChange) {
+    const current = sessionPlacementState();
+    if (!current || !props.onSessionPlacementStateChange) {
       return false;
     }
 
     const next = updater(current);
-    if (sameTerminalPanelSessionGroupState(current, next)) {
+    if (sameTerminalPanelSessionPlacementState(current, next)) {
       return true;
     }
 
-    props.onSessionGroupStateChange(next);
+    props.onSessionPlacementStateChange(next);
     return true;
   };
 
-  const sessionGroupSessionIds = createMemo<readonly string[] | null>((previous) => {
-    const group = sessionGroupState();
-    if (!group) {
+  const placedSessionIds = createMemo<readonly string[] | null>((previous) => {
+    const placement = sessionPlacementState();
+    if (!placement) {
       return previous === null ? previous : null;
     }
-    return previous !== null && sameSessionIdList(previous, group.sessionIds) ? previous : [...group.sessionIds];
+    return previous !== null && sameSessionIdList(previous, placement.sessionIds) ? previous : [...placement.sessionIds];
   }, null);
 
   const sessions = createMemo<TerminalSessionInfo[]>(() => {
     const list = visibleAllSessions();
-    const groupSessionIds = sessionGroupSessionIds();
-    if (!groupSessionIds) {
+    const placementSessionIds = placedSessionIds();
+    if (!placementSessionIds) {
       return list;
     }
 
     const sessionsById = new Map(list.map((session) => [session.id, session]));
     const orderedVisibleSessions: TerminalSessionInfo[] = [];
-    for (const sessionId of groupSessionIds) {
+    for (const sessionId of placementSessionIds) {
       const session = sessionsById.get(sessionId);
       if (session) {
         orderedVisibleSessions.push(session);
@@ -1464,9 +1505,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return activePendingId;
     }
 
-    const group = sessionGroupState();
-    if (group) {
-      return group.activeSessionId;
+    const placement = sessionPlacementState();
+    if (placement) {
+      return placement.activeSessionId;
     }
     return localActiveSessionId();
   });
@@ -1503,13 +1544,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return visiblePendingTerminalSessions().find((session) => session.id === activeId) ?? null;
   });
 
-  const ensureSessionInGroup = (sessionId: string) => {
+  const ensureSessionInPlacement = (sessionId: string) => {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) {
       return;
     }
 
-    updateSessionGroupState((previous) => (
+    updateSessionPlacementState((previous) => (
       previous.sessionIds.includes(normalizedSessionId)
         ? previous
         : {
@@ -1561,7 +1602,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const setActiveRealSessionId = (sessionId: string | null) => {
     const normalizedSessionId = String(sessionId ?? '').trim() || null;
     setLocalActivePendingSessionId(null);
-    if (!updateSessionGroupState((previous) => ({
+    if (!updateSessionPlacementState((previous) => ({
       sessionIds: previous.sessionIds,
       activeSessionId: normalizedSessionId === null
         ? null
@@ -1575,7 +1616,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const activateResolvedPendingSession = (resolved: resolved_pending_terminal_session) => {
     markSessionMounted(resolved.sessionId);
-    ensureSessionInGroup(resolved.sessionId);
+    ensureSessionInPlacement(resolved.sessionId);
     selectOptimisticActiveDisplaySessionId(resolved.sessionId);
     setActiveRealSessionId(resolved.sessionId);
   };
@@ -1899,22 +1940,22 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return changed ? filtered : previous;
     });
 
-    const group = sessionGroupState();
-    if (group && props.onSessionGroupStateChange) {
-      const nextVisibleIds = group.sessionIds.filter((sessionId) => visibleNext.some((session) => session.id === sessionId));
+    const placement = sessionPlacementState();
+    if (placement && props.onSessionPlacementStateChange) {
+      const nextVisibleIds = placement.sessionIds.filter((sessionId) => visibleNext.some((session) => session.id === sessionId));
       const visibleSessions = nextVisibleIds
         .map((sessionId) => visibleNext.find((session) => session.id === sessionId) ?? null)
         .filter((session): session is TerminalSessionInfo => session !== null);
-      const preferredActiveSessionId = group.activeSessionId && nextVisibleIds.includes(group.activeSessionId)
-        ? group.activeSessionId
+      const preferredActiveSessionId = placement.activeSessionId && nextVisibleIds.includes(placement.activeSessionId)
+        ? placement.activeSessionId
         : null;
       const resolvedActiveSessionId = preferredActiveSessionId ?? pickPreferredActiveId(visibleSessions, null);
-      const nextGroupState: TerminalPanelSessionGroupState = {
+      const nextPlacementState: TerminalPanelSessionPlacementState = {
         sessionIds: nextVisibleIds,
         activeSessionId: resolvedActiveSessionId,
       };
-      if (!sameTerminalPanelSessionGroupState(group, nextGroupState)) {
-        props.onSessionGroupStateChange(nextGroupState);
+      if (!sameTerminalPanelSessionPlacementState(placement, nextPlacementState)) {
+        props.onSessionPlacementStateChange(nextPlacementState);
       }
       return;
     }
@@ -1947,7 +1988,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       handleSessionsSnapshot([...terminalCatalog.sessions()]);
       return;
     }
-    const unsub = fallbackSessionsCoordinator?.subscribe(handleSessionsSnapshot);
+    const unsub = fallbackSessionsCoordinator?.subscribe((next: FloetermTerminalSessionInfo[]) => {
+      handleSessionsSnapshot(next.flatMap((session) => {
+        const groupId = String((session as Partial<TerminalSessionInfo>).groupId ?? '').trim();
+        return groupId ? [{ ...session, groupId } as TerminalSessionInfo] : [];
+      }));
+    });
     if (!unsub) return;
     onCleanup(() => unsub());
   });
@@ -2666,7 +2712,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) return;
 
-    ensureSessionInGroup(normalizedSessionId);
+    ensureSessionInPlacement(normalizedSessionId);
     setActiveSessionId(normalizedSessionId);
   };
 
@@ -2727,21 +2773,28 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const createPanelSession = async (
     name: string | undefined,
     workingDir: string,
+    groupId: string,
   ): Promise<terminal_panel_created_session | null> => {
     const normalizedWorkingDir = normalizeAskFlowerAbsolutePath(String(workingDir ?? '').trim()) || agentHomePathAbs() || '';
     if (props.sessionOperations) {
       return normalizeTerminalPanelSessionCreateResult(
-        await props.sessionOperations.createSession(name, normalizedWorkingDir),
+        await props.sessionOperations.createSession(name, normalizedWorkingDir, groupId),
       );
     }
 
     const sessionCoordinator = terminalCatalog?.getCoordinator() ?? fallbackSessionsCoordinator;
     if (!sessionCoordinator) return null;
-    const session = await sessionCoordinator.createSession(String(name ?? '').trim(), normalizedWorkingDir);
+    const response = await rpc.terminal.createSession({
+      name: String(name ?? '').trim() || undefined,
+      workingDir: normalizedWorkingDir || undefined,
+      groupId,
+    });
+    const session = response.session;
+    sessionCoordinator.upsertSession(session);
     return normalizeTerminalPanelSessionCreateResult(session);
   };
 
-  const createPendingSession = (name: string | undefined, workingDir: string): pending_terminal_session => {
+  const createPendingSession = (name: string | undefined, workingDir: string, groupId: string): pending_terminal_session => {
     const operationSequence = ++nextCreateOperationSequence;
     const pendingSession: pending_terminal_session = {
       id: createClientId('pending-terminal'),
@@ -2749,6 +2802,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       createdAtMs: Date.now(),
       name: String(name ?? '').trim() || i18n.t('terminal.title'),
       workingDir: normalizeAskFlowerAbsolutePath(String(workingDir ?? '').trim()) || agentHomePathAbs() || '',
+      groupId,
       visibleSessionIdsAtCreate: sessions().map((session) => session.id),
       status: 'creating',
     };
@@ -2825,8 +2879,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return String(session?.id ?? '').trim() || null;
   };
 
-  const beginCreateSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
-    const pendingSession = createPendingSession(name, workingDir);
+  const beginCreateSession = async (name: string | undefined, workingDir: string, groupId: string): Promise<string | null> => {
+    const pendingSession = createPendingSession(name, workingDir, groupId);
     terminalCatalog?.getCoordinator();
     const createFence = captureSessionMutationFence();
     // Let the optimistic tab reach the screen before starting the heavier RPC/state reconciliation path.
@@ -2838,7 +2892,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return null;
     }
     try {
-      const result = await createPanelSession(name, pendingSession.workingDir);
+      const result = await createPanelSession(name, pendingSession.workingDir, pendingSession.groupId ?? 'default');
       if (!sessionMutationFenceIsCurrent(createFence)) {
         removePendingSession(pendingSession.id);
         return null;
@@ -2887,12 +2941,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
-  const createSession = async () => {
+  const createSessionInGroup = async (groupId: string) => {
     if (!connected()) return;
     setError(null);
     const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
-    void beginCreateSession(i18n.t('terminal.terminalName', { index: nextIndex }), agentHomePathAbs() || '');
+    const group = terminalCatalog?.groups().find((candidate) => candidate.id === groupId);
+    if (!group) {
+      void terminalCatalog?.refreshGroups().catch(() => undefined);
+      return;
+    }
+    void beginCreateSession(i18n.t('terminal.terminalName', { index: nextIndex }), group.defaultWorkingDir, group.id);
   };
+
+  const activeGroupId = createMemo(() => activeSession()?.groupId || 'default');
+  const createSession = () => createSessionInGroup(activeGroupId());
 
   let lastHandledOpenSessionRequestId = '';
   createEffect(() => {
@@ -2920,6 +2982,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         await beginCreateSession(
           resolveRequestedSessionName(request?.preferredName, workingDir, i18n.t('terminal.terminalName', { index: nextIndex })),
           workingDir,
+          activeGroupId(),
         );
       } finally {
         props.onOpenSessionRequestHandled?.(requestId);
@@ -3315,6 +3378,110 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }).map((item) => item.id);
     return sameSessionIdList(previous, next) ? previous : next;
   });
+  const terminalGroups = createMemo<readonly TerminalGroup[]>(() => terminalCatalog?.groups() ?? []);
+  const groupIdBySessionItem = createMemo(() => {
+    const byId = new Map(sessions().map((session) => [session.id, session.groupId]));
+    for (const pending of visiblePendingTerminalSessions()) byId.set(pending.id, pending.groupId);
+    return byId;
+  });
+  createEffect(() => {
+    const knownGroupIds = new Set(terminalGroups().map((group) => group.id));
+    if (sessions().some((session) => session.groupId && !knownGroupIds.has(session.groupId))) {
+      void terminalCatalog?.refreshGroups().catch(() => undefined);
+    }
+  });
+  const navigationGroups = createMemo<readonly TerminalSessionNavigationGroup[]>(() => {
+    const query = sessionFilterQuery().trim().toLocaleLowerCase();
+    const visibleItemIds = new Set(sessionListItemIds());
+    const allItemIdsByGroup = new Map<string, string[]>();
+    for (const item of sessionListItems()) {
+      const groupId = groupIdBySessionItem().get(item.id);
+      if (!groupId) continue;
+      const ids = allItemIdsByGroup.get(groupId) ?? [];
+      ids.push(item.id);
+      allItemIdsByGroup.set(groupId, ids);
+    }
+    const globalCounts = new Map<string, number>();
+    for (const session of terminalCatalog?.sessions() ?? sessions()) {
+      if (!session.groupId) continue;
+      globalCounts.set(session.groupId, (globalCounts.get(session.groupId) ?? 0) + 1);
+    }
+    return terminalGroups().flatMap((group) => {
+      const allItemIds = allItemIdsByGroup.get(group.id) ?? [];
+      const groupMatches = Boolean(query) && [group.name, group.defaultWorkingDir]
+        .some((value) => value.toLocaleLowerCase().includes(query));
+      const itemIds = groupMatches ? allItemIds : allItemIds.filter((id) => visibleItemIds.has(id));
+      if (query && !groupMatches && itemIds.length === 0) return [];
+      const searchRevealsGroup = Boolean(query) && (groupMatches || itemIds.length > 0);
+      return [{
+        id: group.id,
+        name: group.name,
+        defaultWorkingDir: group.defaultWorkingDir,
+        isDefault: group.isDefault,
+        pending: group.pending,
+        expanded: searchRevealsGroup || !collapsedGroupIds().has(group.id),
+        itemIds,
+        totalSessionCount: globalCounts.get(group.id) ?? 0,
+      }];
+    });
+  });
+
+  const toggleNavigationGroup = (groupId: string) => {
+    setCollapsedGroupIds((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  const openGroupEditor = (groupId: string) => {
+    const group = terminalGroups().find((candidate) => candidate.id === groupId);
+    if (!group) return;
+    setGroupEditorTarget(group);
+  };
+
+  const submitGroupEditor = (name: string, defaultWorkingDir: string) => {
+    const target = groupEditorTarget();
+    if (!target || !terminalCatalog) return;
+    setGroupEditorTarget(null);
+    const operation = target === 'create'
+      ? terminalCatalog.createGroup({ name, defaultWorkingDir })
+      : terminalCatalog.updateGroup({
+          groupId: target.id,
+          ...(target.isDefault ? {} : { name }),
+          defaultWorkingDir,
+        });
+    void operation.catch((cause) => {
+      notify.error(
+        target === 'create' ? i18n.t('terminal.newGroup') : i18n.t('terminal.editGroup'),
+        cause instanceof Error ? cause.message : String(cause),
+      );
+    });
+  };
+
+  const confirmDeleteGroup = () => {
+    const target = groupDeleteTarget();
+    if (!target || !terminalCatalog) return;
+    setGroupDeleteTarget(null);
+    void terminalCatalog.deleteGroup(target.id).then((result) => {
+      if (result.failedSessionIds.length > 0) {
+        notify.error(
+          i18n.t('terminal.groupDeletePartialFailureTitle'),
+          i18n.t('terminal.groupDeletePartialFailureMessage', { count: result.failedSessionIds.length }),
+        );
+      }
+    }).catch((cause) => {
+      notify.error(i18n.t('terminal.groupDeleteFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+    });
+  };
+
+  const moveSessionToGroup = (sessionId: string, groupId: string) => {
+    if (!terminalCatalog) return;
+    void terminalCatalog.moveSession(sessionId, groupId).catch((cause) => {
+      notify.error(i18n.t('terminal.groupMoveFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+    });
+  };
   let statusBoundaryBySessionId = new Map<string, 'none' | 'waiting' | 'failed'>();
   let statusBoundaryConnectionEpoch = terminalCatalog?.connectionEpoch() ?? 0;
   createEffect(() => {
@@ -3887,7 +4054,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!connected() || !currentItem?.canDuplicate || !fullPath) return;
     const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
     const fallbackName = i18n.t('terminal.terminalName', { index: nextIndex });
-    void beginCreateSession(resolveRequestedSessionName(undefined, fullPath, fallbackName), fullPath);
+    const sourceGroupId = sessions().find((session) => session.id === item.id)?.groupId ?? 'default';
+    void beginCreateSession(resolveRequestedSessionName(undefined, fullPath, fallbackName), fullPath, sourceGroupId);
   };
 
   const clearSidebarItemSession = (item: TerminalSessionNavigationItem) => {
@@ -4032,6 +4200,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const buildTerminalSidebarMenuItems = (menu: NonNullable<ReturnType<typeof terminalSidebarMenu>>): FloatingContextMenuItem[] => {
     const item = sessionListItemById().get(menu.sessionId);
     if (!item) return [];
+    const moveTargets = terminalGroups()
+      .filter((group) => group.id !== sessions().find((session) => session.id === item.id)?.groupId);
     return [
       {
         id: 'sidebar-ask-flower',
@@ -4061,6 +4231,23 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           duplicateSidebarItemSession(item);
         },
       },
+      ...(moveTargets.length > 0 ? [
+        {
+          id: 'sidebar-move-separator',
+          kind: 'separator' as const,
+        },
+        ...moveTargets
+        .map((group): FloatingContextMenuItem => ({
+          id: `sidebar-move-${group.id}`,
+          kind: 'action',
+          label: i18n.t('terminal.moveToGroupNamed', { group: group.name }),
+          icon: Folder,
+          onSelect: () => {
+            setTerminalSidebarMenu(null);
+            moveSessionToGroup(item.id, group.id);
+          },
+        })),
+      ] : []),
       {
         id: 'sidebar-clear',
         kind: 'action',
@@ -4457,6 +4644,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             filterQuery={sessionFilterQuery()}
             itemIds={sessionListItemIds()}
             itemById={sessionListItemById()}
+            groups={navigationGroups()}
             sidebarActiveSessionId={sidebarActiveSessionId()}
             activeSessionId={activeDisplaySessionId()}
             copiedPathSessionId={copiedSidebarPathSessionId()}
@@ -4471,6 +4659,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             )}
             onCloseDrawer={dismissSessionDrawer}
             onCreateSession={createSession}
+            onCreateSessionInGroup={(groupId) => void createSessionInGroup(groupId)}
+            onCreateGroup={() => setGroupEditorTarget('create')}
+            onToggleGroup={toggleNavigationGroup}
+            onEditGroup={openGroupEditor}
+            onDeleteGroup={(groupId) => {
+              const group = terminalGroups().find((candidate) => candidate.id === groupId);
+              if (group && !group.isDefault) setGroupDeleteTarget(group);
+            }}
+            onMoveSession={moveSessionToGroup}
             onRefresh={handleRefresh}
             onFilterQueryChange={setSessionFilterQuery}
             onPreviewSession={previewSidebarSessionSelection}
@@ -4778,7 +4975,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                                     onClick={() => {
                                       const failedSession = session();
                                       removePendingSession(failedSession.id);
-                                      void beginCreateSession(failedSession.name, failedSession.workingDir);
+                                      void beginCreateSession(failedSession.name, failedSession.workingDir, failedSession.groupId ?? 'default');
                                     }}
                                     disabled={!connected()}
                                   >
@@ -4851,6 +5048,23 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               onFontFamilyChange={persistFontFamily}
               onMobileInputModeChange={(value) => handleMobileInputModeChange(value, { focusTerminal: false })}
               onWorkIndicatorEnabledChange={terminalPrefs.setWorkIndicatorEnabled}
+            />
+
+            <TerminalGroupEditorDialog
+              open={groupEditorTarget() !== null}
+              group={groupEditorTarget() === 'create' ? null : groupEditorTarget() as TerminalGroup | null}
+              defaultWorkingDir={agentHomePathAbs() || '/'}
+              onCancel={() => {
+                setGroupEditorTarget(null);
+              }}
+              onSubmit={submitGroupEditor}
+            />
+            <TerminalGroupDeleteDialog
+              open={groupDeleteTarget() !== null}
+              group={groupDeleteTarget()}
+              sessionCount={(terminalCatalog?.sessions() ?? sessions()).filter((session) => session.groupId === groupDeleteTarget()?.id).length}
+              onCancel={() => setGroupDeleteTarget(null)}
+              onConfirm={confirmDeleteGroup}
             />
 
             <Show when={error()}>

@@ -10,6 +10,7 @@ import {
 function session(patch: Partial<TerminalSessionInfo> = {}): TerminalSessionInfo {
   return {
     id: 'session-1',
+    groupId: 'default',
     name: 'Terminal',
     workingDir: '/workspace/redeven',
     createdAtMs: 1,

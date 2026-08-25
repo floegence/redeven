@@ -3540,7 +3540,7 @@ describe('EnvWorkbenchPage', () => {
           return;
         }
         createStarted = true;
-        void workbench.createTerminalSession(bodyProps.widgetId, 'repo', '/workspace').then((session) => {
+        void workbench.createTerminalSession(bodyProps.widgetId, 'repo', '/workspace', 'default').then((session) => {
           terminalCreateResults.push(session);
         });
       });
@@ -3550,6 +3550,7 @@ describe('EnvWorkbenchPage', () => {
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
     expect(layoutApiMocks.createWorkbenchTerminalSession).toHaveBeenCalledWith('widget-terminal-1', {
+      group_id: 'default',
       name: 'repo',
       working_dir: '/workspace',
     });
@@ -3730,7 +3731,7 @@ describe('EnvWorkbenchPage', () => {
         contextProbeState.terminalPanelState = workbench.terminalPanelState(bodyProps.widgetId);
         if (createStarted) return;
         createStarted = true;
-        void workbench.createTerminalSession(bodyProps.widgetId, 'repo', '/workspace').then((session) => {
+        void workbench.createTerminalSession(bodyProps.widgetId, 'repo', '/workspace', 'default').then((session) => {
           terminalCreateResults.push(session);
         });
       });

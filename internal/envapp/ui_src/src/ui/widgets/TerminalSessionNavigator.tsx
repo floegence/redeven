@@ -1,7 +1,7 @@
-import { For, Show, createEffect, createMemo, onCleanup } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, onCleanup } from 'solid-js';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
-import { Check, Copy, FolderOpen, Link, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
+import { Check, Copy, FolderOpen, Link, MoreHorizontal, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
 
 import { useI18n } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
@@ -49,6 +49,17 @@ export type TerminalSessionNavigationItem = Readonly<{
   closable: boolean;
 }>;
 
+export type TerminalSessionNavigationGroup = Readonly<{
+  id: string;
+  name: string;
+  defaultWorkingDir: string;
+  isDefault: boolean;
+  pending?: boolean;
+  expanded: boolean;
+  itemIds: readonly string[];
+  totalSessionCount: number;
+}>;
+
 export type TerminalSessionNavigatorProps = Readonly<{
   accessibilityIdPrefix: string;
   mobile: boolean;
@@ -61,6 +72,7 @@ export type TerminalSessionNavigatorProps = Readonly<{
   filterQuery: string;
   itemIds: readonly string[];
   itemById: ReadonlyMap<string, TerminalSessionNavigationItem>;
+  groups?: readonly TerminalSessionNavigationGroup[];
   sidebarActiveSessionId: string | null;
   activeSessionId: string | null;
   copiedPathSessionId: string | null;
@@ -69,6 +81,12 @@ export type TerminalSessionNavigatorProps = Readonly<{
   isFocusWithinOwnedLayer?: (target: Node | null) => boolean;
   onCloseDrawer: () => void;
   onCreateSession: () => void;
+  onCreateSessionInGroup?: (groupId: string) => void;
+  onCreateGroup?: () => void;
+  onToggleGroup?: (groupId: string) => void;
+  onEditGroup?: (groupId: string) => void;
+  onDeleteGroup?: (groupId: string) => void;
+  onMoveSession?: (sessionId: string, groupId: string) => void;
   onRefresh: () => void;
   onFilterQueryChange: (value: string) => void;
   onPreviewSession: (event: PointerEvent, sessionId: string) => void;
@@ -116,7 +134,7 @@ function TerminalAgentIdentity(props: {
   const themeAdaptiveImage = createMemo(() => Boolean(presentation().lightIconPath && presentation().darkIconPath));
   return (
     <span
-      class="pointer-events-none relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 bg-[var(--redeven-surface-control)] text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
+      class="pointer-events-none relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 bg-[var(--redeven-surface-control)] text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
       data-terminal-session-avatar={props.sessionId}
       data-terminal-agent-identity={props.identity}
       aria-hidden="true"
@@ -293,6 +311,15 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const i18n = useI18n();
   const sidebarWidth = () => (props.mobile ? 232 : 286);
   let drawerDialogEl: HTMLDivElement | undefined;
+  const navigationGroups = createMemo<readonly TerminalSessionNavigationGroup[]>(() => props.groups ?? [{
+    id: 'default',
+    name: 'Default',
+    defaultWorkingDir: '',
+    isDefault: true,
+    expanded: true,
+    itemIds: props.itemIds,
+    totalSessionCount: props.itemIds.length,
+  }]);
 
   const drawerFocusableElements = () => {
     if (!drawerDialogEl) return [];
@@ -477,6 +504,17 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                   size="sm"
                   variant="ghost"
                   class="h-7 w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
+                  data-testid="terminal-sidebar-add-group"
+                  onClick={() => props.onCreateGroup?.()}
+                  disabled={!props.connected}
+                  title={i18n.t('terminal.newGroup')}
+                >
+                  <span class="text-[15px] font-medium leading-none">＋</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  class="h-7 w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
                   data-testid="terminal-sidebar-refresh"
                   onClick={props.onRefresh}
                   disabled={!props.connected || props.refreshing}
@@ -533,19 +571,93 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                   {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                   class="min-h-0 h-full overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]"
                 >
-                  <For
-                    each={props.itemIds}
-                    fallback={
-                      <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/25 px-2.5 py-3 text-xs text-muted-foreground">
-                        {props.emptyListLoading
-                          ? i18n.t('terminal.loadingSessions')
-                          : props.filterQuery.trim()
-                            ? i18n.t('terminal.noMatchingSessions')
-                            : i18n.t('terminal.noSessionsTitle')}
-                      </div>
-                    }
-                  >
-                    {(sessionId, index) => {
+                  <Index each={navigationGroups()}>
+                    {(navigationGroup) => (
+                      <div
+                        class="group/tree mb-1"
+                        data-terminal-group-id={navigationGroup().id}
+                        data-terminal-group-pending={navigationGroup().pending ? 'true' : 'false'}
+                        aria-busy={navigationGroup().pending ? 'true' : undefined}
+                        onDragOver={(event) => {
+                          if (navigationGroup().pending) return;
+                          if (!event.dataTransfer?.types.includes('application/x-redeven-terminal-session')) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = 'move';
+                        }}
+                        onDrop={(event) => {
+                          if (navigationGroup().pending) return;
+                          const sessionId = event.dataTransfer?.getData('application/x-redeven-terminal-session').trim() ?? '';
+                          if (!sessionId) return;
+                          event.preventDefault();
+                          props.onMoveSession?.(sessionId, navigationGroup().id);
+                        }}
+                      >
+                        <div class="flex min-h-9 items-center gap-1 rounded-md border border-transparent px-1 text-sidebar-foreground hover:border-sidebar-border/35 hover:bg-sidebar-accent/35" classList={{ 'opacity-65': navigationGroup().pending }}>
+                          <button
+                            type="button"
+                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-sm font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            data-testid={`terminal-group-toggle-${navigationGroup().id}`}
+                            aria-expanded={navigationGroup().expanded}
+                            aria-label={navigationGroup().expanded ? i18n.t('terminal.collapseGroup') : i18n.t('terminal.expandGroup')}
+                            onClick={() => props.onToggleGroup?.(navigationGroup().id)}
+                          >
+                            {navigationGroup().expanded ? '−' : '+'}
+                          </button>
+                          <button
+                            type="button"
+                            class="min-w-0 flex-1 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            title={`${navigationGroup().name}\n${navigationGroup().defaultWorkingDir}`}
+                            onClick={() => props.onToggleGroup?.(navigationGroup().id)}
+                          >
+                            <span class="flex items-center gap-1.5">
+                              <span class="min-w-0 flex-1 truncate text-[12px] font-semibold">{navigationGroup().name}</span>
+                              <span class="rounded-full bg-sidebar-accent px-1.5 text-[9px] tabular-nums text-muted-foreground">{navigationGroup().pending ? '…' : navigationGroup().totalSessionCount}</span>
+                            </span>
+                            <span class="block truncate text-[9px] leading-3 text-muted-foreground/65">{navigationGroup().defaultWorkingDir}</span>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                            title={i18n.t('terminal.newSessionInGroup', { group: navigationGroup().name })}
+                            aria-label={i18n.t('terminal.newSessionInGroup', { group: navigationGroup().name })}
+                            onClick={() => props.onCreateSessionInGroup?.(navigationGroup().id)}
+                            disabled={navigationGroup().pending}
+                          >
+                            <Plus class="h-3.5 w-3.5" />
+                          </button>
+                          <Show when={!navigationGroup().pending}>
+                          <details class="relative">
+                            <summary
+                              class="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring [&::-webkit-details-marker]:hidden"
+                              role="button"
+                              aria-label={i18n.t('terminal.groupActions', { group: navigationGroup().name })}
+                            >
+                              <MoreHorizontal class="h-3.5 w-3.5" />
+                            </summary>
+                            <div class="absolute right-0 top-8 z-30 min-w-36 rounded-md border border-popover-border bg-popover p-1 text-popover-foreground shadow-xl">
+                              <button type="button" class="flex h-8 w-full items-center rounded px-2 text-left text-xs hover:bg-accent" onClick={(event) => {
+                                event.currentTarget.closest('details')?.removeAttribute('open');
+                                props.onEditGroup?.(navigationGroup().id);
+                              }}>
+                                {i18n.t('terminal.editGroup')}
+                              </button>
+                              <Show when={!navigationGroup().isDefault}>
+                                <button type="button" class="flex h-8 w-full items-center rounded px-2 text-left text-xs text-error hover:bg-error/10" onClick={(event) => {
+                                  event.currentTarget.closest('details')?.removeAttribute('open');
+                                  props.onDeleteGroup?.(navigationGroup().id);
+                                }}>
+                                  {i18n.t('terminal.deleteGroup')}
+                                </button>
+                              </Show>
+                            </div>
+                          </details>
+                          </Show>
+                        </div>
+                        <Show when={navigationGroup().expanded}>
+                          <div class="ml-3 border-l border-sidebar-border/45 pl-1.5" data-terminal-group-sessions={navigationGroup().id}>
+                            <For each={navigationGroup().itemIds}>
+                    {(sessionId) => {
+                      const navigationIndex = createMemo(() => props.itemIds.indexOf(sessionId));
                       const item = createMemo(() => props.itemById.get(sessionId)!);
                       const sidebarActive = () => props.sidebarActiveSessionId === sessionId;
                       const committedActive = () => props.activeSessionId === sessionId;
@@ -561,12 +673,18 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       return (
                         <div
                           data-terminal-session-row={sessionId}
+                          draggable={item().transitionState === 'none'}
                           class={`group relative grid items-center overflow-hidden rounded-md border text-xs transition-[background-color,border-color,color,box-shadow] duration-150 ${props.mobile
                             ? 'min-h-[68px] grid-cols-[36px_minmax(0,1fr)_60px] gap-x-2 px-2.5 py-1'
-                            : 'min-h-16 grid-cols-[36px_minmax(0,1fr)_44px] gap-x-2.5 px-2.5 py-2'} ${sidebarActive()
+                            : 'min-h-[52px] grid-cols-[32px_minmax(0,1fr)_44px] gap-x-2 px-2 py-1'} ${sidebarActive()
                             ? 'border-sidebar-border/60 bg-sidebar-accent/65 text-sidebar-accent-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_16%,transparent),0_1px_3px_color-mix(in_srgb,var(--foreground)_6%,transparent)]'
                             : 'border-transparent text-sidebar-foreground/80 hover:border-sidebar-border/35 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground hover:shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_4%,transparent)]'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
+                          onDragStart={(event) => {
+                            if (!event.dataTransfer) return;
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData('application/x-redeven-terminal-session', sessionId);
+                          }}
                         >
                           <Tooltip
                             content={(
@@ -585,7 +703,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               class="h-full w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
                               data-terminal-session-id={sessionId}
                               data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
-                              data-terminal-session-index={index() + 1}
+                              data-terminal-session-index={navigationIndex() + 1}
                               aria-label={`${item().label}: ${item().title}${agentPresentation() ? `, ${agentPresentation()!.label}` : ''}${item().subtitle ? ` ${item().subtitle}` : ''}`}
                               aria-describedby={statusDescription() ? `${props.accessibilityIdPrefix}-session-status-${sessionId}` : undefined}
                               aria-current={committedActive() ? 'page' : undefined}
@@ -617,7 +735,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             when={agentIdentity()}
                             fallback={(
                               <span
-                                class="pointer-events-none relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
+                                class="pointer-events-none relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
                                 style={{
                                   background: item().avatarTone.background,
                                   'border-color': item().avatarTone.border,
@@ -749,9 +867,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               data-terminal-session-action-cell="index"
                               aria-hidden="true"
                             >
-                              <Show when={!props.mobile && index() < 9}>
+                              <Show when={!props.mobile && navigationIndex() >= 0 && navigationIndex() < 9}>
                                 <span class="flex h-5 w-5 items-center justify-center rounded border border-sidebar-border/80 bg-sidebar/35 text-[9px] font-medium leading-none tabular-nums text-muted-foreground/80">
-                                  {index() + 1}
+                                  {navigationIndex() + 1}
                                 </span>
                               </Show>
                             </span>
@@ -833,7 +951,21 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         </div>
                       );
                     }}
-                  </For>
+                            </For>
+                          </div>
+                        </Show>
+                      </div>
+                    )}
+                  </Index>
+                  <Show when={navigationGroups().length === 0}>
+                    <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/25 px-2.5 py-3 text-xs text-muted-foreground">
+                      {props.emptyListLoading
+                        ? i18n.t('terminal.loadingSessions')
+                        : props.filterQuery.trim()
+                          ? i18n.t('terminal.noMatchingSessions')
+                          : i18n.t('terminal.noSessionsTitle')}
+                    </div>
+                  </Show>
                 </SidebarItemList>
               </div>
             </SidebarSection>
