@@ -303,6 +303,26 @@ func (a *Adapter) Inspect(ctx context.Context, req ContainerInspectRequest) (Con
 	}, nil
 }
 
+// ContainerMatchesLabel verifies an exact product-owned identity label without
+// exposing raw container labels through the redacted inspection DTO.
+func (a *Adapter) ContainerMatchesLabel(ctx context.Context, req ContainerLabelMatchRequest) (bool, error) {
+	if err := validateEngine(req.Engine); err != nil {
+		return false, err
+	}
+	containerID := strings.TrimSpace(req.ContainerID)
+	if err := validateContainerIdentifier(containerID); err != nil {
+		return false, err
+	}
+	if !validContainerLabel(req.Key, req.Value) {
+		return false, errors.New("container label is invalid")
+	}
+	container, err := a.client.Inspect(ctx, req.Engine, containerID)
+	if err != nil {
+		return false, normalizeContainerResourceError(containerID, err)
+	}
+	return container.Runtime.Labels[strings.TrimSpace(req.Key)] == req.Value, nil
+}
+
 func (a *Adapter) StartPreflight(ctx context.Context, req ContainerStartRequest) (StartPreflightPlan, error) {
 	if err := validateEngine(req.Engine); err != nil {
 		return StartPreflightPlan{}, err
@@ -549,6 +569,11 @@ func containerInspect(container EngineContainer) ContainerInspect {
 		Devices:       summarizeDevices(container.Runtime.Devices),
 		CapAdd:        normalizeCaps(container.Runtime.CapAdd),
 		CapDrop:       normalizeCaps(container.Runtime.CapDrop),
+		ReadOnlyRoot:  container.Runtime.ReadOnlyRoot,
+		SecurityOpts:  append([]string(nil), container.Runtime.SecurityOpts...),
+		PIDsLimit:     container.Runtime.PIDsLimit,
+		ShmSizeBytes:  container.Runtime.ShmSizeBytes,
+		User:          strings.TrimSpace(container.Runtime.User),
 	}
 	return ContainerInspect{
 		ContainerID:     strings.TrimSpace(container.ContainerID),

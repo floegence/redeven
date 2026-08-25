@@ -39,7 +39,12 @@ drifted shapes are rejected read-only. All later versions retain the same kind
 and append contiguous automatic migrations. Other product stores retain their existing supported
 migration histories. Their individual migration tests
 remain responsible for historical shape validation and preservation of their
-domain records. The shared engine rejects incomplete migration chains,
+domain records. The port-forward registry's contiguous v1-to-v2 migration adds
+managed Web Service and persistent operation records while retaining the exact
+v1 forward table and every user-owned forward. Drifted v1 inputs, future
+versions, and failed migrations remain unchanged; managed service, protected
+forward, and first operation creation is separately atomic at runtime. The
+shared engine rejects incomplete migration chains,
 unsupported old versions, future versions, malformed metadata, wrong database
 kinds, and unversioned non-empty databases. Migration and verification errors
 roll back the transaction; startup must surface the error instead of deleting,

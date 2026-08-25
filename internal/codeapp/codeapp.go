@@ -22,6 +22,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/portforward"
@@ -97,6 +98,7 @@ type Service struct {
 
 	reg     *registry.Registry
 	pf      *portforward.Service
+	managed *managedwebservice.Manager
 	runner  *codeserver.Runner
 	runtime *codeserver.RuntimeManager
 	notes   *notes.Service
@@ -185,6 +187,12 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfReg.Close()
 		return nil, err
 	}
+	managedSvc, err := managedwebservice.New(managedwebservice.ManagerOptions{Logger: logger, StateDir: stateAbs, Registry: pfReg, Scope: scope, Containers: containerAdapter})
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		return nil, err
+	}
 
 	portMin, portMax := normalizePortRange(opts.CodeServerPortMin, opts.CodeServerPortMax)
 	reconnectionGrace := time.Duration(0)
@@ -217,6 +225,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		codePortMax:  portMax,
 		reg:          reg,
 		pf:           pfSvc,
+		managed:      managedSvc,
 		runner:       runner,
 		runtime:      runtimeMgr,
 	}
@@ -336,6 +345,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:                 svc,
 		PortForward:             pfSvc,
+		ManagedWebServices:      managedSvc,
 		AIServiceProvider:       aiReady,
 		Notes:                   notesSvc,
 		WorkbenchLayout:         workbenchLayoutSvc,
@@ -387,6 +397,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.pluginIntegration = pluginIntegration
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
 	aiReady.Start()
+	managedSvc.Start(context.Background())
 
 	return svc, nil
 }
@@ -400,6 +411,9 @@ func (s *Service) Close() error {
 	}
 	if s.runner != nil {
 		_ = s.runner.StopAll()
+	}
+	if s.managed != nil {
+		_ = s.managed.Close()
 	}
 	if s.reg != nil {
 		_ = s.reg.Close()

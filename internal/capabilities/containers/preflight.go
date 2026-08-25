@@ -41,6 +41,11 @@ type RuntimeInput struct {
 	Devices       []DeviceInput
 	CapAdd        []string
 	CapDrop       []string
+	ReadOnlyRoot  bool
+	SecurityOpts  []string
+	PIDsLimit     int
+	ShmSizeBytes  int64
+	User          string
 }
 
 type MountInput struct {
@@ -83,6 +88,11 @@ func BuildStartPreflightPlan(input StartPreflightInput) (StartPreflightPlan, err
 		Devices:       summarizeDevices(input.Runtime.Devices),
 		CapAdd:        normalizeCaps(input.Runtime.CapAdd),
 		CapDrop:       normalizeCaps(input.Runtime.CapDrop),
+		ReadOnlyRoot:  input.Runtime.ReadOnlyRoot,
+		SecurityOpts:  append([]string(nil), input.Runtime.SecurityOpts...),
+		PIDsLimit:     input.Runtime.PIDsLimit,
+		ShmSizeBytes:  input.Runtime.ShmSizeBytes,
+		User:          strings.TrimSpace(input.Runtime.User),
 	}
 
 	target := TargetSummary{

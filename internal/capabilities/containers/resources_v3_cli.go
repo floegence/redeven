@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -40,10 +41,37 @@ func (c *CLIClient) CreateContainer(ctx context.Context, req ContainerCreateRequ
 	if req.Privileged {
 		args = append(args, "--privileged")
 	}
+	if req.ReadOnlyRoot {
+		args = append(args, "--read-only")
+	}
+	if req.PIDsLimit > 0 {
+		args = append(args, "--pids-limit", strconv.Itoa(req.PIDsLimit))
+	}
+	if req.ShmSizeBytes > 0 {
+		args = append(args, "--shm-size", strconv.FormatInt(req.ShmSizeBytes, 10))
+	}
+	if user := strings.TrimSpace(req.User); user != "" {
+		args = append(args, "--user", user)
+	}
+	for _, option := range req.SecurityOpts {
+		args = append(args, "--security-opt", strings.TrimSpace(option))
+	}
+	labelKeys := make([]string, 0, len(req.Labels))
+	for key := range req.Labels {
+		labelKeys = append(labelKeys, key)
+	}
+	sort.Strings(labelKeys)
+	for _, key := range labelKeys {
+		args = append(args, "--label", strings.TrimSpace(key)+"="+req.Labels[key])
+	}
 	for _, port := range req.Ports {
 		args = append(args, "--publish", publishedPortArgument(port))
 	}
 	for _, mount := range req.Mounts {
+		if mount.Type == MountTypeTmpfs && len(mount.TmpfsOptions) > 0 {
+			args = append(args, "--tmpfs", strings.TrimSpace(mount.Target)+":"+strings.Join(mount.TmpfsOptions, ","))
+			continue
+		}
 		args = append(args, "--mount", mountArgument(mount))
 	}
 	for _, capability := range req.CapAdd {

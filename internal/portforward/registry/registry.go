@@ -255,6 +255,13 @@ func (r *Registry) DeleteForward(ctx context.Context, forwardID string) error {
 	if id == "" {
 		return errors.New("missing forward_id")
 	}
+	var managedCount int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM managed_web_services WHERE forward_id = ?`, id).Scan(&managedCount); err != nil {
+		return err
+	}
+	if managedCount > 0 {
+		return ErrManagedForward
+	}
 	res, err := r.db.ExecContext(ctx, `DELETE FROM port_forwards WHERE forward_id = ?`, id)
 	if err != nil {
 		return err

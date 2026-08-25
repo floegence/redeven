@@ -28,7 +28,7 @@ func (a *Adapter) CreatePreflight(req ContainerCreateRequest) (ResourcePlan, err
 	}
 	mounts := make([]MountInput, 0, len(req.Mounts))
 	for _, mount := range req.Mounts {
-		mounts = append(mounts, MountInput(mount))
+		mounts = append(mounts, MountInput{Type: mount.Type, Source: mount.Source, Target: mount.Target, ReadOnly: mount.ReadOnly})
 	}
 	devices := make([]DeviceInput, 0, len(req.Devices))
 	for _, device := range req.Devices {
@@ -36,8 +36,9 @@ func (a *Adapter) CreatePreflight(req ContainerCreateRequest) (ResourcePlan, err
 	}
 	runtime := RuntimeSummary{
 		Privileged: req.Privileged, NetworkMode: req.NetworkMode, PIDMode: req.PIDMode, IPCMode: req.IPCMode,
-		RestartPolicy: req.RestartPolicy, Env: summarizeEnv(req.Env), Mounts: summarizeMounts(mounts),
+		RestartPolicy: req.RestartPolicy, Env: summarizeEnv(req.Env), Labels: summarizeLabels(req.Labels), Mounts: summarizeMounts(mounts),
 		Devices: summarizeDevices(devices), CapAdd: normalizeCaps(req.CapAdd), CapDrop: normalizeCaps(req.CapDrop),
+		ReadOnlyRoot: req.ReadOnlyRoot, SecurityOpts: append([]string(nil), req.SecurityOpts...), PIDsLimit: req.PIDsLimit, ShmSizeBytes: req.ShmSizeBytes, User: strings.TrimSpace(req.User),
 	}
 	digest, digestPinned := canonicalImageReferenceDigest(req.Image)
 	image := ImageSummary{Reference: strings.TrimSpace(req.Image), Digest: digest, DigestPinned: digestPinned}
