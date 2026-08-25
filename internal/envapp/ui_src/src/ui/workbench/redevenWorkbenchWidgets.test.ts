@@ -68,6 +68,7 @@ describe('redevenWorkbenchWidgets source contract', () => {
 
   it('gives Flower local wheel routing and derives engagement from the selected widget lifecycle', () => {
     expect(source).toContain('{...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}');
-    expect(source).toContain("engaged={Boolean(props.selected && props.lifecycle !== 'cold' && !props.filtered)}");
+    expect(source).toContain("const engaged = () => Boolean(available() && props.selected && props.lifecycle !== 'cold' && !props.filtered);");
+    expect(source).toContain('env.setFlowerWorkbenchHost?.(host(), engaged())');
   });
 });
