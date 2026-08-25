@@ -18,10 +18,10 @@ import test from 'node:test';
 import { collect } from './collect_release_artifacts.mjs';
 
 const targets = [
-  { goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'] },
-  { goos: 'linux', goarch: 'arm64', desktopOS: 'linux', desktopArch: 'arm64', extensions: ['deb', 'rpm'] },
-  { goos: 'darwin', goarch: 'amd64', desktopOS: 'mac', desktopArch: 'x64', extensions: ['dmg'] },
-  { goos: 'darwin', goarch: 'arm64', desktopOS: 'mac', desktopArch: 'arm64', extensions: ['dmg'] },
+  { goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'], updateFiles: ['latest-linux.yml'] },
+  { goos: 'linux', goarch: 'arm64', desktopOS: 'linux', desktopArch: 'arm64', extensions: ['deb', 'rpm'], updateFiles: ['latest-linux-arm64.yml'] },
+  { goos: 'darwin', goarch: 'amd64', desktopOS: 'mac', desktopArch: 'x64', extensions: ['dmg'], updateFiles: [] },
+  { goos: 'darwin', goarch: 'arm64', desktopOS: 'mac', desktopArch: 'arm64', extensions: ['dmg'], updateFiles: [] },
 ];
 
 function sha256(bytes) {
@@ -47,7 +47,7 @@ function evidenceDescriptor(label) {
   return { sha256: sha256(bytes), size: bytes.length };
 }
 
-function createFixture(root) {
+function createFixture(root, version = '1.2.3') {
   const downloads = path.join(root, 'downloads');
   mkdirSync(downloads, { recursive: true });
   const sharedFiles = new Map([
@@ -63,11 +63,12 @@ function createFixture(root) {
     mkdirSync(packageDirectory, { recursive: true });
     mkdirSync(desktopDirectory, { recursive: true });
     for (const [name, bytes] of sharedFiles) write(packageDirectory, name, bytes);
+    for (const updateFile of target.updateFiles) write(desktopDirectory, updateFile, Buffer.from(`version: ${version}\npath: ${target.desktopArch}\n`));
     write(packageDirectory, `redeven_${target.goos}_${target.goarch}.tar.gz`, Buffer.from(`runtime ${target.goos}/${target.goarch}\n`));
     write(packageDirectory, `redeven-gateway_${target.goos}_${target.goarch}.tar.gz`, Buffer.from(`gateway ${target.goos}/${target.goarch}\n`));
 
     for (const extension of target.extensions) {
-      const installerName = `Redeven-Desktop-1.2.3-${target.desktopOS}-${target.desktopArch}.${extension}`;
+      const installerName = `Redeven-Desktop-${version}-${target.desktopOS}-${target.desktopArch}.${extension}`;
       const installerPath = write(desktopDirectory, installerName, Buffer.from(`installer ${installerName}\n`));
       const hasRuntime = target.goos === 'linux';
       const targetLabel = `${target.goos}/${target.goarch}`;
@@ -87,6 +88,12 @@ function createFixture(root) {
       }, null, 2)}\n`);
     }
   }
+  const sparkleDirectory = path.join(downloads, 'desktop-sparkle');
+  mkdirSync(sparkleDirectory);
+  write(sparkleDirectory, 'appcast-mac-x64.xml', Buffer.from('<rss>signed x64</rss>\n'));
+  write(sparkleDirectory, 'appcast-mac-arm64.xml', Buffer.from('<rss>signed arm64</rss>\n'));
+  write(sparkleDirectory, `Redeven-Desktop-${version}-mac-x64.md`, Buffer.from('signed x64 notes\n'));
+  write(sparkleDirectory, `Redeven-Desktop-${version}-mac-arm64.md`, Buffer.from('signed arm64 notes\n'));
   return downloads;
 }
 
@@ -101,7 +108,37 @@ test('collects only the closed four-target release inventory', () => {
     assert.equal(outputs.filter((name) => name.startsWith('redeven-gateway_')).length, 4);
     assert.equal(outputs.filter((name) => /\.(?:deb|rpm|dmg)$/u.test(name)).length, 6);
     assert.equal(outputs.filter((name) => name.endsWith('.redevplugin-verification.json')).length, 6);
-    assert.equal(outputs.length, 24);
+    assert.equal(outputs.length, 30);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('excludes Sparkle stable-feed assets from prereleases', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-release-collector-'));
+  try {
+    const downloads = createFixture(root, '1.2.3-beta.1');
+    rmSync(path.join(downloads, 'desktop-sparkle'), { recursive: true, force: true });
+    const destination = path.join(root, 'release');
+    collect(downloads, destination, 'v1.2.3-beta.1');
+    const outputs = readdirSync(destination).sort();
+    assert.equal(outputs.some((name) => name.startsWith('appcast-mac-')), false);
+    assert.equal(outputs.some((name) => name.startsWith('Redeven-Desktop-') && name.endsWith('.md')), false);
+    assert.equal(outputs.length, 26);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('requires both signed appcasts and release notes for stable releases', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-release-collector-'));
+  try {
+    const downloads = createFixture(root);
+    unlinkSync(path.join(downloads, 'desktop-sparkle', 'appcast-mac-arm64.xml'));
+    assert.throws(
+      () => collect(downloads, path.join(root, 'missing-sparkle-output'), 'v1.2.3'),
+      /desktop-sparkle inventory mismatch/u,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

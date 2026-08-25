@@ -8,6 +8,7 @@ import { bootstrapDesktopShellBridge } from './desktopShell';
 import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';
 import { bootstrapDesktopLanguageBridge } from './desktopLanguage';
 import { bootstrapDesktopThemeBridge } from './windowTheme';
+import { bootstrapDesktopUpdateBridge } from './desktopUpdate';
 
 bootstrapDesktopDownloadsBridge();
 bootstrapDesktopCodeWorkspaceBridge();
@@ -17,3 +18,4 @@ bootstrapDesktopSessionContextBridge();
 bootstrapDesktopShellBridge();
 bootstrapDesktopStateStorageBridge();
 bootstrapDesktopThemeBridge();
+bootstrapDesktopUpdateBridge();

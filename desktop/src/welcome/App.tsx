@@ -96,6 +96,11 @@ import type {
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import {
+  unsupportedDesktopUpdateSnapshot,
+  type DesktopUpdateAction,
+  type DesktopUpdateSnapshot,
+} from '../shared/desktopUpdateIPC';
+import {
   isDesktopLauncherActionFailure,
   isDesktopLauncherActionSuccess,
   selectLatestDesktopWelcomeSnapshot,
@@ -2473,6 +2478,20 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
   return candidate;
 }
 
+function desktopUpdateBridge() {
+  const candidate = window.redevenDesktopUpdate;
+  if (
+    !candidate
+    || typeof candidate.getSnapshot !== 'function'
+    || typeof candidate.perform !== 'function'
+    || typeof candidate.subscribe !== 'function'
+    || typeof candidate.subscribeOpenRequested !== 'function'
+  ) {
+    return null;
+  }
+  return candidate;
+}
+
 function DesktopLanguagePicker(props: Readonly<{
   openRequest: number;
   snapshot: RedevenLanguageSnapshot;
@@ -2671,6 +2690,7 @@ function DesktopCommandRegistrar(props: Readonly<{
   closeLauncherOrQuit: () => Promise<void>;
   openLanguageSettings: () => void;
   openThemePicker: () => void;
+  checkForUpdates: () => void;
 }>): null {
   const cmd = useCommand();
 
@@ -2713,6 +2733,14 @@ function DesktopCommandRegistrar(props: Readonly<{
         category: props.i18n.t('commandPalette.categories.desktop'),
         icon: Search,
         execute: () => props.openCreateConnectionDialog(props.i18n.t('commandPalette.connectAnotherEnvironmentPrompt')),
+      },
+      {
+        id: 'redeven.desktop.checkForUpdates',
+        title: props.i18n.t('commandPalette.checkForUpdatesTitle'),
+        description: props.i18n.t('commandPalette.checkForUpdatesDescription'),
+        category: props.i18n.t('commandPalette.categories.desktop'),
+        icon: Refresh,
+        execute: () => props.checkForUpdates(),
       },
       {
         id: 'redeven.desktop.closeLauncherOrQuit',
@@ -2777,6 +2805,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const theme = useTheme();
   const shellTheme = desktopThemeBridge();
   const shellLanguage = desktopLanguageBridge();
+  const updateBridge = desktopUpdateBridge();
   const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();
   onCleanup(() => flowerDraftCoordinator.dispose());
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
@@ -2796,6 +2825,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     shellTheme?.getSnapshot() ?? fallbackThemePickerSnapshot(),
   );
   const [themePickerOpenRequest, setThemePickerOpenRequest] = createSignal(0);
+  const [desktopUpdateSnapshot, setDesktopUpdateSnapshot] = createSignal<DesktopUpdateSnapshot>(
+    unsupportedDesktopUpdateSnapshot(),
+  );
+  const [desktopUpdateDialogOpen, setDesktopUpdateDialogOpen] = createSignal(false);
   const [actionToasts, setActionToasts] = createSignal<readonly DesktopActionToast[]>([]);
   const [liveActionProgress, setLiveActionProgress] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
   const [retainedGatewayFailures, setRetainedGatewayFailures] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
@@ -2804,6 +2837,48 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [connectionDialogFieldErrors, setConnectionDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
   const [controlPlaneDialogError, setControlPlaneDialogError] = createSignal('');
   const [busyState, setBusyState] = createSignal<DesktopLauncherBusyState>(IDLE_LAUNCHER_BUSY_STATE);
+
+  createEffect(() => {
+    if (!updateBridge) {
+      return;
+    }
+    let active = true;
+    void updateBridge.getSnapshot().then((nextSnapshot) => {
+      if (active) setDesktopUpdateSnapshot(nextSnapshot);
+    });
+    const unsubscribeSnapshot = updateBridge.subscribe(setDesktopUpdateSnapshot);
+    const unsubscribeOpen = updateBridge.subscribeOpenRequested(() => setDesktopUpdateDialogOpen(true));
+    onCleanup(() => {
+      active = false;
+      unsubscribeSnapshot();
+      unsubscribeOpen();
+    });
+  });
+
+  async function performDesktopUpdateAction(action: DesktopUpdateAction): Promise<void> {
+    if (!updateBridge) {
+      return;
+    }
+    const response = await updateBridge.perform(action);
+    setDesktopUpdateSnapshot(response.snapshot);
+  }
+
+  function checkForDesktopUpdates(): void {
+    const current = desktopUpdateSnapshot();
+    if (current.platform !== 'macos_sparkle' || current.state === 'blocked') {
+      setDesktopUpdateDialogOpen(true);
+    }
+    void performDesktopUpdateAction({ kind: 'check_for_updates' });
+  }
+
+  function openDesktopUpdates(): void {
+    const current = desktopUpdateSnapshot();
+    if (current.platform === 'macos_sparkle' && current.state !== 'blocked') {
+      void performDesktopUpdateAction({ kind: 'open_update_ui' });
+      return;
+    }
+    setDesktopUpdateDialogOpen(true);
+  }
   const [settingsDraftSession, setSettingsDraftSession] = createSignal(createDesktopSettingsDraftSession(props.snapshot.settings_surface));
   const [connectionDialogState, setConnectionDialogState] = createSignal<ConnectionDialogState>(null);
   const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
@@ -6151,6 +6226,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         closeLauncherOrQuit={closeLauncherOrQuit}
         openLanguageSettings={openLanguageSettings}
         openThemePicker={() => setThemePickerOpenRequest((current) => current + 1)}
+        checkForUpdates={checkForDesktopUpdates}
       />
       <DesktopLauncherShell
         mainContentId="redeven-desktop-main"
@@ -6245,6 +6321,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <span class="truncate max-w-[200px]">{localizedIssueTitle(i18n(), snapshot().issue!)}</span>
               </span>
             </Show>
+            <BottomBarItem class="cursor-pointer" onClick={openDesktopUpdates}>
+              <span
+                class={cn(
+                  'text-[11px]',
+                  desktopUpdateSnapshot().state === 'available' || desktopUpdateSnapshot().state === 'ready'
+                    ? 'text-primary'
+                    : desktopUpdateSnapshot().state === 'error'
+                      ? 'text-destructive'
+                      : '',
+                )}
+                aria-label={i18n().t('desktopUpdate.statusButton', {
+                  status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
+                })}
+              >
+                {i18n().t('desktopUpdate.title')}
+              </span>
+            </BottomBarItem>
             {/* Close / Quit */}
             <BottomBarItem class="cursor-pointer" onClick={() => void closeLauncherOrQuit()}>
               <span class="text-[11px]">{localizedCloseActionLabel(i18n(), snapshot().close_action)}</span>
@@ -6409,6 +6502,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         runToastAction={runActionToastAction}
       />
 
+      <DesktopUpdateDialog
+        open={desktopUpdateDialogOpen()}
+        snapshot={desktopUpdateSnapshot()}
+        i18n={i18n()}
+        onOpenChange={setDesktopUpdateDialogOpen}
+        perform={performDesktopUpdateAction}
+      />
+
       <LocalEnvironmentSettingsDialog
         open={snapshot().surface === 'environment_settings'}
         snapshot={settingsSurface()}
@@ -6428,6 +6529,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         runtimeRestartAvailable={settingsRuntimeRestartAvailable()}
         cancelSettings={cancelSettings}
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
+        openDesktopUpdates={() => {
+          cancelSettings();
+          checkForDesktopUpdates();
+        }}
       />
 
       <ConnectionDialog
@@ -12876,6 +12981,190 @@ function SettingsApplyTimingControl(props: Readonly<{
   );
 }
 
+function desktopUpdateStatusLabel(i18n: DesktopI18n, snapshot: DesktopUpdateSnapshot): string {
+  switch (snapshot.state) {
+    case 'checking':
+      return i18n.t('desktopUpdate.checking');
+    case 'available':
+      return i18n.t('desktopUpdate.available');
+    case 'downloading':
+      return i18n.t('desktopUpdate.downloading');
+    case 'ready':
+      return i18n.t('desktopUpdate.ready');
+    case 'installing':
+      return snapshot.message_key === 'desktopUpdate.preparingInstallation'
+        ? i18n.t('desktopUpdate.preparingInstallation')
+        : i18n.t('desktopUpdate.installing');
+    case 'blocked':
+      return snapshot.message_key === 'desktopUpdate.moveToApplications'
+        ? i18n.t('desktopUpdate.moveToApplications')
+        : i18n.t('desktopUpdate.unsupportedBuild');
+    case 'error':
+      return i18n.t('desktopUpdate.failed');
+    case 'idle':
+      return snapshot.message_key === 'desktopUpdate.upToDate'
+        ? i18n.t('desktopUpdate.upToDate')
+        : i18n.t('desktopUpdate.checkForUpdates');
+  }
+}
+
+function DesktopUpdateDialog(props: Readonly<{
+  open: boolean;
+  snapshot: DesktopUpdateSnapshot;
+  i18n: DesktopI18n;
+  onOpenChange: (open: boolean) => void;
+  perform: (action: DesktopUpdateAction) => Promise<void>;
+}>) {
+  const hasCapability = (capability: DesktopUpdateSnapshot['capabilities'][number]) => (
+    props.snapshot.capabilities.includes(capability)
+  );
+  const working = () => (
+    props.snapshot.state === 'checking'
+    || props.snapshot.state === 'downloading'
+    || props.snapshot.state === 'installing'
+  );
+  return (
+    <Dialog
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title={props.i18n.t('desktopUpdate.title')}
+      class="max-w-[34rem]"
+      footer={(
+        <div class="flex w-full flex-wrap items-center justify-between gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void props.perform({ kind: 'open_release_page' })}
+          >
+            <ExternalLink class="mr-1.5 h-3.5 w-3.5" />
+            {props.i18n.t('desktopUpdate.openReleasePage')}
+          </Button>
+          <div class="flex flex-wrap justify-end gap-2">
+            <Show when={hasCapability('reveal_application')}>
+              <Button size="sm" variant="outline" onClick={() => void props.perform({ kind: 'reveal_application' })}>
+                {props.i18n.t('desktopUpdate.revealApplication')}
+              </Button>
+            </Show>
+            <Show when={hasCapability('open_applications_folder')}>
+              <Button size="sm" variant="outline" onClick={() => void props.perform({ kind: 'open_applications_folder' })}>
+                {props.i18n.t('desktopUpdate.openApplicationsFolder')}
+              </Button>
+            </Show>
+            <Show when={hasCapability('cancel_download')}>
+              <Button size="sm" variant="outline" onClick={() => void props.perform({ kind: 'cancel_download' })}>
+                {props.i18n.t('desktopUpdate.cancelDownload')}
+              </Button>
+            </Show>
+            <Show when={hasCapability('download')}>
+              <Button size="sm" onClick={() => void props.perform({ kind: 'download_update' })}>
+                {props.i18n.t('desktopUpdate.download')}
+              </Button>
+            </Show>
+            <Show when={hasCapability('install')}>
+              <Button size="sm" onClick={() => void props.perform({ kind: 'install_update' })}>
+                {props.i18n.t('desktopUpdate.installAndRestart')}
+              </Button>
+            </Show>
+            <Show when={hasCapability('check') && !hasCapability('download') && !hasCapability('install')}>
+              <Button size="sm" onClick={() => void props.perform({ kind: 'check_for_updates' })}>
+                {props.snapshot.state === 'error'
+                  ? props.i18n.t('desktopUpdate.retry')
+                  : props.i18n.t('desktopUpdate.checkForUpdates')}
+              </Button>
+            </Show>
+            <Button size="sm" variant="outline" disabled={props.snapshot.state === 'installing'} onClick={() => props.onOpenChange(false)}>
+              {props.i18n.t('desktopUpdate.close')}
+            </Button>
+          </div>
+        </div>
+      )}
+    >
+      <div class="space-y-5">
+        <div
+          role="status"
+          class={cn(
+            'flex items-start gap-3 rounded-md border px-4 py-3',
+            props.snapshot.state === 'error'
+              ? 'border-destructive/25 bg-destructive/10'
+              : props.snapshot.state === 'blocked'
+                ? 'border-warning/30 bg-warning/10'
+                : 'border-border bg-muted/20',
+          )}
+        >
+          <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+            <Show when={working()} fallback={props.snapshot.state === 'error' || props.snapshot.state === 'blocked'
+              ? <AlertTriangle class="h-4 w-4 text-warning" />
+              : <Check class="h-4 w-4 text-success" />}>
+              <Refresh class="h-4 w-4 animate-spin text-primary" />
+            </Show>
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-foreground">
+              {desktopUpdateStatusLabel(props.i18n, props.snapshot)}
+            </div>
+            <Show when={props.snapshot.state === 'blocked'}>
+              <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                {props.snapshot.message_key === 'desktopUpdate.moveToApplications'
+                  ? props.i18n.t('desktopUpdate.moveToApplicationsDetail')
+                  : props.i18n.t('desktopUpdate.unsupportedBuildDetail')}
+              </p>
+            </Show>
+            <Show when={props.snapshot.error_detail}>
+              <p class="mt-1 break-words text-xs leading-5 text-destructive">{props.snapshot.error_detail}</p>
+            </Show>
+          </div>
+        </div>
+
+        <dl class="grid grid-cols-[minmax(8rem,0.8fr)_minmax(0,1.2fr)] gap-x-5 gap-y-2 text-xs">
+          <dt class="text-muted-foreground">{props.i18n.t('desktopUpdate.currentVersion')}</dt>
+          <dd class="font-mono text-foreground">{props.snapshot.current_version || '—'}</dd>
+          <Show when={props.snapshot.available_version}>
+            <dt class="text-muted-foreground">{props.i18n.t('desktopUpdate.availableVersion')}</dt>
+            <dd class="font-mono text-foreground">{props.snapshot.available_version}</dd>
+          </Show>
+        </dl>
+
+        <Show when={props.snapshot.state === 'downloading' && props.snapshot.download_percent !== undefined}>
+          <div class="space-y-1.5">
+            <div class="flex justify-between text-xs text-muted-foreground">
+              <span>{props.i18n.t('desktopUpdate.downloading')}</span>
+              <span>{Math.round(props.snapshot.download_percent ?? 0)}%</span>
+            </div>
+            <div
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={Math.round(props.snapshot.download_percent ?? 0)}
+              class="h-1.5 overflow-hidden rounded-full bg-muted"
+            >
+              <div class="h-full bg-primary transition-[width]" style={{ width: `${props.snapshot.download_percent ?? 0}%` }} />
+            </div>
+          </div>
+        </Show>
+
+        <Show when={hasCapability('automatic_checks')}>
+          <div class="rounded-md border border-border px-4 py-3">
+            <Checkbox
+              checked={props.snapshot.automatically_checks_for_updates}
+              onChange={(enabled) => void props.perform({ kind: 'set_automatic_checks', enabled })}
+              label={props.i18n.t('desktopUpdate.automaticChecks')}
+              disabled={props.snapshot.state === 'installing'}
+              size="sm"
+            />
+            <p class="mt-1.5 pl-6 text-[11px] leading-5 text-muted-foreground">
+              {props.i18n.t('desktopUpdate.automaticChecksDescription')}
+            </p>
+          </div>
+        </Show>
+
+        <Show when={props.snapshot.platform === 'macos_sparkle' && props.snapshot.state !== 'blocked'}>
+          <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('desktopUpdate.macManagedBySparkle')}</p>
+        </Show>
+      </div>
+    </Dialog>
+  );
+}
+
 function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
@@ -12896,6 +13185,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   runtimeRestartAvailable: boolean;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
+  openDesktopUpdates: () => void;
 }>) {
   const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
   const [step, setStep] = createSignal<'edit' | 'review'>('edit');
@@ -13024,7 +13314,12 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
       title={settingsWindowTitle()}
       class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
       footer={(
-        <div class="flex justify-end gap-2">
+        <div class="flex w-full items-center justify-between gap-2">
+          <Button size="sm" variant="ghost" onClick={props.openDesktopUpdates}>
+            <Refresh class="mr-1.5 h-3.5 w-3.5" />
+            {props.i18n.t('desktopUpdate.checkForUpdates')}
+          </Button>
+          <div class="flex justify-end gap-2">
           <Show
             when={step() === 'review'}
             fallback={(
@@ -13095,6 +13390,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                 : props.i18n.t('settings.saveSettings')}
             </Button>
           </Show>
+          </div>
         </div>
       )}
     >

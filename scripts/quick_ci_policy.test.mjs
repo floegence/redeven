@@ -5,6 +5,7 @@ import test from "node:test";
 const workflow = readFileSync(new URL("../.github/workflows/ci-check.yml", import.meta.url), "utf8");
 const codeqlWorkflow = readFileSync(new URL("../.github/workflows/codeql.yml", import.meta.url), "utf8");
 const releaseWorkflow = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+const sparkleReleaseScript = readFileSync(new URL("./generate_desktop_sparkle_appcast.sh", import.meta.url), "utf8");
 const quickGate = readFileSync(new URL("./check_quick_ci.sh", import.meta.url), "utf8");
 const finalGate = readFileSync(new URL("./check_final_integration.sh", import.meta.url), "utf8");
 const uiGate = readFileSync(new URL("./check_ui_tests.sh", import.meta.url), "utf8");
@@ -208,5 +209,18 @@ test("release workflow validates exact main and contains no test gate", () => {
     "check_gateway_protocol_contract.sh",
   ]) {
     assert.doesNotMatch(releaseWorkflow, new RegExp(forbidden, "i"));
+  }
+});
+
+test("release workflow keeps Desktop update credentials in the protected environment", () => {
+  assert.match(releaseWorkflow, /environment: redeven-release/u);
+  assert.match(releaseWorkflow, /REDEVEN_SPARKLE_PRIVATE_KEY: \$\{\{ secrets\.REDEVEN_SPARKLE_PRIVATE_KEY \}\}/u);
+  assert.match(releaseWorkflow, /REDEVEN_SPARKLE_PUBLIC_ED_KEY: \$\{\{ secrets\.REDEVEN_SPARKLE_PUBLIC_ED_KEY \}\}/u);
+  assert.match(releaseWorkflow, /https:\/\/github\.com\/\$\{\{ github\.repository \}\}\/releases\/latest\/download/u);
+  assert.match(releaseWorkflow, /generate_desktop_sparkle_appcast\.sh/u);
+  assert.match(sparkleReleaseScript, /--maximum-deltas 0/u);
+  assert.match(releaseWorkflow, /if: \$\{\{ !contains\(github\.ref_name, '-'\) \}\}/u);
+  for (const forbidden of ['find-disk-killer', 'jianyintang', 'Y3A8BJ447', 'BEGIN PRIVATE KEY']) {
+    assert.doesNotMatch(releaseWorkflow, new RegExp(forbidden, 'i'));
   }
 });

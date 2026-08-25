@@ -525,6 +525,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @xmldom/xmldom | 0.8.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.8.13 |  |
 | @xmldom/xmldom | 0.9.10 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.9.10 | License verified from the exact registry package manifest. |
 | abbrev | 4.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/abbrev/v/4.0.0 |  |
+| abbrev | 5.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/abbrev/v/5.0.0 |  |
 | acorn-jsx | 5.3.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/acorn-jsx/v/5.3.2 |  |
 | acorn | 8.16.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/acorn/v/8.16.0 | License verified from the exact registry package manifest. |
 | acorn | 8.17.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/acorn/v/8.17.0 |  |
@@ -679,6 +680,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | electron-publish | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/electron-publish/v/26.15.3 |  |
 | electron-to-chromium | 1.5.361 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/electron-to-chromium/v/1.5.361 | License verified from the exact registry package manifest. |
 | electron-to-chromium | 1.5.373 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/electron-to-chromium/v/1.5.373 |  |
+| electron-updater | 6.8.9 | MIT | Desktop shell | https://www.npmjs.com/package/electron-updater/v/6.8.9 |  |
 | electron-winstaller | 5.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/electron-winstaller/v/5.4.0 |  |
 | electron | 41.10.5 | MIT | Desktop shell | https://www.npmjs.com/package/electron/v/41.10.5 |  |
 | emoji-regex | 8.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/emoji-regex/v/8.0.0 |  |
@@ -820,7 +822,6 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | json-stringify-safe | 5.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/json-stringify-safe/v/5.0.1 |  |
 | json5 | 2.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/json5/v/2.2.3 |  |
 | jsonfile | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/jsonfile/v/4.0.0 |  |
-| jsonfile | 6.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/jsonfile/v/6.2.0 |  |
 | jsonfile | 6.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jsonfile/v/6.2.1 |  |
 | jszip | 3.10.1 | (MIT OR GPL-3.0-or-later) | Env App UI | https://www.npmjs.com/package/jszip/v/3.10.1 | Redeven uses this dual-licensed package under the MIT option. |
 | katex | 0.16.45 | MIT | Env App UI | https://www.npmjs.com/package/katex/v/0.16.45 |  |
@@ -851,11 +852,11 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | lodash-es | 4.18.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/lodash-es/v/4.18.1 |  |
 | lodash.defaults | 4.2.0 | MIT | Env App UI | https://www.npmjs.com/package/lodash.defaults/v/4.2.0 |  |
 | lodash.difference | 4.5.0 | MIT | Env App UI | https://www.npmjs.com/package/lodash.difference/v/4.5.0 |  |
-| lodash.escaperegexp | 4.1.2 | MIT | Env App UI | https://www.npmjs.com/package/lodash.escaperegexp/v/4.1.2 |  |
+| lodash.escaperegexp | 4.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/lodash.escaperegexp/v/4.1.2 |  |
 | lodash.flatten | 4.4.0 | MIT | Env App UI | https://www.npmjs.com/package/lodash.flatten/v/4.4.0 |  |
 | lodash.groupby | 4.6.0 | MIT | Env App UI | https://www.npmjs.com/package/lodash.groupby/v/4.6.0 |  |
 | lodash.isboolean | 3.0.3 | MIT | Env App UI | https://www.npmjs.com/package/lodash.isboolean/v/3.0.3 |  |
-| lodash.isequal | 4.5.0 | MIT | Env App UI | https://www.npmjs.com/package/lodash.isequal/v/4.5.0 |  |
+| lodash.isequal | 4.5.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/lodash.isequal/v/4.5.0 |  |
 | lodash.isfunction | 3.0.9 | MIT | Env App UI | https://www.npmjs.com/package/lodash.isfunction/v/3.0.9 |  |
 | lodash.isnil | 4.0.0 | MIT | Env App UI | https://www.npmjs.com/package/lodash.isnil/v/4.0.0 |  |
 | lodash.isplainobject | 4.0.6 | MIT | Env App UI | https://www.npmjs.com/package/lodash.isplainobject/v/4.0.6 |  |
@@ -912,9 +913,11 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | node-api-version | 0.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/node-api-version/v/0.2.1 |  |
 | node-gyp | 12.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.3.0 | License verified from the exact registry package manifest. |
 | node-gyp | 12.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.4.0 |  |
+| node-gyp | 13.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/13.0.1 |  |
 | node-int64 | 0.4.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/node-int64/v/0.4.0 |  |
 | node-releases | 2.0.46 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/node-releases/v/2.0.46 | License verified from the exact registry package manifest. |
 | node-releases | 2.0.47 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/node-releases/v/2.0.47 |  |
+| nopt | 10.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/nopt/v/10.0.1 |  |
 | nopt | 9.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/nopt/v/9.0.0 |  |
 | normalize-path | 3.0.0 | MIT | Env App UI | https://www.npmjs.com/package/normalize-path/v/3.0.0 |  |
 | normalize-url | 6.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/normalize-url/v/6.1.0 |  |
@@ -963,6 +966,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | postject | 1.0.0-alpha.6 | MIT | Desktop shell | https://www.npmjs.com/package/postject/v/1.0.0-alpha.6 |  |
 | prelude-ls | 1.2.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/prelude-ls/v/1.2.1 |  |
 | proc-log | 6.1.0 | ISC | Desktop shell | https://www.npmjs.com/package/proc-log/v/6.1.0 |  |
+| proc-log | 7.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/proc-log/v/7.0.0 |  |
 | process-nextick-args | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/process-nextick-args/v/2.0.1 |  |
 | progress | 2.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/progress/v/2.0.3 |  |
 | promise-retry | 2.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/promise-retry/v/2.0.1 |  |
@@ -1065,6 +1069,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | temp-file | 3.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/temp-file/v/3.4.0 |  |
 | temp | 0.9.4 | MIT | Desktop shell | https://www.npmjs.com/package/temp/v/0.9.4 |  |
 | tiny-async-pool | 1.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/tiny-async-pool/v/1.3.0 |  |
+| tiny-typed-emitter | 2.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/tiny-typed-emitter/v/2.1.0 |  |
 | tinybench | 2.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tinybench/v/2.9.0 |  |
 | tinyexec | 1.0.2 | MIT | Env App UI | https://www.npmjs.com/package/tinyexec/v/1.0.2 |  |
 | tinyexec | 1.2.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tinyexec/v/1.2.2 | License verified from the exact registry package manifest. |
@@ -1137,6 +1142,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | which | 2.0.2 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/which/v/2.0.2 |  |
 | which | 5.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/which/v/5.0.0 |  |
 | which | 6.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/which/v/6.0.1 |  |
+| which | 7.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/which/v/7.0.0 |  |
 | why-is-node-running | 2.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/why-is-node-running/v/2.3.0 |  |
 | word-wrap | 1.2.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/word-wrap/v/1.2.5 |  |
 | wrap-ansi | 7.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/wrap-ansi/v/7.0.0 |  |
@@ -1232,6 +1238,39 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Sparkle 2.9.4
+
+Redeven Desktop includes Sparkle 2.9.4 for signed macOS in-app updates. Sparkle
+is distributed under the MIT License. The release package also retains the
+upstream Sparkle third-party notices for its bundled bsdiff, sais-lite, and
+Ed25519 components. Source: https://github.com/sparkle-project/Sparkle/tree/2.9.4
+
+Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesinski.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ## Floeterm Built-in Theme Notices
 

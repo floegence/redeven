@@ -41,6 +41,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep one storage owner per card, migrate retired SSH records once, and serialize rename, pin, and removal safely.
 - [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Own Local, SSH, and container Runtime lifecycle through one process-local Desktop coordinator.
 - [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Recover an exact managed Runtime root with a Runtime-only package and minimal Desktop journal.
+- [Desktop application updates](desktop/desktop-application-updates.md) - Coordinate signed macOS Sparkle and Linux DEB/RPM updates with one stateful installation boundary.
 
 ## Gateway
 

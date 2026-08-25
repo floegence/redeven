@@ -185,6 +185,7 @@ jobs:
   desktop:
     name: Desktop ${{ matrix.goos }}-${{ matrix.goarch }}
     needs: build
+    environment: redeven-release
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
@@ -249,6 +250,8 @@ jobs:
           REDEVEN_DESKTOP_MAC_NOTARY_API_KEY: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_KEY }}
           REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID }}
           REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER }}
+          REDEVEN_DESKTOP_MAC_TEAM_ID: ${{ secrets.REDEVEN_DESKTOP_MAC_TEAM_ID }}
+          REDEVEN_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.REDEVEN_SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
           missing=()
@@ -258,7 +261,9 @@ jobs:
             REDEVEN_DESKTOP_MAC_IDENTITY \
             REDEVEN_DESKTOP_MAC_NOTARY_API_KEY \
             REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID \
-            REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER; do
+            REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER \
+            REDEVEN_DESKTOP_MAC_TEAM_ID \
+            REDEVEN_SPARKLE_PUBLIC_ED_KEY; do
             if [ -z "${!name:-}" ]; then
               missing+=("${name}")
             fi
@@ -288,6 +293,10 @@ jobs:
           CSC_LINK: ${{ secrets.REDEVEN_DESKTOP_MAC_CERT_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.REDEVEN_DESKTOP_MAC_CERT_PASSWORD }}
           REDEVEN_DESKTOP_MAC_IDENTITY: ${{ secrets.REDEVEN_DESKTOP_MAC_IDENTITY }}
+          REDEVEN_DESKTOP_MAC_TEAM_ID: ${{ secrets.REDEVEN_DESKTOP_MAC_TEAM_ID }}
+          REDEVEN_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.REDEVEN_SPARKLE_PUBLIC_ED_KEY }}
+          REDEVEN_DESKTOP_REQUIRE_UPDATE_CONFIG: "1"
+          REDEVEN_DESKTOP_UPDATE_BASE_URL: https://github.com/${{ github.repository }}/releases/latest/download
           APPLE_API_KEY_ID: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER }}
           REDEVEN_DESKTOP_BUNDLE_GOOS: ${{ matrix.goos }}
@@ -358,6 +367,22 @@ jobs:
               --write-receipt "${package}.redevplugin-verification.json"
           done
 
+      - name: Verify macOS Sparkle package
+        if: matrix.goos == 'darwin'
+        env:
+          REDEVEN_DESKTOP_MAC_TEAM_ID: ${{ secrets.REDEVEN_DESKTOP_MAC_TEAM_ID }}
+          REDEVEN_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.REDEVEN_SPARKLE_PUBLIC_ED_KEY }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          arch="x64"
+          if [[ "${{ matrix.goarch }}" == "arm64" ]]; then arch="arm64"; fi
+          ./scripts/verify_macos_desktop_update_package.sh \
+            --dmg "desktop/release/Redeven-Desktop-${version}-mac-${arch}.dmg" \
+            --arch "$arch" \
+            --expected-team-id "$REDEVEN_DESKTOP_MAC_TEAM_ID" \
+            --sparkle-public-key "$REDEVEN_SPARKLE_PUBLIC_ED_KEY"
+
       - name: Upload desktop package artifact
         uses: actions/upload-artifact@v6
         with:
@@ -366,14 +391,109 @@ jobs:
             desktop/release/*.deb
             desktop/release/*.rpm
             desktop/release/*.dmg
+            desktop/release/*.yml
             desktop/release/*.redevplugin-verification.json
           if-no-files-found: error
+
+      - name: Remove temporary macOS signing material
+        if: ${{ always() && matrix.goos == 'darwin' }}
+        run: |
+          set -euo pipefail
+          rm -rf -- "${RUNNER_TEMP}/redeven-notary" desktop/.bundle/macos-updater desktop/native/macos-updater/.build/redeven-sparkle-headers
+
+  sparkle:
+    name: Generate signed macOS appcasts
+    needs: desktop
+    if: ${{ !contains(github.ref_name, '-') }}
+    environment: redeven-release
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+
+      - name: Install Desktop dependencies
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+
+      - name: Prepare Sparkle release tools
+        run: ./scripts/prepare_desktop_macos_updater.sh
+
+      - name: Download signed macOS packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/sparkle-input/x64 dist/sparkle-input/arm64
+          gh run download "${GITHUB_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name desktop-darwin-amd64 \
+            --dir dist/sparkle-input/x64
+          gh run download "${GITHUB_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name desktop-darwin-arm64 \
+            --dir dist/sparkle-input/arm64
+
+      - name: Generate and verify signed appcasts
+        env:
+          REDEVEN_SPARKLE_PRIVATE_KEY: ${{ secrets.REDEVEN_SPARKLE_PRIVATE_KEY }}
+          REDEVEN_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.REDEVEN_SPARKLE_PUBLIC_ED_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in REDEVEN_SPARKLE_PRIVATE_KEY REDEVEN_SPARKLE_PUBLIC_ED_KEY; do
+            if [ -z "${!name:-}" ]; then missing+=("${name}"); fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            printf 'Missing required Sparkle release secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/desktop-sparkle
+          x64_dmg="$(find dist/sparkle-input/x64 -type f -name 'Redeven-Desktop-*.dmg' -print -quit)"
+          arm64_dmg="$(find dist/sparkle-input/arm64 -type f -name 'Redeven-Desktop-*.dmg' -print -quit)"
+          [[ -n "$x64_dmg" && -n "$arm64_dmg" ]]
+          ./scripts/generate_desktop_sparkle_appcast.sh \
+            --dmg "$x64_dmg" \
+            --arch x64 \
+            --tag "${GITHUB_REF_NAME}" \
+            --output-dir dist/desktop-sparkle
+          ./scripts/generate_desktop_sparkle_appcast.sh \
+            --dmg "$arm64_dmg" \
+            --arch arm64 \
+            --tag "${GITHUB_REF_NAME}" \
+            --output-dir dist/desktop-sparkle
+          test "$(find dist/desktop-sparkle -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 4
+
+      - name: Upload signed Sparkle appcast artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: desktop-sparkle
+          path: dist/desktop-sparkle
+          if-no-files-found: error
+
+      - name: Remove temporary Sparkle material
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -rf -- desktop/.bundle/macos-updater desktop/native/macos-updater/.build/redeven-sparkle-headers dist/sparkle-input
 
   release:
     name: Create GitHub Release
     needs:
       - build
       - desktop
+      - sparkle
+    if: ${{ always() && needs.build.result == 'success' && needs.desktop.result == 'success' && (needs.sparkle.result == 'success' || needs.sparkle.result == 'skipped') }}
+    environment: redeven-release
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -442,20 +562,27 @@ jobs:
       - name: Generate checksums
         run: |
           set -euo pipefail
+          shopt -s nullglob
           cd dist
-          sha256sum \
-            redeven_*.tar.gz \
-            redeven-gateway_*.tar.gz \
-            redeven-runtime-compatibility_*.json \
-            Redeven-Desktop-*.deb \
-            Redeven-Desktop-*.rpm \
-            Redeven-Desktop-*.dmg \
-            Redeven-Desktop-*.redevplugin-verification.json \
-            safe_extract_tar.py \
-            LICENSE \
-            THIRD_PARTY_NOTICES.md \
-            okf_bundle.manifest.json \
-            okf_bundle.sha256 > SHA256SUMS
+          checksum_assets=(
+            redeven_*.tar.gz
+            redeven-gateway_*.tar.gz
+            redeven-runtime-compatibility_*.json
+            Redeven-Desktop-*.deb
+            Redeven-Desktop-*.rpm
+            Redeven-Desktop-*.dmg
+            Redeven-Desktop-*.redevplugin-verification.json
+            latest-linux*.yml
+            safe_extract_tar.py
+            LICENSE
+            THIRD_PARTY_NOTICES.md
+            okf_bundle.manifest.json
+            okf_bundle.sha256
+          )
+          if [[ "${GITHUB_REF_NAME}" != *-* ]]; then
+            checksum_assets+=(appcast-mac-*.xml Redeven-Desktop-*.md)
+          fi
+          sha256sum "${checksum_assets[@]}" > SHA256SUMS
 
       - name: Sign checksums with keyless OIDC
         run: |
@@ -525,6 +652,7 @@ jobs:
             dist/Redeven-Desktop-*.rpm
             dist/Redeven-Desktop-*.dmg
             dist/Redeven-Desktop-*.redevplugin-verification.json
+            dist/latest-linux*.yml
             dist/SHA256SUMS
             dist/SHA256SUMS.sig
             dist/SHA256SUMS.pem
@@ -534,6 +662,12 @@ jobs:
             dist/okf_bundle.manifest.json
             dist/okf_bundle.sha256
           )
+          if [[ "${GITHUB_REF_NAME}" != *-* ]]; then
+            assets+=(
+              dist/appcast-mac-*.xml
+              dist/Redeven-Desktop-*.md
+            )
+          fi
           for asset in "${assets[@]}"; do
             test -f "${asset}"
           done

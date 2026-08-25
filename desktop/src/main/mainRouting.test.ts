@@ -927,8 +927,7 @@ describe('main routing', () => {
 
     expect(handoffStart).toBeGreaterThanOrEqual(0);
     expect(handoffEnd).toBeGreaterThan(handoffStart);
-    expect(handoffSrc).toContain('buildDesktopUpdateHandoffMessageBoxOptions(');
-    expect(handoffSrc).toContain('desktopLanguageState().getSnapshot().resolved_locale');
+    expect(handoffSrc).toContain("desktopUpdateCoordinator().perform({ kind: 'open_update_ui' });");
     expect(mainSrc.match(/await showDesktopUpdateHandoffDialog\(\);/gu)).toHaveLength(2);
     expect(mainSrc).not.toContain('Manage Desktop Update');
     expect(mainSrc).not.toContain('Environment type:');
@@ -1576,7 +1575,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain("shouldConfirmDesktopLastWindowClose,");
     expect(mainSrc).toContain("shouldConfirmDesktopQuit,");
     expect(mainSrc).toContain("showDesktopConfirmationDialog,");
-    expect(mainSrc).toContain("let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';");
+    expect(mainSrc).toContain("let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' | 'update_installing' = 'idle';");
     expect(mainSrc).toContain('const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();');
     expect(mainSrc).toContain('label: string;');
     expect(mainSrc).toContain('async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {');

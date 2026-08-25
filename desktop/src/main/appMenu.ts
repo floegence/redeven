@@ -5,6 +5,7 @@ import type { DesktopI18n } from '../shared/i18n/desktopI18n';
 export type AppMenuActions = Readonly<{
   openConnectionCenter: () => void;
   openAdvancedSettings: () => void;
+  checkForUpdates: () => void;
   requestQuit: () => void;
 }>;
 
@@ -94,6 +95,10 @@ export function buildAppMenuTemplate(
     ? {
         label: i18n.t('desktop.title'),
         submenu: [
+          { label: i18n.t('nativeMenu.aboutDesktop'), role: 'about' },
+          { type: 'separator' },
+          { label: i18n.t('nativeMenu.checkForUpdates'), click: actions.checkForUpdates },
+          { type: 'separator' },
           { label: i18n.t('nativeMenu.hideDesktop'), role: 'hide' },
           { label: i18n.t('nativeMenu.hideOthers'), role: 'hideOthers' },
           { label: i18n.t('nativeMenu.showAll'), role: 'unhide' },
@@ -102,6 +107,15 @@ export function buildAppMenuTemplate(
         ],
       }
     : null;
+
+  const helpMenu: MenuItemConstructorOptions | null = platform === 'darwin'
+    ? null
+    : {
+        label: i18n.t('nativeMenu.help'),
+        submenu: [
+          { label: i18n.t('nativeMenu.checkForUpdates'), click: actions.checkForUpdates },
+        ],
+      };
 
   return [
     ...(appMenu ? [appMenu] : []),
@@ -115,5 +129,6 @@ export function buildAppMenuTemplate(
       submenu: buildViewSubmenu(),
     },
     buildWindowMenu(i18n, platform),
+    ...(helpMenu ? [helpMenu] : []),
   ];
 }
