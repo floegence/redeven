@@ -45,8 +45,10 @@ export interface FloatingContextMenuProps {
   focusDisabledItems?: boolean;
   restoreFocusOnEscape?: boolean;
   restoreFocusOnTab?: boolean;
+  zIndex?: number;
+  contextMenuKind?: string;
   items: readonly FloatingContextMenuItem[];
-  menuRef?: (el: HTMLDivElement) => void;
+  menuRef?: (el: HTMLDivElement | null) => void;
   onDismiss: (reason: MenuDismissReason) => void;
 }
 
@@ -85,6 +87,8 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
     onCleanup(() => cancelAnimationFrame(frame));
   });
 
+  onCleanup(() => props.menuRef?.(null));
+
   createEffect(() => {
     const focusTopology = props.items.map((item) => (
       item.kind === 'action'
@@ -117,6 +121,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
   return (
     <SurfaceFloatingLayer
       id={props.id}
+      owner={props.focusAnchor}
       layerRef={(element) => {
         menuEl = element;
         props.menuRef?.(element);
@@ -132,7 +137,9 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
       }}
       role="menu"
       aria-label={props.ariaLabel}
+      data-context-menu-kind={props.contextMenuKind}
       style={{
+        'z-index': props.zIndex,
         width: props.width ? `${props.width}px` : undefined,
         'max-width': `${Math.max(
           0,

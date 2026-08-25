@@ -2,9 +2,10 @@ import '../../index.css';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { ActivityBar, type BarItemContextMenuRequest } from '@floegence/floe-webapp-core/layout';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import {
   DEFAULT_WORKBENCH_THEME,
@@ -21,12 +22,14 @@ import type { PluginConfirmationIntent, PluginSurfaceHost } from '@floegence/red
 import { I18nProvider, SUPPORTED_LOCALES, type RedevenLocale } from '../i18n';
 import { loadEnvAppDictionary } from '../i18n/locales';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 import { redevenWorkbenchWidgets } from '../workbench/redevenWorkbenchWidgets';
 import { ActivityPluginSurfaceWindow } from './ActivityPluginSurfaceWindow';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PluginConfirmationDialog, createPluginConfirmationQueue } from './PluginConfirmationQueue';
 import { PluginCenterView } from './PluginCenterView';
 import { PluginPanel } from './PluginPanel';
+import { PluginPinContextMenu } from './PluginPinContextMenu';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 import {
   OFFICIAL_PLUGIN_CATALOG_SEED,
@@ -446,6 +449,70 @@ function mountUpdateReviewDialog(): HTMLElement {
   return host;
 }
 
+function mountPinnedActivityMenu(): { host: HTMLElement; onSelectInformation: ReturnType<typeof vi.fn> } {
+  const host = fixedHost();
+  const [request, setRequest] = createSignal<BarItemContextMenuRequest | null>(null);
+  const onSelectInformation = vi.fn();
+  const Icon = (props: { class?: string }) => <span class={props.class}>P</span>;
+  disposers.push(render(() => (
+    <>
+      <div
+        data-testid="activity-plugin-content"
+        class="fixed inset-0"
+        style={{ 'z-index': ENV_APP_FLOATING_LAYER.windowBase }}
+      />
+      <ActivityBar
+        items={[{
+          id: 'plugin-containers',
+          icon: Icon,
+          label: 'Containers',
+          onContextMenu: setRequest,
+        }]}
+        activeId="plugin-containers"
+        onActiveChange={() => undefined}
+      />
+      <PluginPinContextMenu
+        request={request()}
+        ariaLabel="Containers actions"
+        informationLabel="Plugin information"
+        pinLabel="Unpin from Activity Bar"
+        onClose={() => setRequest(null)}
+        onSelectInformation={onSelectInformation}
+        onSelectPin={() => undefined}
+      />
+    </>
+  ), host));
+  return { host, onSelectInformation };
+}
+
+function mountLoadingUpdateReviewDialog(): {
+  open: () => boolean;
+  signal: () => AbortSignal | undefined;
+} {
+  const host = fixedHost();
+  const [open, setOpen] = createSignal(true);
+  let inspectionSignal: AbortSignal | undefined;
+  disposers.push(render(() => (
+    <PluginUpdateReviewDialog
+      open={open()}
+      item={updateDialogItem}
+      canManage
+      onOpenChange={setOpen}
+      onInspect={async (_request, signal) => {
+        inspectionSignal = signal;
+        return new Promise<ExternalPluginInspection>(() => undefined);
+      }}
+      onCommitExternal={async () => unavailableCommit()}
+      onOfficialUpdate={async () => undefined}
+      onRefresh={() => undefined}
+      onCommitted={() => undefined}
+      onOpenActivity={() => undefined}
+      onViewPermissions={() => undefined}
+    />
+  ), host));
+  return { open, signal: () => inspectionSignal };
+}
+
 function browserUpdateInspection(): ExternalPluginInspection {
   return {
     ...browserInspection(),
@@ -683,6 +750,49 @@ afterEach(async () => {
 });
 
 describe('plugin management browser geometry and interaction', () => {
+  it('keeps the pinned Activity plugin menu above plugin content with compact file-menu sizing', async () => {
+    const mounted = mountPinnedActivityMenu();
+    const host = mounted.host;
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Containers"]')!;
+    trigger.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 44,
+      clientY: 88,
+    }));
+    await settle();
+
+    const menu = document.querySelector<HTMLElement>('[data-context-menu-kind="plugin-pin"]')!;
+    const actions = menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+    const informationAction = menu.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="plugin-information"]')!;
+    const pinAction = menu.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="plugin-pin-toggle"]')!;
+    const icon = pinAction.querySelector<SVGElement>('svg')!;
+    expect(Number.parseInt(getComputedStyle(menu).zIndex, 10)).toBeGreaterThan(ENV_APP_FLOATING_LAYER.windowCeiling);
+    expect(actions).toHaveLength(2);
+    expect(informationAction.textContent).toContain('Plugin information');
+    expect(getComputedStyle(pinAction).fontSize).toBe('12px');
+    expect(getComputedStyle(icon).width).toBe('14px');
+    informationAction.click();
+    expect(mounted.onSelectInformation).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels and aborts an update review while update content is loading', async () => {
+    const mounted = mountLoadingUpdateReviewDialog();
+    await settle();
+
+    const close = document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')!;
+    const cancel = document.querySelector<HTMLButtonElement>('[data-plugin-update-cancel]')!;
+    expect(close).not.toBeNull();
+    expect(getComputedStyle(close).display).not.toBe('none');
+    expect(cancel).not.toBeNull();
+    expect(mounted.signal()?.aborted).toBe(false);
+    cancel.click();
+    await settle();
+
+    expect(mounted.signal()?.aborted).toBe(true);
+    expect(mounted.open()).toBe(false);
+  });
+
   it('keeps the Workbench plugin panel in the local layer with the Dock material in every theme', async () => {
     const mounted = mountWorkbenchPanel();
     await settle();

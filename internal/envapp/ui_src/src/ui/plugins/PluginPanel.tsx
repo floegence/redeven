@@ -59,6 +59,14 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     inventoryKey: string;
     request: BarItemContextMenuRequest;
   }> | null>(null);
+  const pinMenuItem = createMemo(() => {
+    const inventoryKey = pinMenu()?.inventoryKey;
+    if (!inventoryKey) return undefined;
+    const tile = props.model.tiles.find((candidate) => (
+      candidate.kind === 'plugin' && candidate.item.inventoryKey === inventoryKey
+    ));
+    return tile?.kind === 'plugin' ? tile.item : undefined;
+  });
   let panelRef: HTMLDivElement | undefined;
   let pinMenuRef: HTMLDivElement | null = null;
   let searchRef: HTMLInputElement | undefined;
@@ -458,7 +466,11 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       </Show>
       <PluginPinContextMenu
         request={pinMenu()?.request ?? null}
-        label={pinMenu() && (props.pinnedInventoryKeys ?? []).includes(pinMenu()!.inventoryKey)
+        ariaLabel={i18n.t('uiCopy.plugin.pluginMenuLabel', {
+          plugin: pinMenuItem()?.displayName ?? i18n.t('uiCopy.plugin.panelTitle'),
+        })}
+        informationLabel={i18n.t('uiCopy.plugin.pluginInformation')}
+        pinLabel={pinMenu() && (props.pinnedInventoryKeys ?? []).includes(pinMenu()!.inventoryKey)
           ? (props.placement === 'workbench'
               ? i18n.t('uiCopy.plugin.unpinFromWorkbenchDock')
               : i18n.t('uiCopy.plugin.unpinFromActivityBar'))
@@ -467,7 +479,11 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               : i18n.t('uiCopy.plugin.pinToActivityBar'))}
         onLayerRef={(element) => { pinMenuRef = element; }}
         onClose={() => setPinMenu(null)}
-        onSelect={() => {
+        onSelectInformation={() => {
+          const menu = pinMenu();
+          if (menu) props.onOpenPluginDetails(menu.inventoryKey);
+        }}
+        onSelectPin={() => {
           const menu = pinMenu();
           if (!menu) return;
           const placement = props.placement === 'workbench' ? 'workbench' : 'activity';

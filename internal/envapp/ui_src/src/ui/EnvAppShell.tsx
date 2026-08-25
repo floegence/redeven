@@ -1546,6 +1546,14 @@ export function EnvAppShell() {
       loading: pluginInventoryInitialPending(),
     },
   ));
+  const pluginPinMenuItem = createMemo(() => {
+    const inventoryKey = pluginPinMenu()?.inventoryKey;
+    if (!inventoryKey) return undefined;
+    const tile = pluginPanelModel().tiles.find((candidate) => (
+      candidate.kind === 'plugin' && candidate.item.inventoryKey === inventoryKey
+    ));
+    return tile?.kind === 'plugin' ? tile.item : undefined;
+  });
   const pinnedActivityPluginTiles = createMemo(() => pluginPlacementPins().activityInventoryKeys
     .map((inventoryKey) => pluginPanelModel().tiles.find((tile) => (
       tile.kind === 'plugin' && tile.item.inventoryKey === inventoryKey
@@ -5280,11 +5288,19 @@ export function EnvAppShell() {
       />
       <PluginPinContextMenu
         request={pluginPinMenu()?.request ?? null}
-        label={pluginPinMenu()?.placement === 'workbench'
+        ariaLabel={i18n.t('uiCopy.plugin.pluginMenuLabel', {
+          plugin: pluginPinMenuItem()?.displayName ?? i18n.t('uiCopy.plugin.panelTitle'),
+        })}
+        informationLabel={i18n.t('uiCopy.plugin.pluginInformation')}
+        pinLabel={pluginPinMenu()?.placement === 'workbench'
           ? i18n.t('uiCopy.plugin.unpinFromWorkbenchDock')
           : i18n.t('uiCopy.plugin.unpinFromActivityBar')}
         onClose={() => setPluginPinMenu(null)}
-        onSelect={() => {
+        onSelectInformation={() => {
+          const menu = pluginPinMenu();
+          if (menu) void openPluginCenter(menu.inventoryKey).catch(reportPluginNavigationFailure);
+        }}
+        onSelectPin={() => {
           const menu = pluginPinMenu();
           if (!menu) return;
           return setPluginPin(menu.placement, menu.inventoryKey, false);

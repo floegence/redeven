@@ -1,20 +1,23 @@
-import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import type { BarItemContextMenuRequest } from '@floegence/floe-webapp-core/layout';
-import { Pin } from '@floegence/floe-webapp-core/icons';
-import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Info, Pin } from '@floegence/floe-webapp-core/icons';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
+import { FloatingContextMenu, type FloatingContextMenuItem } from '../widgets/FloatingContextMenu';
 
 export type PluginPinContextMenuProps = Readonly<{
   request: BarItemContextMenuRequest | null;
-  label: string;
-  onSelect: () => void | Promise<void>;
+  ariaLabel: string;
+  informationLabel: string;
+  pinLabel: string;
+  onSelectInformation: () => void;
+  onSelectPin: () => void | Promise<void>;
   onClose: () => void;
   onLayerRef?: (element: HTMLDivElement | null) => void;
 }>;
 
 export function PluginPinContextMenu(props: PluginPinContextMenuProps): JSX.Element {
   const [busy, setBusy] = createSignal(false);
-  let menuRef: HTMLDivElement | undefined;
-  let itemRef: HTMLButtonElement | undefined;
+  let menuRef: HTMLDivElement | null = null;
   let restoreFocus = false;
 
   const close = (shouldRestoreFocus = true) => {
@@ -22,16 +25,38 @@ export function PluginPinContextMenu(props: PluginPinContextMenuProps): JSX.Elem
     props.onClose();
   };
 
-  const select = async () => {
+  const selectPin = async () => {
     if (busy()) return;
     setBusy(true);
     try {
-      await props.onSelect();
+      await props.onSelectPin();
     } finally {
       setBusy(false);
       close();
     }
   };
+
+  const items = createMemo<readonly FloatingContextMenuItem[]>(() => [
+    {
+      id: 'plugin-information',
+      kind: 'action',
+      label: props.informationLabel,
+      icon: Info,
+      onSelect: () => {
+        props.onSelectInformation();
+        close(false);
+      },
+    },
+    { id: 'plugin-menu-separator', kind: 'separator' },
+    {
+      id: 'plugin-pin-toggle',
+      kind: 'action',
+      label: props.pinLabel,
+      icon: Pin,
+      disabled: busy(),
+      onSelect: () => void selectPin(),
+    },
+  ]);
 
   createEffect(() => {
     const request = props.request;
@@ -42,12 +67,7 @@ export function PluginPinContextMenu(props: PluginPinContextMenuProps): JSX.Elem
       close();
     };
     document.addEventListener('pointerdown', handlePointerDown, true);
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) itemRef?.focus({ preventScroll: true });
-    });
     onCleanup(() => {
-      cancelled = true;
       document.removeEventListener('pointerdown', handlePointerDown, true);
       props.onLayerRef?.(null);
       if (restoreFocus && request.trigger.isConnected) {
@@ -56,56 +76,27 @@ export function PluginPinContextMenu(props: PluginPinContextMenuProps): JSX.Elem
     });
   });
 
-  const handleKeyDown: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      close();
-      return;
-    }
-    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-      event.preventDefault();
-      event.stopPropagation();
-      itemRef?.focus({ preventScroll: true });
-      return;
-    }
-    if ((event.key === 'Enter' || event.key === ' ') && document.activeElement === itemRef) {
-      event.preventDefault();
-      event.stopPropagation();
-      void select();
-    }
-  };
-
   return (
     <Show when={props.request}>
       {(request) => (
-        <SurfaceFloatingLayer
-          position={{ x: request().clientX, y: request().clientY }}
-          owner={request().trigger}
-          estimatedSize={{ width: 232, height: 48 }}
-          layerRef={(element) => {
+        <FloatingContextMenu
+          x={request().clientX}
+          y={request().clientY}
+          focusAnchor={request().trigger}
+          ariaLabel={props.ariaLabel}
+          contextMenuKind="plugin-pin"
+          zIndex={request().trigger.closest('[data-floe-dialog-surface-host="true"]')
+            ? undefined
+            : ENV_APP_FLOATING_LAYER.pluginContextMenu}
+          items={items()}
+          menuRef={(element) => {
             menuRef = element;
             props.onLayerRef?.(element);
           }}
-          role="menu"
-          aria-label={props.label}
-          data-plugin-pin-menu
-          class="min-w-[14.5rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-lg outline-none animate-in fade-in zoom-in-95 duration-100 motion-reduce:animate-none"
-          onKeyDown={handleKeyDown}
-        >
-          <button
-            ref={itemRef}
-            type="button"
-            role="menuitem"
-            disabled={busy()}
-            data-plugin-pin-menu-action
-            class="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none"
-            onClick={() => void select()}
-          >
-            <Pin class="h-4 w-4 shrink-0" />
-            <span>{props.label}</span>
-          </button>
-        </SurfaceFloatingLayer>
+          restoreFocusOnEscape
+          restoreFocusOnTab
+          onDismiss={() => close()}
+        />
       )}
     </Show>
   );

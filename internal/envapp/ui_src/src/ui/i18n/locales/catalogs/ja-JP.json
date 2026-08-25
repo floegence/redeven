@@ -4153,6 +4153,8 @@
       "categoryProductivity": "仕事効率化",
       "categoryOther": "その他",
       "closePanel": "プラグインパネルを閉じる",
+      "pluginMenuLabel": "{plugin} の操作",
+      "pluginInformation": "プラグイン情報",
       "pinToActivityBar": "Activity Bar に固定",
       "unpinFromActivityBar": "Activity Bar から固定解除",
       "pinToWorkbenchDock": "Workbench Dock に固定",

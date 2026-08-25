@@ -55,7 +55,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
   let initializedInventoryKey: string | undefined;
   let completionReported = false;
 
-  const pending = () => stage() === 'loading_review' || stage() === 'committing' || stage() === 'reconciling';
+  const closeBlocked = () => stage() === 'committing' || stage() === 'reconciling';
   const sourcePreset = (): ExternalPluginSourcePreset | undefined => props.item?.officialCatalog?.distribution.installSource;
   const needsRiskConfirmation = createMemo(() => {
     const current = candidate();
@@ -237,7 +237,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
   }
 
   const close = () => {
-    if (pending()) return;
+    if (closeBlocked()) return;
     operation?.abort('Update review closed');
     props.onOpenChange(false);
   };
@@ -250,7 +250,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
       description={i18n.t('uiCopy.plugin.updateReview.description')}
       class={cn(
         'h-dvh max-h-dvh w-screen max-w-none rounded-none bg-background text-foreground sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[min(47rem,calc(100vw-2rem))] sm:max-w-[47rem] sm:rounded-lg',
-        pending() && '[&>div:first-child>button]:hidden',
+        closeBlocked() && '[&>div:first-child>button]:hidden',
       )}
       footer={(
         <div data-plugin-update-footer class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -264,8 +264,8 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
             </label>
           </Show>
           <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Show when={!pending()}>
-              <button type="button" class={secondaryButtonClass} onClick={close}>
+            <Show when={!closeBlocked()}>
+              <button data-plugin-update-cancel type="button" class={secondaryButtonClass} onClick={close}>
                 {stage() === 'complete' ? i18n.t('uiCopy.plugin.updateReview.done') : i18n.t('common.actions.cancel')}
               </button>
             </Show>

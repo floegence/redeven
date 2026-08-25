@@ -409,6 +409,8 @@ export const enUS = defineDictionary({
       categoryProductivity: 'Productivity',
       categoryOther: 'Other',
       closePanel: 'Close plugins',
+      pluginMenuLabel: '{plugin} actions',
+      pluginInformation: 'Plugin information',
       pinToActivityBar: 'Pin to Activity Bar',
       unpinFromActivityBar: 'Unpin from Activity Bar',
       pinToWorkbenchDock: 'Pin to Workbench Dock',
