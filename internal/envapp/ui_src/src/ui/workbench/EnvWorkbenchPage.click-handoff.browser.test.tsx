@@ -1,6 +1,7 @@
 import { page } from 'vitest/browser';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import '@floegence/floe-webapp-core/styles';
 
 import { EnvWorkbenchPage } from './EnvWorkbenchPage';
 
@@ -101,6 +102,38 @@ async function flushWork() {
   await Promise.resolve();
 }
 
+function MockTerminalWidgetBody(props: any) {
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <button
+        type="button"
+        data-testid="widget-terminal-button"
+        data-selected={String(Boolean(props.selected))}
+        onClick={() => layoutApiState.clicks.push(`terminal:${String(Boolean(props.selected))}`)}
+      >
+        Terminal
+      </button>
+      <input
+        aria-label="Terminal input"
+        data-testid="widget-terminal-input"
+        data-selected={String(Boolean(props.selected))}
+      />
+      <div
+        data-testid="terminal-bottom-status-bar"
+        style={{
+          position: 'absolute',
+          right: '0',
+          bottom: '0',
+          width: '28px',
+          height: '28px',
+          'z-index': '10',
+          'pointer-events': 'auto',
+        }}
+      />
+    </div>
+  );
+}
+
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => ({
     env_id: () => envContextState.envId,
@@ -191,23 +224,7 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       type: 'redeven.terminal',
       label: 'Terminal',
       icon: () => null,
-      body: (props: any) => (
-        <div>
-          <button
-            type="button"
-            data-testid="widget-terminal-button"
-            data-selected={String(Boolean(props.selected))}
-            onClick={() => layoutApiState.clicks.push(`terminal:${String(Boolean(props.selected))}`)}
-          >
-            Terminal
-          </button>
-          <input
-            aria-label="Terminal input"
-            data-testid="widget-terminal-input"
-            data-selected={String(Boolean(props.selected))}
-          />
-        </div>
-      ),
+      body: MockTerminalWidgetBody,
       defaultTitle: 'Terminal',
       defaultSize: { width: 360, height: 240 },
       singleton: false,
@@ -254,23 +271,7 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       type: 'redeven.terminal',
       label: t('workbench.widgets.terminal.label'),
       icon: () => null,
-      body: (props: any) => (
-        <div>
-          <button
-            type="button"
-            data-testid="widget-terminal-button"
-            data-selected={String(Boolean(props.selected))}
-            onClick={() => layoutApiState.clicks.push(`terminal:${String(Boolean(props.selected))}`)}
-          >
-            Terminal
-          </button>
-          <input
-            aria-label="Terminal input"
-            data-testid="widget-terminal-input"
-            data-selected={String(Boolean(props.selected))}
-          />
-        </div>
-      ),
+      body: MockTerminalWidgetBody,
       defaultTitle: t('workbench.widgets.terminal.defaultTitle'),
       defaultSize: { width: 360, height: 240 },
       singleton: false,
@@ -483,5 +484,103 @@ describe('EnvWorkbenchPage click handoff', () => {
     expect(getComputedStyle(terminalWidget!).transform).toBe(terminalTransform);
     expect(envContextState.consumeWorkbenchSurfaceActivation).toHaveBeenCalledTimes(1);
     expect(envContextState.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-visible-terminal');
+  });
+
+  it('resizes a terminal through the shared handle above its bottom status bar once', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushWork();
+
+    const widget = host.querySelector('[data-floe-workbench-widget-id="widget-terminal-1"]') as HTMLElement | null;
+    const handle = widget?.querySelector('.workbench-widget__resize') as HTMLElement | null;
+    const statusBar = host.querySelector('[data-testid="terminal-bottom-status-bar"]') as HTMLElement | null;
+    expect(widget).toBeTruthy();
+    expect(handle).toBeTruthy();
+    expect(statusBar).toBeTruthy();
+    expect(getComputedStyle(handle!).zIndex).toBe('40');
+    expect(getComputedStyle(statusBar!).zIndex).toBe('10');
+
+    const bounds = handle!.getBoundingClientRect();
+    const point = { x: bounds.right - 2, y: bounds.bottom - 2 };
+    const hit = document.elementFromPoint(point.x, point.y);
+    expect(hit?.closest('.workbench-widget__resize')).toBe(handle);
+
+    layoutApiMocks.putWorkbenchLayout.mockClear();
+    handle!.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      pointerId: 31,
+      pointerType: 'mouse',
+      clientX: point.x,
+      clientY: point.y,
+    }));
+    document.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      buttons: 1,
+      pointerId: 31,
+      pointerType: 'mouse',
+      clientX: point.x + 36,
+      clientY: point.y + 28,
+    }));
+    document.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 0,
+      pointerId: 31,
+      pointerType: 'mouse',
+      clientX: point.x + 36,
+      clientY: point.y + 28,
+    }));
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 240));
+    await flushWork();
+
+    const resizeCommits = layoutApiMocks.putWorkbenchLayout.mock.calls.filter(([input]) => (
+      input?.widgets?.some((entry: any) => entry.widget_id === 'widget-terminal-1'
+        && entry.width > 360
+        && entry.height > 240)
+    ));
+    expect(resizeCommits).toHaveLength(1);
+  });
+
+  it('does not render or commit a terminal resize handle while Workbench is locked', async () => {
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key !== 'workbench:local_preferences:env-123') return null;
+      return {
+        version: 1,
+        viewport: { x: 0, y: 0, scale: 1 },
+        locked: true,
+        filters: {
+          'redeven.terminal': true,
+          'redeven.files': true,
+          'redeven.preview': true,
+        },
+        selectedWidgetId: 'widget-terminal-1',
+        theme: 'default',
+      };
+    }) as any);
+
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushWork();
+
+    expect(host.querySelector('.workbench-widget__resize')).toBeNull();
+    await new Promise<void>((resolve) => setTimeout(resolve, 260));
+    await flushWork();
+    layoutApiMocks.putWorkbenchLayout.mockClear();
+    await new Promise<void>((resolve) => setTimeout(resolve, 240));
+    expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalled();
   });
 });
