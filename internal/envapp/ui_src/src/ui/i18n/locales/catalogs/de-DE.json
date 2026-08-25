@@ -3478,6 +3478,7 @@
       "runErrorProviderUnreachable": "Der ausgewählte KI-Modellanbieter ist nicht erreichbar. Prüfe den Anbieterendpunkt und die Netzwerkverbindung.",
       "runErrorProviderStreamInterrupted": "Der ausgewählte KI-Modellanbieter hat den Antwortstream unerwartet beendet. Versuche es erneut; prüfe bei wiederholtem Auftreten den Anbieterendpunkt.",
       "runErrorProviderModelUnavailable": "Das ausgewählte Modell ist bei diesem KI-Modellanbieter nicht verfügbar. Wähle im lokalen KI-Profil ein anderes Modell aus.",
+      "runErrorModelGatewayContractFailed": "Die Modellquelle hat einen unvollständigen Tool-Aufruf zurückgegeben. Es wurde kein Tool ausgeführt. Versuche es erneut oder wähle ein anderes Modell.",
       "runErrorFloretEngineFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da die Orchestrierungs-Engine ausgefallen ist.",
       "runErrorFloretControlContractFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da das Modell ein von der aktuellen Laufzeit nicht unterstütztes Tool angefordert hat.",
       "runErrorRuntimeRestarted": "Die lokale Laufzeit wurde neu gestartet, bevor diese Antwort abgeschlossen war. Starte eine neue Antwort, sobald die Laufzeit bereit ist.",

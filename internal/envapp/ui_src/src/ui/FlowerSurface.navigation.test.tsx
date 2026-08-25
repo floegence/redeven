@@ -958,6 +958,35 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Run failed: provider rejected request.');
   });
 
+  it('presents model gateway contract failures without exposing internal tool-call fields', async () => {
+    const failedThread = thread({
+      thread_id: 'thread-model-gateway-contract',
+      title: 'Incomplete model result',
+      created_at_ms: 7_600,
+      updated_at_ms: 7_700,
+      status: 'failed',
+      error: {
+        code: 'model_gateway_contract_failed',
+        message: 'Flower tool call requires id, name, and args',
+      },
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [failedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(failedThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-model-gateway-contract"] button')));
+    (runtime.querySelector('[data-thread-id="thread-model-gateway-contract"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
+
+    const errorText = runtime.querySelector('.flower-error-card')?.textContent ?? '';
+    expect(errorText).toContain('The model source returned an incomplete tool call. No tool was run.');
+    expect(errorText).not.toContain('requires id, name, and args');
+    expect(errorText).not.toContain('Flower tool call');
+    expect(runtime.querySelector('.flower-error-actions button')?.textContent).toContain('Switch model');
+  });
+
   it('clears global load errors after the thread list recovers', async () => {
     const visibleThread = thread({
       thread_id: 'thread-after-list-recovery',

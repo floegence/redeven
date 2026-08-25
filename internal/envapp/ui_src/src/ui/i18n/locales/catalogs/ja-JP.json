@@ -3478,6 +3478,7 @@
       "runErrorProviderUnreachable": "選択中の AI プロバイダーに接続できません。プロバイダーのエンドポイントとネットワーク接続を確認してください。",
       "runErrorProviderStreamInterrupted": "選択中の AI プロバイダーが応答ストリームを予期せず終了しました。再試行し、問題が続く場合はプロバイダーのエンドポイントを確認してください。",
       "runErrorProviderModelUnavailable": "選択したモデルはこのプロバイダーでは利用できません。Local AI Profile で別のモデルを選択してください。",
+      "runErrorModelGatewayContractFailed": "モデルソースから不完全なツール呼び出しが返されたため、ツールは実行されませんでした。再試行するか、別のモデルを選択してください。",
       "runErrorFloretEngineFailed": "Flower は、オーケストレーション エンジンが失敗したため、このターンを終了できませんでした。",
       "runErrorFloretControlContractFailed": "モデルが現在のランタイムでサポートされていないツールを要求したため、Flower はこのターンを終了できませんでした。",
       "runErrorRuntimeRestarted": "この返信が完了する前にローカル実行環境が再起動しました。実行環境の準備ができたら新しい返信を開始してください。",

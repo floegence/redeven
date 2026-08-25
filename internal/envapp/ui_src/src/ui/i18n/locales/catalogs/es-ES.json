@@ -3478,6 +3478,7 @@
       "runErrorProviderUnreachable": "No se pudo contactar con el proveedor de modelos seleccionado. Revisa el punto de conexión del proveedor y la conexión de red.",
       "runErrorProviderStreamInterrupted": "El proveedor de modelos seleccionado interrumpió inesperadamente el flujo de respuesta. Inténtalo de nuevo; si el problema continúa, revisa el punto de conexión del proveedor.",
       "runErrorProviderModelUnavailable": "El modelo seleccionado no está disponible en este proveedor de modelos. Elige otro modelo en el perfil de IA local.",
+      "runErrorModelGatewayContractFailed": "La fuente del modelo devolvió una llamada de herramienta incompleta. No se ejecutó ninguna herramienta. Inténtalo de nuevo o elige otro modelo.",
       "runErrorFloretEngineFailed": "Flower no pudo finalizar este turno porque falló el motor de orquestación.",
       "runErrorFloretControlContractFailed": "Flower no pudo finalizar este turno porque el modelo solicitó una herramienta no compatible con el tiempo de ejecución actual.",
       "runErrorRuntimeRestarted": "El entorno de ejecución local se reinició antes de que terminara esta respuesta. Vuelve a solicitar una respuesta cuando el entorno de ejecución esté listo.",

@@ -343,6 +343,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerUnreachable: string;
       providerStreamInterrupted: string;
       providerModelUnavailable: string;
+      modelGatewayContractFailed: string;
       floretEngineFailed: string;
       floretControlContractFailed: string;
       runtimeRestarted: string;
@@ -591,6 +592,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerUnreachable: 'The selected AI provider could not be reached. Check the provider endpoint and network connection.',
       providerStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
+      modelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
       floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
       floretControlContractFailed: 'Flower could not finish this turn because the model requested an unsupported runtime tool.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',

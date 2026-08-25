@@ -380,6 +380,55 @@ func TestOpenAICompatibleChat_RejectsUnregisteredWireToolName(t *testing.T) {
 	}
 }
 
+func TestDeepSeekChat_PreservesEmptyToolArguments(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		f := w.(http.Flusher)
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id": "chatcmpl_empty_args", "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": "deepseek-v4-flash",
+			"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
+				"role": "assistant", "tool_calls": []any{map[string]any{
+					"index": 0, "id": "call_okf_index", "type": "function",
+					"function": map[string]any{"name": "okf_index", "arguments": `{}`},
+				}},
+			}}},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id": "chatcmpl_empty_args", "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": "deepseek-v4-flash",
+			"choices": []any{map[string]any{"index": 0, "finish_reason": "tool_calls", "delta": map[string]any{}}},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+	}))
+	t.Cleanup(srv.Close)
+
+	adapter, err := newProviderAdapter("deepseek", strings.TrimSuffix(srv.URL, "/")+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+	result, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
+		Model:    "deepseek-v4-flash",
+		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "introduce Redeven"}}}},
+		Tools: []ToolDef{{
+			Name:        "okf.index",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("tool calls=%d, want 1", len(result.ToolCalls))
+	}
+	call := result.ToolCalls[0]
+	if call.ID != "call_okf_index" || call.Name != "okf.index" || call.Args == nil || len(call.Args) != 0 {
+		t.Fatalf("tool call=%#v, want canonical okf.index with non-nil empty arguments", call)
+	}
+}
+
 func TestOpenAICompatibleChat_FileReadToolAliasRoundTrip(t *testing.T) {
 	t.Parallel()
 

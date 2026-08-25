@@ -2297,6 +2297,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerStreamInterrupted;
       case 'provider_model_unavailable':
         return copy().chat.runErrors.providerModelUnavailable;
+      case 'model_gateway_contract_failed':
+        return copy().chat.runErrors.modelGatewayContractFailed;
       case 'floret_engine_failed':
         return copy().chat.runErrors.floretEngineFailed;
       case 'floret_control_contract_failed':
@@ -5312,6 +5314,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'provider_missing_key':
         return copy().chat.runErrorActions.addAPIKey;
       case 'provider_model_unavailable':
+      case 'model_gateway_contract_failed':
         return copy().chat.runErrorActions.switchModel;
       default:
         return copy().chat.runErrorActions.openSettings;
@@ -5534,7 +5537,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || code === 'provider_missing_key'
       || code === 'provider_model_unavailable'
       || code === 'provider_unreachable'
-      || code === 'provider_stream_interrupted';
+      || code === 'provider_stream_interrupted'
+      || code === 'model_gateway_contract_failed';
     const retryContinuation = async () => {
       const threadID = trimString(selectedThreadID());
       if (!threadID) return;

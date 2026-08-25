@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-08-25
+* **Desktop model-source ToolCall integrity**: Desktop RPC now preserves
+  explicit empty argument objects and reuses one fail-closed validator for
+  final ToolCalls across provider completion, RPC transport, and Floret mapping.
+
 ## 2026-08-24
 * **Floret v5.0.1 adoption**: Redeven now consumes the published Floret
   v5.0.1 module with exact checksums and no local replacement or workspace

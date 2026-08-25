@@ -90,9 +90,9 @@ type ModelGatewayRequest struct {
 }
 
 type ToolCall struct {
-	ID   string         `json:"id,omitempty"`
+	ID   string         `json:"id"`
 	Name string         `json:"name"`
-	Args map[string]any `json:"args,omitempty"`
+	Args map[string]any `json:"args"`
 }
 
 type ToolResult struct {

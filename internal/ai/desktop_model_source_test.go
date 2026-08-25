@@ -484,6 +484,46 @@ func TestDesktopModelSourceProviderStreamsAndMapsErrors(t *testing.T) {
 	}
 }
 
+func TestDesktopModelSourceProviderPreservesEmptyToolArguments(t *testing.T) {
+	t.Parallel()
+
+	modelID := "desktop:model_test"
+	modelSource, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+		switch frame.Method {
+		case "ai.turn.stream":
+			return testDesktopModelSourceResult(t, frame.ID, ModelGatewayResult{
+				FinishReason: "tool_calls",
+				ToolCalls: []ToolCall{{
+					ID:   "call_okf_index",
+					Name: "okf.index",
+					Args: map[string]any{},
+				}},
+			})
+		default:
+			return testDesktopModelSourceError(frame.ID, "METHOD_NOT_FOUND", "unexpected method")
+		}
+	})
+	defer cleanup()
+
+	result, err := modelSource.ModelGateway(modelID).StreamTurn(context.Background(), ModelGatewayRequest{Model: modelID}, nil)
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("tool calls=%d, want 1", len(result.ToolCalls))
+	}
+	if result.ToolCalls[0].Args == nil {
+		t.Fatal("empty tool arguments became nil after Desktop model-source RPC")
+	}
+	toolCalls, err := floretToolCallsFromFlower(result.ToolCalls)
+	if err != nil {
+		t.Fatalf("floretToolCallsFromFlower: %v", err)
+	}
+	if len(toolCalls) != 1 || toolCalls[0].Args != "{}" {
+		t.Fatalf("Floret tool calls=%#v, want one call with empty JSON object arguments", toolCalls)
+	}
+}
+
 func startTestDesktopModelSource(t *testing.T, handle func(DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame) (*desktopModelSourceClient, func()) {
 	t.Helper()
 
