@@ -18,9 +18,6 @@ for argument in "$@"; do
       ;;
     -static|-no-pie)
       ;;
-    -nostartfiles|-nodefaultlibs)
-      # Rust already supplies the target startup objects and libraries.
-      ;;
     -Wl,*)
       if [[ "$darwin_link" == true ]]; then
         IFS=',' read -r -a linker_arguments <<< "${argument#-Wl,}"
