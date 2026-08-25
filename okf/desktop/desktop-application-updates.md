@@ -7,12 +7,12 @@ timestamp: 2026-08-25T00:00:00Z
 ---
 # Summary
 
-Redeven Desktop exposes one update coordinator to the application menu, command
-palette, settings, status bar, and compatibility recovery. Packaged macOS uses
-Sparkle 2.9.4 with a signed architecture-specific appcast. Packaged Linux uses
-`electron-updater` metadata for the matching DEB or RPM package. Development,
-unsupported, and incorrectly placed macOS builds fail closed and provide a
-manual recovery path.
+Redeven Desktop exposes one update coordinator to the permanent Welcome top-bar
+entry, application menu, command palette, settings, status bar, and
+compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed
+architecture-specific appcast. Packaged Linux uses `electron-updater` metadata
+for the matching DEB or RPM package. Development, unsupported, and incorrectly
+placed macOS builds fail closed and provide a manual recovery path.
 
 # Contract
 
@@ -25,6 +25,11 @@ checks begin after 30 seconds and are limited to once per 24 hours. Stable
 releases are the only automatic or manual feed candidates. The user must open
 the native Sparkle window or the Redeven Linux dialog before downloading or
 installing an update.
+
+The Welcome top bar always shows a labeled check action. Its accessible label
+reports the current update state, checking animates the icon, and an available
+or ready update adds a visible indicator. The status-bar entry remains a compact
+secondary route to the same coordinator.
 
 Automatic checks are persisted only for Linux. macOS scheduling is delegated to
 Sparkle with a 24-hour interval and automatic installation disabled. No client

@@ -258,6 +258,20 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<TopBarIconButton label={topBarLogoLabel()} onClick={activateTopBarLogo}>');
   });
 
+  it('keeps a labeled Desktop update entry visible in the Welcome top bar', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('class="redeven-desktop-update-button"');
+    expect(appSrc).toContain('data-update-state={desktopUpdateSnapshot().state}');
+    expect(appSrc).toContain('onClick={checkForDesktopUpdates}');
+    expect(appSrc).toContain("<span>{i18n().t('desktopUpdate.checkForUpdates')}</span>");
+    expect(appSrc).toContain("desktopUpdateSnapshot().state === 'checking' ? 'animate-spin' : ''");
+    expect(appSrc).toContain('class="redeven-desktop-update-button__indicator" aria-hidden="true"');
+    expect(styles).toContain('.redeven-desktop-update-button {');
+    expect(styles).toContain(".redeven-desktop-update-button[data-update-state='available']");
+  });
+
   it('keeps Gateways as a third Environment Center tab with independent query and filter state', () => {
     const appSrc = readWelcomeSource();
 
