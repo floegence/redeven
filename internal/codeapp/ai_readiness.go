@@ -332,6 +332,8 @@ func isAutomaticStartupRecovery(startupErr *ai.FloretStoreStartupError) bool {
 func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreStartupPhase) {
 	var state appserver.AIReadinessState
 	switch phase {
+	case ai.FloretStoreStartupOptimizing:
+		state = appserver.AIReadinessOptimizing
 	case ai.FloretStoreStartupVerifying:
 		state = appserver.AIReadinessVerifying
 	case ai.FloretStoreStartupInspecting:

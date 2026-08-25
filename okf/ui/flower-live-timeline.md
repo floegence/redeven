@@ -9,6 +9,12 @@ timestamp: 2026-08-18T00:00:00Z
 
 Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. A selected summary that advances beyond cached detail starts bounded detail revalidation without cursor replay or polling.
 
+Env App retains one `EnvAIPage` and one `FlowerSurface` after access becomes
+available. Activity companion, Activity full page, and the selected Workbench
+Flower widget provide placement hosts for that same DOM tree. Moving between
+hosts does not create another adapter, thread cache, list request, or workspace
+stream.
+
 # Contract
 
 `ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those two authorities independently.
@@ -28,6 +34,12 @@ and reconnects; the new baseline restores summaries and the selected current
 view. This fail-fast resynchronization contract avoids a second replay protocol
 while ensuring a lost terminal update cannot leave the UI permanently running
 or waiting.
+
+The baseline list is built from one Floret root-inventory `List` projection.
+Redeven does not call `View` for each row; timeline, attachment, context, and
+SubAgent detail load only for the selected thread. Until the first list request
+succeeds, the rail shows a loading skeleton. The empty-conversation copy is
+valid only after an authoritative empty list response.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. When a selected summary is ahead, Flower issues a fresh detail request instead of reusing an older in-flight request. One recovery request runs per thread, tracks newer summary targets, and uses finite 100/300/900 ms retries for transient failure. Exhaustion preserves cached content and exposes an explicit retry action.
 
@@ -60,6 +72,8 @@ so a provider update cannot flash empty or wait for transcript replacement.
 - `redeven:internal/flower_ui/src/liveTransport.ts` - Single connection and epoch fencing.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation and bounded view cache.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Retained Flower product placement across Activity and Workbench hosts.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Workbench host registration without a second Flower instance.
 - `redeven:internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts` - Single receiver and obsolete-path removal checks.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Terminal loss, stale request, bounded retry, and first-load fixtures.
 - `redeven:internal/flower_ui/src/flowerThreadTitle.ts` - Shared canonical title consumption and legacy first-message derivation.

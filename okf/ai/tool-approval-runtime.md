@@ -23,8 +23,8 @@ Floret owns canonical interaction identity, atomic answer settlement, effect-att
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v5.0.1 typed runtime.
-- `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces published-v4 adoption without local replacement.
+- `redeven:go.mod` - Pins the released Floret v5.0.2 typed runtime.
+- `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces published-v5 adoption without local replacement.
 - `redeven:internal/ai/approval_command.go` - Product approval authorization and typed mapping.
 - `redeven:internal/ai/retry_thread_effect.go` - Unknown-effect retry boundary.
 - `redeven:internal/ai/floret_effect_authorization.go` - Revalidates product policy and transfers an invocation-bound proof exactly once.

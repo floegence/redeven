@@ -16,6 +16,7 @@ type AIReadinessState string
 const (
 	AIReadinessUnavailable AIReadinessState = "unavailable"
 	AIReadinessInspecting  AIReadinessState = "inspecting"
+	AIReadinessOptimizing  AIReadinessState = "optimizing"
 	AIReadinessMigrating   AIReadinessState = "migrating"
 	AIReadinessVerifying   AIReadinessState = "verifying"
 	AIReadinessRecovering  AIReadinessState = "recovering"
@@ -148,7 +149,7 @@ func (g *Server) aiReadinessSnapshot() AIReadinessSnapshot {
 
 func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapshot {
 	switch snapshot.State {
-	case AIReadinessUnavailable, AIReadinessInspecting, AIReadinessMigrating, AIReadinessVerifying:
+	case AIReadinessUnavailable, AIReadinessInspecting, AIReadinessOptimizing, AIReadinessMigrating, AIReadinessVerifying:
 		return sanitizeAIReadinessDiagnostics(AIReadinessSnapshot{
 			State: snapshot.State, TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase,
 		})

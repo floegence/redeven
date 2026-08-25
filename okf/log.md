@@ -11,6 +11,10 @@
   explicit empty argument objects and reuses one fail-closed validator for
   final ToolCalls across provider completion, RPC transport, and Floret mapping.
 
+* **Storage**: Adopted published Floret v5.0.2, added one bounded pre-open SQLite maintenance call with explicit readiness and sanitized space diagnostics, and retained runtime open as the final store validation authority.
+* **Performance**: Replaced per-thread full runtime views with one summary-only list projection, kept detail loading selected-thread-only, and hid the empty-list state until the first authoritative list response.
+* **Refactor**: Removed the independent Workbench Flower runtime tree; Activity and Workbench now place one retained EnvAIPage, adapter, cache, list bootstrap, and live stream into explicit hosts.
+
 ## 2026-08-24
 * **Floret v5.0.1 adoption**: Redeven now consumes the published Floret
   v5.0.1 module with exact checksums and no local replacement or workspace

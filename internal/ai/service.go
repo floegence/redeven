@@ -228,7 +228,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	floretBootstrap, err := openFloretRuntime(ctx, floretStorePath, opts.StoreStartupProgress)
+	floretBootstrap, err := openFloretRuntime(ctx, floretStorePath, opts.StoreStartupProgress, logger)
 	if err != nil {
 		return nil, err
 	}

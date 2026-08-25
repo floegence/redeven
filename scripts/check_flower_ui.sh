@@ -51,6 +51,7 @@ main() {
     # Solid/Vitest harness; running files in parallel races those reset hooks.
     ui_pkg_run_pnpm exec vitest run --environment=node --maxWorkers=1 --testTimeout=10000 \
       src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx \
+      src/ui/EnvAppShell.flowerSingleSurface.test.ts \
       src/ui/EnvAppShell.localAccess.e2e.test.tsx \
       src/ui/i18n/i18n.test.ts \
       src/ui/activityFlowerCompletionNotice.test.ts \
@@ -68,6 +69,8 @@ main() {
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/flower/FlowerAttachmentLane.test.tsx \
+      src/ui/flower/aiReadiness.test.ts \
+      src/ui/flower/aiReadinessPresentation.test.ts \
       src/ui/flower/activityDisclosure.test.ts \
       src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
@@ -114,6 +117,7 @@ main() {
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \
       internal/flower_ui/src/FlowerSurface.references.test.ts \
+      internal/flower_ui/src/FlowerSurface.warmup.test.ts \
       internal/flower_ui/src/runtimeFlowerSurfaceAdapter.test.ts \
       internal/flower_ui/src/filePicker/directoryPickerTree.test.ts \
       internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.test.ts \

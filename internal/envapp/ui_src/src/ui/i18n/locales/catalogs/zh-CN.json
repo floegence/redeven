@@ -8,6 +8,8 @@
       "unavailableTitle": "Flower 正在启动",
       "unavailableDescription": "Redeven 正在为此环境准备 Agent 服务。",
       "inspectingTitle": "正在检查 Agent 数据",
+      "optimizingTitle": "正在优化对话存储",
+      "optimizingDescription": "Redeven 正在回收未使用的 Agent 存储空间，完成后将打开 Flower。",
       "inspectingDescription": "Redeven 正在检查能否安全打开 Floret Store。",
       "migratingTitle": "正在更新 Agent 数据",
       "migratingDescription": "正在进行兼容的数据更新。Redeven 的其他工具仍可使用。",

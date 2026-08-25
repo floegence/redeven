@@ -22,6 +22,8 @@ export const enUS = defineDictionary({
       unavailableDescription: 'Redeven is preparing the Agent service for this environment.',
       inspectingTitle: 'Checking Agent data',
       inspectingDescription: 'Redeven is checking whether the Floret Store can be opened safely.',
+      optimizingTitle: 'Optimizing conversation storage',
+      optimizingDescription: 'Redeven is reclaiming unused Agent storage before Flower opens.',
       migratingTitle: 'Updating Agent data',
       migratingDescription: 'A compatible data update is in progress. Other Redeven tools remain available.',
       verifyingTitle: 'Verifying Agent data',

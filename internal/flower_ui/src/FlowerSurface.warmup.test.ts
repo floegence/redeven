@@ -36,13 +36,23 @@ describe('Flower warmup presentation', () => {
     const source = readSource(threadListPath);
 
     expect(source).toContain('warmup?: boolean');
-    expect(source).toContain('const showWarmupSkeleton = createMemo(() => props.warmup === true && props.items.length === 0)');
-    expect(source).toContain('const searchDisabled = createMemo(() => props.warmup === true && props.items.length === 0)');
+    expect(source).toContain('const showLoadingSkeleton = createMemo(() => (props.warmup === true || props.loading === true) && props.items.length === 0)');
+    expect(source).toContain('const searchDisabled = createMemo(() => showLoadingSkeleton())');
     expect(source).toContain('copy().warmupDescription');
     expect(source).toContain('flower-thread-warmup-list');
     expect(source).toContain('disabled={props.refreshing || props.warmup}');
     expect(source).toContain('disabled={searchDisabled()}');
-    expect(source.indexOf('when={!showWarmupSkeleton()}')).toBeLessThan(source.indexOf('fallback={<div class="flower-thread-empty'));
+    expect(source.indexOf('when={!showLoadingSkeleton()}')).toBeLessThan(source.indexOf('fallback={<div class="flower-thread-empty'));
+  });
+
+  it('keeps the empty-state copy hidden until the first thread list succeeds', () => {
+    const surface = readSource(flowerSurfacePath);
+    const list = readSource(threadListPath);
+
+    expect(surface).toContain('const [threadsLoaded, setThreadsLoaded] = createSignal(false)');
+    expect(surface).toContain('setThreadsLoaded(true)');
+    expect(surface).toContain('loading={!threadsLoaded()}');
+    expect(list).toContain('props.warmup === true || props.loading === true');
   });
 
   it('ships restrained warmup motion with reduced-motion fallbacks', () => {

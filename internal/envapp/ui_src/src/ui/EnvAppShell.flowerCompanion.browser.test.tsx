@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 
-import { Show, createContext, createEffect, createSignal, useContext } from 'solid-js';
+import { Show, createContext, createEffect, createSignal, onCleanup, useContext } from 'solid-js';
 import { Portal, render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
@@ -479,8 +479,19 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
     const env = useContext(EnvContextMock);
     const filePreview = useContext(FilePreviewContextMock);
     const fileBrowser = useContext(FileBrowserSurfaceContextMock);
+    const [flowerHost, setFlowerHost] = createSignal<HTMLElement | null>(null);
+    createEffect(() => env.setFlowerWorkbenchHost?.(flowerHost(), env.viewMode?.() === 'workbench'));
+    onCleanup(() => env.setFlowerWorkbenchHost?.(flowerHost(), false));
     return (
       <div>
+        <div ref={setFlowerHost} data-testid="workbench-flower-host" />
+        <button
+          type="button"
+          data-testid="workbench-switch-activity"
+          onClick={() => env.setViewMode('activity', { surfaceId: 'terminal', focusSurface: false })}
+        >
+          Switch Activity
+        </button>
         <button
           type="button"
           data-testid="workbench-open-preview"
@@ -1370,6 +1381,38 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(replacementFullPageHost).not.toBe(fullPageHost);
     expect(replacementFullPageHost.contains(fixture.product)).toBe(true);
     expect(fixture.product.getAttribute('aria-hidden')).toBeNull();
+    expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
+    expect(envAIPageMountSequence).toBe(1);
+  });
+
+  it('moves the same Flower surface into and out of the Workbench host', async () => {
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    const flowerSurface = document.querySelector('[data-testid="env-ai-page"]');
+    const switchWorkbench = document.querySelector('[data-testid="activity-switch-workbench"]');
+    if (!(flowerSurface instanceof HTMLElement) || !(switchWorkbench instanceof HTMLButtonElement)) {
+      throw new Error('Flower or Workbench switch did not mount.');
+    }
+    const mountID = flowerSurface.dataset.mountId;
+
+    await userEvent.click(switchWorkbench);
+    await flushAsync();
+    const workbenchHost = document.querySelector('[data-testid="workbench-flower-host"]');
+    const switchActivity = document.querySelector('[data-testid="workbench-switch-activity"]');
+    if (!(workbenchHost instanceof HTMLElement) || !(switchActivity instanceof HTMLButtonElement)) {
+      throw new Error('Workbench Flower host did not mount.');
+    }
+    expect(workbenchHost.contains(fixture.product)).toBe(true);
+    expect(fixture.product.dataset.presentation).toBe('workbench');
+    expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
+    expect(flowerSurface.dataset.mountId).toBe(mountID);
+    expect(document.querySelectorAll('[data-testid="env-ai-page"]')).toHaveLength(1);
+    expect(envAIPageMountSequence).toBe(1);
+
+    switchActivity.click();
+    await flushAsync();
+    expect(workbenchHost.contains(fixture.product)).toBe(false);
+    expect(fixture.product.isConnected).toBe(true);
     expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
     expect(envAIPageMountSequence).toBe(1);
   });

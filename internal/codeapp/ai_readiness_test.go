@@ -254,10 +254,13 @@ func TestAIReadinessControllerClosesLateStartupResult(t *testing.T) {
 
 func TestAIReadinessControllerPublishesObservedMaintenancePhases(t *testing.T) {
 	allowInspect := make(chan struct{})
+	allowOptimize := make(chan struct{})
 	allowVerify := make(chan struct{})
 	controller := newAIReadinessController(context.Background(), ai.Options{}, func(_ context.Context, opts ai.Options) (*ai.Service, error) {
 		opts.StoreStartupProgress(ai.FloretStoreStartupInspecting)
 		<-allowInspect
+		opts.StoreStartupProgress(ai.FloretStoreStartupOptimizing)
+		<-allowOptimize
 		opts.StoreStartupProgress(ai.FloretStoreStartupVerifying)
 		<-allowVerify
 		return new(ai.Service), nil
@@ -265,6 +268,8 @@ func TestAIReadinessControllerPublishesObservedMaintenancePhases(t *testing.T) {
 	controller.Start()
 	waitForAIReadinessState(t, controller, appserver.AIReadinessInspecting)
 	close(allowInspect)
+	waitForAIReadinessState(t, controller, appserver.AIReadinessOptimizing)
+	close(allowOptimize)
 	waitForAIReadinessState(t, controller, appserver.AIReadinessVerifying)
 	close(allowVerify)
 	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
