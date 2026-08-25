@@ -203,7 +203,7 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     expect(terminalPanelMocks.render).toHaveBeenCalledTimes(1);
     expect(terminalPanelMocks.render.mock.calls[0]?.[0]).toMatchObject({
       variant: 'workbench',
-      sessionGroupState: {
+      sessionPlacementState: {
         sessionIds: ['session-1', 'session-2'],
         activeSessionId: 'session-2',
       },

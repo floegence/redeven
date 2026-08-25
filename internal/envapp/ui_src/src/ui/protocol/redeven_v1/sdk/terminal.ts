@@ -11,6 +11,7 @@ import type {
 } from '@floegence/floeterm-terminal-web/semantic';
 
 export type TerminalSessionInfo = FloetermTerminalSessionInfo & {
+  groupId: string;
   localPathCapability?: {
     workingDir: string;
   };
@@ -19,6 +20,7 @@ export type TerminalSessionInfo = FloetermTerminalSessionInfo & {
 export type TerminalSessionCreateRequest = {
   name?: string;
   workingDir?: string;
+  groupId?: string;
 };
 
 export type TerminalSessionCreateResponse = {
@@ -51,6 +53,60 @@ export type TerminalSessionDeleteRequest = {
 export type TerminalSessionDeleteResponse = {
   ok: boolean;
 };
+
+export type TerminalGroup = Readonly<{
+  id: string;
+  name: string;
+  defaultWorkingDir: string;
+  sortOrder: number;
+  createdAtMs: number;
+  updatedAtMs: number;
+  isDefault: boolean;
+  pending?: boolean;
+}>;
+
+export type TerminalGroupCatalogSnapshot = Readonly<{
+  revision: number;
+  groups: readonly TerminalGroup[];
+}>;
+
+export type TerminalGroupCreateRequest = Readonly<{
+  name: string;
+  defaultWorkingDir: string;
+}>;
+
+export type TerminalGroupUpdateRequest = Readonly<{
+  groupId: string;
+  name?: string;
+  defaultWorkingDir?: string;
+}>;
+
+export type TerminalGroupMutationResponse = Readonly<{
+  revision: number;
+  group: TerminalGroup;
+}>;
+
+export type TerminalGroupDeleteRequest = Readonly<{ groupId: string }>;
+
+export type TerminalGroupDeleteResponse = Readonly<{
+  revision: number;
+  failedSessionIds: readonly string[];
+}>;
+
+export type TerminalSessionMoveRequest = Readonly<{ sessionId: string; groupId: string }>;
+
+export type TerminalSessionMoveResponse = Readonly<{
+  revision: number;
+  sessionId: string;
+  groupId: string;
+}>;
+
+export type TerminalGroupCatalogChangedEvent = Readonly<{
+  reason: 'created' | 'updated' | 'deleted' | 'session_moved';
+  groupId?: string;
+  sessionId?: string;
+  revision: number;
+}>;
 
 export type TerminalNameUpdateEvent = {
   sessionId: string;

@@ -25,7 +25,7 @@ existing supported store advances automatically during application startup
 before the service is returned to callers.
 
 The current startup composition opens the Code App registry, port-forward
-registry, thread read state, Notes, Workbench layout, and release-trust state
+registry, thread read state, Notes, Workbench layout, Terminal Group Catalog, and release-trust state
 before returning the product service. The AI product threadstore opens inside
 the isolated AI readiness generation, so its failure blocks Agent surfaces
 without preventing unrelated Code App capabilities from starting. Its current

@@ -13,6 +13,7 @@ function terminalCreatePayload(foregroundCommand?: unknown, outputActivity?: unk
     data: {
       session: {
         id: 'session-1',
+        group_id: 'default',
         name: 'repo',
         working_dir: '/workspace/repo',
         created_at_ms: 1,
@@ -50,7 +51,7 @@ describe('createWorkbenchTerminalSession', () => {
       updated_at_ms: 4,
     }));
 
-    await expect(createWorkbenchTerminalSession('widget-terminal-1', {})).resolves.toMatchObject({
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', { group_id: 'default' })).resolves.toMatchObject({
       session: {
         id: 'session-1',
         foreground_command: {
@@ -69,14 +70,14 @@ describe('createWorkbenchTerminalSession', () => {
     }, {
       phase: 'streaming', revision: 7, updated_at_ms: 8,
     }));
-    await expect(createWorkbenchTerminalSession('widget-terminal-1', {})).resolves.toMatchObject({
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', { group_id: 'default' })).resolves.toMatchObject({
       session: {
         output_activity: { phase: 'streaming', revision: 7, updated_at_ms: 8 },
       },
     });
 
     stubResponse(terminalCreatePayload());
-    await expect(createWorkbenchTerminalSession('widget-terminal-1', {})).resolves.toMatchObject({
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', { group_id: 'default' })).resolves.toMatchObject({
       session: {
         output_activity: { phase: 'unknown', revision: 0, updated_at_ms: 0 },
       },
@@ -85,7 +86,7 @@ describe('createWorkbenchTerminalSession', () => {
     stubResponse(terminalCreatePayload(undefined, {
       phase: 'done', revision: 999, updated_at_ms: 9,
     }));
-    await expect(createWorkbenchTerminalSession('widget-terminal-1', {})).resolves.toMatchObject({
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', { group_id: 'default' })).resolves.toMatchObject({
       session: {
         output_activity: { phase: 'unknown', revision: 0, updated_at_ms: 0 },
       },
@@ -94,7 +95,7 @@ describe('createWorkbenchTerminalSession', () => {
 
   it('normalizes a missing snapshot to unknown and rejects malformed command metadata', async () => {
     stubResponse(terminalCreatePayload());
-    await expect(createWorkbenchTerminalSession('widget-terminal-1', {})).resolves.toMatchObject({
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', { group_id: 'default' })).resolves.toMatchObject({
       session: {
         foreground_command: {
           phase: 'unknown',
@@ -111,7 +112,7 @@ describe('createWorkbenchTerminalSession', () => {
       revision: 5,
       updated_at_ms: 6,
     }));
-    await expect(createWorkbenchTerminalSession('widget-terminal-1', {}))
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', { group_id: 'default' }))
       .rejects.toThrow('Invalid workbench terminal session response');
   });
 });

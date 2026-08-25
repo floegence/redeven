@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   fromWireTerminalExecutionContextUpdateNotify,
   fromWireTerminalForegroundCommandUpdateNotify,
+  fromWireTerminalGroupCatalogChangedNotify,
+  fromWireTerminalGroupListResponse,
   fromWireTerminalSemanticClearResponse,
   fromWireTerminalSemanticHistoryResponse,
   fromWireTerminalNameUpdateNotify,
@@ -13,6 +15,7 @@ import {
   fromWireTerminalWorkStateUpdateNotify,
   toWireTerminalSemanticClearRequest,
   toWireTerminalSemanticHistoryRequest,
+  toWireTerminalSessionMoveRequest,
 } from './terminal';
 
 describe('terminal codec', () => {
@@ -111,6 +114,7 @@ describe('terminal codec', () => {
     expect(fromWireTerminalSessionListResponse({
       sessions: [{
         id: 'session-1',
+        group_id: 'default',
         name: 'repo',
         working_dir: '/workspace/repo',
         created_at_ms: 1,
@@ -132,6 +136,7 @@ describe('terminal codec', () => {
         },
       }, {
         id: 'session-2',
+        group_id: 'default',
         name: 'legacy',
         working_dir: '/',
         created_at_ms: 1,
@@ -160,6 +165,7 @@ describe('terminal codec', () => {
     const [session] = fromWireTerminalSessionListResponse({
       sessions: [{
         id: 'session-1',
+        group_id: 'default',
         name: 'repo',
         working_dir: '/workspace/repo',
         created_at_ms: 1,
@@ -180,6 +186,7 @@ describe('terminal codec', () => {
     expect(fromWireTerminalSessionCreateResponse({
       session: {
         id: 'session-created',
+        group_id: 'default',
         name: 'agent',
         working_dir: '/workspace/repo',
         created_at_ms: 1,
@@ -201,6 +208,7 @@ describe('terminal codec', () => {
     const decoded = fromWireTerminalSessionCreateResponse({
       session: {
         id: 'session-created',
+        group_id: 'default',
         name: 'agent',
         working_dir: '/terminal-controlled/path',
         created_at_ms: 1,
@@ -217,6 +225,7 @@ describe('terminal codec', () => {
   it('omits missing and malformed local path capability fields', () => {
     const base = {
       id: 'session-created',
+      group_id: 'default',
       name: 'agent',
       working_dir: '/workspace/repo',
       created_at_ms: 1,
@@ -474,6 +483,55 @@ describe('terminal codec', () => {
   it('rejects unknown terminal session change reasons', () => {
     expect(fromWireTerminalSessionsChangedNotify({
       reason: 'unknown' as any,
+    })).toBeNull();
+  });
+
+  it('strictly decodes the terminal group catalog and revisioned moves', () => {
+    expect(fromWireTerminalGroupListResponse({
+      revision: 4,
+      groups: [{
+        id: 'default',
+        name: 'Default',
+        default_working_dir: '/workspace',
+        sort_order: 0,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        is_default: true,
+      }],
+    })).toEqual({
+      revision: 4,
+      groups: [{
+        id: 'default',
+        name: 'Default',
+        defaultWorkingDir: '/workspace',
+        sortOrder: 0,
+        createdAtMs: 1,
+        updatedAtMs: 2,
+        isDefault: true,
+      }],
+    });
+    expect(() => fromWireTerminalGroupListResponse({ revision: 3, groups: [] })).toThrow('Default');
+    expect(() => fromWireTerminalSessionListResponse({
+      sessions: [{
+        id: 'session-ungrouped',
+        group_id: '',
+        name: 'broken',
+        working_dir: '/workspace',
+        created_at_ms: 1,
+        last_active_at_ms: 1,
+        is_active: false,
+      }],
+    })).toThrow('ungrouped');
+    expect(toWireTerminalSessionMoveRequest({ sessionId: ' session-1 ', groupId: ' group-2 ' }))
+      .toEqual({ session_id: 'session-1', group_id: 'group-2' });
+    expect(fromWireTerminalGroupCatalogChangedNotify({
+      reason: 'session_moved', session_id: 'session-1', group_id: 'group-2', revision: 5,
+    })).toEqual({ reason: 'session_moved', sessionId: 'session-1', groupId: 'group-2', revision: 5 });
+    expect(fromWireTerminalGroupCatalogChangedNotify({
+      reason: 'session_moved', revision: 0,
+    })).toBeNull();
+    expect(fromWireTerminalGroupCatalogChangedNotify({
+      reason: 'session_moved', group_id: 'group-2', revision: 6,
     })).toBeNull();
   });
 });

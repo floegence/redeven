@@ -4057,6 +4057,9 @@ export const redevenWireSchemas = {
           "id": {
             "kind": "string"
           },
+          "group_id": {
+            "kind": "string"
+          },
           "name": {
             "kind": "string"
           },
@@ -4350,6 +4353,7 @@ export const redevenWireSchemas = {
         },
         "required": [
           "created_at_ms",
+          "group_id",
           "id",
           "is_active",
           "last_active_at_ms",
@@ -4371,6 +4375,9 @@ export const redevenWireSchemas = {
           "kind": "object",
           "properties": {
             "id": {
+              "kind": "string"
+            },
+            "group_id": {
               "kind": "string"
             },
             "name": {
@@ -4666,6 +4673,7 @@ export const redevenWireSchemas = {
           },
           "required": [
             "created_at_ms",
+            "group_id",
             "id",
             "is_active",
             "last_active_at_ms",
@@ -5172,6 +5180,179 @@ export const redevenWireSchemas = {
       "ok"
     ]
   },
+  "wire_terminal_group_list_resp": {
+    "kind": "object",
+    "properties": {
+      "revision": {
+        "kind": "number"
+      },
+      "groups": {
+        "kind": "array",
+        "item": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "string"
+            },
+            "name": {
+              "kind": "string"
+            },
+            "default_working_dir": {
+              "kind": "string"
+            },
+            "sort_order": {
+              "kind": "number"
+            },
+            "created_at_ms": {
+              "kind": "number"
+            },
+            "updated_at_ms": {
+              "kind": "number"
+            },
+            "is_default": {
+              "kind": "boolean"
+            }
+          },
+          "required": [
+            "created_at_ms",
+            "default_working_dir",
+            "id",
+            "is_default",
+            "name",
+            "sort_order",
+            "updated_at_ms"
+          ]
+        }
+      }
+    },
+    "required": [
+      "groups",
+      "revision"
+    ]
+  },
+  "wire_terminal_group_mutation_resp": {
+    "kind": "object",
+    "properties": {
+      "revision": {
+        "kind": "number"
+      },
+      "group": {
+        "kind": "object",
+        "properties": {
+          "id": {
+            "kind": "string"
+          },
+          "name": {
+            "kind": "string"
+          },
+          "default_working_dir": {
+            "kind": "string"
+          },
+          "sort_order": {
+            "kind": "number"
+          },
+          "created_at_ms": {
+            "kind": "number"
+          },
+          "updated_at_ms": {
+            "kind": "number"
+          },
+          "is_default": {
+            "kind": "boolean"
+          }
+        },
+        "required": [
+          "created_at_ms",
+          "default_working_dir",
+          "id",
+          "is_default",
+          "name",
+          "sort_order",
+          "updated_at_ms"
+        ]
+      }
+    },
+    "required": [
+      "group",
+      "revision"
+    ]
+  },
+  "wire_terminal_group_delete_resp": {
+    "kind": "object",
+    "properties": {
+      "revision": {
+        "kind": "number"
+      },
+      "failed_session_ids": {
+        "kind": "array",
+        "item": {
+          "kind": "string"
+        }
+      }
+    },
+    "required": [
+      "failed_session_ids",
+      "revision"
+    ]
+  },
+  "wire_terminal_session_move_resp": {
+    "kind": "object",
+    "properties": {
+      "revision": {
+        "kind": "number"
+      },
+      "session_id": {
+        "kind": "string"
+      },
+      "group_id": {
+        "kind": "string"
+      }
+    },
+    "required": [
+      "group_id",
+      "revision",
+      "session_id"
+    ]
+  },
+  "wire_terminal_group_catalog_changed_notify": {
+    "kind": "object",
+    "properties": {
+      "reason": {
+        "kind": "union",
+        "options": [
+          {
+            "kind": "literal",
+            "value": "created"
+          },
+          {
+            "kind": "literal",
+            "value": "updated"
+          },
+          {
+            "kind": "literal",
+            "value": "deleted"
+          },
+          {
+            "kind": "literal",
+            "value": "session_moved"
+          }
+        ]
+      },
+      "group_id": {
+        "kind": "string"
+      },
+      "session_id": {
+        "kind": "string"
+      },
+      "revision": {
+        "kind": "number"
+      }
+    },
+    "required": [
+      "reason",
+      "revision"
+    ]
+  },
   "wire_terminal_sessions_changed_notify": {
     "kind": "object",
     "properties": {
@@ -5184,15 +5365,15 @@ export const redevenWireSchemas = {
           },
           {
             "kind": "literal",
+            "value": "deleted"
+          },
+          {
+            "kind": "literal",
             "value": "closing"
           },
           {
             "kind": "literal",
             "value": "closed"
-          },
-          {
-            "kind": "literal",
-            "value": "deleted"
           },
           {
             "kind": "literal",
@@ -5313,6 +5494,11 @@ export const redevenWireSchemaNames = {
   "fromWireSysRestartResponse": "wire_sys_restart_resp",
   "fromWireTerminalSessionCreateResponse": "wire_terminal_session_create_resp",
   "fromWireTerminalSessionListResponse": "wire_terminal_session_list_resp",
+  "fromWireTerminalGroupListResponse": "wire_terminal_group_list_resp",
+  "fromWireTerminalGroupMutationResponse": "wire_terminal_group_mutation_resp",
+  "fromWireTerminalGroupDeleteResponse": "wire_terminal_group_delete_resp",
+  "fromWireTerminalSessionMoveResponse": "wire_terminal_session_move_resp",
+  "fromWireTerminalGroupCatalogChangedNotify": "wire_terminal_group_catalog_changed_notify",
   "fromWireTerminalSemanticHistoryResponse": "wire_terminal_history_resp",
   "fromWireTerminalSemanticClearResponse": "wire_terminal_clear_resp",
   "fromWireTerminalSessionDeleteResponse": "wire_terminal_session_delete_resp",

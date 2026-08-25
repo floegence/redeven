@@ -58,7 +58,7 @@ type fakeWorkbenchTerminalSessionManager struct {
 	deleteSessionForWidget func(sessionID string, widgetID string) error
 }
 
-func (m fakeWorkbenchTerminalSessionManager) CreateSession(string, string) (*terminal.SessionInfo, error) {
+func (m fakeWorkbenchTerminalSessionManager) CreateSessionInGroup(string, string, string) (*terminal.SessionInfo, error) {
 	return nil, errors.New("create session not implemented")
 }
 
@@ -561,7 +561,8 @@ func TestServerWorkbenchTerminalSessionAPIs(t *testing.T) {
 
 	createResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
   "name": "repo",
-  "working_dir": ""
+  "working_dir": "",
+  "group_id": "default"
 }`)
 	if createResp.Code != http.StatusOK {
 		t.Fatalf("create status = %d, body = %s", createResp.Code, createResp.Body.String())
@@ -572,6 +573,9 @@ func TestServerWorkbenchTerminalSessionAPIs(t *testing.T) {
 	}](t, createResp)
 	if createData.Session.ID == "" {
 		t.Fatalf("created session id is empty: %#v", createData.Session)
+	}
+	if createData.Session.GroupID != terminal.DefaultTerminalGroupID {
+		t.Fatalf("created session group = %q, want %q", createData.Session.GroupID, terminal.DefaultTerminalGroupID)
 	}
 	if command := createData.Session.ForegroundCommand; command.Phase != "unknown" || command.DisplayName != "" || command.Revision != 0 || command.UpdatedAtMs != 0 {
 		t.Fatalf("created session foreground command = %#v, want unknown snapshot", command)

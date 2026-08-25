@@ -13,7 +13,7 @@ import {
   type WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import type { TerminalSessionInfo } from '@floegence/floeterm-terminal-web';
+import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import { LayoutDashboard, Maximize, Minus } from '@floegence/floe-webapp-core/icons';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { batch, createEffect, createMemo, createSignal, onCleanup, Show, untrack } from 'solid-js';
@@ -225,9 +225,11 @@ function normalizeRuntimeTerminalTimestamp(value: unknown): number {
 
 function normalizeRuntimeTerminalSessionInfo(session: RuntimeWorkbenchTerminalSessionInfo): TerminalSessionInfo | null {
   const id = compact(session.id);
-  if (!id) return null;
+  const groupId = compact(session.group_id);
+  if (!id || !groupId) return null;
   return {
     id,
+    groupId,
     name: compact(session.name),
     workingDir: normalizeAbsolutePath(session.working_dir),
     createdAtMs: normalizeRuntimeTerminalTimestamp(session.created_at_ms),
@@ -2620,11 +2622,13 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       const next = updater(current);
       persistLocalTerminalPanelState(normalizedWidgetId, sharedSessionIds, next.activeSessionId);
     },
-    createTerminalSession: async (widgetId, name, workingDir) => {
+    createTerminalSession: async (widgetId, name, workingDir, groupId) => {
       const normalizedWidgetId = compact(widgetId);
+      const normalizedGroupId = compact(groupId);
       const mutationFence = captureTerminalMutationFence();
       if (
         !normalizedWidgetId
+        || !normalizedGroupId
         || !runtimeTerminalWidgetReady(normalizedWidgetId)
         || !terminalMutationFenceIsCurrent(mutationFence)
       ) {
@@ -2634,6 +2638,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
         const result = await createWorkbenchTerminalSession(normalizedWidgetId, {
           name: compact(name) || undefined,
           working_dir: normalizeAbsolutePath(workingDir) || undefined,
+          group_id: normalizedGroupId,
         });
         if (
           !terminalMutationFenceIsCurrent(mutationFence)

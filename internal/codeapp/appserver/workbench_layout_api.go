@@ -24,6 +24,7 @@ const (
 type workbenchTerminalSessionCreateRequest struct {
 	Name       string `json:"name,omitempty"`
 	WorkingDir string `json:"working_dir,omitempty"`
+	GroupID    string `json:"group_id,omitempty"`
 }
 
 type workbenchTerminalSessionCloseFailure struct {
@@ -147,7 +148,7 @@ func (g *Server) handleWorkbenchWidgetStateAPI(w http.ResponseWriter, r *http.Re
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return true
 		}
-		session, err := g.term.CreateSession(strings.TrimSpace(body.Name), strings.TrimSpace(body.WorkingDir))
+		session, err := g.term.CreateSessionInGroup(strings.TrimSpace(body.GroupID), strings.TrimSpace(body.Name), strings.TrimSpace(body.WorkingDir))
 		if err != nil {
 			writeWorkbenchLayoutError(w, err)
 			return true

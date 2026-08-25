@@ -12,6 +12,14 @@ import type {
   wire_terminal_foreground_command_update_notify,
   wire_terminal_history_req,
   wire_terminal_history_resp,
+  wire_terminal_group,
+  wire_terminal_group_catalog_changed_notify,
+  wire_terminal_group_create_req,
+  wire_terminal_group_delete_req,
+  wire_terminal_group_delete_resp,
+  wire_terminal_group_list_resp,
+  wire_terminal_group_mutation_resp,
+  wire_terminal_group_update_req,
   wire_terminal_name_update_notify,
   wire_terminal_output_activity_info,
   wire_terminal_output_activity_update_notify,
@@ -21,6 +29,8 @@ import type {
   wire_terminal_session_delete_resp,
   wire_terminal_session_info,
   wire_terminal_session_list_resp,
+  wire_terminal_session_move_req,
+  wire_terminal_session_move_resp,
   wire_terminal_sessions_changed_notify,
   wire_terminal_work_state_info,
   wire_terminal_work_state_update_notify,
@@ -32,6 +42,14 @@ import type {
   TerminalSemanticClearResponse,
   TerminalForegroundCommandUpdateEvent,
   TerminalExecutionContextUpdateEvent,
+  TerminalGroup,
+  TerminalGroupCatalogChangedEvent,
+  TerminalGroupCatalogSnapshot,
+  TerminalGroupCreateRequest,
+  TerminalGroupDeleteRequest,
+  TerminalGroupDeleteResponse,
+  TerminalGroupMutationResponse,
+  TerminalGroupUpdateRequest,
   TerminalNameUpdateEvent,
   TerminalOutputActivityUpdateEvent,
   TerminalSessionCreateRequest,
@@ -39,6 +57,8 @@ import type {
   TerminalSessionDeleteRequest,
   TerminalSessionDeleteResponse,
   TerminalSessionInfo,
+  TerminalSessionMoveRequest,
+  TerminalSessionMoveResponse,
   TerminalSessionsChangedEvent,
   TerminalWorkStateUpdateEvent,
 } from '../sdk/terminal';
@@ -174,6 +194,7 @@ function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionIn
   );
   return {
     id: String(s?.id ?? ''),
+    groupId: String(s?.group_id ?? '').trim(),
     name: String(s?.name ?? ''),
     workingDir: String(s?.working_dir ?? ''),
     createdAtMs: Number(s?.created_at_ms ?? 0),
@@ -196,19 +217,131 @@ function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionIn
 export function toWireTerminalSessionCreateRequest(req: TerminalSessionCreateRequest): wire_terminal_session_create_req {
   const name = req.name?.trim();
   const workingDir = req.workingDir?.trim();
+  const groupId = req.groupId?.trim();
   return {
     ...(name ? { name } : {}),
     ...(workingDir ? { working_dir: workingDir } : {}),
+    ...(groupId ? { group_id: groupId } : {}),
   };
 }
 
 export function fromWireTerminalSessionCreateResponse(resp: wire_terminal_session_create_resp): TerminalSessionCreateResponse {
-  return { session: toTerminalSessionInfo(resp.session) };
+  const session = toTerminalSessionInfo(resp.session);
+  if (!session.id || !session.groupId) throw new Error('invalid terminal session create response');
+  return { session };
 }
 
 export function fromWireTerminalSessionListResponse(resp: wire_terminal_session_list_resp): { sessions: TerminalSessionInfo[] } {
-  const sessions = Array.isArray(resp?.sessions) ? resp.sessions : [];
-  return { sessions: sessions.map(toTerminalSessionInfo).filter((s) => s.id) };
+  if (!Array.isArray(resp?.sessions)) throw new Error('invalid terminal session list response');
+  const sessions = resp.sessions.map(toTerminalSessionInfo);
+  if (sessions.some((session) => !session.id || !session.groupId)) {
+    throw new Error('terminal session list contains an ungrouped session');
+  }
+  return { sessions };
+}
+
+function fromWireTerminalGroup(value: wire_terminal_group): TerminalGroup {
+  const id = String(value?.id ?? '').trim();
+  const name = String(value?.name ?? '').trim();
+  const defaultWorkingDir = canonicalAbsolutePath(value?.default_working_dir);
+  const sortOrder = Number(value?.sort_order);
+  const createdAtMs = Number(value?.created_at_ms);
+  const updatedAtMs = Number(value?.updated_at_ms);
+  const isDefault = value?.is_default;
+  if (!id || !name || !defaultWorkingDir || !Number.isSafeInteger(sortOrder) || sortOrder < 0
+    || !Number.isSafeInteger(createdAtMs) || createdAtMs < 0
+    || !Number.isSafeInteger(updatedAtMs) || updatedAtMs < 0
+    || typeof isDefault !== 'boolean'
+    || Array.from(name).length > 64
+    || (id === 'default') !== isDefault
+    || (isDefault && (name !== 'Default' || sortOrder !== 0))) {
+    throw new Error('invalid terminal group');
+  }
+  return { id, name, defaultWorkingDir, sortOrder, createdAtMs, updatedAtMs, isDefault };
+}
+
+function terminalCatalogRevision(value: unknown): number {
+  const revision = Number(value);
+  if (!Number.isSafeInteger(revision) || revision < 1) {
+    throw new Error('invalid terminal group catalog revision');
+  }
+  return revision;
+}
+
+export function fromWireTerminalGroupListResponse(resp: wire_terminal_group_list_resp): TerminalGroupCatalogSnapshot {
+  const groups = Array.isArray(resp?.groups) ? resp.groups.map(fromWireTerminalGroup) : [];
+  const ids = new Set<string>();
+  const names = new Set<string>();
+  for (const group of groups) {
+    const foldedName = group.name.toLocaleLowerCase();
+    if (ids.has(group.id) || names.has(foldedName)) {
+      throw new Error('terminal group catalog contains duplicates');
+    }
+    ids.add(group.id);
+    names.add(foldedName);
+  }
+  if (groups.filter((group) => group.id === 'default' && group.isDefault).length !== 1) {
+    throw new Error('terminal group catalog is missing Default');
+  }
+  return { revision: terminalCatalogRevision(resp?.revision), groups };
+}
+
+export function toWireTerminalGroupCreateRequest(req: TerminalGroupCreateRequest): wire_terminal_group_create_req {
+  return { name: req.name.trim(), default_working_dir: req.defaultWorkingDir.trim() };
+}
+
+export function toWireTerminalGroupUpdateRequest(req: TerminalGroupUpdateRequest): wire_terminal_group_update_req {
+  return {
+    group_id: req.groupId.trim(),
+    ...(req.name === undefined ? {} : { name: req.name.trim() }),
+    ...(req.defaultWorkingDir === undefined ? {} : { default_working_dir: req.defaultWorkingDir.trim() }),
+  };
+}
+
+export function fromWireTerminalGroupMutationResponse(resp: wire_terminal_group_mutation_resp): TerminalGroupMutationResponse {
+  return { revision: terminalCatalogRevision(resp?.revision), group: fromWireTerminalGroup(resp?.group) };
+}
+
+export function toWireTerminalGroupDeleteRequest(req: TerminalGroupDeleteRequest): wire_terminal_group_delete_req {
+  return { group_id: req.groupId.trim() };
+}
+
+export function fromWireTerminalGroupDeleteResponse(resp: wire_terminal_group_delete_resp): TerminalGroupDeleteResponse {
+  if (!Array.isArray(resp?.failed_session_ids)) throw new Error('invalid terminal group delete response');
+  const failedSessionIds = resp.failed_session_ids.map((value) => String(value).trim());
+  if (failedSessionIds.some((sessionId) => !sessionId) || new Set(failedSessionIds).size !== failedSessionIds.length) {
+    throw new Error('invalid terminal group delete response');
+  }
+  return { revision: terminalCatalogRevision(resp?.revision), failedSessionIds };
+}
+
+export function toWireTerminalSessionMoveRequest(req: TerminalSessionMoveRequest): wire_terminal_session_move_req {
+  return { session_id: req.sessionId.trim(), group_id: req.groupId.trim() };
+}
+
+export function fromWireTerminalSessionMoveResponse(resp: wire_terminal_session_move_resp): TerminalSessionMoveResponse {
+  const sessionId = String(resp?.session_id ?? '').trim();
+  const groupId = String(resp?.group_id ?? '').trim();
+  if (!sessionId || !groupId) throw new Error('invalid terminal session move response');
+  return { revision: terminalCatalogRevision(resp?.revision), sessionId, groupId };
+}
+
+export function fromWireTerminalGroupCatalogChangedNotify(
+  payload: wire_terminal_group_catalog_changed_notify,
+): TerminalGroupCatalogChangedEvent | null {
+  const reason = payload?.reason;
+  if (reason !== 'created' && reason !== 'updated' && reason !== 'deleted' && reason !== 'session_moved') return null;
+  const revision = Number(payload?.revision);
+  if (!Number.isSafeInteger(revision) || revision < 1) return null;
+  const groupId = String(payload?.group_id ?? '').trim();
+  const sessionId = String(payload?.session_id ?? '').trim();
+  if (!groupId || (reason === 'session_moved' && !sessionId)) return null;
+  return {
+    reason,
+    revision,
+    ...(groupId ? { groupId } : {}),
+    ...(sessionId ? { sessionId } : {}),
+  };
 }
 
 export function toWireTerminalSemanticHistoryRequest(req: TerminalSemanticHistoryRequest): wire_terminal_history_req {

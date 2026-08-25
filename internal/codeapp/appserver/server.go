@@ -114,7 +114,7 @@ type PortForwardBackend interface {
 }
 
 type workbenchTerminalSessionManager interface {
-	CreateSession(name string, workingDir string) (*terminal.SessionInfo, error)
+	CreateSessionInGroup(groupID string, name string, workingDir string) (*terminal.SessionInfo, error)
 	DeleteSession(sessionID string) error
 	DeleteSessionForWidget(sessionID string, widgetID string) error
 	AddSessionLifecycleHook(hook terminal.SessionLifecycleHook) func()

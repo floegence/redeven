@@ -85,7 +85,7 @@ function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
       variant="workbench"
       openSessionRequest={workbench.terminalOpenRequest(props.widgetId)}
       onOpenSessionRequestHandled={workbench.consumeTerminalOpenRequest}
-      sessionGroupState={panelState()}
+      sessionPlacementState={panelState()}
       terminalGeometryPreferences={{
         fontSize: geometryPreferences().fontSize,
         fontFamilyId: geometryPreferences().fontFamilyId,
@@ -102,11 +102,11 @@ function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
           }));
         },
       }}
-      onSessionGroupStateChange={(next) => {
+      onSessionPlacementStateChange={(next) => {
         workbench.updateTerminalPanelState(props.widgetId, () => next);
       }}
       sessionOperations={{
-        createSession: (name, workingDir) => workbench.createTerminalSession(props.widgetId, name, workingDir),
+        createSession: (name, workingDir, groupId) => workbench.createTerminalSession(props.widgetId, name, workingDir, groupId),
         deleteSession: (sessionId) => workbench.deleteTerminalSession(props.widgetId, sessionId),
       }}
       workbenchSelected={props.selected}

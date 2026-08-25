@@ -186,10 +186,10 @@ func (m *Manager) deleteSessionNow(sessionID string) error {
 }
 
 func (m *Manager) DeleteSessionForWidget(sessionID string, widgetID string) error {
-	return m.requestSessionDelete(sessionID, widgetID, false)
+	return m.requestSessionDelete(sessionID, widgetID, false, true)
 }
 
-func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict bool) error {
+func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict bool, hideOnFailure bool) error {
 	if m == nil {
 		return &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
@@ -207,8 +207,10 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	m.mu.Lock()
 	if operation := m.deleteOperations[sessionID]; operation != nil {
 		operation.participants++
-		if ownerWidgetID := strings.TrimSpace(widgetID); ownerWidgetID != "" {
+		if hideOnFailure {
 			operation.hideOnFailure = true
+		}
+		if ownerWidgetID := strings.TrimSpace(widgetID); ownerWidgetID != "" {
 			if operation.ownerWidgetID == "" {
 				operation.ownerWidgetID = ownerWidgetID
 			}
@@ -229,6 +231,7 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 		}
 		delete(m.sessionLifecycle, sessionID)
 		delete(m.localPathCapabilities, sessionID)
+		delete(m.sessionGroupIDs, sessionID)
 		m.mu.Unlock()
 		return nil
 	}
@@ -242,7 +245,7 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	operation := &sessionDeleteOperation{
 		done:          make(chan struct{}),
 		participants:  1,
-		hideOnFailure: record.OwnerWidgetID != "",
+		hideOnFailure: hideOnFailure,
 		ownerWidgetID: record.OwnerWidgetID,
 	}
 	if m.deleteOperations == nil {
@@ -301,6 +304,7 @@ func (m *Manager) completeSessionDelete(
 			record.OwnerWidgetID = operation.ownerWidgetID
 			reason = "close_failed_hidden"
 			delete(m.localPathCapabilities, sessionID)
+			delete(m.sessionGroupIDs, sessionID)
 		} else {
 			record.Lifecycle = SessionLifecycleOpen
 		}
@@ -313,6 +317,7 @@ func (m *Manager) completeSessionDelete(
 	} else {
 		delete(m.sessionLifecycle, sessionID)
 		delete(m.localPathCapabilities, sessionID)
+		delete(m.sessionGroupIDs, sessionID)
 	}
 	operation.err = err
 	if m.deleteOperations[sessionID] == operation {
@@ -352,6 +357,7 @@ func (m *Manager) finalizeSessionClosed(sessionID string) string {
 	record.CloseFinishedAtMs = nowUnixMs
 	delete(m.sessionLifecycle, sessionID)
 	delete(m.localPathCapabilities, sessionID)
+	delete(m.sessionGroupIDs, sessionID)
 	m.mu.Unlock()
 
 	return reason

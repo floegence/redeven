@@ -48,11 +48,13 @@ describe('TerminalPanel semantic contracts', () => {
         createdAtMs: 10,
         name: 'Terminal',
         workingDir: '/workspace',
+        groupId: 'default',
         visibleSessionIdsAtCreate: [],
         status: 'creating',
       }],
       [{
         id: 'session-1',
+        groupId: 'default',
         name: 'Terminal',
         workingDir: '/workspace',
         createdAtMs: 11,

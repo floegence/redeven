@@ -48,6 +48,7 @@ export type wire_terminal_local_path_capability = {
 
 export type wire_terminal_session_info = {
   id: string;
+  group_id: string;
   name: string;
   working_dir: string;
   created_at_ms: number;
@@ -63,6 +64,7 @@ export type wire_terminal_session_info = {
 export type wire_terminal_session_create_req = {
   name?: string;
   working_dir?: string;
+  group_id?: string;
 };
 
 export type wire_terminal_session_create_resp = {
@@ -162,6 +164,49 @@ export type wire_terminal_session_delete_req = {
 
 export type wire_terminal_session_delete_resp = {
   ok: boolean;
+};
+
+export type wire_terminal_group = {
+  id: string;
+  name: string;
+  default_working_dir: string;
+  sort_order: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+  is_default: boolean;
+};
+
+export type wire_terminal_group_list_resp = {
+  revision: number;
+  groups: wire_terminal_group[];
+};
+
+export type wire_terminal_group_create_req = {
+  name: string;
+  default_working_dir: string;
+};
+
+export type wire_terminal_group_update_req = {
+  group_id: string;
+  name?: string;
+  default_working_dir?: string;
+};
+
+export type wire_terminal_group_mutation_resp = {
+  revision: number;
+  group: wire_terminal_group;
+};
+
+export type wire_terminal_group_delete_req = { group_id: string };
+export type wire_terminal_group_delete_resp = { revision: number; failed_session_ids: string[] };
+export type wire_terminal_session_move_req = { session_id: string; group_id: string };
+export type wire_terminal_session_move_resp = { revision: number; session_id: string; group_id: string };
+
+export type wire_terminal_group_catalog_changed_notify = {
+  reason: 'created' | 'updated' | 'deleted' | 'session_moved';
+  group_id?: string;
+  session_id?: string;
+  revision: number;
 };
 
 export type wire_terminal_sessions_changed_notify = {

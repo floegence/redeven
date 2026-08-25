@@ -55,6 +55,12 @@ export const redevenV1TypeIds = {
     outputActivityUpdate: 2014,
     executionContextUpdate: 2015,
     workStateUpdate: 2016,
+    groupList: 2017,
+    groupCreate: 2018,
+    groupUpdate: 2019,
+    groupDelete: 2020,
+    sessionMove: 2021,
+    groupCatalogChanged: 2022,
   },
   monitor: {
     sysMonitor: 3001,

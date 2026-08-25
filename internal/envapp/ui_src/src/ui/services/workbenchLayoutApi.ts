@@ -198,7 +198,8 @@ export async function createWorkbenchTerminalSession(
     throw new Error('Invalid workbench terminal session response');
   }
   const sessionId = String(data?.session?.id ?? '').trim();
-  if (!sessionId) {
+  const groupId = String(data?.session?.group_id ?? '').trim();
+  if (!sessionId || !groupId) {
     throw new Error('Invalid workbench terminal session response');
   }
   const foregroundCommand = data?.session?.foreground_command == null
@@ -213,6 +214,7 @@ export async function createWorkbenchTerminalSession(
   return {
     session: {
       id: sessionId,
+      group_id: groupId,
       name: String(data?.session?.name ?? '').trim(),
       working_dir: String(data?.session?.working_dir ?? '').trim(),
       created_at_ms: Number(data?.session?.created_at_ms ?? 0),

@@ -149,6 +149,7 @@ export type RuntimeWorkbenchOpenPreviewResponse = Readonly<{
 export type RuntimeWorkbenchTerminalCreateSessionRequest = Readonly<{
   name?: string;
   working_dir?: string;
+  group_id: string;
 }>;
 
 export type RuntimeWorkbenchTerminalForegroundCommandInfo = Readonly<{
@@ -166,6 +167,7 @@ export type RuntimeWorkbenchTerminalOutputActivityInfo = Readonly<{
 
 export type RuntimeWorkbenchTerminalSessionInfo = Readonly<{
   id: string;
+  group_id: string;
   name: string;
   working_dir: string;
   created_at_ms: number;
