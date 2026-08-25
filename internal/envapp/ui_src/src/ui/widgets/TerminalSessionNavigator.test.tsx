@@ -22,12 +22,14 @@ afterEach(() => {
 
 function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = vi.fn(), options?: {
   groups?: Parameters<typeof TerminalSessionNavigator>[0]['groups'];
+  additionalItems?: readonly TerminalSessionNavigationItem[];
   onMoveSession?: (sessionId: string, groupId: string) => void;
   onToggleGroup?: (groupId: string) => void;
 }) {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const itemById = new Map([[item.id, item]]);
+  const items = [item, ...(options?.additionalItems ?? [])];
+  const itemById = new Map(items.map((navigationItem) => [navigationItem.id, navigationItem]));
   disposers.push(render(() => (
     <TerminalSessionNavigator
       accessibilityIdPrefix="terminal-panel-test"
@@ -39,7 +41,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
       activeAvatar={item.avatar}
       shortcutModLabel="Ctrl"
       filterQuery=""
-      itemIds={[item.id]}
+      itemIds={items.map((navigationItem) => navigationItem.id)}
       itemById={itemById}
       groups={options?.groups}
       sidebarActiveSessionId={item.id}
@@ -192,7 +194,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).not.toContain('rgba(');
     expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-7 w-7');
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
-    expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('color-mix(in_srgb,var(--foreground)_6%,transparent)');
+    expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('border-primary/35');
     const descriptionId = rowButton.getAttribute('aria-describedby');
     expect(descriptionId).toBe('terminal-panel-test-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output');
@@ -525,17 +527,52 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     expect(host.querySelector('[data-terminal-group-id="group-services"]')?.textContent).toContain('Services');
     expect(host.querySelector('[data-terminal-group-id="group-services"]')?.textContent).toContain('/workspace/services');
-    expect(host.querySelector('[data-terminal-tree-group="group-services"]')?.className).toContain('rounded-lg');
-    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).toContain('ml-4');
-    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).toContain('pl-4');
+    expect(host.querySelector('[data-terminal-group-header="group-services"]')?.className).toContain('var(--primary)_7%');
+    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).toContain('ml-[18px]');
+    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).toContain('pl-5');
     expect(host.querySelector('[data-terminal-tree-trunk="group-services"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-tree-rail="group-services"]')?.className).toContain('bottom-[26px]');
     expect(host.querySelector('[data-terminal-tree-connector="session-1"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-tree-continuation="session-1"]')).toBeNull();
-    expect(host.querySelector('[data-testid="terminal-group-toggle-group-services"]')?.className).toContain('border-sidebar-border/75');
+    expect(host.querySelector('[data-terminal-tree-junction="session-1"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="terminal-group-toggle-group-services"]')?.className).toContain('text-primary');
     expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('min-h-[52px]');
     expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('grid-cols-[32px_minmax(0,1fr)_40px]');
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-group-toggle-group-services"]')?.click();
     expect(onToggleGroup).toHaveBeenCalledWith('group-services');
+  });
+
+  it('uses one continuous rail for every session branch in a group', () => {
+    const firstItem = navigationItem({ id: 'session-1', title: 'alpha' });
+    const secondItem = navigationItem({ id: 'session-2', title: 'beta' });
+    const { host } = renderNavigator(firstItem, vi.fn(), {
+      additionalItems: [secondItem],
+      groups: [{
+        id: 'group-services',
+        name: 'Services',
+        defaultWorkingDir: '/workspace/services',
+        isDefault: false,
+        expanded: true,
+        itemIds: ['session-1', 'session-2'],
+        totalSessionCount: 2,
+      }],
+    });
+
+    expect(host.querySelectorAll('[data-terminal-tree-rail="group-services"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-terminal-tree-connector]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-terminal-tree-junction]')).toHaveLength(2);
+    expect(host.querySelector('[data-terminal-tree-child="session-1"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-tree-child="session-2"]')).not.toBeNull();
+  });
+
+  it('labels session and group creation as distinct actions', () => {
+    const { host } = renderNavigator(navigationItem());
+    const newSession = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-session"]');
+    const newGroup = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-group"]');
+
+    expect(newSession?.textContent).toContain('New session');
+    expect(newGroup?.textContent).toContain('New group');
+    expect(newSession?.parentElement).not.toBe(newGroup?.parentElement);
+    expect(newGroup?.querySelector('svg')).not.toBeNull();
   });
 
   it('moves a dragged session to the group that receives the drop', () => {
