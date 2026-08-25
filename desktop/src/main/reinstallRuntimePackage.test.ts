@@ -11,6 +11,13 @@ import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
 import { createLocalRuntimeHostExecutor } from './runtimeHostAccess';
 import { buildManagedSSHRuntimeProbeScript } from './sshRuntime';
 import {
+  MANAGED_RUNTIME_DIRECTORY_MODE,
+  MANAGED_RUNTIME_EXECUTABLE_MODE,
+  MANAGED_RUNTIME_METADATA_MODE,
+  MANAGED_RUNTIME_STAMP_FILENAME,
+  MANAGED_RUNTIME_STAMP_SCHEMA_VERSION,
+} from './managedRuntimeSlot';
+import {
   cleanupReinstallRuntimePackage,
   installReinstallRuntimePackage,
   prepareReinstallRuntimePackage,
@@ -150,11 +157,21 @@ describe('reinstall Runtime package', () => {
       });
       await installReinstallRuntimePackage(executor, placement, targetRoot, prepared, 'preserve_data');
 
-      const stamp = await fs.readFile(path.join(targetRoot, 'runtime', 'managed', 'managed-runtime.stamp'), 'utf8');
-      expect(stamp).toContain('schema_version=2');
+      const managedRoot = path.join(targetRoot, 'runtime', 'managed');
+      const stampPath = path.join(managedRoot, MANAGED_RUNTIME_STAMP_FILENAME);
+      const stamp = await fs.readFile(stampPath, 'utf8');
+      expect(stamp).toContain(`schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}`);
       expect(stamp).toContain('managed_by=redeven-desktop');
       expect(stamp).toContain('slot_release_tag=v1');
       expect(stamp).toContain('commit=abc');
+      expect((await fs.stat(path.join(targetRoot, 'runtime'))).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_DIRECTORY_MODE, 8));
+      expect((await fs.stat(managedRoot)).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_DIRECTORY_MODE, 8));
+      expect((await fs.stat(path.join(managedRoot, 'bin'))).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_DIRECTORY_MODE, 8));
+      expect((await fs.stat(path.join(managedRoot, 'bin', 'redeven'))).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_EXECUTABLE_MODE, 8));
+      expect((await fs.stat(path.join(managedRoot, 'bin', 'redevplugin-runtime'))).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_EXECUTABLE_MODE, 8));
+      expect((await fs.stat(stampPath)).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_METADATA_MODE, 8));
+      expect((await fs.stat(path.join(managedRoot, 'bin', 'redevplugin-runtime.provenance.json'))).mode & 0o777)
+        .toBe(Number.parseInt(MANAGED_RUNTIME_METADATA_MODE, 8));
       const normalProbe = await executor.run([
         'sh',
         '-c',

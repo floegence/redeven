@@ -185,6 +185,9 @@ describe('containerRuntime', () => {
     ]));
     expect(installCommand.join('\n')).toContain('cat > "$archive_path"');
     expect(installCommand.join('\n')).toContain('write_runtime_stamp "desktop_upload"');
+    expect(installCommand.join('\n')).toContain('umask 077');
+    expect(installCommand.join('\n')).toContain('normalize_managed_runtime_metadata');
+    expect(installCommand.join('\n')).not.toContain('chmod +x');
     expect(installCommand.join('\n')).toContain('runtime/managed');
     expect(installCommand.join('\n')).toContain('managed-runtime.stamp');
     expect(installCommand.join('\n')).toContain('schema_version=2');

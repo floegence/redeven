@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -5,8 +6,6 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  MANAGED_SSH_RUNTIME_STAMP_FILENAME,
-  MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION,
   buildManagedSSHActivatePreparedRuntimeScript,
   buildManagedSSHRemoteInstallScript,
   buildManagedSSHRuntimeProbeScript,
@@ -17,6 +16,10 @@ import {
   parseManagedSSHRuntimeProbeResult,
   probeManagedSSHRuntimeStatus,
 } from './sshRuntime';
+import {
+  MANAGED_RUNTIME_STAMP_FILENAME,
+  MANAGED_RUNTIME_STAMP_SCHEMA_VERSION,
+} from './managedRuntimeSlot';
 import { DefaultDesktopSSHTransportManager } from './sshTransportManager';
 
 function readSSHRuntimeSource(): string {
@@ -25,6 +28,32 @@ function readSSHRuntimeSource(): string {
 
 function readSSHTransportManagerSource(): string {
   return fs.readFileSync(path.join(__dirname, 'sshTransportManager.ts'), 'utf8');
+}
+
+function fileMode(filename: string): number {
+  return fs.statSync(filename).mode & 0o777;
+}
+
+function createRuntimeArchive(root: string): string {
+  const source = path.join(root, 'archive');
+  fs.mkdirSync(source, { recursive: true });
+  fs.writeFileSync(path.join(source, 'redeven'), '#!/bin/sh\necho redeven v1 abc\n');
+  fs.chmodSync(path.join(source, 'redeven'), 0o755);
+  for (const companion of [
+    '.redevplugin-release-artifacts-verified.json',
+    'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+    'REDEVPLUGIN_RUNTIME.spdx.json',
+    'redevplugin-runtime.provenance.json',
+    'redevplugin-runtime.sig',
+    'redevplugin-runtime.pem',
+    'redevplugin-runtime',
+  ]) {
+    fs.writeFileSync(path.join(source, companion), companion === 'redevplugin-runtime' ? '#!/bin/sh\n' : '{}');
+  }
+  fs.chmodSync(path.join(source, 'redevplugin-runtime'), 0o755);
+  const archive = path.join(root, 'redeven.tar.gz');
+  execFileSync('tar', ['-czf', archive, '-C', source, '.']);
+  return archive;
 }
 
 describe('sshRuntime', () => {
@@ -111,7 +140,7 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).not.toContain('runtime/releases/${target_release_tag}/bin/redeven');
     expect(buildManagedSSHStartScript()).not.toContain('runtime/releases/${release_tag}/bin/redeven');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
-    expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${managed_root}'}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`);
+    expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${managed_root}'}/${MANAGED_RUNTIME_STAMP_FILENAME}"`);
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'slot_release_tag=%s\\n' \"$slot_release_tag\"");
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'reported_release_tag=%s\\n' \"$reported_release_tag\"");
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'target_release_tag=%s\\n' \"$target_release_tag\"");
@@ -196,7 +225,7 @@ describe('sshRuntime', () => {
     const versionProbeIndex = script.indexOf('version_output="$("$binary" version 2>/dev/null)"');
     const reportedVersionIndex = script.indexOf('reported_release_tag="$2"', versionProbeIndex);
     const stampExistsIndex = script.indexOf('if [ ! -f "$stamp_path" ]; then');
-    const stampSchemaIndex = script.indexOf(`schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}`, stampExistsIndex);
+    const stampSchemaIndex = script.indexOf(`schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}`, stampExistsIndex);
 
     expect(versionProbeIndex).toBeGreaterThanOrEqual(0);
     expect(reportedVersionIndex).toBeGreaterThan(versionProbeIndex);
@@ -212,7 +241,7 @@ describe('sshRuntime', () => {
     const probeScript = buildManagedSSHRuntimeProbeScript();
 
     for (const script of [remoteInstallScript, uploadedInstallScript, probeScript]) {
-      expect(script).toContain(`schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}`);
+      expect(script).toContain(`schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}`);
       expect(script).toContain('slot_release_tag=');
       expect(script).toContain('installed_at_unix_ms=');
     }
@@ -221,6 +250,8 @@ describe('sshRuntime', () => {
     expect(remoteInstallScript).toContain('REDEVEN_INSTALL_DIR="$staging_bin_dir"');
     expect(remoteInstallScript).toContain('staged_binary="${staging_bin_dir}/redeven"');
     expect(remoteInstallScript).toContain('if [ "$staged_release_tag" != "$target_release_tag" ]; then');
+    expect(remoteInstallScript).toContain('umask 077');
+    expect(remoteInstallScript).toContain('normalize_managed_runtime_metadata');
     expect(remoteInstallScript).toContain('printf "%s\\n" "$staging_root"');
     expect(remoteInstallScript).not.toContain('switch_staged_runtime');
     expect(remoteInstallScript).not.toContain('cleanup_legacy_releases');
@@ -229,7 +260,10 @@ describe('sshRuntime', () => {
     expect(uploadedInstallScript).toContain('staging_root="$(mktemp -d "${managed_root}.staging.XXXXXX")"');
     expect(uploadedInstallScript).toContain('mv "$binary_path" "${staging_root}/bin/redeven"');
     expect(uploadedInstallScript).toContain('if [ "$staged_release_tag" != "$target_release_tag" ]; then');
+    expect(uploadedInstallScript).toContain('umask 077');
+    expect(uploadedInstallScript).toContain('normalize_managed_runtime_metadata');
     expect(uploadedInstallScript).toContain('printf "%s\\n" "$staging_root"');
+    expect(uploadedInstallScript).not.toContain('chmod +x');
     expect(uploadedInstallScript).not.toContain('switch_staged_runtime');
     expect(uploadedInstallScript).not.toContain('cleanup_legacy_releases');
     expect(uploadedInstallScript).not.toContain('mv "$temp_binary" "$binary"');
@@ -240,6 +274,143 @@ describe('sshRuntime', () => {
     expect(activateScript).toContain('mv "$managed_root" "$previous_managed_root"');
     expect(activateScript).toContain('if mv "$staging_root" "$managed_root"; then');
     expect(activateScript).not.toContain('cleanup_legacy_releases');
+  });
+
+  it('stages a private managed Runtime slot even when the target umask is group-writable', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-managed-runtime-mode-'));
+    try {
+      const targetRoot = path.join(root, 'target');
+      const uploadDir = path.join(root, 'upload');
+      fs.mkdirSync(path.join(targetRoot, 'runtime'), { recursive: true });
+      fs.chmodSync(path.join(targetRoot, 'runtime'), 0o775);
+      fs.mkdirSync(uploadDir, { recursive: true });
+      const archive = createRuntimeArchive(root);
+      const archiveCopy = path.join(uploadDir, 'redeven.tar.gz');
+      fs.copyFileSync(archive, archiveCopy);
+      const scriptPath = path.join(root, 'install.sh');
+      fs.writeFileSync(scriptPath, buildManagedSSHUploadedInstallScript());
+
+      const stagingRoot = execFileSync('sh', [
+        '-c',
+        'umask 0002\nexec sh "$1" "$2" "$3" "$4" "$5"',
+        'redeven-managed-runtime-mode-test',
+        scriptPath,
+        targetRoot,
+        'v1',
+        archiveCopy,
+        uploadDir,
+      ], { encoding: 'utf8' }).trim();
+
+      expect(fileMode(stagingRoot)).toBe(0o700);
+      expect(fileMode(path.join(stagingRoot, 'bin'))).toBe(0o700);
+      expect(fileMode(path.join(stagingRoot, 'bin', 'redeven'))).toBe(0o700);
+      expect(fileMode(path.join(stagingRoot, 'bin', 'redevplugin-runtime'))).toBe(0o700);
+      expect(fileMode(path.join(stagingRoot, MANAGED_RUNTIME_STAMP_FILENAME))).toBe(0o600);
+      expect(fileMode(path.join(stagingRoot, 'bin', 'redevplugin-runtime.provenance.json'))).toBe(0o600);
+
+      const activateScriptPath = path.join(root, 'activate.sh');
+      fs.writeFileSync(activateScriptPath, buildManagedSSHActivatePreparedRuntimeScript());
+      execFileSync('sh', [activateScriptPath, targetRoot, 'v1', stagingRoot]);
+      expect(fileMode(path.join(targetRoot, 'runtime'))).toBe(0o700);
+      expect(fileMode(path.join(targetRoot, 'runtime', 'managed'))).toBe(0o700);
+      expect(fileMode(path.join(targetRoot, 'runtime', 'managed', 'bin'))).toBe(0o700);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('normalizes remote-install Runtime metadata independently of the target umask', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-remote-runtime-mode-'));
+    try {
+      const targetRoot = path.join(root, 'target');
+      const fakeBin = path.join(root, 'bin');
+      fs.mkdirSync(fakeBin, { recursive: true });
+      const curlPath = path.join(fakeBin, 'curl');
+      fs.writeFileSync(curlPath, [
+        '#!/bin/sh',
+        'set -eu',
+        'output=""',
+        'while [ "$#" -gt 0 ]; do',
+        '  if [ "$1" = "-o" ]; then output="$2"; shift 2; else shift; fi',
+        'done',
+        'cat > "$output" <<\'INSTALL\'',
+        '#!/bin/sh',
+        'set -eu',
+        'mkdir -p "$REDEVEN_INSTALL_DIR"',
+        'printf \'#!/bin/sh\\necho redeven v1 abc\\n\' > "$REDEVEN_INSTALL_DIR/redeven"',
+        'chmod 775 "$REDEVEN_INSTALL_DIR/redeven"',
+        'INSTALL',
+        'chmod 775 "$output"',
+        '',
+      ].join('\n'));
+      fs.chmodSync(curlPath, 0o755);
+      const scriptPath = path.join(root, 'remote-install.sh');
+      fs.writeFileSync(scriptPath, buildManagedSSHRemoteInstallScript());
+
+      const stagingRoot = execFileSync('sh', [
+        '-c',
+        'umask 0002\nexec sh "$1" "$2" "$3" "$4"',
+        'redeven-remote-runtime-mode-test',
+        scriptPath,
+        targetRoot,
+        'v1',
+        'https://example.invalid/install.sh',
+      ], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}` },
+      }).trim();
+
+      expect(fileMode(stagingRoot)).toBe(0o700);
+      expect(fileMode(path.join(stagingRoot, 'bin'))).toBe(0o700);
+      expect(fileMode(path.join(stagingRoot, 'bin', 'redeven'))).toBe(0o700);
+      expect(fileMode(path.join(stagingRoot, MANAGED_RUNTIME_STAMP_FILENAME))).toBe(0o600);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not replace the managed Runtime when the private parent metadata cannot be committed', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-managed-runtime-mode-failure-'));
+    try {
+      const targetRoot = path.join(root, 'target');
+      const uploadDir = path.join(root, 'upload');
+      const fakeBin = path.join(root, 'bin');
+      fs.mkdirSync(path.join(targetRoot, 'runtime', 'managed'), { recursive: true });
+      fs.writeFileSync(path.join(targetRoot, 'runtime', 'managed', 'sentinel'), 'unchanged');
+      fs.mkdirSync(uploadDir, { recursive: true });
+      fs.mkdirSync(fakeBin, { recursive: true });
+      const archive = createRuntimeArchive(root);
+      const archiveCopy = path.join(uploadDir, 'redeven.tar.gz');
+      fs.copyFileSync(archive, archiveCopy);
+      const scriptPath = path.join(root, 'install.sh');
+      fs.writeFileSync(scriptPath, buildManagedSSHUploadedInstallScript());
+      const stagingRoot = execFileSync('sh', [
+        scriptPath,
+        targetRoot,
+        'v1',
+        archiveCopy,
+        uploadDir,
+      ], { encoding: 'utf8' }).trim();
+      const chmodPath = path.join(fakeBin, 'chmod');
+      fs.writeFileSync(chmodPath, '#!/bin/sh\nexit 73\n');
+      fs.chmodSync(chmodPath, 0o755);
+      const activateScriptPath = path.join(root, 'activate.sh');
+      fs.writeFileSync(activateScriptPath, buildManagedSSHActivatePreparedRuntimeScript());
+
+      expect(() => execFileSync('sh', [
+        activateScriptPath,
+        targetRoot,
+        'v1',
+        stagingRoot,
+      ], {
+        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}` },
+        stdio: 'pipe',
+      })).toThrow();
+      expect(fs.readFileSync(path.join(targetRoot, 'runtime', 'managed', 'sentinel'), 'utf8')).toBe('unchanged');
+      expect(fs.existsSync(stagingRoot)).toBe(true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('checks the SSH master socket, probes remote platform, and keeps bootstrap strategy explicit', () => {
@@ -290,7 +461,7 @@ describe('sshRuntime', () => {
     expect(source).toContain("code: 'ssh_connection_interrupted'");
     expect(source).toContain('recordSSHControlCheckFailure(session, error);');
     expect(source).toContain('parseLaunchReport(result.stdout)');
-    expect(source).toContain('formatBlockedLaunchDiagnostics(launchReport)');
+    expect(source).not.toContain('formatBlockedLaunchDiagnostics(launchReport)');
     expect(source).toContain('const replacementInventory = await processSession.inspect();');
     expect(source).toContain('await processSession.stop(replacementInventory, stopTimeoutMs);');
     expect(source).toContain('[preparedRuntimePackage, processSession] = await Promise.all([');

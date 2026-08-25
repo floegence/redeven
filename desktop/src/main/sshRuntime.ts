@@ -26,7 +26,7 @@ import {
 } from './runtimeProcessInventory';
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
-import { formatBlockedLaunchDiagnostics, parseLaunchReport, type LaunchBlockedReport } from './launchReport';
+import { parseLaunchReport, type LaunchBlockedReport } from './launchReport';
 import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
@@ -66,6 +66,15 @@ import {
   DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
   DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
 } from './runtimeHostAccess';
+import {
+  MANAGED_RUNTIME_DIRECTORY_MODE,
+  MANAGED_RUNTIME_EXECUTABLE_MODE,
+  MANAGED_RUNTIME_LINUX_COMPANION_FILENAMES,
+  MANAGED_RUNTIME_LINUX_EVIDENCE_FILENAMES,
+  MANAGED_RUNTIME_METADATA_MODE,
+  MANAGED_RUNTIME_STAMP_FILENAME,
+  MANAGED_RUNTIME_STAMP_SCHEMA_VERSION,
+} from './managedRuntimeSlot';
 
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
@@ -73,9 +82,6 @@ const DEFAULT_SSH_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 10;
 const DEFAULT_SSH_POLL_INTERVAL_MS = 200;
 const MAX_RECENT_LOG_CHARS = 8_000;
-export const MANAGED_SSH_RUNTIME_STAMP_FILENAME = 'managed-runtime.stamp';
-export const MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION = 2;
-
 type RemoteInstallStrategy = 'desktop_upload' | 'remote_install';
 type PreparedDesktopSSHUploadAsset = DesktopRuntimeUploadAsset;
 type PreparedManagedSSHRuntimePackage = Readonly<{
@@ -134,7 +140,7 @@ export type ManagedSSHRuntimeProcessSession = Readonly<{
   close: () => Promise<void>;
 }>;
 export type DesktopSSHRemoteRuntimeStamp = Readonly<{
-  schema_version: typeof MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION;
+  schema_version: typeof MANAGED_RUNTIME_STAMP_SCHEMA_VERSION;
   managed_by: 'redeven-desktop';
   slot_release_tag: string;
   install_strategy: RemoteInstallStrategy;
@@ -486,7 +492,7 @@ function buildManagedSSHRuntimePathShell(targetReleaseTagArg = '2'): string {
     'managed_root="${runtime_root%/}/runtime/managed"',
     'bin_dir="${managed_root}/bin"',
     'binary="${bin_dir}/redeven"',
-    `stamp_path="\${managed_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    `stamp_path="\${managed_root}/${MANAGED_RUNTIME_STAMP_FILENAME}"`,
   ].join('\n');
 }
 
@@ -539,7 +545,7 @@ function buildManagedSSHRuntimeProbeShell(): string {
     '    probe_reason="managed runtime stamp is missing"',
     '    return 1',
     '  fi',
-    `  if ! grep -Fx "schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}" "$stamp_path" >/dev/null 2>&1; then`,
+    `  if ! grep -Fx "schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}" "$stamp_path" >/dev/null 2>&1; then`,
     '    probe_status="stamp_invalid"',
     '    probe_reason="managed runtime stamp schema is invalid"',
     '    return 1',
@@ -594,7 +600,7 @@ function buildManagedSSHRuntimeStampShell(): string {
     '  mkdir -p "$managed_root"',
     '  temp_stamp="${stamp_path}.tmp.$$"',
     '  {',
-    `    printf 'schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}\\n'`,
+    `    printf 'schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}\\n'`,
     "    printf 'managed_by=redeven-desktop\\n'",
     "    printf 'slot_release_tag=%s\\n' \"$slot_release_tag\"",
     "    printf 'install_strategy=%s\\n' \"$install_strategy\"",
@@ -609,7 +615,7 @@ function buildManagedSSHRuntimeSwitchShell(): string {
   return [
     'switch_staged_runtime() {',
     '  staged_binary="${staging_root}/bin/redeven"',
-    `  staged_stamp="\${staging_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    `  staged_stamp="\${staging_root}/${MANAGED_RUNTIME_STAMP_FILENAME}"`,
     '  if [ ! -x "$staged_binary" ]; then',
     '    echo "staged Redeven binary is missing" >&2',
     '    return 1',
@@ -618,7 +624,9 @@ function buildManagedSSHRuntimeSwitchShell(): string {
     '    echo "staged Redeven stamp is missing" >&2',
     '    return 1',
     '  fi',
-    '  mkdir -p "$(dirname "$managed_root")"',
+    '  managed_parent="$(dirname "$managed_root")"',
+    '  mkdir -p "$managed_parent"',
+    `  chmod ${MANAGED_RUNTIME_DIRECTORY_MODE} "$managed_parent"`,
     '  previous_managed_root="${managed_root}.previous.$$"',
     '  rm -rf "$previous_managed_root"',
     '  if [ -e "$managed_root" ]; then',
@@ -632,6 +640,21 @@ function buildManagedSSHRuntimeSwitchShell(): string {
     '    mv "$previous_managed_root" "$managed_root" || true',
     '  fi',
     '  return 1',
+    '}',
+  ].join('\n');
+}
+
+function buildManagedRuntimeMetadataShell(): string {
+  const evidenceFilenames = MANAGED_RUNTIME_LINUX_EVIDENCE_FILENAMES.join(' ');
+  return [
+    'normalize_managed_runtime_metadata() {',
+    `  chmod ${MANAGED_RUNTIME_DIRECTORY_MODE} "$staging_root" "$staging_root/bin"`,
+    `  chmod ${MANAGED_RUNTIME_EXECUTABLE_MODE} "$staging_root/bin/redeven"`,
+    `  if [ -e "$staging_root/bin/redevplugin-runtime" ]; then chmod ${MANAGED_RUNTIME_EXECUTABLE_MODE} "$staging_root/bin/redevplugin-runtime"; fi`,
+    `  for metadata in ${evidenceFilenames} ${MANAGED_RUNTIME_STAMP_FILENAME}; do`,
+    `    if [ -e "$staging_root/$metadata" ]; then chmod ${MANAGED_RUNTIME_METADATA_MODE} "$staging_root/$metadata"; fi`,
+    `    if [ -e "$staging_root/bin/$metadata" ]; then chmod ${MANAGED_RUNTIME_METADATA_MODE} "$staging_root/bin/$metadata"; fi`,
+    '  done',
     '}',
   ].join('\n');
 }
@@ -657,10 +680,12 @@ export function buildManagedSSHRuntimeProbeScript(): string {
 export function buildManagedSSHRemoteInstallScript(): string {
   return [
     'set -eu',
+    'umask 077',
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
     'install_script_url="$3"',
     buildManagedSSHRuntimeStampShell(),
+    buildManagedRuntimeMetadataShell(),
     'if [ -z "$target_release_tag" ]; then',
     '  echo "target release tag is required for remote runtime install" >&2',
     '  exit 1',
@@ -680,7 +705,7 @@ export function buildManagedSSHRemoteInstallScript(): string {
     'old_stamp_path="$stamp_path"',
     'old_managed_root="$managed_root"',
     'managed_root="$staging_root"',
-    `  stamp_path="\${managed_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    `  stamp_path="\${managed_root}/${MANAGED_RUNTIME_STAMP_FILENAME}"`,
     'write_runtime_stamp "remote_install" "$target_release_tag"',
     'managed_root="$old_managed_root"',
     'stamp_path="$old_stamp_path"',
@@ -701,6 +726,7 @@ export function buildManagedSSHRemoteInstallScript(): string {
     '  exit 1',
     'fi',
     'rm -f "$script_path"',
+    'normalize_managed_runtime_metadata',
     'cleanup_staging=0',
     'trap - EXIT INT TERM',
     'printf "%s\\n" "$staging_root"',
@@ -710,11 +736,13 @@ export function buildManagedSSHRemoteInstallScript(): string {
 export function buildManagedSSHUploadedInstallScript(): string {
   return [
     'set -eu',
+    'umask 077',
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
     'archive_path="$3"',
     'upload_dir="$4"',
     buildManagedSSHRuntimeStampShell(),
+    buildManagedRuntimeMetadataShell(),
     'if [ -z "$target_release_tag" ]; then',
     '  echo "target release tag is required for uploaded runtime install" >&2',
     '  exit 1',
@@ -743,15 +771,15 @@ export function buildManagedSSHUploadedInstallScript(): string {
     '  exit 1',
     'fi',
     'mv "$binary_path" "${staging_root}/bin/redeven"',
-    'chmod +x "${staging_root}/bin/redeven"',
+    `chmod ${MANAGED_RUNTIME_EXECUTABLE_MODE} "\${staging_root}/bin/redeven"`,
     // Runtime packages carry the verified ReDevPlugin release evidence next
     // to the binary. Keep those files in the managed slot so a fresh daemon
     // can validate its plugin runtime before opening the environment.
-    'for companion in .redevplugin-release-artifacts-verified.json REDEVPLUGIN_THIRD_PARTY_NOTICES.md REDEVPLUGIN_RUNTIME.spdx.json redevplugin-runtime.provenance.json redevplugin-runtime.sig redevplugin-runtime.pem redevplugin-runtime; do',
+    `for companion in ${MANAGED_RUNTIME_LINUX_COMPANION_FILENAMES.join(' ')}; do`,
     '  if [ "$companion" = "redevplugin-runtime" ]; then',
     '    [ -x "${extract_dir}/$companion" ] || { echo "uploaded Runtime archive is missing $companion" >&2; exit 1; }',
     '    cp "${extract_dir}/$companion" "${staging_root}/bin/$companion"',
-    '    chmod +x "${staging_root}/bin/$companion"',
+    `    chmod ${MANAGED_RUNTIME_EXECUTABLE_MODE} "\${staging_root}/bin/$companion"`,
     '  else',
     '    [ -f "${extract_dir}/$companion" ] || { echo "uploaded Runtime archive is missing $companion" >&2; exit 1; }',
     '    cp "${extract_dir}/$companion" "${staging_root}/bin/$companion"',
@@ -771,10 +799,11 @@ export function buildManagedSSHUploadedInstallScript(): string {
     'old_stamp_path="$stamp_path"',
     'old_managed_root="$managed_root"',
     'managed_root="$staging_root"',
-    `stamp_path="\${managed_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    `stamp_path="\${managed_root}/${MANAGED_RUNTIME_STAMP_FILENAME}"`,
     'write_runtime_stamp "desktop_upload" "$target_release_tag"',
     'managed_root="$old_managed_root"',
     'stamp_path="$old_stamp_path"',
+    'normalize_managed_runtime_metadata',
     'cleanup_staging=0',
     'printf "%s\\n" "$staging_root"',
   ].join('\n');
@@ -791,12 +820,12 @@ export function buildManagedSSHActivatePreparedRuntimeScript(): string {
     '  *) echo "prepared runtime path is outside the managed staging layout" >&2; exit 1 ;;',
     'esac',
     'staged_binary="${staging_root}/bin/redeven"',
-    `staged_stamp="\${staging_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    `staged_stamp="\${staging_root}/${MANAGED_RUNTIME_STAMP_FILENAME}"`,
     'if [ ! -x "$staged_binary" ] || [ ! -f "$staged_stamp" ]; then',
     '  echo "prepared runtime package is incomplete" >&2',
     '  exit 1',
     'fi',
-    `grep -Fx "schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}" "$staged_stamp" >/dev/null`,
+    `grep -Fx "schema_version=${MANAGED_RUNTIME_STAMP_SCHEMA_VERSION}" "$staged_stamp" >/dev/null`,
     'grep -Fx "managed_by=redeven-desktop" "$staged_stamp" >/dev/null',
     'grep -Fx "slot_release_tag=$target_release_tag" "$staged_stamp" >/dev/null',
     'if ! staged_version_output="$("$staged_binary" version 2>/dev/null)"; then',
@@ -1898,51 +1927,62 @@ async function waitForRemoteStartupReport(args: Readonly<{
       ]),
     );
     if (result.exit_code === 0) {
+      let launchReport: ReturnType<typeof parseLaunchReport>;
       try {
-        const launchReport = parseLaunchReport(result.stdout);
-        if (launchReport.status === 'blocked') {
-          const classification = classifyDesktopRuntimeBlockedLaunchReport(launchReport, {
-            target_runtime_version: args.runtimeReleaseTag,
-          });
-          if (
-            classification.kind === 'restart_required'
-            && desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable(classification.maintenance)
-          ) {
-            if (Date.now() >= deadline) {
-              throw readinessTimeoutFailure(
-                classification.maintenance.message,
-                args.session.logs,
-                {
-                  title: 'SSH Runtime Launch Timed Out',
-                  detail: 'Redeven is running on the SSH host, but Desktop could not verify the management socket before the timeout.',
-                  targetLabel: desktopSSHAuthority(args.session.target),
-                },
-              );
-            }
-            await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
-            continue;
-          }
-          throw new Error(`Remote Redeven could not start:\n${formatBlockedLaunchDiagnostics(launchReport)}`);
-        }
-        return {
-          startup: launchReport.startup,
-          launch_mode: launchReport.status === 'attached' ? 'attached' : 'spawned',
-        };
-      } catch (error) {
-        if (error instanceof DesktopSSHRuntimeReadinessTimeoutError) {
-          throw error;
-        }
+        launchReport = parseLaunchReport(result.stdout);
+      } catch {
         throw readinessFailure(
-          error instanceof Error ? error.message : 'Remote Redeven startup report was invalid.',
+          'Desktop received an invalid Runtime startup report from the SSH host.',
           args.session.logs,
           {
             code: 'ssh_runtime_launch_failed',
             title: 'SSH Runtime Startup Report Invalid',
+            titleKey: 'progress.sshRuntimeStartupReportInvalidTitle',
+            summaryKey: 'progress.sshRuntimeStartupReportInvalidSummary',
             detail: 'Redeven started on the SSH host but wrote a startup report Desktop could not use.',
             targetLabel: desktopSSHAuthority(args.session.target),
           },
         );
       }
+      if (launchReport.status === 'blocked') {
+        const classification = classifyDesktopRuntimeBlockedLaunchReport(launchReport, {
+          target_runtime_version: args.runtimeReleaseTag,
+        });
+        if (
+          classification.kind === 'restart_required'
+          && desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable(classification.maintenance)
+        ) {
+          if (Date.now() >= deadline) {
+            throw readinessTimeoutFailure(
+              classification.maintenance.message,
+              args.session.logs,
+              {
+                title: 'SSH Runtime Launch Timed Out',
+                detail: 'Redeven is running on the SSH host, but Desktop could not verify the management socket before the timeout.',
+                targetLabel: desktopSSHAuthority(args.session.target),
+              },
+            );
+          }
+          await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
+          continue;
+        }
+        throw readinessFailure(
+          launchReport.message,
+          args.session.logs,
+          {
+            code: 'ssh_runtime_launch_failed',
+            title: 'SSH Runtime Start Failed',
+            titleKey: 'progress.sshRuntimeReportedStartupFailureTitle',
+            detail: launchReport.message,
+            detailKey: 'progress.sshRuntimeReportedStartupFailureDetail',
+            targetLabel: desktopSSHAuthority(args.session.target),
+          },
+        );
+      }
+      return {
+        startup: launchReport.startup,
+        launch_mode: launchReport.status === 'attached' ? 'attached' : 'spawned',
+      };
     }
 
     const controlResult = args.getControlResult();

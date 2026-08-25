@@ -213,6 +213,13 @@ environment remain available. It does not execute a worker through another
 path. Missing evidence, digest or target mismatch, invalid metadata, and all
 other admission failures still fail closed.
 
+Desktop owns the product-managed slot that supplies the sibling executable. It
+installs the managed directories and executables with private `0700` metadata
+and the stamp, SBOM, provenance, signature, certificate, notices, and release
+descriptor with `0600` metadata before activation. This packaging rule does not
+replace ReDevPlugin admission: later ownership, permission, identity, ELF, or
+digest drift is still rejected by the released Host without a fallback.
+
 Official Containers `4.4.9` is a signed manifest-v9 release-ref package over the
 `redeven.capability.container_resources@3.0.0` adapter. The latest-only market
 selects its immutable GitHub Release and complete transport, while ReDevPlugin

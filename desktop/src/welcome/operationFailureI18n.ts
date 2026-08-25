@@ -8,6 +8,7 @@ function compact(value: unknown): string {
 function failureParams(failure: DesktopOperationFailurePresentation): TranslationParams {
   return {
     target: compact(failure.target_label) || 'Runtime',
+    reason: compact(failure.detail),
   };
 }
 

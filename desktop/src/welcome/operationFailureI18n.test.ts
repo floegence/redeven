@@ -40,6 +40,24 @@ describe('operationFailureI18n', () => {
     expect(localizedOperationFailureSummary(createDesktopI18n('zh-CN'), failure)).toBe('准备网关包未完成。');
   });
 
+  it('shows the Runtime-reported SSH startup reason without classifying the report as invalid', () => {
+    const failure: DesktopOperationFailurePresentation = {
+      code: 'ssh_runtime_launch_failed',
+      severity: 'error',
+      title: 'SSH Runtime Start Failed',
+      title_key: 'progress.runtimeStartFailedTitle',
+      summary: 'admission failed',
+      detail: 'directory capability metadata',
+      detail_key: 'progress.sshRuntimeReportedStartupFailureDetail',
+      target_label: 'orange',
+    };
+
+    expect(localizedOperationFailureDetail(createDesktopI18n('en-US'), failure))
+      .toBe('Runtime reported: directory capability metadata');
+    expect(localizedOperationFailureDetail(createDesktopI18n('zh-CN'), failure))
+      .toBe('运行时报告：directory capability metadata');
+  });
+
   it.each([
     'runtime_package_prepare_failed',
     'redevplugin_release_asset_forbidden',
