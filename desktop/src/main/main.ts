@@ -2571,6 +2571,7 @@ function launcherActionSuccess(
   outcome: DesktopLauncherActionSuccess['outcome'],
   options: Readonly<{
     operationKey?: string;
+    operationStartedAtUnixMS?: number;
     sessionKey?: string;
     utilityWindowKind?: DesktopLauncherActionSuccess['utility_window_kind'];
     reinstallPreview?: DesktopLauncherActionSuccess['reinstall_preview'];
@@ -2580,6 +2581,10 @@ function launcherActionSuccess(
     ok: true,
     outcome,
     operation_key: compact(options.operationKey) || undefined,
+    operation_started_at_unix_ms: Number.isFinite(options.operationStartedAtUnixMS)
+      && Number(options.operationStartedAtUnixMS) > 0
+      ? Math.floor(Number(options.operationStartedAtUnixMS))
+      : undefined,
     session_key: options.sessionKey,
     utility_window_kind: options.utilityWindowKind,
     reinstall_preview: options.reinstallPreview,
@@ -6786,6 +6791,7 @@ async function previewReinstallTargetFromLauncher(
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('previewed_reinstall_target', {
       operationKey,
+      operationStartedAtUnixMS: operation.started_at_unix_ms,
       reinstallPreview: preview,
     });
   } catch (error) {
@@ -6873,7 +6879,10 @@ async function reinstallTargetFromLauncher(
     || existing.status === 'canceling'
     || existing.status === 'cleanup_running'
   )) {
-    return launcherActionSuccess('reinstall_target_in_progress', { operationKey });
+    return launcherActionSuccess('reinstall_target_in_progress', {
+      operationKey,
+      operationStartedAtUnixMS: existing.started_at_unix_ms,
+    });
   }
   if (existing?.action === 'reinstall_target' && existing.status === 'succeeded') {
     return launcherActionSuccess('reinstalled_target', { operationKey });
