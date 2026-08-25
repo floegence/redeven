@@ -127,11 +127,36 @@ describe('main routing', () => {
     expect(mainSrc).toContain(
       'prepare_process_session: async (descriptor, targetRoot, executor, platform, signal) => openReinstallTargetProcessSession',
     );
-    const freshInstallStart = mainSrc.indexOf('async function installFreshDirectReinstallTarget(');
-    const freshInstallEnd = mainSrc.indexOf('async function verifyFreshDirectReinstallTarget(', freshInstallStart);
+    const freshInstallStart = mainSrc.indexOf('async function installFreshReinstallRuntime(');
+    const freshInstallEnd = mainSrc.indexOf('async function startFreshReinstallRuntime(', freshInstallStart);
     const freshInstallSrc = mainSrc.slice(freshInstallStart, freshInstallEnd);
-    expect(freshInstallSrc).toContain('activateManagedComponentBatch(');
-    expect(freshInstallSrc).toContain('startRuntimePlacementBridgeSession({');
+    expect(freshInstallSrc).toContain('installReinstallRuntimePackage(');
+    expect(freshInstallSrc).not.toContain('startRuntimePlacementBridgeSession({');
+    expect(freshInstallSrc).not.toContain('runtimeHostExecutor(');
+    const freshStartStart = freshInstallEnd;
+    const freshStartEnd = mainSrc.indexOf('async function finalizeFreshReinstallRuntime(', freshStartStart);
+    const freshStartSrc = mainSrc.slice(freshStartStart, freshStartEnd);
+    expect(freshStartSrc).toContain('startReinstallRuntime({');
+    expect(mainSrc).toContain('const ready = await verifyReinstallRuntimeReady({');
+    const freshAccessStart = mainSrc.indexOf('async function verifyReinstallTargetCatalogAndLocalUI(');
+    const freshAccessEnd = mainSrc.indexOf('function reinstallTargetCoordinator()', freshAccessStart);
+    const freshAccessSrc = mainSrc.slice(freshAccessStart, freshAccessEnd);
+    expect(freshAccessSrc).toContain('probeExternalLocalUIStartup(bridge.startup.local_ui_url');
+    expect(freshAccessSrc).toContain('signal,');
+    expect(freshAccessSrc).toContain('runtimeServiceIsOpenable(localUI.value.runtime_service)');
+    expect(freshStartSrc).not.toContain('runtimeHostExecutor(');
+    const placementStart = mainSrc.indexOf('function resolvedReinstallRuntimePlacement(');
+    const placementEnd = mainSrc.indexOf('async function prepareFreshReinstallRuntimePackage(', placementStart);
+    const placementSrc = mainSrc.slice(placementStart, placementEnd);
+    expect(placementSrc).toContain('desktopRuntimePlacementStateRoot(descriptor.placement)');
+    expect(placementSrc).not.toContain('runtime_state_root: targetRoot');
+    const failureMappingStart = mainSrc.indexOf('function reinstallFailureForPhase(');
+    const failureMappingEnd = mainSrc.indexOf('function launcherActionFailureFromRuntimeStartError(', failureMappingStart);
+    const failureMappingSrc = mainSrc.slice(failureMappingStart, failureMappingEnd);
+    expect(failureMappingSrc).toContain("case 'runtime_installed':");
+    expect(failureMappingSrc).toContain("code: 'reinstall_runtime_install_failed'");
+    expect(failureMappingSrc).toContain("code: 'reinstall_runtime_verification_failed'");
+    expect(failureMappingSrc).toContain("code: 'reinstall_runtime_access_failed'");
     expect(freshInstallSrc).not.toContain('ensureManagedGatewayServiceReady(');
     expect(freshInstallSrc).not.toContain('ensureRuntimePlacementReady(');
     expect(freshInstallSrc).not.toContain('ensureManagedSSHRuntimeReady(');
@@ -155,6 +180,15 @@ describe('main routing', () => {
     );
     const executeLifecycleSrc = mainSrc.slice(executeLifecycleStart, executeLifecycleEnd);
     expect(executeLifecycleSrc).not.toContain('reinstallTargetRequiredFailureIfPresent');
+    expect(executeLifecycleSrc).toContain("if (input.operation !== 'stop')");
+    expect(executeLifecycleSrc).toContain('await verifyManagedRuntimeLifecycleAccess({');
+    const lifecycleAccessStart = mainSrc.indexOf('async function verifyManagedRuntimeLifecycleAccess(');
+    const lifecycleAccessEnd = mainSrc.indexOf('function runtimeBridgeStartCanRecover(', lifecycleAccessStart);
+    const lifecycleAccessSrc = mainSrc.slice(lifecycleAccessStart, lifecycleAccessEnd);
+    expect(lifecycleAccessSrc).toContain('runtimeServiceIsOpenable(ready.startup.runtime_service)');
+    expect(lifecycleAccessSrc).toContain('startRuntimePlacementBridgeSession({');
+    expect(lifecycleAccessSrc).toContain('runtimeServiceIsOpenable(localUI.value.runtime_service)');
+    expect(mainSrc).not.toContain('waitForDesktopRuntimeLifecycleReadiness');
     expect(lifecycleSrc).not.toContain('localEnvironmentPairingRequiredLauncherFailure');
     expect(lifecycleSrc).not.toContain('upsertDirectRuntimeGateway');
 
@@ -916,7 +950,7 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('async function ensureSSHRuntimeReadyRecordUncoordinated(');
     expect(routeSnapshotSrc).not.toContain('ensureManagedSSHRuntimeReady({');
     expect(mainSrc.slice(
-      mainSrc.indexOf('async function installFreshDirectReinstallTarget('),
+      mainSrc.indexOf('async function installFreshReinstallRuntime('),
       mainSrc.indexOf('async function verifyFreshDirectReinstallTarget('),
     )).not.toContain('ensureManagedSSHRuntimeReady({');
 

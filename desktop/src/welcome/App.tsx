@@ -8693,6 +8693,11 @@ function EnvironmentProgressPanel(props: Readonly<{
       }))
       .filter((group) => group.actions.length > 0);
   });
+  const hasPanelActions = createMemo(() => (
+    nextActionGroups().length > 0
+    || canCancel()
+    || panelPrimaryAction() !== null
+  ));
   const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string; detail?: string; tasks?: readonly import('../shared/desktopLauncherIPC').DesktopComponentTaskProgress[] }[]>(() => {
     const steps = stepProgress();
     if (steps) {
@@ -8789,10 +8794,7 @@ function EnvironmentProgressPanel(props: Readonly<{
   );
   const renderNextActionGroups = () => (
     <Show when={nextActionGroups().length > 0}>
-      <div
-        class="redeven-action-popover__action-stack"
-        data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}
-      >
+      <div class="redeven-action-popover__action-stack">
         <For each={nextActionGroups()}>
           {(group) => (
             <div
@@ -8867,63 +8869,63 @@ function EnvironmentProgressPanel(props: Readonly<{
       tabIndex={-1}
       aria-live="polite"
     >
-      <div class="redeven-action-popover__status-header">
-        <span class="redeven-action-popover__status-icon" data-tone={iconTone()}>
-          <Show when={iconTone() === 'success'} fallback={(
-            <Show when={iconTone() === 'error'} fallback={<span class="redeven-action-popover__status-dot" />}>
-              <X />
+      <div class="redeven-environment-progress__body">
+        <div class="redeven-action-popover__status-header">
+          <span class="redeven-action-popover__status-icon" data-tone={iconTone()}>
+            <Show when={iconTone() === 'success'} fallback={(
+              <Show when={iconTone() === 'error'} fallback={<span class="redeven-action-popover__status-dot" />}>
+                <X />
+              </Show>
+            )}>
+              <Check />
             </Show>
-          )}>
-            <Check />
-          </Show>
-        </span>
-        <div class="redeven-action-popover__status-text">
-          <div class="redeven-action-popover__eyebrow">{environmentProgressStatus(props.i18n, props.progress)}</div>
-          <div class="redeven-action-popover__title">{localizedProgressTitle(props.i18n, props.progress)}</div>
-          <div class="redeven-environment-progress__target">{environmentProgressLabel(props.i18n, props.progress)}</div>
-        </div>
-      </div>
-      <Show when={progressLeadDetail()}>
-        {(detail) => <div class="redeven-action-popover__detail">{detail()}</div>}
-      </Show>
-      <Show when={props.progress.status === 'needs_confirmation' && props.progress.reinstall_preview}>
-        {(preview) => (
-          <div class="redeven-runtime-impact" data-tone="warning">
-            <div class="redeven-runtime-impact__summary">{props.i18n.t(reinstallTargetDescriptionKey(preview().mode))}</div>
-            <details class="redeven-runtime-impact__technical">
-              <summary>{props.i18n.t('confirm.reinstallTargetDetails')}</summary>
-              <div class="redeven-runtime-impact__detail space-y-1">
-                <div>{props.i18n.t('confirm.reinstallTargetHost', { host: localizedReinstallHost(props.i18n, preview().host_label) })}</div>
-                <Show when={preview().container_id}>
-                  {(containerID) => <div>{props.i18n.t('confirm.reinstallTargetContainer', { container: containerID() })}</div>}
-                </Show>
-                <div class="font-mono break-all">{props.i18n.t('confirm.reinstallTargetRoot', { root: preview().target_root })}</div>
-                <div>{preview().target_exists_known
-                  ? props.i18n.t('confirm.reinstallTargetProcessCount', { count: preview().processes.length })
-                  : props.i18n.t('confirm.reinstallTargetProcessCountUnknown')}</div>
-                <div>{props.i18n.t('confirm.reinstallAffectedEnvironmentCount', { count: preview().affected_environment_ids.length })}</div>
-                <ul class="list-disc space-y-1 pl-4">
-                  <For each={preview().deleted_data_keys}>
-                    {(dataKey) => <li>{props.i18n.t(reinstallDeletedDataTranslationKey(dataKey))}</li>}
-                  </For>
-                </ul>
-                <div class="font-medium text-destructive">{props.i18n.t('confirm.reinstallIrreversible')}</div>
-              </div>
-            </details>
+          </span>
+          <div class="redeven-action-popover__status-text">
+            <div class="redeven-action-popover__eyebrow">{environmentProgressStatus(props.i18n, props.progress)}</div>
+            <div class="redeven-action-popover__title">{localizedProgressTitle(props.i18n, props.progress)}</div>
+            <div class="redeven-environment-progress__target">{environmentProgressLabel(props.i18n, props.progress)}</div>
           </div>
-        )}
-      </Show>
-      <Show when={!hasStepTimeline()}>
-        {renderFailureNotice()}
-        {renderNextActionGroups()}
-      </Show>
-      <Show when={hasStepTimeline()}>
-        <>
-          <div
-            class="redeven-environment-progress__steps"
-            role="list"
-            aria-label={props.i18n.t('progress.environmentProgress')}
-          >
+        </div>
+        <Show when={progressLeadDetail()}>
+          {(detail) => <div class="redeven-action-popover__detail">{detail()}</div>}
+        </Show>
+        <Show when={props.progress.status === 'needs_confirmation' && props.progress.reinstall_preview}>
+          {(preview) => (
+            <div class="redeven-runtime-impact" data-tone="warning">
+              <div class="redeven-runtime-impact__summary">{props.i18n.t(reinstallTargetDescriptionKey(preview().mode))}</div>
+              <details class="redeven-runtime-impact__technical">
+                <summary>{props.i18n.t('confirm.reinstallTargetDetails')}</summary>
+                <div class="redeven-runtime-impact__detail space-y-1">
+                  <div>{props.i18n.t('confirm.reinstallTargetHost', { host: localizedReinstallHost(props.i18n, preview().host_label) })}</div>
+                  <Show when={preview().container_id}>
+                    {(containerID) => <div>{props.i18n.t('confirm.reinstallTargetContainer', { container: containerID() })}</div>}
+                  </Show>
+                  <div class="font-mono break-all">{props.i18n.t('confirm.reinstallTargetRoot', { root: preview().target_root })}</div>
+                  <div>{preview().target_exists_known
+                    ? props.i18n.t('confirm.reinstallTargetProcessCount', { count: preview().processes.length })
+                    : props.i18n.t('confirm.reinstallTargetProcessCountUnknown')}</div>
+                  <div>{props.i18n.t('confirm.reinstallAffectedEnvironmentCount', { count: preview().affected_environment_ids.length })}</div>
+                  <ul class="list-disc space-y-1 pl-4">
+                    <For each={preview().deleted_data_keys}>
+                      {(dataKey) => <li>{props.i18n.t(reinstallDeletedDataTranslationKey(dataKey))}</li>}
+                    </For>
+                  </ul>
+                  <div class="font-medium text-destructive">{props.i18n.t('confirm.reinstallIrreversible')}</div>
+                </div>
+              </details>
+            </div>
+          )}
+        </Show>
+        <Show when={!hasStepTimeline()}>
+          {renderFailureNotice()}
+        </Show>
+        <Show when={hasStepTimeline()}>
+          <>
+            <div
+              class="redeven-environment-progress__steps"
+              role="list"
+              aria-label={props.i18n.t('progress.environmentProgress')}
+            >
               <Index each={phaseSequence()}>
                 {(step, index) => {
                   const state = () => stepState(
@@ -9012,44 +9014,49 @@ function EnvironmentProgressPanel(props: Readonly<{
               </Show>
             </div>
             {renderFailureNotice()}
-            {renderNextActionGroups()}
           </>
-      </Show>
-      <Show when={canCancel()}>
-        <div class="redeven-action-popover__actions">
-          <Button
-            size="sm"
-            variant="outline"
-            class="w-full justify-center gap-1.5"
-            title={localizedProgressInterruptDetail(props.i18n, props.progress)}
-            onClick={() => props.cancelOperation(props.progress)}
-          >
-            <Stop class="h-3.5 w-3.5" />
-            {localizedProgressInterruptLabel(props.i18n, props.progress)}
-          </Button>
-        </div>
-      </Show>
-      <Show when={panelPrimaryAction()}>
-        {(action) => (
-          <div class="redeven-action-popover__actions">
-            <Button
-              size="sm"
-              variant="default"
-              class="w-full justify-center gap-1.5"
-              loading={action().loading}
-              disabled={action().disabled}
-              onClick={() => props.runPrimaryAction?.(action().action)}
-            >
-              <Show
-                when={action().icon === 'refresh'}
-                fallback={<ExternalLink class="h-3.5 w-3.5" />}
+        </Show>
+      </div>
+      <Show when={hasPanelActions()}>
+        <div class="redeven-action-popover__action-footer">
+          {renderNextActionGroups()}
+          <Show when={canCancel()}>
+            <div class="redeven-action-popover__actions">
+              <Button
+                size="sm"
+                variant="outline"
+                class="w-full justify-center gap-1.5"
+                title={localizedProgressInterruptDetail(props.i18n, props.progress)}
+                onClick={() => props.cancelOperation(props.progress)}
               >
-                <Refresh class="h-3.5 w-3.5" />
-              </Show>
-              {action().label}
-            </Button>
-          </div>
-        )}
+                <Stop class="h-3.5 w-3.5" />
+                {localizedProgressInterruptLabel(props.i18n, props.progress)}
+              </Button>
+            </div>
+          </Show>
+          <Show when={panelPrimaryAction()}>
+            {(action) => (
+              <div class="redeven-action-popover__actions">
+                <Button
+                  size="sm"
+                  variant="default"
+                  class="w-full justify-center gap-1.5"
+                  loading={action().loading}
+                  disabled={action().disabled}
+                  onClick={() => props.runPrimaryAction?.(action().action)}
+                >
+                  <Show
+                    when={action().icon === 'refresh'}
+                    fallback={<ExternalLink class="h-3.5 w-3.5" />}
+                  >
+                    <Refresh class="h-3.5 w-3.5" />
+                  </Show>
+                  {action().label}
+                </Button>
+              </div>
+            )}
+          </Show>
+        </div>
       </Show>
     </div>
   );

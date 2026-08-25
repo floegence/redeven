@@ -53,7 +53,8 @@ Read-only health probes do not start, stop, repair, or reconnect Runtime. Access
 - `redeven:desktop/src/main/desktopBundle.ts:1` - Runtime-only bundle identity and file validation.
 - `redeven:desktop/src/main/desktopWelcomeRuntimeState.ts:1` - Local readiness hydration with explicit state and Runtime roots.
 - `redeven:desktop/src/main/runtimeProcess.ts:1` - Local inventory and status lookup path contract.
-- `redeven:desktop/src/main/runtimeLifecycleReadiness.ts:1` - Bounded healthy and stopped completion barriers.
+- `redeven:desktop/src/main/runtimePlacementManager.ts:1` - Container process replacement, startup waiting, and ready Runtime snapshots.
+- `redeven:desktop/src/main/reinstallRuntimePackage.ts:1` - Reinstall startup, single-process inventory, and Runtime Service terminal verification.
 - `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - One probe/decide/lifecycle/re-probe/open flow.
 - `redeven:desktop/src/main/launcherOperations.ts:1` - Authoritative progress surface and terminal state.
 - `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Direct managed versus access-only capability boundary.

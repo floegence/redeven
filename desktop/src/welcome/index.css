@@ -2630,12 +2630,6 @@ html:not(.dark) .redeven-header-separator {
   border-top: 1px solid color-mix(in srgb, var(--border) 46%, transparent);
 }
 
-.redeven-action-popover__action-stack[data-placement='after-steps'] {
-  margin-top: 0.45rem;
-  padding-top: 0;
-  border-top: 0;
-}
-
 .redeven-action-popover__actions {
   display: flex;
   min-width: 0;
@@ -2689,8 +2683,45 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-environment-progress {
+  display: flex;
+  max-height: var(--redeven-anchored-overlay-max-height, none);
   min-width: 0;
-  gap: 0.55rem;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.redeven-environment-progress__body {
+  min-width: 0;
+  min-height: 0;
+  padding: 1.125rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.redeven-action-popover__action-footer {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.65rem 1.125rem 1.125rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
+  background: var(--popover);
+  box-shadow: 0 -0.5rem 1rem -0.9rem color-mix(in srgb, var(--foreground) 28%, transparent);
+}
+
+.redeven-action-popover__action-footer .redeven-action-popover__action-stack {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.redeven-action-popover__action-footer > .redeven-action-popover__actions:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .redeven-environment-progress__header {
