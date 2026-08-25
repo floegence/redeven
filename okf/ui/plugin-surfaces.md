@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: Plugin surfaces
-description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows, and Workbench widgets.
+description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows and pinned pages, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
 timestamp: 2026-07-29T00:00:00Z
 quality_exception: Cross-surface plugin UX contract spanning exact inventory, discovery, package review, lifecycle governance, and Activity and Workbench placement.
@@ -10,14 +10,15 @@ quality_exception: Cross-surface plugin UX contract spanning exact inventory, di
 
 Plugin UI uses released ReDevPlugin sandbox surfaces inside Redeven-owned
 navigation and placement. The Launcher and Plugin Center route exact inventory
-identities through discovery, trust and lifecycle review, recovery, permissions,
-installation, and updates. Activity opens Shell-root windows and Workbench opens
-`redeven.plugin` widgets, always with fresh SDK slots. ReDevPlugin remains the
+identities through discovery, lifecycle review, permissions, installation,
+updates, and recovery. Activity opens a Shell-root window, an Activity Bar pin
+opens a full main-area page, and Workbench opens a `redeven.plugin` widget, with
+fresh SDK slots for every placement change. ReDevPlugin remains the
 authority for package admission, lifecycle `action_state`, confirmations,
 Events, bridge sessions, exact-surface close, and revocation; Redeven owns the
 accessible product presentation, filters, and serialized placement. Unknown
-mutation or close outcomes invalidate stale local authority and require platform
-reconciliation rather than wider teardown or blind retry.
+mutation or close outcomes require platform reconciliation, never wider teardown
+or blind retry.
 
 # Contract
 
@@ -40,16 +41,23 @@ Escape clears search before closing, focus is trapped and restored, background
 content is inert, and arrow/Home/End navigation remains within the visible grid.
 Each plugin is a semantic list item containing a native primary button. The
 compact launcher header exposes one market icon action for Plugin Center;
-plugin tiles do not render an overflow menu. In Workbench placement, installed
+plugin tiles do not render a visible overflow button. Right-click, Context Menu,
+and Shift+F10 expose exactly one mode-specific pin or unpin action, with arrow,
+Home/End, Enter, Escape, outside dismissal, and focus restoration. The menu uses
+the released `SurfaceFloatingLayer`; Workbench requests project into the owning
+surface rather than viewport-fixed coordinates. In Workbench placement, installed
 tiles and pinned Dock items use the released Floe Webapp drag transaction. Over
 the canvas it projects the standard `redeven.plugin` frame from its 1120 by 760
 world-unit definition; pointer release commits the same resolved world center,
 so zoom, pan, and edge auto-pan cannot move the created widget away from its
 preview. A canvas drop creates a fresh widget without recentering the viewport,
 while a Dock drop only pins the inventory item. Cancellation or release outside
-both targets performs no action. Pin
-persistence is renderer- and environment-scoped, versioned, ordered,
-idempotent, and malformed or future state fails closed. Absent product mutation
+both targets performs no action. Pin persistence is one renderer- and
+environment-scoped v2 record with independent ordered `activityInventoryKeys`
+and `workbenchInventoryKeys` lists. v1 Dock order migrates only into the
+Workbench list. Duplicate operations are idempotent, malformed or future state
+fails closed, and an unavailable plugin leaves a dormant record that reappears
+when its current inventory target becomes launchable. Absent product mutation
 APIs are not simulated. Click suppression after a drag belongs only to Floe's
 shared drag transaction; the Launcher keeps no second suppression flag.
 
@@ -357,7 +365,7 @@ confirmation name the exact permission id. A stale grant remains revocable when
 policy blocks its use. Failure reloads inventory, grants, and policy and requires
 a new confirmation.
 
-## Activity windows
+## Activity windows and pinned pages
 
 Each Activity window owns one fresh `PluginSurfaceSlot` and opens it only through
 `openSurfaceInSlot`. The SDK Promise is the sandbox load, bridge handshake,
@@ -386,6 +394,25 @@ disposal failed, retry skips close and repeats only local disposal. Ending
 the whole session is a separately confirmed destructive fallback. Local iframe
 disposal is not revocation evidence, and uncertain close never affects siblings.
 
+Desktop Activity pins use the manifest-verified current name and icon and a
+stable component id derived from `inventoryKey`. Released
+`FloeRegistryContributions` serializes dynamic registration and unregistration;
+`ActivityAppsMain` mounts the full-page contribution on first activation and
+keeps its DOM while other Activity pages are selected. View activation drives
+the released `visible` and `hidden` lifecycle, and returning to the page does not
+create another slot. The Activity Bar, top bar, and bottom bar remain visible.
+Mobile never receives dynamic plugin tab entries and continues to use the
+Launcher and Activity window presentation.
+
+Moving the same target from a pinned page to an Activity window or Workbench
+first awaits the exact pinned-page close, removes its body from the retained
+contribution, then opens a fresh slot. Returning to the pin likewise creates a
+fresh slot rather than reviving or moving the old iframe. Unpin first closes the
+mounted page; close failure retains both the shortcut and recovery presentation.
+Successful unpin of the active page selects the latest built-in Activity page.
+Restart restores shortcuts but always begins on a built-in page, so startup does
+not automatically open third-party content.
+
 ## Workbench widgets and placement
 
 Workbench uses the normal projected widget type `redeven.plugin`. Its persisted
@@ -405,6 +432,9 @@ events, or establish a second MessageChannel.
 Placement operations are globally serialized. Move, revision replacement, and
 removal await old-slot close before state or a fresh slot commits. Every new
 placement receives a fresh lease, iframe, and surface instance; no iframe moves.
+Clicking a pinned Dock item creates or focuses the same standard widget, and its
+drag placement uses the released world-coordinate drop result. Unpinning the
+Dock removes only the shortcut and never removes an existing canvas widget.
 
 ## Confirmation and teardown
 
@@ -437,7 +467,9 @@ or call business adapters directly.
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Owns inventory, client lifetime, lifecycle commands, and cross-placement serialization.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:1` - Carries exact inventory keys from tiles into management navigation.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:1` - Carries exact inventory keys into launch, drag, and mode-specific pin menus.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinContextMenu.tsx:1` - Owns accessible pin-menu keyboard, outside-dismissal, focus restoration, and surface-aware projection.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginDockPins.ts:1` - Owns v1-to-v2 migration and independent ordered Activity and Workbench pin lists.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Selects exact inventory items and owns install and update-review entry state.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1` - Presents the target-bound review, fixed confirmation footer, reconciliation, and retained completion state.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Classifies update targets and fences revision, inspection expiry, and package identity.
@@ -450,6 +482,7 @@ or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Implements source, review, explicit confirmation, Host install, and terminal result UX.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Isolates official and external identity, trust, provenance, grants, and requirements.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceWindow.tsx:1` - Owns Activity floating chrome, mobile modality, focus, and close.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx:1` - Projects a pinned surface into Activity KeepAlive activation and visibility lifecycle.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Opens and retires only released SDK slots.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx:2150` - Owns persisted plugin widget open, replacement, removal, and cleanup.
 - `redeven:internal/workbenchlayout/service_test.go:1080` - Covers persisted `redeven.plugin` widget state.

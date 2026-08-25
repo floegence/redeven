@@ -99,6 +99,7 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
 vi.mock('@floegence/floe-webapp-core/app', () => ({
   ActivityAppsMain: () => <div>activity main</div>,
   FloeRegistryRuntime: (props: any) => <>{props.children}</>,
+  FloeRegistryContributions: () => null,
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({

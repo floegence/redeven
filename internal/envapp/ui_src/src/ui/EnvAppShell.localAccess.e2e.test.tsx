@@ -54,6 +54,11 @@ const settingsPageState = vi.hoisted(() => ({
 }));
 const registeredComponentsState = vi.hoisted(() => ({
   components: [] as Array<{ id: string; component: () => JSX.Element }>,
+  baseComponents: [] as Array<{ id: string; component: () => JSX.Element }>,
+  dynamicComponents: [] as Array<{ id: string; component: () => JSX.Element }>,
+}));
+const activityItemsState = vi.hoisted(() => ({
+  items: [] as any[],
 }));
 const innerProviderState = vi.hoisted(() => ({
   refreshEnabled: false,
@@ -121,6 +126,10 @@ const pluginSurfaceFrameState = vi.hoisted(() => ({
   lastProps: null as any,
   propsByInstanceID: new Map<string, any>(),
   closeOverrides: new Map<string, () => Promise<void>>(),
+}));
+const activityPluginPageState = vi.hoisted(() => ({
+  closeCalls: 0,
+  failClose: false,
 }));
 const workbenchPluginSurfaceState = vi.hoisted(() => ({
   open: vi.fn(async () => undefined),
@@ -512,8 +521,26 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
     // The real registry publishes components synchronously to its consumers.
     // Keep the mock's registry snapshot available before ActivityAppsMain can
     // observe a navigation event in the same render turn.
-    registeredComponentsState.components = Array.isArray(props.components) ? props.components : [];
+    registeredComponentsState.baseComponents = Array.isArray(props.components) ? props.components : [];
+    registeredComponentsState.components = [
+      ...registeredComponentsState.baseComponents,
+      ...registeredComponentsState.dynamicComponents,
+    ];
     return <>{props.children}</>;
+  },
+  FloeRegistryContributions: (props: any) => {
+    createEffect(() => {
+      registeredComponentsState.dynamicComponents = Array.isArray(props.components) ? props.components : [];
+      registeredComponentsState.components = [
+        ...registeredComponentsState.baseComponents,
+        ...registeredComponentsState.dynamicComponents,
+      ];
+    });
+    onCleanup(() => {
+      registeredComponentsState.dynamicComponents = [];
+      registeredComponentsState.components = [...registeredComponentsState.baseComponents];
+    });
+    return null;
   },
 }));
 
@@ -606,6 +633,9 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
       settingsPageState.focusSeq = env?.settingsFocusSeq?.() ?? 0;
       settingsPageState.focusSection = env?.settingsFocusSection?.() ?? null;
     });
+    createEffect(() => {
+      activityItemsState.items = Array.isArray(props.activityItems) ? props.activityItems : [];
+    });
 
     const activateItem = (item: any) => {
       if (item.onClick) {
@@ -636,22 +666,40 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
         {props.logo}
         {props.topBarActions}
         <div>
-          {Array.isArray(props.activityItems)
-            ? props.activityItems.map((item: any) => (
-                <button ref={(button) => item.buttonRef?.(button)} type="button" data-activity-id={item.id} aria-expanded={typeof item.ariaExpanded === 'function' ? item.ariaExpanded() : item.ariaExpanded} aria-controls={item.ariaControls} onClick={() => activateItem(item)}>
+          <For each={Array.isArray(props.activityItems) ? props.activityItems : []}>
+            {(item: any) => (
+                <button
+                  ref={(button) => item.buttonRef?.(button)}
+                  type="button"
+                  data-activity-id={item.id}
+                  aria-expanded={typeof item.ariaExpanded === 'function' ? item.ariaExpanded() : item.ariaExpanded}
+                  aria-controls={item.ariaControls}
+                  aria-haspopup={item.onContextMenu ? 'menu' : item.ariaHasPopup}
+                  onClick={() => activateItem(item)}
+                  onContextMenu={(event) => {
+                    if (!item.onContextMenu) return;
+                    event.preventDefault();
+                    item.onContextMenu({
+                      trigger: event.currentTarget,
+                      clientX: event.clientX,
+                      clientY: event.clientY,
+                      source: 'pointer',
+                    });
+                  }}
+                >
                   {item.label}
                 </button>
-              ))
-            : null}
+              )}
+          </For>
         </div>
         <div>
-          {Array.isArray(props.activityBottomItems)
-            ? props.activityBottomItems.map((item: any) => (
+          <For each={Array.isArray(props.activityBottomItems) ? props.activityBottomItems : []}>
+            {(item: any) => (
                 <button type="button" data-activity-id={item.id} onClick={() => activateItem(item)}>
                   {item.label}
                 </button>
-              ))
-            : null}
+              )}
+          </For>
         </div>
         {props.bottomBarItems}
         <div
@@ -735,6 +783,22 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </section>
     </Show>
   ),
+  SurfaceFloatingLayer: (props: any) => {
+    let layer: HTMLDivElement | undefined;
+    onMount(() => props.layerRef?.(layer));
+    onCleanup(() => props.layerRef?.(null));
+    return (
+      <div
+        ref={layer}
+        role={props.role}
+        aria-label={props['aria-label']}
+        data-plugin-pin-menu={props['data-plugin-pin-menu']}
+        onKeyDown={props.onKeyDown}
+      >
+        {props.children}
+      </div>
+    );
+  },
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -813,6 +877,33 @@ vi.mock('./plugins/PluginSurfaceFrame', () => ({
         <button type="button" aria-label="Close Plugin Surface" onClick={() => props.onClose?.()}>Close</button>
         <iframe data-plugin-surface-iframe />
       </section>
+    );
+  },
+}));
+vi.mock('./plugins/ActivityPluginSurfacePage', () => ({
+  ActivityPluginSurfacePage: (props: any) => {
+    const requestClose = async () => {
+      activityPluginPageState.closeCalls += 1;
+      return !activityPluginPageState.failClose;
+    };
+    onMount(() => props.registerClose?.(requestClose));
+    onCleanup(() => props.registerClose?.(null));
+    return (
+      <Show when={props.target?.()}>
+        {(target) => (
+          <section
+            data-plugin-surface-host
+            data-activity-plugin-surface-page
+            data-plugin-id={target().pluginID}
+            data-plugin-instance-id={target().pluginInstanceID}
+            data-surface-id={target().surfaceID}
+            data-placement="activity-full-page"
+            data-management-revision={String(target().expectedManagementRevision)}
+          >
+            <iframe data-plugin-surface-iframe />
+          </section>
+        )}
+      </Show>
     );
   },
 }));
@@ -1031,6 +1122,28 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
     onCleanup(() => props.registerPluginSurfaceController?.(null));
     return (
       <MockDisplayModeSurface testId="workbench-page">
+        <For each={props.dockItems ?? []}>
+          {(item: any) => (
+            <button
+              type="button"
+              data-workbench-dock-item={item.id}
+              aria-haspopup={item.onContextMenu ? 'menu' : undefined}
+              onClick={() => item.onActivate?.()}
+              onContextMenu={(event) => {
+                if (!item.onContextMenu) return;
+                event.preventDefault();
+                item.onContextMenu({
+                  trigger: event.currentTarget,
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                  source: 'pointer',
+                });
+              }}
+            >
+              {item.label}
+            </button>
+          )}
+        </For>
         <For each={props.dockActions ?? []}>
           {(action: any) => (
             <button
@@ -1264,6 +1377,11 @@ function findButtonByText(root: ParentNode, text: string): HTMLButtonElement | u
   return Array.from(root.querySelectorAll('button')).find((node) => node.textContent?.trim().includes(text)) as HTMLButtonElement | undefined;
 }
 
+function findActivityButton(root: ParentNode, activityID: string): HTMLButtonElement | null {
+  return [...root.querySelectorAll<HTMLButtonElement>('[data-activity-id]')]
+    .find((button) => button.dataset.activityId === activityID) ?? null;
+}
+
 function expectPluginCenterMountedInActivityMain(host: ParentNode): void {
   const view = host.querySelector('[data-plugin-center-view]');
   const main = host.querySelector('[data-floe-shell-slot="main"]');
@@ -1329,6 +1447,12 @@ afterEach(() => {
 });
 
 beforeEach(async () => {
+  const localStorage = createStorageMock();
+  const sessionStorage = createStorageMock();
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: localStorage });
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: localStorage });
+  Object.defineProperty(window, 'sessionStorage', { configurable: true, value: sessionStorage });
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: sessionStorage });
   vi.resetModules();
   // EnvAppShell loads PluginCenterView through Solid's lazy boundary. Resolve
   // the mocked module before each mount so the harness exercises the same
@@ -1344,6 +1468,9 @@ beforeEach(async () => {
   settingsPageState.focusSeq = 0;
   settingsPageState.focusSection = null;
   registeredComponentsState.components = [];
+  registeredComponentsState.baseComponents = [];
+  registeredComponentsState.dynamicComponents = [];
+  activityItemsState.items = [];
   innerProviderState.refreshEnabled = false;
   innerProviderState.refreshOwner = () => undefined;
   activitySurfaceLifecycleState.fileMounts = 0;
@@ -1400,6 +1527,8 @@ beforeEach(async () => {
   pluginSurfaceFrameState.lastProps = null;
   pluginSurfaceFrameState.propsByInstanceID.clear();
   pluginSurfaceFrameState.closeOverrides.clear();
+  activityPluginPageState.closeCalls = 0;
+  activityPluginPageState.failClose = false;
   workbenchPluginSurfaceState.open.mockClear();
   workbenchPluginSurfaceState.close.mockClear();
   workbenchPluginSurfaceState.closePlugin.mockClear();
@@ -3182,6 +3311,179 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => !host.querySelector('[data-plugin-surface-host]'));
       expect(host.querySelector('[data-plugin-surface-host]')).toBeNull();
       expect(sidebarActiveTabValue).toBe('terminal');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('opens a pinned Activity plugin in the kept-alive main area and retires it before Workbench placement', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const restoredPins = JSON.stringify({
+      schemaVersion: 2,
+      activityInventoryKeys: ['instance:plugini_redeven_official_containers'],
+      workbenchInventoryKeys: [],
+    });
+    window.localStorage.setItem('redeven.plugin-dock-pins:default', restoredPins);
+    window.localStorage.setItem('redeven.plugin-dock-pins:env_local', restoredPins);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      const activityID = 'redeven.plugin.activity:instance%3Aplugini_redeven_official_containers';
+      await flushUntil(() => (
+        window.sessionStorage.getItem('redeven_env_public_id') === 'env_local'
+        && pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin')
+      ), 60);
+      await flushAsync();
+      await pluginPanelState.lastProps.onSetPluginPin(
+        'activity',
+        'instance:plugini_redeven_official_containers',
+        true,
+      );
+      expect(JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}').activityInventoryKeys)
+        .toEqual(['instance:plugini_redeven_official_containers']);
+      await flushUntil(() => activityItemsState.items.some((item) => item.id === activityID), 60);
+      expect(findActivityButton(host, activityID)).not.toBeNull();
+      findActivityButton(host, activityID)!.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-plugin-surface-page]')), 60);
+
+      const firstPage = host.querySelector('[data-activity-plugin-surface-page]')!;
+      expect(host.querySelector('[data-floe-shell-slot="main"]')?.contains(firstPage)).toBe(true);
+      expect(sidebarActiveTabValue).toBe(activityID);
+      expect(host.querySelectorAll('[data-activity-plugin-surface-page]')).toHaveLength(1);
+
+      (host.querySelector('[data-activity-id="monitor"]') as HTMLButtonElement).click();
+      await flushUntil(() => sidebarActiveTabValue === 'monitor');
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(firstPage);
+      expect(firstPage.closest('[data-testid^="activity-view-"]')?.getAttribute('style')).toContain('display: none');
+
+      findActivityButton(host, activityID)!.click();
+      await flushUntil(() => sidebarActiveTabValue === activityID);
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(firstPage);
+      expect(activityPluginPageState.closeCalls).toBe(0);
+
+      await pluginPanelState.lastProps.onOpenPluginSurface({
+        ...officialContainersProjection('enabled').items[0].defaultLaunchTarget,
+        preferredPlacement: 'workbench',
+      });
+      await flushUntil(() => host.querySelector('[data-activity-plugin-surface-page]') === null);
+      expect(activityPluginPageState.closeCalls).toBe(1);
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledTimes(1);
+
+      findActivityButton(host, activityID)!.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-plugin-surface-page]')), 60);
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).not.toBe(firstPage);
+      expect(workbenchPluginSurfaceState.close).toHaveBeenCalled();
+      expect(host.querySelectorAll('[data-activity-plugin-surface-page]')).toHaveLength(1);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps an Activity pin when exact close fails and removes it after a successful retry', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const restoredPins = JSON.stringify({
+      schemaVersion: 2,
+      activityInventoryKeys: ['instance:plugini_redeven_official_containers'],
+      workbenchInventoryKeys: [],
+    });
+    window.localStorage.setItem('redeven.plugin-dock-pins:default', restoredPins);
+    window.localStorage.setItem('redeven.plugin-dock-pins:env_local', restoredPins);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      const activityID = 'redeven.plugin.activity:instance%3Aplugini_redeven_official_containers';
+      await flushUntil(() => (
+        window.sessionStorage.getItem('redeven_env_public_id') === 'env_local'
+        && pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin')
+      ), 60);
+      await flushAsync();
+      await pluginPanelState.lastProps.onSetPluginPin(
+        'activity',
+        'instance:plugini_redeven_official_containers',
+        true,
+      );
+      expect(JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}').activityInventoryKeys)
+        .toEqual(['instance:plugini_redeven_official_containers']);
+      await flushUntil(() => activityItemsState.items.some((item) => item.id === activityID), 60);
+      expect(findActivityButton(host, activityID)).not.toBeNull();
+      const pinnedButton = findActivityButton(host, activityID)!;
+      pinnedButton.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-plugin-surface-page]')), 60);
+
+      activityPluginPageState.failClose = true;
+      pinnedButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-pin-menu-action]')));
+      (document.querySelector('[data-plugin-pin-menu-action]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(findActivityButton(host, activityID)).not.toBeNull();
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).not.toBeNull();
+      expect(JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}').activityInventoryKeys)
+        .toEqual(['instance:plugini_redeven_official_containers']);
+
+      activityPluginPageState.failClose = false;
+      pinnedButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-pin-menu-action]')));
+      (document.querySelector('[data-plugin-pin-menu-action]') as HTMLButtonElement).click();
+      await flushUntil(() => findActivityButton(host, activityID) === null, 60);
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).toBeNull();
+      expect(sidebarActiveTabValue).toBe('terminal');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps Activity and Workbench pins independent and unpins Dock without closing its widget', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => (
+        window.sessionStorage.getItem('redeven_env_public_id') === 'env_local'
+        && pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin')
+      ), 60);
+      await flushAsync();
+      const inventoryKey = 'instance:plugini_redeven_official_containers';
+      await pluginPanelState.lastProps.onSetPluginPin('activity', inventoryKey, true);
+      await pluginPanelState.lastProps.onSetPluginPin('workbench', inventoryKey, true);
+      await flushUntil(() => Boolean(host.querySelector(`[data-workbench-dock-item="${inventoryKey}"]`)), 60);
+
+      const stored = JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}');
+      expect(stored.activityInventoryKeys).toEqual([inventoryKey]);
+      expect(stored.workbenchInventoryKeys).toEqual([inventoryKey]);
+
+      const dockButton = host.querySelector(`[data-workbench-dock-item="${inventoryKey}"]`) as HTMLButtonElement;
+      dockButton.click();
+      await flushUntil(() => workbenchPluginSurfaceState.open.mock.calls.length === 1);
+      dockButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-pin-menu-action]')));
+      (document.querySelector('[data-plugin-pin-menu-action]') as HTMLButtonElement).click();
+      await flushUntil(() => host.querySelector(`[data-workbench-dock-item="${inventoryKey}"]`) === null, 60);
+
+      const afterUnpin = JSON.parse(window.localStorage.getItem('redeven.plugin-dock-pins:env_local') ?? '{}');
+      expect(afterUnpin.activityInventoryKeys).toEqual([inventoryKey]);
+      expect(afterUnpin.workbenchInventoryKeys).toEqual([]);
+      expect(workbenchPluginSurfaceState.close).not.toHaveBeenCalled();
+      expect(workbenchPluginSurfaceState.closePlugin).not.toHaveBeenCalled();
     } finally {
       dispose();
     }

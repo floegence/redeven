@@ -70,6 +70,7 @@ export default defineConfig({
     strictPort: true,
   },
   test: {
+    execArgv: ['--no-experimental-webstorage'],
     setupFiles: [path.resolve(__dirname, 'src/test/vitestDomPlatform.ts')],
   },
   worker: {
