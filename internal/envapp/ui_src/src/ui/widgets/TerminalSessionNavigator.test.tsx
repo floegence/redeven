@@ -525,7 +525,15 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     expect(host.querySelector('[data-terminal-group-id="group-services"]')?.textContent).toContain('Services');
     expect(host.querySelector('[data-terminal-group-id="group-services"]')?.textContent).toContain('/workspace/services');
+    expect(host.querySelector('[data-terminal-tree-group="group-services"]')?.className).toContain('rounded-lg');
+    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).toContain('ml-4');
+    expect(host.querySelector('[data-terminal-tree-children="group-services"]')?.className).toContain('pl-4');
+    expect(host.querySelector('[data-terminal-tree-trunk="group-services"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-tree-connector="session-1"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-tree-continuation="session-1"]')).toBeNull();
+    expect(host.querySelector('[data-testid="terminal-group-toggle-group-services"]')?.className).toContain('border-sidebar-border/75');
     expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('min-h-[52px]');
+    expect(host.querySelector('[data-terminal-session-row="session-1"]')?.className).toContain('grid-cols-[32px_minmax(0,1fr)_40px]');
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-group-toggle-group-services"]')?.click();
     expect(onToggleGroup).toHaveBeenCalledWith('group-services');
   });
