@@ -48,6 +48,7 @@ export type TerminalSessionCatalogValue = Readonly<{
   updateGroup: (request: TerminalGroupUpdateRequest) => Promise<TerminalGroup>;
   deleteGroup: (groupId: string) => Promise<TerminalGroupDeleteResponse>;
   moveSession: (sessionId: string, groupId: string) => Promise<void>;
+  reorderSession: (sessionId: string, beforeSessionId: string | null) => void;
   upsertSession: (session: TerminalSessionInfo) => void;
   removeSession: (sessionId: string) => void;
   updateSessionMeta: (sessionId: string, patch: {
@@ -152,6 +153,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   let nextGroupOperationSequence = 0;
   const latestGroupOperationByKey = new Map<string, number>();
   let groupRefreshPromise: Promise<void> | null = null;
+  let sessionOrderIds: string[] = [];
   let providerDisposed = false;
   let coordinatorHydrated = false;
   let deniedClient: object | null = null;
@@ -506,10 +508,24 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         if (!authoritativeIds.has(sessionId)) latestWorkStates.delete(sessionId);
       }
     }
+    const sessionById = new Map(visible.map((session) => [session.id, session]));
+    const nextOrderIds = sessionOrderIds.filter((sessionId) => sessionById.has(sessionId));
+    const orderedIds = new Set(nextOrderIds);
+    for (const session of visible) {
+      if (orderedIds.has(session.id)) continue;
+      nextOrderIds.push(session.id);
+      orderedIds.add(session.id);
+    }
+    sessionOrderIds = nextOrderIds;
+    const orderedVisible = sessionOrderIds.flatMap((sessionId) => {
+      const session = sessionById.get(sessionId);
+      return session ? [session] : [];
+    });
+
     const openingSessionIds = new Set<string>();
     let openingEpochsChanged = false;
     const observedAtMs = Date.now();
-    for (const session of visible) {
+    for (const session of orderedVisible) {
       if (session.executionContext?.location.kind !== 'remote'
         || session.executionContext.location.phase !== 'opening') continue;
       openingSessionIds.add(session.id);
@@ -525,7 +541,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     }
     if (openingEpochsChanged) setRemoteOpeningEpochRevision((value) => value + 1);
 
-    const frozen = Object.freeze([...visible]);
+    const frozen = Object.freeze([...orderedVisible]);
     setSessions(frozen);
   };
 
@@ -1046,6 +1062,22 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     }
   };
 
+  const reorderSession = (sessionIdInput: string, beforeSessionIdInput: string | null): void => {
+    const sessionId = String(sessionIdInput ?? '').trim();
+    const beforeSessionId = String(beforeSessionIdInput ?? '').trim() || null;
+    const current = sessions();
+    if (!sessionId || !current.some((session) => session.id === sessionId)) return;
+    if (beforeSessionId === sessionId) return;
+
+    const nextOrderIds = current.map((session) => session.id).filter((candidate) => candidate !== sessionId);
+    const insertIndex = beforeSessionId ? nextOrderIds.indexOf(beforeSessionId) : -1;
+    nextOrderIds.splice(insertIndex >= 0 ? insertIndex : nextOrderIds.length, 0, sessionId);
+    if (nextOrderIds.every((candidate, index) => candidate === current[index]?.id)) return;
+
+    sessionOrderIds = nextOrderIds;
+    applySnapshot([...current]);
+  };
+
   const clearForPermissionDenied = () => {
     disposeConnection(false);
     setStale(false);
@@ -1182,6 +1214,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     updateGroup,
     deleteGroup,
     moveSession,
+    reorderSession,
     upsertSession,
     removeSession,
     updateSessionMeta,
