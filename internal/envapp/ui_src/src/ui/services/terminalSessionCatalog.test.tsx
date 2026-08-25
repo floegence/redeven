@@ -64,6 +64,23 @@ class FakeCoordinator {
 
   getSnapshot() { return this.snapshot; }
 
+  private sessionsEqual(left: any[], right: any[]) {
+    if (left.length !== right.length) return false;
+    return left.every((session, index) => {
+      const candidate = right[index];
+      return session.id === candidate?.id
+        && (session.name ?? '') === (candidate.name ?? '')
+        && (session.workingDir ?? '') === (candidate.workingDir ?? '')
+        && (session.createdAtMs ?? 0) === (candidate.createdAtMs ?? 0)
+        && (session.lastActiveAtMs ?? 0) === (candidate.lastActiveAtMs ?? 0)
+        && Boolean(session.isActive) === Boolean(candidate.isActive)
+        && JSON.stringify(session.foregroundCommand ?? null) === JSON.stringify(candidate.foregroundCommand ?? null)
+        && JSON.stringify(session.outputActivity ?? null) === JSON.stringify(candidate.outputActivity ?? null)
+        && JSON.stringify(session.executionContext ?? null) === JSON.stringify(candidate.executionContext ?? null)
+        && JSON.stringify(session.workState ?? null) === JSON.stringify(candidate.workState ?? null);
+    });
+  }
+
   refresh() {
     const requestRevision = this.mutationRevision;
     if (this.inFlight?.revision === requestRevision) return this.inFlight.promise;
@@ -73,7 +90,9 @@ class FakeCoordinator {
     };
     request.promise = this.transport.listSessions().then((response: any) => {
       if (this.mutationRevision !== requestRevision) return;
-      this.snapshot = Array.isArray(response) ? response : (response.sessions ?? []);
+      const next = Array.isArray(response) ? response : (response.sessions ?? []);
+      if (this.sessionsEqual(this.snapshot, next)) return;
+      this.snapshot = next;
       for (const listener of this.listeners) listener(this.snapshot);
     }).finally(() => {
       if (this.inFlight === request) this.inFlight = null;
@@ -83,8 +102,10 @@ class FakeCoordinator {
   }
 
   upsertSession(session: any) {
+    const next = [...this.snapshot.filter((entry) => entry.id !== session.id), session];
+    if (this.sessionsEqual(this.snapshot, next)) return;
     this.mutationRevision += 1;
-    this.snapshot = [...this.snapshot.filter((entry) => entry.id !== session.id), session];
+    this.snapshot = next;
     for (const listener of this.listeners) listener(this.snapshot);
   }
 
@@ -280,6 +301,7 @@ describe('TerminalSessionCatalogProvider', () => {
     expect(latest.groups().map((group: any) => group.id)).toEqual(['default']);
     expect(rpcState.list).toHaveBeenCalledTimes(1);
     expect(rpcState.listGroups).toHaveBeenCalledTimes(1);
+    expect(coordinatorState.current?.getSnapshot()[0]?.groupId).toBeUndefined();
     dispose();
   });
 
@@ -351,6 +373,136 @@ describe('TerminalSessionCatalogProvider', () => {
     });
     await create;
     expect(latest.groups().find((group: any) => group.id === 'frontend')?.pending).toBeUndefined();
+    dispose();
+  });
+
+  it('keeps the newest optimistic group when move responses settle out of order', async () => {
+    rpcState.groups = [
+      ...rpcState.groups,
+      { id: 'services', name: 'Services', defaultWorkingDir: '/services', sortOrder: 1, createdAtMs: 2, updatedAtMs: 2, isDefault: false },
+      { id: 'clients', name: 'Clients', defaultWorkingDir: '/clients', sortOrder: 2, createdAtMs: 3, updatedAtMs: 3, isDefault: false },
+    ];
+    rpcState.groupRevision = 2;
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.groupRevision()).toBe(2));
+
+    let resolveFirst!: (value: any) => void;
+    let resolveSecond!: (value: any) => void;
+    rpcState.moveSession
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+
+    const firstMove = latest.moveSession('s1', 'services');
+    const secondMove = latest.moveSession('s1', 'clients');
+    expect(latest.sessions()[0]?.groupId).toBe('clients');
+
+    rpcState.sessions = [{ ...rpcState.sessions[0], groupId: 'clients' }];
+    rpcState.list.mockImplementation(async () => ({ sessions: rpcState.sessions }));
+    resolveSecond({ revision: 4, sessionId: 's1', groupId: 'clients' });
+    await secondMove;
+    resolveFirst({ revision: 5, sessionId: 's1', groupId: 'services' });
+    await expect(firstMove).resolves.toBeUndefined();
+    await vi.waitFor(() => expect(latest.sessions()[0]?.groupId).toBe('clients'));
+    dispose();
+  });
+
+  it('does not roll back or reject when a superseded move fails late', async () => {
+    rpcState.groups = [
+      ...rpcState.groups,
+      { id: 'services', name: 'Services', defaultWorkingDir: '/services', sortOrder: 1, createdAtMs: 2, updatedAtMs: 2, isDefault: false },
+      { id: 'clients', name: 'Clients', defaultWorkingDir: '/clients', sortOrder: 2, createdAtMs: 3, updatedAtMs: 3, isDefault: false },
+    ];
+    rpcState.groupRevision = 2;
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.groupRevision()).toBe(2));
+
+    let rejectFirst!: (reason: Error) => void;
+    let resolveSecond!: (value: any) => void;
+    rpcState.moveSession
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    const firstMove = latest.moveSession('s1', 'services');
+    const secondMove = latest.moveSession('s1', 'clients');
+    rpcState.sessions = [{ ...rpcState.sessions[0], groupId: 'clients' }];
+    rpcState.list.mockImplementation(async () => ({ sessions: rpcState.sessions }));
+
+    resolveSecond({ revision: 4, sessionId: 's1', groupId: 'clients' });
+    await secondMove;
+    rejectFirst(new Error('superseded move rejected'));
+
+    await expect(firstMove).resolves.toBeUndefined();
+    expect(latest.sessions()[0]?.groupId).toBe('clients');
+    dispose();
+  });
+
+  it('does not let a session list started before a move restore the old group', async () => {
+    rpcState.groups = [
+      ...rpcState.groups,
+      { id: 'services', name: 'Services', defaultWorkingDir: '/services', sortOrder: 1, createdAtMs: 2, updatedAtMs: 2, isDefault: false },
+    ];
+    rpcState.groupRevision = 2;
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    const staleSessions = rpcState.sessions;
+    let resolveStaleList!: (value: any) => void;
+    rpcState.list.mockImplementationOnce(() => new Promise((resolve) => { resolveStaleList = resolve; }));
+    const staleRefresh = latest.refresh();
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+
+    rpcState.moveSession.mockResolvedValueOnce({ revision: 3, sessionId: 's1', groupId: 'services' });
+    await latest.moveSession('s1', 'services');
+    rpcState.sessions = [{ ...rpcState.sessions[0], groupId: 'services' }];
+    rpcState.list.mockImplementation(async () => ({ sessions: rpcState.sessions }));
+    resolveStaleList({ sessions: staleSessions });
+    await staleRefresh;
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(latest.sessions()[0]?.groupId).toBe('services'));
+    dispose();
+  });
+
+  it('projects a session move notification without relying on coordinator equality', async () => {
+    rpcState.groups = [
+      ...rpcState.groups,
+      { id: 'services', name: 'Services', defaultWorkingDir: '/services', sortOrder: 1, createdAtMs: 2, updatedAtMs: 2, isDefault: false },
+    ];
+    rpcState.groupRevision = 2;
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    rpcState.groupCatalogHandler?.({
+      reason: 'session_moved',
+      sessionId: 's1',
+      groupId: 'services',
+      revision: 3,
+    });
+
+    expect(latest.sessions()[0]?.groupId).toBe('services');
     dispose();
   });
 

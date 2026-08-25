@@ -2805,7 +2805,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       groupId,
     });
     const session = response.session;
-    sessionCoordinator.upsertSession(session);
+    if (!terminalCatalog) sessionCoordinator.upsertSession(session);
     return normalizeTerminalPanelSessionCreateResult(session);
   };
 

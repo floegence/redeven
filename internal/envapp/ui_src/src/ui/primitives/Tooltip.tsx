@@ -12,6 +12,7 @@ export interface TooltipProps {
   class?: string;
   anchorClass?: string;
   clickToToggle?: boolean;
+  disabled?: boolean;
 }
 
 function tooltipArrowClass(placement: AnchoredOverlayPlacement): string {
@@ -103,6 +104,7 @@ export function Tooltip(props: TooltipProps) {
   };
 
   const show = () => {
+    if (props.disabled) return;
     clearTimeoutHandle();
     const delay = props.delay ?? 300;
     if (delay <= 0) {
@@ -127,6 +129,14 @@ export function Tooltip(props: TooltipProps) {
     setForceUnmount(true);
     setVisible(false);
   };
+
+  createEffect(() => {
+    if (!props.disabled) return;
+    hovered = false;
+    pinned = false;
+    dismissed = true;
+    dismissTransient();
+  });
 
   createEffect(() => {
     if (!visible()) {
@@ -186,8 +196,10 @@ export function Tooltip(props: TooltipProps) {
     <span
       ref={anchorRef}
       data-redeven-tooltip-anchor=""
+      data-redeven-tooltip-disabled={props.disabled ? 'true' : undefined}
       class={cn('relative inline-block max-w-full', props.anchorClass)}
       onMouseEnter={() => {
+        if (props.disabled) return;
         hovered = true;
         dismissed = false;
         show();
@@ -197,6 +209,7 @@ export function Tooltip(props: TooltipProps) {
         if (!focused && !pinned) hide();
       }}
       onClick={() => {
+        if (props.disabled) return;
         if (!props.clickToToggle) {
           dismissed = true;
           dismissTransient();
@@ -221,6 +234,7 @@ export function Tooltip(props: TooltipProps) {
         hide();
       }}
       onFocusIn={() => {
+        if (props.disabled) return;
         focused = true;
         if (!dismissed) show();
       }}
@@ -234,7 +248,7 @@ export function Tooltip(props: TooltipProps) {
     >
       {props.children}
 
-      <Show when={tooltipPresence.mounted() && !forceUnmount()}>
+      <Show when={!props.disabled && tooltipPresence.mounted() && !forceUnmount()}>
         <SurfaceFloatingLayer
           owner={anchorRef}
           position={{ x: position()?.left ?? 0, y: position()?.top ?? 0 }}

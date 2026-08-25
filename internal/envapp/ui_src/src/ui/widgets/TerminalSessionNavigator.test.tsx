@@ -603,7 +603,13 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     dispatchDragEvent(sessionRow, 'dragstart', dataTransfer);
     const dragOver = dispatchDragEvent(defaultGroup, 'dragover', dataTransfer);
     expect(defaultGroup.getAttribute('data-terminal-group-drop-target')).toBe('group');
-    expect(host.querySelector('[data-terminal-group-drop-hint="default"]')?.textContent).toContain('Move to Default');
+    expect(defaultGroup.className).toContain('var(--primary)_15%');
+    expect(defaultGroup.className).not.toContain('ring-2');
+    expect(defaultGroup.className).not.toContain('scale-[1.01]');
+    expect(defaultGroup.className).not.toContain('border-primary/70');
+    expect(defaultGroup.className).not.toContain('shadow-[0_5px_16px');
+    expect(host.querySelector('[data-terminal-group-drop-hint="default"]')).toBeNull();
+    expect(host.querySelector('[data-redeven-tooltip-disabled="true"]')).not.toBeNull();
     const drop = dispatchDragEvent(defaultGroup, 'drop', dataTransfer);
 
     expect(dataTransfer.effectAllowed).toBe('move');
@@ -640,9 +646,44 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     dispatchDragEvent(secondRow, 'dragstart', dataTransfer);
     dispatchDragEvent(firstTreeRow, 'dragover', dataTransfer, 110);
     expect(firstTreeRow.getAttribute('data-terminal-session-drop-position')).toBe('before');
-    expect(host.querySelector('[data-terminal-session-drop-hint="session-1"]')?.textContent).toContain('Place before alpha');
+    expect(host.querySelector('[data-terminal-session-drop-hint="session-1"]')?.textContent?.trim()).toBe('');
     dispatchDragEvent(firstTreeRow, 'drop', dataTransfer, 110);
     expect(onRelocateSession).toHaveBeenCalledWith('session-2', 'default', 'session-1');
+  });
+
+  it('clears every drag affordance when a native drag ends outside the navigator', () => {
+    const item = navigationItem({ id: 'session-1' });
+    const { host } = renderNavigator(item, vi.fn(), {
+      groups: [{
+        id: 'default',
+        name: 'Default',
+        defaultWorkingDir: '/workspace',
+        isDefault: true,
+        expanded: true,
+        itemIds: ['session-1'],
+        totalSessionCount: 1,
+      }, {
+        id: 'services',
+        name: 'Services',
+        defaultWorkingDir: '/services',
+        isDefault: false,
+        expanded: true,
+        itemIds: [],
+        totalSessionCount: 0,
+      }],
+    });
+    const sessionRow = host.querySelector<HTMLElement>('[data-terminal-session-row="session-1"]')!;
+    const servicesGroup = host.querySelector<HTMLElement>('[data-terminal-group-header="services"]')!;
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(sessionRow, 'dragstart', dataTransfer);
+    dispatchDragEvent(servicesGroup, 'dragover', dataTransfer);
+    expect(servicesGroup.getAttribute('data-terminal-group-drop-target')).toBe('group');
+
+    document.dispatchEvent(new Event('dragend', { bubbles: true }));
+
+    expect(servicesGroup.getAttribute('data-terminal-group-drop-target')).toBeNull();
+    expect(sessionRow.getAttribute('aria-grabbed')).toBe('false');
   });
 
   it('opens the same group menu from right click and the overflow action', () => {
