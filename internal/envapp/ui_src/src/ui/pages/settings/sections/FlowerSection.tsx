@@ -313,13 +313,8 @@ export function FlowerSection() {
     setPermissionSaving(true);
     setPermissionError(null);
     try {
-      const response = await fetchLocalApiJSON<SettingsUpdateResponse>('/_redeven_proxy/api/ai/default_permission', {
-        method: 'PUT',
-        body: JSON.stringify({ permission_type: target }),
-      });
-      if (response.settings) ctx.mutateSettings(response.settings);
-      ctx.env.bumpSettingsSeq();
-      const confirmed = normalizePermissionType(response.settings?.ai?.permission_type ?? target);
+      const response = await ctx.saveDefaultAIPermission(target);
+      const confirmed = normalizePermissionType(response.settings.ai?.permission_type);
       setConfirmedPermissionType(confirmed);
       setPermissionSavedAt(Date.now());
       if (permissionType() === target) {

@@ -655,7 +655,14 @@ describe('Env local Flower surface adapter', () => {
       }
       if (url === '/_redeven_proxy/api/ai/default_permission' && init?.method === 'PUT') {
         permissionType = 'full_access';
-        return jsonResponse({});
+        return jsonResponse({
+          settings: {
+            config_path: '/tmp/config.json',
+            connection: { controlplane_base_url: '', environment_id: '', agent_instance_id: '', direct: { artifact_provisioned: false, expires_at_unix_s: 0 } },
+            runtime: { agent_home_dir: '/workspace', shell: '/bin/sh' },
+            ai: { permission_type: permissionType },
+          },
+        });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -670,6 +677,30 @@ describe('Env local Flower surface adapter', () => {
     const updated = await adapter.saveDefaultPermission!('full_access');
 
     expect(updated.defaults.permission_type).toBe('full_access');
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/settings')).toHaveLength(2);
+  });
+
+  it('invalidates the settings cache when the external settings revision changes', async () => {
+    let permissionType: FlowerPermissionType = 'approval_required';
+    let settingsRevision = 0;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({ ai: { permission_type: permissionType } });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      settingsRevision: () => settingsRevision,
+      rpc: { ai: {} } as any,
+    });
+
+    expect((await adapter.loadSettings()).defaults.permission_type).toBe('approval_required');
+    permissionType = 'full_access';
+    settingsRevision += 1;
+
+    expect((await adapter.loadSettings()).defaults.permission_type).toBe('full_access');
     expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/settings')).toHaveLength(2);
   });
 
