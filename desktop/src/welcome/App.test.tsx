@@ -1653,6 +1653,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('height: auto;');
     expect(styles).toContain('padding-block: 0.25rem;');
     expect(styles).toContain('.redeven-environment-progress__body');
+    expect(styles).toMatch(/\.redeven-environment-progress__body \{[\s\S]*?display: grid;[\s\S]*?align-content: start;[\s\S]*?gap: 0\.55rem;/u);
     expect(styles).toContain('.redeven-action-popover__action-footer');
     expect(styles).toContain('max-height: var(--redeven-anchored-overlay-max-height, none);');
     expect(styles).toContain('flex: 0 0 auto;');
