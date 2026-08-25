@@ -242,6 +242,7 @@ describe('AIReadinessBoundary browser layout', () => {
 
   it.each([
     [blockedReason('', { state: 'inspecting' }), 'Checking Agent data'],
+    [blockedReason('', { state: 'optimizing' }), 'Optimizing conversation storage'],
     [blockedReason('', { state: 'migrating' }), 'Updating Agent data'],
     [blockedReason('', { state: 'verifying' }), 'Verifying Agent data'],
   ] as const)('audits the %s busy phase without inventing progress', async (snapshot, title) => {

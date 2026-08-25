@@ -80,6 +80,21 @@ function completedTerminalThread() {
 }
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('shows list loading state until an authoritative empty response arrives', async () => {
+    const listResponse = deferred<ReturnType<typeof thread>[]>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(() => listResponse.promise),
+    });
+
+    await waitFor(() => runtime.querySelector('.flower-thread-warmup-list') !== null);
+    expect(runtime.querySelector('.flower-thread-empty')).toBeNull();
+
+    listResponse.resolve([]);
+    await waitFor(() => runtime.querySelector('.flower-thread-empty') !== null);
+    expect(runtime.querySelector('.flower-thread-warmup-list')).toBeNull();
+  });
+
   it('atomically replaces a new-thread outbox row when live current wins the launch race', async () => {
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [] }]);
     const launchResponse = deferred<FlowerTurnLaunchReceipt>();

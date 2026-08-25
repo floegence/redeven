@@ -78,6 +78,13 @@ class TestVisibilitySource {
 }
 
 describe('AI readiness model', () => {
+  it('preserves the storage optimization startup phase', () => {
+    expect(normalizeAIReadinessSnapshot({
+      state: 'optimizing', reason_code: '', retryable: false, safe_to_retry: false,
+      committed: false, rolled_back: false, startup_phase: 'optimizing',
+    })).toMatchObject({ state: 'optimizing', startup_phase: 'optimizing' });
+  });
+
   it('preserves safe diagnostics while startup is inspecting', () => {
     expect(normalizeAIReadinessSnapshot({
       state: 'inspecting',

@@ -419,6 +419,15 @@ func TestSanitizeAIReadinessSnapshotPreservesSafeTransientDiagnostics(t *testing
 	}
 }
 
+func TestSanitizeAIReadinessSnapshotPreservesOptimizingState(t *testing.T) {
+	got := sanitizeAIReadinessSnapshot(AIReadinessSnapshot{
+		State: AIReadinessOptimizing, TraceID: "ai-start-optimize", StartupPhase: "optimizing",
+	})
+	if got.State != AIReadinessOptimizing || got.StartupPhase != "optimizing" {
+		t.Fatalf("optimizing snapshot = %#v, want safe transient diagnostics", got)
+	}
+}
+
 func newAIReadinessTestServer(t *testing.T, provider AIServiceProvider, meta session.Meta) (*Server, string) {
 	t.Helper()
 	channelID := "ch_ai_readiness"

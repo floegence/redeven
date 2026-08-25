@@ -1013,16 +1013,29 @@ export function EnvAppShell() {
   const [activityFlowerCompanionContentHost, setActivityFlowerCompanionContentHost] = createSignal<HTMLElement | null>(null);
   const [activityFlowerCompanionPhase, setActivityFlowerCompanionPhase] = createSignal<BottomBarCompanionPhase>('collapsed');
   const [activityFlowerFullPageHost, setActivityFlowerFullPageHost] = createSignal<HTMLElement | null>(null);
-  const [activityFlowerProductMountHost, setActivityFlowerProductMountHost] = createSignal<HTMLElement | null>(null);
-  const [activityFlowerMountContainer, setActivityFlowerMountContainer] = createSignal<HTMLDivElement | null>(null);
+  const [flowerWorkbenchHost, setFlowerWorkbenchHostElement] = createSignal<HTMLElement | null>(null);
+  const [flowerWorkbenchActive, setFlowerWorkbenchActive] = createSignal(false);
+  const [flowerProductMountHost, setFlowerProductMountHost] = createSignal<HTMLElement | null>(null);
+  const [flowerProductMountContainer, setFlowerProductMountContainer] = createSignal<HTMLDivElement | null>(null);
   const [activityFlowerMobileRailStyle, setActivityFlowerMobileRailStyle] = createSignal<Record<string, string>>({});
-  const [activityFlowerMountRequested, setActivityFlowerMountRequested] = createSignal(false);
+  const [flowerProductMountRequested, setFlowerProductMountRequested] = createSignal(false);
   const [activityFlowerVisualViewportBottomOffset, setActivityFlowerVisualViewportBottomOffset] = createSignal(0);
   const [activityFlowerAnchor, setActivityFlowerAnchor] = createSignal<HTMLElement | null>(null);
   createEffect(() => {
-    if (canUseFlower()) setActivityFlowerMountRequested(true);
+    if (canUseFlower()) setFlowerProductMountRequested(true);
   });
-  let activityFlowerPanelRef: HTMLDivElement | undefined;
+  let flowerProductPanelRef: HTMLDivElement | undefined;
+  const setFlowerWorkbenchHost = (host: HTMLElement | null, active: boolean) => {
+    if (active && host?.isConnected) {
+      setFlowerWorkbenchHostElement(host);
+      setFlowerWorkbenchActive(true);
+      return;
+    }
+    if (!host || flowerWorkbenchHost() === host) {
+      setFlowerWorkbenchActive(false);
+      if (!host || !host.isConnected) setFlowerWorkbenchHostElement(null);
+    }
+  };
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
   let initialActivitySurface: EnvActivitySurfaceId | null = null;
 
@@ -2221,14 +2234,21 @@ export function EnvAppShell() {
       ? 'full_page'
       : activityFlowerPresentation()
   ));
-  const requestedActivityFlowerProductHost = createMemo<HTMLElement | null>(() => (
-    activityFlowerPlacement() === 'full_page'
-      ? activityFlowerFullPageHost()
-      : activityFlowerCompanionContentHost()
+  const flowerProductPlacement = createMemo<'collapsed' | 'expanded' | 'full_page' | 'workbench'>(() => (
+    viewMode() === 'workbench' && flowerWorkbenchActive() && flowerWorkbenchHost()?.isConnected
+      ? 'workbench'
+      : activityFlowerPlacement()
+  ));
+  const requestedFlowerProductHost = createMemo<HTMLElement | null>(() => (
+    flowerProductPlacement() === 'workbench'
+      ? flowerWorkbenchHost()
+      : flowerProductPlacement() === 'full_page'
+        ? activityFlowerFullPageHost()
+        : activityFlowerCompanionContentHost()
   ));
   createEffect(() => {
-    const requestedHost = requestedActivityFlowerProductHost();
-    if (requestedHost?.isConnected) setActivityFlowerProductMountHost(requestedHost);
+    const requestedHost = requestedFlowerProductHost();
+    if (requestedHost?.isConnected) setFlowerProductMountHost(requestedHost);
   });
 
   const syncActivityFlowerAnchorPlacement = () => {
@@ -2330,7 +2350,7 @@ export function EnvAppShell() {
       return;
     }
     const capturedMode = viewMode();
-    if (activityFlowerPanelRef?.contains(document.activeElement)) {
+    if (flowerProductPanelRef?.contains(document.activeElement)) {
       activityNotesViewportAnchor()?.focus({ preventScroll: true });
     }
     const contextualIntent = withFlowerTurnExecutionContext(intent);
@@ -3130,37 +3150,51 @@ export function EnvAppShell() {
   ));
   const activityFlowerResidentInFullPageHost = createMemo(() => {
     const host = activityFlowerFullPageHost();
-    const mountContainer = activityFlowerMountContainer();
+    const mountContainer = flowerProductMountContainer();
     return Boolean(
       host?.isConnected
       && mountContainer?.parentElement === host
-      && activityFlowerPanelRef?.isConnected
-      && activityFlowerPanelRef
-      && mountContainer.contains(activityFlowerPanelRef),
+      && flowerProductPanelRef?.isConnected
+      && flowerProductPanelRef
+      && mountContainer.contains(flowerProductPanelRef),
     );
   });
   const activityFlowerResidentInCompanionHost = createMemo(() => {
     const host = activityFlowerCompanionContentHost();
-    const mountContainer = activityFlowerMountContainer();
+    const mountContainer = flowerProductMountContainer();
     return Boolean(
       host?.isConnected
       && mountContainer?.parentElement === host
-      && activityFlowerPanelRef?.isConnected
-      && activityFlowerPanelRef
-      && mountContainer.contains(activityFlowerPanelRef),
+      && flowerProductPanelRef?.isConnected
+      && flowerProductPanelRef
+      && mountContainer.contains(flowerProductPanelRef),
     );
   });
-  const activityFlowerSurfaceVisible = createMemo(() => (
-    viewMode() === 'activity'
-    && (activityFlowerPlacement() === 'full_page'
-      ? activityFlowerResidentInFullPageHost()
-      : activityFlowerResidentInCompanionHost())
+  const flowerResidentInWorkbenchHost = createMemo(() => {
+    const host = flowerWorkbenchHost();
+    const mountContainer = flowerProductMountContainer();
+    return Boolean(
+      host?.isConnected
+      && mountContainer?.parentElement === host
+      && flowerProductPanelRef?.isConnected
+      && flowerProductPanelRef
+      && mountContainer.contains(flowerProductPanelRef),
+    );
+  });
+  const flowerSurfaceVisible = createMemo(() => (
+    (flowerProductPlacement() === 'workbench'
+      ? flowerResidentInWorkbenchHost()
+      : viewMode() === 'activity'
+        && (activityFlowerPlacement() === 'full_page'
+          ? activityFlowerResidentInFullPageHost()
+          : activityFlowerResidentInCompanionHost()))
     && !activityFlowerLauncherVisible()
     && !accessGateVisible()
     && !recoveryVisible()
   ));
-  const activityFlowerEngaged = createMemo(() => (
-    activityFlowerSurfaceVisible() && activityFlowerExpanded()
+  const flowerSurfaceEngaged = createMemo(() => (
+    flowerSurfaceVisible()
+    && (flowerProductPlacement() === 'workbench' || activityFlowerExpanded())
   ));
   const activityFlowerSummaryCopy = createMemo<ActivityFlowerSummaryCopy>(() => ({
     lead: {
@@ -3233,7 +3267,7 @@ export function EnvAppShell() {
     event.target instanceof Element && Boolean(event.target.closest(FLOWER_RELATED_SURFACE_SELECTOR))
   );
   const dismissActivityFlowerCompanion = (reason: BottomBarCompanionDismissReason) => {
-    if (reason === 'outside-pointer' && activityFlowerPanelRef?.contains(document.activeElement)) {
+    if (reason === 'outside-pointer' && flowerProductPanelRef?.contains(document.activeElement)) {
       activityNotesViewportAnchor()?.focus({ preventScroll: true });
     }
     collapseActivityFlowerCompanion(reason === 'escape');
@@ -3243,16 +3277,16 @@ export function EnvAppShell() {
     activatePluginSurfaceWindow(instanceID);
   };
 
-  let activityFlowerWasVisible = false;
+  let flowerWasVisible = false;
   createRenderEffect(() => {
-    const visible = activityFlowerSurfaceVisible();
-    if (activityFlowerWasVisible && !visible && activityFlowerPanelRef?.contains(document.activeElement)) {
+    const visible = flowerSurfaceVisible();
+    if (flowerWasVisible && !visible && flowerProductPanelRef?.contains(document.activeElement)) {
       const neutralOwner = viewMode() === 'workbench'
         ? workbenchNotesViewportAnchor()
         : activityNotesViewportAnchor();
       neutralOwner?.focus({ preventScroll: true });
     }
-    activityFlowerWasVisible = visible;
+    flowerWasVisible = visible;
   });
   const status = createMemo(() => {
     if (accessGatePhase() === 'unlock_required') return 'disconnected';
@@ -4875,7 +4909,7 @@ export function EnvAppShell() {
   const renderActivityFlowerCompanion = () => (
     <>
       <BottomBarCompanion
-        retained={activityFlowerMountRequested()}
+        retained={flowerProductMountRequested()}
         visible={activityFlowerCompanionVisible()}
         open={activityFlowerPlacement() === 'expanded'}
         anchor={activityFlowerAnchor()}
@@ -4888,31 +4922,31 @@ export function EnvAppShell() {
         onDismiss={dismissActivityFlowerCompanion}
         onPhaseChange={setActivityFlowerCompanionPhase}
       />
-      <Show when={activityFlowerMountRequested() && activityFlowerProductMountHost()}>
+      <Show when={flowerProductMountRequested() && flowerProductMountHost()}>
         <Portal
-          mount={activityFlowerProductMountHost()!}
+          mount={flowerProductMountHost()!}
           ref={(element) => {
             element.classList.add('flower-activity-product-portal');
-            setActivityFlowerMountContainer(element);
+            setFlowerProductMountContainer(element);
           }}
         >
           <div
-            ref={activityFlowerPanelRef}
+            ref={flowerProductPanelRef}
             id="redeven-activity-flower-product"
             class="flower-activity-product-root"
-            classList={{ 'flower-activity-product-root-full-page': activityFlowerPlacement() === 'full_page' }}
+            classList={{ 'flower-activity-product-root-full-page': flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' }}
             data-floe-dialog-surface-host="true"
-            data-presentation={activityFlowerPlacement()}
-            aria-hidden={!activityFlowerSurfaceVisible() ? 'true' : undefined}
-            inert={!activityFlowerSurfaceVisible()}
+            data-presentation={flowerProductPlacement()}
+            aria-hidden={!flowerSurfaceVisible() ? 'true' : undefined}
+            inert={!flowerSurfaceVisible()}
           >
             <EnvAIPage
               draftCoordinator={flowerDraftCoordinator}
-              presentation={activityFlowerPlacement() === 'full_page' ? 'full' : 'companion'}
-              engaged={activityFlowerEngaged()}
-              transcriptVisible={activityFlowerEngaged()}
+              presentation={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' ? 'full' : 'companion'}
+              engaged={flowerSurfaceEngaged()}
+              transcriptVisible={flowerSurfaceEngaged()}
               companionPresenceOwner={!accessGateVisible()}
-              companionOpen={activityFlowerPlacement() === 'full_page' || activityFlowerCompanionDetailVisible()}
+              companionOpen={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' || activityFlowerCompanionDetailVisible()}
               companionRegionID="redeven-activity-flower-companion"
               companionSummary={{
                 visualText: activityFlowerPresentedSummary().visualText,
@@ -4924,15 +4958,17 @@ export function EnvAppShell() {
                 running: activityFlowerPresentedSummary().presentationStatus === 'running',
               }}
               companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}
-              focusRequestScope="activity"
-              focusThreadRequest={activityFlowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
-              focusComposerRequest={activityFlowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
+              focusRequestScope={flowerProductPlacement() === 'workbench' ? 'workbench' : 'activity'}
+              focusThreadRequest={flowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
+              focusComposerRequest={flowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
               onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
               onCompanionOpenRequest={() => openActivityFlowerCompanion()}
               companionCopy={activityFlowerCompanionCopy()}
-              headerTrailingActions={activityFlowerHeaderActions()}
+              headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
               onPresenceChange={handleActivityFlowerPresenceChange}
-              settingsReturnSurfaceId={lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
+              settingsReturnSurfaceId={flowerProductPlacement() === 'workbench'
+                ? 'ai'
+                : lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
             />
           </div>
         </Portal>
@@ -5240,6 +5276,7 @@ export function EnvAppShell() {
         toggleFilesSidebar: toggleFilesMobileSidebar,
         settingsSeq,
         bumpSettingsSeq,
+        setFlowerWorkbenchHost,
         openSettings,
         settingsOrigin,
         returnFromSettingsOrigin,

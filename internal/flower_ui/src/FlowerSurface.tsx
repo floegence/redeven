@@ -835,6 +835,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [modelSourceRefreshing, setModelSourceRefreshing] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
+  const [threadsLoaded, setThreadsLoaded] = createSignal(false);
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
   let consumedSettingsFocusRequest = 0;
@@ -3869,6 +3870,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (refreshSequence !== threadsRefreshSequence) {
         return false;
       }
+      setThreadsLoaded(true);
       setLoadError('');
       const selectedID = selectedThreadID();
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
@@ -10932,6 +10934,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           activeThreadID={selectedThreadID()}
           query={historyFilter()}
           refreshing={threadsRefreshing()}
+          loading={!threadsLoaded()}
           warmup={surfaceWarmupActive()}
           copy={copy().threadList}
           onQueryChange={setHistoryFilter}

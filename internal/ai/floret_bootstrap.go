@@ -3,11 +3,13 @@ package ai
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 
 	"github.com/floegence/floret/v5/identity"
 	flruntime "github.com/floegence/floret/v5/runtime"
+	flstorage "github.com/floegence/floret/v5/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -186,12 +188,12 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 	}, nil
 }
 
-func openFloretRuntime(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase)) (*floretBootstrapResult, error) {
-	return openFloretRuntimeWith(ctx, storePath, progress, flruntime.Open)
+func openFloretRuntime(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger) (*floretBootstrapResult, error) {
+	return openFloretRuntimeWith(ctx, storePath, progress, logger, flstorage.MaintainSQLite, flruntime.Open)
 }
 
-func openFloretRuntimeWith(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), open floretRuntimeOpener) (*floretBootstrapResult, error) {
-	host, err := openFloretHost(ctx, storePath, progress, open)
+func openFloretRuntimeWith(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger, maintain floretSQLiteMaintainer, open floretRuntimeOpener) (*floretBootstrapResult, error) {
+	host, err := openFloretHost(ctx, storePath, progress, logger, maintain, open)
 	if err != nil {
 		return nil, err
 	}

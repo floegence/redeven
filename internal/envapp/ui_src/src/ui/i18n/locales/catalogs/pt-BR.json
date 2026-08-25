@@ -8,6 +8,8 @@
       "unavailableTitle": "O Flower está iniciando",
       "unavailableDescription": "O Redeven está preparando o serviço Agent para este ambiente.",
       "inspectingTitle": "Verificando os dados do Agent",
+      "optimizingTitle": "Otimizando o armazenamento das conversas",
+      "optimizingDescription": "O Redeven está recuperando espaço não utilizado do Agent antes de abrir o Flower.",
       "inspectingDescription": "O Redeven está verificando se o Floret Store pode ser aberto com segurança.",
       "migratingTitle": "Atualizando os dados do Agent",
       "migratingDescription": "Uma atualização de dados compatível está em andamento. As outras ferramentas do Redeven continuam disponíveis.",

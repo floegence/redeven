@@ -60,7 +60,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v5.0.1's public ordered `ThreadView.Items` and
+Redeven consumes Floret v5.0.2's public ordered `ThreadView.Items` and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
@@ -81,11 +81,26 @@ Every public Activity item passes through one host projection before it reaches
 current view, timeline pagination, live stream, or historical replay. The
 projection removes host paths, working directories, pending handles, and
 nested private values while keeping renderer, operation, status, summary,
-stable IDs, and display names. Floret v5.0.1 `StructuredActivityPayload.Rows`
+stable IDs, and display names. Floret v5.0.2 `StructuredActivityPayload.Rows`
 is the only generic rich-detail contract: Redeven creates bounded, ordered,
 safe display rows before admission, and Flower expands only those rows, a
 meaningful summary, or an error. It never rebuilds detail from raw tool JSON.
 Flower's payload contract remains the final validation boundary.
+
+Before the one `runtime.Open` call, Redeven invokes Floret's published
+`storage.MaintainSQLite` boundary with a bounded 30-second startup context.
+The public maintenance implementation validates the physical schema and
+integrity, converts eligible legacy databases to incremental auto-vacuum, and
+reclaims only when the fixed size and ratio thresholds are met. Busy storage,
+insufficient disk space, and timeout are observable safe skips; the subsequent
+runtime open remains the only final authority for accepting or rejecting the
+database. Redeven never reads, copies, replaces, or compacts opaque Floret
+records itself.
+
+Thread inventory uses one Floret `List` snapshot. Redeven merges each public
+`ThreadSummary` with host-owned settings and does not load `ThreadView`,
+timeline, context, attachments, or child detail for list rows. Full canonical
+projection remains exclusive to the selected-thread detail boundary.
 
 One endpoint/thread authority boundary resolves the product catalog record and
 rejects an absent, tombstoned, or foreign thread before every canonical
@@ -129,14 +144,15 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v5.0.1 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v5.0.2 typed runtime without local replacement.
 - `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces exact published-v5 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
+- `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.
 - `redeven:internal/ai/floret_thread_context.go` - Canonical compaction mapping and timeline anchoring.
 - `redeven:internal/ai/send_user_turn.go` - Thin product send mapping into typed Floret state.
 - `redeven:internal/ai/activity_file_actions.go` - Shared public Activity sanitizer for all projection paths.
 - `redeven:internal/ai/activity_timeline.go` - Applies Activity sanitization to typed timeline blocks.
-- `redeven:internal/ai/threads.go` - Single endpoint/thread ownership boundary before canonical mutation.
+- `redeven:internal/ai/threads.go` - Summary-only inventory mapping and the single endpoint/thread ownership boundary before canonical mutation.
 - `redeven:internal/ai/execution_authority.go` - Current submitting-user authority capture for restart recovery.
 - `redeven:internal/ai/threadstore/execution_authority.go` - Minimal host authorization facts for restart redispatch.
 - `redeven:internal/ai/execution_authority_continuity_test.go` - Retry and SubAgent authority continuity across accepted turns and restart.

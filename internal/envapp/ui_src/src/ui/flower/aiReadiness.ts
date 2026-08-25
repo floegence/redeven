@@ -5,6 +5,7 @@ import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
 export type AIReadinessState =
   | 'unavailable'
   | 'inspecting'
+  | 'optimizing'
   | 'migrating'
   | 'verifying'
   | 'recovering'
@@ -79,6 +80,7 @@ const CONTRACT_ERROR_REASON: AIReadinessReasonCode = 'ai_readiness_contract_erro
 const readinessStates = new Set<AIReadinessState>([
   'unavailable',
   'inspecting',
+  'optimizing',
   'migrating',
   'verifying',
   'recovering',
@@ -261,6 +263,7 @@ function isAutomaticRetryCandidate(snapshot: AIReadinessSnapshot): boolean {
 function shouldPoll(snapshot: AIReadinessSnapshot): boolean {
   return snapshot.state === 'unavailable'
     || snapshot.state === 'inspecting'
+    || snapshot.state === 'optimizing'
     || snapshot.state === 'migrating'
     || snapshot.state === 'verifying'
     || snapshot.state === 'recovering';

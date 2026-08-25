@@ -72,6 +72,7 @@ describe('createAIReadinessPresentation', () => {
   it.each([
     ['unavailable', 'busy', 'Flower is starting'],
     ['inspecting', 'busy', 'Checking Agent data'],
+    ['optimizing', 'busy', 'Optimizing conversation storage'],
     ['migrating', 'busy', 'Updating Agent data'],
     ['verifying', 'busy', 'Verifying Agent data'],
     ['recovering', 'busy', 'Agent data is temporarily in use'],

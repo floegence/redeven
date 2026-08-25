@@ -325,6 +325,7 @@ export type FlowerThreadListProps = Readonly<{
   activeThreadID?: string;
   query: string;
   refreshing?: boolean;
+  loading?: boolean;
   warmup?: boolean;
   copy?: FlowerThreadListCopy;
   onQueryChange: (query: string) => void;
@@ -367,8 +368,8 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     return item ? { ...state, item } : null;
   });
   const warmupRows = [0, 1, 2, 3, 4, 5] as const;
-  const showWarmupSkeleton = createMemo(() => props.warmup === true && props.items.length === 0);
-  const searchDisabled = createMemo(() => props.warmup === true && props.items.length === 0);
+  const showLoadingSkeleton = createMemo(() => (props.warmup === true || props.loading === true) && props.items.length === 0);
+  const searchDisabled = createMemo(() => showLoadingSkeleton());
 
   const openMenu = (event: MouseEvent | KeyboardEvent, item: FlowerThreadListItem) => {
     event.preventDefault();
@@ -427,7 +428,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         <div class="min-w-0 flex-1">
           <h2 class="flower-thread-list-title truncate text-sm font-semibold">{copy().title}</h2>
           <p class="flower-thread-list-description truncate text-xs">
-            {props.warmup ? copy().warmupDescription : copy().description}
+            {props.warmup || props.loading ? copy().warmupDescription : copy().description}
           </p>
         </div>
         <button
@@ -452,7 +453,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         />
       </label>
       <div class="flower-scroll flex-1 space-y-2">
-        <Show when={!showWarmupSkeleton()} fallback={(
+        <Show when={!showLoadingSkeleton()} fallback={(
           <div class="flower-thread-warmup-list" role="status" aria-live="polite" aria-label={copy().warmupDescription}>
             <For each={warmupRows}>
               {(row) => (

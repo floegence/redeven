@@ -8,6 +8,8 @@
       "unavailableTitle": "Flower を起動しています",
       "unavailableDescription": "Redeven がこの環境の Agent サービスを準備しています。",
       "inspectingTitle": "Agent データを確認しています",
+      "optimizingTitle": "会話ストレージを最適化しています",
+      "optimizingDescription": "Redeven は Flower を開く前に、未使用の Agent ストレージを回収しています。",
       "inspectingDescription": "Redeven が Floret Store を安全に開けるか確認しています。",
       "migratingTitle": "Agent データを更新しています",
       "migratingDescription": "互換性のあるデータ更新を実行中です。Redeven のほかのツールは引き続き利用できます。",

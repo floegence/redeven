@@ -5,7 +5,7 @@ import type {
 } from '@floegence/floe-webapp-core/workbench';
 import { AlertTriangle, DockCpu, DockFolder, DockLayers, DockTerminal, Package, Search } from '@floegence/floe-webapp-core/icons';
 import { Button, WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
-import { Show, createMemo, lazy, type JSX } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, type JSX } from 'solid-js';
 
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
@@ -26,7 +26,6 @@ import {
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
 const FRONTABLE_WORKBENCH_RENDER_MODE = 'projected_surface';
-const EnvAIPage = lazy(() => import('../pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
 const EnvCodespacesPage = lazy(() => import('../pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
 const EnvPortForwardsPage = lazy(() => import('../pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
 const RemoteFileBrowser = lazy(() => import('../widgets/RemoteFileBrowser').then((module) => ({ default: module.RemoteFileBrowser })));
@@ -256,6 +255,10 @@ function FlowerWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
   const i18n = useI18n();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
+  const [host, setHost] = createSignal<HTMLElement | null>(null);
+  const engaged = () => Boolean(available() && props.selected && props.lifecycle !== 'cold' && !props.filtered);
+  createEffect(() => env.setFlowerWorkbenchHost?.(host(), engaged()));
+  onCleanup(() => env.setFlowerWorkbenchHost?.(host(), false));
 
   return (
     <Show
@@ -269,14 +272,11 @@ function FlowerWidget(props: RedevenWorkbenchWidgetBodyProps) {
       )}
     >
       <div
+        ref={setHost}
         {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
         class="redeven-workbench-body-surface relative h-full min-h-0 min-w-0"
-      >
-        <EnvAIPage
-          draftCoordinator={env.flowerDraftCoordinator!}
-          engaged={Boolean(props.selected && props.lifecycle !== 'cold' && !props.filtered)}
-        />
-      </div>
+        data-flower-workbench-host
+      />
     </Show>
   );
 }

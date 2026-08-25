@@ -93,6 +93,8 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
     switch (snapshot.state) {
       case 'inspecting':
         return { title: 'aiReadiness.states.inspectingTitle', description: 'aiReadiness.states.inspectingDescription', tone: 'neutral' };
+      case 'optimizing':
+        return { title: 'aiReadiness.states.optimizingTitle', description: 'aiReadiness.states.optimizingDescription', tone: 'neutral' };
       case 'migrating':
         return { title: 'aiReadiness.states.migratingTitle', description: 'aiReadiness.states.migratingDescription', tone: 'neutral' };
       case 'verifying':

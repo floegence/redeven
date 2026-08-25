@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	flruntime "github.com/floegence/floret/v5/runtime"
 	flstorage "github.com/floegence/floret/v5/storage"
@@ -19,6 +21,7 @@ type FloretStoreStartupPhase string
 
 const (
 	FloretStoreStartupInspecting FloretStoreStartupPhase = "inspecting"
+	FloretStoreStartupOptimizing FloretStoreStartupPhase = "optimizing"
 	FloretStoreStartupVerifying  FloretStoreStartupPhase = "verifying"
 	FloretStoreStartupRecovering FloretStoreStartupPhase = "recovering"
 )
@@ -62,15 +65,52 @@ func (e *FloretStoreStartupError) Unwrap() error {
 // current published Floret storage contract. Unsupported stores fail closed.
 type floretRuntimeOpener func(context.Context, flruntime.Options) (*flruntime.Host, error)
 
-func openFloretHost(ctx context.Context, path string, progress func(FloretStoreStartupPhase), open floretRuntimeOpener) (*flruntime.Host, error) {
-	if ctx == nil || strings.TrimSpace(path) == "" || path != strings.TrimSpace(path) || open == nil {
-		return nil, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage startup requires a context, canonical path, and runtime opener"))
+const floretStoreMaintenanceTimeout = 30 * time.Second
+
+var floretStoreMaintenancePolicy = flstorage.SQLiteMaintenancePolicy{
+	MinimumFileBytes:    128 << 20,
+	MinimumReclaimBytes: 64 << 20,
+	MinimumReclaimRatio: 0.5,
+	RetainedFreeBytes:   32 << 20,
+}
+
+type floretSQLiteMaintainer func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error)
+
+func openFloretHost(ctx context.Context, path string, progress func(FloretStoreStartupPhase), logger *slog.Logger, maintain floretSQLiteMaintainer, open floretRuntimeOpener) (*flruntime.Host, error) {
+	if ctx == nil || strings.TrimSpace(path) == "" || path != strings.TrimSpace(path) || maintain == nil || open == nil {
+		return nil, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage startup requires a context, canonical path, SQLite maintainer, and runtime opener"))
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
+	}
+	reportFloretStorePhase(progress, FloretStoreStartupInspecting)
+	reportFloretStorePhase(progress, FloretStoreStartupOptimizing)
+	started := time.Now()
+	maintenanceCtx, cancel := context.WithTimeout(ctx, floretStoreMaintenanceTimeout)
+	result, maintenanceErr := maintain(maintenanceCtx, path, floretStoreMaintenancePolicy)
+	cancel()
+	attrs := []any{
+		"duration_ms", time.Since(started).Milliseconds(),
+		"action", result.Action,
+		"reason", result.Reason,
+		"before_file_bytes", result.Before.FileBytes,
+		"before_reclaim_bytes", result.Before.ReclaimableBytes,
+		"after_file_bytes", result.After.FileBytes,
+		"after_reclaim_bytes", result.After.ReclaimableBytes,
+	}
+	if maintenanceErr != nil {
+		if logger != nil {
+			logger.Error("ai: Floret SQLite maintenance failed closed", append(attrs, "error_class", classifyFloretMaintenanceError(maintenanceErr))...)
+		}
+		return nil, classifyFloretStorageOpenError(maintenanceErr)
+	}
+	if logger != nil {
+		logger.Info("ai: Floret SQLite maintenance complete", attrs...)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
 	}
 	source := flstorage.SQLite(path)
-	reportFloretStorePhase(progress, FloretStoreStartupInspecting)
 	host, err := open(ctx, flruntime.Options{Storage: source})
 	if err != nil {
 		return nil, classifyFloretStorageOpenError(err)
@@ -80,6 +120,22 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 	}
 	reportFloretStorePhase(progress, FloretStoreStartupVerifying)
 	return host, nil
+}
+
+func classifyFloretMaintenanceError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "cancelled"
+	}
+	if errors.Is(err, os.ErrPermission) || os.IsPermission(err) {
+		return "environment_permission_error"
+	}
+	if isTemporaryFloretStorageError(err) {
+		return "temporarily_blocked"
+	}
+	return "maintenance_error"
 }
 
 func reportFloretStorePhase(progress func(FloretStoreStartupPhase), phase FloretStoreStartupPhase) {
