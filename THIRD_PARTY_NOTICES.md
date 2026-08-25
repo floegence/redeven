@@ -6,6 +6,17 @@ Redeven itself is licensed under the MIT License; see `LICENSE`.
 
 This inventory is intentionally broad: it includes Go modules used by the runtime and JavaScript packages used to build the embedded Env App, Code App, and Desktop shell. Some JavaScript packages are build-time only, but keeping them in one auditable notice file avoids accidental omission when build output changes.
 
+## On-Demand Managed Web Service Software
+
+Redeven can install the following software only after an authorized user explicitly requests a managed Web Service deployment. These artifacts are not embedded in the Redeven binary.
+
+| Component | Fixed version | License | Source | Distribution note |
+| --- | --- | --- | --- | --- |
+| DeepSeek Harness (`@deepseek-ai/dsh`) | 0.1.1-rc.2 | MIT | https://github.com/deepseek-ai/deepseek-harness | Developer Preview software. The audited native package retains its upstream license and dependency notices. |
+| DeepSeek Harness Docker (Community) | 0.1.1-rc.2 | MIT | https://github.com/runzhliu/deepseek-harness-docker | Community packaging, not an official DeepSeek distribution. Redeven permits only the reviewed source revision and signed OCI digest. The image retains its own operating-system and package notices. |
+
+The native package and OCI image enter Redeven's signed catalog only after their source revision, DeepSeek Harness version, license inventory, architecture, and immutable digest have passed release review. Redeven never resolves a mutable `latest` tag for these deployments.
+
 ## Go Modules
 
 | Component | Version | License | Used by | Source | Notes |

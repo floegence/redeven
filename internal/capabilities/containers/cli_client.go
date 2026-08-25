@@ -482,6 +482,7 @@ type inspectConfig struct {
 	Env         []string          `json:"Env"`
 	Labels      map[string]string `json:"Labels"`
 	RepoDigests []string          `json:"RepoDigests"`
+	User        string            `json:"User"`
 }
 
 type inspectState struct {
@@ -495,14 +496,18 @@ type inspectState struct {
 }
 
 type inspectHostConfig struct {
-	Privileged    bool                   `json:"Privileged"`
-	NetworkMode   string                 `json:"NetworkMode"`
-	PIDMode       string                 `json:"PidMode"`
-	IPCMode       string                 `json:"IpcMode"`
-	RestartPolicy inspectRestartPolicy   `json:"RestartPolicy"`
-	CapAdd        []string               `json:"CapAdd"`
-	CapDrop       []string               `json:"CapDrop"`
-	Devices       []inspectDeviceMapping `json:"Devices"`
+	Privileged     bool                   `json:"Privileged"`
+	NetworkMode    string                 `json:"NetworkMode"`
+	PIDMode        string                 `json:"PidMode"`
+	IPCMode        string                 `json:"IpcMode"`
+	RestartPolicy  inspectRestartPolicy   `json:"RestartPolicy"`
+	CapAdd         []string               `json:"CapAdd"`
+	CapDrop        []string               `json:"CapDrop"`
+	Devices        []inspectDeviceMapping `json:"Devices"`
+	ReadonlyRootfs bool                   `json:"ReadonlyRootfs"`
+	SecurityOpt    []string               `json:"SecurityOpt"`
+	PidsLimit      int                    `json:"PidsLimit"`
+	ShmSize        int64                  `json:"ShmSize"`
 }
 
 type inspectRestartPolicy struct {
@@ -570,6 +575,11 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 			Devices:       inspectDeviceInputs(doc.HostConfig.Devices),
 			CapAdd:        append([]string(nil), doc.HostConfig.CapAdd...),
 			CapDrop:       append([]string(nil), doc.HostConfig.CapDrop...),
+			ReadOnlyRoot:  doc.HostConfig.ReadonlyRootfs,
+			SecurityOpts:  append([]string(nil), doc.HostConfig.SecurityOpt...),
+			PIDsLimit:     doc.HostConfig.PidsLimit,
+			ShmSizeBytes:  doc.HostConfig.ShmSize,
+			User:          strings.TrimSpace(doc.Config.User),
 		},
 		Ports:     inspectPortSummaries(doc.NetworkSettings.Ports),
 		GroupKind: containerGroup(engine, doc.Config.Labels, "", "").Kind,

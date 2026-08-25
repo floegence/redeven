@@ -34,6 +34,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	runtimefs "github.com/floegence/redeven/internal/fs"
+	"github.com/floegence/redeven/internal/managedwebservice"
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/pluginmarket"
@@ -54,6 +55,7 @@ type Options struct {
 	DistFS                  stdfs.FS
 	Backend                 Backend
 	PortForward             PortForwardBackend
+	ManagedWebServices      managedwebservice.Backend
 	AIServiceProvider       AIServiceProvider
 	Notes                   *notes.Service
 	WorkbenchLayout         *workbenchlayout.Service
@@ -211,6 +213,7 @@ type Server struct {
 
 	backend    Backend
 	pf         PortForwardBackend
+	managed    managedwebservice.Backend
 	aiProvider AIServiceProvider
 	notes      *notes.Service
 	layouts    *workbenchlayout.Service
@@ -365,6 +368,7 @@ func New(opts Options) (*Server, error) {
 		fs:                      runtimefs.NewServiceWithScope(scope),
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
+		managed:                 opts.ManagedWebServices,
 		aiProvider:              opts.AIServiceProvider,
 		notes:                   opts.Notes,
 		layouts:                 opts.WorkbenchLayout,
@@ -2418,6 +2422,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if g.handleNotesAPI(w, r) {
+		return
+	}
+	if g.handleManagedWebServicesAPI(w, r) {
 		return
 	}
 	var aiSvc *ai.Service
@@ -5411,6 +5418,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					status := http.StatusBadRequest
 					if errors.Is(err, portforward.ErrForwardNotFound) {
 						status = http.StatusNotFound
+					}
+					if errors.Is(err, pfregistry.ErrManagedForward) {
+						status = http.StatusConflict
+						writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: "MANAGED_FORWARD_PROTECTED"})
+						return
 					}
 					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 					return

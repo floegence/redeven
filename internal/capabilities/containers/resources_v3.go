@@ -18,6 +18,7 @@ var (
 	containerCapPattern    = regexp.MustCompile(`^[A-Za-z0-9_]{1,64}$`)
 	imageDigestPattern     = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 	volumeOptionKeyPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+	tmpfsSizeOptionPattern = regexp.MustCompile(`^size=[1-9][0-9]{0,15}$`)
 )
 
 type ContainerCreateRequest struct {
@@ -27,6 +28,7 @@ type ContainerCreateRequest struct {
 	Image         string                 `json:"image"`
 	Command       []string               `json:"command,omitempty"`
 	Env           []string               `json:"env,omitempty"`
+	Labels        map[string]string      `json:"labels,omitempty"`
 	RestartPolicy string                 `json:"restart_policy,omitempty"`
 	NetworkMode   string                 `json:"network_mode,omitempty"`
 	Ports         []ContainerPortPublish `json:"ports,omitempty"`
@@ -39,6 +41,19 @@ type ContainerCreateRequest struct {
 	CapDrop       []string               `json:"cap_drop,omitempty"`
 	Devices       []ContainerDevice      `json:"devices,omitempty"`
 	Privileged    bool                   `json:"privileged,omitempty"`
+	ReadOnlyRoot  bool                   `json:"read_only_root,omitempty"`
+	SecurityOpts  []string               `json:"security_opts,omitempty"`
+	PIDsLimit     int                    `json:"pids_limit,omitempty"`
+	ShmSizeBytes  int64                  `json:"shm_size_bytes,omitempty"`
+	User          string                 `json:"user,omitempty"`
+}
+
+type ContainerLabelMatchRequest struct {
+	Engine      Engine     `json:"engine"`
+	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID string     `json:"container_id"`
+	Key         string     `json:"key"`
+	Value       string     `json:"value"`
 }
 
 type ContainerPortPublish struct {
@@ -49,10 +64,11 @@ type ContainerPortPublish struct {
 }
 
 type ContainerMount struct {
-	Type     MountType `json:"type"`
-	Source   string    `json:"source,omitempty"`
-	Target   string    `json:"target"`
-	ReadOnly bool      `json:"read_only,omitempty"`
+	Type         MountType `json:"type"`
+	Source       string    `json:"source,omitempty"`
+	Target       string    `json:"target"`
+	ReadOnly     bool      `json:"read_only,omitempty"`
+	TmpfsOptions []string  `json:"tmpfs_options,omitempty"`
 }
 
 type ContainerDevice struct {
@@ -210,12 +226,17 @@ func validateContainerCreateRequest(req ContainerCreateRequest) error {
 		return errors.New("container name is invalid")
 	}
 	if len(req.Command) > 128 || len(req.Env) > 256 || len(req.Ports) > 128 || len(req.Mounts) > 128 ||
-		len(req.CapAdd) > 128 || len(req.CapDrop) > 128 || len(req.Devices) > 128 {
+		len(req.CapAdd) > 128 || len(req.CapDrop) > 128 || len(req.Devices) > 128 || len(req.SecurityOpts) > 32 || len(req.Labels) > 64 {
 		return errors.New("container create request exceeds resource limits")
 	}
 	for _, value := range append(append([]string(nil), req.Command...), req.Env...) {
 		if hasControl(value) {
 			return errors.New("container command or environment entry is invalid")
+		}
+	}
+	for key, value := range req.Labels {
+		if !validContainerLabel(key, value) {
+			return errors.New("container label is invalid")
 		}
 	}
 	if req.RestartPolicy != "" && !validRestartPolicy(req.RestartPolicy) {
@@ -231,6 +252,21 @@ func validateContainerCreateRequest(req ContainerCreateRequest) error {
 	}
 	if req.MemoryBytes < 0 || (req.MemoryBytes > 0 && req.MemoryBytes < 4*1024*1024) {
 		return errors.New("memory_bytes is invalid")
+	}
+	if req.PIDsLimit < 0 || req.PIDsLimit > 1_000_000 {
+		return errors.New("pids_limit is invalid")
+	}
+	if req.ShmSizeBytes < 0 || (req.ShmSizeBytes > 0 && req.ShmSizeBytes < 1024*1024) {
+		return errors.New("shm_size_bytes is invalid")
+	}
+	if user := strings.TrimSpace(req.User); user != "" && (!containerModePattern.MatchString(user) || strings.HasPrefix(user, "-")) {
+		return errors.New("container user is invalid")
+	}
+	for _, option := range req.SecurityOpts {
+		option = strings.TrimSpace(option)
+		if option == "" || strings.HasPrefix(option, "-") || hasControl(option) || strings.ContainsAny(option, " ,") {
+			return errors.New("container security option is invalid")
+		}
 	}
 	for _, port := range req.Ports {
 		protocol := strings.ToLower(strings.TrimSpace(port.Protocol))
@@ -259,8 +295,17 @@ func validateContainerCreateRequest(req ContainerCreateRequest) error {
 			if source != "" {
 				return errors.New("tmpfs mount must not declare a source")
 			}
+			for _, option := range mount.TmpfsOptions {
+				option = strings.TrimSpace(option)
+				if option != "rw" && option != "noexec" && option != "nosuid" && option != "nodev" && !tmpfsSizeOptionPattern.MatchString(option) {
+					return errors.New("tmpfs mount option is invalid")
+				}
+			}
 		default:
 			return errors.New("mount type is invalid")
+		}
+		if mount.Type != MountTypeTmpfs && len(mount.TmpfsOptions) != 0 {
+			return errors.New("tmpfs options require a tmpfs mount")
 		}
 	}
 	for _, capability := range append(append([]string(nil), req.CapAdd...), req.CapDrop...) {
@@ -279,6 +324,11 @@ func validateContainerCreateRequest(req ContainerCreateRequest) error {
 		}
 	}
 	return nil
+}
+
+func validContainerLabel(key, value string) bool {
+	key = strings.TrimSpace(key)
+	return key != "" && len(key) <= 128 && !strings.HasPrefix(key, "-") && containerModePattern.MatchString(key) && len(value) <= 1024 && !hasControl(value)
 }
 
 func validateVolumeCreateRequest(req VolumeCreateRequest) error {

@@ -73,6 +73,20 @@ func TestAdapterListAndInspectReturnRedactedDomainDTOs(t *testing.T) {
 	}
 }
 
+func TestAdapterMatchesExactContainerLabelWithoutExposingIt(t *testing.T) {
+	container := testEngineContainer()
+	container.Runtime.Labels["com.floegence.redeven.managed-web-service"] = "mws_one"
+	adapter := mustNewAdapter(t, &fakeEngineClient{inspect: map[string]EngineContainer{"docker:container_123": container}})
+	matched, err := adapter.ContainerMatchesLabel(context.Background(), ContainerLabelMatchRequest{Engine: EngineDocker, ContainerID: "container_123", Key: "com.floegence.redeven.managed-web-service", Value: "mws_one"})
+	if err != nil || !matched {
+		t.Fatalf("ContainerMatchesLabel = %v, err=%v", matched, err)
+	}
+	matched, err = adapter.ContainerMatchesLabel(context.Background(), ContainerLabelMatchRequest{Engine: EngineDocker, ContainerID: "container_123", Key: "com.floegence.redeven.managed-web-service", Value: "mws_other"})
+	if err != nil || matched {
+		t.Fatalf("mismatched ContainerMatchesLabel = %v, err=%v", matched, err)
+	}
+}
+
 func TestAdapterStartPreflightUsesInspectedRuntime(t *testing.T) {
 	client := &fakeEngineClient{inspect: map[string]EngineContainer{"docker:container_123": testEngineContainer()}}
 	plan, err := mustNewAdapter(t, client).StartPreflight(context.Background(), ContainerStartRequest{

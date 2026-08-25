@@ -332,6 +332,11 @@ type RuntimeSummary struct {
 	Devices       []DeviceSummary `json:"devices,omitempty"`
 	CapAdd        []string        `json:"cap_add,omitempty"`
 	CapDrop       []string        `json:"cap_drop,omitempty"`
+	ReadOnlyRoot  bool            `json:"read_only_root,omitempty"`
+	SecurityOpts  []string        `json:"security_opts,omitempty"`
+	PIDsLimit     int             `json:"pids_limit,omitempty"`
+	ShmSizeBytes  int64           `json:"shm_size_bytes,omitempty"`
+	User          string          `json:"user,omitempty"`
 }
 
 type EnvSummary struct {

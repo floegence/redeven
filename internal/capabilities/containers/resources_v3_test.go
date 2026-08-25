@@ -239,7 +239,7 @@ func TestAdapterPruneOperationsRevalidateAndForwardExactIdentities(t *testing.T)
 
 func TestCLIClientBuildsAdvancedContainerAndVolumeArgv(t *testing.T) {
 	runner := &fakeCommandRunner{outputs: map[string]string{
-		"docker run -d --name api --restart unless-stopped --network bridge --pid host --ipc private --cpus 1.5 --memory 67108864 --privileged --publish 127.0.0.1:8080:80/tcp --publish 53/udp --mount type=bind,source=/srv/api,target=/workspace,readonly --mount type=volume,source=cache,target=/cache --mount type=tmpfs,target=/tmp --cap-add NET_ADMIN --cap-drop SYS_ADMIN --device /dev/kvm:/dev/kvm:rwm -e MODE=prod ghcr.io/acme/api@" + testSHA256Digest + " server --listen 80": "container_123\n",
+		"docker run -d --name api --restart unless-stopped --network bridge --pid host --ipc private --cpus 1.5 --memory 67108864 --privileged --read-only --pids-limit 512 --shm-size 1073741824 --user 1000:1000 --security-opt no-new-privileges:true --label com.example.instance=api-one --publish 127.0.0.1:8080:80/tcp --publish 53/udp --mount type=bind,source=/srv/api,target=/workspace,readonly --mount type=volume,source=cache,target=/cache --tmpfs /tmp:rw,noexec,nosuid,nodev,size=536870912 --cap-add NET_ADMIN --cap-drop SYS_ADMIN --device /dev/kvm:/dev/kvm:rwm -e MODE=prod ghcr.io/acme/api@" + testSHA256Digest + " server --listen 80": "container_123\n",
 		"docker volume create --driver local --opt type=nfs --opt o=addr=10.0.0.1 data": "data\n",
 	}}
 	client := &CLIClient{Runner: runner}
@@ -248,6 +248,9 @@ func TestCLIClientBuildsAdvancedContainerAndVolumeArgv(t *testing.T) {
 		Command: []string{"server", "--listen", "80"}, Env: []string{"MODE=prod"},
 		RestartPolicy: "unless-stopped", NetworkMode: "bridge", PIDMode: "host", IPCMode: "private",
 		CPUCount: 1.5, MemoryBytes: 64 * 1024 * 1024, Privileged: true,
+		ReadOnlyRoot: true, PIDsLimit: 512, ShmSizeBytes: 1024 * 1024 * 1024,
+		User: "1000:1000", SecurityOpts: []string{"no-new-privileges:true"},
+		Labels: map[string]string{"com.example.instance": "api-one"},
 		Ports: []ContainerPortPublish{
 			{HostIP: "127.0.0.1", HostPort: 8080, ContainerPort: 80, Protocol: "TCP"},
 			{ContainerPort: 53, Protocol: "udp"},
@@ -255,7 +258,7 @@ func TestCLIClientBuildsAdvancedContainerAndVolumeArgv(t *testing.T) {
 		Mounts: []ContainerMount{
 			{Type: MountTypeBind, Source: "/srv/api", Target: "/workspace", ReadOnly: true},
 			{Type: MountTypeVolume, Source: "cache", Target: "/cache"},
-			{Type: MountTypeTmpfs, Target: "/tmp"},
+			{Type: MountTypeTmpfs, Target: "/tmp", TmpfsOptions: []string{"rw", "noexec", "nosuid", "nodev", "size=536870912"}},
 		},
 		CapAdd: []string{"NET_ADMIN"}, CapDrop: []string{"SYS_ADMIN"},
 		Devices: []ContainerDevice{{HostPath: "/dev/kvm", ContainerPath: "/dev/kvm", Permissions: "rwm"}},
@@ -564,6 +567,17 @@ func TestCLIClientRejectsInvalidAdvancedContainerInputsBeforeExecution(t *testin
 			req.Mounts = []ContainerMount{{Type: MountTypeBind, Source: "/srv,data", Target: "/data"}}
 		}},
 		{name: "small memory", mutate: func(req *ContainerCreateRequest) { req.MemoryBytes = 1024 }},
+		{name: "small shm", mutate: func(req *ContainerCreateRequest) { req.ShmSizeBytes = 1024 }},
+		{name: "negative pids", mutate: func(req *ContainerCreateRequest) { req.PIDsLimit = -1 }},
+		{name: "invalid user", mutate: func(req *ContainerCreateRequest) { req.User = "--root" }},
+		{name: "invalid security option", mutate: func(req *ContainerCreateRequest) { req.SecurityOpts = []string{"label=one two"} }},
+		{name: "invalid label", mutate: func(req *ContainerCreateRequest) { req.Labels = map[string]string{"bad key": "value"} }},
+		{name: "invalid tmpfs option", mutate: func(req *ContainerCreateRequest) {
+			req.Mounts = []ContainerMount{{Type: MountTypeTmpfs, Target: "/tmp", TmpfsOptions: []string{"exec"}}}
+		}},
+		{name: "tmpfs options on bind", mutate: func(req *ContainerCreateRequest) {
+			req.Mounts = []ContainerMount{{Type: MountTypeBind, Source: "/srv", Target: "/data", TmpfsOptions: []string{"rw"}}}
+		}},
 		{name: "invalid namespace", mutate: func(req *ContainerCreateRequest) { req.PIDMode = "container:api other" }},
 		{name: "invalid capability", mutate: func(req *ContainerCreateRequest) { req.CapAdd = []string{"NET-ADMIN"} }},
 		{name: "invalid device permissions", mutate: func(req *ContainerCreateRequest) {

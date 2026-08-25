@@ -120,6 +120,10 @@ export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Prom
   return (await fetchLocalApiJSONResponse<T>(url, init)).data;
 }
 
+export async function fetchLocalApi(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, await prepareLocalApiRequestInit(init));
+}
+
 export type LocalApiJSONResponse<T> = Readonly<{
   data: T;
   meta?: unknown;

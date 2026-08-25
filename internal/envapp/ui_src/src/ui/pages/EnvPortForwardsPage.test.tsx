@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { Show } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -16,13 +17,15 @@ const notificationMocks = vi.hoisted(() => ({
 }));
 
 const envContextMocks = vi.hoisted(() => ({
+  env_id: () => 'env_demo',
   env: Object.assign(
-    () => ({ permissions: { can_execute: true } }),
+    () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
     { state: 'ready', loading: false, error: null },
   ),
 }));
 
 const localApiMocks = vi.hoisted(() => ({
+  fetchLocalApi: vi.fn(),
   fetchLocalApiJSON: vi.fn(),
 }));
 
@@ -54,6 +57,10 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Save: (props: any) => <span class={props.class} data-testid="save-icon" />,
   Search: (props: any) => <span class={props.class} data-testid="search-icon" />,
   Trash: (props: any) => <span class={props.class} data-testid="trash-icon" />,
+  Play: (props: any) => <span class={props.class} data-testid="play-icon" />,
+  Stop: (props: any) => <span class={props.class} data-testid="stop-icon" />,
+  Refresh: (props: any) => <span class={props.class} data-testid="restart-icon" />,
+  FileText: (props: any) => <span class={props.class} data-testid="file-text-icon" />,
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
@@ -87,7 +94,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
-  Card: (props: any) => <div class={props.class} data-testid="port-forward-card">{props.children}</div>,
+  Card: (props: any) => <div class={props.class} data-testid={props['data-testid'] ?? 'port-forward-card'}>{props.children}</div>,
   CardContent: (props: any) => <div class={props.class}>{props.children}</div>,
   CardDescription: (props: any) => <div class={props.class} title={props.title}>{props.children}</div>,
   CardFooter: (props: any) => <div class={props.class}>{props.children}</div>,
@@ -96,6 +103,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
   Input: (props: any) => <input value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} disabled={props.disabled} data-testid={props['data-testid']} />,
+  Checkbox: (props: any) => <label><input type="checkbox" checked={props.checked} disabled={props.disabled} onChange={(event) => props.onChange?.(event.currentTarget.checked)} />{props.label}</label>,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
 
@@ -114,6 +122,7 @@ vi.mock('../services/floeproxyContract', () => ({
 }));
 
 vi.mock('../services/localApi', () => ({
+  fetchLocalApi: localApiMocks.fetchLocalApi,
   fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
 }));
 
@@ -127,6 +136,11 @@ vi.mock('../services/sandboxWindowRegistry', () => ({
 
 vi.mock('../primitives/Tooltip', () => ({
   Tooltip: (props: any) => <>{props.children}</>,
+}));
+
+vi.mock('../primitives/EnvAppModal', () => ({
+  Dialog: (props: any) => <Show when={props.open}><div><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
+  ConfirmDialog: (props: any) => <Show when={props.open}><div><h2>{props.title}</h2>{props.children}<button type="button" disabled={props.loading} onClick={props.onConfirm}>{props.confirmText}</button></div></Show>,
 }));
 
 vi.mock('./EnvContext', () => ({
@@ -298,10 +312,11 @@ describe('EnvPortForwardsPage', () => {
     });
     sandboxWindowRegistryMocks.registerSandboxWindow.mockReset();
     envContextMocks.env = Object.assign(
-      () => ({ permissions: { can_execute: true } }),
+      () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
       { state: 'ready', loading: false, error: null },
     );
     localApiMocks.fetchLocalApiJSON.mockReset();
+    localApiMocks.fetchLocalApi.mockReset();
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/forwards') {
         return {
@@ -490,6 +505,164 @@ describe('EnvPortForwardsPage', () => {
 
     expect(panel?.className).toContain('redeven-surface-panel--strong');
     expect(card?.className).toContain('redeven-surface-panel--interactive');
+  });
+
+  it('shows a managed DeepSeek Harness card without duplicating its protected forward', async () => {
+    envContextMocks.env = Object.assign(
+      () => ({ name: 'Build host', permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
+      { state: 'ready', loading: false, error: null },
+    );
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'managed-forward', target_url: 'http://127.0.0.1:3080', name: 'DeepSeek Harness', description: 'Managed by Redeven', health: { status: 'healthy', last_checked_at_unix_ms: 1, latency_ms: 2, last_error: '' }, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 0 }] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    expect(host.querySelectorAll('[data-testid="managed-deepseek-card"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-testid="port-forward-card"]')).toHaveLength(0);
+    expect(host.textContent).toContain('DeepSeek Harness');
+    expect(host.textContent).toContain('Running');
+  });
+
+  it('shows managed service status and read actions without lifecycle permission', async () => {
+    envContextMocks.env = Object.assign(
+      () => ({ permissions: { can_read: true, can_write: false, can_execute: false } }),
+      { state: 'ready', loading: false, error: null },
+    );
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-readonly', template_id: 'deepseek-harness', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-deepseek-card"]')).toBeTruthy());
+
+    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-deepseek-card"] button'));
+    expect(buttons.find((button) => button.textContent?.trim() === 'Open')?.disabled).toBe(true);
+    expect(buttons.find((button) => button.textContent?.trim() === 'Stop')?.disabled).toBe(true);
+    expect(buttons.find((button) => button.title === 'View logs')?.disabled).toBe(false);
+    expect(buttons.find((button) => button.title === 'Uninstall')?.disabled).toBe(true);
+  });
+
+  it('disables Docker deployment when the runtime reports it unavailable', async () => {
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'deepseek-harness', name: 'DeepSeek Harness', version: '0.1.1-rc.2', developer_preview: true, disk_bytes: 2147483648, data_location: '/state/deepseek-harness/data', source_url: 'https://github.com/deepseek-ai/deepseek-harness', docker_source_url: 'https://github.com/runzhliu/deepseek-harness-docker', deployments: [{ deployment: 'native', available: true }, { deployment: 'docker', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    const deployButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Deploy');
+    expect(deployButton).toBeTruthy();
+    await waitForAssertion(() => expect(deployButton?.disabled).toBe(false));
+    deployButton?.click();
+    await flushPage();
+
+    expect(document.body.textContent).toContain('Developer Preview');
+    await waitForAssertion(() => {
+      const dockerButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Docker');
+      expect(dockerButton?.disabled).toBe(true);
+    });
+    expect(document.body.textContent).toContain('env_demo');
+    expect(document.body.textContent).toContain('/state/deepseek-harness/data');
+  });
+
+  it('restores an active managed operation and exposes cancellation after a page reload', async () => {
+    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
+    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, active_operation: activeOperation };
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-service-operations/mop-active/cancel' && init?.method === 'POST') return { ...activeOperation, state: 'cancelling' };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(activeOperation)}\n\n`));
+      },
+    }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await waitForAssertion(() => expect(host.textContent).toContain('Pulling audited image'));
+      const cancel = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation');
+      expect(cancel).toBeTruthy();
+      cancel?.click();
+      await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-service-operations/mop-active/cancel', { method: 'POST' }));
+    } finally {
+      dispose();
+    }
+  });
+
+  it('uninstalls a managed service while retaining its data by default', async () => {
+    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
+    let removed = false;
+    let operationBody: Record<string, unknown> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: removed ? [] : [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-1/operations' && init?.method === 'POST') {
+        operationBody = JSON.parse(String(init.body));
+        removed = true;
+        return { operation_id: 'mop-uninstall', service_id: 'mws-1', state: 'pending', stage: 'stopping', progress_current: 0, progress_total: 7 };
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-uninstall', service_id: 'mws-1', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')).toBeTruthy());
+    host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
+    await flushPage();
+    const uninstall = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Uninstall');
+    uninstall?.click();
+
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: false }));
+    await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('DeepSeek Harness uninstalled', expect.any(String)));
+  });
+
+  it('requires the second destructive confirmation before deleting managed data', async () => {
+    envContextMocks.env = Object.assign(
+      () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
+      { state: 'ready', loading: false, error: null },
+    );
+    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
+    let operationBody: Record<string, unknown> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: operationBody ? [] : [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-1/operations' && init?.method === 'POST') {
+        operationBody = JSON.parse(String(init.body));
+        return { operation_id: 'mop-delete', service_id: 'mws-1', state: 'pending', stage: 'stopping', progress_current: 0, progress_total: 7 };
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-delete', service_id: 'mws-1', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')).toBeTruthy());
+    host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
+    await flushPage();
+    const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(checkbox?.disabled).toBe(false);
+    checkbox?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Uninstall')?.click();
+    await flushPage();
+    expect(operationBody).toBeNull();
+    expect(host.textContent).toContain('This permanently deletes');
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data')?.click();
+
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true }));
   });
 
   it('uses Web Services copy for the product surface', async () => {
