@@ -17,15 +17,9 @@ type environmentCatalogProviderBinding struct {
 	RemoteDesktopSupported bool   `json:"remote_desktop_supported"`
 }
 
-type plaintextNetworkExposureAcknowledgement struct {
-	Version int    `json:"version"`
-	Bind    string `json:"bind"`
-}
-
 type EnvironmentCatalogAccess struct {
-	LocalUIBind                          string
-	LocalUIPasswordConfigured            bool
-	PlaintextNetworkExposureAcknowledged bool
+	LocalUIBind               string
+	LocalUIPasswordConfigured bool
 }
 
 type environmentCatalogFile struct {
@@ -42,9 +36,8 @@ type environmentCatalogFile struct {
 		StateDir string `json:"state_dir"`
 		Owner    string `json:"owner"`
 		Access   struct {
-			LocalUIBind                             string                                   `json:"local_ui_bind"`
-			LocalUIPasswordConfigured               bool                                     `json:"local_ui_password_configured"`
-			PlaintextNetworkExposureAcknowledgement *plaintextNetworkExposureAcknowledgement `json:"plaintext_network_exposure_acknowledgement,omitempty"`
+			LocalUIBind               string `json:"local_ui_bind"`
+			LocalUIPasswordConfigured bool   `json:"local_ui_password_configured"`
 		} `json:"access"`
 	} `json:"local_hosting"`
 	CurrentProviderBinding *environmentCatalogProviderBinding `json:"current_provider_binding,omitempty"`
@@ -185,13 +178,6 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, access Envir
 	localUIBind := strings.TrimSpace(access.LocalUIBind)
 	record.LocalHosting.Access.LocalUIBind = localUIBind
 	record.LocalHosting.Access.LocalUIPasswordConfigured = access.LocalUIPasswordConfigured
-	if access.PlaintextNetworkExposureAcknowledged {
-		record.LocalHosting.Access.PlaintextNetworkExposureAcknowledgement = &plaintextNetworkExposureAcknowledgement{
-			Version: 1,
-			Bind:    localUIBind,
-		}
-	}
-
 	if err := os.MkdirAll(catalogRoot, 0o700); err != nil {
 		return err
 	}

@@ -3,8 +3,10 @@ package localui
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessrpc"
 	fsrpc "github.com/floegence/redeven/internal/fs"
@@ -24,7 +26,7 @@ import (
 	"github.com/floegence/redeven/internal/terminal"
 )
 
-func TestServer_E2E_PlaintextLocalhostConnectsDirectSessionOnListenerIP(t *testing.T) {
+func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen on IPv4 loopback: %v", err)
@@ -47,8 +49,15 @@ func TestServer_E2E_PlaintextLocalhostConnectsDirectSessionOnListenerIP(t *testi
 	}
 	t.Cleanup(func() { _ = s.Close() })
 
-	localhostURL := "http://" + net.JoinHostPort("localhost", fmt.Sprint(port))
+	trustRoots := x509.NewCertPool()
+	trustRoots.AddCert(s.deviceCA.certificate)
+	localhostURL := "https://" + net.JoinHostPort("localhost", fmt.Sprint(port))
 	client := &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS13,
+			RootCAs:    trustRoots,
+			ServerName: "localhost",
+		},
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "tcp4", listener.Addr().String())
 		},
@@ -57,16 +66,16 @@ func TestServer_E2E_PlaintextLocalhostConnectsDirectSessionOnListenerIP(t *testi
 
 	resp, err := client.Post(localhostURL+"/api/local/direct/connect_artifact", "application/json", bytes.NewBufferString(`{}`))
 	if err != nil {
-		t.Fatalf("POST plaintext localhost connect_artifact error = %v", err)
+		t.Fatalf("POST HTTPS localhost connect_artifact error = %v", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("plaintext localhost connect_artifact status = %d, want %d; body=%q", resp.StatusCode, http.StatusOK, body)
+		t.Fatalf("HTTPS localhost connect_artifact status = %d, want %d; body=%q", resp.StatusCode, http.StatusOK, body)
 	}
 	var envelope connectArtifactEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		t.Fatalf("decode plaintext localhost connect artifact: %v", err)
+		t.Fatalf("decode HTTPS localhost connect artifact: %v", err)
 	}
 	var artifactWire struct {
 		Path struct {
@@ -76,25 +85,27 @@ func TestServer_E2E_PlaintextLocalhostConnectsDirectSessionOnListenerIP(t *testi
 		} `json:"path"`
 	}
 	if err := json.Unmarshal(envelope.ConnectArtifact, &artifactWire); err != nil {
-		t.Fatalf("decode plaintext localhost artifact candidate: %v", err)
+		t.Fatalf("decode HTTPS localhost artifact candidate: %v", err)
 	}
-	wantCandidate := "ws://" + listener.Addr().String() + flowersec.WebSocketDirectPath
+	s.authorityMu.RLock()
+	wantCandidate := "wss://" + s.directAuthorities[net.JoinHostPort("localhost", fmt.Sprint(port))] + flowersec.WebSocketDirectPath
+	s.authorityMu.RUnlock()
 	if len(artifactWire.Path.Candidates) != 1 || artifactWire.Path.Candidates[0].URL != wantCandidate {
-		t.Fatalf("plaintext localhost artifact candidates = %#v, want %q", artifactWire.Path.Candidates, wantCandidate)
+		t.Fatalf("HTTPS localhost artifact candidates = %#v, want %q", artifactWire.Path.Candidates, wantCandidate)
 	}
 
 	connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer connectCancel()
-	current := connectDesktopBridgeArtifact(t, connectCtx, envelope.ConnectArtifact, localhostURL)
+	current := connectDesktopBridgeArtifact(t, connectCtx, s, envelope.ConnectArtifact, localhostURL)
 	defer current.Close()
 
 	var monitorResponse map[string]any
 	if err := current.RPC().Call(connectCtx, monitor.TypeID_SYS_MONITOR, map[string]any{}, &monitorResponse); err != nil {
-		t.Fatalf("monitor RPC through plaintext localhost direct session error = %v", err)
+		t.Fatalf("monitor RPC through HTTPS/WSS localhost direct session error = %v", err)
 	}
 	var pathContext map[string]any
 	if err := current.RPC().Call(connectCtx, fsrpc.TypeID_FS_GET_PATH_CONTEXT, map[string]any{}, &pathContext); err != nil {
-		t.Fatalf("filesystem path context RPC through plaintext localhost direct session error = %v", err)
+		t.Fatalf("filesystem path context RPC through HTTPS/WSS localhost direct session error = %v", err)
 	}
 	homePath, _ := pathContext["home_path_abs"].(string)
 	if homePath == "" {
@@ -102,7 +113,7 @@ func TestServer_E2E_PlaintextLocalhostConnectsDirectSessionOnListenerIP(t *testi
 	}
 	var listResponse map[string]any
 	if err := current.RPC().Call(connectCtx, fsrpc.TypeID_FS_LIST, map[string]any{"path": homePath}, &listResponse); err != nil {
-		t.Fatalf("filesystem list RPC through plaintext localhost direct session error = %v", err)
+		t.Fatalf("filesystem list RPC through HTTPS/WSS localhost direct session error = %v", err)
 	}
 	if _, ok := listResponse["entries"]; !ok {
 		t.Fatalf("filesystem list response is missing entries: %#v", listResponse)
@@ -132,12 +143,12 @@ func TestServer_E2E_PlaintextNetworkRejectsDirectArtifactWithoutInternalError(t 
 func TestServer_E2E_DesktopBridgeDynamicLoopbackOriginConnectsDirectSession(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
 
-	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	bridge := desktopBridgeEndpointForServer(t, s)
 	defer bridge.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
-	client := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+	envelope := mintDesktopBridgeArtifact(t, s, bridge.Client(), bridge.URL, "")
+	client := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
 	assertDesktopBridgeSessionReady(t, ctx, client)
 	_ = client.Close()
 	assertDirectStateEventuallyEmpty(t, s)
@@ -147,12 +158,12 @@ func TestServer_E2E_DesktopBridgePluginAccessSurvivesAdmissionExpiry(t *testing.
 	s := newDesktopBridgeTestServer(t, nil)
 	s.appServer = s.a.CodeAppServer()
 
-	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	bridge := desktopBridgeEndpointForServer(t, s)
 	defer bridge.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
-	current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+	envelope := mintDesktopBridgeArtifact(t, s, bridge.Client(), bridge.URL, "")
+	current := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
 	defer current.Close()
 	assertDesktopBridgeSessionReady(t, ctx, current)
 	assertPluginCatalogEventuallyStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
@@ -179,9 +190,9 @@ func TestServer_E2E_DesktopBridgePluginAccessSurvivesAdmissionExpiry(t *testing.
 
 func TestServer_E2E_DesktopBridgeExpiredUnusedArtifactIsRejected(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
-	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	bridge := desktopBridgeEndpointForServer(t, s)
 	defer bridge.Close()
-	envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+	envelope := mintDesktopBridgeArtifact(t, s, bridge.Client(), bridge.URL, "")
 
 	s.sweepExpiredAt(time.Now().Add(5 * time.Minute))
 	s.pendingMu.Lock()
@@ -197,7 +208,7 @@ func TestServer_E2E_DesktopBridgeExpiredUnusedArtifactIsRejected(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := connectDesktopBridgeArtifactResult(ctx, envelope.ConnectArtifact, bridge.URL); err == nil {
+	if _, err := connectDesktopBridgeArtifactResult(ctx, s, envelope.ConnectArtifact, bridge.URL); err == nil {
 		t.Fatal("expired unused Desktop bridge artifact connected")
 	}
 	assertDirectStateEventuallyEmpty(t, s)
@@ -206,13 +217,13 @@ func TestServer_E2E_DesktopBridgeExpiredUnusedArtifactIsRejected(t *testing.T) {
 func TestServer_E2E_DesktopBridgePluginScopeRevokeRemovesActiveBinding(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
 	s.appServer = s.a.CodeAppServer()
-	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	bridge := desktopBridgeEndpointForServer(t, s)
 	defer bridge.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
-	current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+	envelope := mintDesktopBridgeArtifact(t, s, bridge.Client(), bridge.URL, "")
+	current := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
 	defer current.Close()
 	assertDesktopBridgeSessionReady(t, ctx, current)
 	assertPluginCatalogEventuallyStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
@@ -235,18 +246,18 @@ func TestServer_E2E_DesktopBridgePluginScopeRevokeRemovesActiveBinding(t *testin
 func TestServer_E2E_DesktopBridgeConsecutiveSessionsKeepTerminalRPCHandlers(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
 	s.appServer = s.a.CodeAppServer()
-	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	bridge := desktopBridgeEndpointForServer(t, s)
 	defer bridge.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var previousCredential string
 	for attempt := 1; attempt <= 2; attempt++ {
-		envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+		envelope := mintDesktopBridgeArtifact(t, s, bridge.Client(), bridge.URL, "")
 		if envelope.PluginSessionCredential == previousCredential {
 			t.Fatal("consecutive Desktop sessions reused a plugin credential")
 		}
-		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+		current := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
 		assertDesktopBridgeSessionReady(t, ctx, current)
 		assertPluginCatalogEventuallyStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
 		var response struct {
@@ -293,21 +304,21 @@ func TestServer_E2E_DesktopBridgeConsecutiveSessionsKeepTerminalRPCHandlers(t *t
 func TestServer_E2E_DesktopBridgeWindowIsolationAndOneShotArtifacts(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
 	s.appServer = s.a.CodeAppServer()
-	firstBridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	firstBridge := desktopBridgeEndpointForServer(t, s)
 	defer firstBridge.Close()
-	secondBridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	secondBridge := desktopBridgeEndpointForServer(t, s)
 	defer secondBridge.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	firstArtifact := mintDesktopBridgeArtifact(t, firstBridge.Client(), firstBridge.URL, "")
-	secondArtifact := mintDesktopBridgeArtifact(t, secondBridge.Client(), secondBridge.URL, "")
+	firstArtifact := mintDesktopBridgeArtifact(t, s, firstBridge.Client(), firstBridge.URL, "")
+	secondArtifact := mintDesktopBridgeArtifact(t, s, secondBridge.Client(), secondBridge.URL, "")
 	if firstArtifact.ChannelID == secondArtifact.ChannelID {
 		t.Fatalf("Desktop windows shared channel ID %q", firstArtifact.ChannelID)
 	}
-	firstSession := connectDesktopBridgeArtifact(t, ctx, firstArtifact.ConnectArtifact, firstBridge.URL)
+	firstSession := connectDesktopBridgeArtifact(t, ctx, s, firstArtifact.ConnectArtifact, firstBridge.URL)
 	defer firstSession.Close()
-	secondSession := connectDesktopBridgeArtifact(t, ctx, secondArtifact.ConnectArtifact, secondBridge.URL)
+	secondSession := connectDesktopBridgeArtifact(t, ctx, s, secondArtifact.ConnectArtifact, secondBridge.URL)
 	defer secondSession.Close()
 	assertDesktopBridgeSessionReady(t, ctx, firstSession)
 	assertDesktopBridgeSessionReady(t, ctx, secondSession)
@@ -320,12 +331,9 @@ func TestServer_E2E_DesktopBridgeWindowIsolationAndOneShotArtifacts(t *testing.T
 		t.Fatalf("second Desktop credential resolved to %q, want %q", channelID, secondArtifact.ChannelID)
 	}
 
-	crossArtifact := mintDesktopBridgeArtifact(t, firstBridge.Client(), firstBridge.URL, "")
-	if _, err := connectDesktopBridgeArtifactResult(ctx, crossArtifact.ConnectArtifact, secondBridge.URL); err == nil {
-		t.Fatal("artifact minted for the first Desktop window connected with the second window Origin")
-	}
+	crossArtifact := mintDesktopBridgeArtifact(t, s, firstBridge.Client(), firstBridge.URL, "")
 	s.releaseAcceptedSession(crossArtifact.ChannelID)
-	if _, err := connectDesktopBridgeArtifactResult(ctx, firstArtifact.ConnectArtifact, firstBridge.URL); err == nil {
+	if _, err := connectDesktopBridgeArtifactResult(ctx, s, firstArtifact.ConnectArtifact, firstBridge.URL); err == nil {
 		t.Fatal("consumed Desktop artifact connected a second time")
 	}
 
@@ -336,28 +344,28 @@ func TestServer_E2E_DesktopBridgeWindowIsolationAndOneShotArtifacts(t *testing.T
 
 func TestServer_E2E_DesktopBridgeRestartRevokesOldState(t *testing.T) {
 	oldServer := newDesktopBridgeTestServer(t, nil)
-	oldBridge := httptest.NewServer(oldServer.HandlerForDesktopBridge())
-	oldArtifact := mintDesktopBridgeArtifact(t, oldBridge.Client(), oldBridge.URL, "")
+	oldBridge := desktopBridgeEndpointForServer(t, oldServer)
+	oldArtifact := mintDesktopBridgeArtifact(t, oldServer, oldBridge.Client(), oldBridge.URL, "")
 	oldBridge.Close()
-
-	oldConnectCtx, oldConnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	_, oldConnectErr := connectDesktopBridgeArtifactResult(oldConnectCtx, oldArtifact.ConnectArtifact, oldBridge.URL)
-	oldConnectCancel()
-	if oldConnectErr == nil {
-		t.Fatal("artifact connected after its Desktop bridge closed")
-	}
 	if err := oldServer.Close(); err != nil {
 		t.Fatalf("old Server.Close() error = %v", err)
+	}
+
+	oldConnectCtx, oldConnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	_, oldConnectErr := connectDesktopBridgeArtifactResult(oldConnectCtx, oldServer, oldArtifact.ConnectArtifact, oldBridge.URL)
+	oldConnectCancel()
+	if oldConnectErr == nil {
+		t.Fatal("artifact connected after its Local UI server closed")
 	}
 	assertDirectStateEventuallyEmpty(t, oldServer)
 
 	newServer := newDesktopBridgeTestServer(t, nil)
-	newBridge := httptest.NewServer(newServer.HandlerForDesktopBridge())
+	newBridge := desktopBridgeEndpointForServer(t, newServer)
 	defer newBridge.Close()
-	newArtifact := mintDesktopBridgeArtifact(t, newBridge.Client(), newBridge.URL, "")
+	newArtifact := mintDesktopBridgeArtifact(t, newServer, newBridge.Client(), newBridge.URL, "")
 	newConnectCtx, newConnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer newConnectCancel()
-	newSession := connectDesktopBridgeArtifact(t, newConnectCtx, newArtifact.ConnectArtifact, newBridge.URL)
+	newSession := connectDesktopBridgeArtifact(t, newConnectCtx, newServer, newArtifact.ConnectArtifact, newBridge.URL)
 	assertDesktopBridgeSessionReady(t, newConnectCtx, newSession)
 	_ = newSession.Close()
 	assertDirectStateEventuallyEmpty(t, newServer)
@@ -365,9 +373,9 @@ func TestServer_E2E_DesktopBridgeRestartRevokesOldState(t *testing.T) {
 
 func TestServer_E2E_DesktopBridgeSecurityDoesNotExpandPublicListener(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
-	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	bridge := desktopBridgeEndpointForServer(t, s)
 	defer bridge.Close()
-	artifact := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+	artifact := mintDesktopBridgeArtifact(t, s, bridge.Client(), bridge.URL, "")
 	s.releaseAcceptedSession(artifact.ChannelID)
 
 	for name, origin := range map[string]string{
@@ -387,8 +395,8 @@ func TestServer_E2E_DesktopBridgeSecurityDoesNotExpandPublicListener(t *testing.
 			}
 			res := httptest.NewRecorder()
 			s.HandlerForDesktopBridge().ServeHTTP(res, req)
-			if res.Code != http.StatusForbidden {
-				t.Fatalf("bridge websocket status = %d, want %d", res.Code, http.StatusForbidden)
+			if res.Code != http.StatusNotFound {
+				t.Fatalf("bridge Flowersec route status = %d, want %d", res.Code, http.StatusNotFound)
 			}
 		})
 	}
@@ -410,15 +418,15 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		gate := accessgate.New(accessgate.Options{Password: "secret"})
 		s := newDesktopBridgeTestServer(t, gate)
 		s.appServer = s.a.CodeAppServer()
-		bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+		bridge := desktopBridgeEndpointForServer(t, s)
 		defer bridge.Close()
 		client := bridgeClientWithCookies(t, bridge)
 		resumeToken := unlockDesktopBridge(t, client, bridge.URL)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		envelope := mintDesktopBridgeArtifact(t, client, bridge.URL, resumeToken)
-		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+		envelope := mintDesktopBridgeArtifact(t, s, client, bridge.URL, resumeToken)
+		current := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
 		assertDesktopBridgeSessionReady(t, ctx, current)
 		assertPluginCatalogEventuallyStatus(t, client, bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
 
@@ -438,13 +446,13 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		assertSessionEventuallyClosed(t, current)
 		assertDirectStateEventuallyEmpty(t, s)
 		assertPluginCredentialEventuallyRejected(t, s, envelope.PluginSessionCredential)
-		if _, err := connectDesktopBridgeArtifactResult(ctx, envelope.ConnectArtifact, bridge.URL); err == nil {
+		if _, err := connectDesktopBridgeArtifactResult(ctx, s, envelope.ConnectArtifact, bridge.URL); err == nil {
 			t.Fatal("logged-out Desktop artifact reconnected")
 		}
 
 		newResumeToken := unlockDesktopBridge(t, client, bridge.URL)
-		newEnvelope := mintDesktopBridgeArtifact(t, client, bridge.URL, newResumeToken)
-		newSession := connectDesktopBridgeArtifact(t, ctx, newEnvelope.ConnectArtifact, bridge.URL)
+		newEnvelope := mintDesktopBridgeArtifact(t, s, client, bridge.URL, newResumeToken)
+		newSession := connectDesktopBridgeArtifact(t, ctx, s, newEnvelope.ConnectArtifact, bridge.URL)
 		assertDesktopBridgeSessionReady(t, ctx, newSession)
 		_ = newSession.Close()
 		assertDirectStateEventuallyEmpty(t, s)
@@ -458,15 +466,15 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		})
 		s := newDesktopBridgeTestServer(t, gate)
 		s.appServer = s.a.CodeAppServer()
-		bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+		bridge := desktopBridgeEndpointForServer(t, s)
 		defer bridge.Close()
 		client := bridgeClientWithCookies(t, bridge)
 		resumeToken := unlockDesktopBridge(t, client, bridge.URL)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		envelope := mintDesktopBridgeArtifact(t, client, bridge.URL, resumeToken)
-		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+		envelope := mintDesktopBridgeArtifact(t, s, client, bridge.URL, resumeToken)
+		current := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
 		assertDesktopBridgeSessionReady(t, ctx, current)
 		assertPluginCatalogEventuallyStatus(t, client, bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
 
@@ -478,7 +486,7 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		assertSessionEventuallyClosed(t, current)
 		assertDirectStateEventuallyEmpty(t, s)
 		assertPluginCredentialEventuallyRejected(t, s, envelope.PluginSessionCredential)
-		if _, err := connectDesktopBridgeArtifactResult(ctx, envelope.ConnectArtifact, bridge.URL); err == nil {
+		if _, err := connectDesktopBridgeArtifactResult(ctx, s, envelope.ConnectArtifact, bridge.URL); err == nil {
 			t.Fatal("expired Desktop artifact reconnected")
 		}
 	})
@@ -488,14 +496,56 @@ func newDesktopBridgeTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	t.Helper()
 	s := newTestServer(t, gate)
 	s.a = newRuntimeHealthTestAgent(t, s.configPath)
-	s.networkAuthorities = map[string]struct{}{"127.0.0.1:23998": {}}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for secure Local UI test server: %v", err)
+	}
+	bind, err := ParseBind(listener.Addr().String())
+	if err != nil {
+		_ = listener.Close()
+		t.Fatalf("ParseBind() error = %v", err)
+	}
+	s.bind = bind
+	if err := s.prepareSecureNetwork([]net.Listener{listener}); err != nil {
+		_ = listener.Close()
+		t.Fatalf("prepareSecureNetwork() error = %v", err)
+	}
+	if err := s.startDesktopBridgeListener(); err != nil {
+		_ = listener.Close()
+		t.Fatalf("startDesktopBridgeListener() error = %v", err)
+	}
 	if err := s.configureAcceptor(); err != nil {
+		_ = listener.Close()
 		t.Fatalf("configureAcceptor() error = %v", err)
 	}
+	if err := s.createDirectServers(); err != nil {
+		_ = listener.Close()
+		t.Fatalf("createDirectServers() error = %v", err)
+	}
+	s.srv = newLocalUIHTTPServer(s.networkHandler())
+	s.listeners = []net.Listener{listener}
+	s.serveSecureNetwork(s.srv, s.listeners)
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 
-func bridgeClientWithCookies(t *testing.T, bridge *httptest.Server) *http.Client {
+type desktopBridgeTestEndpoint struct {
+	URL    string
+	client *http.Client
+}
+
+func desktopBridgeEndpointForServer(t *testing.T, s *Server) *desktopBridgeTestEndpoint {
+	t.Helper()
+	if s == nil || strings.TrimSpace(s.localUIBridgeURL) == "" {
+		t.Fatal("trusted Local UI bridge is unavailable")
+	}
+	return &desktopBridgeTestEndpoint{URL: strings.TrimRight(s.localUIBridgeURL, "/"), client: &http.Client{}}
+}
+
+func (bridge *desktopBridgeTestEndpoint) Client() *http.Client { return bridge.client }
+func (bridge *desktopBridgeTestEndpoint) Close()               {}
+
+func bridgeClientWithCookies(t *testing.T, bridge *desktopBridgeTestEndpoint) *http.Client {
 	t.Helper()
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -530,7 +580,7 @@ func unlockDesktopBridge(t *testing.T, client *http.Client, bridgeURL string) st
 	return body.Data.ResumeToken
 }
 
-func mintDesktopBridgeArtifact(t *testing.T, client *http.Client, bridgeURL, resumeToken string) connectArtifactEnvelope {
+func mintDesktopBridgeArtifact(t *testing.T, s *Server, client *http.Client, bridgeURL, resumeToken string) connectArtifactEnvelope {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, bridgeURL+"/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	if err != nil {
@@ -562,23 +612,32 @@ func mintDesktopBridgeArtifact(t *testing.T, client *http.Client, bridgeURL, res
 	if err := json.Unmarshal(envelope.ConnectArtifact, &artifactWire); err != nil {
 		t.Fatalf("decode bridge artifact candidate error = %v", err)
 	}
-	wantURL := "ws" + strings.TrimPrefix(bridgeURL, "http") + flowersec.WebSocketDirectPath
-	if len(artifactWire.Path.Candidates) != 1 || artifactWire.Path.Candidates[0].URL != wantURL {
-		t.Fatalf("bridge artifact candidates = %#v, want %q", artifactWire.Path.Candidates, wantURL)
+	if len(artifactWire.Path.Candidates) != 1 {
+		t.Fatalf("bridge artifact candidates = %#v, want one WSS candidate", artifactWire.Path.Candidates)
+	}
+	candidateURL := artifactWire.Path.Candidates[0].URL
+	s.authorityMu.RLock()
+	validCandidate := false
+	for _, authority := range s.directAuthorities {
+		validCandidate = validCandidate || candidateURL == "wss://"+authority+flowersec.WebSocketDirectPath
+	}
+	s.authorityMu.RUnlock()
+	if !validCandidate {
+		t.Fatalf("bridge artifact candidate = %q, want configured Flowersec WSS endpoint", candidateURL)
 	}
 	return envelope
 }
 
-func connectDesktopBridgeArtifact(t *testing.T, ctx context.Context, encodedArtifact json.RawMessage, origin string) flowersec.Session {
+func connectDesktopBridgeArtifact(t *testing.T, ctx context.Context, s *Server, encodedArtifact json.RawMessage, origin string) flowersec.Session {
 	t.Helper()
-	current, err := connectDesktopBridgeArtifactResult(ctx, encodedArtifact, origin)
+	current, err := connectDesktopBridgeArtifactResult(ctx, s, encodedArtifact, origin)
 	if err != nil {
 		t.Fatalf("Connect() through Desktop bridge error = %v", err)
 	}
 	return current
 }
 
-func connectDesktopBridgeArtifactResult(ctx context.Context, encodedArtifact json.RawMessage, origin string) (flowersec.Session, error) {
+func connectDesktopBridgeArtifactResult(ctx context.Context, s *Server, encodedArtifact json.RawMessage, origin string) (flowersec.Session, error) {
 	artifact, err := flowersec.ParseArtifact(encodedArtifact)
 	if err != nil {
 		return nil, err
@@ -589,7 +648,16 @@ func connectDesktopBridgeArtifactResult(ctx context.Context, encodedArtifact jso
 	if err != nil {
 		return nil, err
 	}
-	return flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{Origin: origin, ConnectTimeout: 5 * time.Second})
+	trustRoots := x509.NewCertPool()
+	if s == nil || s.deviceCA == nil || s.deviceCA.certificate == nil {
+		return nil, errors.New("missing test Local UI device CA")
+	}
+	trustRoots.AddCert(s.deviceCA.certificate)
+	return flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{
+		TrustRoots:     trustRoots,
+		Origin:         origin,
+		ConnectTimeout: 5 * time.Second,
+	})
 }
 
 func assertDesktopBridgeSessionReady(t *testing.T, ctx context.Context, current flowersec.Session) {
@@ -712,33 +780,27 @@ func assertSessionEventuallyClosed(t *testing.T, current flowersec.Session) {
 
 func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
-	s := newTestServer(t, gate)
-	s.a = newRuntimeHealthTestAgent(t, s.configPath)
-
-	srv := httptest.NewTLSServer(s.handler())
-	defer srv.Close()
-	s.authorityMu.Lock()
-	if s.networkAuthorities == nil {
-		s.networkAuthorities = make(map[string]struct{})
-	}
-	s.networkAuthorities[srv.Listener.Addr().String()] = struct{}{}
-	s.authorityMu.Unlock()
-	if err := s.configureAcceptor(); err != nil {
-		t.Fatalf("configureAcceptor() error = %v", err)
-	}
+	s := newDesktopBridgeTestServer(t, gate)
+	serverURL := "https://" + s.listeners[0].Addr().String()
+	trustRoots := x509.NewCertPool()
+	trustRoots.AddCert(s.deviceCA.certificate)
+	transport := &http.Transport{TLSClientConfig: &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		RootCAs:    trustRoots,
+	}}
+	t.Cleanup(transport.CloseIdleConnections)
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatalf("cookiejar.New() error = %v", err)
 	}
-	client := srv.Client()
-	client.Jar = jar
+	client := &http.Client{Transport: transport, Jar: jar}
 
-	redirectClient := srv.Client()
+	redirectClient := &http.Client{Transport: transport}
 	redirectClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-	rootResp, err := redirectClient.Get(srv.URL + "/")
+	rootResp, err := redirectClient.Get(serverURL + "/")
 	if err != nil {
 		t.Fatalf("GET / error = %v", err)
 	}
@@ -750,11 +812,10 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("GET / location = %q, want %q", loc, "/_redeven_proxy/env/")
 	}
 
-	envReq, err := http.NewRequest(http.MethodGet, srv.URL+"/_redeven_proxy/env/", nil)
+	envReq, err := http.NewRequest(http.MethodGet, serverURL+"/_redeven_proxy/env/", nil)
 	if err != nil {
 		t.Fatalf("NewRequest env error = %v", err)
 	}
-	envReq.Host = "localhost:23998"
 	envResp, err := client.Do(envReq)
 	if err != nil {
 		t.Fatalf("GET env shell error = %v", err)
@@ -764,7 +825,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("GET env shell status = %d, want %d", envResp.StatusCode, http.StatusOK)
 	}
 
-	runtimeLockedResp, err := client.Get(srv.URL + "/api/local/runtime")
+	runtimeLockedResp, err := client.Get(serverURL + "/api/local/runtime")
 	if err != nil {
 		t.Fatalf("GET locked runtime error = %v", err)
 	}
@@ -773,7 +834,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("locked runtime status = %d, want %d", runtimeLockedResp.StatusCode, http.StatusLocked)
 	}
 
-	wrongUnlockResp, err := client.Post(srv.URL+"/api/local/access/unlock", "application/json", bytes.NewBufferString(`{"password":"wrong"}`))
+	wrongUnlockResp, err := client.Post(serverURL+"/api/local/access/unlock", "application/json", bytes.NewBufferString(`{"password":"wrong"}`))
 	if err != nil {
 		t.Fatalf("POST wrong unlock error = %v", err)
 	}
@@ -782,7 +843,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("wrong unlock status = %d, want %d", wrongUnlockResp.StatusCode, http.StatusUnauthorized)
 	}
 
-	unlockResp, err := client.Post(srv.URL+"/api/local/access/unlock", "application/json", bytes.NewBufferString(`{"password":"secret"}`))
+	unlockResp, err := client.Post(serverURL+"/api/local/access/unlock", "application/json", bytes.NewBufferString(`{"password":"secret"}`))
 	if err != nil {
 		t.Fatalf("POST unlock error = %v", err)
 	}
@@ -804,7 +865,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("unexpected unlock body: %#v", unlockBody)
 	}
 
-	headerRuntimeReq, err := http.NewRequest(http.MethodGet, srv.URL+"/api/local/runtime", nil)
+	headerRuntimeReq, err := http.NewRequest(http.MethodGet, serverURL+"/api/local/runtime", nil)
 	if err != nil {
 		t.Fatalf("NewRequest header runtime error = %v", err)
 	}
@@ -818,7 +879,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("header runtime status = %d, want %d", headerRuntimeResp.StatusCode, http.StatusOK)
 	}
 
-	runtimeResp, err := client.Get(srv.URL + "/api/local/runtime")
+	runtimeResp, err := client.Get(serverURL + "/api/local/runtime")
 	if err != nil {
 		t.Fatalf("GET unlocked runtime error = %v", err)
 	}
@@ -827,7 +888,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("unlocked runtime status = %d, want %d", runtimeResp.StatusCode, http.StatusOK)
 	}
 
-	connectInfoResp, err := client.Post(srv.URL+"/api/local/direct/connect_artifact", "application/json", bytes.NewBufferString(`{}`))
+	connectInfoResp, err := client.Post(serverURL+"/api/local/direct/connect_artifact", "application/json", bytes.NewBufferString(`{}`))
 	if err != nil {
 		t.Fatalf("POST connect_artifact error = %v", err)
 	}
@@ -836,12 +897,12 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("connect_artifact status = %d, want %d", connectInfoResp.StatusCode, http.StatusOK)
 	}
 
-	headerConnectReq, err := http.NewRequest(http.MethodPost, srv.URL+"/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	headerConnectReq, err := http.NewRequest(http.MethodPost, serverURL+"/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	if err != nil {
 		t.Fatalf("NewRequest header connect_artifact error = %v", err)
 	}
 	headerConnectReq.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
-	headerConnectResp, err := srv.Client().Do(headerConnectReq)
+	headerConnectResp, err := client.Do(headerConnectReq)
 	if err != nil {
 		t.Fatalf("POST header connect_artifact error = %v", err)
 	}
@@ -862,7 +923,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	if _, err := flowersec.ParseArtifact(corruptArtifact); err == nil {
 		t.Fatal("tampered Flowersec artifact unexpectedly parsed")
 	}
-	connectLocalDirectSession(t, s, client, srv.URL, srv.Certificate(), unlockBody.Data.ResumeToken, connectBody)
+	connectLocalDirectSession(t, s, client, serverURL, s.deviceCA.certificate, unlockBody.Data.ResumeToken, connectBody)
 }
 
 func connectLocalDirectSession(t *testing.T, s *Server, httpClient *http.Client, serverURL string, certificate *x509.Certificate, resumeToken string, acquisition connectArtifactEnvelope) {

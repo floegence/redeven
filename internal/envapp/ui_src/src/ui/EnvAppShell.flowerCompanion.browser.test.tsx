@@ -1038,7 +1038,6 @@ beforeEach(() => {
   getLocalRuntimeMock.mockResolvedValue({
     mode: 'local',
     env_public_id: 'env_local',
-    direct_ws_url: 'ws://localhost/_redeven_direct/ws',
   });
   getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
   unlockLocalAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
@@ -1060,7 +1059,7 @@ beforeEach(() => {
   mintLocalDirectConnectArtifactMock.mockResolvedValue({
     transport: 'direct',
     direct_info: {
-      ws_url: 'ws://localhost/_redeven_direct/ws',
+      ws_url: 'wss://localhost/flowersec/v3/direct',
       channel_id: 'ch_local',
       e2ee_psk_b64u: 'secret',
       channel_init_expire_at_unix_s: 1,

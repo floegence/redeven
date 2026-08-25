@@ -51,7 +51,7 @@ describe('controlplaneApi controlplane helper usage', () => {
 
     expect(source).toBe(registeredSource);
     expect(createControlplaneArtifactSource).toHaveBeenCalledWith(expect.objectContaining({
-      baseUrl: 'http://localhost:3000',
+      baseUrl: 'https://localhost',
       endpointId: 'dynamic_env',
       entryTicket: 'dynamic_entry_ticket',
       payload: {
@@ -61,7 +61,6 @@ describe('controlplaneApi controlplane helper usage', () => {
       commitSpend: expect.any(Function),
       validateSpendBinding: expect.any(Function),
     }));
-    expect(createControlplaneArtifactSource.mock.calls[0]?.[0]).not.toHaveProperty('allowLoopbackHTTP');
     const sourceOptions = createControlplaneArtifactSource.mock.calls[0]?.[0] as {
       fetch: typeof globalThis.fetch;
     };
@@ -81,8 +80,8 @@ describe('controlplaneApi controlplane helper usage', () => {
     const artifactCalls = fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/v1/connect/artifact/entry'));
     expect(artifactCalls).toHaveLength(2);
     expect(artifactCalls.map(([input]) => String(input))).toEqual([
-      'http://localhost:3000/v1/connect/artifact/entry',
-      'http://localhost:3000/v1/connect/artifact/entry',
+      'https://localhost/v1/connect/artifact/entry',
+      'https://localhost/v1/connect/artifact/entry',
     ]);
     expect(new Headers(artifactCalls[0]?.[1]?.headers).get('authorization')).toBe('Bearer ticket-1');
     expect(new Headers(artifactCalls[1]?.[1]?.headers).get('authorization')).toBe('Bearer ticket-2');
@@ -91,29 +90,6 @@ describe('controlplaneApi controlplane helper usage', () => {
       payload: { floe_app: 'com.floegence.redeven.agent' },
       correlation: { trace_id: 'trace-1' },
     });
-  });
-
-  it('forwards loopback HTTP permission only when the caller selects it', async () => {
-    const mod = await import('./controlplaneApi');
-    const source = await mod.createEnvProxyArtifactSource({
-      endpointId: () => 'env_demo',
-      floeApp: 'com.floegence.redeven.agent',
-      codeSpaceId: 'env-ui',
-      allowLoopbackHTTP: true,
-    });
-
-    expect(source).toBe(registeredSource);
-    expect(createControlplaneArtifactSource).toHaveBeenCalledWith(expect.objectContaining({
-      baseUrl: 'http://localhost:3000',
-      endpointId: 'dynamic_env',
-      entryTicket: 'dynamic_entry_ticket',
-      payload: {
-        floe_app: 'com.floegence.redeven.agent',
-      },
-      allowLoopbackHTTP: true,
-      commitSpend: expect.any(Function),
-      validateSpendBinding: expect.any(Function),
-    }));
   });
 
   it('commits remote spend through the Portal exact bearer contract', async () => {

@@ -23,8 +23,8 @@ function errorResponse(message: string, status: number, extras?: Record<string, 
   });
 }
 
-function validV2Artifact(): unknown {
-  return JSON.parse('{"v":2,"profile":"flowersec/2","session":{"channel_id":"channel-1","init_expire_at_unix_s":2000000000,"idle_timeout_seconds":60,"establish_timeout_seconds":30,"rekey_prepare_timeout_seconds":10,"rekey_completion_timeout_seconds":30,"max_inbound_streams":64,"e2ee_psk_b64u":"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA","allowed_suites":[1,2],"default_suite":1,"selected_features":0,"contract_hash_b64u":"ioBJP5DPhg471caMR-huV5I9RlNKY2Pr9fs2GkP8CmA"},"path":{"kind":"direct","rendezvous_group_id":"group-1","listener_audience":"listener-1","routing_token":"routing-token","candidates":[{"id":"w1","carrier":"websocket","url":"wss://example.com/flowersec/v2/direct","wire_profile":"flowersec-direct/2"}]},"scoped":[],"correlation":{"v":2,"tags":[]}}');
+function validV3Artifact(): unknown {
+	return JSON.parse('{"correlation":{"tags":[],"v":3},"path":{"candidates":[{"carrier":"websocket","id":"issuer-ws","tls":{"mode":"ca"},"url":"wss://issuer.example/flowersec/v3/direct","wire_profile":"flowersec-direct/3"}],"kind":"direct","listener_audience":"issuer-audience","rendezvous_group_id":"issuer-group","routing_token":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"},"profile":"flowersec/3","scoped":[],"session":{"allowed_suites":[1,2],"channel_id":"issuer-shared","contract_hash_b64u":"81XXUykAE_J_K1LvRqkr_B7H3CCCcSRF7E7CIbmfwCU","default_suite":1,"e2ee_psk_b64u":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI","establish_timeout_seconds":30,"idle_timeout_seconds":60,"init_expire_at_unix_s":2000000000,"max_inbound_streams":32,"rekey_completion_timeout_seconds":30,"rekey_prepare_timeout_seconds":10,"selected_features":0},"v":3}');
 }
 
 describe('controlplaneApi local access flow', () => {
@@ -61,7 +61,6 @@ describe('controlplaneApi local access flow', () => {
       mode: 'local',
       env_public_id: 'env_local',
     });
-    expect(String(runtime?.direct_ws_url ?? '')).toContain('/_redeven_direct/ws');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -76,7 +75,6 @@ describe('controlplaneApi local access flow', () => {
         return jsonResponse({
           mode: 'local',
           env_public_id: 'env_local',
-          direct_ws_url: 'ws://127.0.0.1:43123/_redeven_direct/ws',
           effective_run_mode: 'hybrid',
           remote_enabled: true,
         });
@@ -91,7 +89,6 @@ describe('controlplaneApi local access flow', () => {
     expect(runtime).toEqual({
       mode: 'local',
       env_public_id: 'env_local',
-      direct_ws_url: 'ws://127.0.0.1:43123/_redeven_direct/ws',
       effective_run_mode: 'hybrid',
       remote_enabled: true,
       runtime_service: undefined,
@@ -232,7 +229,7 @@ describe('controlplaneApi local access flow', () => {
         plugin_session_credential: 'plugin-generation-secret',
         channel_id: 'ch_local',
         v: 1,
-        connect_artifact: JSON.stringify(validV2Artifact()),
+        connect_artifact: JSON.stringify(validV3Artifact()),
         critical_scope_projection_json: '{"scope":"proxy.runtime"}',
         spend_scope: {
           v: 1,
@@ -266,7 +263,6 @@ describe('controlplaneApi local access flow', () => {
     expect(createControlplaneArtifactSource).toHaveBeenCalledWith(expect.objectContaining({
       baseUrl: window.location.origin,
       endpointId: 'env_local',
-      allowLoopbackHTTP: true,
       fetch: expect.any(Function),
       commitSpend: expect.any(Function),
       validateSpendBinding: expect.any(Function),
@@ -328,7 +324,7 @@ describe('controlplaneApi local access flow', () => {
     const sourceOptions = createControlplaneArtifactSource.mock.calls[0]?.[0] as {
       fetch: typeof globalThis.fetch;
     };
-    const response = await sourceOptions.fetch('http://localhost:3000/v1/connect/artifact', {
+    const response = await sourceOptions.fetch('https://localhost:3000/v1/connect/artifact', {
       method: 'POST',
       signal: new AbortController().signal,
     });

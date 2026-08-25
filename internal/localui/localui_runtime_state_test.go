@@ -2,6 +2,8 @@ package localui
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -76,8 +78,9 @@ func TestServerStartPublishesRuntimeControlStatus(t *testing.T) {
 			}
 			return store
 		}(),
-		a:       newRuntimeControlTestAgent(t, cfgPath),
-		pending: make(map[string]pendingDirect),
+		a:        newRuntimeControlTestAgent(t, cfgPath),
+		pending:  make(map[string]pendingDirect),
+		deviceCA: newTestLocalUIDeviceCA(t),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,7 +125,14 @@ func TestServerStartPublishesRuntimeControlStatus(t *testing.T) {
 		t.Fatalf("NewRequest(public) error = %v", err)
 	}
 	publicReq.Host = forwardedAuthority
-	publicResp, err := http.DefaultClient.Do(publicReq)
+	trustRoots := x509.NewCertPool()
+	trustRoots.AddCert(s.deviceCA.certificate)
+	publicClient := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		RootCAs:    trustRoots,
+	}}}
+	t.Cleanup(publicClient.CloseIdleConnections)
+	publicResp, err := publicClient.Do(publicReq)
 	if err != nil {
 		t.Fatalf("Do(public) error = %v", err)
 	}
@@ -203,6 +213,7 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 		appServer:              newTestAppServer(t, cfgPath),
 		a:                      a,
 		pending:                make(map[string]pendingDirect),
+		deviceCA:               newTestLocalUIDeviceCA(t),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

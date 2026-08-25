@@ -21,76 +21,33 @@ The native package and OCI image enter Redeven's signed catalog only after their
 
 | Component | Version | License | Used by | Source | Notes |
 | --- | --- | --- | --- | --- | --- |
-| cloud.google.com/go/auth | v0.7.2 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/auth@v0.7.2 | Detected from LICENSE. |
-| cloud.google.com/go/auth/oauth2adapt | v0.2.3 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/auth/oauth2adapt@v0.2.3 | Detected from LICENSE. |
-| cloud.google.com/go/compute/metadata | v0.5.0 | Apache-2.0 | Runtime | https://pkg.go.dev/cloud.google.com/go/compute/metadata@v0.5.0 | Detected from LICENSE. |
 | github.com/anthropics/anthropic-sdk-go | v1.22.1 | MIT | Runtime | https://pkg.go.dev/github.com/anthropics/anthropic-sdk-go@v1.22.1 | Detected from LICENSE. |
-| github.com/aws/aws-sdk-go-v2 | v1.30.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2@v1.30.3 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream | v1.6.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream@v1.6.3 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/config | v1.27.27 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/config@v1.27.27 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/credentials | v1.17.27 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/credentials@v1.17.27 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/feature/ec2/imds | v1.16.11 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/feature/ec2/imds@v1.16.11 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/internal/configsources | v1.3.15 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/configsources@v1.3.15 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 | v2.6.15 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.6.15 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/internal/ini | v1.8.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/internal/ini@v1.8.0 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding | v1.11.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding@v1.11.3 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/service/internal/presigned-url | v1.11.17 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/internal/presigned-url@v1.11.17 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/service/sso | v1.22.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/sso@v1.22.4 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/service/ssooidc | v1.26.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/ssooidc@v1.26.4 | Detected from LICENSE.txt. |
-| github.com/aws/aws-sdk-go-v2/service/sts | v1.30.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/sts@v1.30.3 | Detected from LICENSE.txt. |
-| github.com/aws/smithy-go | v1.20.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/aws/smithy-go@v1.20.3 | Detected from LICENSE. |
-| github.com/Azure/azure-sdk-for-go/sdk/azcore | v1.17.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azcore@v1.17.0 | Detected from LICENSE.txt. |
-| github.com/Azure/azure-sdk-for-go/sdk/azidentity | v1.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity@v1.7.0 | Detected from LICENSE.txt. |
-| github.com/Azure/azure-sdk-for-go/sdk/internal | v1.10.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/internal@v1.10.0 | Detected from LICENSE.txt. |
-| github.com/AzureAD/microsoft-authentication-library-for-go | v1.2.2 | MIT | Runtime | https://pkg.go.dev/github.com/AzureAD/microsoft-authentication-library-for-go@v1.2.2 | Detected from LICENSE. |
 | github.com/coder/websocket | v1.8.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/coder/websocket@v1.8.15 | coder/websocket is distributed under a BSD-style license. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
-| github.com/davecgh/go-spew | v1.1.1 | ISC | Runtime | https://pkg.go.dev/github.com/davecgh/go-spew@v1.1.1 | Detected from LICENSE. |
 | github.com/dunglas/httpsfv | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.0 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
 | github.com/floegence/floeterm/terminal-go | v0.17.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.17.0 | Floegence first-party dependency. |
 | github.com/floegence/floret/v5 | v5.0.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v5@v5.0.2 | Detected from LICENSE. |
-| github.com/floegence/flowersec/flowersec-go/v2 | v2.5.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v2@v2.5.2 | Floegence first-party dependency. |
+| github.com/floegence/flowersec/flowersec-go/v3 | v3.1.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v3@v3.1.1 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin/v3 | v3.0.16 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.16 | Floegence first-party dependency. |
-| github.com/go-logr/logr | v1.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.2 | Detected from LICENSE. |
-| github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/stdr@v1.2.2 | Detected from LICENSE. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
-| github.com/golang-jwt/jwt/v5 | v5.2.1 | MIT | Runtime | https://pkg.go.dev/github.com/golang-jwt/jwt/v5@v5.2.1 | Detected from LICENSE. |
-| github.com/golang/groupcache | v0.0.0-20210331224755-41bb18bfe9da | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/golang/groupcache@v0.0.0-20210331224755-41bb18bfe9da | Detected from LICENSE. |
-| github.com/golang/protobuf | v1.5.4 | BSD-style | Runtime | https://pkg.go.dev/github.com/golang/protobuf@v1.5.4 | Detected from LICENSE. |
-| github.com/google/go-cmp | v0.7.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/go-cmp@v0.7.0 | Detected from LICENSE. |
-| github.com/google/pprof | v0.0.0-20260802141513-ef3492d7dac3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/google/pprof@v0.0.0-20260802141513-ef3492d7dac3 | Detected from LICENSE. |
-| github.com/google/s2a-go | v0.1.7 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/google/s2a-go@v0.1.7 | Detected from LICENSE.md. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
-| github.com/googleapis/enterprise-certificate-proxy | v0.3.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/googleapis/enterprise-certificate-proxy@v0.3.2 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
-| github.com/hashicorp/golang-lru/v2 | v2.0.7 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/hashicorp/golang-lru/v2@v2.0.7 | Detected from LICENSE. |
-| github.com/jordanlewis/gcassert | v0.0.0-20250430164644-389ef753e22e | MIT | Runtime | https://pkg.go.dev/github.com/jordanlewis/gcassert@v0.0.0-20250430164644-389ef753e22e | Detected from LICENSE.txt. |
-| github.com/kr/pretty | v0.3.1 | MIT | Runtime | https://pkg.go.dev/github.com/kr/pretty@v0.3.1 | Detected from License. |
-| github.com/kr/text | v0.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/kr/text@v0.2.0 | Detected from License. |
-| github.com/kylelemons/godebug | v1.1.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/kylelemons/godebug@v1.1.0 | Detected from LICENSE. |
 | github.com/libp2p/go-buffer-pool | v0.0.2 | MIT | Runtime | https://pkg.go.dev/github.com/libp2p/go-buffer-pool@v0.0.2 | Detected from LICENSE, LICENSE-BSD. |
 | github.com/libp2p/go-yamux/v5 | v5.1.0 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/libp2p/go-yamux/v5@v5.1.0 | Detected from LICENSE, LICENSE-BSD. |
 | github.com/lufia/plan9stats | v0.0.0-20211012122336-39d0f177ccd0 | BSD-style | Runtime | https://pkg.go.dev/github.com/lufia/plan9stats@v0.0.0-20211012122336-39d0f177ccd0 | Detected from LICENSE. |
 | github.com/mattn/go-isatty | v0.0.24 | MIT | Runtime | https://pkg.go.dev/github.com/mattn/go-isatty@v0.0.24 | Detected from LICENSE. |
 | github.com/ncruces/go-strftime | v1.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v1.0.0 | Detected from LICENSE. |
 | github.com/openai/openai-go | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go@v1.12.0 | Detected from LICENSE. |
-| github.com/pkg/browser | v0.0.0-20240102092130-5ac0b6a4141c | BSD-style | Runtime | https://pkg.go.dev/github.com/pkg/browser@v0.0.0-20240102092130-5ac0b6a4141c | Detected from LICENSE. |
-| github.com/pmezard/go-difflib | v1.0.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/pmezard/go-difflib@v1.0.0 | Detected from LICENSE. |
 | github.com/power-devops/perfstat | v0.0.0-20240221224432-82ca36839d55 | MIT | Runtime | https://pkg.go.dev/github.com/power-devops/perfstat@v0.0.0-20240221224432-82ca36839d55 | Detected from LICENSE. |
-| github.com/quic-go/go-ossfuzz-seeds | v0.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/go-ossfuzz-seeds@v0.1.0 | Detected from LICENSE. |
 | github.com/quic-go/qpack | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/qpack@v0.6.0 | Detected from LICENSE.md. |
 | github.com/quic-go/quic-go | v0.61.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/quic-go@v0.61.0 | Detected from LICENSE. |
 | github.com/quic-go/webtransport-go | v0.12.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/webtransport-go@v0.12.0 | Detected from LICENSE. |
 | github.com/remyoudompheng/bigfft | v0.0.0-20230129092748-24d4a6f8daec | BSD-style | Runtime | https://pkg.go.dev/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec | Detected from LICENSE. |
-| github.com/rogpeppe/go-internal | v1.10.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/rogpeppe/go-internal@v1.10.0 | Detected from LICENSE. |
 | github.com/santhosh-tekuri/jsonschema/v5 | v5.3.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/santhosh-tekuri/jsonschema/v5@v5.3.1 | Detected from LICENSE. |
 | github.com/shirou/gopsutil/v4 | v4.25.12 | BSD-style | Runtime | https://pkg.go.dev/github.com/shirou/gopsutil/v4@v4.25.12 | Detected from LICENSE. |
-| github.com/stretchr/testify | v1.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/stretchr/testify@v1.11.1 | Detected from LICENSE. |
 | github.com/tdewolff/parse/v2 | v2.8.16 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/parse/v2@v2.8.16 | Detected from LICENSE.md. |
-| github.com/tdewolff/test | v1.0.12 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/test@v1.0.12 | Detected from LICENSE.md. |
 | github.com/tetratelabs/wazero | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tetratelabs/wazero@v1.12.0 | Detected from LICENSE. |
 | github.com/tidwall/gjson | v1.18.0 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/gjson@v1.18.0 | Detected from LICENSE. |
 | github.com/tidwall/match | v1.1.1 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/match@v1.1.1 | Detected from LICENSE. |
@@ -99,45 +56,18 @@ The native package and OCI image enter Redeven's signed catalog only after their
 | github.com/tklauser/go-sysconf | v0.3.16 | BSD-style | Runtime | https://pkg.go.dev/github.com/tklauser/go-sysconf@v0.3.16 | Detected from LICENSE. |
 | github.com/tklauser/numcpus | v0.11.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tklauser/numcpus@v0.11.0 | Detected from LICENSE. |
 | github.com/yusufpapurcu/wmi | v1.2.4 | MIT | Runtime | https://pkg.go.dev/github.com/yusufpapurcu/wmi@v1.2.4 | Detected from LICENSE. |
-| go.opencensus.io | v0.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opencensus.io@v0.24.0 | Detected from LICENSE. |
-| go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc | v0.49.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc@v0.49.0 | Detected from LICENSE. |
-| go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp | v0.49.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.49.0 | Detected from LICENSE. |
-| go.opentelemetry.io/otel | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel@v1.24.0 | Detected from LICENSE. |
-| go.opentelemetry.io/otel/metric | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/metric@v1.24.0 | Detected from LICENSE. |
-| go.opentelemetry.io/otel/trace | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/trace@v1.24.0 | Detected from LICENSE. |
-| go.uber.org/mock | v0.5.2 | Apache-2.0 | Runtime | https://pkg.go.dev/go.uber.org/mock@v0.5.2 | Detected from LICENSE. |
 | golang.org/x/crypto | v0.55.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.55.0 | Detected from LICENSE. |
 | golang.org/x/image | v0.45.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.45.0 | Detected from LICENSE. |
 | golang.org/x/mod | v0.40.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.40.0 | Detected from LICENSE. |
 | golang.org/x/net | v0.58.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.58.0 | Detected from LICENSE. |
-| golang.org/x/oauth2 | v0.30.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.30.0 | Detected from LICENSE. |
-| golang.org/x/sync | v0.22.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.22.0 | Detected from LICENSE. |
 | golang.org/x/sys | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.47.0 | Detected from LICENSE. |
 | golang.org/x/term | v0.45.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.45.0 | Detected from LICENSE. |
 | golang.org/x/text | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.41.0 | Detected from LICENSE. |
-| golang.org/x/time | v0.5.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/time@v0.5.0 | Detected from LICENSE. |
-| golang.org/x/tools | v0.49.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/tools@v0.49.0 | Detected from LICENSE. |
-| golang.org/x/xerrors | v0.0.0-20191204190536-9bdfabe68543 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/xerrors@v0.0.0-20191204190536-9bdfabe68543 | Detected from LICENSE. |
-| google.golang.org/api | v0.189.0 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/api@v0.189.0 | Detected from LICENSE. |
-| google.golang.org/genproto/googleapis/rpc | v0.0.0-20240722135656-d784300faade | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/genproto/googleapis/rpc@v0.0.0-20240722135656-d784300faade | Detected from LICENSE. |
-| google.golang.org/grpc | v1.64.1 | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/grpc@v1.64.1 | Detected from LICENSE. |
-| google.golang.org/protobuf | v1.34.2 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/protobuf@v1.34.2 | Detected from LICENSE. |
-| gopkg.in/check.v1 | v1.0.0-20201130134442-10cb98267c6c | BSD-style | Runtime | https://pkg.go.dev/gopkg.in/check.v1@v1.0.0-20201130134442-10cb98267c6c | Detected from LICENSE. |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT | Runtime | https://pkg.go.dev/gopkg.in/yaml.v3@v3.0.1 | Detected from LICENSE. |
-| modernc.org/cc/v4 | v4.29.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/cc/v4@v4.29.1 | Detected from LICENSE. |
-| modernc.org/ccgo/v4 | v4.34.6 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/ccgo/v4@v4.34.6 | Detected from LICENSE. |
-| modernc.org/fileutil | v1.4.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/fileutil@v1.4.0 | Detected from LICENSE. |
-| modernc.org/gc/v2 | v2.6.5 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/gc/v2@v2.6.5 | Detected from LICENSE. |
-| modernc.org/gc/v3 | v3.1.4 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/gc/v3@v3.1.4 | Detected from LICENSE. |
-| modernc.org/goabi0 | v0.2.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/goabi0@v0.2.0 | Detected from LICENSE. |
 | modernc.org/libc | v1.74.4 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/libc@v1.74.4 | Detected from LICENSE, LICENSE-3RD-PARTY.md. |
 | modernc.org/mathutil | v1.7.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/mathutil@v1.7.1 | Detected from LICENSE. |
 | modernc.org/memory | v1.11.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/memory@v1.11.0 | Detected from LICENSE, LICENSE-GO, LICENSE-LOGO, LICENSE-MMAP-GO. |
-| modernc.org/opt | v0.2.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/opt@v0.2.0 | Detected from LICENSE. |
-| modernc.org/sortutil | v1.2.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/sortutil@v1.2.1 | Detected from LICENSE. |
 | modernc.org/sqlite | v1.56.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/sqlite@v1.56.0 | Detected from LICENSE. |
-| modernc.org/strutil | v1.2.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/strutil@v1.2.1 | Detected from LICENSE. |
-| modernc.org/token | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/token@v1.1.0 | Detected from LICENSE. |
 
 ## JavaScript Packages
 
@@ -247,16 +177,16 @@ The native package and OCI image enter Redeven's signed catalog only after their
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.43.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.43.0 |  |
-| @floegence/floe-webapp-core | 0.43.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.43.0 |  |
-| @floegence/floe-webapp-protocol | 0.43.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.43.0 |  |
+| @floegence/floe-webapp-boot | 0.44.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.44.0 |  |
+| @floegence/floe-webapp-core | 0.44.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.44.0 |  |
+| @floegence/floe-webapp-protocol | 0.44.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.44.0 |  |
 | @floegence/floeterm-terminal-web | 0.17.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.17.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.17.0 package. |
-| @floegence/flowersec-core | 2.5.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/2.5.2 |  |
-| @floegence/flowersec-node-native-darwin-arm64 | 2.5.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/2.5.2 |  |
-| @floegence/flowersec-node-native-darwin-x64 | 2.5.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/2.5.2 |  |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 2.5.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/2.5.2 |  |
-| @floegence/flowersec-node-native-linux-x64-gnu | 2.5.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/2.5.2 |  |
-| @floegence/flowersec-node-native | 2.5.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/2.5.2 |  |
+| @floegence/flowersec-core | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/3.1.1 |  |
+| @floegence/flowersec-node-native-darwin-arm64 | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/3.1.1 |  |
+| @floegence/flowersec-node-native-darwin-x64 | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/3.1.1 |  |
+| @floegence/flowersec-node-native-linux-arm64-gnu | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/3.1.1 |  |
+| @floegence/flowersec-node-native-linux-x64-gnu | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/3.1.1 |  |
+| @floegence/flowersec-node-native | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/3.1.1 |  |
 | @floegence/redevplugin-contracts | 3.0.16 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.16 |  |
 | @floegence/redevplugin-ui | 3.0.16 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.16 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |

@@ -86,10 +86,14 @@ For remote machines: Desktop can auto-install the matching Redeven release over 
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Run
+# 2. Generate and trust the Local UI device CA (once)
+redeven local-authority device-ca generate --state-root ~/.redeven
+redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# 3. Run
 redeven run
 
-# 3. Open http://localhost:23998 in your browser.
+# 4. Open https://localhost:23998 in your browser.
 ```
 
 The first `redeven run` initializes local state under `~/.redeven/local-environment/` and starts in local mode. No bootstrap or control-plane configuration is required. Local UI listens on `localhost:23998` and is available only from this device; direct LAN or public-network access is not supported. Press Ctrl+C to stop the runtime.
@@ -120,7 +124,7 @@ Redeven leads with capability, but the runtime is still the trust boundary becau
 
 - The runtime lives on the endpoint and keeps plaintext there.
 - The control plane issues bootstrap payloads, grants, and immutable session metadata.
-- [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes between the client and the endpoint runtime; the browser integration uses the published 2.5.2 API and the Go consumer module is `flowersec-go/v2@v2.5.2`.
+- [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes between the client and the endpoint runtime; browser surfaces use Flowersec Core 3.1.1 and the Go consumer module is `flowersec-go/v3@v3.1.1`.
 - Effective permissions come from server-issued session grants, clamped by the local permission policy (`read`, `write`, `execute`, `admin` — no category implies any other).
 - Local config, E2EE material, audit logs, and diagnostics stay in the endpoint state directory.
 - GitHub Releases remain the public source of truth for binaries, checksums, signatures, and OKF verification assets.

@@ -52,14 +52,6 @@ function resolvedRuntimeBootstrap(
   return bootstrap ?? null;
 }
 
-function acknowledgementMatchesBind(raw: string | undefined, canonicalBind: string): boolean {
-  try {
-    return canonicalLocalUIBind(String(raw ?? '')) === canonicalBind;
-  } catch {
-    return false;
-  }
-}
-
 export function buildDesktopRuntimeArgs(
   environment: DesktopLocalEnvironmentState,
   options: BuildDesktopRuntimeArgsOptions = {},
@@ -76,16 +68,11 @@ export function buildDesktopRuntimeArgs(
     '--local-ui-bind',
     localUIBind,
   ];
-  if (!isLoopbackOnlyBind(parsedBind)) {
-    const acknowledgement = access.plaintext_network_exposure_acknowledgement;
-    if (!access.local_ui_password_configured || String(access.local_ui_password ?? '') === '') {
-      throw new Error('Network Local UI access requires a configured password.');
-    }
-    if (acknowledgement?.version !== 1 || !acknowledgementMatchesBind(acknowledgement.bind, localUIBind)) {
-      throw new Error('Review network exposure before starting this Local Environment.');
-    }
-    args.push('--acknowledge-plaintext-network-exposure');
-  }
+	if (!isLoopbackOnlyBind(parsedBind)) {
+		if (!access.local_ui_password_configured || String(access.local_ui_password ?? '') === '') {
+			throw new Error('Network Local UI access requires a configured password.');
+		}
+	}
   const stateRoot = String(options.stateRoot ?? '').trim();
   if (stateRoot !== '') {
     args.push('--state-root', stateRoot);

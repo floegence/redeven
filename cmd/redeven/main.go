@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
@@ -236,7 +237,6 @@ func (c *cli) runCmd(args []string) int {
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
 	modeRaw := fs.String("mode", string(defaultRunMode), "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
-	acknowledgePlaintextNetworkExposure := fs.Bool("acknowledge-plaintext-network-exposure", false, "Acknowledge plaintext credential exposure for a non-loopback Local UI bind")
 	passwordPrompt := fs.Bool("password-prompt", false, "Prompt for the Local UI access password without echo")
 	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
@@ -290,7 +290,7 @@ func (c *cli) runCmd(args []string) int {
 			fmt.Sprintf("invalid value for `--local-ui-bind`: %v", err),
 			[]string{
 				"Accepted examples: localhost:23998, 127.0.0.1:0, 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998.",
-				"Non-loopback binds require a fixed port, a Local UI password, and --acknowledge-plaintext-network-exposure.",
+				"Non-loopback binds require a fixed port, a Local UI password, and a trusted Local UI device CA.",
 			},
 			runHelpText(),
 		)
@@ -326,25 +326,6 @@ func (c *cli) runCmd(args []string) int {
 		)
 		return 2
 	}
-	if mode == runModeRemote && *acknowledgePlaintextNetworkExposure {
-		writeErrorWithHelp(
-			c.stderr,
-			"`--acknowledge-plaintext-network-exposure` requires a Local UI run mode",
-			[]string{"Remove the acknowledgement in remote-only mode; no Local UI listener is started."},
-			runHelpText(),
-		)
-		return 2
-	}
-	if localUIBind.IsLoopbackOnly() && *acknowledgePlaintextNetworkExposure {
-		writeErrorWithHelp(
-			c.stderr,
-			"`--acknowledge-plaintext-network-exposure` is invalid for a loopback Local UI bind",
-			[]string{"Remove the acknowledgement, or choose a specific non-loopback IP or wildcard bind when network access is intentional."},
-			runHelpText(),
-		)
-		return 2
-	}
-
 	inlineBootstrapRequested := strings.TrimSpace(*providerOrigin) != "" ||
 		strings.TrimSpace(*controlplane) != "" ||
 		strings.TrimSpace(*envID) != "" ||
@@ -372,18 +353,6 @@ func (c *cli) runCmd(args []string) int {
 	passwordRequired := startupSecrets.localUIPassword.value != ""
 	localUIExposure := runtimemanagement.NewLocalUIExposure(localUIBind.IsNetworkExposure(), passwordRequired)
 	if mode != runModeRemote && localUIBind.IsNetworkExposure() {
-		if !*acknowledgePlaintextNetworkExposure {
-			writeErrorWithHelp(
-				c.stderr,
-				"network Local UI exposure requires `--acknowledge-plaintext-network-exposure`",
-				[]string{
-					"Plaintext HTTP does not protect passwords, cookies, page resources, or non-Flowersec traffic from interception or modification.",
-					"Provide a Local UI password and repeat the command with the acknowledgement only on a trusted network.",
-				},
-				runHelpText(),
-			)
-			return 2
-		}
 		if !passwordRequired {
 			writeErrorWithHelp(
 				c.stderr,
@@ -658,9 +627,8 @@ func (c *cli) runCmd(args []string) int {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to bind plugin runtime authority: %v", err))
 	}
 	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, config.EnvironmentCatalogAccess{
-		LocalUIBind:                          localUIBindLabel,
-		LocalUIPasswordConfigured:            accessGate.Enabled(),
-		PlaintextNetworkExposureAcknowledged: *acknowledgePlaintextNetworkExposure,
+		LocalUIBind:               localUIBindLabel,
+		LocalUIPasswordConfigured: accessGate.Enabled(),
 	}); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update environment catalog: %v", err))
 	}
@@ -705,7 +673,7 @@ func (c *cli) runCmd(args []string) int {
 				Detail: cfg.ControlplaneBaseURL,
 			})
 		},
-		OnControlRetry: func(err error, delay time.Duration) {
+		OnControlRetry: func(_ flowersec.ConnectionDiagnostic, delay time.Duration) {
 			_ = startupReporter.Emit(runtimepresentation.Event{
 				Kind:        runtimepresentation.EventWarning,
 				Phase:       runtimepresentation.PhaseConnectControl,
@@ -777,11 +745,18 @@ func (c *cli) runCmd(args []string) int {
 		}
 		localUIServer = srv
 		if err := srv.Start(ctx); err != nil {
+			remediation := "Start Redeven on another local port, for example: redeven run --local-ui-bind 127.0.0.1:24000"
+			if errors.Is(err, localui.ErrLocalUIDeviceCAMissing) ||
+				errors.Is(err, localui.ErrLocalUIDeviceCAInvalid) ||
+				errors.Is(err, localui.ErrLocalUIDeviceCAExpired) ||
+				errors.Is(err, localui.ErrLocalUIDeviceCAUntrusted) {
+				remediation = "Run `redeven local-authority device-ca status --state-root <path>` and complete explicit current-user trust setup before restarting."
+			}
 			return failRuntimeLaunch(
 				desktopLaunchCodeStartupFailed,
 				fmt.Sprintf("failed to start local ui: %v", err),
 				1,
-				"Start Redeven on another local port, for example: redeven run --local-ui-bind 127.0.0.1:24000",
+				remediation,
 			)
 		}
 		localUIBindLabel = srv.ListenLabel()
@@ -797,19 +772,9 @@ func (c *cli) runCmd(args []string) int {
 			Title:  "Local UI ready",
 			Detail: firstNonEmptyString(localUIURLs),
 		})
-		if srv.LocalUIExposure().IsNetwork() {
-			_ = startupReporter.Emit(runtimepresentation.Event{
-				Kind:     runtimepresentation.EventWarning,
-				Phase:    runtimepresentation.PhaseStartLocalUI,
-				Title:    "Plaintext network exposure is active",
-				Detail:   fmt.Sprintf("listen=%s urls=%s tls=disabled password=enabled", localUIBindLabel, strings.Join(localUIURLs, ",")),
-				Severity: runtimepresentation.SeverityWarning,
-			})
-		}
 		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, config.EnvironmentCatalogAccess{
-			LocalUIBind:                          localUIBindLabel,
-			LocalUIPasswordConfigured:            accessGate.Enabled(),
-			PlaintextNetworkExposureAcknowledged: *acknowledgePlaintextNetworkExposure,
+			LocalUIBind:               localUIBindLabel,
+			LocalUIPasswordConfigured: accessGate.Enabled(),
 		}); err != nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to refresh environment catalog: %v", err))
 		}

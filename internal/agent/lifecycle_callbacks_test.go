@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -26,8 +27,10 @@ func TestRunCallsControlDisabledCallback(t *testing.T) {
 		Version:               "test",
 		OnControlDisabled:     func() { called <- struct{}{} },
 		OnControlConnecting:   func() { t.Fatalf("OnControlConnecting should not run when control channel is disabled") },
-		OnControlRetry:        func(error, time.Duration) { t.Fatalf("OnControlRetry should not run when control channel is disabled") },
-		OnControlConnected:    func() { t.Fatalf("OnControlConnected should not run when control channel is disabled") },
+		OnControlRetry: func(flowersec.ConnectionDiagnostic, time.Duration) {
+			t.Fatalf("OnControlRetry should not run when control channel is disabled")
+		},
+		OnControlConnected: func() { t.Fatalf("OnControlConnected should not run when control channel is disabled") },
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

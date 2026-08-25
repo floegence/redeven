@@ -14,12 +14,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	appserverpkg "github.com/floegence/redeven/internal/codeapp/appserver"
@@ -242,6 +243,7 @@ func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 
 func newTestServerWithAppServer(t *testing.T, gate *accessgate.Gate, appSrv *appserverpkg.Server, cfgPath string) *Server {
 	t.Helper()
+	testDeviceCA := newTestLocalUIDeviceCA(t)
 	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
 		cfgPath,
 		localUserPublicID,
@@ -256,7 +258,33 @@ func newTestServerWithAppServer(t *testing.T, gate *accessgate.Gate, appSrv *app
 		accessGate:         gate,
 		appServer:          appSrv,
 		pending:            make(map[string]pendingDirect),
+		deviceCA:           testDeviceCA,
+		directAuthorities:  make(map[string]string),
+		resolveDirectAuthority: func(authority string) (string, error) {
+			host, portText, splitErr := net.SplitHostPort(authority)
+			if splitErr != nil {
+				return "", splitErr
+			}
+			port, parseErr := strconv.Atoi(portText)
+			if parseErr != nil || port >= 65535 {
+				return "", errors.New("invalid test authority")
+			}
+			return net.JoinHostPort(host, strconv.Itoa(port+1)), nil
+		},
 	}
+}
+
+func newTestLocalUIDeviceCA(t *testing.T) *deviceCA {
+	t.Helper()
+	caStateDir := t.TempDir()
+	if _, err := GenerateLocalUIDeviceCA(caStateDir); err != nil {
+		t.Fatalf("GenerateLocalUIDeviceCA() error = %v", err)
+	}
+	testDeviceCA, err := loadLocalUIDeviceCA(caStateDir)
+	if err != nil {
+		t.Fatalf("loadLocalUIDeviceCA() error = %v", err)
+	}
+	return testDeviceCA
 }
 
 func newRuntimeHealthTestAgent(t *testing.T, cfgPath string) *agent.Agent {
@@ -823,7 +851,7 @@ func TestServer_hasLocalAccess_acceptsResumeTokenQuery(t *testing.T) {
 		t.Fatalf("expected resume token")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_direct/ws?"+localAccessResumeQuery+"="+unlockBody.Data.ResumeToken, nil)
+	req := httptest.NewRequest(http.MethodGet, "https://localhost:23998/cs/demo?"+localAccessResumeQuery+"="+unlockBody.Data.ResumeToken, nil)
 	if !s.hasLocalAccess(req) {
 		t.Fatalf("expected query resume token to grant local access")
 	}
@@ -994,15 +1022,16 @@ func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	diagStore := newDiagnosticsStoreForConfig(t, cfgPath)
 	s := &Server{
-		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-		configPath: cfgPath,
-		version:    "dev",
-		appServer:  newTestAppServer(t, cfgPath),
-		diag:       diagStore,
-		pending:    make(map[string]pendingDirect),
+		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		configPath:        cfgPath,
+		version:           "dev",
+		appServer:         newTestAppServer(t, cfgPath),
+		diag:              diagStore,
+		pending:           make(map[string]pendingDirect),
+		directAuthorities: map[string]string{"localhost:23998": "localhost:24000"},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "https://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	req.TLS = &tls.ConnectionState{}
 	res := httptest.NewRecorder()
 	s.handler().ServeHTTP(res, req)
@@ -1266,6 +1295,7 @@ func TestServer_Start_UsesActualDynamicPortForDisplayURLs(t *testing.T) {
 		appServer:  newTestAppServer(t, cfgPath),
 		a:          newRuntimeHealthTestAgent(t, cfgPath),
 		pending:    make(map[string]pendingDirect),
+		deviceCA:   newTestLocalUIDeviceCA(t),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1358,14 +1388,14 @@ func TestLocalPortForwardRoute(t *testing.T) {
 }
 
 func TestSameOriginWSRequest(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "http://127.42.0.9:12345/_redeven_direct/ws", nil)
-	req.Header.Set("Origin", "http://127.42.0.9:12345")
-	if !sameOriginWSRequest(req) {
+	req := httptest.NewRequest(http.MethodGet, "https://127.42.0.9:12345/socket", nil)
+	req.Header.Set("Origin", "https://127.42.0.9:12345")
+	if !strictSameOriginWSRequest(req, true) {
 		t.Fatalf("expected same-origin websocket request to pass")
 	}
 
-	req.Header.Set("Origin", "http://evil.example.com")
-	if sameOriginWSRequest(req) {
+	req.Header.Set("Origin", "https://evil.example.com")
+	if strictSameOriginWSRequest(req, true) {
 		t.Fatalf("expected mismatched origin to fail")
 	}
 }

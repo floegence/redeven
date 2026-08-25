@@ -16,7 +16,7 @@ import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRunt
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
 const loopbackExposure = {
   scope: 'loopback',
-  transport: 'plaintext',
+  transport: 'tls',
   password_required: false,
 } as const;
 

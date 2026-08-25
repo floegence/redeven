@@ -12,125 +12,15 @@ function sha256Base64URL(value) {
   return createHash('sha256').update(value).digest('base64url');
 }
 
-function pendingAcceptAcceptor() {
-  let resolveAccept;
-  let rejectAccept;
-  let closeCalls = 0;
-  let signal;
-  const acceptor = {
-    addresses: () => [{ host: '127.0.0.1', port: 45678 }],
-    accept(options = {}) {
-      signal = options.signal;
-      return new Promise((resolve, reject) => {
-        resolveAccept = resolve;
-        rejectAccept = reject;
-        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
-      });
-    },
-    async close() {
-      closeCalls += 1;
-    },
-  };
-  return {
-    acceptor,
-    get signal() { return signal; },
-    get closeCalls() { return closeCalls; },
-    release() {
-      resolveAccept?.({
-        close: async () => undefined,
-        serve: async () => undefined,
-      });
-    },
-    abort(reason = new Error('test abort')) {
-      rejectAccept?.(reason);
-    },
-  };
-}
-
-function resolvedAcceptAcceptor() {
-  let acceptCalls = 0;
-  let closeCalls = 0;
-  let sessionCloseCalls = 0;
-  let resolveAccept;
-  let resolveServe;
-  const accepted = {
-    async close() {
-      sessionCloseCalls += 1;
-      resolveServe();
-    },
-    serve() {
-      return new Promise((resolve) => {
-        resolveServe = resolve;
-      });
-    },
-  };
-  return {
-    acceptor: {
-      addresses: () => [{ host: '127.0.0.1', port: 45678 }],
-      accept(options = {}) {
-        acceptCalls += 1;
-        return new Promise((resolve, reject) => {
-          if (acceptCalls === 1) resolveAccept = () => resolve(accepted);
-          options.signal?.addEventListener('abort', () => reject(options.signal.reason), { once: true });
-        });
-      },
-      async close() {
-        closeCalls += 1;
-      },
-    },
-    releaseAccepted() { resolveAccept(); },
-    get acceptCalls() { return acceptCalls; },
-    get closeCalls() { return closeCalls; },
-    get sessionCloseCalls() { return sessionCloseCalls; },
-  };
-}
-
-test('packaged renderer close aborts a pending Flowersec accept loop and releases all resources', async () => {
-  const pending = pendingAcceptAcceptor();
-  const server = await createBuiltDistServer({
-    accessReady: true,
-    tls: { certificate: 'test-certificate', privateKey: 'test-private-key' },
-    acceptorFactory: async () => pending.acceptor,
-  });
-
-  const closePromise = server.close();
-  let timer;
-  const closeResult = await Promise.race([
-    closePromise.then(() => 'closed'),
-    new Promise((resolve) => {
-      timer = setTimeout(() => resolve('timed_out'), 100);
-    }),
-  ]);
-  clearTimeout(timer);
-
+test('packaged renderer close terminates its published Flowersec Go v3 peer', async () => {
+  const tls = await createBuiltDistTLS();
+  const server = await createBuiltDistServer({ accessReady: true, tls });
   try {
-    assert.equal(closeResult, 'closed');
-    assert.ok(pending.signal, 'close must provide an abort signal to accept');
-    assert.equal(pending.signal.aborted, true);
-    assert.equal(pending.closeCalls, 1);
+    await server.close();
     await assert.rejects(fetch(server.baseURL));
   } finally {
-    pending.release();
-    pending.abort();
-    await closePromise;
+    await tls.cleanup();
   }
-});
-
-test('packaged renderer close releases a session accepted during shutdown', async () => {
-  const resolved = resolvedAcceptAcceptor();
-  const server = await createBuiltDistServer({
-    accessReady: true,
-    tls: { certificate: 'test-certificate', privateKey: 'test-private-key' },
-    acceptorFactory: async () => resolved.acceptor,
-  });
-
-  resolved.releaseAccepted();
-  await server.close();
-
-  assert.equal(resolved.closeCalls, 1);
-  assert.equal(resolved.acceptCalls, 1);
-  assert.equal(resolved.sessionCloseCalls, 1);
-  await assert.rejects(fetch(server.baseURL));
 });
 
 test('packaged renderer TLS cleanup removes its temporary credentials', async () => {
@@ -143,7 +33,8 @@ test('packaged renderer TLS cleanup removes its temporary credentials', async ()
 });
 
 test('unlocked packaged renderer emits a current validated Floe acquisition envelope', async () => {
-  const server = await createBuiltDistServer({ accessReady: true });
+  const tls = await createBuiltDistTLS();
+  const server = await createBuiltDistServer({ accessReady: true, tls });
 
   try {
     const response = await fetch(new URL('/api/local/direct/connect_artifact', server.baseURL), {
@@ -186,6 +77,7 @@ test('unlocked packaged renderer emits a current validated Floe acquisition enve
     });
   } finally {
     await server.close();
+    await tls.cleanup();
   }
 });
 
@@ -256,15 +148,12 @@ test('locked packaged renderer verifies the access gate without opening privileg
   assert.doesNotMatch(packagedRendererSource, /pluginEntryCount/u);
 });
 
-test('unlocked packaged renderer uses the Flowersec 2.5.2 WebSocket Acceptor contract', () => {
-  assert.match(packagedRendererSource, /listeners: \[\{[\s\S]*?carrier: 'websocket',[\s\S]*?path: 'direct'/u);
-  assert.match(packagedRendererSource, /acceptor\.addresses\(\)\[0\]/u);
-  assert.match(packagedRendererSource, /new Issuer\(\)\.issueDirect/u);
-  assert.match(packagedRendererSource, /authorizeRuntime\(request, directAuthorizationRecord/u);
-  assert.doesNotMatch(packagedRendererSource, /acceptor\.address\(\)/u);
-  assert.doesNotMatch(packagedRendererSource, /contract_hash_b64u/u);
-  assert.doesNotMatch(packagedRendererSource, /flowersec\/webtransport\/v2\/direct/u);
-  assert.doesNotMatch(packagedRendererSource, /createBuiltDistServer\(\{[^}]*\btls\b/u);
+test('unlocked packaged renderer starts the published Flowersec Go v3 WSS peer', () => {
+  assert.match(packagedRendererSource, /flowersec-v3-smoke-peer/u);
+  assert.match(packagedRendererSource, /GOWORK: 'off'/u);
+  assert.match(packagedRendererSource, /--ignore-certificate-errors-spki-list/u);
+  assert.doesNotMatch(packagedRendererSource, /@floegence\/flowersec-core\/node/u);
+  assert.doesNotMatch(packagedRendererSource, /createAcceptor|new Issuer|authorizeRuntime/u);
 });
 
 test('unlocked packaged renderer opens Plugin Center through the empty launcher action', () => {

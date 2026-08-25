@@ -19,7 +19,7 @@ func TestLocalUIReverseProxyRewritesAuthorityOriginAndJSON(t *testing.T) {
 		gotOrigin = r.Header.Get("Origin")
 		gotEncoding = r.Header.Get("Accept-Encoding")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"direct_ws_url":"ws://`+r.Host+`/direct"}`)
+		_, _ = io.WriteString(w, `{"effective_run_mode":"local","local_ui_url":"https://`+r.Host+`/"}`)
 	}))
 	defer upstream.Close()
 

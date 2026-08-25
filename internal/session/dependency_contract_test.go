@@ -21,10 +21,10 @@ import (
 )
 
 const (
-	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v2"
-	flowersecGoVersion   = "v2.5.2"
+	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersecGoVersion   = "v3.1.1"
 	flowersecCorePackage = "@floegence/flowersec-core"
-	flowersecCoreVersion = "2.5.2"
+	flowersecCoreVersion = "3.1.1"
 )
 
 func TestDesktopPnpmPeerInstallSettingMatchesLockfile(t *testing.T) {
@@ -253,7 +253,7 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 	for _, marker := range []string{
 		"createLocalDirectArtifactSource({",
 		"createEnvProxyArtifactSource({",
-		"resolveLocalTransportSecurityPolicy(window.location.hostname)",
+		"resolveLocalTransportSecurityPolicy(window.location.protocol, window.location.hostname)",
 		"createEnvAppConnectionRuntime({",
 	} {
 		if !strings.Contains(envAppSource, marker) {
@@ -277,7 +277,7 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 	for _, marker := range []string{
 		"policy: true",
 		"hostnameIsLoopback",
-		"Flowersec plaintext direct sessions are restricted to canonical loopback hosts.",
+		"Redeven Local UI requires trusted HTTPS and Flowersec WSS.",
 	} {
 		if !strings.Contains(localTransportPolicySource, marker) {
 			t.Fatalf("localTransportSecurity.ts must contain explicit Local UI transport policy %q", marker)
@@ -312,7 +312,7 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 	localUISource := readRepoFile(t, root, "internal/localui/localui.go")
 	for _, marker := range []string{"flowersec.NewAcceptor(", "controlplane.AuthorizeRuntime(", "flowersec.WebSocketDirectPath"} {
 		if !strings.Contains(localUISource, marker) {
-			t.Fatalf("Local UI direct server must use the Flowersec v2 Acceptor boundary %q", marker)
+			t.Fatalf("Local UI direct server must use the Flowersec v3 Acceptor boundary %q", marker)
 		}
 	}
 }
@@ -323,58 +323,58 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"0.43.0\"",
+			"\"@floegence/floe-webapp-core\": \"0.44.0\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.43.0.tgz",
+			"floe-webapp-core-0.44.0.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.43.0",
+			"@floegence/floe-webapp-core@0.44.0",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.43.0\"",
-			"\"@floegence/floe-webapp-core\": \"0.43.0\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.43.0\"",
+			"\"@floegence/floe-webapp-boot\": \"0.44.0\"",
+			"\"@floegence/floe-webapp-core\": \"0.44.0\"",
+			"\"@floegence/floe-webapp-protocol\": \"0.44.0\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.17.0\"",
-			"\"@floegence/flowersec-core\": \"2.5.2\"",
+			"\"@floegence/flowersec-core\": \"3.1.1\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.43.0.tgz",
-			"floe-webapp-core-0.43.0.tgz",
-			"floe-webapp-protocol-0.43.0.tgz",
+			"floe-webapp-boot-0.44.0.tgz",
+			"floe-webapp-core-0.44.0.tgz",
+			"floe-webapp-protocol-0.44.0.tgz",
 			"floeterm-terminal-web-0.17.0.tgz",
-			"flowersec-core-2.5.2.tgz",
+			"flowersec-core-3.1.1.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.43.0",
-			"@floegence/floe-webapp-core@0.43.0",
-			"@floegence/floe-webapp-protocol@0.43.0",
+			"@floegence/floe-webapp-boot@0.44.0",
+			"@floegence/floe-webapp-core@0.44.0",
+			"@floegence/floe-webapp-protocol@0.44.0",
 			"@floegence/floeterm-terminal-web@0.17.0",
-			"@floegence/flowersec-core@2.5.2",
+			"@floegence/flowersec-core@3.1.1",
 		},
 		"internal/codeapp/ui_src/package.json": {
-			"\"@floegence/flowersec-core\": \"2.5.2\"",
+			"\"@floegence/flowersec-core\": \"3.1.1\"",
 		},
 		"internal/codeapp/ui_src/package-lock.json": {
-			"flowersec-core-2.5.2.tgz",
+			"flowersec-core-3.1.1.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.43.0",
-			"@floegence/floe-webapp-core | 0.43.0",
-			"@floegence/floe-webapp-protocol | 0.43.0",
+			"@floegence/floe-webapp-boot | 0.44.0",
+			"@floegence/floe-webapp-core | 0.44.0",
+			"@floegence/floe-webapp-protocol | 0.44.0",
 			"@floegence/floeterm-terminal-web | 0.17.0",
-			"@floegence/flowersec-core | 2.5.2",
+			"@floegence/flowersec-core | 3.1.1",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.17.0",
-			"Flowersec Go v2.5.2",
-			"Flowersec Core v2.5.2",
+			"Flowersec Go v3.1.1",
+			"Flowersec Core v3.1.1",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.17.0",
 			"semantic Presentation",
-			"Floe Webapp Boot, Core, and Protocol v0.43.0",
-			"Flowersec Core v2.5.2",
+			"Floe Webapp Boot, Core, and Protocol v0.44.0",
+			"Flowersec Core v3.1.1",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -714,7 +714,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"github.com/floegence/floret/v5 v5.0.2",
 			"runtime-permission-lifecycle-v2",
-			"published Flowersec Go and Core v2.5.2 plus Floe Webapp v0.43.0",
+			"published Flowersec Go and Core v3.1.1 plus Floe Webapp v0.44.0",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-runtime-v2",

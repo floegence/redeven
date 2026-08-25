@@ -265,6 +265,20 @@ func TestDockerUbuntuPlaintextNetworkExposure(t *testing.T) {
 
 	reportPath := "/tmp/redeven-network-report.json"
 	stateRoot := "/root/.redeven-network-e2e"
+	deviceCAPath := "/tmp/redeven-local-ui-device-ca.crt"
+	f.dockerExec(ctx, nil, containerRedeven, "local-authority", "device-ca", "generate", "--state-root", stateRoot)
+	f.dockerExec(ctx, nil, containerRedeven, "local-authority", "device-ca", "export", "--state-root", stateRoot, "--output", deviceCAPath)
+	f.dockerExec(ctx, nil, "sh", "-c", "cp "+deviceCAPath+" /usr/local/share/ca-certificates/redeven-local-ui.crt && update-ca-certificates")
+	hostDeviceCAPath := filepath.Join(f.tempRoot, "redeven-local-ui-device-ca.crt")
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.containerName+":"+deviceCAPath, hostDeviceCAPath); err != nil {
+		t.Fatalf("copy Local UI device CA from runtime container: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", hostDeviceCAPath, clientName+":"+deviceCAPath); err != nil {
+		t.Fatalf("copy Local UI device CA to client container: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", clientName, "sh", "-c", "cp "+deviceCAPath+" /usr/local/share/ca-certificates/redeven-local-ui.crt && update-ca-certificates"); err != nil {
+		t.Fatalf("trust Local UI device CA in client container: %v", err)
+	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil,
 		"docker", "exec", "-d", f.containerName,
 		containerRedeven, "run",
@@ -272,7 +286,6 @@ func TestDockerUbuntuPlaintextNetworkExposure(t *testing.T) {
 		"--state-root", stateRoot,
 		"--local-ui-bind", "0.0.0.0:"+networkTestPort,
 		"--password-file", passwordPath,
-		"--acknowledge-plaintext-network-exposure",
 		"--presentation", "machine",
 		"--startup-report-file", reportPath,
 	); err != nil {
@@ -280,7 +293,7 @@ func TestDockerUbuntuPlaintextNetworkExposure(t *testing.T) {
 	}
 	report := f.waitNetworkExposureReady(ctx, reportPath)
 	if report.Exposure.Scope != runtimemanagement.LocalUIExposureScopeNetwork ||
-		report.Exposure.Transport != runtimemanagement.LocalUITransportPlaintext ||
+		report.Exposure.Transport != runtimemanagement.LocalUITransportTLS ||
 		!report.Exposure.PasswordRequired || !report.PasswordRequired {
 		t.Fatalf("unexpected network exposure report: %#v", report)
 	}
@@ -565,19 +578,8 @@ func (f *fixture) assertNetworkExposureStartFailures(ctx context.Context, passwo
 		wantDetail string
 	}{
 		{
-			name:      "missing acknowledgement",
-			stateRoot: "/root/.redeven-network-missing-ack",
-			args: []string{
-				"--password-file", passwordPath,
-			},
-			wantDetail: "requires `--acknowledge-plaintext-network-exposure`",
-		},
-		{
-			name:      "missing password",
-			stateRoot: "/root/.redeven-network-missing-password",
-			args: []string{
-				"--acknowledge-plaintext-network-exposure",
-			},
+			name:       "missing password",
+			stateRoot:  "/root/.redeven-network-missing-password",
 			wantDetail: "requires a non-empty access password",
 		},
 	}

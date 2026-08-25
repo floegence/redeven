@@ -14,7 +14,6 @@ export type DesktopSettingsDraft = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
   local_ui_password_mode: DesktopLocalUIPasswordMode;
-  plaintext_network_exposure_acknowledgement_bind?: string;
   auto_runtime_probe_enabled: boolean;
 }>;
 

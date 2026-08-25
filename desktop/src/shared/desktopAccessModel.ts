@@ -47,10 +47,8 @@ export type DesktopAccessDraftModel = Readonly<{
   next_start_address_detail_key: 'settings.localOnlyAddressDetail' | 'settings.sharedAddressDetail' | 'settings.customLoopbackDetail' | 'settings.customBindDetail' | 'settings.autoLoopbackAddressDetail';
   password_required: boolean;
   password_configured: boolean;
-  password_requirement_satisfied: boolean;
-  network_exposure: boolean;
-  network_exposure_acknowledged: boolean;
-  network_exposure_review_required: boolean;
+	password_requirement_satisfied: boolean;
+	network_exposure: boolean;
   password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   current_runtime_url: string;
@@ -285,8 +283,6 @@ export function deriveDesktopAccessDraftModel(
   const addressDisplay = nextStartAddressDisplay(accessMode, bindHost, portMode, fixedPort, bindRaw);
   const password = passwordState(accessMode, bindHost, draft, options);
   const networkExposure = !isLoopbackHost(bindHost);
-  const networkExposureAcknowledged = networkExposure
-    && trimString(draft.plaintext_network_exposure_acknowledgement_bind) === bindRaw;
 
   return {
     access_mode: accessMode,
@@ -300,9 +296,7 @@ export function deriveDesktopAccessDraftModel(
     password_required: password.required,
     password_configured: password.configured,
     password_requirement_satisfied: !password.required || password.configured,
-    network_exposure: networkExposure,
-    network_exposure_acknowledged: networkExposureAcknowledged,
-    network_exposure_review_required: networkExposure && !networkExposureAcknowledged,
+		network_exposure: networkExposure,
     password_state_id: password.id,
     password_state_tone: password.tone,
     current_runtime_url: trimString(options.current_runtime_url),
@@ -316,13 +310,6 @@ export function desktopSettingsDraftRequiresRuntimeRestart(
   if (trimString(baseline.local_ui_bind) !== trimString(draft.local_ui_bind)) {
     return true;
   }
-  if (
-    trimString(baseline.plaintext_network_exposure_acknowledgement_bind)
-    !== trimString(draft.plaintext_network_exposure_acknowledgement_bind)
-  ) {
-    return true;
-  }
-
   const passwordMode = normalizeDesktopLocalUIPasswordMode(draft.local_ui_password_mode);
   if (passwordMode === 'replace') {
     return trimString(draft.local_ui_password) !== '';
@@ -402,17 +389,15 @@ export function applyDesktopAccessModeToDraft(
     const model = deriveDesktopAccessDraftModel(draft);
     if (model.access_mode === 'local_only' && model.port_mode === 'auto') {
       return {
-        ...draft,
-        local_ui_bind: DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND,
-        local_ui_password: '',
-        plaintext_network_exposure_acknowledgement_bind: '',
+			...draft,
+			local_ui_bind: DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND,
+			local_ui_password: '',
       };
     }
     return {
-      ...draft,
-      local_ui_bind: formatHostPort('localhost', nextFixedPortForDraft(draft)),
-      local_ui_password: '',
-      plaintext_network_exposure_acknowledgement_bind: '',
+		...draft,
+		local_ui_bind: formatHostPort('localhost', nextFixedPortForDraft(draft)),
+		local_ui_password: '',
     };
   }
   return {
@@ -440,16 +425,14 @@ export function applyDesktopAccessAutoPortToDraft(
 ): DesktopSettingsDraft {
   if (enabled) {
     return {
-      ...draft,
-      local_ui_bind: DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND,
-      local_ui_password: '',
-      plaintext_network_exposure_acknowledgement_bind: '',
+		...draft,
+		local_ui_bind: DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND,
+		local_ui_password: '',
     };
   }
   return {
-    ...draft,
-    local_ui_bind: formatHostPort('localhost', nextFixedPortForDraft(draft)),
-    local_ui_password: '',
-    plaintext_network_exposure_acknowledgement_bind: '',
+		...draft,
+		local_ui_bind: formatHostPort('localhost', nextFixedPortForDraft(draft)),
+		local_ui_password: '',
   };
 }

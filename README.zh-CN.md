@@ -86,10 +86,14 @@ Redeven 是一个单文件二进制程序，可将您的电脑和服务器汇集
 # 1. 安装
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. 运行
+# 2. 生成并信任 Local UI 设备 CA（仅需一次）
+redeven local-authority device-ca generate --state-root ~/.redeven
+redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# 3. 运行
 redeven run
 
-# 3. 在浏览器中打开 http://localhost:23998。
+# 4. 在浏览器中打开 https://localhost:23998。
 ```
 
 首次执行 `redeven run` 会初始化 `~/.redeven/local-environment/` 下的本地状态，并以本地模式启动。无需进行引导初始化或控制平面配置。Local UI 仅监听 `localhost:23998`，只能从当前设备访问；不支持从局域网或公网直接访问。按 Ctrl+C 可停止运行时。
@@ -120,7 +124,7 @@ Redeven 以能力为先，但运行时仍然是信任边界，因为它实际掌
 
 - 运行时位于端点，明文数据始终保留在端点。
 - 控制平面签发引导载荷、授权和不可变的会话元数据。
-- [Flowersec](https://github.com/floegence/flowersec) 在客户端与端点运行时之间传输加密字节；浏览器集成使用已发布的 2.5.2 API，Go 消费模块为 `flowersec-go/v2@v2.5.2`。
+- [Flowersec](https://github.com/floegence/flowersec) 在客户端与端点运行时之间传输加密字节；浏览器界面使用 Flowersec Core 3.1.1，Go 消费模块为 `flowersec-go/v3@v3.1.1`。
 - 有效权限来自服务器签发的会话授权，并受本地权限策略约束（`read`、`write`、`execute`、`admin`，任何类别都不会隐含其他类别）。
 - 本地配置、E2EE 材料、审计日志和诊断数据保留在端点状态目录中。
 - GitHub Releases 始终是二进制文件、校验和、签名及 OKF 验证资产的公开权威来源。

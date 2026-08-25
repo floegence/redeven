@@ -71,6 +71,9 @@ export default defineConfig({
   },
   test: {
     execArgv: ['--no-experimental-webstorage'],
+    environmentOptions: {
+      jsdom: { url: 'https://localhost/_redeven_proxy/env/' },
+    },
     setupFiles: [path.resolve(__dirname, 'src/test/vitestDomPlatform.ts')],
   },
   worker: {

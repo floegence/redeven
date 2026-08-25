@@ -1,25 +1,20 @@
 #!/usr/bin/env node
 
 import { createHash, X509Certificate } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
-import {
-  authorizeRuntime,
-  createAcceptor,
-  createEndpointSet,
-  Issuer,
-  SessionHandlers,
-} from '@floegence/flowersec-core/node';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
 const distDir = path.resolve(scriptDir, '../../ui/dist/env');
 const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent_icons.json');
+const flowersecV3SmokePeerDir = path.join(scriptDir, 'flowersec-v3-smoke-peer');
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const pluginMarketCatalogPath = '/_redeven_proxy/api/plugins/market/catalog';
@@ -52,13 +47,13 @@ const builtDistProxyRuntimeProjection = JSON.stringify({
   scope_version: 2,
   critical: true,
   payload: {
-    version: 2,
-    mode: 'service_worker',
     appBasePath: entryPath,
+    mode: 'service_worker',
     serviceWorker: {
-      scriptUrl: `${entryPath}_redeven_sw.js`,
       scope: entryPath,
+      scriptUrl: `${entryPath}_redeven_sw.js`,
     },
+    version: 2,
   },
 });
 const builtDistTargetBinding = Object.freeze({
@@ -101,13 +96,95 @@ async function createBuiltDistTLS() {
   ], { stdio: 'ignore' });
   const certificate = await readFile(certificatePath, 'utf8');
   const privateKey = await readFile(privateKeyPath, 'utf8');
-  const certificateHash = createHash('sha256').update(new X509Certificate(certificate).raw).digest('base64');
+  const parsedCertificate = new X509Certificate(certificate);
+  const certificateHash = createHash('sha256').update(parsedCertificate.raw).digest('base64');
+  const certificateSPKIHash = createHash('sha256').update(parsedCertificate.publicKey.export({
+    type: 'spki',
+    format: 'der',
+  })).digest('base64');
   return {
     directory,
+    certificatePath,
+    privateKeyPath,
     certificate,
     privateKey,
     certificateHash,
+    certificateSPKIHash,
     cleanup: () => rm(directory, { recursive: true, force: true }),
+  };
+}
+
+async function startFlowersecV3SmokePeer({ tls, allowedOrigin, onEvent }) {
+  if (!tls?.certificatePath || !tls?.privateKeyPath) {
+    throw new Error('Flowersec v3 smoke peer requires an explicit TLS identity');
+  }
+  const child = spawn('go', [
+    'run', '.',
+    '--certificate', tls.certificatePath,
+    '--private-key', tls.privateKeyPath,
+    '--allowed-origin', allowedOrigin,
+  ], {
+    cwd: flowersecV3SmokePeerDir,
+    env: { ...process.env, GOWORK: 'off' },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const lines = createInterface({ input: child.stdout });
+  let ready;
+  try {
+    ready = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Flowersec v3 smoke peer startup timed out')), 30_000);
+      const rejectOnExit = (code, signal) => {
+        clearTimeout(timer);
+        reject(new Error(`Flowersec v3 smoke peer exited before ready (${code ?? signal}): ${stderr.trim()}`));
+      };
+      child.once('exit', rejectOnExit);
+      lines.on('line', (line) => {
+        let message;
+        try {
+          message = JSON.parse(line);
+        } catch {
+          return;
+        }
+        if (message.type === 'event') {
+          onEvent?.(message.event);
+          return;
+        }
+        if (message.type === 'ready') {
+          clearTimeout(timer);
+          child.off('exit', rejectOnExit);
+          resolve(message);
+        }
+      });
+    });
+  } catch (error) {
+    lines.close();
+    child.stdin.destroy();
+    child.stdout.destroy();
+    child.stderr.destroy();
+    if (child.exitCode === null) child.kill('SIGTERM');
+    throw error;
+  }
+  let closed = false;
+  return {
+    ...ready,
+    close: async () => {
+      if (closed) return;
+      closed = true;
+      const exited = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => child.kill('SIGKILL'), 5_000);
+        child.once('exit', (code, signal) => {
+          clearTimeout(timer);
+          lines.close();
+          if (code === 0) resolve();
+          else reject(new Error(`Flowersec v3 smoke peer failed (${code ?? signal}): ${stderr.trim()}`));
+        });
+      });
+      child.stdin.end();
+      await exited;
+    },
   };
 }
 
@@ -333,23 +410,16 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, acceptorFactory = createAcceptor } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls = null, flowersecPeerFactory = startFlowersecV3SmokePeer } = {}) {
   let baseURL = '';
   let installedPlugin = null;
   let releaseInstallExecution = null;
   let directArtifact = null;
   let directArtifactJSON = '';
-  let directAuthorizationRecord = null;
   let directArtifactExpiresAt = '';
-  let acceptor = null;
-  let acceptorFailure = null;
-  let accepting = true;
-  let acceptController = null;
-  const acceptedSessions = new Set();
-  const acceptedSessionTasks = new Set();
+  let flowersecPeer = null;
   const lifecycleEvents = [];
   const artifactSpendRequests = [];
-  let acceptingTask = Promise.resolve();
   const server = createServer(async (request, response) => {
     try {
       const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
@@ -361,7 +431,6 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         jsonResponse(response, {
           env_public_id: 'env_built_dist_shell',
           effective_run_mode: 'local',
-          direct_ws_url: baseURL.replace(/^http/, 'ws') + '_redeven_direct/ws',
         });
         return;
       }
@@ -641,99 +710,28 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   if (!address || typeof address === 'string') throw new Error('built Env App dist server did not bind a TCP port');
   baseURL = `http://127.0.0.1:${address.port}/`;
   if (accessReady) {
-    acceptor = await acceptorFactory({
-      listeners: [{
-        carrier: 'websocket',
-        path: 'direct',
-        host: '127.0.0.1',
-        port: 0,
-        allowedOrigins: [new URL(baseURL).origin],
-      }],
-      maxInboundStreams: 64,
-      authorize: async (request) => {
-        if (!directAuthorizationRecord) throw new Error('built direct artifact authorization is unavailable');
-        lifecycleEvents.push('websocket_authorized');
-        return authorizeRuntime(request, directAuthorizationRecord, 'built-dist-shell');
-      },
-      release: () => {
-        lifecycleEvents.push('lease_released');
-      },
-      resolveHandlers: () => {
-        const handlers = new SessionHandlers();
-        handlers.handleRPC(4001, async () => ({ payload: { server_time_ms: Date.now() } }));
-        handlers.handleRPC(4501, async () => ({ payload: { password_required: false, unlocked: true } }));
-        handlers.handleRPC(4502, async () => ({ payload: { unlocked: true } }));
-        handlers.handleRPC(5001, async () => ({ payload: { sessions: [] } }));
-        handlers.handleRPC(2002, async () => ({ payload: { sessions: [] } }));
-        return handlers;
-      },
+    flowersecPeer = await flowersecPeerFactory({
+      tls,
+      allowedOrigin: new URL(baseURL).origin,
+      onEvent: (event) => lifecycleEvents.push(event),
     });
-    const acceptorAddress = acceptor.addresses()[0];
-    if (!acceptorAddress) throw new Error('built Env App direct server did not publish an address');
-    const directArtifactExpiresAtUnixSeconds = Math.floor(Date.now() / 1_000) + 240;
-    directArtifactExpiresAt = new Date(directArtifactExpiresAtUnixSeconds * 1_000).toISOString();
-    const issued = new Issuer().issueDirect({
-      session: {
-        channelId: 'channel-1',
-        expiresAtUnixSeconds: directArtifactExpiresAtUnixSeconds,
-        idleTimeoutSeconds: 60,
-        maxInboundStreams: 64,
-      },
-      endpoints: createEndpointSet(`ws://127.0.0.1:${acceptorAddress.port}/flowersec/v2/direct`),
-      rendezvousGroupId: 'group-1',
-      listenerAudience: 'listener-1',
-      upstreamAddress: `127.0.0.1:${acceptorAddress.port}`,
-      metadata: {
-        scopes: [{
-          name: 'proxy.runtime',
-          version: 2,
-          critical: true,
-          payload: JSON.parse(builtDistProxyRuntimeProjection).payload,
-        }],
-      },
-    });
-    directArtifactJSON = new TextDecoder().decode(issued.artifactJSON());
+    directArtifactJSON = flowersecPeer.artifact;
     directArtifact = JSON.parse(directArtifactJSON);
-    directAuthorizationRecord = issued.authorizationRecord();
-    acceptController = new AbortController();
-    acceptingTask = (async () => {
-      while (accepting) {
-        const accepted = await acceptor.accept({ signal: acceptController.signal });
-        acceptedSessions.add(accepted);
-        lifecycleEvents.push('session_established');
-        lifecycleEvents.push('session_serving');
-        const acceptedSessionTask = accepted.serve()
-          .catch(() => undefined)
-          .finally(() => {
-            acceptedSessions.delete(accepted);
-            acceptedSessionTasks.delete(acceptedSessionTask);
-          });
-        acceptedSessionTasks.add(acceptedSessionTask);
-        lifecycleEvents.push('runtime_ready');
-      }
-    })().catch((error) => {
-      if (accepting) acceptorFailure = error;
-    });
+    directArtifactExpiresAt = flowersecPeer.expires_at;
   }
   return {
     baseURL,
     artifactSpendRequests: () => [...artifactSpendRequests],
     close: async () => {
-      accepting = false;
-      acceptController?.abort();
-      await acceptor?.close().catch(() => undefined);
-      await acceptingTask;
-      await Promise.all([...acceptedSessions].map((accepted) => accepted.close().catch(() => undefined)));
-      await Promise.all([...acceptedSessionTasks]);
+      await flowersecPeer?.close();
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-      if (acceptorFailure) throw acceptorFailure;
     },
     lifecycleEvents: () => [...lifecycleEvents],
   };
 }
 
 async function verifyBuiltFlowerLifecycle(browser, tls) {
-  const server = await createBuiltDistServer({ accessReady: true });
+  const server = await createBuiltDistServer({ accessReady: true, tls });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(() => {
     globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
@@ -882,7 +880,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
 }
 
 async function verifyBuiltPluginInstallRouting(browser, tls) {
-  const server = await createBuiltDistServer({ accessReady: true, pluginInstallFlow: true });
+  const server = await createBuiltDistServer({ accessReady: true, pluginInstallFlow: true, tls });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(() => {
     globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
@@ -1159,7 +1157,10 @@ async function main() {
 
   const tls = await createBuiltDistTLS();
   const server = await createBuiltDistServer();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    args: [`--ignore-certificate-errors-spki-list=${tls.certificateSPKIHash}`],
+  });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(() => {
     globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');

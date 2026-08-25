@@ -1984,7 +1984,6 @@ describe('desktopWelcomeState', () => {
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
-      plaintext_network_exposure_acknowledgement_bind: '',
       auto_runtime_probe_enabled: true,
     });
     expect(snapshot.settings_surface.auto_runtime_probe_configurable).toBe(false);

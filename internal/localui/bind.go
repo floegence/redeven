@@ -153,11 +153,11 @@ func (b BindSpec) displayURLsForPort(port int) []string {
 	}
 	switch {
 	case b.localhost:
-		return []string{formatHTTPURL("localhost", port)}
+		return []string{formatHTTPSURL("localhost", port)}
 	case b.wildcard:
 		return nil
 	default:
-		return []string{formatHTTPURL(b.host, port)}
+		return []string{formatHTTPSURL(b.host, port)}
 	}
 }
 
@@ -236,4 +236,8 @@ func eligibleNetworkAccessAddress(addr netip.Addr) bool {
 
 func formatHTTPURL(host string, port int) string {
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
+}
+
+func formatHTTPSURL(host string, port int) string {
+	return "https://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
 }

@@ -86,10 +86,14 @@ Redeven は、コンピューターとサーバーを 1 つのブラウザータ
 # 1. インストール
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. 実行
+# 2. Local UI デバイス CA を生成して信頼する（初回のみ）
+redeven local-authority device-ca generate --state-root ~/.redeven
+redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# 3. 実行
 redeven run
 
-# 3. ブラウザーで http://localhost:23998 を開く。
+# 4. ブラウザーで https://localhost:23998 を開く。
 ```
 
 初めて `redeven run` を実行すると、`~/.redeven/local-environment/` にローカル状態が初期化され、ローカルモードで起動します。ブートストラップやコントロールプレーンの設定は不要です。Local UI は `localhost:23998` でのみ待ち受け、このデバイスからだけ利用できます。LAN や公開ネットワークからの直接アクセスには対応していません。Ctrl+C でランタイムを停止できます。
@@ -120,7 +124,7 @@ Redeven は機能を前面に出しますが、実際のホストを管理する
 
 - ランタイムはエンドポイント上で動作し、平文をそこに保持します。
 - コントロールプレーンはブートストラップペイロード、権限、不変のセッションメタデータを発行します。
-- [Flowersec](https://github.com/floegence/flowersec) はクライアントとエンドポイントランタイムの間で暗号化されたバイト列を転送します。ブラウザ統合は公開済みの 2.5.2 API、Go 消費モジュールは `flowersec-go/v2@v2.5.2` を使用します。
+- [Flowersec](https://github.com/floegence/flowersec) はクライアントとエンドポイントランタイムの間で暗号化されたバイト列を転送します。ブラウザー画面は Flowersec Core 3.1.1、Go 消費モジュールは `flowersec-go/v3@v3.1.1` を使用します。
 - 有効な権限はサーバー発行のセッション権限から得られ、ローカル権限ポリシーによって制限されます（`read`、`write`、`execute`、`admin`。どのカテゴリも他のカテゴリを暗黙に含みません）。
 - ローカル設定、E2EE 資料、監査ログ、診断情報はエンドポイントの状態ディレクトリに残ります。
 - GitHub Releases は、バイナリ、チェックサム、署名、OKF 検証アセットの公開された信頼できる情報源です。

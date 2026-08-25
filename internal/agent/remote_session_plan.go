@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
 	"github.com/floegence/redeven/internal/accessrpc"
 	"github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/gitrepo"

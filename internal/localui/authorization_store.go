@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/v2/controlplane"
+	"github.com/floegence/flowersec/flowersec-go/v3/controlplane"
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -1698,7 +1698,7 @@ func localProjectionJSON() string {
 }
 
 func localProxyRuntimePayloadJSON() string {
-	return `{"version":2,"mode":"service_worker","appBasePath":"/_redeven_proxy/env/","serviceWorker":{"scriptUrl":"/_redeven_proxy/env/_redeven_sw.js","scope":"/_redeven_proxy/env/"}}`
+	return `{"appBasePath":"/_redeven_proxy/env/","mode":"service_worker","serviceWorker":{"scope":"/_redeven_proxy/env/","scriptUrl":"/_redeven_proxy/env/_redeven_sw.js"},"version":2}`
 }
 
 func localTargetBindingJSON() []byte {

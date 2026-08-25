@@ -54,7 +54,9 @@ Quick start:
   Start the Local UI on this device:
     redeven run
 
-  Open http://localhost:23998 in your browser.
+  Generate and trust the Local UI device CA once, then open https://localhost:23998:
+    redeven local-authority device-ca generate --state-root ~/.redeven
+    redeven local-authority device-ca install --state-root ~/.redeven --scope user
   No bootstrap or control-plane configuration is required.
   Local UI stays on loopback and is available only from this device.
 
@@ -103,16 +105,21 @@ func localAuthorityHelpText() string {
 	return strings.TrimLeft(`
 redeven local-authority
 
-Rotate the Local UI durable authority encryption key while the runtime is
-stopped. The command takes the same agent.lock as the runtime, rewraps active
-authorization records, and retains only key versions still referenced by
-retained authorization or spend rows.
+Maintain the Local UI durable authority key and trusted HTTPS device CA. Device
+CA creation is explicit: runtime startup never generates, replaces, installs,
+or elevates privileges for trust material.
 
 Usage:
   redeven local-authority rotate-key --state-root <path>
+  redeven local-authority device-ca generate --state-root <path>
+  redeven local-authority device-ca status --state-root <path>
+  redeven local-authority device-ca export --state-root <path> --output <new-path>
+  redeven local-authority device-ca install --state-root <path> --scope user
 
 Flags:
   --state-root <path>              Exact Redeven state root.
+  --output <path>                  New public CA certificate export path.
+  --scope user                     Current-user trust only; system trust is unsupported.
 `, "\n")
 }
 
@@ -272,9 +279,9 @@ Local UI bind rules:
   - Loopback examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, [::1]:24000
   - Network examples: 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998
   - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
-  - Network binds require a fixed port, password authentication, and --acknowledge-plaintext-network-exposure.
-  - HTTP remains plaintext: passwords, cookies, page resources, and non-Flowersec traffic can be intercepted or modified.
-  - Flowersec protects encrypted session payloads only after its handshake completes.
+  - Every Local UI bind uses trusted HTTPS; Flowersec uses an independent runtime-assigned WSS listener.
+  - Runtime startup fails when the explicit device CA is missing, invalid, expired, or untrusted.
+  - Network binds additionally require a fixed port and password authentication.
 
 Password rules:
   - Select at most one of --password-prompt, --password-stdin, or --password-file.
@@ -292,8 +299,6 @@ Flags:
   --mode <remote|hybrid|local|desktop>
                                     Run mode (default: local).
   --local-ui-bind <host:port>       Local UI bind address (default: localhost:23998).
-  --acknowledge-plaintext-network-exposure
-                                    Explicitly accept plaintext credential exposure for a network bind.
   --provider-origin <url>           Provider authority origin for one-shot bootstrap.
   --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
@@ -329,7 +334,7 @@ Examples:
     redeven run --mode desktop --presentation machine --local-ui-bind 127.0.0.1:0
 
   Cross-device access:
-    redeven run --local-ui-bind 0.0.0.0:23998 --password-file /run/secrets/redeven-local-ui-password --acknowledge-plaintext-network-exposure
+    redeven run --local-ui-bind 0.0.0.0:23998 --password-file /run/secrets/redeven-local-ui-password
 
   One-shot hybrid run without a separate bootstrap step:
     redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket

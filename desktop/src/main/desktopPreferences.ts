@@ -170,11 +170,10 @@ type DesktopLocalEnvironmentStateCatalogFile = Readonly<{
   preferred_open_route?: unknown;
   local_hosting?: Readonly<{
     state_dir?: unknown;
-    access?: Readonly<{
-      local_ui_bind?: unknown;
-      local_ui_password_configured?: unknown;
-    plaintext_network_exposure_acknowledgement?: unknown;
-    }>;
+		access?: Readonly<{
+			local_ui_bind?: unknown;
+			local_ui_password_configured?: unknown;
+		}>;
   }>;
   current_provider_binding?: Readonly<{
     provider_origin?: unknown;
@@ -421,24 +420,15 @@ export function desktopPreferencesToDraft(
     return localEnvironmentAccess(localEnvironment);
   })();
   return {
-    local_ui_bind: access.local_ui_bind,
-    local_ui_password: '',
-    local_ui_password_mode: access.local_ui_password_configured ? 'keep' : 'replace',
-    plaintext_network_exposure_acknowledgement_bind: access.plaintext_network_exposure_acknowledgement?.bind ?? '',
+		local_ui_bind: access.local_ui_bind,
+		local_ui_password: '',
+		local_ui_password_mode: access.local_ui_password_configured ? 'keep' : 'replace',
     auto_runtime_probe_enabled: (selectedLocalEnvironment ?? localEnvironment).auto_runtime_probe_enabled,
   };
 }
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
-}
-
-function canonicalLocalUIBindOrEmpty(value: unknown): string {
-  try {
-    return canonicalLocalUIBind(compact(value));
-  } catch {
-    return '';
-  }
 }
 
 function normalizeLastUsedAtMS(value: unknown, fallback: number): number {
@@ -549,28 +539,15 @@ function resolveLocalEnvironmentStateDir(input: Readonly<{
 }
 
 function normalizeLocalEnvironmentAccess(
-  localUIBind: unknown,
-  localUIPassword: string,
-  localUIPasswordConfigured = compact(localUIPassword) !== '',
-  acknowledgement?: unknown,
+	localUIBind: unknown,
+	localUIPassword: string,
+	localUIPasswordConfigured = compact(localUIPassword) !== '',
 ): DesktopLocalEnvironmentAccess {
-  const localUIBindCanonical = canonicalLocalUIBind(compact(localUIBind) || DEFAULT_DESKTOP_LOCAL_UI_BIND);
-  const bind = parseLocalUIBind(localUIBindCanonical);
-  const candidate = acknowledgement && typeof acknowledgement === 'object'
-    ? acknowledgement as Readonly<{ version?: unknown; bind?: unknown }>
-    : null;
-  const acknowledgedBind = canonicalLocalUIBindOrEmpty(candidate?.bind);
-  const normalizedAcknowledgement = !isLoopbackOnlyBind(bind)
-    && candidate?.version === 1
-    && acknowledgedBind !== ''
-    && acknowledgedBind === localUIBindCanonical
-    ? { version: 1 as const, bind: localUIBindCanonical }
-    : undefined;
-  return {
-    local_ui_bind: localUIBindCanonical,
-    local_ui_password: localUIPassword,
-    local_ui_password_configured: localUIPasswordConfigured,
-    plaintext_network_exposure_acknowledgement: normalizedAcknowledgement,
+	const localUIBindCanonical = canonicalLocalUIBind(compact(localUIBind) || DEFAULT_DESKTOP_LOCAL_UI_BIND);
+	return {
+		local_ui_bind: localUIBindCanonical,
+		local_ui_password: localUIPassword,
+		local_ui_password_configured: localUIPasswordConfigured,
   };
 }
 
@@ -1849,18 +1826,10 @@ export function validateDesktopSettingsDraft(
   if (!isLoopbackOnlyBind(bind) && !passwordState.local_ui_password_configured) {
     throw new Error('Non-loopback Local UI binds require a Local UI password.');
   }
-  const acknowledgedBind = compact(draft.plaintext_network_exposure_acknowledgement_bind);
-  if (!isLoopbackOnlyBind(bind) && (acknowledgedBind === '' || canonicalLocalUIBindOrEmpty(acknowledgedBind) !== canonicalBind)) {
-    throw new Error('Review and acknowledge plaintext network exposure for this Local UI bind.');
-  }
-
-  return {
+	return {
     local_ui_bind: canonicalBind,
     local_ui_password: passwordState.local_ui_password,
     local_ui_password_configured: passwordState.local_ui_password_configured,
-    plaintext_network_exposure_acknowledgement: isLoopbackOnlyBind(bind)
-      ? undefined
-      : { version: 1, bind: canonicalBind },
   };
 }
 
@@ -1986,10 +1955,9 @@ function normalizeLocalEnvironmentCatalogCandidate(
     const password = compact(localUIPassword);
     const passwordConfigured = localHostingSource?.access?.local_ui_password_configured === true || password !== '';
     const access = normalizeLocalEnvironmentAccess(
-      localHostingSource?.access?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
-      password,
-      passwordConfigured,
-      localHostingSource?.access?.plaintext_network_exposure_acknowledgement,
+		localHostingSource?.access?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
+		password,
+		passwordConfigured,
     );
     try {
       return createDesktopLocalEnvironmentHosting({
@@ -2079,9 +2047,8 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
     local_hosting: {
       state_dir: environment.local_hosting.state_dir,
       access: {
-        local_ui_bind: access.local_ui_bind,
-        local_ui_password_configured: access.local_ui_password_configured,
-        plaintext_network_exposure_acknowledgement: access.plaintext_network_exposure_acknowledgement,
+			local_ui_bind: access.local_ui_bind,
+			local_ui_password_configured: access.local_ui_password_configured,
       },
     },
     ...(environment.current_provider_binding

@@ -1,71 +1,47 @@
 ---
 type: Security Contract
 title: Local UI network exposure
-description: Explicit plaintext Local UI exposure requires fixed IP binding, password authentication, and bind-scoped risk acknowledgement.
+description: Local UI uses explicit device trust, HTTPS, independent Flowersec WSS, and password-protected network admission.
 tags: [security, local-ui, desktop, env-app, flowersec]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-08-26T00:00:00Z
 ---
 # Summary
 
-Redeven supports direct Local UI access from another machine only as an explicit plaintext network exposure mode. Loopback remains the default. Network exposure is never inferred, migrated, downgraded, or enabled by an environment-variable acknowledgement.
+Every public Local UI listener uses trusted HTTPS. Flowersec direct sessions use an independent runtime-assigned WSS listener and v3 artifact. Loopback remains the default; network exposure additionally requires a fixed port and an effective Local UI password. Redeven never falls back to plaintext HTTP, `ws:`, a v2 route, or an alternate listener.
 
 # Contract
 
-## Admission Contract
+## Device CA lifecycle
 
-A network listener starts only when all three facts are true: the bind is a concrete non-loopback IP or wildcard with a fixed nonzero port, an effective Local UI password exists, and `--acknowledge-plaintext-network-exposure` is present. The acknowledgement is rejected for loopback and remote-only modes. Desktop persists acknowledgement version 1 against the canonical bind and adds the CLI flag only when that exact bind still matches. Runtime catalog writeback records the same versioned acknowledgement only when the current startup carried the explicit flag, binds it to the actual listener label, and clears it for loopback startup. Missing, stale, or malformed acknowledgement blocks startup and leaves the saved settings intact for review.
+The user explicitly creates the device CA with `redeven local-authority device-ca generate`, inspects it with `status`, exports only the public certificate with `export`, and requests current-user trust with `install --scope user`. Redeven never generates a CA during Runtime startup, never exposes its private key, never writes a system trust store, never invokes `sudo`, and never silently elevates privileges. Platforms without a safe current-user installer return explicit manual instructions.
 
-Wildcard binds enumerate active same-family interface addresses after the listener opens. Redeven excludes loopback, unspecified, multicast, link-local, zoned, mapped, inactive, and duplicate addresses, sorts the remainder, and fails if none remain. Display URLs, startup reports, Runtime attach status, health, and access status use these real addresses rather than wildcard placeholders.
+The CA key and certificate live under the Local Environment state directory with private directory and key permissions. Runtime startup validates identity, key match, CA constraints, validity, file type, and permissions, then verifies current-user trust. Missing, invalid, expired, or untrusted state fails closed with remediation. Each start creates an in-memory P-256 leaf certificate containing only the exact configured DNS and IP SANs; the leaf is not persisted.
 
-## Request Boundary
+## Listener and origin boundary
 
-The public listener accepts only exact canonical IP authorities created from the bound or enumerated addresses and actual port, plus the exact `localhost` authority for a configured localhost bind. It rejects other DNS names, wildcard authorities, userinfo, paths, malformed or noncanonical ports, zones, mapped IPv6, and unlisted IPs before routing. Direct WebSocket URLs normally use the validated request authority. A plaintext `localhost` request is the sole normalization case: the candidate and upstream address use the actual same-port loopback IP listener recorded by `http.Server`, and that IP must already be in the configured authority allowlist. Browser Direct WebSocket requests otherwise require exact request scheme and authority equality with Origin. The localhost page may connect to its normalized IP candidate only when the WebSocket Host equals that same actual listener authority and both the localhost Origin and IP Host are configured on the same port. This does not admit an arbitrary hostname, alternate port, non-loopback address, TLS alias, or Desktop bridge alias.
+The public HTTPS listener accepts only canonical authorities derived from its actual bound addresses. Wildcard binds enumerate usable same-family interface addresses and exclude loopback, unspecified, multicast, link-local, zoned, mapped, inactive, and duplicate addresses. Display URLs, startup reports, Runtime status, health, and access status expose those HTTPS authorities rather than wildcard placeholders.
 
-Trusted Desktop, SSH, and container traffic enters through an independent `127.0.0.1:0` listener that mounts the trusted bridge handler and accepts canonical loopback authorities only. Its required attach URL is machine-only and never joins public display or exposure projections. SSH and container placement bridges execute `redeven desktop-bridge` and stream through that listener; they never forward the public Local UI port, rewrite Host, retry through the public URL, or select a compatibility transport. An established SSH bridge may replace only its private stdio transport after the same remote process generation proves the original identity; this does not create a public listener, alternate URL, or Runtime restart path. Runtime-control, Desktop model-source, and runtime management sockets remain loopback, token, owner, or local-socket protected and are not widened by Local UI exposure.
+Each HTTPS listener has a separate dynamically assigned WSS listener served by Flowersec Go v3 `NewWebSocketHTTPServer` at `/flowersec/v3/direct`. Artifact issuance maps the already validated HTTPS authority to its exact WSS authority and uses a CA TLS policy. The browser requires `https:` before it requests an artifact; HTTP never selects a weaker transport or URL guess.
 
-A Desktop bridge connect artifact is one-shot admission state. Redeven keeps its
-channel metadata and plugin credential hash in `pending` only until Flowersec
-accepts the authenticated session, then atomically consumes that admission and
-creates an independent active channel binding. The artifact's four-minute
-admission expiry and the thirty-second pending sweep never revoke an established
-transport or its active plugin binding. An unused expired artifact is removed
-with its authorization index and cannot connect. Transport termination removes
-the exact active binding and credential generation; logout and access expiry
-close every exact access-session binding; plugin session-scope revoke retires
-plugin authority and removes the active plugin binding without treating the
-still-live transport as pending admission. Shutdown closes active transports and
-clears pending, active, authorization, and handler state. The shared lock order
-is pending admission before active direct state, while authorization cleanup is
-performed without either lock.
+Trusted Desktop, SSH, and container traffic enters through a separate exact loopback bridge. The bridge authority is machine-only and never joins public display or exposure projections. It may obtain an artifact whose candidate is the independent WSS listener, but it cannot expose or reuse that listener as a public fallback.
 
-## Security Meaning
+## Admission and lifecycle
 
-`LocalUIExposure` is the single projected posture: `scope` is `loopback` or `network`, `transport` is `plaintext`, and `password_required` records access control. It appears in CLI presentation, Desktop startup and attach status, Runtime health, Local UI access status, and Env App state.
+A network listener starts only for a concrete non-loopback IP or wildcard with a fixed nonzero port and an effective password. There is no plaintext-risk acknowledgement, compatibility flag, or bind-scoped review state. `LocalUIExposure` projects `scope` as `loopback` or `network`, `transport` as `tls`, and the effective password requirement.
 
-Password authentication does not provide transport confidentiality or integrity. A network observer can capture or modify the password, cookies, page resources, and any non-Flowersec HTTP traffic. Flowersec E2EE protects its session payload only after the handshake completes. Env App therefore permits direct plaintext only when `resolveLocalTransportSecurityPolicy` confirms a canonical loopback hostname; non-loopback direct admission fails closed. Policy resolution failure blocks connection and never selects a weaker policy.
-
-Desktop shows a persistent warning while network exposure is active. Desktop review occurs inside the existing settings window and binds confirmation to the canonical address. Env App renders its warning with the shared Activity/Workbench shell and exposes the actual access URLs and complete boundary in a desktop detail panel or mobile bottom sheet. In a Desktop window, the warning participates in the shared native-titlebar contract: its content uses the current platform's window-control insets, its non-interactive area remains draggable, and its actions remain explicitly interactive. The same markup keeps the normal browser spacing when no Desktop window-chrome contract is present. The user may close the Env App warning for the current renderer mount or choose not to be reminded again. The persistent choice is a versioned renderer-scoped UI preference, so direct browser access remains scoped by browser origin and Desktop access remains scoped by the local environment renderer identity. Missing, malformed, or unsupported preference data fails open by showing the warning. Hiding the presentation does not alter Runtime admission, password requirements, Flowersec policy selection, or projected exposure state.
+Connect artifacts are one-shot v3 admission state. Pending metadata is consumed only after Flowersec authenticates the session and becomes an independent active binding. Unused expired artifacts are rejected. Transport termination, logout, access expiry, plugin-scope revoke, and shutdown remove their exact authorization, handler, and active-session state. Flowersec owns WSS admission, session establishment, liveness, handler dispatch, close, and lease release; Redeven does not copy those loops.
 
 # Boundaries
 
-No additional boundary is declared for this concept.
+Installing trust is an explicit user action outside Runtime startup. Password authentication controls application access but does not replace TLS identity. The private Desktop bridge is an exact loopback capability and is not a public transport.
 
 # Evidence
 
-- `redeven:internal/localui/bind.go:21` - Bind parsing and interface selection enforce canonical fixed-port network addresses.
-- `redeven:internal/localui/http_security.go:21` - Listener resolution creates exact authorities and real access URLs.
-- `redeven:internal/localui/http_security.go:174` - Plaintext localhost normalization requires the request's actual configured loopback listener and exact port.
-- `redeven:internal/localui/http_security_test.go:218` - Focused tests preserve IP and TLS behavior while rejecting missing, mismatched, and non-loopback listener identity.
-- `redeven:cmd/redeven/main.go:230` - Runtime CLI defines the explicit acknowledgement flag and admission checks.
-- `redeven:internal/runtimemanagement/local_ui_exposure.go:1` - LocalUIExposure is the canonical status contract.
-- `redeven:desktop/src/main/desktopPreferences.ts:2195` - Desktop validates password and bind-scoped acknowledgement before saving.
-- `redeven:desktop/src/main/desktopLaunch.ts:47` - Desktop appends acknowledgement argv only for a matching reviewed network bind.
-- `redeven:desktop/src/welcome/App.tsx:12820` - Desktop settings provides inline warning and same-window review.
-- `redeven:internal/envapp/ui_src/src/ui/security/localTransportSecurity.ts:1` - Env App selects canonical loopback direct policy without fallback.
-- `redeven:internal/envapp/ui_src/src/ui/security/networkExposureWarningPreference.ts:1` - Env App stores only a versioned renderer-scoped warning suppression preference and fails open on invalid data.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3270` - Env App renders the titlebar-safe warning, details, current-mount close, and persistent do-not-remind actions.
-- `redeven:internal/config/catalog.go:117` - Runtime catalog writeback preserves exact startup acknowledgement instead of dropping it after restart.
-- `redeven:cmd/redeven/desktop_bridge.go:42` - `desktop-bridge` dials only the required trusted Local UI bridge URL.
-- `redeven:internal/desktopbridge/server.go:205` - Trusted bridge URL validation admits only root-path HTTP loopback endpoints.
-- `redeven:desktop/src/main/runtimePlacementBridgeSession.ts:337` - Established placement bridges keep one loopback proxy while replacing only a verified private transport.
-- `redeven:internal/localui/localui_e2e_test.go:37` - Real Flowersec Desktop bridge coverage proves admission consumption, post-expiry plugin access, unused-artifact rejection, revocation, and window isolation.
+- `redeven:internal/localui/device_ca.go` - Creates and validates the durable device CA and ephemeral exact-SAN leaf.
+- `redeven:internal/localui/device_ca_install.go` - Implements explicit current-user trust without elevation.
+- `redeven:cmd/redeven/local_authority.go` - Exposes generate, status, export, and install commands.
+- `redeven:internal/localui/secure_server.go` - Owns HTTPS and independent Flowersec WSS listeners.
+- `redeven:internal/localui/http_security.go` - Derives exact public HTTPS authorities.
+- `redeven:internal/localui/localui.go` - Issues one-shot v3 artifacts and binds accepted sessions.
+- `redeven:internal/envapp/ui_src/src/ui/security/localTransportSecurity.ts` - Requires trusted HTTPS without fallback.
+- `redeven:internal/runtimemanagement/local_ui_exposure.go` - Projects the canonical TLS posture.

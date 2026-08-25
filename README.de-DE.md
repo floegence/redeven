@@ -86,10 +86,14 @@ Für entfernte Rechner kann Desktop die passende Redeven-Version automatisch üb
 # 1. Installieren
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Starten
+# 2. Local-UI-Geräte-CA erzeugen und als vertrauenswürdig installieren (einmalig)
+redeven local-authority device-ca generate --state-root ~/.redeven
+redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# 3. Starten
 redeven run
 
-# 3. http://localhost:23998 im Browser öffnen.
+# 4. https://localhost:23998 im Browser öffnen.
 ```
 
 Beim ersten Aufruf von `redeven run` wird der lokale Zustand unter `~/.redeven/local-environment/` initialisiert und Redeven im lokalen Modus gestartet. Weder Bootstrap noch eine Konfiguration der Steuerungsebene sind erforderlich. Local UI lauscht ausschließlich auf `localhost:23998` und ist nur auf diesem Gerät verfügbar; ein direkter Zugriff aus dem LAN oder öffentlichen Netz wird nicht unterstützt. Strg+C beendet die Laufzeit.
@@ -120,7 +124,7 @@ Redeven stellt Funktionen in den Vordergrund. Die Laufzeit bleibt dennoch die Ve
 
 - Die Laufzeit läuft auf dem Endpunkt und hält Klartextdaten dort.
 - Die Steuerungsebene stellt Bootstrap-Nutzdaten, Freigaben und unveränderliche Sitzungsmetadaten aus.
-- [Flowersec](https://github.com/floegence/flowersec) überträgt verschlüsselte Bytes zwischen Client und Endpunkt-Laufzeit. Die Browser-Integration nutzt die veröffentlichte API 2.5.2 und das Go-Modul `flowersec-go/v2@v2.5.2`.
+- [Flowersec](https://github.com/floegence/flowersec) überträgt verschlüsselte Bytes zwischen Client und Endpunkt-Laufzeit. Die Browser-Oberflächen nutzen Flowersec Core 3.1.1 und das Go-Modul `flowersec-go/v3@v3.1.1`.
 - Wirksame Berechtigungen stammen aus serverseitig ausgestellten Sitzungsfreigaben und werden durch die lokale Berechtigungsrichtlinie begrenzt (`read`, `write`, `execute`, `admin`; keine Kategorie schließt eine andere ein).
 - Lokale Konfiguration, E2EE-Material, Audit-Logs und Diagnosedaten verbleiben im Zustandsverzeichnis des Endpunkts.
 - GitHub Releases bleiben die öffentliche Referenz für Binärdateien, Prüfsummen, Signaturen und OKF-Verifikationsdateien.

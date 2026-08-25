@@ -86,10 +86,14 @@ Pour les machines distantes, Desktop peut installer automatiquement la version c
 # 1. Installer
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Exécuter
+# 2. Générer et approuver l’autorité de certification de l’appareil Local UI (une fois)
+redeven local-authority device-ca generate --state-root ~/.redeven
+redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# 3. Exécuter
 redeven run
 
-# 3. Ouvrir http://localhost:23998 dans votre navigateur.
+# 4. Ouvrir https://localhost:23998 dans votre navigateur.
 ```
 
 Lors de sa première exécution, `redeven run` initialise l'état local dans `~/.redeven/local-environment/` et démarre en mode local. Aucun amorçage ni aucune configuration du plan de contrôle n'est nécessaire. Local UI écoute uniquement sur `localhost:23998` et n'est disponible que depuis cet appareil ; l'accès direct depuis le LAN ou un réseau public n'est pas pris en charge. Ctrl+C arrête l'environnement d'exécution.
@@ -120,7 +124,7 @@ Redeven met les fonctionnalités au premier plan, mais l'environnement d'exécut
 
 - L'environnement d'exécution réside sur le point de terminaison et y conserve les données en clair.
 - Le plan de contrôle émet les charges utiles d'initialisation, les autorisations et les métadonnées de session immuables.
-- [Flowersec](https://github.com/floegence/flowersec) transporte des octets chiffrés entre le client et l'environnement d'exécution du point de terminaison. L'intégration navigateur utilise l'API publiée 2.5.2 et le module Go `flowersec-go/v2@v2.5.2`.
+- [Flowersec](https://github.com/floegence/flowersec) transporte des octets chiffrés entre le client et l'environnement d'exécution du point de terminaison. Les surfaces du navigateur utilisent Flowersec Core 3.1.1 et le module Go `flowersec-go/v3@v3.1.1`.
 - Les permissions effectives proviennent des autorisations de session émises par le serveur, limitées par la politique locale (`read`, `write`, `execute`, `admin` ; aucune catégorie n'en implique une autre).
 - La configuration locale, le matériel E2EE, les journaux d'audit et les diagnostics restent dans le répertoire d'état du point de terminaison.
 - GitHub Releases demeure la référence publique pour les binaires, sommes de contrôle, signatures et ressources de vérification OKF.

@@ -10,7 +10,6 @@ import {
 import type { DesktopSessionLifecycle, DesktopSessionSummary } from './desktopTarget';
 import type { GatewayDesktopTarget } from './desktopTarget';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
-import { canonicalLocalUIBind, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherSurface,
@@ -1187,18 +1186,6 @@ function buildLocalEnvironmentEntry(
   const isOpen = sessionIsOpen(localSession);
   const isOpening = sessionIsOpening(localSession);
   const access = localEnvironmentAccess(environment);
-  const networkExposureReviewRequired = (() => {
-    try {
-      const canonicalBind = canonicalLocalUIBind(access.local_ui_bind);
-      if (isLoopbackOnlyBind(parseLocalUIBind(canonicalBind))) {
-        return false;
-      }
-      return access.plaintext_network_exposure_acknowledgement?.version !== 1
-        || canonicalLocalUIBind(access.plaintext_network_exposure_acknowledgement.bind) !== canonicalBind;
-    } catch {
-      return true;
-    }
-  })();
   const kind = localEnvironmentStateKind(environment);
   const providerOrigin = localEnvironmentProviderOrigin(environment);
   const providerID = localEnvironmentProviderID(environment);
@@ -1286,7 +1273,6 @@ function buildLocalEnvironmentEntry(
     local_environment_kind: kind,
     local_environment_ui_bind: access.local_ui_bind,
     local_environment_ui_password_configured: access.local_ui_password_configured,
-    local_environment_network_exposure_review_required: networkExposureReviewRequired,
     local_environment_runtime_state: resolvedLocalRuntimeState,
     local_environment_runtime_url: resolvedLocalRuntimeURL || undefined,
     local_environment_runtime_plan: localRuntimePlan,

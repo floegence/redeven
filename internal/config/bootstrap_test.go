@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	flowercontrol "github.com/floegence/flowersec/flowersec-go/v2/controlplane"
+	flowercontrol "github.com/floegence/flowersec/flowersec-go/v3/controlplane"
 )
 
 func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
@@ -570,7 +570,9 @@ func writeBootstrapTestResponseForEnvironment(t *testing.T, w http.ResponseWrite
 
 func bootstrapTestControlArtifactPool(t *testing.T, generation int64) *bootstrapControlArtifactPool {
 	t.Helper()
-	endpoints, err := flowercontrol.NewEndpointSet("wss://example.com/flowersec/v2/direct")
+	endpoints, err := flowercontrol.NewEndpointSet(flowercontrol.EndpointConfig{
+		ID: "websocket", URL: "wss://example.com/flowersec/v3/direct", TLS: flowercontrol.CAPolicy(),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

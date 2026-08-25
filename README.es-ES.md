@@ -86,10 +86,14 @@ Para equipos remotos, Desktop puede instalar automáticamente la versión corres
 # 1. Instalar
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Ejecutar
+# 2. Generar y confiar en la CA del dispositivo de Local UI (una vez)
+redeven local-authority device-ca generate --state-root ~/.redeven
+redeven local-authority device-ca install --state-root ~/.redeven --scope user
+
+# 3. Ejecutar
 redeven run
 
-# 3. Abrir http://localhost:23998 en el navegador.
+# 4. Abrir https://localhost:23998 en el navegador.
 ```
 
 La primera ejecución de `redeven run` inicializa el estado local en `~/.redeven/local-environment/` y arranca en modo local. No hace falta realizar el bootstrap ni configurar el plano de control. Local UI escucha en `localhost:23998` y solo está disponible desde este dispositivo; no admite el acceso directo desde una LAN ni desde una red pública. Pulsa Ctrl+C para detener el entorno de ejecución.
@@ -120,7 +124,7 @@ Redeven da prioridad a las funciones, pero el entorno de ejecución sigue siendo
 
 - El entorno de ejecución reside en el endpoint y mantiene allí los datos en texto claro.
 - El plano de control emite cargas de inicialización, concesiones y metadatos de sesión inmutables.
-- [Flowersec](https://github.com/floegence/flowersec) transporta bytes cifrados entre el cliente y el entorno de ejecución del endpoint. La integración del navegador usa la API publicada 2.5.2 y el módulo Go `flowersec-go/v2@v2.5.2`.
+- [Flowersec](https://github.com/floegence/flowersec) transporta bytes cifrados entre el cliente y el entorno de ejecución del endpoint. Las superficies del navegador usan Flowersec Core 3.1.1 y el módulo Go `flowersec-go/v3@v3.1.1`.
 - Los permisos efectivos proceden de concesiones de sesión emitidas por el servidor y quedan limitados por la política local (`read`, `write`, `execute`, `admin`; ninguna categoría implica otra).
 - La configuración local, el material E2EE, los registros de auditoría y los diagnósticos permanecen en el directorio de estado del endpoint.
 - GitHub Releases sigue siendo la fuente pública de referencia para binarios, sumas de comprobación, firmas y recursos de verificación de OKF.
