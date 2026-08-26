@@ -75,7 +75,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
 
 function dispatchDragEvent(
   target: Element,
-  type: 'dragstart' | 'dragover' | 'drop' | 'dragend',
+  type: 'dragstart' | 'dragover' | 'dragleave' | 'drop' | 'dragend',
   dataTransfer: DataTransfer,
   clientY = 0,
   clientX = 12,
@@ -748,6 +748,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
       }],
       onRelocateSession,
     });
+    const dragBoundary = host.querySelector<HTMLElement>('[data-terminal-drag-boundary]')!;
     const secondRow = host.querySelector<HTMLElement>('[data-terminal-session-row="session-2"]')!;
     const firstTreeRow = host.querySelector<HTMLElement>('[data-terminal-tree-child="session-1"]')!;
     Object.defineProperty(firstTreeRow, 'getBoundingClientRect', {
@@ -761,6 +762,11 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(firstTreeRow.classList.contains('translate-y-[3px]')).toBe(true);
     expect(firstTreeRow.classList.contains('-translate-y-[3px]')).toBe(false);
     expect(host.querySelector('[data-terminal-session-drop-hint="session-1"]')?.textContent?.trim()).toBe('');
+    dispatchDragEvent(dragBoundary, 'dragover', dataTransfer, 300);
+    expect(firstTreeRow.getAttribute('data-terminal-session-drop-position')).toBeNull();
+    dispatchDragEvent(firstTreeRow, 'dragover', dataTransfer, 110);
+    dispatchDragEvent(firstTreeRow, 'dragleave', dataTransfer, 110);
+    expect(firstTreeRow.getAttribute('data-terminal-session-drop-position')).toBe('before');
     dispatchDragEvent(firstTreeRow, 'drop', dataTransfer, 110);
     expect(onRelocateSession).toHaveBeenCalledWith('session-2', 'default', 'session-1');
   });
@@ -859,6 +865,11 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     dispatchDragEvent(betaHeader, 'dragover', dataTransfer, 150);
     expect(host.querySelectorAll('[data-terminal-group-order-drop-hint]')).toHaveLength(1);
+    expect(host.querySelector('[data-terminal-group-order-drop-hint="beta"]')?.getAttribute('data-terminal-group-order-drop-position')).toBe('before');
+    dispatchDragEvent(dragBoundary, 'dragover', dataTransfer, 400);
+    expect(host.querySelectorAll('[data-terminal-group-order-drop-hint]')).toHaveLength(0);
+    dispatchDragEvent(betaHeader, 'dragover', dataTransfer, 150);
+    dispatchDragEvent(betaHeader, 'dragleave', dataTransfer, 150);
     expect(host.querySelector('[data-terminal-group-order-drop-hint="beta"]')?.getAttribute('data-terminal-group-order-drop-position')).toBe('before');
     dispatchDragEvent(betaHeader, 'drop', dataTransfer, 150);
     expect(onReorderGroup).toHaveBeenCalledWith('gamma', 'beta');

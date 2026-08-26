@@ -490,6 +490,11 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
       // delaying Redeven's own constrained return animation.
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      const target = event.target;
+      if (!(target instanceof Node) || !dragBoundaryEl?.contains(target)) {
+        setDropIntent(null);
+        setGroupDropIntent(null);
+      }
     };
     const completeNativeDrop = (event: DragEvent) => {
       if (!dragPreviewEl) return;
@@ -731,6 +736,12 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
               ref={dragBoundaryEl}
               class="relative flex h-full min-h-0 select-none flex-col overflow-hidden"
               data-terminal-drag-boundary
+              onDragOver={(event) => {
+                // Explicit targets stop propagation after setting their intent.
+                // Any event reaching the boundary is therefore an invalid slot.
+                if (acceptsTerminalSessionDrag(event)) setDropIntent(null);
+                if (acceptsTerminalGroupDrag(event)) setGroupDropIntent(null);
+              }}
             >
               <div class="shrink-0 space-y-2">
               <div class="flex items-center gap-2 px-0.5">
@@ -832,11 +843,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         data-terminal-tree-group={navigationGroup().id}
                         data-terminal-group-pending={navigationGroup().pending ? 'true' : 'false'}
                         aria-busy={navigationGroup().pending ? 'true' : undefined}
-                        onDragLeave={(event) => {
-                          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-                          if (dropIntent()?.groupId === navigationGroup().id) setDropIntent(null);
-                          if (groupDropIntent()?.targetGroupId === navigationGroup().id) setGroupDropIntent(null);
-                        }}
                       >
                         <Show when={groupDropIntent()?.targetGroupId === navigationGroup().id}>
                           <span
@@ -1450,10 +1456,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         targetGroupId: null,
                         position: 'after',
                       });
-                    }}
-                    onDragLeave={(event) => {
-                      if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-                      if (groupDropIntent()?.targetGroupId === null) setGroupDropIntent(null);
                     }}
                     onDrop={commitGroupDrop}
                   >
