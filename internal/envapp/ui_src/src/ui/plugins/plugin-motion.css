@@ -1,20 +1,90 @@
 @layer components {
-  .plugin-panel-popover-open {
-    animation: redeven-plugin-panel-open 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  .plugin-panel-backdrop {
+    opacity: 0;
+    transition-property: opacity;
+    transition-duration: 190ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .plugin-panel-popover-close {
-    animation: redeven-plugin-panel-close 150ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  .plugin-panel-backdrop[data-plugin-launcher-motion-state='open'] {
+    opacity: 1;
   }
 
-  @keyframes redeven-plugin-panel-open {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+  .plugin-panel-backdrop[data-plugin-launcher-motion-state='closing'] {
+    pointer-events: none;
+    opacity: 0;
+    transition-duration: 140ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
   }
 
-  @keyframes redeven-plugin-panel-close {
-    from { opacity: 1; transform: translateY(0); }
-    to { opacity: 0; transform: translateY(10px); }
+  .plugin-panel-surface {
+    --redeven-plugin-panel-origin-x: 50%;
+    --redeven-plugin-panel-origin-y: 50%;
+    --redeven-plugin-panel-enter-x: 0px;
+    --redeven-plugin-panel-enter-y: 12px;
+    opacity: 0;
+    transform: translate3d(
+      var(--redeven-plugin-panel-enter-x),
+      var(--redeven-plugin-panel-enter-y),
+      0
+    ) scale(0.965);
+    transform-origin:
+      var(--redeven-plugin-panel-origin-x)
+      var(--redeven-plugin-panel-origin-y);
+    transition-property: opacity, transform;
+    transition-duration: 210ms, 240ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .plugin-panel-surface[data-plugin-panel-motion-kind='workbench-popover'] {
+    transform: translate3d(
+      var(--redeven-plugin-panel-enter-x),
+      var(--redeven-plugin-panel-enter-y),
+      0
+    ) scale(0.975);
+    transition-duration: 170ms, 200ms;
+  }
+
+  .plugin-panel-surface[data-plugin-panel-motion-kind='mobile-sheet'] {
+    transform: translate3d(
+      var(--redeven-plugin-panel-enter-x),
+      var(--redeven-plugin-panel-enter-y),
+      0
+    ) scale(0.985);
+  }
+
+  .plugin-panel-surface[data-plugin-panel-motion-state='open'] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  .plugin-panel-surface[data-plugin-panel-motion-state='closing'] {
+    pointer-events: none;
+    opacity: 0;
+    transform: translate3d(0, 5px, 0) scale(0.985);
+    transition-duration: 120ms, 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+
+  [data-plugin-panel-content] {
+    opacity: 0;
+    transform: translateY(4px);
+    transition-property: opacity, transform;
+    transition-duration: 150ms, 180ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .plugin-panel-surface[data-plugin-panel-motion-state='open'] > [data-plugin-panel-content] {
+    opacity: 1;
+    transform: translateY(0);
+    transition-delay: 35ms;
+  }
+
+  .plugin-panel-surface[data-plugin-panel-motion-state='closing'] > [data-plugin-panel-content] {
+    opacity: 0;
+    transform: translateY(2px);
+    transition-duration: 90ms;
+    transition-delay: 0ms;
   }
 
   .redeven-plugin-enter-up {
@@ -85,6 +155,12 @@
   .redeven-plugin-motion {
     transform: none !important;
     transition: none !important;
+  }
+
+  .plugin-panel-backdrop[data-plugin-launcher-motion-state='open'],
+  .plugin-panel-surface[data-plugin-panel-motion-state='open'],
+  .plugin-panel-surface[data-plugin-panel-motion-state='open'] > [data-plugin-panel-content] {
+    opacity: 1 !important;
   }
 
   .redeven-plugin-directory-card-icon {

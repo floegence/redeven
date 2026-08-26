@@ -165,6 +165,21 @@ describe('PluginPanel', () => {
     expect(dialog.textContent).not.toContain('No installed plugins yet.');
   });
 
+  it('stages the desktop modal from the Activity trigger before settling open', () => {
+    const trigger = createTrigger();
+    mountPanel({ trigger, placement: 'activity' });
+
+    const backdrop = document.querySelector<HTMLElement>('[data-plugin-launcher-backdrop]')!;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(backdrop.dataset.pluginLauncherMotionState).toBe('entering');
+    expect(dialog.dataset.pluginPanelMotionState).toBe('entering');
+    expect(dialog.dataset.pluginPanelMotionKind).toBe('modal');
+    expect(dialog.querySelector('[data-plugin-panel-content]')).not.toBeNull();
+    expect(dialog.style.getPropertyValue('--redeven-plugin-panel-origin-x')).toBe('8%');
+    expect(Number.parseFloat(dialog.style.getPropertyValue('--redeven-plugin-panel-enter-x'))).toBeLessThan(0);
+    expect(Number.parseFloat(dialog.style.getPropertyValue('--redeven-plugin-panel-enter-y'))).toBeLessThan(0);
+  });
+
   it('keeps the popup mounted while it closes downward', async () => {
     vi.useFakeTimers();
     const [open, setOpen] = createSignal(true);
@@ -345,9 +360,10 @@ describe('PluginPanel', () => {
     expect(document.activeElement).toBe(tile);
   });
 
-  it('mounts the Workbench launcher in the local floating layer with the Dock material', () => {
+  it('mounts the Workbench launcher in the local floating layer with the Dock material', async () => {
     const { surface, trigger } = createWorkbenchTrigger();
     mountPanel({ placement: 'workbench', trigger });
+    await Promise.resolve();
 
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     const layer = surface.querySelector<HTMLElement>('[data-floe-surface-floating-layer="true"]')!;

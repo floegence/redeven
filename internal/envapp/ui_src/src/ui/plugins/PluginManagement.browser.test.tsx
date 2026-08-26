@@ -832,12 +832,57 @@ describe('plugin management browser geometry and interaction', () => {
     }
   });
 
+  it('opens the Activity launcher from its trigger and reverses the motion on close', async () => {
+    await page.viewport(1440, 900);
+    const mounted = mountPanel(false);
+    const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
+    const backdrop = document.querySelector<HTMLElement>('[data-plugin-launcher-backdrop]')!;
+
+    expect(dialog.dataset.pluginPanelMotionState).toBe('entering');
+    expect(backdrop.dataset.pluginLauncherMotionState).toBe('entering');
+    expect(dialog.style.getPropertyValue('--redeven-plugin-panel-origin-x')).toBe('8%');
+    expect(Number.parseFloat(dialog.style.getPropertyValue('--redeven-plugin-panel-enter-x'))).toBeLessThan(0);
+    expect(getComputedStyle(dialog).opacity).toBe('0');
+    expect(getComputedStyle(dialog).transitionProperty).toContain('transform');
+
+    await settle();
+    expect(dialog.dataset.pluginPanelMotionState).toBe('open');
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
+    expect(getComputedStyle(dialog).opacity).toBe('1');
+    expect(new DOMMatrixReadOnly(getComputedStyle(dialog).transform).m11).toBeCloseTo(1, 2);
+
+    mounted.setOpen(false);
+    await Promise.resolve();
+    expect(dialog.dataset.pluginPanelMotionState).toBe('closing');
+    expect(backdrop.dataset.pluginLauncherMotionState).toBe('closing');
+    expect(getComputedStyle(dialog).pointerEvents).toBe('none');
+  });
+
+  it('removes launcher motion without delaying close when reduced motion is requested', async () => {
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'none' });
+    const mounted = mountPanel(false);
+    await settle();
+
+    const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
+    expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
+    expect(dialog.dataset.pluginPanelMotionState).toBe('open');
+    expect(getComputedStyle(dialog).transitionDuration).toBe('0s');
+    expect(getComputedStyle(dialog).transform).toBe('none');
+    expect(getComputedStyle(dialog).opacity).toBe('1');
+
+    mounted.setOpen(false);
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it.each(viewportCases.filter(({ width }) => width >= 768))(
     'centers the modal Plugin Launcher without overflow at $width px',
     async (viewport) => {
       await page.viewport(viewport.width, viewport.height);
       const mounted = mountPanel(false);
       await settle();
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
 
       const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
       expect(dialog.getAttribute('aria-modal')).toBe('true');
@@ -858,6 +903,7 @@ describe('plugin management browser geometry and interaction', () => {
     await page.viewport(viewport.width, viewport.height);
     mountPanel(true);
     await settle();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
 
     const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
     expect(dialog.getAttribute('aria-modal')).toBe('true');
@@ -901,7 +947,7 @@ describe('plugin management browser geometry and interaction', () => {
     await page.viewport(viewport.width, viewport.height);
     mountPanel(viewport.mobile, updatePanelModel);
     await settle();
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
 
     const tile = document.querySelector<HTMLElement>('[data-plugin-panel-tile="instance:containers"]')!;
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;

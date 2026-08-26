@@ -112,14 +112,23 @@ bound to its requested item even when retained filters exclude it. External
 installation is visible only to administrators as a lower-weight overflow action
 and does not compete with primary discovery.
 
-Plugin motion is progressive feedback rather than an interaction gate. New
-Launcher, directory, detail, review, confirmation, loading, error, and recovery
-states enter over 150–200ms; repeated directory items use a bounded stagger, and
+Plugin motion is progressive feedback rather than an interaction gate. The
+Launcher establishes backdrop depth before its content settles, and its panel
+uses reversible opacity and transform transitions rather than fixed keyframe
+replays. The desktop Activity Launcher derives its transform origin and small
+directional offset from the current Activity Bar trigger; the mobile sheet and
+Workbench companion retain bottom-edge origins. Entry completes within 240ms,
+content follows after a bounded 35ms delay, and exit completes within 150ms.
+A rapid close or reopen reverses from the current visual pose without snapping,
+while the closing surface stops accepting pointer input. Directory, detail,
+review, confirmation, loading, error, and recovery states retain bounded
+150–200ms entry feedback; repeated directory items use a bounded stagger, and
 interactive controls transition only explicit color, border, shadow, opacity,
 and transform properties. Press feedback begins immediately and never delays the
 underlying command. `prefers-reduced-motion: reduce` removes entry animations,
-transform feedback, disclosure motion, and nonessential transitions while
-preserving the same focus, selection, loading, and recovery behavior.
+transform feedback, disclosure motion, and nonessential transitions, and closes
+the Launcher without a motion timer while preserving the same focus, selection,
+loading, and recovery behavior.
 
 The Shell owns inventory loading, one platform client, shared scope, placement
 controllers, and the selected product inventory key. Every catalog or installed
