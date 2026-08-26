@@ -2304,6 +2304,21 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
   };
 }
 
+export function buildEnvironmentSettingsRuntimeModel(
+  environment: DesktopEnvironmentEntry,
+): Readonly<{
+  running: boolean;
+  status_label: string;
+  status_tone: EnvironmentCardTone;
+}> {
+  const card = buildEnvironmentCardModel(environment);
+  return {
+    running: environment.runtime_health.status === 'online',
+    status_label: card.status_label,
+    status_tone: card.status_tone,
+  };
+}
+
 export function environmentMatchesLibrarySearch(
   environment: DesktopEnvironmentEntry,
   query: string,

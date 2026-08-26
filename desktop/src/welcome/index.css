@@ -3335,6 +3335,28 @@ html:not(.dark) .redeven-empty-panel {
   background: color-mix(in srgb, var(--card) 97%, var(--background) 3%);
 }
 
+.redeven-settings-state-card--current[data-status-tone='success'] {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--success) 6%, transparent), transparent 58%),
+    color-mix(in srgb, var(--card) 97%, var(--background) 3%);
+}
+
+.redeven-settings-state-card--current[data-status-tone='success'] .redeven-settings-state-glyph {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+}
+
+.redeven-settings-state-card--current[data-status-tone='success'] .redeven-settings-runtime-status {
+  color: var(--success);
+}
+
+.redeven-settings-state-card--current[data-status-tone='primary'] .redeven-settings-runtime-status {
+  color: var(--primary);
+}
+
+.redeven-settings-state-card--current[data-status-tone='warning'] .redeven-settings-runtime-status {
+  color: var(--warning);
+}
+
 .redeven-settings-state-card--next {
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--primary) 7%, transparent), transparent 58%),
@@ -3360,6 +3382,19 @@ html:not(.dark) .redeven-empty-panel {
     border-color: CanvasText;
     background: Canvas;
     color: CanvasText;
+  }
+
+  .redeven-runtime-status-orb canvas {
+    display: none;
+  }
+
+  .redeven-runtime-status-orb__forced-colors {
+    display: block;
+    border-color: CanvasText;
+  }
+
+  .redeven-settings-runtime-status {
+    color: CanvasText !important;
   }
 
   .redeven-settings-state-card--next {

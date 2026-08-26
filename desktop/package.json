@@ -104,6 +104,7 @@
     "@floegence/flowersec-core": "3.2.0",
     "builder-util-runtime": "^9.7.0",
     "electron-updater": "^6.8.9",
-    "qrcode-generator": "^2.0.4"
+    "qrcode-generator": "^2.0.4",
+    "thinking-orbs": "0.3.1"
   }
 }
