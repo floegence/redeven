@@ -24,7 +24,11 @@ import {
 } from './runtimeProcessInventory';
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
-import { parseLaunchReport, type LaunchBlockedReport } from './launchReport';
+import {
+  parseAvailableLaunchReport,
+  parseLaunchReport,
+  type LaunchBlockedReport,
+} from './launchReport';
 import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
@@ -1804,97 +1808,98 @@ async function waitForRemoteStartupReport(args: Readonly<{
         args.sessionToken,
       ]),
     );
-    if (result.exit_code === 0) {
-      let launchReport: ReturnType<typeof parseLaunchReport>;
-      try {
-        launchReport = parseLaunchReport(result.stdout);
-      } catch {
-        throw readinessFailure(
-          'Desktop received an invalid Runtime startup report from the SSH host.',
-          args.session.logs,
-          {
-            code: 'ssh_runtime_launch_failed',
-            title: 'SSH Runtime Startup Report Invalid',
-            titleKey: 'progress.sshRuntimeStartupReportInvalidTitle',
-            summaryKey: 'progress.sshRuntimeStartupReportInvalidSummary',
-            detail: 'Redeven started on the SSH host but wrote a startup report Desktop could not use.',
-            targetLabel: desktopSSHAuthority(args.session.target),
-          },
-        );
-      }
-      if (launchReport.status === 'blocked') {
-        const classification = classifyDesktopRuntimeBlockedLaunchReport(launchReport, {
-          target_runtime_version: args.runtimeReleaseTag,
-        });
-        if (
-          classification.kind === 'restart_required'
-          && desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable(classification.maintenance)
-        ) {
-          if (Date.now() >= deadline) {
-            throw readinessTimeoutFailure(
-              classification.maintenance.message,
-              args.session.logs,
-              {
-                title: 'SSH Runtime Launch Timed Out',
-                detail: 'Redeven is running on the SSH host, but Desktop could not verify the management socket before the timeout.',
-                targetLabel: desktopSSHAuthority(args.session.target),
-              },
-            );
-          }
-          await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
-          continue;
-        }
-        throw readinessFailure(
-          launchReport.message,
-          args.session.logs,
-          {
-            code: 'ssh_runtime_launch_failed',
-            title: 'SSH Runtime Start Failed',
-            titleKey: 'progress.sshRuntimeReportedStartupFailureTitle',
-            detail: launchReport.message,
-            detailKey: 'progress.sshRuntimeReportedStartupFailureDetail',
-            targetLabel: desktopSSHAuthority(args.session.target),
-          },
-        );
-      }
-      return {
-        startup: launchReport.startup,
-        launch_mode: launchReport.status === 'attached' ? 'attached' : 'spawned',
-      };
+    if (result.exit_code !== 0) {
+      throw readinessFailure(
+        `Desktop could not read the Runtime startup report from the SSH host (exit code ${result.exit_code ?? 'unknown'}).`,
+        args.session.logs,
+        {
+          code: 'runtime_host_command_failed',
+          title: 'Runtime host command failed',
+          titleKey: 'progress.runtimeHostCommandFailedTitle',
+          summaryKey: 'progress.runtimeHostCommandFailedSummary',
+          targetLabel: desktopSSHAuthority(args.session.target),
+        },
+      );
     }
-
-    const controlResult = args.getControlResult();
-    if (controlResult) {
-      if (controlResult.exit_code === 0 && !controlResult.signal) {
+    let launchReport: ReturnType<typeof parseAvailableLaunchReport>;
+    try {
+      launchReport = parseAvailableLaunchReport(result.stdout);
+    } catch {
+      throw readinessFailure(
+        'Desktop received an invalid Runtime startup report from the SSH host.',
+        args.session.logs,
+        {
+          code: 'ssh_runtime_launch_failed',
+          title: 'SSH Runtime Startup Report Invalid',
+          titleKey: 'progress.sshRuntimeStartupReportInvalidTitle',
+          summaryKey: 'progress.sshRuntimeStartupReportInvalidSummary',
+          detail: 'Redeven started on the SSH host but wrote a startup report Desktop could not use.',
+          targetLabel: desktopSSHAuthority(args.session.target),
+        },
+      );
+    }
+    if (!launchReport) {
+      const controlResult = args.getControlResult();
+      if (controlResult && (controlResult.exit_code !== 0 || controlResult.signal)) {
+        const exitReason = controlResult.exit_code !== null
+          ? `exit code ${controlResult.exit_code}`
+          : `signal ${controlResult.signal}`;
+        throw readinessFailure(`Remote Redeven launcher failed before reporting readiness (${exitReason}).`, args.session.logs, {
+          code: 'ssh_runtime_launch_failed',
+          title: 'SSH Runtime Launch Failed',
+          detail: 'The remote Redeven process exited before Desktop could read its startup report.',
+          targetLabel: desktopSSHAuthority(args.session.target),
+        });
+      }
+      if (Date.now() >= deadline) {
+        throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.session.logs, {
+          title: 'SSH Runtime Launch Timed Out',
+          detail: 'Redeven did not write its startup report on the SSH host before the timeout.',
+          targetLabel: desktopSSHAuthority(args.session.target),
+        });
+      }
+      await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
+      continue;
+    }
+    if (launchReport.status === 'blocked') {
+      const classification = classifyDesktopRuntimeBlockedLaunchReport(launchReport, {
+        target_runtime_version: args.runtimeReleaseTag,
+      });
+      if (
+        classification.kind === 'restart_required'
+        && desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable(classification.maintenance)
+      ) {
         if (Date.now() >= deadline) {
-          throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.session.logs, {
-            title: 'SSH Runtime Launch Timed Out',
-            detail: 'Redeven did not write its startup report on the SSH host before the timeout.',
-            targetLabel: desktopSSHAuthority(args.session.target),
-          });
+          throw readinessTimeoutFailure(
+            classification.maintenance.message,
+            args.session.logs,
+            {
+              title: 'SSH Runtime Launch Timed Out',
+              detail: 'Redeven is running on the SSH host, but Desktop could not verify the management socket before the timeout.',
+              targetLabel: desktopSSHAuthority(args.session.target),
+            },
+          );
         }
         await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
         continue;
       }
-      const exitReason = controlResult.exit_code !== null
-        ? `exit code ${controlResult.exit_code}`
-        : `signal ${controlResult.signal}`;
-      throw readinessFailure(`Remote Redeven launcher failed before reporting readiness (${exitReason}).`, args.session.logs, {
-        code: 'ssh_runtime_launch_failed',
-        title: 'SSH Runtime Launch Failed',
-        detail: 'The remote Redeven process exited before Desktop could read its startup report.',
-        targetLabel: desktopSSHAuthority(args.session.target),
-      });
+      throw readinessFailure(
+        launchReport.message,
+        args.session.logs,
+        {
+          code: 'ssh_runtime_launch_failed',
+          title: 'SSH Runtime Start Failed',
+          titleKey: 'progress.sshRuntimeReportedStartupFailureTitle',
+          detail: launchReport.message,
+          detailKey: 'progress.sshRuntimeReportedStartupFailureDetail',
+          targetLabel: desktopSSHAuthority(args.session.target),
+        },
+      );
     }
-
-    if (Date.now() >= deadline) {
-      throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.session.logs, {
-        title: 'SSH Runtime Launch Timed Out',
-        detail: 'Redeven did not write its startup report on the SSH host before the timeout.',
-        targetLabel: desktopSSHAuthority(args.session.target),
-      });
-    }
-    await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
+    return {
+      startup: launchReport.startup,
+      launch_mode: launchReport.status === 'attached' ? 'attached' : 'spawned',
+    };
   }
 }
 
