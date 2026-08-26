@@ -346,7 +346,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   let drawerDialogEl: HTMLDivElement | undefined;
   let dragBoundaryEl: HTMLDivElement | undefined;
   let dragPreviewEl: HTMLDivElement | undefined;
-  let dragPreviewReturnFrame: number | undefined;
   let dragPreviewReturnTimer: number | undefined;
   let dragPreviewReturning = false;
   let dragPreviewMetrics: Readonly<{
@@ -379,11 +378,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     position: 'before' | 'after';
   }> | null>(null);
   const clearDragPreview = () => {
-    if (dragPreviewReturnFrame !== undefined) window.cancelAnimationFrame(dragPreviewReturnFrame);
     if (dragPreviewReturnTimer !== undefined) window.clearTimeout(dragPreviewReturnTimer);
     dragPreviewEl?.remove();
     dragPreviewEl = undefined;
-    dragPreviewReturnFrame = undefined;
     dragPreviewReturnTimer = undefined;
     dragPreviewReturning = false;
     dragPreviewMetrics = null;
@@ -479,24 +476,34 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
       clearDragPreview();
     };
     preview.addEventListener('transitionend', finishReturn, { once: true });
-    dragPreviewReturnFrame = window.requestAnimationFrame(() => {
-      if (dragPreviewEl !== preview) return;
-      preview.style.transform = targetTransform;
-      preview.style.opacity = '0';
-    });
+    preview.style.transform = targetTransform;
+    preview.style.opacity = '0';
     dragPreviewReturnTimer = window.setTimeout(finishReturn, 220);
   };
   if (typeof document !== 'undefined' && typeof window !== 'undefined') {
     const returnNativeDragState = () => returnDragPreview();
-    const updateNativeDragPreview = (event: DragEvent) => updateDragPreviewPosition(event.clientX, event.clientY);
+    const updateNativeDragPreview = (event: DragEvent) => {
+      updateDragPreviewPosition(event.clientX, event.clientY);
+      if (draggedSessionId() === null && draggedGroupId() === null) return;
+      // Treat the whole document as an accepted surface for this internal drag.
+      // Otherwise Chromium runs its native invalid-drop snapback before dragend,
+      // delaying Redeven's own constrained return animation.
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    };
+    const completeNativeDrop = (event: DragEvent) => {
+      if (!dragPreviewEl) return;
+      event.preventDefault();
+      returnDragPreview();
+    };
     document.addEventListener('dragover', updateNativeDragPreview, true);
     document.addEventListener('dragend', returnNativeDragState);
-    document.addEventListener('drop', returnNativeDragState);
+    document.addEventListener('drop', completeNativeDrop);
     window.addEventListener('blur', clearDragState);
     onCleanup(() => {
       document.removeEventListener('dragover', updateNativeDragPreview, true);
       document.removeEventListener('dragend', returnNativeDragState);
-      document.removeEventListener('drop', returnNativeDragState);
+      document.removeEventListener('drop', completeNativeDrop);
       window.removeEventListener('blur', clearDragState);
       clearDragPreview();
     });
