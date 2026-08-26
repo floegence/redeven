@@ -18,6 +18,7 @@ import {
   type TagProps,
 } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
+import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 
 import {
   getEnvPublicIDFromSession,
@@ -1395,17 +1396,6 @@ export function EnvPortForwardsPage() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={openTemplateCatalog}
-                disabled={managedLoading() || (permissionReady() && !canRead())}
-                class={outlineControlClass}
-                data-testid="service-templates-button"
-              >
-                <FileText class="w-3.5 h-3.5 sm:mr-1" />
-                <span class="hidden sm:inline">{i18n.t('webServices.managed.serviceTemplates')}</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
                 onClick={() => { bumpRefresh(); void loadManaged(true); }}
                 disabled={!!busyID() || forwards.loading || managedLoading()}
                 aria-label={i18n.t('webServices.actions.refresh')}
@@ -1426,6 +1416,17 @@ export function EnvPortForwardsPage() {
               >
                 <Plus class="w-3.5 h-3.5 sm:mr-1" />
                 <span class="hidden sm:inline">{i18n.t('webServices.actions.addService')}</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={openTemplateCatalog}
+                disabled={managedLoading() || (permissionReady() && !canRead())}
+                class={outlineControlClass}
+                data-testid="service-templates-button"
+              >
+                <FileText class="w-3.5 h-3.5 sm:mr-1" />
+                <span class="hidden sm:inline">{i18n.t('webServices.managed.serviceTemplates')}</span>
               </Button>
             </div>
           </div>
@@ -1632,12 +1633,11 @@ export function EnvPortForwardsPage() {
       {/* Create dialog */}
       <CreateForwardDialog open={createOpen()} loading={createLoading()} onOpenChange={setCreateOpen} onCreate={doCreate} />
 
-      <Dialog
+      <EnvAppDrawer
         open={templateDrawerOpen()}
         onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) setTemplateDrawerOpen(open); }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
-        class="!fixed !inset-y-2 !right-2 !left-auto !m-0 !h-[calc(100%-1rem)] !max-h-none !w-[min(920px,calc(100%-1rem))] !max-w-none !rounded-lg"
         footer={
           <div class="flex w-full items-center justify-between gap-2">
             <Show when={templateDrawerView() !== 'catalog'} fallback={<span />}>
@@ -1657,7 +1657,7 @@ export function EnvPortForwardsPage() {
           </div>
         }
       >
-        <div class="min-h-0 space-y-4 overflow-y-auto pr-1" data-testid="service-template-drawer">
+        <div class="min-h-0 space-y-4 p-1" data-testid="service-template-drawer">
           <Show when={templateDrawerView() === 'catalog'}>
             <div class="sticky top-0 z-10 -mx-1 space-y-3 bg-card px-1 pb-2">
               <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1732,7 +1732,7 @@ export function EnvPortForwardsPage() {
             </div>
           )}</Show>
         </div>
-      </Dialog>
+      </EnvAppDrawer>
 
       <Dialog open={templateDuplicate() !== null} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-sm text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
 

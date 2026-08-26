@@ -15,10 +15,40 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-const auditedDockerImage = "runzhliu/deepseek-harness:0.1.1-rc.2"
-const managedServiceLabel = "com.floegence.redeven.managed-web-service"
+const (
+	auditedDockerImage       = "runzhliu/deepseek-harness:0.1.1-rc.2"
+	auditedDockerAMD64Digest = "sha256:7ab8875c68f3ecef18b21b8f04f72d914a4b86df9876064bb5af7d45a9224e9c"
+	auditedDockerARM64Digest = "sha256:53e8a997f09252b139b8e46c0c13eeb574074e6f17a732a4b57135ac5a6bc58a"
+	managedServiceLabel      = "com.floegence.redeven.managed-web-service"
+)
 
 var dockerDigestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+
+func auditedDockerArtifact(platform string) (dockerArtifact, bool) {
+	digest := ""
+	switch platform {
+	case "linux-amd64":
+		digest = auditedDockerAMD64Digest
+	case "linux-arm64":
+		digest = auditedDockerARM64Digest
+	default:
+		return dockerArtifact{}, false
+	}
+	return dockerArtifact{Image: auditedDockerImage, Digest: digest}, true
+}
+
+func auditedDockerCatalog() catalogPayload {
+	docker := make(map[string]dockerArtifact, 2)
+	for _, platform := range []string{"linux-amd64", "linux-arm64"} {
+		artifact, _ := auditedDockerArtifact(platform)
+		docker[platform] = artifact
+	}
+	return catalogPayload{
+		TemplateID: DeepSeekHarnessTemplateID,
+		Version:    DeepSeekHarnessVersion,
+		Docker:     docker,
+	}
+}
 
 type retainedDockerVolume struct {
 	Name            string `json:"name"`

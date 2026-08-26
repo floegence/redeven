@@ -1,6 +1,7 @@
 package managedwebservice
 
 import (
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -8,6 +9,33 @@ import (
 	"github.com/floegence/redeven/internal/capabilities/containers"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
+
+func TestAuditedDockerCatalogPinsReviewedPlatformDigests(t *testing.T) {
+	t.Parallel()
+	catalog := auditedDockerCatalog()
+	if catalog.TemplateID != DeepSeekHarnessTemplateID || catalog.Version != DeepSeekHarnessVersion {
+		t.Fatalf("audited Docker catalog identity = %+v", catalog)
+	}
+	if len(catalog.Docker) != 2 {
+		t.Fatalf("audited Docker platforms = %+v", catalog.Docker)
+	}
+	for _, platform := range []string{"linux-amd64", "linux-arm64"} {
+		artifact, ok := catalog.Docker[platform]
+		if !ok || artifact.Image != auditedDockerImage || !dockerDigestPattern.MatchString(artifact.Digest) {
+			t.Fatalf("audited Docker artifact %s = %+v", platform, artifact)
+		}
+	}
+	current, ok := catalog.Docker["linux-"+runtime.GOARCH]
+	if (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") && (!ok || current.Digest == "") {
+		t.Fatalf("current platform audited Docker artifact = %+v", current)
+	}
+
+	catalog.Docker["linux-amd64"] = dockerArtifact{}
+	artifact, ok := auditedDockerArtifact("linux-amd64")
+	if !ok || artifact.Digest == "" {
+		t.Fatal("audited Docker catalog returned a mutable digest map")
+	}
+}
 
 func TestHardenedDockerCreateRequestUsesExactIdentityAndLoopbackOnly(t *testing.T) {
 	t.Parallel()

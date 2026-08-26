@@ -4,6 +4,39 @@
   box-shadow: none !important;
 }
 
+[data-floe-dialog-panel].env-app-drawer-panel {
+  position: fixed;
+  app-region: no-drag;
+  user-select: auto;
+  left: auto;
+  top: var(--redeven-desktop-titlebar-height, 0px);
+  right: 0;
+  bottom: 0;
+  width: min(58rem, 100vw);
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  --floe-floating-enter-duration: 240ms;
+  --floe-floating-exit-duration: 180ms;
+  --floe-floating-enter-x: min(8rem, 18vw);
+  --floe-floating-exit-x: min(6rem, 14vw);
+  --floe-floating-enter-y: 0;
+  --floe-floating-exit-y: 0;
+  --floe-floating-enter-scale: 1;
+  --floe-floating-exit-scale: 1;
+  --floe-floating-origin: right center;
+}
+
+@media (max-width: 639px) {
+  [data-floe-dialog-panel].env-app-drawer-panel {
+    top: var(--redeven-desktop-titlebar-height, 0px);
+    width: 100vw;
+    border-radius: 0;
+  }
+}
+
 .redeven-terminal-surface {
   contain: paint;
 }

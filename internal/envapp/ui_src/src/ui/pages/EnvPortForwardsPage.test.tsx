@@ -146,6 +146,10 @@ vi.mock('../primitives/EnvAppModal', () => ({
   ConfirmDialog: (props: any) => <Show when={props.open}><div><h2>{props.title}</h2>{props.children}<button type="button" disabled={props.loading} onClick={props.onConfirm}>{props.confirmText}</button></div></Show>,
 }));
 
+vi.mock('../primitives/EnvAppDrawer', () => ({
+  EnvAppDrawer: (props: any) => <Show when={props.open}><div data-testid="env-app-drawer-mock"><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
+}));
+
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => envContextMocks,
 }));
@@ -508,6 +512,16 @@ describe('EnvPortForwardsPage', () => {
 
     expect(panel?.className).toContain('redeven-surface-panel--strong');
     expect(card?.className).toContain('redeven-surface-panel--interactive');
+  });
+
+  it('places Service templates at the far right of the page actions', async () => {
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const templates = host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]');
+    const actions = templates?.parentElement?.querySelectorAll<HTMLButtonElement>(':scope > button');
+    expect(templates).toBeTruthy();
+    expect(actions?.item((actions?.length ?? 1) - 1)).toBe(templates);
   });
 
   it('shows a managed DeepSeek Harness card without duplicating its protected forward', async () => {
