@@ -669,7 +669,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain("preserved_open_operation_key: input.operation_key");
     expect(mainSrc).toContain('const matchingActiveOperation = activeLifecycle');
     expect(mainSrc).toContain('const failureOperationKey = matchingActiveOperation?.operation_key');
-    expect(mainSrc).toContain('clearSupersededRuntimeLifecycleFailures(targetID, input.operation_key)');
+    expect(mainSrc).toContain('clearSupersededRuntimeFailuresForEnvironments([input.environment_id], input.operation_key)');
     expect(mainSrc).toContain("intent: 'reinstall'");
     expect(mainSrc).toContain("Redeven reinstall is taking ownership of this target.");
     expect(mainSrc).not.toContain('pendingSSHRuntimeStartByKey');
@@ -1764,6 +1764,48 @@ describe('main routing', () => {
     expect(reinstallSrc).toContain('operationStartedAtUnixMS: operation.started_at_unix_ms');
     expect(reinstallSrc).toContain('operationStartedAtUnixMS: existing.started_at_unix_ms');
     expect(readSharedLauncherIPCSource()).toContain('operation_started_at_unix_ms?: number;');
+  });
+
+  it('converges every affected Environment after successful reinstall through one refresh path', () => {
+    const mainSrc = readMainSource();
+    const cleanupStart = mainSrc.indexOf('function removeOtherReinstallOperationsForAffectedEnvironments(');
+    const cleanupEnd = mainSrc.indexOf('async function reinstallRequiredTargetFingerprints(', cleanupStart);
+    const cleanupSrc = mainSrc.slice(cleanupStart, cleanupEnd);
+    const convergenceStart = mainSrc.indexOf('async function convergeLauncherStateAfterSuccessfulReinstall(');
+    const convergenceEnd = mainSrc.indexOf('async function reinstallRequiredTargetFingerprints(', convergenceStart);
+    const convergenceSrc = mainSrc.slice(convergenceStart, convergenceEnd);
+    const lifecycleCleanupStart = mainSrc.indexOf('function clearSupersededRuntimeFailuresForEnvironments(');
+    const lifecycleCleanupEnd = mainSrc.indexOf('async function executeDirectManagedEnvironmentLifecycle(', lifecycleCleanupStart);
+    const lifecycleCleanupSrc = mainSrc.slice(lifecycleCleanupStart, lifecycleCleanupEnd);
+    const reinstallStart = mainSrc.indexOf('async function reinstallTargetFromLauncher(');
+    const reinstallEnd = mainSrc.indexOf('async function deleteGatewayFromLauncher(', reinstallStart);
+    const reinstallSrc = mainSrc.slice(reinstallStart, reinstallEnd);
+    const refreshScopeStart = mainSrc.indexOf('function launcherActionRefreshScope(');
+    const refreshScopeEnd = mainSrc.indexOf('function scheduleWelcomeRuntimeHealthRefreshAfterLauncherAction(', refreshScopeStart);
+    const refreshScopeSrc = mainSrc.slice(refreshScopeStart, refreshScopeEnd);
+
+    expect(cleanupStart).toBeGreaterThanOrEqual(0);
+    expect(cleanupEnd).toBeGreaterThan(cleanupStart);
+    expect(cleanupSrc).toContain('removeLauncherOperation(operation.operation_key);');
+    expect(cleanupSrc).not.toContain('launcherOperations.remove(');
+    expect(convergenceStart).toBeGreaterThanOrEqual(0);
+    expect(convergenceEnd).toBeGreaterThan(convergenceStart);
+    expect(convergenceSrc).toContain('clearSupersededRuntimeFailuresForEnvironments(affected, currentOperationKey);');
+    expect(convergenceSrc).toContain('removeOtherReinstallOperationsForAffectedEnvironments(currentOperationKey, affected);');
+    expect(convergenceSrc).toContain('resetLauncherIssueState();');
+    expect(convergenceSrc.match(/refreshWelcomeRuntimeHealth\(\{/gu)).toHaveLength(1);
+    expect(convergenceSrc).toContain("mode: 'manual'");
+    expect(convergenceSrc).toContain('force: true');
+    expect(convergenceSrc).toContain('targetEnvironmentIDs: affected');
+    expect(lifecycleCleanupSrc).toContain("snapshot.active_progress_surface === 'runtime_lifecycle'");
+    expect(lifecycleCleanupSrc).toContain("snapshot.active_progress_surface === 'open'");
+    expect(lifecycleCleanupSrc).toContain("snapshot.status === 'canceled'");
+    expect(lifecycleCleanupSrc).toContain("snapshot.status === 'failed'");
+    expect(lifecycleCleanupSrc).toContain('affected.has(compact(snapshot.environment_id))');
+    expect(reinstallSrc).toContain('const completedJournal = await runtimeLifecycleCoordinator.run({');
+    expect(reinstallSrc).toContain('completedJournal.affected_environment_ids');
+    expect(reinstallSrc).not.toContain('operation.reinstall_preview?.affected_environment_ids');
+    expect(refreshScopeSrc).not.toContain("case 'reinstall_target':");
   });
 
   it('routes legacy Gateway refresh requests through the unified Refresh workflow', () => {

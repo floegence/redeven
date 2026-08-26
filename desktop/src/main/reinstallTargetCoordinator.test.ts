@@ -807,6 +807,35 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
   });
 
+  it('continues wipe reinstall when the old process inventory schema is unsupported', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed');
+    await fs.mkdir(targetRoot);
+    await fs.writeFile(path.join(targetRoot, 'old-runtime-data'), 'obsolete');
+    const current = descriptor(targetRoot);
+    const events: string[] = [];
+    const dependencies = coordinatorDependencies(path.join(parent, 'journal'), () => current, events);
+    const prepareProcessSession = vi.fn(async () => {
+      throw new Error('Runtime process inventory schema is unsupported.');
+    });
+    const coordinator = new ReinstallTargetCoordinator({
+      ...dependencies,
+      prepare_process_session: prepareProcessSession,
+    });
+
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+    const journal = await coordinator.execute(preview.preflight_id);
+
+    expect(prepareProcessSession).toHaveBeenCalledOnce();
+    expect(journal.affected_environment_ids).toEqual(['env-alias', 'env-local']);
+    expect(events).toContain('install_runtime');
+    expect(events).toContain('start_runtime');
+    expect(events).toContain('verify_fresh_identity');
+    expect(events).toContain('verify_catalog_and_local_ui');
+    await expect(fs.lstat(path.join(targetRoot, 'old-runtime-data'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.readFile(path.join(targetRoot, 'fresh-component'), 'utf8')).resolves.toBe('current');
+  });
+
   it('groups every Desktop record that resolves to the same canonical physical root', async () => {
     const parent = await temporaryRoot();
     const targetRoot = path.join(parent, 'managed');

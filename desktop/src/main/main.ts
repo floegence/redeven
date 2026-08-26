@@ -1295,18 +1295,36 @@ function removeOtherReinstallOperationsForAffectedEnvironments(
   currentOperationKey: string,
   affectedEnvironmentIDs: readonly string[],
 ): void {
-  const affected = new Set(affectedEnvironmentIDs);
+  const affected = new Set(affectedEnvironmentIDs.map(compact).filter(Boolean));
   for (const operation of launcherOperations.operations()) {
     if (operation.operation_key === currentOperationKey || operation.action !== 'reinstall_target') {
       continue;
     }
     if (
-      (operation.environment_id && affected.has(operation.environment_id))
-      || operation.reinstall_preview?.affected_environment_ids.some((environmentID) => affected.has(environmentID))
+      affected.has(compact(operation.environment_id))
+      || operation.reinstall_preview?.affected_environment_ids.some((environmentID) => affected.has(compact(environmentID)))
     ) {
-      launcherOperations.remove(operation.operation_key);
+      removeLauncherOperation(operation.operation_key);
     }
   }
+}
+
+async function convergeLauncherStateAfterSuccessfulReinstall(
+  currentOperationKey: string,
+  affectedEnvironmentIDs: readonly string[],
+): Promise<void> {
+  const affected = [...new Set(affectedEnvironmentIDs.map(compact).filter(Boolean))];
+  clearSupersededRuntimeFailuresForEnvironments(affected, currentOperationKey);
+  removeOtherReinstallOperationsForAffectedEnvironments(currentOperationKey, affected);
+  resetLauncherIssueState();
+  await refreshWelcomeRuntimeHealth({
+    force: true,
+    mode: 'manual',
+    targetEnvironmentIDs: affected,
+  }).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[redeven:reinstall-target] Runtime health convergence failed: ${message}`);
+  });
 }
 
 async function reinstallRequiredTargetFingerprints(
@@ -7038,7 +7056,7 @@ async function reinstallTargetFromLauncher(
         );
       }
     }
-    await runtimeLifecycleCoordinator.run({
+    const completedJournal = await runtimeLifecycleCoordinator.run({
       target_key: targetKey,
       intent: 'reinstall',
       fingerprint: runtimeLifecycleFingerprint({
@@ -7081,9 +7099,9 @@ async function reinstallTargetFromLauncher(
       detail_key: 'progress.reinstallCompletedDetail',
       step_progress: reinstallTargetStepProgress('completed', 'succeeded'),
     });
-    removeOtherReinstallOperationsForAffectedEnvironments(
+    await convergeLauncherStateAfterSuccessfulReinstall(
       operationKey,
-      operation.reinstall_preview?.affected_environment_ids ?? [request.environment_id],
+      completedJournal.affected_environment_ids,
     );
     scheduleCurrentLauncherOperationRemoval(operationKey, owner);
     broadcastDesktopWelcomeSnapshots();
@@ -14236,13 +14254,20 @@ type EnvironmentRuntimeLifecycleExecutionOptions = Readonly<{
   }>;
 }>;
 
-function clearSupersededRuntimeLifecycleFailures(targetID: string, currentOperationKey: string): void {
+function clearSupersededRuntimeFailuresForEnvironments(
+  affectedEnvironmentIDs: readonly string[],
+  currentOperationKey: string,
+): void {
+  const affected = new Set(affectedEnvironmentIDs.map(compact).filter(Boolean));
   for (const snapshot of launcherOperations.operations()) {
     if (
       snapshot.operation_key !== currentOperationKey
       && snapshot.subject_kind === 'runtime_target'
-      && snapshot.subject_id === targetID
-      && snapshot.active_progress_surface === 'runtime_lifecycle'
+      && affected.has(compact(snapshot.environment_id))
+      && (
+        snapshot.active_progress_surface === 'runtime_lifecycle'
+        || snapshot.active_progress_surface === 'open'
+      )
       && (
         snapshot.status === 'failed'
         || snapshot.status === 'cleanup_failed'
@@ -14629,7 +14654,7 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
           status: 'running',
         });
       }
-      clearSupersededRuntimeLifecycleFailures(targetID, input.operation_key);
+      clearSupersededRuntimeFailuresForEnvironments([input.environment_id], input.operation_key);
       await clearReinstallTargetRequiredForEnvironment(input.environment_id).catch(() => undefined);
       resetLauncherIssueState();
       broadcastDesktopWelcomeSnapshots();
@@ -15306,7 +15331,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
           lifecycle_progress: lifecycleProgress,
         });
         scheduleCurrentLauncherOperationRemoval(operationKey, owner);
-        clearSupersededRuntimeLifecycleFailures(targetID, operationKey);
+        clearSupersededRuntimeFailuresForEnvironments([environmentID], operationKey);
         resetLauncherIssueState();
         broadcastDesktopWelcomeSnapshots();
         return launcherActionSuccess('refreshed_environment_runtime', {
