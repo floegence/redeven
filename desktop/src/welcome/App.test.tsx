@@ -1677,9 +1677,13 @@ describe('DesktopWelcomeShell', () => {
     expect(actionPopoverFrameStyles).not.toContain('overflow: auto;');
     expect(actionPopoverStyles).toContain('max-height: inherit;');
     expect(actionPopoverStyles).toContain('overflow: auto;');
+    expect(actionPopoverStyles).toContain('scrollbar-gutter: stable;');
     expect(environmentProgressStyles).toContain('overflow: hidden;');
+    expect(environmentProgressStyles).toContain('scrollbar-gutter: auto;');
     expect(environmentProgressBodyStyles).toContain('overflow: auto;');
+    expect(environmentProgressBodyStyles).toContain('scrollbar-gutter: stable;');
     expect(gatewayActionPanelStyles).toContain('overflow: hidden;');
+    expect(gatewayActionPanelStyles).toContain('scrollbar-gutter: auto;');
     expect(gatewayActionPanelBodyStyles).toContain('overflow: auto;');
     expect(styles).toContain('--redeven-action-popover-border');
     expect(styles).toContain('--redeven-action-popover-width: min(19rem, calc(100vw - 1rem));');
