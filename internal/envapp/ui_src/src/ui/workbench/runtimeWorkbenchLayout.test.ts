@@ -8,6 +8,7 @@ import {
 } from '@floegence/floe-webapp-core/workbench';
 
 import {
+  createEmptyRuntimeWorkbenchLayoutSnapshot,
   createWorkbenchOverviewViewport,
   derivePersistedWorkbenchLocalState,
   extractRuntimeWorkbenchLayoutFromSurfaceState,
@@ -800,19 +801,15 @@ describe('runtimeWorkbenchLayout', () => {
     }, widgetDefinitions as any);
 
     expect(sanitized).toEqual({
-      version: 4,
+      version: 5,
       locked: true,
-      filters: {
-        'redeven.files': false,
-        'redeven.terminal': true,
-      },
       theme: 'midnight',
       mode: 'work',
       activeTool: 'select',
     });
   });
 
-  it('keeps v4 filters unchanged when only the layout lock changes', () => {
+  it('migrates v4 filters to v5 and restores every component type', () => {
     const hydrated = sanitizePersistedWorkbenchLocalState({
       version: 4,
       locked: true,
@@ -824,29 +821,30 @@ describe('runtimeWorkbenchLayout', () => {
       mode: 'work',
       activeTool: 'select',
     }, widgetDefinitions as any);
-    const unlocked = derivePersistedWorkbenchLocalState({
-      version: 1,
-      widgets: [],
-      viewport: { x: 0, y: 0, scale: 1 },
-      locked: false,
-      filters: hydrated.filters,
-      selectedWidgetId: null,
-      theme: hydrated.theme,
-      mode: hydrated.mode,
-      activeTool: hydrated.activeTool,
-    } as any);
-    const relocked = derivePersistedWorkbenchLocalState({
-      ...unlocked,
-      locked: true,
-    } as any);
+    const projected = projectWorkbenchStateFromRuntimeLayout({
+      snapshot: createEmptyRuntimeWorkbenchLayoutSnapshot(),
+      localState: hydrated,
+      widgetDefinitions: widgetDefinitions as any,
+    });
 
-    expect(unlocked.filters).toEqual(hydrated.filters);
-    expect(relocked.filters).toEqual(hydrated.filters);
-    expect(unlocked.filters['redeven.files']).toBe(false);
-    expect(relocked.filters['redeven.files']).toBe(false);
+    expect(hydrated).toEqual({
+      version: 5,
+      locked: true,
+      theme: 'default',
+      mode: 'work',
+      activeTool: 'select',
+    });
+    expect(projected.filters).toMatchObject({
+      'redeven.files': true,
+      'redeven.terminal': true,
+      'sticky-note': true,
+      text: true,
+      'background-region': true,
+    });
+    expect(derivePersistedWorkbenchLocalState(projected)).not.toHaveProperty('filters');
   });
 
-  it('preserves upstream layered filter ids in local state normalization', () => {
+  it('ignores legacy layered filter ids in local state normalization', () => {
     const sanitized = sanitizePersistedWorkbenchLocalState({
       filters: {
         'sticky-note': false,
@@ -858,14 +856,8 @@ describe('runtimeWorkbenchLayout', () => {
       activeTool: 'background-region',
     }, widgetDefinitions as any);
 
-    expect(sanitized.filters).toMatchObject({
-      'redeven.files': true,
-      'redeven.terminal': true,
-      'sticky-note': false,
-      text: true,
-      'background-region': false,
-    });
-    expect(sanitized.filters).not.toHaveProperty('ignored');
+    expect(sanitized).not.toHaveProperty('filters');
+    expect(sanitized.version).toBe(5);
     expect(sanitized.mode).toBe('background');
     expect(sanitized.activeTool).toBe('background-region');
   });
@@ -885,12 +877,8 @@ describe('runtimeWorkbenchLayout', () => {
     } as any);
 
     expect(localState).toEqual({
-      version: 4,
+      version: 5,
       locked: true,
-      filters: {
-        'redeven.files': false,
-        'redeven.terminal': true,
-      },
       theme: 'mica',
       mode: 'work',
       activeTool: 'select',

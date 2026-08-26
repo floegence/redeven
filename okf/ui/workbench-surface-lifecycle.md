@@ -3,11 +3,11 @@ type: UI Contract
 title: Workbench surface lifecycle
 description: Selection presentation, recovery ownership, lazy widgets, and shared floating surfaces.
 tags: [ui, workbench, lifecycle, keep-alive]
-timestamp: 2026-08-15T00:00:00Z
+timestamp: 2026-08-26T00:00:00Z
 ---
 # Summary
 
-Workbench keeps widget identity and state stable while visual selection, input routing, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. A selected Terminal's declared local scroll viewport owns pointer wheel input without requiring terminal DOM focus, while unselected widgets remain under Canvas ownership. Recovery is mounted above the canvas and makes retained content inert instead of creating per-widget reconnect state. Pointer-anchored overlays use the shared surface layer, and lazy module delivery cannot replace permission, keep-alive, or lifecycle contracts.
+Workbench keeps widget identity and state stable while Dock navigation, visual selection, input routing, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. Floe Webapp owns generic Dock focus cycling; Redeven selects that mode and persists no competing visibility state. A selected Terminal's declared local scroll viewport owns pointer wheel input without requiring terminal DOM focus, while unselected widgets remain under Canvas ownership. Recovery is mounted above the canvas and makes retained content inert instead of creating per-widget reconnect state. Pointer-anchored overlays use the shared surface layer, and lazy module delivery cannot replace permission, keep-alive, or lifecycle contracts.
 
 # Contract
 
@@ -15,7 +15,9 @@ Workbench keeps widget identity and state stable while visual selection, input r
 
 Workbench widget selection follows the same presentation ordering without changing canvas ownership. The selected boundary and pointer ownership update immediately; committed activation, z-order persistence, viewport reveal or centering, fit, focus, and geometry measurement occur after the intent paint. Activity and Workbench page roots also remain mounted after first visit. Switching page mode changes visibility and activation sequence after paint, then restores Workbench geometry and focus; it does not rebuild the Workbench page or destroy the Activity Shell.
 
-Canvas locking and component filtering are independent inputs. Locking controls layout editing and keeps the established locked pan-and-zoom behavior; filtering alone controls whether each component type is visible. For one widget set and filter map, changing only the lock cannot change the visible widget ids. A type stored as `false` remains filtered while locked and unlocked, while `true` or an absent entry remains visible. The version 4 local-preferences owner persists `locked` and `filters` independently and never rewrites a user's false filter merely because the lock changes. Locked wheel gestures do not zoom the canvas; unlocked canvas wheel gestures retain zoom.
+Redeven enables Floe Webapp's published `focus-cycle` Dock activation mode. For built-in Widgets, sticky notes, text, and background regions, Floe resolves candidates in stable spatial order, owns the cycle session, creates the first component at the viewport center when none exists, selects and centers the target without changing scale, transfers focus, and projects count or `+` badges. Repeated activation wraps; manual selection, another Dock item, or a candidate-set or order change starts a new cycle. Waiting and panning alone do not. Pointer and keyboard activation share that path, while drag completion cannot also click. Host interception still runs first, and Plugin Dock items, Plugin panels, mode switching, context menus, and drag-to-canvas creation retain their existing semantics.
+
+Canvas locking remains the sole owner of layout editing. A locked canvas still permits Dock selection, centering, activation, and focus, but does not admit component movement or resize. Version 5 local preferences persist only lock, theme, interaction mode, and active tool. Legacy `filters`, including `false` values from version 4 and earlier, are ignored during hydration so every component type returns visible, and the next persistence write emits v5 without a `filters` field. This is browser-local preference normalization, not a Runtime or Workbench layout database migration. Locked wheel gestures do not zoom the canvas; unlocked canvas wheel gestures retain zoom.
 
 Shell preset changes may repaint widget boundaries, retained feature bodies, and floating surfaces, but they do not change input ownership. The selected widget remains the canvas wheel guard, declared reading surfaces retain browser text selection and copy, unselected widgets do not capture wheel input, and projected overlays continue through `SurfaceFloatingLayer`. When the pointer wheel path belongs to a selected Terminal's real local-scroll marker, that Terminal owns scrollback input even if its textarea does not currently hold DOM focus and even while Canvas movement is locked; routing the wheel must not move focus, change the active session, or grant an unselected or placeholder Terminal local ownership. Theme-derived colors must not be implemented by replacing or remounting those owners.
 
@@ -45,6 +47,8 @@ Git entity menus use this shared projection for workspace sections and rows, bra
 
 Lazy loading is a module-delivery boundary only. It must not pre-mount inactive Workbench features, eagerly initialize Flower providers, or weaken existing permission, state restoration, input ownership, and error recovery contracts.
 
+Redeven must not copy Floe's Dock candidate sorting, cycle session, empty-state creation, badge, centering, or focus logic. Its product adapter selects `focus-cycle` and supplies product widget definitions; upstream remains the single behavior owner.
+
 Connection recovery must not be implemented independently inside Workbench widgets or feature bodies. Per-widget curtains, fallback controls, and local reconnect state would create conflicting interaction owners and allow stale controls to remain reachable. Only the shell-level recovery snapshot may suspend the Workbench interaction tree, and a terminal failure does not grant the retained canvas any read or write interaction until a new Desktop session is opened.
 
 # Evidence
@@ -52,8 +56,9 @@ Connection recovery must not be implemented independently inside Workbench widge
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Tests cover reusing a singleton widget without implicit ensureWidget centering when focus is disabled.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts:241` - Selected Terminal wheel routing delegates only an explicit local-scroll marker to the widget without a DOM-focus gate.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx:650` - Surface interaction tests cover selected Terminal wheel ownership outside terminal focus and while Canvas is locked.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx` - Product integration tests keep projected filtered and visible widget ids stable across lock changes through the published floe-webapp surface.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/runtimeWorkbenchLayout.test.ts` - Local-preferences tests preserve false filter entries across unlock and relock persistence projections.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - The product surface selects the published `focus-cycle` activation mode without implementing cycle behavior.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.test.tsx` - Adapter coverage requires the `focus-cycle` opt-in to reach Floe's public surface.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/runtimeWorkbenchLayout.test.ts` - Local-preferences coverage migrates legacy false filters to v5 and restores every component type.
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx:287` - Flower thread context menus render through the shared surface floating layer.
 - `redeven:AGENTS.md:651` - Repository rules define Workbench floating UI and coordinate ownership.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:20` - Workbench feature bodies use independent lazy imports while widget definitions remain stable.

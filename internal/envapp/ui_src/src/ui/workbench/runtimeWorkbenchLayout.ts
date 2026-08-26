@@ -7,7 +7,6 @@ import {
   WORKBENCH_DEFAULT_STICKY_NOTE_COLOR,
   WORKBENCH_DEFAULT_TEXT_COLOR,
   WORKBENCH_DEFAULT_TEXT_FONT,
-  WORKBENCH_LAYER_COMPONENT_FILTER_IDS,
   WORKBENCH_REGION_FILL_OPTIONS,
   WORKBENCH_STICKY_NOTE_COLORS,
   WORKBENCH_TEXT_COLOR_OPTIONS,
@@ -194,9 +193,8 @@ export type RuntimeWorkbenchTerminalWidgetSessionsCloseResponse = Readonly<{
 }>;
 
 export type PersistedWorkbenchLocalState = Readonly<{
-  version: 4;
+  version: 5;
   locked: boolean;
-  filters: Record<string, boolean>;
   theme: WorkbenchThemeId;
   mode: WorkbenchInteractionMode;
   activeTool: WorkbenchDockToolId;
@@ -578,28 +576,6 @@ function projectLayerItemsInStableOrder<T extends { id: string }>(
   return projected;
 }
 
-function normalizeFilters(
-  value: unknown,
-  defaults: Record<string, boolean>,
-  widgetDefinitions: readonly WorkbenchWidgetDefinition[],
-): Record<string, boolean> {
-  const allowedTypes = new Set<string>([
-    ...widgetDefinitions.map((definition) => definition.type),
-    ...WORKBENCH_LAYER_COMPONENT_FILTER_IDS,
-  ]);
-  const next = { ...defaults };
-  if (!isRecord(value)) {
-    return next;
-  }
-  for (const [key, entry] of Object.entries(value)) {
-    if (!allowedTypes.has(key) || typeof entry !== 'boolean') {
-      continue;
-    }
-    next[key] = entry;
-  }
-  return next;
-}
-
 export function createEmptyRuntimeWorkbenchLayoutSnapshot(): RuntimeWorkbenchLayoutSnapshot {
   return EMPTY_RUNTIME_WORKBENCH_LAYOUT_SNAPSHOT;
 }
@@ -729,11 +705,8 @@ export function normalizeRuntimeWorkbenchTerminalWidgetSessionsCloseResponse(
 
 export function derivePersistedWorkbenchLocalState(state: WorkbenchState): PersistedWorkbenchLocalState {
   return {
-    version: 4,
+    version: 5,
     locked: Boolean(state.locked),
-    filters: Object.fromEntries(
-      Object.entries(state.filters ?? {}).map(([key, enabled]) => [key, Boolean(enabled)]),
-    ),
     theme: normalizeWorkbenchTheme(state.theme),
     mode: normalizeWorkbenchInteractionMode(state.mode),
     activeTool: normalizeWorkbenchDockToolId(state.activeTool),
@@ -747,15 +720,11 @@ export function sanitizePersistedWorkbenchLocalState(
   const defaultState = createDefaultWorkbenchState(widgetDefinitions);
   const fallback = derivePersistedWorkbenchLocalState(defaultState);
   if (!isRecord(value)) {
-    return {
-      ...fallback,
-      filters: normalizeFilters(fallback.filters, defaultState.filters, widgetDefinitions),
-    };
+    return fallback;
   }
   return {
-    version: 4,
+    version: 5,
     locked: typeof value.locked === 'boolean' ? value.locked : fallback.locked,
-    filters: normalizeFilters(value.filters, defaultState.filters, widgetDefinitions),
     theme: normalizeWorkbenchTheme(value.theme, fallback.theme),
     mode: normalizeWorkbenchInteractionMode(value.mode, fallback.mode),
     activeTool: normalizeWorkbenchDockToolId(value.activeTool, fallback.activeTool),
@@ -766,20 +735,10 @@ export function samePersistedWorkbenchLocalState(
   left: PersistedWorkbenchLocalState,
   right: PersistedWorkbenchLocalState,
 ): boolean {
-  if (
-    left.locked !== right.locked
-    || left.theme !== right.theme
-    || left.mode !== right.mode
-    || left.activeTool !== right.activeTool
-  ) {
-    return false;
-  }
-  const leftFilters = Object.entries(left.filters);
-  const rightFilters = Object.entries(right.filters);
-  if (leftFilters.length !== rightFilters.length) {
-    return false;
-  }
-  return leftFilters.every(([key, value]) => right.filters[key] === value);
+  return left.locked === right.locked
+    && left.theme === right.theme
+    && left.mode === right.mode
+    && left.activeTool === right.activeTool;
 }
 
 export function createWorkbenchOverviewViewport(args: Readonly<{
@@ -1179,10 +1138,7 @@ export function projectWorkbenchStateFromRuntimeLayout(args: Readonly<{
       widgets,
       viewport: args.existingState?.viewport ?? defaultState.viewport,
       locked: args.localState.locked,
-      filters: {
-        ...defaultState.filters,
-        ...args.localState.filters,
-      },
+      filters: defaultState.filters,
       selectedWidgetId,
       theme: args.localState.theme,
       mode: args.localState.mode,

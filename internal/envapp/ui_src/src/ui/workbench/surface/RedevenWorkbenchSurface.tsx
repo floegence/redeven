@@ -542,6 +542,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         class={props.class}
         widgetDefinitions={props.widgetDefinitions}
         launcherWidgetTypes={props.filterBarWidgetTypes}
+        dockItemActivationMode="focus-cycle"
         textAnnotationDefaults={props.textAnnotationDefaults ?? REDEVEN_TEXT_ANNOTATION_DEFAULTS}
         backgroundLayerDefaults={props.backgroundLayerDefaults ?? REDEVEN_BACKGROUND_LAYER_DEFAULTS}
         interactionAdapter={redevenWorkbenchInteractionAdapter}
