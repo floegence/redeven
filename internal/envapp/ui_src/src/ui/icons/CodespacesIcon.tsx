@@ -1,8 +1,9 @@
-const CODESPACES_FOLD_PATH = 'M8.4 6.15q.42-.05.7.28l.35.43q.27.32-.03.62L6.25 12l3.17 4.52q.3.3.03.62l-.35.43q-.28.33-.7.28l-3.81-5.07q-.3-.35-.3-.78t.3-.78Z';
-const CODESPACES_SLASH_PATH = 'M13.28 4.42q.13-.43.56-.3l.48.15q.43.14.29.57L9.68 19.58q-.14.43-.57.29l-.48-.16q-.43-.14-.29-.57Z';
+const CODESPACES_FOLD_PATH = 'M7.6 6.35q.4-.04.67.27l.33.4q.25.3-.03.58L5.5 12l3.07 4.4q.28.29.03.59l-.33.4q-.27.31-.67.26l-3.6-4.88q-.29-.34-.29-.77t.29-.77Z';
+const CODESPACES_SLASH_PATH = 'M13.36 4.2q.12-.45.57-.34l.4.11q.45.12.33.57L10.54 19.8q-.12.45-.57.34l-.4-.11q-.45-.12-.33-.57Z';
 
 function CodespacesFoldedMark(props: {
   foldFill: string;
+  foldOpacity: string;
   slashFill: string;
   slashOpacity: string;
   surface?: 'activity-bar';
@@ -18,13 +19,13 @@ function CodespacesFoldedMark(props: {
         data-codespaces-icon-part="fold-left"
         d={CODESPACES_FOLD_PATH}
         fill={props.foldFill}
-        fill-opacity=".86"
+        fill-opacity={props.foldOpacity}
       />
       <path
         data-codespaces-icon-part="fold-right"
         d={CODESPACES_FOLD_PATH}
         fill={props.foldFill}
-        fill-opacity=".86"
+        fill-opacity={props.foldOpacity}
         transform="matrix(-1 0 0 1 24 0)"
       />
       <path
@@ -41,8 +42,9 @@ export function CodespacesActivityBarGlyph() {
   return (
     <CodespacesFoldedMark
       foldFill="currentColor"
+      foldOpacity=".86"
       slashFill="currentColor"
-      slashOpacity=".74"
+      slashOpacity=".78"
       surface="activity-bar"
     />
   );
@@ -71,9 +73,10 @@ export function CodespacesWorkbenchIcon(props: { class?: string }) {
         stroke-opacity=".08"
       />
       <CodespacesFoldedMark
-        foldFill="var(--redeven-code-muted)"
-        slashFill="var(--redeven-code-token-flag)"
-        slashOpacity=".92"
+        foldFill="var(--redeven-status-info)"
+        foldOpacity=".82"
+        slashFill="var(--redeven-status-warning)"
+        slashOpacity="1"
         transform="translate(2.4 2.4) scale(1.8)"
       />
     </svg>

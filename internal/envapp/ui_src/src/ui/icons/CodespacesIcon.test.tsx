@@ -37,9 +37,9 @@ describe('Codespaces icons', () => {
     expect(slashFacet?.getAttribute('fill')).toBe('currentColor');
     expect(leftFold?.getAttribute('fill-opacity')).toBe('.86');
     expect(rightFold?.getAttribute('fill-opacity')).toBe('.86');
-    expect(slashFacet?.getAttribute('fill-opacity')).toBe('.74');
-    expect(leftFold?.getAttribute('d')).toBe('M8.4 6.15q.42-.05.7.28l.35.43q.27.32-.03.62L6.25 12l3.17 4.52q.3.3.03.62l-.35.43q-.28.33-.7.28l-3.81-5.07q-.3-.35-.3-.78t.3-.78Z');
-    expect(slashFacet?.getAttribute('d')).toBe('M13.28 4.42q.13-.43.56-.3l.48.15q.43.14.29.57L9.68 19.58q-.14.43-.57.29l-.48-.16q-.43-.14-.29-.57Z');
+    expect(slashFacet?.getAttribute('fill-opacity')).toBe('.78');
+    expect(leftFold?.getAttribute('d')).toBe('M7.6 6.35q.4-.04.67.27l.33.4q.25.3-.03.58L5.5 12l3.07 4.4q.28.29.03.59l-.33.4q-.27.31-.67.26l-3.6-4.88q-.29-.34-.29-.77t.29-.77Z');
+    expect(slashFacet?.getAttribute('d')).toBe('M13.36 4.2q.12-.45.57-.34l.4.11q.45.12.33.57L10.54 19.8q-.12.45-.57.34l-.4-.11q-.45-.12-.33-.57Z');
     expect(leftFold?.getAttribute('stroke')).toBeNull();
     expect(rightFold?.getAttribute('stroke')).toBeNull();
     expect(slashFacet?.getAttribute('stroke')).toBeNull();
@@ -62,10 +62,12 @@ describe('Codespaces icons', () => {
     expect(mark?.querySelectorAll('path')).toHaveLength(3);
     expect(mark?.querySelectorAll('rect')).toHaveLength(0);
     expect(mark?.querySelectorAll('text')).toHaveLength(0);
-    expect(mark?.querySelector('[data-codespaces-icon-part="fold-left"]')?.getAttribute('fill')).toBe('var(--redeven-code-muted)');
-    expect(mark?.querySelector('[data-codespaces-icon-part="fold-right"]')?.getAttribute('fill')).toBe('var(--redeven-code-muted)');
-    expect(mark?.querySelector('[data-codespaces-icon-part="slash-facet"]')?.getAttribute('fill')).toBe('var(--redeven-code-token-flag)');
-    expect(mark?.querySelector('[data-codespaces-icon-part="slash-facet"]')?.getAttribute('fill-opacity')).toBe('.92');
+    expect(mark?.querySelector('[data-codespaces-icon-part="fold-left"]')?.getAttribute('fill')).toBe('var(--redeven-status-info)');
+    expect(mark?.querySelector('[data-codespaces-icon-part="fold-right"]')?.getAttribute('fill')).toBe('var(--redeven-status-info)');
+    expect(mark?.querySelector('[data-codespaces-icon-part="fold-left"]')?.getAttribute('fill-opacity')).toBe('.82');
+    expect(mark?.querySelector('[data-codespaces-icon-part="fold-right"]')?.getAttribute('fill-opacity')).toBe('.82');
+    expect(mark?.querySelector('[data-codespaces-icon-part="slash-facet"]')?.getAttribute('fill')).toBe('var(--redeven-status-warning)');
+    expect(mark?.querySelector('[data-codespaces-icon-part="slash-facet"]')?.getAttribute('fill-opacity')).toBe('1');
     expect(Array.from(mark?.querySelectorAll('path') ?? [], (path) => path.getAttribute('d')))
       .toEqual(Array.from(activityMark?.querySelectorAll('path') ?? [], (path) => path.getAttribute('d')));
     expect(icon?.querySelectorAll('rect')).toHaveLength(1);
