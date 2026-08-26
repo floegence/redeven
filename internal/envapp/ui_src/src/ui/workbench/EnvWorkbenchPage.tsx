@@ -669,10 +669,7 @@ function createWorkbenchStateFromLocalState(
     {
       ...defaultState,
       locked: localState.locked,
-      filters: {
-        ...defaultState.filters,
-        ...localState.filters,
-      },
+      filters: defaultState.filters,
       theme: localState.theme,
       mode: localState.mode,
       activeTool: localState.activeTool,

@@ -154,6 +154,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     expect(sharedSurfaceMocks.lastProps).toMatchObject({
       launcherWidgetTypes: ['redeven.files', 'redeven.terminal'],
+      dockItemActivationMode: 'focus-cycle',
     });
     expect(sharedSurfaceMocks.lastProps.interactionAdapter.surfaceRootAttr).toBe(
       REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR

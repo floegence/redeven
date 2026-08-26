@@ -379,13 +379,8 @@ function persistedWidget(widget_id: string, widget_type: string, title: string, 
 
 function localWorkbenchPreferences(overrides: Record<string, unknown> = {}) {
   return {
-    version: 4,
+    version: 5,
     locked: false,
-    filters: {
-      'redeven.terminal': true,
-      'redeven.files': true,
-      'redeven.preview': true,
-    },
     theme: 'default',
     mode: 'work',
     activeTool: 'select',
@@ -1033,17 +1028,22 @@ describe('EnvWorkbenchPage', () => {
     expect(surface.dataset.widgetIds).toBe('widget-files-1');
     expect(surface.dataset.viewportX).toBe('80');
     expect(surface.dataset.widgetX).toBe('320');
+    expect(surfaceApiMocks.lastStateAccessor().filters).toEqual({
+      'redeven.terminal': true,
+      'redeven.files': true,
+      'redeven.preview': true,
+    });
 
     vi.advanceTimersByTime(120);
     expect(storageMocks.writeUIStorageJSON).toHaveBeenCalledWith(
       'workbench:local_preferences:env-123',
-      expect.objectContaining({
-        version: 4,
+      {
+        version: 5,
         locked: true,
         theme: 'mica',
         mode: 'work',
         activeTool: 'select',
-      }),
+      },
     );
   });
 

@@ -114,6 +114,18 @@ function createWorkbenchState(): WorkbenchState {
   };
 }
 
+function createDockCycleWorkbenchState(
+  widgets: WorkbenchState['widgets'],
+): WorkbenchState {
+  return {
+    ...createWorkbenchState(),
+    widgets,
+    viewport: { x: 120, y: 72, scale: 1.25 },
+    locked: true,
+    selectedWidgetId: null,
+  };
+}
+
 function createTerminalWorkbenchState(
   definitions: readonly WorkbenchWidgetDefinition[],
   selectedWidgetId: string | null = 'widget-terminal-1',
@@ -192,7 +204,7 @@ function dispatchPrimaryClickSequence(
 ): Event {
   const pointerDown = dispatchPointerEvent('pointerdown', target, options);
   dispatchPointerEvent('pointerup', target, options);
-  target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
   return pointerDown;
 }
 
@@ -251,6 +263,114 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.innerHTML = '';
+  });
+
+  it('cycles and wraps Dock targets while locked without changing scale', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let state!: () => WorkbenchState;
+
+    render(() => {
+      const [workbenchState, setWorkbenchState] = createSignal(createDockCycleWorkbenchState([
+        {
+          id: 'widget-spatial-first',
+          type: 'redeven.input-panel',
+          title: 'Input Panel A',
+          x: 420,
+          y: 40,
+          width: 320,
+          height: 220,
+          z_index: 1,
+          created_at_unix_ms: 2,
+        },
+        {
+          id: 'widget-spatial-second',
+          type: 'redeven.input-panel',
+          title: 'Input Panel B',
+          x: 80,
+          y: 360,
+          width: 320,
+          height: 220,
+          z_index: 2,
+          created_at_unix_ms: 1,
+        },
+      ]));
+      state = workbenchState;
+      return (
+        <RedevenWorkbenchSurface
+          state={workbenchState}
+          setState={setWorkbenchState}
+          widgetDefinitions={widgetDefinitions}
+          filterBarWidgetTypes={['redeven.input-panel']}
+          enableKeyboard={false}
+        />
+      );
+    }, host);
+
+    const canvas = host.querySelector<HTMLElement>('[data-floe-workbench-canvas-frame="true"]');
+    const dockItem = host.querySelector<HTMLElement>('[data-workbench-dock-component="redeven.input-panel"]');
+    expect(canvas).toBeTruthy();
+    expect(dockItem).toBeTruthy();
+    mockCanvasRect(canvas!);
+
+    const initialScale = state().viewport.scale;
+    for (const expectedId of [
+      'widget-spatial-first',
+      'widget-spatial-second',
+      'widget-spatial-first',
+    ]) {
+      dispatchPrimaryClickSequence(dockItem!);
+      await flushWorkbenchInteraction();
+      expect(state().selectedWidgetId).toBe(expectedId);
+      expect(state().viewport.scale).toBe(initialScale);
+      expect(document.activeElement).toBe(
+        host.querySelector(`[data-redeven-workbench-widget-id="${expectedId}"]`),
+      );
+    }
+
+    expect(state().locked).toBe(true);
+  });
+
+  it('creates the first missing Dock target at the viewport center and focuses it', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let state!: () => WorkbenchState;
+
+    render(() => {
+      const [workbenchState, setWorkbenchState] = createSignal(createDockCycleWorkbenchState([]));
+      state = workbenchState;
+      return (
+        <RedevenWorkbenchSurface
+          state={workbenchState}
+          setState={setWorkbenchState}
+          widgetDefinitions={widgetDefinitions}
+          filterBarWidgetTypes={['redeven.input-panel']}
+          enableKeyboard={false}
+        />
+      );
+    }, host);
+
+    const canvas = host.querySelector<HTMLElement>('[data-floe-workbench-canvas-frame="true"]');
+    const dockItem = host.querySelector<HTMLElement>('[data-workbench-dock-component="redeven.input-panel"]');
+    expect(canvas).toBeTruthy();
+    expect(dockItem).toBeTruthy();
+    mockCanvasRect(canvas!);
+
+    dispatchPrimaryClickSequence(dockItem!);
+    await flushWorkbenchInteraction();
+
+    expect(state().widgets).toHaveLength(1);
+    expect(state().widgets[0]).toMatchObject({
+      type: 'redeven.input-panel',
+      x: 128,
+      y: 88.4,
+    });
+    expect(state().selectedWidgetId).toBe(state().widgets[0]?.id);
+    expect(state().viewport.scale).toBe(1.25);
+    expect(document.activeElement).toBe(
+      host.querySelector(`[data-redeven-workbench-widget-id="${state().widgets[0]?.id}"]`),
+    );
+    expect(state().locked).toBe(true);
   });
 
   it('keeps the visible projected widget set independent from lock changes', async () => {
