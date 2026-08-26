@@ -1,8 +1,10 @@
-const CODESPACES_FOLD_PATH = 'M9.2 5.95Q9.62 5.9 9.9 6.23l.35.43q.27.32-.03.62L6.4 12l3.82 4.72q.3.3.03.62l-.35.43q-.28.33-.7.28l-4.58-5.27q-.3-.35-.3-.78t.3-.78Z';
-const CODESPACES_SLASH_PATH = 'M13.33 5.72q.15-.44.6-.29l.52.18q.45.15.3.6l-4.07 12.07q-.15.44-.6.29l-.52-.18q-.45-.15-.3-.6Z';
+const CODESPACES_FOLD_PATH = 'M8.4 6.15q.42-.05.7.28l.35.43q.27.32-.03.62L6.25 12l3.17 4.52q.3.3.03.62l-.35.43q-.28.33-.7.28l-3.81-5.07q-.3-.35-.3-.78t.3-.78Z';
+const CODESPACES_SLASH_PATH = 'M13.28 4.42q.13-.43.56-.3l.48.15q.43.14.29.57L9.68 19.58q-.14.43-.57.29l-.48-.16q-.43-.14-.29-.57Z';
 
 function CodespacesFoldedMark(props: {
-  fill: string;
+  foldFill: string;
+  slashFill: string;
+  slashOpacity: string;
   surface?: 'activity-bar';
   transform?: string;
 }) {
@@ -10,31 +12,40 @@ function CodespacesFoldedMark(props: {
     <g
       data-codespaces-icon-surface={props.surface}
       data-codespaces-icon-mark="folded-facets"
-      fill={props.fill}
       transform={props.transform}
     >
       <path
         data-codespaces-icon-part="fold-left"
         d={CODESPACES_FOLD_PATH}
+        fill={props.foldFill}
         fill-opacity=".86"
       />
       <path
         data-codespaces-icon-part="fold-right"
         d={CODESPACES_FOLD_PATH}
+        fill={props.foldFill}
         fill-opacity=".86"
         transform="matrix(-1 0 0 1 24 0)"
       />
       <path
         data-codespaces-icon-part="slash-facet"
         d={CODESPACES_SLASH_PATH}
-        fill-opacity=".7"
+        fill={props.slashFill}
+        fill-opacity={props.slashOpacity}
       />
     </g>
   );
 }
 
 export function CodespacesActivityBarGlyph() {
-  return <CodespacesFoldedMark fill="currentColor" surface="activity-bar" />;
+  return (
+    <CodespacesFoldedMark
+      foldFill="currentColor"
+      slashFill="currentColor"
+      slashOpacity=".74"
+      surface="activity-bar"
+    />
+  );
 }
 
 export function CodespacesWorkbenchIcon(props: { class?: string }) {
@@ -59,7 +70,12 @@ export function CodespacesWorkbenchIcon(props: { class?: string }) {
         stroke="var(--foreground)"
         stroke-opacity=".08"
       />
-      <CodespacesFoldedMark fill="#4f7fad" transform="translate(2.4 2.4) scale(1.8)" />
+      <CodespacesFoldedMark
+        foldFill="var(--redeven-code-muted)"
+        slashFill="var(--redeven-code-token-flag)"
+        slashOpacity=".92"
+        transform="translate(2.4 2.4) scale(1.8)"
+      />
     </svg>
   );
 }
