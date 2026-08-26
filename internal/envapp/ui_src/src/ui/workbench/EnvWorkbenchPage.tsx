@@ -2193,11 +2193,9 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
     }
 
-    // A drag placement is explicit. Always create a new surface at the exact
-    // world coordinate already resolved by the Workbench drag transaction.
-    const currentState = placement
-      ? undefined
-      : runtimeSnapshot().widget_states.find((state) => pluginStateMatchesTarget(state, target));
+    const currentState = runtimeSnapshot().widget_states.find((state) => (
+      pluginStateMatchesTarget(state, target)
+    ));
     let widget = currentState ? api.findWidgetById(currentState.widget_id) : null;
     const created = !widget;
     if (!widget) {
@@ -2213,7 +2211,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     const widgetID = widget.id;
     const title = target.displayName ?? target.pluginID;
     updateWidgetTitle(widgetID, title);
-    api.focusWidget(widget, { centerViewport: created && !placement });
+    api.focusWidget(widget, { centerViewport: !created || !placement });
     try {
       if (created) await waitForRuntimePluginWidget(widgetID);
       if (

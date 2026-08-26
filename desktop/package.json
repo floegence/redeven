@@ -99,8 +99,8 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.46.0",
-    "@floegence/floe-webapp-core": "0.46.0",
+    "@floegence/floe-webapp-boot": "0.46.2",
+    "@floegence/floe-webapp-core": "0.46.2",
     "@floegence/flowersec-core": "3.2.0",
     "builder-util-runtime": "^9.7.0",
     "electron-updater": "^6.8.9",
