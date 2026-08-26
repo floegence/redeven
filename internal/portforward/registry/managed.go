@@ -9,26 +9,61 @@ import (
 )
 
 var (
-	ErrManagedServiceNotFound = errors.New("managed web service not found")
-	ErrManagedForward         = errors.New("managed port forward can only be removed by uninstalling its service")
+	ErrManagedServiceNotFound      = errors.New("managed web service not found")
+	ErrManagedForward              = errors.New("managed port forward can only be removed by uninstalling its service")
+	ErrManagedTemplateNotFound     = errors.New("managed web service template not found")
+	ErrManagedTemplateNameConflict = errors.New("managed web service template name already exists")
+	ErrManagedTemplateInUse        = errors.New("managed web service template has an installed service")
 )
 
+type ManagedTemplate struct {
+	TemplateID            string `json:"template_id"`
+	Name                  string `json:"name"`
+	Description           string `json:"description"`
+	Source                string `json:"source"`
+	Deployment            string `json:"deployment"`
+	Version               string `json:"version"`
+	Revision              int64  `json:"revision"`
+	SpecJSON              string `json:"-"`
+	SpecSHA256            string `json:"spec_sha256"`
+	DerivedFromTemplateID string `json:"derived_from_template_id,omitempty"`
+	DerivedFromRevision   int64  `json:"derived_from_revision,omitempty"`
+	ServiceFamilyID       string `json:"service_family_id"`
+	CreatedAtUnixMs       int64  `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs       int64  `json:"updated_at_unix_ms"`
+}
+
+type ManagedTemplateRequest struct {
+	RequestID          string
+	RequestFingerprint string
+	TemplateID         string
+	Action             string
+	CreatedAtUnixMs    int64
+}
+
 type ManagedService struct {
-	ServiceID         string `json:"service_id"`
-	TemplateID        string `json:"template_id"`
-	Deployment        string `json:"deployment"`
-	WorkspacePath     string `json:"workspace_path"`
-	Version           string `json:"version"`
-	DesiredState      string `json:"desired_state"`
-	ObservedState     string `json:"observed_state"`
-	ForwardID         string `json:"forward_id"`
-	RuntimeIdentity   string `json:"runtime_identity,omitempty"`
-	RuntimePort       int    `json:"runtime_port,omitempty"`
-	ArtifactReference string `json:"artifact_reference,omitempty"`
-	LastErrorCode     string `json:"last_error_code,omitempty"`
-	LastErrorMessage  string `json:"last_error_message,omitempty"`
-	CreatedAtUnixMs   int64  `json:"created_at_unix_ms"`
-	UpdatedAtUnixMs   int64  `json:"updated_at_unix_ms"`
+	ServiceID              string `json:"service_id"`
+	TemplateID             string `json:"template_id"`
+	TemplateSource         string `json:"template_source"`
+	TemplateRevision       int64  `json:"template_revision"`
+	TemplateSnapshotJSON   string `json:"-"`
+	TemplateSnapshotSHA256 string `json:"template_snapshot_sha256"`
+	ServiceFamilyID        string `json:"service_family_id"`
+	Deployment             string `json:"deployment"`
+	WorkspacePath          string `json:"workspace_path"`
+	ConfigurationJSON      string `json:"-"`
+	Version                string `json:"version"`
+	DesiredState           string `json:"desired_state"`
+	ObservedState          string `json:"observed_state"`
+	ForwardID              string `json:"forward_id"`
+	RuntimeIdentity        string `json:"runtime_identity,omitempty"`
+	RuntimeManifestJSON    string `json:"-"`
+	RuntimePort            int    `json:"runtime_port,omitempty"`
+	ArtifactReference      string `json:"artifact_reference,omitempty"`
+	LastErrorCode          string `json:"last_error_code,omitempty"`
+	LastErrorMessage       string `json:"last_error_message,omitempty"`
+	CreatedAtUnixMs        int64  `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs        int64  `json:"updated_at_unix_ms"`
 }
 
 type ManagedOperation struct {
@@ -51,20 +86,178 @@ type ManagedOperation struct {
 }
 
 type ManagedServicePatch struct {
-	DesiredState      *string
-	ObservedState     *string
-	RuntimeIdentity   *string
-	RuntimePort       *int
-	ArtifactReference *string
-	LastErrorCode     *string
-	LastErrorMessage  *string
+	DesiredState        *string
+	ObservedState       *string
+	RuntimeIdentity     *string
+	RuntimePort         *int
+	ArtifactReference   *string
+	RuntimeManifestJSON *string
+	LastErrorCode       *string
+	LastErrorMessage    *string
+}
+
+func (r *Registry) ListManagedTemplates(ctx context.Context) ([]ManagedTemplate, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("registry not initialized")
+	}
+	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms FROM managed_web_service_templates ORDER BY lower(name), template_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ManagedTemplate{}
+	for rows.Next() {
+		var value ManagedTemplate
+		if err := scanManagedTemplate(rows, &value); err != nil {
+			return nil, err
+		}
+		out = append(out, value)
+	}
+	return out, rows.Err()
+}
+
+func (r *Registry) GetManagedTemplate(ctx context.Context, templateID string) (*ManagedTemplate, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("registry not initialized")
+	}
+	value := ManagedTemplate{}
+	err := scanManagedTemplate(r.db.QueryRowContext(nonNilContext(ctx), `SELECT template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms FROM managed_web_service_templates WHERE template_id=?`, strings.TrimSpace(templateID)), &value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &value, nil
+}
+
+func scanManagedTemplate(row rowScanner, value *ManagedTemplate) error {
+	return row.Scan(&value.TemplateID, &value.Name, &value.Description, &value.Source, &value.Deployment, &value.Version, &value.Revision, &value.SpecJSON, &value.SpecSHA256, &value.DerivedFromTemplateID, &value.DerivedFromRevision, &value.ServiceFamilyID, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs)
+}
+
+func (r *Registry) CreateManagedTemplate(ctx context.Context, value ManagedTemplate) error {
+	return r.createManagedTemplate(ctx, value, nil)
+}
+
+func (r *Registry) CreateManagedTemplateWithRequest(ctx context.Context, value ManagedTemplate, request ManagedTemplateRequest) error {
+	return r.createManagedTemplate(ctx, value, &request)
+}
+
+func (r *Registry) createManagedTemplate(ctx context.Context, value ManagedTemplate, request *ManagedTemplateRequest) error {
+	if r == nil || r.db == nil {
+		return errors.New("registry not initialized")
+	}
+	now := time.Now().UnixMilli()
+	if value.CreatedAtUnixMs <= 0 {
+		value.CreatedAtUnixMs = now
+	}
+	if value.UpdatedAtUnixMs <= 0 {
+		value.UpdatedAtUnixMs = value.CreatedAtUnixMs
+	}
+	tx, err := r.db.BeginTx(nonNilContext(ctx), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_service_templates WHERE lower(name)=lower(?)`, strings.TrimSpace(value.Name)).Scan(&count); err != nil {
+		return err
+	}
+	if count != 0 {
+		return ErrManagedTemplateNameConflict
+	}
+	_, err = tx.Exec(`INSERT INTO managed_web_service_templates(template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, value.TemplateID, value.Name, value.Description, value.Source, value.Deployment, value.Version, value.Revision, value.SpecJSON, value.SpecSHA256, value.DerivedFromTemplateID, value.DerivedFromRevision, value.ServiceFamilyID, value.CreatedAtUnixMs, value.UpdatedAtUnixMs)
+	if err != nil {
+		return err
+	}
+	if request != nil {
+		created := request.CreatedAtUnixMs
+		if created <= 0 {
+			created = now
+		}
+		if _, err := tx.Exec(`INSERT INTO managed_web_service_template_requests(request_id,request_fingerprint,template_id,action,created_at_unix_ms) VALUES(?,?,?,?,?)`, strings.TrimSpace(request.RequestID), request.RequestFingerprint, value.TemplateID, request.Action, created); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *Registry) GetManagedTemplateRequest(ctx context.Context, requestID string) (*ManagedTemplateRequest, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("registry not initialized")
+	}
+	value := ManagedTemplateRequest{}
+	err := r.db.QueryRowContext(nonNilContext(ctx), `SELECT request_id,request_fingerprint,template_id,action,created_at_unix_ms FROM managed_web_service_template_requests WHERE request_id=?`, strings.TrimSpace(requestID)).Scan(&value.RequestID, &value.RequestFingerprint, &value.TemplateID, &value.Action, &value.CreatedAtUnixMs)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &value, nil
+}
+
+func (r *Registry) UpdateManagedTemplate(ctx context.Context, value ManagedTemplate) error {
+	if r == nil || r.db == nil {
+		return errors.New("registry not initialized")
+	}
+	tx, err := r.db.BeginTx(nonNilContext(ctx), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_service_templates WHERE lower(name)=lower(?) AND template_id<>?`, strings.TrimSpace(value.Name), strings.TrimSpace(value.TemplateID)).Scan(&count); err != nil {
+		return err
+	}
+	if count != 0 {
+		return ErrManagedTemplateNameConflict
+	}
+	result, err := tx.Exec(`UPDATE managed_web_service_templates SET name=?,description=?,deployment=?,version=?,revision=?,spec_json=?,spec_sha256=?,derived_from_template_id=?,derived_from_revision=?,updated_at_unix_ms=? WHERE template_id=?`, value.Name, value.Description, value.Deployment, value.Version, value.Revision, value.SpecJSON, value.SpecSHA256, value.DerivedFromTemplateID, value.DerivedFromRevision, time.Now().UnixMilli(), strings.TrimSpace(value.TemplateID))
+	if err != nil {
+		return err
+	}
+	if affected, err := result.RowsAffected(); err != nil {
+		return err
+	} else if affected != 1 {
+		return ErrManagedTemplateNotFound
+	}
+	return tx.Commit()
+}
+
+func (r *Registry) DeleteManagedTemplate(ctx context.Context, templateID string) error {
+	if r == nil || r.db == nil {
+		return errors.New("registry not initialized")
+	}
+	tx, err := r.db.BeginTx(nonNilContext(ctx), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_services WHERE template_id=?`, strings.TrimSpace(templateID)).Scan(&count); err != nil {
+		return err
+	}
+	if count != 0 {
+		return ErrManagedTemplateInUse
+	}
+	result, err := tx.Exec(`DELETE FROM managed_web_service_templates WHERE template_id=?`, strings.TrimSpace(templateID))
+	if err != nil {
+		return err
+	}
+	if affected, err := result.RowsAffected(); err != nil {
+		return err
+	} else if affected != 1 {
+		return ErrManagedTemplateNotFound
+	}
+	return tx.Commit()
 }
 
 func (r *Registry) ListManagedServices(ctx context.Context) ([]ManagedService, error) {
 	if r == nil || r.db == nil {
 		return nil, errors.New("registry not initialized")
 	}
-	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id, template_id, deployment, workspace_path, version, desired_state, observed_state, forward_id, runtime_identity, runtime_port, artifact_reference, last_error_code, last_error_message, created_at_unix_ms, updated_at_unix_ms FROM managed_web_services ORDER BY created_at_unix_ms ASC`)
+	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms FROM managed_web_services ORDER BY created_at_unix_ms ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +278,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 		return nil, errors.New("registry not initialized")
 	}
 	value := ManagedService{}
-	err := scanManagedService(r.db.QueryRowContext(nonNilContext(ctx), `SELECT service_id, template_id, deployment, workspace_path, version, desired_state, observed_state, forward_id, runtime_identity, runtime_port, artifact_reference, last_error_code, last_error_message, created_at_unix_ms, updated_at_unix_ms FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)), &value)
+	err := scanManagedService(r.db.QueryRowContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)), &value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -98,7 +291,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 type rowScanner interface{ Scan(dest ...any) error }
 
 func scanManagedService(row rowScanner, value *ManagedService) error {
-	return row.Scan(&value.ServiceID, &value.TemplateID, &value.Deployment, &value.WorkspacePath, &value.Version, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs)
+	return row.Scan(&value.ServiceID, &value.TemplateID, &value.TemplateSource, &value.TemplateRevision, &value.TemplateSnapshotJSON, &value.TemplateSnapshotSHA256, &value.ServiceFamilyID, &value.Deployment, &value.WorkspacePath, &value.ConfigurationJSON, &value.Version, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs)
 }
 
 func (r *Registry) CreateManagedService(ctx context.Context, service ManagedService, forward Forward) error {
@@ -146,7 +339,7 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 	if _, err = tx.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?)`, forward.ForwardID, forward.TargetURL, forward.Name, forward.Description, forward.HealthPath, boolToInt(forward.InsecureSkipVerify), forward.CreatedAtUnixMs, forward.UpdatedAtUnixMs, forward.LastOpenedAtUnixMs); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,deployment,workspace_path,version,desired_state,observed_state,forward_id,runtime_identity,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.Deployment, service.WorkspacePath, service.Version, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs); err != nil {
+	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.TemplateSource, service.TemplateRevision, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, service.ServiceFamilyID, service.Deployment, service.WorkspacePath, service.ConfigurationJSON, service.Version, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimeManifestJSON, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs); err != nil {
 		return err
 	}
 	if operation != nil {
@@ -177,6 +370,9 @@ func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, p
 	}
 	if patch.ArtifactReference != nil {
 		add("artifact_reference", strings.TrimSpace(*patch.ArtifactReference))
+	}
+	if patch.RuntimeManifestJSON != nil {
+		add("runtime_manifest_json", strings.TrimSpace(*patch.RuntimeManifestJSON))
 	}
 	if patch.LastErrorCode != nil {
 		add("last_error_code", strings.TrimSpace(*patch.LastErrorCode))

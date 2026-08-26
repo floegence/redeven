@@ -38,7 +38,8 @@ func TestCatalogAvailabilityRequiresUsableSignedArtifact(t *testing.T) {
 		catalog: &catalogClient{client: server.Client(), catalogURL: server.URL, packageOrigin: defaultPackageOrigin, publicKey: publicKey, keyID: managedCatalogKeyID},
 	}
 	templates, err := manager.Catalog(context.Background())
-	if err != nil || len(templates) != 1 || templates[0].Deployments[0].Available || templates[0].Deployments[0].ReasonCode != "CATALOG_UNAVAILABLE" {
+	hostTemplate := templateByID(templates, DeepSeekHarnessHostTemplateID)
+	if err != nil || len(templates) != 2 || hostTemplate == nil || hostTemplate.Available || hostTemplate.ReasonCode != "CATALOG_UNAVAILABLE" {
 		t.Fatalf("unpublished catalog availability = %+v, err=%v", templates, err)
 	}
 
@@ -55,9 +56,19 @@ func TestCatalogAvailabilityRequiresUsableSignedArtifact(t *testing.T) {
 	}
 	response.Store(signedCatalogBytes(t, privateKey, payloadBytes))
 	templates, err = manager.Catalog(context.Background())
-	if err != nil || len(templates) != 1 || !templates[0].Deployments[0].Available || templates[0].Deployments[0].ReasonCode != "" {
+	hostTemplate = templateByID(templates, DeepSeekHarnessHostTemplateID)
+	if err != nil || len(templates) != 2 || hostTemplate == nil || !hostTemplate.Available || hostTemplate.ReasonCode != "" {
 		t.Fatalf("signed catalog availability = %+v, err=%v", templates, err)
 	}
+}
+
+func templateByID(templates []Template, templateID string) *Template {
+	for i := range templates {
+		if templates[i].TemplateID == templateID {
+			return &templates[i]
+		}
+	}
+	return nil
 }
 
 func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {

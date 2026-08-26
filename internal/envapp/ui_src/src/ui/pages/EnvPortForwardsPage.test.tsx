@@ -61,6 +61,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Stop: (props: any) => <span class={props.class} data-testid="stop-icon" />,
   Refresh: (props: any) => <span class={props.class} data-testid="restart-icon" />,
   FileText: (props: any) => <span class={props.class} data-testid="file-text-icon" />,
+  Copy: (props: any) => <span class={props.class} data-testid="copy-icon" />,
+  Pencil: (props: any) => <span class={props.class} data-testid="pencil-icon" />,
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
@@ -94,7 +96,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
-  Card: (props: any) => <div class={props.class} data-testid={props['data-testid'] ?? 'port-forward-card'}>{props.children}</div>,
+  Card: (props: any) => <div class={props.class} data-testid={props['data-testid'] ?? 'port-forward-card'} data-template-id={props['data-template-id']}>{props.children}</div>,
   CardContent: (props: any) => <div class={props.class}>{props.children}</div>,
   CardDescription: (props: any) => <div class={props.class} title={props.title}>{props.children}</div>,
   CardFooter: (props: any) => <div class={props.class}>{props.children}</div>,
@@ -103,6 +105,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
   Input: (props: any) => <input value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} disabled={props.disabled} data-testid={props['data-testid']} />,
+  Textarea: (props: any) => <textarea value={props.value} onInput={props.onInput} class={props.class} disabled={props.disabled} />,
   Checkbox: (props: any) => <label><input type="checkbox" checked={props.checked} disabled={props.disabled} onChange={(event) => props.onChange?.(event.currentTarget.checked)} />{props.label}</label>,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
@@ -514,7 +517,7 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'managed-forward', target_url: 'http://127.0.0.1:3080', name: 'DeepSeek Harness', description: 'Managed by Redeven', health: { status: 'healthy', last_checked_at_unix_ms: 1, latency_ms: 2, last_error: '' }, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 0 }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
@@ -522,7 +525,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    expect(host.querySelectorAll('[data-testid="managed-deepseek-card"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-testid="managed-service-card"]')).toHaveLength(1);
     expect(host.querySelectorAll('[data-testid="port-forward-card"]')).toHaveLength(0);
     expect(host.textContent).toContain('DeepSeek Harness');
     expect(host.textContent).toContain('Running');
@@ -535,14 +538,14 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-readonly', template_id: 'deepseek-harness', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-readonly', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
 
     render(() => <EnvPortForwardsPage />, host);
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-deepseek-card"]')).toBeTruthy());
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-card"]')).toBeTruthy());
 
-    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-deepseek-card"] button'));
+    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-card"] button'));
     expect(buttons.find((button) => button.textContent?.trim() === 'Open')?.disabled).toBe(true);
     expect(buttons.find((button) => button.textContent?.trim() === 'Stop')?.disabled).toBe(true);
     expect(buttons.find((button) => button.title === 'View logs')?.disabled).toBe(false);
@@ -551,7 +554,7 @@ describe('EnvPortForwardsPage', () => {
 
   it('disables Docker deployment when the runtime reports it unavailable', async () => {
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
-      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'deepseek-harness', name: 'DeepSeek Harness', version: '0.1.1-rc.2', developer_preview: true, disk_bytes: 2147483648, data_location: '/state/deepseek-harness/data', source_url: 'https://github.com/deepseek-ai/deepseek-harness', docker_source_url: 'https://github.com/runzhliu/deepseek-harness-docker', deployments: [{ deployment: 'native', available: true }, { deployment: 'docker', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }, { template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Container', description: 'Container deployment', source: 'builtin', deployment: 'docker', revision: 1, duplicateable: true, editable: false, available: false, reason_code: 'DOCKER_UNAVAILABLE', version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'docker', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
       throw new Error(`Unexpected local API call: ${url}`);
@@ -559,19 +562,42 @@ describe('EnvPortForwardsPage', () => {
 
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
-    const deployButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Deploy');
-    expect(deployButton).toBeTruthy();
-    await waitForAssertion(() => expect(deployButton?.disabled).toBe(false));
-    deployButton?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
+    const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Container templates');
+    containerTab?.click();
+    await flushPage();
+    const containerCard = document.querySelector('[data-template-id="deepseek-harness-container"]');
+    expect(containerCard).toBeTruthy();
+    expect(Array.from(containerCard?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === 'Deploy')?.disabled).toBe(true);
+    expect(containerCard?.textContent).toContain('Docker is unavailable');
+  });
 
-    expect(document.body.textContent).toContain('Developer Preview');
-    await waitForAssertion(() => {
-      const dockerButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Docker');
-      expect(dockerButton?.disabled).toBe(true);
+  it('duplicates a built-in service template as an independent custom template', async () => {
+    const source = { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
+    let duplicateBody: Record<string, unknown> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [source] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-service-templates/deepseek-harness-host/duplicate' && init?.method === 'POST') {
+        duplicateBody = JSON.parse(String(init.body));
+        return { ...source, template_id: 'tmpl-copy', service_family_id: 'family-copy', source: 'custom', editable: true, name: duplicateBody?.name };
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
     });
-    expect(document.body.textContent).toContain('env_demo');
-    expect(document.body.textContent).toContain('/state/deepseek-harness/data');
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    document.querySelector<HTMLButtonElement>('button[title="Duplicate"]')?.click();
+    await flushPage();
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Duplicate');
+    confirm?.click();
+
+    await waitForAssertion(() => expect(duplicateBody).toMatchObject({ name: 'DeepSeek Harness · Host copy' }));
+    expect(String((duplicateBody as Record<string, unknown> | null)?.request_id)).toMatch(/^envapp-/u);
   });
 
   it('restores an active managed operation and exposes cancellation after a page reload', async () => {
@@ -592,7 +618,7 @@ describe('EnvPortForwardsPage', () => {
 
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
-      await waitForAssertion(() => expect(host.textContent).toContain('Pulling audited image'));
+      await waitForAssertion(() => expect(host.textContent).toContain('Pulling image'));
       const cancel = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation');
       expect(cancel).toBeTruthy();
       cancel?.click();
@@ -627,7 +653,7 @@ describe('EnvPortForwardsPage', () => {
     uninstall?.click();
 
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: false }));
-    await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('DeepSeek Harness uninstalled', expect.any(String)));
+    await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service uninstalled', expect.any(String)));
   });
 
   it('requires the second destructive confirmation before deleting managed data', async () => {
