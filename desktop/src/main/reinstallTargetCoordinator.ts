@@ -13,6 +13,7 @@ import {
 } from './runtimeHostAccess';
 import type { DesktopComponentTaskProgress } from '../shared/desktopLauncherIPC';
 import type { PreparedReinstallRuntimePackage } from './reinstallRuntimePackage';
+import type { StartupReport } from './startup';
 import type {
   DesktopRuntimeHostAccess,
   DesktopRuntimePlacement,
@@ -170,7 +171,7 @@ export type ReinstallTargetCoordinatorDependencies = Readonly<{
     targetRoot: string,
     executor: RuntimeHostAccessExecutor,
     signal?: AbortSignal,
-  ) => Promise<void>;
+  ) => Promise<StartupReport>;
   finalize_install?: (
     descriptor: ReinstallTargetDescriptor,
     targetRoot: string,
@@ -188,6 +189,8 @@ export type ReinstallTargetCoordinatorDependencies = Readonly<{
   verify_fresh_identity: (
     descriptor: ReinstallTargetDescriptor,
     targetRoot: string,
+    preparedPackage: PreparedReinstallRuntimePackage,
+    startup: StartupReport,
     executor: RuntimeHostAccessExecutor,
     signal?: AbortSignal,
   ) => Promise<void>;
@@ -649,7 +652,7 @@ export class ReinstallTargetCoordinator {
     let targetPlatform: ReinstallTargetPlatform | null = null;
     let targetDisruptionStarted = cached.preview.mode === 'wipe_data'
       && journalPhaseAtLeast(persistedPhase, 'old_root_isolated_or_cleared');
-    let installAttempted = journalPhaseAtLeast(persistedPhase, 'runtime_installed');
+    let installAttempted = false;
     let installFinalized = false;
     let preserveRollbackSucceeded = false;
     let activeDescriptor: ReinstallTargetDescriptor = current;
@@ -734,97 +737,93 @@ export class ReinstallTargetCoordinator {
         onProgress?.('target_resolved');
       }
 
-      if (!journalPhaseAtLeast(persistedPhase, 'runtime_installed')) {
-        targetPlatform = await this.dependencies.prepare_platform(currentResolved, executor, signal);
-        preparedPackage = await this.dependencies.prepare_runtime_package(
+      // Every confirmed recovery below access verification replays the current
+      // Desktop package. A historical phase proves only that an old command
+      // committed; it never proves that the installed bytes match this Desktop.
+      targetPlatform = await this.dependencies.prepare_platform(currentResolved, executor, signal);
+      preparedPackage = await this.dependencies.prepare_runtime_package(
+        currentResolved,
+        repeated.root,
+        operationID,
+        executor,
+        targetPlatform,
+        (tasks) => {
+          onProgress?.('package_batch_prepared_and_verified', undefined, tasks);
+        },
+        signal,
+      );
+      await persistPhase('package_batch_prepared_and_verified');
+      try {
+        processSession = await this.dependencies.prepare_process_session(
           currentResolved,
           repeated.root,
-          operationID,
           executor,
           targetPlatform,
-          (tasks) => {
-            onProgress?.('package_batch_prepared_and_verified', undefined, tasks);
-          },
-          signal,
-        );
-        await persistPhase('package_batch_prepared_and_verified');
-        try {
-          processSession = await this.dependencies.prepare_process_session(
-            currentResolved,
-            repeated.root,
-            executor,
-            targetPlatform,
-            preparedPackage,
-            signal,
-          );
-        } catch (error) {
-          if (cached.preview.mode === 'preserve_data') {
-            throw error;
-          }
-          processSession = null;
-        }
-        await this.dependencies.mark_in_progress(currentResolved, cached.preview.preflight_id).catch(() => undefined);
-        await this.dependencies.close_sessions(currentResolved).catch(() => undefined);
-
-        let inventory: ReinstallTargetProcessInventory | null = null;
-        try {
-          inventory = await processSession?.inspect(signal) ?? null;
-        } catch {
-          // Old process state is not an input to final recovery. The exact-root
-          // filesystem operation below remains authoritative.
-        }
-        onProgress?.('redeven_process_stop_attempted');
-        if (inventory && inventory.instances.length > 0) {
-          await processSession?.stop(inventory, signal).catch(() => undefined);
-        }
-        await persistPhase('redeven_process_stop_attempted', undefined, undefined, false);
-
-        onProgress?.('old_root_isolated_or_cleared');
-        if (cached.preview.mode === 'wipe_data') {
-          // Repeating this atomic action adopts the operation's existing
-          // quarantine and clears only an uncommitted fresh attempt.
-          targetDisruptionStarted = true;
-          await executor.run(placementCommand(currentResolved.placement, isolateTargetScript, [repeated.root, quarantineRoot]), commandOptions());
-          isolated = true;
-        }
-        await persistPhase('old_root_isolated_or_cleared', undefined, undefined, false);
-        await this.dependencies.clear_desktop_state(currentResolved);
-        installAttempted = true;
-        onProgress?.('runtime_installed');
-        await this.dependencies.install_runtime(
-          currentResolved,
-          repeated.root,
-          cached.preview.mode,
           preparedPackage,
-          executor,
           signal,
         );
-        await persistPhase('runtime_installed', undefined, undefined, false);
-        onProgress?.('runtime_started');
-        await this.dependencies.start_runtime(currentResolved, repeated.root, executor, signal);
-        await persistPhase('runtime_started', undefined, undefined, false);
-      } else if (!journalPhaseAtLeast(persistedPhase, 'runtime_started')) {
-        onProgress?.('runtime_started');
-        await this.dependencies.start_runtime(currentResolved, repeated.root, executor, signal);
-        await persistPhase('runtime_started', undefined, undefined, false);
-      } else {
-        onProgress?.(persistedPhase);
+      } catch (error) {
+        if (cached.preview.mode === 'preserve_data') {
+          throw error;
+        }
+        processSession = null;
       }
+      await this.dependencies.mark_in_progress(currentResolved, cached.preview.preflight_id).catch(() => undefined);
+      await this.dependencies.close_sessions(currentResolved).catch(() => undefined);
 
-      if (!journalPhaseAtLeast(currentJournal.phase, 'runtime_verified')) {
-        onProgress?.('runtime_verified');
-        await this.dependencies.verify_fresh_identity(currentResolved, repeated.root, executor, signal);
-        await persistPhase('runtime_verified', undefined, undefined, false);
+      let inventory: ReinstallTargetProcessInventory | null = null;
+      try {
+        inventory = await processSession?.inspect(signal) ?? null;
+      } catch {
+        // Old process state is not an input to final recovery. The exact-root
+        // filesystem operation below remains authoritative.
       }
-      if (!journalPhaseAtLeast(currentJournal.phase, 'catalog_and_local_ui_verified')) {
-        onProgress?.('catalog_and_local_ui_verified');
-        await this.dependencies.verify_catalog_and_local_ui(currentResolved, repeated.root, signal);
-        await persistPhase('catalog_and_local_ui_verified', undefined, undefined, false);
+      onProgress?.('redeven_process_stop_attempted');
+      if (inventory && inventory.instances.length > 0) {
+        await processSession?.stop(inventory, signal).catch(() => undefined);
       }
-      if (preparedPackage || journalPhaseAtLeast(persistedPhase, 'runtime_installed')) {
-        await this.dependencies.finalize_install?.(currentResolved, repeated.root, operationID, executor, signal);
-        installFinalized = true;
+      await persistPhase('redeven_process_stop_attempted', undefined, undefined, false);
+
+      onProgress?.('old_root_isolated_or_cleared');
+      if (cached.preview.mode === 'wipe_data') {
+        // Repeating this atomic action adopts the operation's existing
+        // quarantine and clears only an uncommitted fresh attempt.
+        targetDisruptionStarted = true;
+        await executor.run(placementCommand(currentResolved.placement, isolateTargetScript, [repeated.root, quarantineRoot]), commandOptions());
+        isolated = true;
       }
+      await persistPhase('old_root_isolated_or_cleared', undefined, undefined, false);
+      await this.dependencies.clear_desktop_state(currentResolved);
+      installAttempted = true;
+      onProgress?.('runtime_installed');
+      await this.dependencies.install_runtime(
+        currentResolved,
+        repeated.root,
+        cached.preview.mode,
+        preparedPackage,
+        executor,
+        signal,
+      );
+      await persistPhase('runtime_installed', undefined, undefined, false);
+      onProgress?.('runtime_started');
+      const startup = await this.dependencies.start_runtime(currentResolved, repeated.root, executor, signal);
+      await persistPhase('runtime_started', undefined, undefined, false);
+
+      onProgress?.('runtime_verified');
+      await this.dependencies.verify_fresh_identity(
+        currentResolved,
+        repeated.root,
+        preparedPackage,
+        startup,
+        executor,
+        signal,
+      );
+      await persistPhase('runtime_verified', undefined, undefined, false);
+      onProgress?.('catalog_and_local_ui_verified');
+      await this.dependencies.verify_catalog_and_local_ui(currentResolved, repeated.root, signal);
+      await persistPhase('catalog_and_local_ui_verified', undefined, undefined, false);
+      await this.dependencies.finalize_install?.(currentResolved, repeated.root, operationID, executor, signal);
+      installFinalized = true;
       const verifiedJournal: ReinstallTargetJournal = {
         ...currentJournal,
         phase: 'catalog_and_local_ui_verified',
@@ -857,8 +856,7 @@ export class ReinstallTargetCoordinator {
           { cause: error, recommendedMode: cached.preview.mode },
         );
       }
-      const componentTransactionStarted = preparedPackage !== null
-        || journalPhaseAtLeast(persistedPhase, 'runtime_installed');
+      const componentTransactionStarted = preparedPackage !== null;
       if (componentTransactionStarted && !installFinalized && executor) {
         let rollbackSucceeded = false;
         let freshProcessesStopped = false;

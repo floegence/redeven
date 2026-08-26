@@ -230,6 +230,15 @@ describe('containerRuntime', () => {
       runtime_binary_path: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
     })[6]).toContain('runtime_binary_path="${runtime_root%/}/runtime/managed/bin/redeven"');
+    const reinstallStart = containerRuntimeDaemonStartCommand({
+      engine: 'docker',
+      container_id: 'dev',
+      runtime_binary_path: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      startup_session_token: 'reinstall-session',
+    });
+    expect(reinstallStart[6]).toContain('--startup-report-file "$report_path"');
+    expect(reinstallStart.at(-1)).toBe('reinstall-session');
     expect(containerRuntimeDaemonStatusCommand({
       engine: 'docker',
       container_id: 'dev',

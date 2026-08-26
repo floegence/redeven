@@ -139,6 +139,8 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('managed_root="${runtime_root%/}/runtime/managed"');
     expect(buildManagedSSHStartScript()).not.toContain('runtime/releases/${target_release_tag}/bin/redeven');
     expect(buildManagedSSHStartScript()).not.toContain('runtime/releases/${release_tag}/bin/redeven');
+    expect(buildManagedSSHReportReadScript()).toContain('if [ -f "$report_path" ]; then');
+    expect(buildManagedSSHReportReadScript()).not.toContain('if [ ! -f "$report_path" ]; then');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
     expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${managed_root}'}/${MANAGED_RUNTIME_STAMP_FILENAME}"`);
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'slot_release_tag=%s\\n' \"$slot_release_tag\"");
@@ -464,13 +466,16 @@ describe('sshRuntime', () => {
     expect(source).not.toContain('formatBlockedLaunchDiagnostics(launchReport)');
     expect(source).toContain('const replacementInventory = await processSession.inspect();');
     expect(source).toContain('await processSession.stop(replacementInventory, stopTimeoutMs);');
-    expect(source).toContain('[preparedRuntimePackage, processSession] = await Promise.all([');
-    expect(source).toContain('prepareRemoteRuntimePackage(packageArgs).then((prepared) => {');
-    expect(source).toContain('const updateProcessSessionTask');
-    expect(source).toContain('onProgress: undefined,');
+    expect(source).not.toContain('[preparedRuntimePackage, processSession] = await Promise.all([');
+    expect(source).not.toContain('const updateProcessSessionTask');
+    expect(source).toContain('preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);');
+    expect(source).toContain('processSession = await openManagedSSHRuntimeProcessSession({');
     expect(source).toContain('await processSession.stop(processInventory, stopTimeoutMs);');
     expect(source).toContain('await activatePreparedRemoteRuntimePackage({');
-    expect(source.indexOf('prepareRemoteRuntimePackage(packageArgs).then((prepared) => {')).toBeLessThan(
+    expect(source.indexOf('preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);')).toBeLessThan(
+      source.indexOf('processSession = await openManagedSSHRuntimeProcessSession({'),
+    );
+    expect(source.indexOf('processSession = await openManagedSSHRuntimeProcessSession({')).toBeLessThan(
       source.indexOf('await processSession.stop(processInventory, stopTimeoutMs);'),
     );
     expect(source.indexOf('await processSession.stop(processInventory, stopTimeoutMs);')).toBeLessThan(

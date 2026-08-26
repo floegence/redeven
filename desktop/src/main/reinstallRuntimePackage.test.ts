@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
 import { createLocalRuntimeHostExecutor } from './runtimeHostAccess';
 import { buildManagedSSHRuntimeProbeScript } from './sshRuntime';
+import { parseLaunchReport } from './launchReport';
 import {
   MANAGED_RUNTIME_DIRECTORY_MODE,
   MANAGED_RUNTIME_EXECUTABLE_MODE,
@@ -24,6 +25,7 @@ import {
   rollbackReinstallRuntimePackage,
   startReinstallRuntime,
   verifyReinstallRuntimeReady,
+  type PreparedReinstallRuntimePackage,
 } from './reinstallRuntimePackage';
 
 const execFile = promisify(execFileCallback);
@@ -67,6 +69,7 @@ function readyStatus(): string {
     pid: 71,
     runtime_service: {
       runtime_version: 'v1',
+      runtime_commit: 'abc',
       protocol_version: 'redeven-runtime-v2',
       compatibility_epoch: 9,
       compatibility: 'compatible',
@@ -80,6 +83,21 @@ function readyStatus(): string {
       },
     },
   });
+}
+
+function preparedRuntime(targetRoot: string): PreparedReinstallRuntimePackage {
+  return {
+    operation_id: 'op-start',
+    staging_root: `${targetRoot}.stage`,
+    strategy: 'desktop_upload',
+    release_tag: 'v1',
+    commit: 'abc',
+    platform: 'linux',
+    architecture: 'amd64',
+    archive_sha256: 'a'.repeat(64),
+    archive_size_bytes: 1,
+    executable_sha256: 'b'.repeat(64),
+  };
 }
 
 function inventory(targetRoot: string, running: boolean): string {
@@ -98,6 +116,11 @@ function inventory(targetRoot: string, running: boolean): string {
     }] : [],
     summary: { automatic: running ? 1 : 0, blocked: 0 },
   });
+}
+
+function readyLaunchReport(overrides: Readonly<Record<string, unknown>> = {}) {
+  const report = JSON.parse(readyStatus()) as Record<string, unknown>;
+  return parseLaunchReport(JSON.stringify({ ...report, ...overrides }));
 }
 
 afterEach(async () => {
@@ -242,50 +265,58 @@ describe('reinstall Runtime package', () => {
   it('starts an installed Runtime exactly once and verifies one current process', async () => {
     const targetRoot = '/home/ops/.redeven';
     let statusAttempts = 0;
+    let startupReportAttempts = 0;
     let processRunning = false;
-    let serviceReady = false;
+    let startupReportReady = false;
     const commands: string[] = [];
     const executor: RuntimeHostAccessExecutor = {
       host_access: { kind: 'local_host' },
       run: vi.fn(async (argv) => {
         const command = argv.join(' ');
         commands.push(command);
+        if (argv.includes('redeven-reinstall-runtime-start')) {
+          processRunning = true;
+          startupReportReady = true;
+          return { stdout: '', stderr: '' };
+        }
+        if (command.includes('startup-report.json')) {
+          startupReportAttempts++;
+          if (!startupReportReady) {
+            throw new Error('startup report is not ready');
+          }
+          if (startupReportAttempts === 1) {
+            return { stdout: '', stderr: '' };
+          }
+          return { stdout: readyStatus(), stderr: '' };
+        }
         if (command.includes('desktop-runtime-status')) {
           statusAttempts++;
-          if (!serviceReady) {
-            throw new Error('Runtime daemon is not running.');
-          }
           return { stdout: readyStatus(), stderr: '' };
         }
         if (command.includes('desktop-target-process-inventory')) {
           return { stdout: inventory(targetRoot, processRunning), stderr: '' };
-        }
-        if (command.includes('redeven-reinstall-runtime-start')) {
-          processRunning = true;
-          return { stdout: '', stderr: '' };
         }
         throw new Error(`Unexpected command: ${command}`);
       }),
       release: vi.fn(async () => undefined),
     };
 
-    await startReinstallRuntime({
+    const firstStartup = await startReinstallRuntime({
       executor,
       placement: { kind: 'host_process', runtime_root: targetRoot },
       target_root: targetRoot,
       state_root: targetRoot,
     });
     expect(processRunning).toBe(true);
-    expect(serviceReady).toBe(false);
-    serviceReady = true;
     const first = await verifyReinstallRuntimeReady({
       executor,
       placement: { kind: 'host_process', runtime_root: targetRoot },
       target_root: targetRoot,
       state_root: targetRoot,
-      startup_timeout_ms: 1_000,
+      prepared: preparedRuntime(targetRoot),
+      startup: firstStartup,
     });
-    await startReinstallRuntime({
+    const secondStartup = await startReinstallRuntime({
       executor,
       placement: { kind: 'host_process', runtime_root: targetRoot },
       target_root: targetRoot,
@@ -296,13 +327,152 @@ describe('reinstall Runtime package', () => {
       placement: { kind: 'host_process', runtime_root: targetRoot },
       target_root: targetRoot,
       state_root: targetRoot,
-      startup_timeout_ms: 1_000,
+      prepared: preparedRuntime(targetRoot),
+      startup: secondStartup,
     });
 
     expect(first.process_count).toBe(1);
     expect(second.process_count).toBe(1);
     expect(commands[0]).toContain('desktop-target-process-inventory');
-    expect(commands.filter((command) => command.includes('redeven-reinstall-runtime-start'))).toHaveLength(1);
-    expect(statusAttempts).toBeGreaterThanOrEqual(2);
+    expect(commands.filter((command) => command.split(' ').includes('redeven-reinstall-runtime-start'))).toHaveLength(1);
+    expect(startupReportAttempts).toBe(2);
+    expect(statusAttempts).toBe(1);
+  });
+
+  it('returns the exact blocked startup report instead of a later verification failure', async () => {
+    const targetRoot = '/home/ops/.redeven';
+    const executor: RuntimeHostAccessExecutor = {
+      host_access: { kind: 'local_host' },
+      run: vi.fn(async (argv) => {
+        if (argv.includes('redeven-reinstall-runtime-start')) {
+          return { stdout: '', stderr: '' };
+        }
+        const command = argv.join(' ');
+        if (command.includes('desktop-target-process-inventory')) {
+          return { stdout: inventory(targetRoot, false), stderr: '' };
+        }
+        if (command.includes('startup-report.json')) {
+          return {
+            stdout: JSON.stringify({
+              status: 'blocked',
+              code: 'startup_failed',
+              message: 'Local UI device CA is missing',
+              diagnostics: { command: 'redeven run' },
+            }),
+            stderr: '',
+          };
+        }
+        throw new Error(`Unexpected command: ${command}`);
+      }),
+      release: vi.fn(async () => undefined),
+    };
+
+    await expect(startReinstallRuntime({
+      executor,
+      placement: { kind: 'host_process', runtime_root: targetRoot },
+      target_root: targetRoot,
+      state_root: targetRoot,
+      startup_timeout_ms: 1_000,
+    })).rejects.toMatchObject({
+      presentation: {
+        code: 'reinstall_runtime_start_failed',
+        detail: 'Local UI device CA is missing',
+        diagnostics: [expect.objectContaining({ text: expect.stringContaining('Local UI device CA is missing') })],
+      },
+    });
+  });
+
+  it.each([
+    ['zero processes', inventory('/home/ops/.redeven', false), 'process_count=0'],
+    ['multiple processes', JSON.stringify({
+      ...JSON.parse(inventory('/home/ops/.redeven', true)),
+      instances: [
+        JSON.parse(inventory('/home/ops/.redeven', true)).instances[0],
+        {
+          ...JSON.parse(inventory('/home/ops/.redeven', true)).instances[0],
+          pid: 72,
+        },
+      ],
+      summary: { automatic: 2, blocked: 0 },
+    }), 'process_count=2'],
+    ['wrong PID', JSON.stringify({
+      ...JSON.parse(inventory('/home/ops/.redeven', true)),
+      instances: [{
+        ...JSON.parse(inventory('/home/ops/.redeven', true)).instances[0],
+        pid: 99,
+      }],
+    }), 'pid=99'],
+    ['wrong binary path', JSON.stringify({
+      ...JSON.parse(inventory('/home/ops/.redeven', true)),
+      instances: [{
+        ...JSON.parse(inventory('/home/ops/.redeven', true)).instances[0],
+        executable_path: '/home/ops/.redeven/runtime/managed/bin/redeven.old',
+      }],
+    }), 'binary=/home/ops/.redeven/runtime/managed/bin/redeven.old'],
+  ])('reports exact Runtime process mismatches for %s', async (_label, inventoryPayload, detail) => {
+    const targetRoot = '/home/ops/.redeven';
+    const executor: RuntimeHostAccessExecutor = {
+      host_access: { kind: 'local_host' },
+      run: vi.fn(async () => ({ stdout: inventoryPayload, stderr: '' })),
+      release: vi.fn(async () => undefined),
+    };
+    const launchReport = parseLaunchReport(readyStatus());
+    if (launchReport.status === 'blocked') {
+      throw new Error('ready fixture returned a blocked report');
+    }
+
+    await expect(verifyReinstallRuntimeReady({
+      executor,
+      placement: { kind: 'host_process', runtime_root: targetRoot },
+      target_root: targetRoot,
+      state_root: targetRoot,
+      prepared: preparedRuntime(targetRoot),
+      startup: launchReport.startup,
+    })).rejects.toMatchObject({
+      presentation: {
+        code: 'reinstall_runtime_verification_failed',
+        detail: expect.stringContaining(detail),
+      },
+    });
+  });
+
+  it.each([
+    ['version', {
+      runtime_service: {
+        ...(JSON.parse(readyStatus()).runtime_service as Record<string, unknown>),
+        runtime_version: 'v0',
+      },
+    }, 'version=v0'],
+    ['commit', {
+      runtime_service: {
+        ...(JSON.parse(readyStatus()).runtime_service as Record<string, unknown>),
+        runtime_commit: 'old-commit',
+      },
+    }, 'commit=old-commit'],
+  ])('rejects a ready startup report with the wrong Runtime %s', async (_label, overrides, detail) => {
+    const targetRoot = '/home/ops/.redeven';
+    const executor: RuntimeHostAccessExecutor = {
+      host_access: { kind: 'local_host' },
+      run: vi.fn(async () => ({ stdout: inventory(targetRoot, true), stderr: '' })),
+      release: vi.fn(async () => undefined),
+    };
+    const launchReport = readyLaunchReport(overrides);
+    if (launchReport.status === 'blocked') {
+      throw new Error('ready fixture returned a blocked report');
+    }
+
+    await expect(verifyReinstallRuntimeReady({
+      executor,
+      placement: { kind: 'host_process', runtime_root: targetRoot },
+      target_root: targetRoot,
+      state_root: targetRoot,
+      prepared: preparedRuntime(targetRoot),
+      startup: launchReport.startup,
+    })).rejects.toMatchObject({
+      presentation: {
+        code: 'reinstall_runtime_verification_failed',
+        detail: expect.stringContaining(detail),
+      },
+    });
   });
 });

@@ -7,14 +7,23 @@ import {
   containerRuntimeDaemonStartCommand,
   containerRuntimeExecCommand,
 } from './containerRuntime';
-import { parseLaunchReport } from './launchReport';
+import {
+  formatBlockedLaunchDiagnostics,
+  parseLaunchReport,
+  type LaunchReport,
+} from './launchReport';
 import type { StartupReport } from './startup';
+import {
+  DesktopOperationFailureError,
+  desktopOperationFailurePresentation,
+} from './desktopOperationFailure';
 import {
   DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
   DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
   type RuntimeHostAccessExecutor,
 } from './runtimeHostAccess';
 import {
+  buildManagedSSHReportReadScript,
   buildManagedSSHStartScript,
 } from './sshRuntime';
 import {
@@ -213,31 +222,21 @@ function abortableWait(delayMS: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-async function readReadyStatus(args: Readonly<{
+async function readRuntimeStatus(args: Readonly<{
   executor: RuntimeHostAccessExecutor;
   placement: DesktopRuntimePlacement;
   target_root: string;
   state_root: string;
   signal?: AbortSignal;
-}>): Promise<Readonly<{ startup: StartupReport | null; error: unknown | null }>> {
-  try {
-    const result = await args.executor.run(commandForPlacement(args.placement, statusScript, 'redeven-reinstall-runtime-status', [
-      args.target_root,
-      args.state_root,
-    ]), {
-      ...(args.signal ? { signal: args.signal } : {}),
-      timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
-    });
-    const report = parseLaunchReport(result.stdout);
-    return {
-      startup: report.status !== 'blocked' && runtimeServiceIsOpenable(report.startup.runtime_service)
-        ? report.startup
-        : null,
-      error: report.status === 'blocked' ? new Error(report.message || 'Runtime reported a blocked startup state.') : null,
-    };
-  } catch (error) {
-    return { startup: null, error };
-  }
+}>): Promise<LaunchReport> {
+  const result = await args.executor.run(commandForPlacement(args.placement, statusScript, 'redeven-reinstall-runtime-status', [
+    args.target_root,
+    args.state_root,
+  ]), {
+    ...(args.signal ? { signal: args.signal } : {}),
+    timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+  });
+  return parseLaunchReport(result.stdout);
 }
 
 async function inspectInstalledRuntime(args: Readonly<{
@@ -255,34 +254,119 @@ async function inspectInstalledRuntime(args: Readonly<{
   return parseProcessInventory(result.stdout);
 }
 
-async function waitForReadyStatus(args: Readonly<{
+function blockedStartupError(report: Extract<LaunchReport, Readonly<{ status: 'blocked' }>>): DesktopOperationFailureError {
+  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    code: 'reinstall_runtime_start_failed',
+    title: 'Fresh Runtime start failed',
+    titleKey: 'progress.reinstallRuntimeStartFailedTitle',
+    summary: report.message,
+    detail: report.message,
+    diagnostics: [{
+      channel: 'startup_report',
+      label: 'Runtime startup report',
+      text: formatBlockedLaunchDiagnostics(report),
+    }],
+  }));
+}
+
+function invalidStartupReportError(rawReport: string, cause: unknown): DesktopOperationFailureError {
+  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    code: 'reinstall_runtime_start_failed',
+    title: 'Runtime startup report invalid',
+    summary: 'The freshly installed Runtime wrote a startup report Desktop could not validate.',
+    detail: cause instanceof Error ? cause.message : String(cause),
+    diagnostics: rawReport.trim() === '' ? [] : [{
+      channel: 'startup_report',
+      label: 'Runtime startup report',
+      text: rawReport,
+    }],
+  }), { cause });
+}
+
+async function readStartupReport(args: Readonly<{
   executor: RuntimeHostAccessExecutor;
   placement: DesktopRuntimePlacement;
   target_root: string;
   state_root: string;
+  session_token: string;
+  signal?: AbortSignal;
+}>): Promise<Readonly<{ report: LaunchReport | null; error: unknown | null }>> {
+  try {
+    const result = await args.executor.run(commandForPlacement(
+      args.placement,
+      buildManagedSSHReportReadScript(),
+      'redeven-reinstall-runtime-startup-report',
+      [args.target_root, args.state_root, args.session_token],
+    ), {
+      ...(args.signal ? { signal: args.signal } : {}),
+      timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+    });
+    if (result.stdout.trim() === '') {
+      return { report: null, error: null };
+    }
+    try {
+      return { report: parseLaunchReport(result.stdout), error: null };
+    } catch (error) {
+      throw invalidStartupReportError(result.stdout, error);
+    }
+  } catch (error) {
+    if (error instanceof DesktopOperationFailureError) {
+      throw error;
+    }
+    return { report: null, error };
+  }
+}
+
+async function waitForStartupReport(args: Readonly<{
+  executor: RuntimeHostAccessExecutor;
+  placement: DesktopRuntimePlacement;
+  target_root: string;
+  state_root: string;
+  session_token: string;
   timeout_ms: number;
   signal?: AbortSignal;
 }>): Promise<StartupReport> {
   const deadline = Date.now() + args.timeout_ms;
   let lastError: unknown = null;
   do {
-    const status = await readReadyStatus(args);
-    if (status.startup) {
-      return status.startup;
+    const result = await readStartupReport(args);
+    if (result.report?.status === 'blocked') {
+      throw blockedStartupError(result.report);
     }
-    lastError = status.error ?? lastError;
+    if (result.report && runtimeServiceIsOpenable(result.report.startup.runtime_service)) {
+      return result.report.startup;
+    }
+    if (result.report) {
+      throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
+        code: 'reinstall_runtime_start_failed',
+        title: 'Fresh Runtime start failed',
+        titleKey: 'progress.reinstallRuntimeStartFailedTitle',
+        summary: 'The freshly installed Runtime reported ready without a usable Runtime Service.',
+        detail: 'The startup report was valid, but Runtime Service was not openable.',
+        diagnostics: [{
+          channel: 'startup_report',
+          label: 'Runtime startup report',
+          text: JSON.stringify(result.report, null, 2),
+        }],
+      }));
+    }
+    lastError = result.error ?? lastError;
     await abortableWait(250, args.signal);
   } while (Date.now() < deadline);
-  throw new Error(
-    'The freshly installed Runtime did not publish a ready Runtime Service before the startup deadline.',
-    lastError === null ? undefined : { cause: lastError },
-  );
+  throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    code: 'reinstall_runtime_start_failed',
+    title: 'Fresh Runtime start failed',
+    titleKey: 'progress.reinstallRuntimeStartFailedTitle',
+    summary: 'The freshly installed Runtime did not publish a startup report before the startup deadline.',
+    detail: lastError instanceof Error ? lastError.message : String(lastError ?? ''),
+  }), lastError === null ? {} : { cause: lastError });
 }
 
 function runtimeStartCommand(
   placement: DesktopRuntimePlacement,
   targetRoot: string,
   stateRoot: string,
+  sessionToken: string,
 ): readonly string[] {
   const runtimeBinaryPath = `${targetRoot.replace(/\/$/u, '')}/runtime/managed/bin/redeven`;
   if (placement.kind === 'container_process') {
@@ -292,6 +376,7 @@ function runtimeStartCommand(
       runtime_binary_path: runtimeBinaryPath,
       runtime_root: targetRoot,
       runtime_state_root: stateRoot,
+      startup_session_token: sessionToken,
     });
   }
   return [
@@ -302,7 +387,7 @@ function runtimeStartCommand(
     targetRoot,
     stateRoot,
     '',
-    `reinstall-${Date.now()}-${process.pid}`,
+    sessionToken,
   ];
 }
 
@@ -411,18 +496,33 @@ export async function startReinstallRuntime(args: Readonly<{
   placement: DesktopRuntimePlacement;
   target_root: string;
   state_root: string;
+  startup_timeout_ms?: number;
   signal?: AbortSignal;
-}>): Promise<void> {
+}>): Promise<StartupReport> {
   const before = await inspectInstalledRuntime(args);
   if (before.summary.blocked !== 0 || before.instances.length > 1) {
     throw new Error('Desktop found conflicting Runtime processes before reinstall startup.');
   }
-  if (before.instances.length === 0) {
-    await args.executor.run(runtimeStartCommand(args.placement, args.target_root, args.state_root), {
-      ...(args.signal ? { signal: args.signal } : {}),
-      timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
-    });
+  if (before.instances.length === 1) {
+    const report = await readRuntimeStatus(args);
+    if (report.status === 'blocked') {
+      throw blockedStartupError(report);
+    }
+    if (!runtimeServiceIsOpenable(report.startup.runtime_service)) {
+      throw new Error('The existing Runtime process did not report an openable Runtime Service.');
+    }
+    return report.startup;
   }
+  const sessionToken = `reinstall-${Date.now()}-${process.pid}`;
+  await args.executor.run(runtimeStartCommand(args.placement, args.target_root, args.state_root, sessionToken), {
+    ...(args.signal ? { signal: args.signal } : {}),
+    timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+  });
+  return waitForStartupReport({
+    ...args,
+    session_token: sessionToken,
+    timeout_ms: args.startup_timeout_ms ?? 45_000,
+  });
 }
 
 export async function verifyReinstallRuntimeReady(args: Readonly<{
@@ -430,33 +530,55 @@ export async function verifyReinstallRuntimeReady(args: Readonly<{
   placement: DesktopRuntimePlacement;
   target_root: string;
   state_root: string;
-  startup_timeout_ms?: number;
+  prepared: PreparedReinstallRuntimePackage;
+  startup: StartupReport;
   signal?: AbortSignal;
 }>): Promise<ReinstallRuntimeReady> {
-  const startup = await waitForReadyStatus({
-    ...args,
-    timeout_ms: args.startup_timeout_ms ?? 45_000,
-  });
   const finalInventory = await inspectInstalledRuntime(args);
   const binary = `${args.target_root.replace(/\/$/u, '')}/runtime/managed/bin/redeven`;
   const finalInstance = finalInventory.instances[0];
-  const runtimeVersion = String(startup.runtime_service?.runtime_version ?? '').trim();
-  if (
-    finalInventory.target_root !== args.target_root
-    || finalInventory.summary.blocked !== 0
-    || finalInventory.summary.automatic !== 1
-    || finalInventory.instances.length !== 1
-    || finalInstance?.pid !== startup.pid
-    || (finalInstance?.role !== 'runtime' && finalInstance?.role !== 'target_root_process')
-    || finalInstance?.identity_status !== 'verified'
-    || finalInstance?.stop_authority !== 'automatic'
-    || finalInstance?.executable_deleted === true
-    || finalInstance?.executable_path !== binary
-    || runtimeVersion === ''
-  ) {
-    throw new Error('Desktop could not verify one current Runtime process after reinstall startup.');
+  const runtimeVersion = String(args.startup.runtime_service?.runtime_version ?? '').trim();
+  const runtimeCommit = String(args.startup.runtime_service?.runtime_commit ?? '').trim();
+  const mismatches = [
+    ...(finalInventory.target_root !== args.target_root ? [`target_root=${finalInventory.target_root}, expected=${args.target_root}`] : []),
+    ...(finalInventory.summary.blocked !== 0 ? [`blocked_processes=${finalInventory.summary.blocked}`] : []),
+    ...(finalInventory.summary.automatic !== 1 ? [`automatic_processes=${finalInventory.summary.automatic}, expected=1`] : []),
+    ...(finalInventory.instances.length !== 1 ? [`process_count=${finalInventory.instances.length}, expected=1`] : []),
+    ...(finalInstance?.pid !== args.startup.pid ? [`pid=${finalInstance?.pid ?? 'missing'}, startup_pid=${args.startup.pid ?? 'missing'}`] : []),
+    ...(finalInstance && finalInstance.role !== 'runtime' && finalInstance.role !== 'target_root_process' ? [`role=${finalInstance.role}`] : []),
+    ...(finalInstance?.identity_status !== 'verified' ? [`identity=${finalInstance?.identity_status ?? 'missing'}`] : []),
+    ...(finalInstance?.stop_authority !== 'automatic' ? [`stop_authority=${finalInstance?.stop_authority ?? 'missing'}`] : []),
+    ...(finalInstance?.executable_deleted === true ? ['executable=deleted'] : []),
+    ...(finalInstance?.executable_path !== binary ? [`binary=${finalInstance?.executable_path ?? 'missing'}, expected=${binary}`] : []),
+    ...(runtimeVersion !== args.prepared.release_tag ? [`version=${runtimeVersion || 'missing'}, expected=${args.prepared.release_tag}`] : []),
+    ...(runtimeCommit !== args.prepared.commit ? [`commit=${runtimeCommit || 'missing'}, expected=${args.prepared.commit}`] : []),
+    ...(!runtimeServiceIsOpenable(args.startup.runtime_service) ? ['runtime_service=not_openable'] : []),
+  ];
+  if (mismatches.length > 0) {
+    throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
+      code: 'reinstall_runtime_verification_failed',
+      title: 'Fresh Runtime verification failed',
+      titleKey: 'progress.reinstallRuntimeVerificationFailedTitle',
+      summary: 'Desktop could not verify one ready current Runtime process after reinstall startup.',
+      detail: mismatches.join('\n'),
+      diagnostics: [{
+        channel: 'runtime_verification',
+        label: 'Runtime verification',
+        text: JSON.stringify({
+          expected: {
+            target_root: args.target_root,
+            binary_path: binary,
+            release_tag: args.prepared.release_tag,
+            commit: args.prepared.commit,
+            startup_pid: args.startup.pid,
+          },
+          inventory: finalInventory,
+          runtime_service: args.startup.runtime_service,
+        }, null, 2),
+      }],
+    }));
   }
-  return { startup, process_count: 1 };
+  return { startup: args.startup, process_count: 1 };
 }
 
 export async function rollbackReinstallRuntimePackage(

@@ -646,6 +646,7 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
   runtime_binary_path: string;
   runtime_root: string;
   runtime_state_root?: string;
+  startup_session_token?: string;
 }>): readonly string[] {
   const startDriver = [
     'set -eu',
@@ -654,6 +655,7 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
     'runtime_root="$2"',
     containerRuntimeRootShellPrelude('runtime_root'),
     'runtime_binary_path="$3"',
+    'session_token="${4:-}"',
     `if [ "$runtime_binary_path" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
     '  runtime_binary_path="${runtime_root%/}/runtime/managed/bin/redeven"',
     'fi',
@@ -666,6 +668,13 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
     `    runtime_binary_path="\${HOME%/}/.redeven/\${runtime_binary_path#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
     '    ;;',
     'esac',
+    'if [ -n "$session_token" ]; then',
+    '  session_dir="${state_root%/}/runtime/sessions/${session_token}"',
+    '  report_path="${session_dir}/startup-report.json"',
+    '  mkdir -p "$session_dir"',
+    '  rm -f "$report_path"',
+    '  exec "$runtime_binary_path" run --mode desktop --presentation machine --state-root "$state_root" --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
+    'fi',
     'exec "$runtime_binary_path" run --mode desktop --presentation machine --state-root "$state_root" --local-ui-bind 127.0.0.1:0',
   ].join('\n');
   return containerRuntimeExecCommandWithMode({
@@ -679,6 +688,7 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
       input.runtime_state_root ?? input.runtime_root,
       input.runtime_root,
       input.runtime_binary_path,
+      ...(input.startup_session_token === undefined ? [] : [input.startup_session_token]),
     ],
   }, { detached: true, interactive: false });
 }

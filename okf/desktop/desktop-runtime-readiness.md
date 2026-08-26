@@ -32,7 +32,7 @@ SSH-host, local-container, and SSH-container readiness is observed through the s
 probe -> decide -> lifecycle when needed -> re-probe same target -> open
 ```
 
-A healthy Runtime opens directly. A stopped Runtime offers Start and Open. An incompatible Runtime offers Update and Open. Unknown or failed health offers Refresh with the real direct-channel diagnostic. A successful lifecycle step cannot complete Open until the same target produces a fresh compatible readiness observation.
+A healthy Runtime opens directly. A stopped Runtime offers Start and Open. An incompatible Runtime offers Update and Open. Unknown or failed health offers Refresh with the real direct-channel diagnostic. A successful lifecycle step cannot complete Open until the same target produces a fresh compatible readiness observation. That observation carries Runtime health only; Open must create the live placement bridge before resolving an Env App URL, and an empty public `local_ui_url` is valid for a managed Desktop-private Runtime.
 
 Runtime process health, Runtime Service compatibility, Local UI availability, Workspace readiness, AI readiness, Provider link, and Gateway access are separate facts. AI or Provider failure does not make a healthy Runtime installation unavailable. Gateway failure affects only sessions routed through that Gateway.
 

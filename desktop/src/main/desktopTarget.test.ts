@@ -115,7 +115,6 @@ describe('desktopTarget', () => {
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
     }, {
-      forwardedLocalUIURL: 'http://127.0.0.1:41111/',
       label: 'SSH Lab',
     })).toEqual({
       kind: 'ssh_environment',
@@ -129,7 +128,6 @@ describe('desktopTarget', () => {
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
       connect_timeout_seconds: 10,
-      forwarded_local_ui_url: 'http://127.0.0.1:41111/',
     });
   });
 

@@ -53,6 +53,33 @@ describe('runtimePlacementBridge', () => {
     expect(command).toContain('exec "$runtime_binary_path" desktop-bridge --state-root "$state_root"');
   });
 
+  it('derives the standard managed binary from placement when readiness stores no executable path', () => {
+    const plan = buildRuntimePlacementBridgePlan({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'bastion',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: 10,
+        },
+      },
+      placement: {
+        kind: 'host_process',
+        runtime_root: '/srv/redeven',
+        runtime_state_root: '/srv/redeven-state',
+      },
+    });
+
+    expect(plan.command.slice(3)).toEqual([
+      'redeven-host-desktop-bridge',
+      '/srv/redeven',
+      DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      '/srv/redeven-state',
+    ]);
+    expect(plan.command[2]).toContain('runtime_binary_path="${install_root%/}/runtime/managed/bin/redeven"');
+  });
+
   it('keeps Gateway host bridge install and state roots separate', () => {
     const plan = buildRuntimePlacementBridgePlan({
       host_access: {

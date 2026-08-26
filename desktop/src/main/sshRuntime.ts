@@ -873,10 +873,9 @@ export function buildManagedSSHReportReadScript(): string {
     buildRemoteStateRootShell(),
     'session_token="$3"',
     'report_path="${state_root%/}/runtime/sessions/${session_token}/startup-report.json"',
-    'if [ ! -f "$report_path" ]; then',
-    '  exit 1',
+    'if [ -f "$report_path" ]; then',
+    '  cat "$report_path"',
     'fi',
-    'cat "$report_path"',
   ].join('\n');
 }
 

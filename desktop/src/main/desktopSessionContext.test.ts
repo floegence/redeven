@@ -74,7 +74,6 @@ describe('desktopSessionContext', () => {
       bootstrap_strategy: 'desktop_upload',
       release_base_url: '',
     }, {
-      forwardedLocalUIURL: 'http://127.0.0.1:41111/',
       label: 'SSH Lab',
     }))).toEqual({
       local_environment_id: 'ssh:devbox:2222:key_agent:remote_default',
