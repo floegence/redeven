@@ -396,27 +396,6 @@ export class LauncherOperationRegistry {
     return snapshot;
   }
 
-  restore(snapshot: DesktopLauncherOperationSnapshot): DesktopLauncherOperationSnapshot {
-    const operationKey = compact(snapshot.operation_key);
-    const subjectID = compact(snapshot.subject_id);
-    if (operationKey === '' || subjectID === '') {
-      throw new Error('Persisted launcher operation identity is invalid.');
-    }
-    const existing = this.operationsByKey.get(operationKey);
-    if (existing && operationIsActive(existing)) {
-      throw new LauncherOperationConflictError(operationKey);
-    }
-    this.lastStartedAtUnixMs = Math.max(this.lastStartedAtUnixMs, snapshot.started_at_unix_ms);
-    this.operationsByKey.set(operationKey, snapshot);
-    if (operationIsActive(snapshot)) {
-      this.abortControllersByKey.set(operationKey, new AbortController());
-    } else {
-      this.abortControllersByKey.delete(operationKey);
-    }
-    this.onChange(snapshot);
-    return snapshot;
-  }
-
   operationSignal(operationKey: string): AbortSignal | null {
     return this.abortControllersByKey.get(compact(operationKey))?.signal ?? null;
   }

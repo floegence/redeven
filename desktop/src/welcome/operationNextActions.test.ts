@@ -376,7 +376,7 @@ describe('operationNextActions', () => {
     ]);
   });
 
-  it('keeps an exact recovered reinstall continuation as the primary action', () => {
+  it('keeps a same-process reinstall retry as the primary action', () => {
     const progress: DesktopLauncherActionProgress = {
       ...failedProgress([
         {
@@ -385,7 +385,7 @@ describe('operationNextActions', () => {
           operation_key: 'reinstall-target:one',
           preflight_id: 'preflight-one',
           mode: 'wipe_data',
-          label: 'Continue reinstall',
+          label: 'Reinstall Redeven',
         },
       ]),
       action: 'reinstall_target',

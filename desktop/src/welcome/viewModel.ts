@@ -894,6 +894,9 @@ function runtimeUpdatePresentation(): RuntimeUpdatePresentation {
 }
 
 function environmentRuntimeDisplayState(environment: DesktopEnvironmentEntry): EnvironmentRuntimeDisplayState {
+  if (environment.reinstall_required === true) {
+    return 'blocked';
+  }
   if (environment.window_state === 'open') {
     return 'window_open';
   }
@@ -1007,6 +1010,9 @@ function environmentDisplayStatusLabel(
   environment: DesktopEnvironmentEntry,
   state: EnvironmentRuntimeDisplayState,
 ): string {
+  if (environment.reinstall_required === true) {
+    return 'REINSTALL REQUIRED';
+  }
   switch (state) {
     case 'window_open':
       return 'Open';
@@ -2045,9 +2051,37 @@ export function buildProviderBackedEnvironmentActionModel(
 ): ProviderBackedEnvironmentActionModel {
   const displayState = buildEnvironmentDisplayStateModel(environment);
   const syncState = _controlPlaneSyncState;
-  // A recovery marker records an interrupted/failed attempt; it is not live
-  // Runtime health. Keep the normal primary action driven by the current
-  // health snapshot and leave reinstall available in the actions menu.
+  if (environment.reinstall_required === true && environmentSupportsDirectReinstall(environment)) {
+    const refreshPlan = environment.runtime_operations.refresh;
+    return {
+      status_label: displayState.status_label,
+      status_tone: displayState.status_tone,
+      action_presentation: {
+        kind: 'split_button',
+        primary_action: {
+          intent: 'reinstall_target',
+          label: 'Reinstall Redeven',
+          label_key: 'environmentAction.reinstallRedeven',
+          enabled: true,
+          variant: 'default',
+          reinstall_mode: 'wipe_data',
+        },
+        menu_button_label: 'Runtime actions',
+        menu_actions: [{
+          id: 'refresh_runtime',
+          label: 'Refresh runtime status',
+          label_key: 'environmentAction.refreshRuntimeStatus',
+          action: {
+            intent: 'refresh_runtime',
+            label: 'Refresh runtime status',
+            label_key: 'environmentAction.refreshRuntimeStatus',
+            enabled: refreshPlan?.availability !== 'blocked',
+            variant: 'outline',
+          },
+        }],
+      },
+    };
+  }
   const primaryAction = primaryWindowAction(environment);
   const menuActions = syncState === 'auth_required' && environment.kind === 'provider_environment'
     ? [{

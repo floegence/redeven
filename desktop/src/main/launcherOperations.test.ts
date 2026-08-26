@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
-import { reinstallTargetStepProgress } from '../shared/desktopReinstallProgress';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { LauncherOperationConflictError, LauncherOperationRegistry } from './launcherOperations';
 
@@ -60,32 +59,6 @@ describe('LauncherOperationRegistry', () => {
       title: 'Checking Runtime',
       detail: 'Desktop is checking the Runtime.',
     })).not.toThrow();
-  });
-
-  it('restores a reinstall operation with the original key and complete step plan', () => {
-    const source = new LauncherOperationRegistry();
-    const persisted = source.create({
-      operation_key: 'reinstall-target:resume-me',
-      action: 'reinstall_target',
-      active_progress_surface: 'reinstall',
-      subject_kind: 'runtime_target',
-      subject_id: 'env-ssh',
-      environment_id: 'env-ssh',
-      environment_label: 'SSH Environment',
-      status: 'needs_confirmation',
-      phase: 'confirmation',
-      title: 'Reinstall Redeven',
-      detail: 'Review the deletion list.',
-      step_progress: reinstallTargetStepProgress('confirmation'),
-      cancelable: false,
-    });
-    const restored = new LauncherOperationRegistry();
-    restored.restore(persisted);
-
-    expect(restored.get(persisted.operation_key)).toEqual(persisted);
-    expect(restored.progressItems()[0]?.operation_key).toBe(persisted.operation_key);
-    expect(restored.progressItems()[0]?.step_progress?.steps).toHaveLength(12);
-    expect(restored.progressItems()[0]?.step_progress?.active_step_id).toBe('confirmation');
   });
 
   it('does not clear an unrelated explicit presentation key', () => {

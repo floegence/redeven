@@ -20,20 +20,21 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
-  it('restores one current reinstall owner and resumes it without presentation inference', () => {
+  it('keeps persisted reinstall journals internal until the user starts a current request', () => {
     const mainSrc = readMainSource();
 
-    expect(mainSrc).toContain('currentReinstallTargetJournals(');
     expect(mainSrc).toContain('currentReinstallTargetJournalForEnvironment(');
-    expect(mainSrc).toContain("label_key: 'environmentAction.continueReinstallRedeven'");
-    expect(mainSrc).toContain("titleKey: 'confirm.reinstallInterruptedTitle'");
-    expect(mainSrc).toContain("summaryKey: 'confirm.reinstallInterruptedDescription'");
-    expect(mainSrc).toContain('persistedJournal.preview.mode === (request.mode ?? \'wipe_data\')');
+    expect(mainSrc).toContain('createReinstallConfirmationForCurrentRequest(');
     expect(mainSrc).toContain('.validatePersistedJournalTarget(persistedJournal)');
+    expect(mainSrc).toContain('await reinstallRecoveryRequiredForEnvironment(request.environment_id)');
     expect(mainSrc).toContain('removeOtherReinstallOperationsForAffectedEnvironments(');
     expect(mainSrc).toContain("existing?.reinstall_preview?.preflight_id === request.preflight_id");
     expect(mainSrc).toContain('recommendedMode && recommendedMode !== request.mode');
     expect(mainSrc).toContain("const targetReviewRequired = normalizedError instanceof ReinstallTargetCoordinatorError");
+    expect(mainSrc).toContain('await reinstallTargetCoordinator().discardUnstartedJournals();');
+    expect(mainSrc).not.toContain('hydratePersistedReinstallOperations');
+    expect(mainSrc).not.toContain('Reinstall interrupted');
+    expect(mainSrc).not.toContain('Continue reinstall');
     expect(mainSrc).not.toContain("existing.status === 'needs_confirmation'\n        && existing.environment_id");
     expect(mainSrc).not.toContain("retry_action: {\n          kind: 'reinstall_target'");
     expect(mainSrc).not.toContain("existing.next_actions?.some((action) => action.kind === 'reinstall_target')");
@@ -116,6 +117,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('await markReinstallTargetRequired(preferences.local_environment.id, {');
     expect(mainSrc).not.toContain('reinstallTargetRequiredFailureIfPresent');
     expect(mainSrc).not.toContain('reinstallTargetRequiredLauncherFailure');
+    expect(mainSrc).toContain('async function reinstallRecoveryBlockForEnvironment(');
+    expect(mainSrc).not.toContain('pendingReinstallOperationForEnvironment');
     expect(mainSrc).toContain('const gatewaySources = await loadGatewaySourcesForWelcome();');
     const openStart = mainSrc.indexOf('async function openLocalEnvironmentFromLauncher(');
     const openEnd = mainSrc.indexOf('async function openRemoteEnvironmentFromLauncher(', openStart);

@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop managed Environment reinstall
 description: Runtime-only direct-channel reinstall with minimal Desktop recovery journal.
 tags: [desktop, reinstall, runtime, ssh, containers]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-26T00:00:00Z
 ---
 # Summary
 
@@ -50,13 +50,13 @@ Old Gateway directories under the confirmed Runtime root are historical residue.
 
 Desktop writes one minimal journal outside the target root. It records the confirmed target, mode, normalized physical root, operation quarantine, and last committed phase. Each committed phase is repeatable. After Desktop or transport interruption, a repeated confirmation resumes from this Desktop journal without consulting an old Gateway API, Runtime database, target-side lock, checkpoint service, or shell state machine.
 
-Desktop presents one current recovery operation per physical target. If several journals remain for that target, the newest committed journal owns the popup and older journals remain cleanup inputs only. A post-confirmation interruption is shown as **Reinstall interrupted** with one direct **Continue reinstall** action bound to the original operation and preflight identity. Target-coordinate changes return to target review instead of reusing that confirmation. Button presentation is not execution authority: the journal, operation identity, and exact-target validation decide whether work can resume.
+Launcher progress belongs only to the current Desktop process. Startup never restores a journal as an operation, failure popup, or pending confirmation. Unstarted confirmation journals are discarded; a post-confirmation journal remains internal recovery authority and contributes only to the Environment's current `reinstall_required` state while the Runtime is unhealthy.
 
-When the progress popup has a confirmation, continuation, retry, cancellation, or diagnostic action, its single normalized action stack stays in a fixed footer while steps and technical details scroll above it. The footer never creates a second action source or operation owner; it only keeps the existing executable actions immediately visible.
+An Environment that requires recovery exposes one standard **Reinstall Redeven** action and **Refresh status**. Open and ordinary Runtime lifecycle actions fail with the same typed reinstall-required result until recovery is cleared. Selecting Reinstall always creates a current-process confirmation. If the newest journal still matches the registered target, confirmation resumes its original mode and checkpoint; otherwise Desktop creates a fresh confirmation for the current target. Only a genuinely live current-process task may return `reinstall_target_in_progress`.
 
-An old journal or quarantine is input to continuation or cleanup, not a reason to hide or block wipe reinstall. A genuine target-coordinate change still requires new confirmation because continuing against another host, container, user, or explicit root could delete unrelated data.
+A successful current Runtime health probe clears the recovery marker and retires matching Desktop journals when no reinstall is live. It never deletes target-side quarantine data during status refresh. An old journal or quarantine is input to a later exact-root reinstall or cleanup, not a reason to revive historical progress or block a newly confirmed wipe. A genuine target-coordinate change still requires new confirmation because continuing against another host, container, user, or explicit root could delete unrelated data.
 
-`manual_recovery_required` is reserved for cases where the direct channel or filesystem prevents continuation and, for preserve mode, also prevents safe rollback. Wipe failures retain the journal and present Continue Reinstall with the original command, exit status, stderr, and filesystem reason in technical details.
+`manual_recovery_required` is reserved for cases where the direct channel or filesystem prevents retry and, for preserve mode, also prevents safe rollback. Wipe failures retain the journal and present the standard Reinstall action with the original command, exit status, stderr, and filesystem reason in technical details during the current process.
 
 Failure ownership follows the active command: exact-root isolation and cleanup report filesystem errors; managed-slot switching reports installation errors; daemon launch reports startup errors; process count or Runtime Service mismatch reports Runtime verification errors; bridge, Catalog, or Local UI failure reports access verification errors. A later-stage failure is never rewritten as an earlier filesystem failure.
 

@@ -848,6 +848,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     'GATEWAY OFFLINE': 'environmentStatus.gatewayOffline',
     STOPPED: 'environmentStatus.stopped',
     'RESTART REQUIRED': 'environmentStatus.restartRequired',
+    'REINSTALL REQUIRED': 'environmentStatus.reinstallRequired',
     'RUNTIME NEEDS UPDATE': 'environmentStatus.runtimeNeedsUpdate',
     'RUNTIME BLOCKED': 'environmentStatus.runtimeBlocked',
     'RUNTIME PREPARING': 'environmentStatus.runtimePreparing',
