@@ -346,6 +346,7 @@ export type FlowerSurfaceCopy = Readonly<{
       modelGatewayContractFailed: string;
       floretEngineFailed: string;
       floretControlContractFailed: string;
+      floretAuthorityConsistencyFailed: string;
       runtimeRestarted: string;
     }>;
     messageErrorTitle: string;
@@ -595,6 +596,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       modelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
       floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
       floretControlContractFailed: 'Flower could not finish this turn because the model requested an unsupported runtime tool.',
+      floretAuthorityConsistencyFailed: 'Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     },
     messageErrorTitle: 'Message failed',

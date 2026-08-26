@@ -76,29 +76,30 @@ type terminalProcessOutputChunk struct {
 }
 
 type terminalProcessSnapshot struct {
-	ProcessID         string             `json:"process_id"`
-	EndpointID        string             `json:"endpoint_id,omitempty"`
-	ThreadID          string             `json:"thread_id,omitempty"`
-	RunID             string             `json:"run_id,omitempty"`
-	TurnID            string             `json:"turn_id,omitempty"`
-	ToolID            string             `json:"tool_id,omitempty"`
-	ToolName          string             `json:"tool_name,omitempty"`
-	Command           string             `json:"command"`
-	Cwd               string             `json:"cwd"`
-	Status            string             `json:"status"`
-	Output            string             `json:"output"`
-	FirstSeq          int64              `json:"first_seq"`
-	LastSeq           int64              `json:"last_seq"`
-	LatestSeq         int64              `json:"latest_seq"`
-	HasMore           bool               `json:"has_more"`
-	TotalBytes        int64              `json:"total_bytes"`
-	Truncated         bool               `json:"truncated"`
-	StartedAtUnixMs   int64              `json:"started_at_ms"`
-	EndedAtUnixMs     int64              `json:"ended_at_ms,omitempty"`
-	DurationMS        int64              `json:"duration_ms,omitempty"`
-	ExitCode          int                `json:"exit_code,omitempty"`
-	ExecutionLocation string             `json:"execution_location"`
-	Error             *aitools.ToolError `json:"error,omitempty"`
+	ProcessID          string             `json:"process_id"`
+	EndpointID         string             `json:"endpoint_id,omitempty"`
+	ThreadID           string             `json:"thread_id,omitempty"`
+	RunID              string             `json:"run_id,omitempty"`
+	TurnID             string             `json:"turn_id,omitempty"`
+	ToolID             string             `json:"tool_id,omitempty"`
+	ToolName           string             `json:"tool_name,omitempty"`
+	Command            string             `json:"command"`
+	Cwd                string             `json:"cwd"`
+	Status             string             `json:"status"`
+	Output             string             `json:"output"`
+	FirstSeq           int64              `json:"first_seq"`
+	LastSeq            int64              `json:"last_seq"`
+	LatestSeq          int64              `json:"latest_seq"`
+	HasMore            bool               `json:"has_more"`
+	TotalBytes         int64              `json:"total_bytes"`
+	Truncated          bool               `json:"truncated"`
+	StartedAtUnixMs    int64              `json:"started_at_ms"`
+	EndedAtUnixMs      int64              `json:"ended_at_ms,omitempty"`
+	DurationMS         int64              `json:"duration_ms,omitempty"`
+	ExitCode           int                `json:"exit_code,omitempty"`
+	ExecutionLocation  string             `json:"execution_location"`
+	Error              *aitools.ToolError `json:"error,omitempty"`
+	outputUTF8Repaired bool
 }
 
 type terminalProcess struct {
@@ -828,6 +829,7 @@ func joinTerminalOutputChunks(chunks []terminalProcessOutputChunk) string {
 }
 
 func (p *terminalProcess) snapshotWithOutputLocked(output string, firstSeq int64, lastSeq int64, latestSeq int64, hasMore bool, truncated bool) terminalProcessSnapshot {
+	output, outputUTF8Repaired := normalizeUTF8Text(output)
 	duration := int64(0)
 	if !p.startedAt.IsZero() {
 		end := p.endedAt
@@ -850,29 +852,30 @@ func (p *terminalProcess) snapshotWithOutputLocked(output string, firstSeq int64
 		err = &cp
 	}
 	return terminalProcessSnapshot{
-		ProcessID:         p.id,
-		EndpointID:        p.endpointID,
-		ThreadID:          p.threadID,
-		RunID:             p.runID,
-		TurnID:            p.turnID,
-		ToolID:            p.toolID,
-		ToolName:          p.toolName,
-		Command:           p.command,
-		Cwd:               p.cwd,
-		Status:            p.status,
-		Output:            output,
-		FirstSeq:          firstSeq,
-		LastSeq:           lastSeq,
-		LatestSeq:         latestSeq,
-		HasMore:           hasMore,
-		TotalBytes:        p.total,
-		Truncated:         truncated,
-		StartedAtUnixMs:   startedAtUnixMs,
-		EndedAtUnixMs:     endedAtUnixMs,
-		DurationMS:        duration,
-		ExitCode:          p.exitCode,
-		ExecutionLocation: ToolTargetModeLocalRuntime,
-		Error:             err,
+		ProcessID:          p.id,
+		EndpointID:         p.endpointID,
+		ThreadID:           p.threadID,
+		RunID:              p.runID,
+		TurnID:             p.turnID,
+		ToolID:             p.toolID,
+		ToolName:           p.toolName,
+		Command:            p.command,
+		Cwd:                p.cwd,
+		Status:             p.status,
+		Output:             output,
+		FirstSeq:           firstSeq,
+		LastSeq:            lastSeq,
+		LatestSeq:          latestSeq,
+		HasMore:            hasMore,
+		TotalBytes:         p.total,
+		Truncated:          truncated,
+		StartedAtUnixMs:    startedAtUnixMs,
+		EndedAtUnixMs:      endedAtUnixMs,
+		DurationMS:         duration,
+		ExitCode:           p.exitCode,
+		ExecutionLocation:  ToolTargetModeLocalRuntime,
+		Error:              err,
+		outputUTF8Repaired: outputUTF8Repaired,
 	}
 }
 

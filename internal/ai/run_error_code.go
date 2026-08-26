@@ -13,16 +13,17 @@ import (
 )
 
 const (
-	runErrorCodeProviderAuthFailed        = "provider_auth_failed"
-	runErrorCodeProviderMissingKey        = "provider_missing_key"
-	runErrorCodeProviderRateLimited       = "provider_rate_limited"
-	runErrorCodeProviderUnreachable       = "provider_unreachable"
-	runErrorCodeProviderStreamInterrupted = "provider_stream_interrupted"
-	runErrorCodeProviderModelUnavailable  = "provider_model_unavailable"
-	runErrorCodeModelGatewayContract      = "model_gateway_contract_failed"
-	runErrorCodeFloretEngineFailed        = "floret_engine_failed"
-	runErrorCodeFloretControlContract     = "floret_control_contract_failed"
-	runErrorCodeFloretAdmissionBlocked    = "floret_thread_admission_blocked"
+	runErrorCodeProviderAuthFailed         = "provider_auth_failed"
+	runErrorCodeProviderMissingKey         = "provider_missing_key"
+	runErrorCodeProviderRateLimited        = "provider_rate_limited"
+	runErrorCodeProviderUnreachable        = "provider_unreachable"
+	runErrorCodeProviderStreamInterrupted  = "provider_stream_interrupted"
+	runErrorCodeProviderModelUnavailable   = "provider_model_unavailable"
+	runErrorCodeModelGatewayContract       = "model_gateway_contract_failed"
+	runErrorCodeFloretEngineFailed         = "floret_engine_failed"
+	runErrorCodeFloretControlContract      = "floret_control_contract_failed"
+	runErrorCodeFloretAdmissionBlocked     = "floret_thread_admission_blocked"
+	runErrorCodeFloretAuthorityConsistency = "floret_authority_consistency_failed"
 )
 
 func userFacingRunError(code string, fallback string) string {
@@ -48,6 +49,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "Flower could not finish this turn because the model requested an unsupported runtime tool."
 	case runErrorCodeFloretAdmissionBlocked:
 		return "Flower could not start the next turn because the runtime still reports an active turn. Restart recovery did not complete, so the turn was not admitted."
+	case runErrorCodeFloretAuthorityConsistency:
+		return "Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue."
 	default:
 		if fallback != "" {
 			return fallback
@@ -114,9 +117,17 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return runErrorCodeFloretControlContract
 	case strings.Contains(text, "thread already has an active turn"):
 		return runErrorCodeFloretAdmissionBlocked
+	case strings.Contains(text, "floret authority state is corrupt") || strings.Contains(text, "session tree authority state is corrupt"):
+		return runErrorCodeFloretAuthorityConsistency
 	default:
 		return strings.TrimSpace(fallback)
 	}
+}
+
+func projectRunFailure(raw string, fallbackCode string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	code := classifyRunFailureCode(errors.New(raw), fallbackCode)
+	return code, userFacingRunError(code, raw)
 }
 
 func providerHTTPStatusRunErrorCode(status int) string {

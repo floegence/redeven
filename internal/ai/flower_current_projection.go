@@ -68,6 +68,11 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 			projectCurrentAttachmentURLs(input, current.Queue[index].Input.Attachments, threadID, "", current.Queue[index].ID)
 		}
 	}
+	if rawError := strings.TrimSpace(current.Error); rawError != "" {
+		code, message := projectRunFailure(rawError, "floret_turn_failed")
+		root["run_error_code"] = code
+		root["error"] = message
+	}
 	return json.Marshal(root)
 }
 

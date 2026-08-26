@@ -28,7 +28,7 @@ The native package and OCI image enter Redeven's signed catalog only after their
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.17.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.17.1 | Floegence first-party dependency. |
-| github.com/floegence/floret/v5 | v5.0.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v5@v5.0.2 | Detected from LICENSE. |
+| github.com/floegence/floret/v5 | v5.0.3 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v5@v5.0.3 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v3 | v3.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v3@v3.2.0 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin/v3 | v3.0.16 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.16 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |

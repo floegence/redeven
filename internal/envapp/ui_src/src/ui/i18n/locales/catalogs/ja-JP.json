@@ -3619,6 +3619,7 @@
       "runErrorModelGatewayContractFailed": "モデルソースから不完全なツール呼び出しが返されたため、ツールは実行されませんでした。再試行するか、別のモデルを選択してください。",
       "runErrorFloretEngineFailed": "Flower は、オーケストレーション エンジンが失敗したため、このターンを終了できませんでした。",
       "runErrorFloretControlContractFailed": "モデルが現在のランタイムでサポートされていないツールを要求したため、Flower はこのターンを終了できませんでした。",
+      "runErrorFloretAuthorityConsistencyFailed": "確定済みのツール結果を検証できなかったため、Flower はこのターンを完了できませんでした。ツールは再実行されません。新しいメッセージを送信して続行してください。",
       "runErrorRuntimeRestarted": "この返信が完了する前にローカル実行環境が再起動しました。実行環境の準備ができたら新しい返信を開始してください。",
       "runtimeRestartedDivider": "Redeven ランタイムが再起動しました",
       "messageErrorTitle": "メッセージの処理に失敗しました。",

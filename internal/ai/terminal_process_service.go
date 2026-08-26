@@ -7,6 +7,7 @@ import (
 	"time"
 
 	fltools "github.com/floegence/floret/v5/tools"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -43,6 +44,7 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), snapshot); err != nil {
 		return nil, err
 	}
+	s.logTerminalOutputEncodingRepair(snapshot, "read")
 	return &snapshot, nil
 }
 
@@ -76,6 +78,7 @@ func (s *Service) WriteTerminalProcess(ctx context.Context, meta *session.Meta, 
 		return nil, err
 	}
 	snapshot, err := proc.Write(input)
+	s.logTerminalOutputEncodingRepair(snapshot, "write")
 	if err != nil {
 		return &snapshot, err
 	}
@@ -99,10 +102,28 @@ func (s *Service) TerminateTerminalProcess(ctx context.Context, meta *session.Me
 		return nil, err
 	}
 	snapshot, err := proc.Terminate(ctx)
+	s.logTerminalOutputEncodingRepair(snapshot, "terminate")
 	if err != nil {
 		return &snapshot, err
 	}
 	return &snapshot, nil
+}
+
+func (s *Service) logTerminalOutputEncodingRepair(snapshot terminalProcessSnapshot, source string) {
+	if s == nil || s.log == nil || !snapshot.outputUTF8Repaired {
+		return
+	}
+	s.log.Debug(
+		"ai: normalized invalid UTF-8 in terminal output",
+		"source", logsafe.Text(source, 32),
+		"endpoint_id", logsafe.Text(snapshot.EndpointID, 256),
+		"thread_id", logsafe.Text(snapshot.ThreadID, 256),
+		"run_id", logsafe.Text(snapshot.RunID, 256),
+		"process_id", logsafe.Text(snapshot.ProcessID, 256),
+		"first_seq", snapshot.FirstSeq,
+		"last_seq", snapshot.LastSeq,
+		"total_bytes", snapshot.TotalBytes,
+	)
 }
 
 func validateTerminalProcessAccess(meta *session.Meta, runID string, snapshot terminalProcessSnapshot) error {

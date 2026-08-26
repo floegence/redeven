@@ -1744,6 +1744,7 @@ func contractSafeString(value string, limit int) (string, bool) {
 	if value == "" {
 		return "", false
 	}
+	value, _ = normalizeUTF8Text(value)
 	runes := []rune(value)
 	if len(runes) <= limit {
 		return value, false

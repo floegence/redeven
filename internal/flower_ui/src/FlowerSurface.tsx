@@ -2313,6 +2313,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.floretEngineFailed;
       case 'floret_control_contract_failed':
         return copy().chat.runErrors.floretControlContractFailed;
+      case 'floret_authority_consistency_failed':
+        return copy().chat.runErrors.floretAuthorityConsistencyFailed;
       case 'runtime_restarted':
         return copy().chat.runErrors.runtimeRestarted;
       default:

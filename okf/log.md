@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-08-26
+* **Terminal UTF-8 boundary and Floret v5.0.3 adoption**: Redeven now keeps
+  terminal byte accounting inside the PTY owner but normalizes invalid UTF-8 at
+  the single text projection boundary. Published Floret v5.0.3 consumes the
+  committed Effect entry as the canonical result without replaying a duplicate
+  payload comparison.
+* **Authority failure presentation**: Canonical consistency failures retain
+  their historical facts and fail closed, while server-side classification and
+  localized Flower copy hide internal storage wording and state explicitly that
+  an Effect was not rerun.
+
 ## 2026-08-25
 * **Flower New Chat admission handoff**: Canonical request-key confirmation now
   settles the submitted draft, caches the real thread, transfers a still-current

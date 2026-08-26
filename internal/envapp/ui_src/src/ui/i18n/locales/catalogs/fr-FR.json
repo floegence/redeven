@@ -3619,6 +3619,7 @@
       "runErrorModelGatewayContractFailed": "La source du modèle a renvoyé un appel d’outil incomplet. Aucun outil n’a été exécuté. Réessayez ou choisissez un autre modèle.",
       "runErrorFloretEngineFailed": "Flower n'a pas pu terminer ce tour en raison d'une panne du moteur d'orchestration.",
       "runErrorFloretControlContractFailed": "Flower n'a pas pu terminer ce tour, car le modèle a demandé un outil non pris en charge par l'environnement d'exécution actuel.",
+      "runErrorFloretAuthorityConsistencyFailed": "Flower n'a pas pu terminer ce tour, car le résultat d'outil validé n'a pas pu être vérifié. L'outil n'a pas été réexécuté ; envoyez un nouveau message pour continuer.",
       "runErrorRuntimeRestarted": "L’environnement d’exécution local a redémarré avant la fin de cette réponse. Lancez une nouvelle réponse lorsqu’il est prêt.",
       "runtimeRestartedDivider": "L'environnement d'exécution Redeven a redémarré",
       "messageErrorTitle": "Échec du message",
