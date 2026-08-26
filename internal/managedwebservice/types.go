@@ -107,6 +107,7 @@ type HostTemplateSpec struct {
 	StopScript      string            `json:"stop_script,omitempty"`
 	UninstallScript string            `json:"uninstall_script,omitempty"`
 	Artifact        *HostArtifactSpec `json:"artifact,omitempty"`
+	RuntimeBundle   string            `json:"runtime_bundle,omitempty"`
 }
 
 type ContainerMountSpec struct {

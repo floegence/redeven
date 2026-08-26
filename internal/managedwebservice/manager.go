@@ -34,17 +34,18 @@ type ManagerOptions struct {
 }
 
 type Manager struct {
-	log        *slog.Logger
-	stateDir   string
-	registry   *pfregistry.Registry
-	scope      *filesystemscope.Registry
-	containers *containers.Adapter
-	catalog    *catalogClient
-	native     deploymentDriver
-	docker     deploymentDriver
-	host       deploymentDriver
-	container  deploymentDriver
-	compose    deploymentDriver
+	log           *slog.Logger
+	stateDir      string
+	registry      *pfregistry.Registry
+	scope         *filesystemscope.Registry
+	containers    *containers.Adapter
+	downloads     *packageDownloadClient
+	nativeRuntime *nativeDriver
+	native        deploymentDriver
+	docker        deploymentDriver
+	host          deploymentDriver
+	container     deploymentDriver
+	compose       deploymentDriver
 
 	requestMu    sync.Mutex
 	mu           sync.Mutex
@@ -74,8 +75,9 @@ func New(opts ManagerOptions) (*Manager, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: defaultCatalogClient(), cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
-	m.native = &nativeDriver{log: logger, stateDir: root, client: m.catalog.packageHTTPClient()}
+	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, downloads: defaultPackageDownloadClient(), cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	m.nativeRuntime = &nativeDriver{log: logger, stateDir: root, client: m.downloads.packageHTTPClient(), packageOrigin: defaultNodePackageOrigin}
+	m.native = m.nativeRuntime
 	m.docker = &dockerDriver{adapter: opts.Containers, stateDir: root}
 	m.host = &hostScriptDriver{manager: m, processes: map[string]nativeProcess{}}
 	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
@@ -153,34 +155,15 @@ func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
 	if dockerAvailable && (!dockerArtifactAvailable || dockerArtifact.Image != auditedDockerImage || !dockerDigestPattern.MatchString(strings.TrimSpace(dockerArtifact.Digest))) {
 		dockerAvailable, dockerReasonCode, dockerReason = false, "DOCKER_PLATFORM_UNSUPPORTED", "The reviewed DeepSeek Harness image does not include this CPU architecture."
 	}
-	catalogCtx, cancelCatalog := context.WithTimeout(ctx, 4*time.Second)
-	payload, catalogErr := m.catalog.resolve(catalogCtx)
-	cancelCatalog()
-	if catalogErr != nil {
-		code, _, _, _ := ErrorDetails(catalogErr)
-		reasonCode, reason := "CATALOG_UNAVAILABLE", "The audited managed-service catalog is not currently available."
-		if code == "CATALOG_TRUST_UNAVAILABLE" {
-			reasonCode, reason = code, "This build has no audited managed-service catalog trust anchor."
-		}
-		if nativeAvailable {
-			nativeAvailable, nativeReasonCode, nativeReason = false, reasonCode, reason
-		}
-	} else {
-		if nativeAvailable {
-			artifact, ok := payload.Platforms[currentPlatformKey()]
-			if !ok || validateNativeArtifact(artifact, m.catalog.packageHTTPClient(), m.catalog.packageOrigin) != nil {
-				nativeAvailable, nativeReasonCode, nativeReason = false, "CATALOG_UNAVAILABLE", "The audited catalog does not include a usable native package for this Environment."
-			}
+	if nativeAvailable {
+		artifact, ok := auditedNativeArtifact(currentPlatformKey())
+		if !ok || validateNativeArtifact(artifact, m.downloads.packageHTTPClient(), defaultNodePackageOrigin) != nil {
+			nativeAvailable, nativeReasonCode, nativeReason = false, "NATIVE_RUNTIME_UNAVAILABLE", "This Redeven release does not include a usable host runtime for the Environment platform."
 		}
 	}
 	workspaceRoots := m.workspaceRoots()
-	hostSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: `exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"`}}
+	hostSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: `exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"`, RuntimeBundle: deepSeekRuntimeBundleID}}
 	containerSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: auditedDockerImage, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {Type: "workspace", Target: "/workspace"}, {Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512}}
-	if catalogErr == nil {
-		if artifact, ok := payload.Platforms[currentPlatformKey()]; ok {
-			hostSpec.Host.Artifact = &HostArtifactSpec{DownloadURL: artifact.DownloadURL, SizeBytes: artifact.SizeBytes, SHA256: artifact.SHA256, ExecutableRelPath: artifact.ExecutableRelPath}
-		}
-	}
 	if dockerArtifactAvailable {
 		containerSpec.Container.Image = dockerArtifact.Image + "@" + dockerArtifact.Digest
 	}
@@ -529,15 +512,11 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
 	m.progress(op, "environment_check", 1)
 	payload := catalogPayload{}
-	var err error
 	switch Deployment(service.Deployment) {
 	case DeploymentNative:
-		payload, err = m.catalog.resolve(ctx)
+		payload = auditedNativeCatalog()
 	case DeploymentDocker:
 		payload = auditedDockerCatalog()
-	}
-	if err != nil {
-		return err
 	}
 	stage := map[Deployment]string{DeploymentNative: "downloading", DeploymentDocker: "pulling", DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[Deployment(service.Deployment)]
 	m.progress(op, stage, 2)

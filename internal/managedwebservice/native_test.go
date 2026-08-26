@@ -4,6 +4,11 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,7 +21,7 @@ import (
 func TestNativeCommandUsesOnlySupportedWebFlags(t *testing.T) {
 	t.Parallel()
 	service := &pfregistry.ManagedService{RuntimePort: 43123}
-	want := []string{"web", "--host", "127.0.0.1", "--port", "43123"}
+	want := []string{"web", "--host", "127.0.0.1", "--port", "43123", "--no-open"}
 	if got := nativeCommandArgs(service); !reflect.DeepEqual(got, want) {
 		t.Fatalf("native command args = %v, want %v", got, want)
 	}
@@ -38,12 +43,76 @@ func TestExtractManagedArchiveAcceptsFilesAndRejectsEscapes(t *testing.T) {
 	if err := extractManagedArchive(unsafeArchive, filepath.Join(t.TempDir(), "unsafe")); err == nil || !strings.Contains(err.Error(), "escapes destination") {
 		t.Fatalf("unsafe archive error = %v", err)
 	}
+
+	symlinkArchive := writeNativeTestArchive(t, []nativeTestArchiveEntry{{name: "bin/npm", typeflag: tar.TypeSymlink, linkname: "../lib/npm.js"}})
+	if err := extractManagedArchive(symlinkArchive, filepath.Join(t.TempDir(), "strict-links")); err == nil || !strings.Contains(err.Error(), "symbolic links") {
+		t.Fatalf("custom package symlink error = %v", err)
+	}
+	nodeDestination := filepath.Join(t.TempDir(), "node-links")
+	if err := extractNodeRuntimeArchive(symlinkArchive, nodeDestination); err != nil {
+		t.Fatalf("skip audited Node.js tool symlink: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(nodeDestination, "bin", "npm")); !os.IsNotExist(err) {
+		t.Fatalf("ignored Node.js tool symlink exists: %v", err)
+	}
+}
+
+func TestNativeInstallBuildsPrivateReleaseLockedRuntime(t *testing.T) {
+	t.Parallel()
+	archivePath := writeNativeTestArchive(t, []nativeTestArchiveEntry{
+		{name: "node-test/bin/node", body: "node", mode: 0o755},
+		{name: "node-test/lib/node_modules/npm/bin/npm-cli.js", body: "npm", mode: 0o644},
+	})
+	archive, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+	digest := sha256.Sum256(archive)
+	artifact := nativeArtifact{
+		DownloadURL: server.URL + "/node.tar.gz", SHA256: hex.EncodeToString(digest[:]), SizeBytes: int64(len(archive)),
+		ArchiveRoot: "node-test", NodeRelPath: "node-test/bin/node", NPMCLIRelPath: "node-test/lib/node_modules/npm/bin/npm-cli.js", ExecutableRelPath: "bin/dsh",
+	}
+	installCalls := 0
+	driver := &nativeDriver{
+		stateDir: t.TempDir(), client: server.Client(), packageOrigin: server.URL,
+		packageInstaller: func(_ context.Context, _, _, appRoot, _ string) error {
+			installCalls++
+			entry := filepath.Join(appRoot, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js")
+			if err := os.MkdirAll(filepath.Dir(entry), 0o700); err != nil {
+				return err
+			}
+			return os.WriteFile(entry, []byte("dsh"), 0o600)
+		},
+	}
+	service := &pfregistry.ManagedService{ServiceID: "mws_native_install"}
+	catalog := catalogPayload{Platforms: map[string]nativeArtifact{currentPlatformKey(): artifact}}
+	_, executable, err := driver.Install(context.Background(), service, catalog, func(string, int64) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	installRoot := filepath.Dir(filepath.Dir(executable))
+	if installCalls != 1 || !regularExecutable(executable) {
+		t.Fatalf("native install calls=%d executable=%q", installCalls, executable)
+	}
+	if err := verifyInstalledNativeRuntime(installRoot, artifact); err != nil {
+		t.Fatalf("verify installed runtime: %v", err)
+	}
+	_, replayed, err := driver.Install(context.Background(), service, catalog, func(string, int64) {})
+	if err != nil || replayed != executable || installCalls != 1 {
+		t.Fatalf("idempotent native install executable=%q calls=%d err=%v", replayed, installCalls, err)
+	}
 }
 
 type nativeTestArchiveEntry struct {
-	name string
-	body string
-	mode int64
+	name     string
+	body     string
+	mode     int64
+	typeflag byte
+	linkname string
 }
 
 func writeNativeTestArchive(t *testing.T, entries []nativeTestArchiveEntry) string {
@@ -52,11 +121,21 @@ func writeNativeTestArchive(t *testing.T, entries []nativeTestArchiveEntry) stri
 	gz := gzip.NewWriter(&raw)
 	tw := tar.NewWriter(gz)
 	for _, entry := range entries {
-		if err := tw.WriteHeader(&tar.Header{Name: entry.name, Mode: entry.mode, Size: int64(len(entry.body)), Typeflag: tar.TypeReg}); err != nil {
+		typeflag := entry.typeflag
+		if typeflag == 0 {
+			typeflag = tar.TypeReg
+		}
+		size := int64(len(entry.body))
+		if typeflag != tar.TypeReg {
+			size = 0
+		}
+		if err := tw.WriteHeader(&tar.Header{Name: entry.name, Mode: entry.mode, Size: size, Typeflag: typeflag, Linkname: entry.linkname}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tw.Write([]byte(entry.body)); err != nil {
-			t.Fatal(err)
+		if size > 0 {
+			if _, err := tw.Write([]byte(entry.body)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	if err := tw.Close(); err != nil {

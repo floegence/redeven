@@ -2,35 +2,20 @@ package managedwebservice
 
 import (
 	"bytes"
-	"context"
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 	"time"
-
-	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
 )
 
 const (
-	defaultCatalogURL    = "https://version.agent.redeven.com/v1/managed-web-services/deepseek-harness/0.1.1-rc.2.json"
-	defaultPackageOrigin = "https://agent.package.redeven.com"
-	maxCatalogBytes      = 256 * 1024
-	managedCatalogKeyID  = "redeven_official_signing_2026_08"
+	defaultNodePackageOrigin = "https://nodejs.org"
+	deepSeekRuntimeBundleID  = "deepseek-harness-0.1.1-rc.2-node-24.19.0"
 )
-
-type signedCatalogEnvelope struct {
-	SchemaVersion int    `json:"schema_version"`
-	KeyID         string `json:"key_id"`
-	Payload       string `json:"payload"`
-	Signature     string `json:"signature"`
-}
 
 type catalogPayload struct {
 	TemplateID string                    `json:"template_id"`
@@ -43,6 +28,9 @@ type nativeArtifact struct {
 	DownloadURL       string `json:"download_url"`
 	SHA256            string `json:"sha256"`
 	SizeBytes         int64  `json:"size_bytes"`
+	ArchiveRoot       string `json:"archive_root"`
+	NodeRelPath       string `json:"node_rel_path"`
+	NPMCLIRelPath     string `json:"npm_cli_rel_path"`
 	ExecutableRelPath string `json:"executable_rel_path"`
 }
 
@@ -51,17 +39,12 @@ type dockerArtifact struct {
 	Digest string `json:"digest"`
 }
 
-type catalogClient struct {
-	client        *http.Client
-	catalogURL    string
-	packageOrigin string
-	publicKey     ed25519.PublicKey
-	keyID         string
+type packageDownloadClient struct {
+	client *http.Client
 }
 
-func defaultCatalogClient() *catalogClient {
-	key, _ := redevpluginartifacts.OfficialSigningPublicKey()
-	return &catalogClient{
+func defaultPackageDownloadClient() *packageDownloadClient {
+	return &packageDownloadClient{
 		client: &http.Client{Timeout: 70 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 4 {
 				return errors.New("too many redirects")
@@ -71,69 +54,16 @@ func defaultCatalogClient() *catalogClient {
 			}
 			return nil
 		}},
-		catalogURL: defaultCatalogURL, packageOrigin: defaultPackageOrigin, publicKey: append(ed25519.PublicKey(nil), key.PublicKey...), keyID: key.KeyID,
 	}
 }
 
-func (c *catalogClient) packageHTTPClient() *http.Client {
+func (c *packageDownloadClient) packageHTTPClient() *http.Client {
 	if c == nil || c.client == nil {
 		return nil
 	}
 	client := *c.client
 	client.Timeout = 30 * time.Minute
 	return &client
-}
-
-func (c *catalogClient) trusted() bool {
-	return c != nil && c.keyID == managedCatalogKeyID && len(c.publicKey) == ed25519.PublicKeySize
-}
-
-func (c *catalogClient) resolve(ctx context.Context) (catalogPayload, error) {
-	if !c.trusted() {
-		return catalogPayload{}, serviceError("CATALOG_TRUST_UNAVAILABLE", "This Redeven build does not include the managed service catalog trust anchor.", 503, false, nil)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.catalogURL, nil)
-	if err != nil {
-		return catalogPayload{}, err
-	}
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return catalogPayload{}, serviceError("CATALOG_UNAVAILABLE", "The audited package catalog is unavailable.", 503, true, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return catalogPayload{}, serviceError("CATALOG_UNAVAILABLE", "The audited package catalog is unavailable.", 503, true, fmt.Errorf("catalog returned %s", resp.Status))
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxCatalogBytes+1))
-	if err != nil {
-		return catalogPayload{}, err
-	}
-	if len(body) > maxCatalogBytes {
-		return catalogPayload{}, serviceError("CATALOG_INVALID", "The audited package catalog is invalid.", 502, false, nil)
-	}
-	var envelope signedCatalogEnvelope
-	if err := decodeStrictJSON(body, &envelope); err != nil {
-		return catalogPayload{}, serviceError("CATALOG_INVALID", "The audited package catalog is invalid.", 502, false, err)
-	}
-	if envelope.SchemaVersion != 1 || envelope.KeyID != c.keyID {
-		return catalogPayload{}, serviceError("CATALOG_INVALID", "The audited package catalog has an unsupported schema or signing identity.", 502, false, nil)
-	}
-	payloadBytes, err := base64.StdEncoding.DecodeString(envelope.Payload)
-	if err != nil {
-		return catalogPayload{}, serviceError("CATALOG_INVALID", "The audited package catalog payload is invalid.", 502, false, err)
-	}
-	signature, err := base64.StdEncoding.DecodeString(envelope.Signature)
-	if err != nil || !ed25519.Verify(c.publicKey, payloadBytes, signature) {
-		return catalogPayload{}, serviceError("CATALOG_SIGNATURE_INVALID", "The audited package catalog signature is invalid.", 502, false, err)
-	}
-	var payload catalogPayload
-	if err := decodeStrictJSON(payloadBytes, &payload); err != nil {
-		return catalogPayload{}, serviceError("CATALOG_INVALID", "The audited package catalog payload is invalid.", 502, false, err)
-	}
-	if payload.TemplateID != DeepSeekHarnessTemplateID || payload.Version != DeepSeekHarnessVersion {
-		return catalogPayload{}, serviceError("CATALOG_VERSION_MISMATCH", "The audited package catalog does not match the fixed DeepSeek Harness version.", 502, false, nil)
-	}
-	return payload, nil
 }
 
 func decodeStrictJSON(raw []byte, destination any) error {
@@ -153,6 +83,51 @@ func decodeStrictJSON(raw []byte, destination any) error {
 }
 
 func currentPlatformKey() string { return runtime.GOOS + "-" + runtime.GOARCH }
+
+func auditedNativeArtifact(platform string) (nativeArtifact, bool) {
+	const nodeVersion = "24.19.0"
+	type identity struct {
+		SHA256 string
+		Size   int64
+	}
+	identities := map[string]identity{
+		"darwin-arm64": {SHA256: "8294b7aa9b03997481c06babf1e8b270c859358f27da57a11509afe537ac381d", Size: 52234372},
+		"darwin-amd64": {SHA256: "d1b5e999db158c62fe8f7267a4476b035d8bd93b1a605bac24a3f0dd166e3316", Size: 53439583},
+		"linux-arm64":  {SHA256: "d28c8a5bf0a808f0ed434a1dce8c54ae98f0371c0bd86ac58abc613f73e6643f", Size: 57128466},
+		"linux-amd64":  {SHA256: "f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4", Size: 57409532},
+	}
+	entry, ok := identities[platform]
+	if !ok {
+		return nativeArtifact{}, false
+	}
+	parts := strings.Split(platform, "-")
+	if len(parts) != 2 {
+		return nativeArtifact{}, false
+	}
+	arch := parts[1]
+	if arch == "amd64" {
+		arch = "x64"
+	}
+	archiveRoot := "node-v" + nodeVersion + "-" + parts[0] + "-" + arch
+	return nativeArtifact{
+		DownloadURL:       defaultNodePackageOrigin + "/dist/v" + nodeVersion + "/" + archiveRoot + ".tar.gz",
+		SHA256:            entry.SHA256,
+		SizeBytes:         entry.Size,
+		ArchiveRoot:       archiveRoot,
+		NodeRelPath:       archiveRoot + "/bin/node",
+		NPMCLIRelPath:     archiveRoot + "/lib/node_modules/npm/bin/npm-cli.js",
+		ExecutableRelPath: "bin/dsh",
+	}, true
+}
+
+func auditedNativeCatalog() catalogPayload {
+	platforms := make(map[string]nativeArtifact, 4)
+	for _, platform := range []string{"darwin-arm64", "darwin-amd64", "linux-arm64", "linux-amd64"} {
+		artifact, _ := auditedNativeArtifact(platform)
+		platforms[platform] = artifact
+	}
+	return catalogPayload{TemplateID: DeepSeekHarnessTemplateID, Version: DeepSeekHarnessVersion, Platforms: platforms}
+}
 
 func validatePackageURL(raw, origin string) error {
 	parsed, err := url.Parse(strings.TrimSpace(raw))

@@ -198,7 +198,7 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 func completeBuiltInDuplicateSpec(spec TemplateSpec) bool {
 	switch spec.Kind {
 	case DeploymentHost:
-		return spec.Host != nil && spec.Host.Artifact != nil
+		return spec.Host != nil && (spec.Host.Artifact != nil || spec.Host.RuntimeBundle == deepSeekRuntimeBundleID)
 	case DeploymentContainer:
 		return spec.Container != nil && strings.Contains(spec.Container.Image, "@sha256:")
 	default:
@@ -326,6 +326,9 @@ func validateTemplateSpec(spec TemplateSpec) error {
 			if len(script) > 128*1024 || strings.ContainsRune(script, '\x00') {
 				return serviceError("TEMPLATE_HOST_INVALID", "A host lifecycle script is too large or invalid.", 400, false, nil)
 			}
+		}
+		if spec.Host.RuntimeBundle != "" && (spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || spec.Host.Artifact != nil) {
+			return serviceError("TEMPLATE_RUNTIME_BUNDLE_INVALID", "The host template runtime bundle is not supported or conflicts with a package artifact.", 400, false, nil)
 		}
 	case DeploymentContainer:
 		if spec.Container == nil || !validImageReference(spec.Container.Image) || spec.Endpoint.ContainerPort < 1 || spec.Endpoint.ContainerPort > 65535 {
