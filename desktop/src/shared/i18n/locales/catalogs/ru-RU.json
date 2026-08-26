@@ -1743,7 +1743,6 @@
     "reinstallCheckingDetail": "Desktop повторно проверяет подтверждённые хост, контейнер и корневой каталог Redeven.",
     "reinstallTargetResolvedDetail": "Desktop подтвердил точно зарегистрированную цель Redeven.",
     "reinstallSessionsClosedDetail": "Desktop закрыл окна сред и bridges, подключённые к этой цели.",
-    "reinstallHelperPreparingDetail": "Desktop готовит текущий служебный helper вне старого корневого каталога Redeven.",
     "reinstallInventoryDetail": "Desktop определяет процессы Redeven, принадлежащие именно этой цели.",
     "reinstallStoppingProcessesDetail": "Desktop останавливает процессы Redeven для этой цели.",
     "reinstallProcessesStoppedDetail": "Desktop подтвердил, что для этой цели не осталось старых процессов Redeven.",
@@ -1872,7 +1871,6 @@
     "checkingContainer": "Проверка контейнера",
     "detectingPlatform": "Определение платформы",
     "checkingRuntimePackage": "Проверка пакета среды выполнения",
-    "preparingMaintenanceHelper": "Подготовка ресурсов среды выполнения",
     "stoppingRuntimeProcess": "Остановка процесса среды выполнения",
     "verifyingRuntimeStopped": "Проверка среды выполнения остановлено",
     "verifyingRuntimeInventory": "Проверка списка процессов среды выполнения",
@@ -2013,8 +2011,7 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "Среда выполнения",
-      "maintenanceHelper": "Служебный помощник"
+      "runtime": "Среда выполнения"
     }
   },
   "runtimeMessage": {

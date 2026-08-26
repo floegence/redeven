@@ -3,10 +3,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const registeredSource = Object.freeze({ acquire: vi.fn() });
+const privateRegisteredSource = Object.freeze({ acquire: vi.fn() });
 const createControlplaneArtifactSource = vi.fn((_options: Record<string, unknown>) => registeredSource);
+const createPrivateLoopbackControlplaneArtifactSource = vi.fn(
+  (_options: Record<string, unknown>) => privateRegisteredSource,
+);
 
 vi.mock('@floegence/floe-webapp-boot/artifact-source', () => ({
   createControlplaneArtifactSource,
+  createPrivateLoopbackControlplaneArtifactSource,
 }));
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -33,6 +38,7 @@ describe('controlplaneApi local access flow', () => {
     vi.restoreAllMocks();
     registeredSource.acquire.mockClear();
     createControlplaneArtifactSource.mockClear();
+    createPrivateLoopbackControlplaneArtifactSource.mockClear();
     window.history.replaceState(null, document.title, '/_redeven_proxy/env/');
   });
 
@@ -257,7 +263,11 @@ describe('controlplaneApi local access flow', () => {
     const beforeAcquire = vi.fn();
     const afterCredentialStaged = vi.fn();
     const mod = await import('./controlplaneApi');
-    const source = await mod.createLocalDirectArtifactSource({ beforeAcquire, afterCredentialStaged });
+    const source = await mod.createLocalDirectArtifactSource({
+      transport: 'public_tls',
+      beforeAcquire,
+      afterCredentialStaged,
+    });
 
     expect(source).toBe(registeredSource);
     expect(createControlplaneArtifactSource).toHaveBeenCalledWith(expect.objectContaining({
@@ -290,6 +300,22 @@ describe('controlplaneApi local access flow', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('selects the private artifact source only for the explicit Desktop transport', async () => {
+    const mod = await import('./controlplaneApi');
+    const source = await mod.createLocalDirectArtifactSource({
+      transport: 'desktop_private_bridge_v2',
+    });
+
+    expect(source).toBe(privateRegisteredSource);
+    expect(createPrivateLoopbackControlplaneArtifactSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: window.location.origin,
+        endpointId: 'env_local',
+      }),
+    );
+    expect(createControlplaneArtifactSource).not.toHaveBeenCalled();
+  });
+
   it('waits for the exact plugin binding and accepts the empty 204 readiness response', async () => {
     const auth = await import('./localAccessAuth');
     auth.writeLocalAccessResumeToken('resume-ready');
@@ -320,7 +346,7 @@ describe('controlplaneApi local access flow', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const mod = await import('./controlplaneApi');
-    await mod.createLocalDirectArtifactSource();
+    await mod.createLocalDirectArtifactSource({ transport: 'public_tls' });
     const sourceOptions = createControlplaneArtifactSource.mock.calls[0]?.[0] as {
       fetch: typeof globalThis.fetch;
     };
@@ -354,7 +380,7 @@ describe('controlplaneApi local access flow', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const mod = await import('./controlplaneApi');
-    await mod.createLocalDirectArtifactSource();
+    await mod.createLocalDirectArtifactSource({ transport: 'public_tls' });
     const sourceOptions = createControlplaneArtifactSource.mock.calls[0]?.[0] as {
       commitSpend: (request: Record<string, any>, signal?: AbortSignal) => Promise<void>;
     };

@@ -99,7 +99,7 @@ export function bootstrapDesktopSessionContextBridge(): void {
         ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
         ...(label !== '' ? { label } : {}),
         ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
-        ...(documentTransport === 'desktop_private_bridge_v1' ? { document_transport: documentTransport } : {}),
+        ...(documentTransport === 'desktop_private_bridge_v2' ? { document_transport: documentTransport } : {}),
       };
     },
     getTransportRecoverySnapshot: () => currentRecoverySnapshot,

@@ -8,7 +8,7 @@ export type DesktopComponentTaskProgressStatus =
   | 'succeeded';
 
 export type DesktopComponentTaskProgress = Readonly<{
-  id: 'gateway' | 'runtime' | 'maintenance_helper';
+  id: 'gateway' | 'runtime';
   status: DesktopComponentTaskProgressStatus;
   phase: 'preparing' | 'transferring' | 'verifying' | 'ready';
   strategy: 'desktop_upload' | 'remote_install';

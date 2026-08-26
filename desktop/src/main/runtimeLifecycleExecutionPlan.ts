@@ -214,8 +214,6 @@ function packageTailFrom(
         : ['detecting_platform', ...packageInstallSteps(), ...startReadySteps()];
     case 'checking_runtime_package':
       return ['checking_runtime_package'];
-    case 'preparing_maintenance_helper':
-      return ['preparing_maintenance_helper', 'installing_runtime_package', ...startReadySteps()];
     case 'preparing_runtime_package':
       return ['preparing_runtime_package', 'installing_runtime_package', ...startReadySteps()];
     case 'installing_runtime_package':

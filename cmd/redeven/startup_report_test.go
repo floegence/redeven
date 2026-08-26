@@ -127,12 +127,36 @@ func TestWriteDesktopLaunchReportBlocked(t *testing.T) {
 	}
 }
 
-func TestWriteDesktopLaunchReportRejectsMissingLocalURL(t *testing.T) {
+func TestWriteDesktopLaunchReportRejectsMissingLocalEndpoints(t *testing.T) {
 	err := writeDesktopLaunchReport(filepath.Join(t.TempDir(), "report.json"), desktopLaunchReport{
 		Status: desktopLaunchStatusReady,
 	})
 	if err == nil {
-		t.Fatalf("expected missing local_ui_url error")
+		t.Fatalf("expected missing private Local UI bridge error")
+	}
+}
+
+func TestWriteDesktopLaunchReportAcceptsPrivateBridgeWithoutPublicURL(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.json")
+	err := writeDesktopLaunchReport(path, desktopLaunchReport{
+		Status:             desktopLaunchStatusReady,
+		LocalUIBridgeURL:   "http://127.0.0.1:43124/",
+		LocalUIBridgeToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		Exposure:           runtimemanagement.NewLocalUIExposure(false, false),
+	})
+	if err != nil {
+		t.Fatalf("writeDesktopLaunchReport() error = %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	var report desktopLaunchReport
+	if err := json.Unmarshal(body, &report); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if report.LocalUIURL != "" || len(report.LocalUIURLs) != 0 {
+		t.Fatalf("private-only report published public URLs: %#v", report)
 	}
 }
 

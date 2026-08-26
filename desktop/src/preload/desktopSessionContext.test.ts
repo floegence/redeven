@@ -48,7 +48,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
         renderer_storage_scope_id: 'local',
         target_kind: 'local_environment',
         target_route: 'local_host',
-        document_transport: 'desktop_private_bridge_v1',
+        document_transport: 'desktop_private_bridge_v2',
       };
     });
   });
@@ -64,7 +64,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
       renderer_storage_scope_id: 'local',
       target_kind: 'local_environment',
       target_route: 'local_host',
-      document_transport: 'desktop_private_bridge_v1',
+      document_transport: 'desktop_private_bridge_v2',
     });
 
     bridge.notifyAppReady({ state: 'access_gate_interactive' });
@@ -105,7 +105,7 @@ describe('bootstrapDesktopSessionContextBridge', () => {
       local_environment_id: 'local',
       renderer_storage_scope_id: 'local',
       target_route: 'local_host',
-      document_transport: 'desktop_private_bridge_v2',
+      document_transport: 'desktop_private_bridge_v1',
     });
     const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
     bootstrapDesktopSessionContextBridge();

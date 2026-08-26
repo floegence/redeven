@@ -306,7 +306,6 @@ function spawnStreamingCommand(
   }) as SpawnedStreamingCommand;
   let settled = false;
   let timedOut = false;
-  let stdout = '';
   let stderr = '';
   const timeoutMs = Number(options.timeout_ms);
   const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
@@ -316,8 +315,9 @@ function spawnStreamingCommand(
           child.kill('SIGTERM');
       }, timeoutMs)
       : undefined;
-  child.stdout.setEncoding('utf8');
-  child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+  // stdout is the caller-owned streaming protocol channel. Do not decode or
+  // observe it here: a data listener would consume bridge frames, and UTF-8
+  // decoding would corrupt their binary length prefix.
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', (chunk: string) => { stderr += chunk; });
   const closed = new Promise<void>((resolve, reject) => {
@@ -329,7 +329,6 @@ function spawnStreamingCommand(
           command,
           reason: `timed out after ${Math.floor(timeoutMs)} ms`,
           code: 'runtime_host_command_timeout',
-          stdout,
           stderr,
         }));
         return;
@@ -346,7 +345,6 @@ function spawnStreamingCommand(
           command,
           reason: `timed out after ${Math.floor(timeoutMs)} ms`,
           code: 'runtime_host_command_timeout',
-          stdout,
           stderr,
         }));
         return;

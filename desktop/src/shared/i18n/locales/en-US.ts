@@ -923,7 +923,6 @@ export const enUS = {
     reinstallCheckingDetail: 'Desktop is revalidating the confirmed host, container, and Redeven root.',
     reinstallTargetResolvedDetail: 'Desktop confirmed the exact registered Redeven target.',
     reinstallSessionsClosedDetail: 'Desktop closed Environment windows and bridges connected to this target.',
-    reinstallHelperPreparingDetail: 'Desktop is preparing the current bundled maintenance helper outside the old Redeven root.',
     reinstallPackagesPreparingDetail: 'Desktop is preparing and transferring the Runtime package.',
     reinstallPackagesApplyingDetail: 'Desktop is applying the verified Runtime package.',
     reinstallInventoryDetail: 'Desktop is identifying Redeven processes owned by this exact target.',
@@ -963,7 +962,6 @@ export const enUS = {
     componentName: {
       gateway: 'Gateway',
       runtime: 'Runtime',
-      maintenanceHelper: 'Maintenance helper',
     },
     local: 'Local',
     localContainer: 'Local container',
@@ -1066,7 +1064,6 @@ export const enUS = {
     checkingContainer: 'Checking container',
     detectingPlatform: 'Detecting platform',
     checkingRuntimePackage: 'Checking Runtime package',
-    preparingMaintenanceHelper: 'Preparing Runtime resources',
     stoppingRuntimeProcess: 'Stopping Runtime process',
     verifyingRuntimeStopped: 'Verifying Runtime stopped',
     verifyingRuntimeInventory: 'Verifying Runtime process inventory',

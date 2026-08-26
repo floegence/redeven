@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	"github.com/floegence/flowersec/flowersec-go/v3/controlplane"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessrpc"
 	fsrpc "github.com/floegence/redeven/internal/fs"
@@ -140,18 +142,38 @@ func TestServer_E2E_PlaintextNetworkRejectsDirectArtifactWithoutInternalError(t 
 	}
 }
 
-func TestServer_E2E_DesktopBridgeDynamicLoopbackOriginConnectsDirectSession(t *testing.T) {
+func TestServer_E2E_DesktopBridgeMintsPrivateLoopbackArtifact(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
 
 	bridge := desktopBridgeEndpointForServer(t, s)
 	defer bridge.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	envelope := mintDesktopBridgeArtifact(t, s, bridge.Client(), bridge.URL, "")
-	client := connectDesktopBridgeArtifact(t, ctx, s, envelope.ConnectArtifact, bridge.URL)
-	assertDesktopBridgeSessionReady(t, ctx, client)
-	_ = client.Close()
-	assertDirectStateEventuallyEmpty(t, s)
+	envelope := mintPrivateDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+	var wire struct {
+		Version      int    `json:"v"`
+		Profile      string `json:"profile"`
+		Endpoint     string `json:"endpoint"`
+		ArtifactB64U string `json:"artifact_b64u"`
+	}
+	if err := json.Unmarshal(envelope.ConnectArtifact, &wire); err != nil {
+		t.Fatalf("decode private Desktop artifact: %v", err)
+	}
+	if wire.Version != 1 || wire.Profile != controlplane.PrivateLoopbackProfile {
+		t.Fatalf("private Desktop artifact profile = %d %q", wire.Version, wire.Profile)
+	}
+	wantEndpoint := "ws://" + strings.TrimPrefix(strings.TrimRight(bridge.URL, "/"), "http://") + flowersec.WebSocketDirectPath
+	if wire.Endpoint != wantEndpoint {
+		t.Fatalf("private Desktop artifact endpoint = %q", wire.Endpoint)
+	}
+	if _, err := flowersec.ParseArtifact(envelope.ConnectArtifact); err == nil {
+		t.Fatal("public Flowersec parser accepted private Desktop artifact")
+	}
+	nestedArtifact, err := base64.RawURLEncoding.DecodeString(wire.ArtifactB64U)
+	if err != nil {
+		t.Fatalf("decode nested Flowersec v3 artifact: %v", err)
+	}
+	if _, err := flowersec.ParseArtifact(nestedArtifact); err != nil {
+		t.Fatalf("nested Flowersec v3 artifact is invalid: %v", err)
+	}
 }
 
 func TestServer_E2E_DesktopBridgePluginAccessSurvivesAdmissionExpiry(t *testing.T) {
@@ -396,8 +418,8 @@ func TestServer_E2E_DesktopBridgeSecurityDoesNotExpandPublicListener(t *testing.
 			}
 			res := httptest.NewRecorder()
 			s.HandlerForDesktopBridge().ServeHTTP(res, req)
-			if res.Code != http.StatusNotFound {
-				t.Fatalf("bridge Flowersec route status = %d, want %d", res.Code, http.StatusNotFound)
+			if res.Code != http.StatusForbidden {
+				t.Fatalf("bridge Flowersec route status = %d, want %d", res.Code, http.StatusForbidden)
 			}
 		})
 	}
@@ -511,9 +533,9 @@ func newDesktopBridgeTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 		_ = listener.Close()
 		t.Fatalf("prepareSecureNetwork() error = %v", err)
 	}
-	if err := s.startDesktopBridgeListener(); err != nil {
+	if err := s.prepareDesktopBridgeListener(); err != nil {
 		_ = listener.Close()
-		t.Fatalf("startDesktopBridgeListener() error = %v", err)
+		t.Fatalf("prepareDesktopBridgeListener() error = %v", err)
 	}
 	if err := s.configureAcceptor(); err != nil {
 		_ = listener.Close()
@@ -522,6 +544,14 @@ func newDesktopBridgeTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	if err := s.createDirectServers(); err != nil {
 		_ = listener.Close()
 		t.Fatalf("createDirectServers() error = %v", err)
+	}
+	if err := s.configureDesktopBridgeDirectHandler(); err != nil {
+		_ = listener.Close()
+		t.Fatalf("configureDesktopBridgeDirectHandler() error = %v", err)
+	}
+	if err := s.startDesktopBridgeServer(); err != nil {
+		_ = listener.Close()
+		t.Fatalf("startDesktopBridgeServer() error = %v", err)
 	}
 	s.srv = newLocalUIHTTPServer(s.networkHandler())
 	s.listeners = []net.Listener{listener}
@@ -602,7 +632,7 @@ func unlockDesktopBridge(t *testing.T, client *http.Client, bridgeURL string) st
 	return body.Data.ResumeToken
 }
 
-func mintDesktopBridgeArtifact(t *testing.T, s *Server, client *http.Client, bridgeURL, resumeToken string) connectArtifactEnvelope {
+func mintPrivateDesktopBridgeArtifact(t *testing.T, client *http.Client, bridgeURL, resumeToken string) connectArtifactEnvelope {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, bridgeURL+"/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	if err != nil {
@@ -623,6 +653,37 @@ func mintDesktopBridgeArtifact(t *testing.T, s *Server, client *http.Client, bri
 	var envelope connectArtifactEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		t.Fatalf("decode bridge connect_artifact error = %v", err)
+	}
+	return envelope
+}
+
+func mintDesktopBridgeArtifact(t *testing.T, s *Server, _ *http.Client, _ string, resumeToken string) connectArtifactEnvelope {
+	t.Helper()
+	publicURLs := s.DisplayURLs()
+	if len(publicURLs) != 1 {
+		t.Fatalf("public Local UI URLs = %#v, want one", publicURLs)
+	}
+	publicURL := strings.TrimRight(publicURLs[0], "/")
+	client := publicLocalUIClientForServer(t, s)
+	req, err := http.NewRequest(http.MethodPost, publicURL+"/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	if err != nil {
+		t.Fatalf("NewRequest public connect_artifact error = %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(resumeToken) != "" {
+		req.Header.Set(localAccessResumeHeader, resumeToken)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST public connect_artifact error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("public connect_artifact status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var envelope connectArtifactEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode public connect_artifact error = %v", err)
 	}
 	var artifactWire struct {
 		Path struct {
@@ -648,6 +709,19 @@ func mintDesktopBridgeArtifact(t *testing.T, s *Server, client *http.Client, bri
 		t.Fatalf("bridge artifact candidate = %q, want configured Flowersec WSS endpoint", candidateURL)
 	}
 	return envelope
+}
+
+func publicLocalUIClientForServer(t *testing.T, s *Server) *http.Client {
+	t.Helper()
+	trustRoots := x509.NewCertPool()
+	if s == nil || s.deviceCA == nil || s.deviceCA.certificate == nil {
+		t.Fatal("missing test Local UI device CA")
+	}
+	trustRoots.AddCert(s.deviceCA.certificate)
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		RootCAs:    trustRoots,
+	}}}
 }
 
 func connectDesktopBridgeArtifact(t *testing.T, ctx context.Context, s *Server, encodedArtifact json.RawMessage, origin string) flowersec.Session {
@@ -677,7 +751,7 @@ func connectDesktopBridgeArtifactResult(ctx context.Context, s *Server, encodedA
 	trustRoots.AddCert(s.deviceCA.certificate)
 	return flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{
 		TrustRoots:     trustRoots,
-		Origin:         origin,
+		Origin:         strings.TrimRight(s.DisplayURLs()[0], "/"),
 		ConnectTimeout: 5 * time.Second,
 	})
 }

@@ -313,6 +313,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async () => {
 
 vi.mock('@floegence/floe-webapp-boot', () => ({
   createArtifactDirectConnectionConfig: (config: unknown) => config,
+  createPrivateLoopbackDirectConnectionConfig: (config: unknown) => config,
   createProxyRuntimeTunnelConnectionConfig: (config: unknown) => config,
 }));
 

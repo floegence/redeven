@@ -2,7 +2,7 @@ module github.com/floegence/redeven/flowersec-v3-smoke-peer
 
 go 1.26.6
 
-require github.com/floegence/flowersec/flowersec-go/v3 v3.1.1
+require github.com/floegence/flowersec/flowersec-go/v3 v3.2.0
 
 require (
 	github.com/dunglas/httpsfv v1.1.0 // indirect

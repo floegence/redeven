@@ -81,9 +81,6 @@ type DesktopSourceRuntimePackageCacheEntry = Readonly<{
 const inFlightReleaseManifests = new Map<string, Promise<DesktopSSHVerifiedReleaseManifest>>();
 const inFlightReleaseAssets = new Map<string, Promise<DesktopRuntimePackageCacheEntry>>();
 const inFlightSourceRuntimeAssets = new Map<string, Promise<DesktopRuntimeUploadAsset>>();
-const sourceMaintenanceHelperCache = new Map<string, Buffer>();
-const inFlightSourceMaintenanceHelpers = new Map<string, Promise<Buffer>>();
-const inFlightReleaseMaintenanceHelpers = new Map<string, Promise<Buffer>>();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -349,27 +346,27 @@ function createTarGzip(entries: readonly RuntimeArchiveEntry[]): Buffer {
   const chunks: Buffer[] = [];
   for (const entry of entries) {
     const { name: fileName, data, mode } = entry;
-  const header = Buffer.alloc(512, 0);
-  header.write(fileName, 0, Math.min(Buffer.byteLength(fileName), 100), 'ascii');
-  writeTarOctal(header, mode, 100, 8);
-  writeTarOctal(header, 0, 108, 8);
-  writeTarOctal(header, 0, 116, 8);
-  writeTarOctal(header, data.length, 124, 12);
-  writeTarOctal(header, Math.floor(Date.now() / 1_000), 136, 12);
-  header.fill(0x20, 148, 156);
-  header.write('0', 156, 1, 'ascii');
-  header.write('ustar', 257, 5, 'ascii');
-  header[262] = 0;
-  header.write('00', 263, 2, 'ascii');
+    const header = Buffer.alloc(512, 0);
+    header.write(fileName, 0, Math.min(Buffer.byteLength(fileName), 100), 'ascii');
+    writeTarOctal(header, mode, 100, 8);
+    writeTarOctal(header, 0, 108, 8);
+    writeTarOctal(header, 0, 116, 8);
+    writeTarOctal(header, data.length, 124, 12);
+    writeTarOctal(header, Math.floor(Date.now() / 1_000), 136, 12);
+    header.fill(0x20, 148, 156);
+    header.write('0', 156, 1, 'ascii');
+    header.write('ustar', 257, 5, 'ascii');
+    header[262] = 0;
+    header.write('00', 263, 2, 'ascii');
 
-  let checksum = 0;
-  for (const byte of header) {
-    checksum += byte;
-  }
-  const checksumText = checksum.toString(8).padStart(6, '0').slice(-6);
-  header.write(checksumText, 148, 6, 'ascii');
-  header[154] = 0;
-  header[155] = 0x20;
+    let checksum = 0;
+    for (const byte of header) {
+      checksum += byte;
+    }
+    const checksumText = checksum.toString(8).padStart(6, '0').slice(-6);
+    header.write(checksumText, 148, 6, 'ascii');
+    header[154] = 0;
+    header[155] = 0x20;
 
     const paddingLength = (512 - (data.length % 512)) % 512;
     chunks.push(header, data, Buffer.alloc(paddingLength, 0));
@@ -937,104 +934,8 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
   });
 }
 
-async function prepareSourceMaintenanceHelperArchive(args: Readonly<{
-  sourceRuntimeRoot: string;
-  runtimeReleaseTag: string;
-  platform: DesktopSSHRemotePlatform;
-  signal?: AbortSignal;
-}>): Promise<Buffer> {
-  const sourceRoot = normalizeSourceRuntimeRoot(args.sourceRuntimeRoot);
-  const commandRoot = path.join(sourceRoot, 'cmd', 'redeven');
-  const commandRootStat = await fs.stat(commandRoot).catch(() => null);
-  if (!commandRootStat?.isDirectory()) {
-    throw new Error(`Desktop maintenance helper source root is not a Redeven checkout: ${sourceRoot}`);
-  }
-  await checkSourceRuntimeCompiler(sourceRoot, args.platform, args.signal);
-  const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-maintenance-helper-'));
-  try {
-    const binaryPath = path.join(buildRoot, 'redeven');
-    const goos = args.platform.goos;
-    const goarch = args.platform.goarch;
-    const version = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
-    const commit = await readSourceRuntimeCommit(sourceRoot, args.signal);
-    const buildTime = compact(process.env.REDEVEN_DESKTOP_BUNDLE_BUILD_TIME)
-      || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
-    await runLocalCommand('go', [
-      'build',
-      '-trimpath',
-      '-ldflags', `-s -w -X main.Version=${version} -X main.Commit=${commit} -X main.BuildTime=${buildTime}`,
-      '-o', binaryPath,
-      './cmd/redeven',
-    ], {
-      cwd: sourceRoot,
-      env: {
-        GOWORK: 'off',
-        GOOS: goos,
-        GOARCH: goarch,
-        CGO_ENABLED: '0',
-      },
-      signal: args.signal,
-      timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
-    });
-    return createSingleFileTarGzip('redeven', await fs.readFile(binaryPath), 0o755);
-  } finally {
-    await fs.rm(buildRoot, { recursive: true, force: true }).catch(() => undefined);
-  }
-}
-
-export async function prepareDesktopRuntimeMaintenanceHelperAsset(args: Readonly<{
-  runtimeReleaseTag: string;
-  releaseBaseURL: string;
-  assetCacheRoot: string;
-  sourceRuntimeRoot?: string;
-  platform: DesktopSSHRemotePlatform;
-  fetchPolicy: DesktopSSHReleaseFetchPolicy;
-  signal?: AbortSignal;
-}>): Promise<Buffer> {
-  const sourceRoot = compact(args.sourceRuntimeRoot);
-  if (sourceRoot === '') {
-    const runtimeAsset = await prepareDesktopRuntimeUploadAsset(args);
-    const executable = runtimeExecutableFromArchive(runtimeAsset.archiveData);
-    const executableSHA = createHash('sha256').update(executable).digest('hex');
-    const helperPath = path.join(
-      args.assetCacheRoot,
-      'maintenance-helpers',
-      normalizeRuntimeReleaseTag(args.runtimeReleaseTag),
-      args.platform.platform_id,
-      `${executableSHA}.tar.gz`,
-    );
-    return onceInFlight(inFlightReleaseMaintenanceHelpers, helperPath, async () => {
-      const cached = await fs.readFile(helperPath).catch(() => null);
-      if (cached) return cached;
-      const archive = createSingleFileTarGzip('redeven', executable, 0o755);
-      await fs.mkdir(path.dirname(helperPath), { recursive: true });
-      const temporaryPath = `${helperPath}.tmp-${process.pid}-${Date.now()}`;
-      await fs.writeFile(temporaryPath, archive, { mode: 0o600 });
-      await fs.rename(temporaryPath, helperPath).catch(async (error) => {
-        await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
-        const existing = await fs.readFile(helperPath).catch(() => null);
-        if (!existing) throw error;
-      });
-      return await fs.readFile(helperPath);
-    });
-  }
-  const normalizedSourceRoot = normalizeSourceRuntimeRoot(sourceRoot);
-  const sourceCommit = await readSourceRuntimeCommit(normalizedSourceRoot, args.signal);
-  const key = `maintenance-helper:${normalizedSourceRoot}:${sourceCommit}:${normalizeRuntimeReleaseTag(args.runtimeReleaseTag)}:${args.platform.platform_id}`;
-  const cached = sourceMaintenanceHelperCache.get(key);
-  if (cached) {
-    return Buffer.from(cached);
-  }
-  const archive = await onceInFlight(inFlightSourceMaintenanceHelpers, key, () => (
-    prepareSourceMaintenanceHelperArchive({
-      sourceRuntimeRoot: normalizedSourceRoot,
-      runtimeReleaseTag: args.runtimeReleaseTag,
-      platform: args.platform,
-      signal: args.signal,
-    })
-  ));
-  sourceMaintenanceHelperCache.set(key, Buffer.from(archive));
-  return archive;
+export function runtimeProcessHelperArchiveFromRuntimePackage(runtimeArchive: Buffer): Buffer {
+  return createSingleFileTarGzip('redeven', runtimeExecutableFromArchive(runtimeArchive), 0o700);
 }
 
 function isRuntimePackageCacheTemporaryName(name: string): boolean {

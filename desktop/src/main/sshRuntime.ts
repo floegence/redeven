@@ -9,9 +9,7 @@ import {
   type DesktopSSHReleaseFetchPolicy,
 } from './sshReleaseAssets';
 import {
-  prepareDesktopRuntimeMaintenanceHelperAsset,
   prepareDesktopRuntimeUploadAsset,
-  runtimeReleaseFetchPolicy,
   type DesktopRuntimeUploadAsset,
 } from './runtimePackageCache';
 import {
@@ -169,8 +167,6 @@ export type DesktopSSHRuntimeProgressPhase =
   | 'ssh_checking_runtime'
   | 'ssh_runtime_ready'
   | 'ssh_detecting_platform'
-  | 'ssh_preparing_process_helper'
-  | 'ssh_process_helper_ready'
   | 'ssh_preparing_upload'
   | 'ssh_runtime_package_ready'
   | 'ssh_remote_installing'
@@ -897,22 +893,6 @@ function buildManagedSSHRuntimeStatusScript(): string {
   ].join('\n');
 }
 
-function buildManagedSSHRuntimeProcessHelperStageScript(): string {
-  return [
-    'set -eu',
-    'helper_root="$(mktemp -d "${TMPDIR:-/tmp}/redeven-runtime-process-helper.XXXXXX")"',
-    'archive_path="${helper_root}/runtime.tar.gz"',
-    'cleanup() { rm -rf "$helper_root"; }',
-    'trap cleanup EXIT INT TERM',
-    'cat > "$archive_path"',
-    'tar -xzf "$archive_path" -C "$helper_root"',
-    'binary="${helper_root}/redeven"',
-    '[ -x "$binary" ] || { echo "Desktop runtime process helper is missing redeven" >&2; exit 1; }',
-    'trap - EXIT INT TERM',
-    'printf "%s\\n" "$binary"',
-  ].join('\n');
-}
-
 function buildManagedSSHRuntimeProcessCommandScript(): string {
   return [
     'set -eu',
@@ -939,18 +919,6 @@ function buildManagedSSHRuntimeProcessCommandScript(): string {
     '    echo "runtime helper operation is invalid" >&2',
     '    exit 2',
     '    ;;',
-    'esac',
-  ].join('\n');
-}
-
-function buildManagedSSHRuntimeProcessHelperCleanupScript(): string {
-  return [
-    'set -eu',
-    'binary="$1"',
-    'helper_root="${binary%/redeven}"',
-    'case "$helper_root" in',
-    '  "${TMPDIR:-/tmp}"/redeven-runtime-process-helper.*) rm -rf -- "$helper_root" ;;',
-    '  *) echo "refusing to clean an unknown Runtime helper path" >&2; exit 1 ;;',
     'esac',
   ].join('\n');
 }
@@ -1077,14 +1045,10 @@ export async function probeManagedSSHRuntimeStatus(
 export async function openManagedSSHRuntimeProcessSession(
   args: ManagedSSHRuntimeProcessInventoryArgs &
     Readonly<{
-      helperBinaryPath?: string;
-      helperArchive?: Buffer;
-      platform?: DesktopSSHRemotePlatform;
-      preferManagedHelper?: boolean;
+      helperBinaryPath: string;
     }>,
 ): Promise<ManagedSSHRuntimeProcessSession> {
   const target = normalizeDesktopSSHEnvironmentDetails(args.target);
-  const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
   const logs = createMutableRecentLogs();
   let ownedLease: DesktopSSHTransportLease | null = null;
   const lease =
@@ -1107,86 +1071,11 @@ export async function openManagedSSHRuntimeProcessSession(
     onLog: args.onLog,
     signal: args.signal,
   };
-  let helperBinary = compact(args.helperBinaryPath) || '';
-  let uploadedHelperBinary = '';
+  let helperBinary = compact(args.helperBinaryPath);
   let closed = false;
   try {
-    if (helperBinary === '' && args.preferManagedHelper) {
-      const managedProbe = await probeRemoteRuntimeCompatibility({
-        session,
-        runtimeReleaseTag,
-        onProgress: undefined,
-      }).catch(() => null);
-      if (managedProbe?.status === 'ready') {
-        helperBinary = managedProbe.binary_path;
-      }
-    }
     if (helperBinary === '') {
-      emitSSHRuntimeProgress(
-        args.onProgress,
-        'ssh_preparing_process_helper',
-        'Preparing maintenance helper',
-        'Desktop is preparing the lightweight Runtime process helper for this SSH operation.',
-      );
-      let platform = args.platform;
-      if (!platform) {
-        const platformResult = await runSSHControlCommand(
-          session,
-          remoteShellCommand('set -eu\nuname -s\nuname -m', 'redeven-ssh-runtime-helper-platform'),
-        );
-        if (platformResult.exit_code !== 0) {
-          throw runtimeProcessCommandErrorFromOutput(
-            platformResult.stdout,
-            platformResult.stderr,
-            'Desktop could not detect the SSH host platform for Runtime process identity validation.',
-          );
-        }
-        const platformLines = platformResult.stdout
-          .split(/\r?\n/u)
-          .map((line) => line.trim())
-          .filter(Boolean);
-        if (platformLines.length < 2) {
-          throw new Error(
-            'Desktop received an incomplete SSH host platform result for Runtime process identity validation.',
-          );
-        }
-        platform = resolveDesktopSSHRemotePlatform(platformLines[0] ?? '', platformLines[1] ?? '');
-      }
-      const archive =
-        args.helperArchive ??
-        (await prepareDesktopRuntimeMaintenanceHelperAsset({
-          runtimeReleaseTag,
-          releaseBaseURL: target.release_base_url,
-          assetCacheRoot: args.assetCacheRoot,
-          sourceRuntimeRoot: args.sourceRuntimeRoot,
-          platform,
-          fetchPolicy: runtimeReleaseFetchPolicy(DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS, args.signal),
-          signal: args.signal,
-        }));
-      const stageResult = await runSSHControlCommand(
-        session,
-        remoteShellCommand(
-          buildManagedSSHRuntimeProcessHelperStageScript(),
-          'redeven-ssh-runtime-process-helper-stage',
-        ),
-        archive,
-        DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
-      );
-      if (stageResult.exit_code !== 0 || compact(stageResult.stdout) === '') {
-        throw runtimeProcessCommandErrorFromOutput(
-          stageResult.stdout,
-          stageResult.stderr,
-          'Desktop could not stage the current Runtime process helper on the SSH host.',
-        );
-      }
-      helperBinary = compact(stageResult.stdout.split(/\r?\n/u).filter(Boolean).at(-1));
-      uploadedHelperBinary = helperBinary;
-      emitSSHRuntimeProgress(
-        args.onProgress,
-        'ssh_process_helper_ready',
-        'Maintenance helper ready',
-        'Desktop staged the current lightweight Runtime process helper on the SSH host.',
-      );
+      throw new Error('Desktop requires the installed Runtime or the prepared Runtime package for SSH process inspection.');
     }
 
     const run = async (
@@ -1234,16 +1123,6 @@ export async function openManagedSSHRuntimeProcessSession(
       close: async () => {
         if (closed) return;
         closed = true;
-        if (uploadedHelperBinary !== '') {
-          await runSSHControlCommand(
-            session,
-            remoteShellCommand(
-              buildManagedSSHRuntimeProcessHelperCleanupScript(),
-              'redeven-ssh-runtime-process-helper-cleanup',
-              [uploadedHelperBinary],
-            ),
-          ).catch(() => undefined);
-        }
         await ownedLease?.release();
       },
     };
@@ -2337,38 +2216,19 @@ async function startManagedSSHRuntimeInternal(
       initialProbe,
       platform: sharedPlatform,
     } as const;
-    const updateProcessSessionTask =
-      shouldPreparePackage
-        ? openManagedSSHRuntimeProcessSession({
-            ...processArgs,
-          }).catch(() => null)
-        : Promise.resolve(null);
-    [preparedRuntimePackage, processSession] = await Promise.all([
-      prepareRemoteRuntimePackage(packageArgs).then((prepared) => {
-        emitSSHRuntimeProgress(
-          args.onProgress,
-          'ssh_runtime_package_ready',
-          'Runtime package ready',
-          'Desktop prepared and verified the Runtime package for this SSH operation.',
-        );
-        return prepared;
-      }),
-      updateProcessSessionTask,
-    ]);
-    if (!processSession) {
-      processSession = await openManagedSSHRuntimeProcessSession({
-        ...processArgs,
-        helperBinaryPath: preparedRuntimePackage ? `${preparedRuntimePackage.stagingRoot}/bin/redeven` : 'managed',
-      });
+    preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);
+    if (preparedRuntimePackage) {
       emitSSHRuntimeProgress(
         args.onProgress,
-        'ssh_process_helper_ready',
-        'Maintenance helper ready',
-        preparedRuntimePackage
-          ? 'Desktop will use the verified staged Runtime executable for process maintenance.'
-          : 'Desktop will use the verified installed Runtime executable for process maintenance.',
+        'ssh_runtime_package_ready',
+        'Runtime package ready',
+        'Desktop prepared and verified the Runtime package for this SSH operation.',
       );
     }
+    processSession = await openManagedSSHRuntimeProcessSession({
+      ...processArgs,
+      helperBinaryPath: preparedRuntimePackage ? `${preparedRuntimePackage.stagingRoot}/bin/redeven` : 'managed',
+    });
     emitSSHRuntimeProgress(
       args.onProgress,
       'ssh_discovering_runtime_instances',

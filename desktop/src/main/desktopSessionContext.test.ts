@@ -25,10 +25,10 @@ describe('desktopSessionContext', () => {
   it('publishes document provenance only for private Desktop bridge transports', () => {
     const target = buildLocalEnvironmentDesktopTarget(testLocalEnvironment());
     expect(desktopSessionContextSnapshotFromTarget(target, undefined, 'native_local_bridge')).toMatchObject({
-      document_transport: 'desktop_private_bridge_v1',
+      document_transport: 'desktop_private_bridge_v2',
     });
     expect(desktopSessionContextSnapshotFromTarget(target, undefined, 'placement_bridge')).toMatchObject({
-      document_transport: 'desktop_private_bridge_v1',
+      document_transport: 'desktop_private_bridge_v2',
     });
     expect(desktopSessionContextSnapshotFromTarget(target, undefined, 'provider_remote')).not.toHaveProperty('document_transport');
   });

@@ -28,7 +28,7 @@ export function desktopSessionContextSnapshotFromTarget(
       ...(target.provider_id ? { provider_id: target.provider_id } : {}),
       ...(target.env_public_id ? { env_public_id: target.env_public_id } : {}),
       ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
-      ...(privateBridgeDocument ? { document_transport: 'desktop_private_bridge_v1' as const } : {}),
+      ...(privateBridgeDocument ? { document_transport: 'desktop_private_bridge_v2' as const } : {}),
     };
   }
 
@@ -46,6 +46,6 @@ export function desktopSessionContextSnapshotFromTarget(
         : 'external_local_ui',
     label: target.label,
     ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
-    ...(privateBridgeDocument ? { document_transport: 'desktop_private_bridge_v1' as const } : {}),
+    ...(privateBridgeDocument ? { document_transport: 'desktop_private_bridge_v2' as const } : {}),
   };
 }

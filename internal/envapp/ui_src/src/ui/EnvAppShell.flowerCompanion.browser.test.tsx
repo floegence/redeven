@@ -376,6 +376,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
 
 vi.mock('@floegence/floe-webapp-boot', () => ({
   createArtifactDirectConnectionConfig: (config: unknown) => config,
+  createPrivateLoopbackDirectConnectionConfig: (config: unknown) => config,
   createProxyRuntimeTunnelConnectionConfig: (config: unknown) => config,
 }));
 
@@ -844,6 +845,15 @@ vi.mock('./services/desktopTheme', () => ({
   toggleDesktopTheme: vi.fn(),
 }));
 vi.mock('./services/sandboxOrigins', () => ({ controlPlaneOriginFromSandboxLocation: () => 'https://console.example.com' }));
+vi.mock('./security/localTransportSecurity', () => ({
+  resolveLocalTransportSecurityPolicy: () => ({
+    policy: true,
+    transport: 'public_tls',
+    loopback: true,
+    network: false,
+    error: '',
+  }),
+}));
 vi.mock('./services/uiStorage', () => ({
   readRendererScopedUIStorageJSON: vi.fn((_key: string, fallback: unknown) => fallback),
   readUIStorageJSON: vi.fn(() => null),

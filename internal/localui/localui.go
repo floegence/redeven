@@ -58,6 +58,7 @@ type Options struct {
 	Bind   BindSpec
 
 	DisableSelfUpgrade     bool
+	DesktopPrivateAccess   bool
 	EffectiveRunMode       string
 	RemoteEnabled          bool
 	ControlplaneBaseURL    string
@@ -101,6 +102,7 @@ type Server struct {
 	runtimeControlSockPath string
 	version                string
 	selfUpgradeDisabled    bool
+	desktopPrivateAccess   bool
 	effectiveRunMode       string
 	remoteEnabled          bool
 	controlplaneBaseURL    string
@@ -144,6 +146,7 @@ type Server struct {
 
 	desktopBridgeListener net.Listener
 	desktopBridgeServer   *http.Server
+	desktopBridgeDirect   http.Handler
 	localUIBridgeURL      string
 	localUIBridgeToken    string
 
@@ -257,7 +260,16 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, localUIBodyLimit)
 		}
-		next.ServeHTTP(w, withTrustedLocalUIBridge(r))
+		trustedRequest := withTrustedLocalUIBridge(r)
+		if r.URL.Path == flowersec.WebSocketDirectPath {
+			if s.desktopBridgeDirect == nil {
+				http.Error(w, "Flowersec private bridge is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			s.desktopBridgeDirect.ServeHTTP(w, trustedRequest)
+			return
+		}
+		next.ServeHTTP(w, trustedRequest)
 	})
 }
 
@@ -338,6 +350,7 @@ func New(opts Options) (*Server, error) {
 		runtimeControlSockPath:    strings.TrimSpace(opts.RuntimeControlSocketPath),
 		version:                   strings.TrimSpace(opts.Version),
 		selfUpgradeDisabled:       opts.DisableSelfUpgrade,
+		desktopPrivateAccess:      opts.DesktopPrivateAccess,
 		effectiveRunMode:          strings.TrimSpace(opts.EffectiveRunMode),
 		remoteEnabled:             opts.RemoteEnabled,
 		controlplaneBaseURL:       strings.TrimSpace(opts.ControlplaneBaseURL),
@@ -397,14 +410,6 @@ func (s *Server) configureAcceptor() error {
 		origins = append(origins, "https://"+authority)
 	}
 	s.authorityMu.RUnlock()
-	if bridgeURL, err := url.Parse(strings.TrimSpace(s.localUIBridgeURL)); err == nil && bridgeURL != nil && bridgeURL.Scheme == "http" {
-		if bridgeAuthority, authorityErr := canonicalLoopbackAuthority(bridgeURL.Host); authorityErr == nil {
-			origins = append(origins, "http://"+bridgeAuthority)
-		}
-	}
-	if len(origins) == 0 {
-		return errors.New("missing Local UI origins")
-	}
 	acceptor, err := flowersec.NewAcceptor(flowersec.AcceptorOptions{
 		AllowedOrigins:    origins,
 		MaxInboundStreams: 32,
@@ -517,6 +522,24 @@ func (s *Server) configureAcceptor() error {
 	return nil
 }
 
+func (s *Server) configureDesktopBridgeDirectHandler() error {
+	if s == nil || s.acceptor == nil {
+		return errors.New("Flowersec acceptor is not configured")
+	}
+	handler, err := s.acceptor.PrivateLoopbackHandler(flowersec.PrivateLoopbackHandlerOptions{
+		AuthorizeRequest: isTrustedLocalUIBridge,
+	})
+	if err != nil {
+		return fmt.Errorf("configure Flowersec private loopback handler: %w", err)
+	}
+	s.desktopBridgeDirect = handler
+	return nil
+}
+
+func (s *Server) privateDesktopMode() bool {
+	return s != nil && s.desktopPrivateAccess
+}
+
 func (s *Server) Start(ctx context.Context) error {
 	if s == nil {
 		return nil
@@ -524,50 +547,63 @@ func (s *Server) Start(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if s.srv != nil {
+	if s.srv != nil || s.desktopBridgeServer != nil {
 		return nil
 	}
 	if err := s.ensureAuthorizationStore(); err != nil {
 		return err
 	}
 
-	var listeners []net.Listener
-	var errs []string
-	for _, addr := range s.bind.ListenAddrs() {
-		ln, err := net.Listen("tcp", addr)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", addr, err))
-			continue
-		}
-		listeners = append(listeners, ln)
-	}
-	if len(listeners) == 0 {
-		return fmt.Errorf("listen %s failed: %s", s.bind.ListenLabel(), strings.Join(errs, "; "))
-	}
-	if err := s.prepareSecureNetwork(listeners); err != nil {
-		for _, listener := range listeners {
-			_ = listener.Close()
-		}
-		return err
-	}
-	for _, errText := range errs {
-		s.log.Warn("local ui listener unavailable", "bind", s.bind.ListenLabel(), "error", errText)
-	}
-
-	srv := newLocalUIHTTPServer(s.networkHandler())
-	s.srv = srv
-	s.listeners = listeners
-	if err := s.startDesktopBridgeListener(); err != nil {
+	if err := s.prepareDesktopBridgeListener(); err != nil {
 		_ = s.Close()
 		return fmt.Errorf("start trusted Local UI bridge listener: %w", err)
+	}
+
+	var listeners []net.Listener
+	var srv *http.Server
+	if !s.privateDesktopMode() {
+		var errs []string
+		for _, addr := range s.bind.ListenAddrs() {
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", addr, err))
+				continue
+			}
+			listeners = append(listeners, ln)
+		}
+		if len(listeners) == 0 {
+			_ = s.Close()
+			return fmt.Errorf("listen %s failed: %s", s.bind.ListenLabel(), strings.Join(errs, "; "))
+		}
+		if err := s.prepareSecureNetwork(listeners); err != nil {
+			_ = s.Close()
+			return err
+		}
+		for _, errText := range errs {
+			s.log.Warn("local ui listener unavailable", "bind", s.bind.ListenLabel(), "error", errText)
+		}
+		srv = newLocalUIHTTPServer(s.networkHandler())
+		s.srv = srv
+		s.listeners = listeners
 	}
 	if err := s.configureAcceptor(); err != nil {
 		_ = s.Close()
 		return err
 	}
-	if err := s.createDirectServers(); err != nil {
+	if err := s.configureDesktopBridgeDirectHandler(); err != nil {
 		_ = s.Close()
 		return err
+	}
+	if err := s.startDesktopBridgeServer(); err != nil {
+		_ = s.Close()
+		return fmt.Errorf("start trusted Local UI bridge server: %w", err)
+	}
+	if !s.privateDesktopMode() {
+		if err := s.createDirectServers(); err != nil {
+			_ = s.Close()
+			return err
+		}
+		s.serveSecureNetwork(srv, listeners)
 	}
 
 	go func() {
@@ -576,8 +612,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}()
 
 	go s.sweepLoop(ctx)
-
-	s.serveSecureNetwork(srv, listeners)
 
 	runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.log, nil)
 	if err != nil {
@@ -595,7 +629,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("start runtime management socket: %w", err)
 	}
 
-	s.log.Info("local ui listening", "bind", s.ListenLabel())
+	s.log.Info("local ui listening", "bind", s.ListenLabel(), "desktop_bridge", s.localUIBridgeURL)
 	return nil
 }
 
@@ -606,7 +640,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if s.srv != nil {
+	if s.srv != nil || s.desktopBridgeServer != nil {
 		return nil
 	}
 	if err := s.ensureAuthorizationStore(); err != nil {
@@ -622,13 +656,21 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	srv := newLocalUIHTTPServer(s.networkHandler())
 	s.srv = srv
 	s.listeners = append([]net.Listener(nil), listeners...)
-	if err := s.startDesktopBridgeListener(); err != nil {
+	if err := s.prepareDesktopBridgeListener(); err != nil {
 		_ = s.Close()
 		return fmt.Errorf("start trusted Local UI bridge listener: %w", err)
 	}
 	if err := s.configureAcceptor(); err != nil {
 		_ = s.Close()
 		return err
+	}
+	if err := s.configureDesktopBridgeDirectHandler(); err != nil {
+		_ = s.Close()
+		return err
+	}
+	if err := s.startDesktopBridgeServer(); err != nil {
+		_ = s.Close()
+		return fmt.Errorf("start trusted Local UI bridge server: %w", err)
 	}
 	if err := s.createDirectServers(); err != nil {
 		_ = s.Close()
@@ -668,7 +710,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	return nil
 }
 
-func (s *Server) startDesktopBridgeListener() error {
+func (s *Server) prepareDesktopBridgeListener() error {
 	if s == nil || s.desktopBridgeListener != nil {
 		return nil
 	}
@@ -687,10 +729,21 @@ func (s *Server) startDesktopBridgeListener() error {
 		return fmt.Errorf("generate trusted Local UI bridge authorization: %w", err)
 	}
 	s.localUIBridgeToken = bridgeToken
-	server := newLocalUIHTTPServer(s.HandlerForDesktopBridge())
 	s.desktopBridgeListener = listener
-	s.desktopBridgeServer = server
 	s.localUIBridgeURL = formatHTTPURL(addr.IP.String(), addr.Port)
+	return nil
+}
+
+func (s *Server) startDesktopBridgeServer() error {
+	if s == nil || s.desktopBridgeServer != nil {
+		return nil
+	}
+	if s.desktopBridgeListener == nil || s.desktopBridgeDirect == nil {
+		return errors.New("trusted Local UI bridge is not configured")
+	}
+	server := newLocalUIHTTPServer(s.HandlerForDesktopBridge())
+	s.desktopBridgeServer = server
+	listener := s.desktopBridgeListener
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.log.Error("trusted Local UI bridge server stopped", "error", err)
@@ -816,6 +869,7 @@ func (s *Server) Close() error {
 	s.tlsConfig = nil
 	s.desktopBridgeServer = nil
 	s.desktopBridgeListener = nil
+	s.desktopBridgeDirect = nil
 	s.localUIBridgeURL = ""
 	s.localUIBridgeToken = ""
 	s.runtimeControl = nil
@@ -846,11 +900,14 @@ func (s *Server) ListenLabel() string {
 	if s == nil {
 		return ""
 	}
+	if s.privateDesktopMode() {
+		return ""
+	}
 	return s.bind.ListenLabelForPort(s.Port())
 }
 
 func (s *Server) DisplayURLs() []string {
-	if s == nil {
+	if s == nil || s.privateDesktopMode() {
 		return nil
 	}
 	s.authorityMu.RLock()
@@ -1707,15 +1764,6 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	}
 	s.authorityMu.RLock()
 	directAuthority := s.directAuthorities[requestAuthority]
-	if directAuthority == "" && isTrustedLocalUIBridge(r) {
-		for uiAuthority, candidate := range s.directAuthorities {
-			host, _, splitErr := net.SplitHostPort(uiAuthority)
-			if splitErr == nil && (strings.EqualFold(host, "localhost") || net.ParseIP(host).IsLoopback()) {
-				directAuthority = candidate
-				break
-			}
-		}
-	}
 	s.authorityMu.RUnlock()
 	if directAuthority == "" && s.resolveDirectAuthority != nil {
 		directAuthority, err = s.resolveDirectAuthority(requestAuthority)
@@ -1727,6 +1775,17 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 		return "", errors.New("Flowersec WSS endpoint is unavailable")
 	}
 	return (&url.URL{Scheme: "wss", Host: directAuthority, Path: flowersec.WebSocketDirectPath}).String(), nil
+}
+
+func privateLoopbackWSURLFromRequest(r *http.Request) (string, error) {
+	if r == nil || !isTrustedLocalUIBridge(r) {
+		return "", errors.New("private Local UI bridge authorization required")
+	}
+	authority, err := canonicalLoopbackAuthority(r.Host)
+	if err != nil {
+		return "", errors.New("invalid private Local UI bridge authority")
+	}
+	return (&url.URL{Scheme: "ws", Host: authority, Path: flowersec.WebSocketDirectPath}).String(), nil
 }
 
 func randomB64u(n int) (string, error) {
@@ -1822,7 +1881,7 @@ type localIssuedPending struct {
 	ExpiresAt        time.Time
 }
 
-func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, accessSessionID string, accessExpiresAt time.Time) (localIssuedPending, error) {
+func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, accessSessionID string, accessExpiresAt time.Time, privateLoopback bool) (localIssuedPending, error) {
 	if s == nil {
 		return localIssuedPending{}, errors.New("server not ready")
 	}
@@ -1893,12 +1952,6 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 	s.directMu.Unlock()
 	s.pendingMu.Unlock()
 
-	endpoints, err := controlplane.NewEndpointSet(controlplane.EndpointConfig{
-		ID: "websocket", URL: strings.TrimSpace(wsURL), TLS: controlplane.CAPolicy(),
-	})
-	if err != nil {
-		return localIssuedPending{}, err
-	}
 	endpointURL, err := url.Parse(strings.TrimSpace(wsURL))
 	if err != nil || endpointURL == nil || strings.TrimSpace(endpointURL.Host) == "" {
 		return localIssuedPending{}, errors.New("invalid direct endpoint authority")
@@ -1909,26 +1962,52 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 	if trace := strings.TrimSpace(traceID); trace != "" {
 		metadata.CorrelationTags = map[string]string{"trace_id": trace}
 	}
-	issued, err := controlplane.NewIssuer().IssueDirect(controlplane.DirectIssueOptions{
-		Session: controlplane.SessionOptions{
-			ChannelID:         channelID,
-			ExpiresAt:         expiresAt,
-			IdleTimeout:       2 * time.Minute,
-			MaxInboundStreams: 32,
-		},
-		Endpoints:         endpoints,
-		RendezvousGroupID: "local-ui-" + channelID,
-		ListenerAudience:  "redeven-local-ui",
-		UpstreamAddress:   endpointURL.Host,
-		Metadata:          metadata,
-	})
-	if err != nil {
-		return localIssuedPending{}, err
+	sessionOptions := controlplane.SessionOptions{
+		ChannelID:         channelID,
+		ExpiresAt:         expiresAt,
+		IdleTimeout:       2 * time.Minute,
+		MaxInboundStreams: 32,
 	}
-	artifact := json.RawMessage(issued.ArtifactJSON())
+	var artifact json.RawMessage
+	var authorizationRecord controlplane.AuthorizationRecord
+	if privateLoopback {
+		issued, issueErr := controlplane.NewIssuer().IssuePrivateLoopbackDirect(controlplane.PrivateLoopbackIssueOptions{
+			Session:           sessionOptions,
+			Endpoint:          strings.TrimSpace(wsURL),
+			RendezvousGroupID: "local-ui-" + channelID,
+			ListenerAudience:  "redeven-local-ui",
+			UpstreamAddress:   endpointURL.Host,
+			Metadata:          metadata,
+		})
+		if issueErr != nil {
+			return localIssuedPending{}, issueErr
+		}
+		artifact = json.RawMessage(issued.ArtifactJSON())
+		authorizationRecord = issued.AuthorizationRecord()
+	} else {
+		endpoints, endpointsErr := controlplane.NewEndpointSet(controlplane.EndpointConfig{
+			ID: "websocket", URL: strings.TrimSpace(wsURL), TLS: controlplane.CAPolicy(),
+		})
+		if endpointsErr != nil {
+			return localIssuedPending{}, endpointsErr
+		}
+		issued, issueErr := controlplane.NewIssuer().IssueDirect(controlplane.DirectIssueOptions{
+			Session:           sessionOptions,
+			Endpoints:         endpoints,
+			RendezvousGroupID: "local-ui-" + channelID,
+			ListenerAudience:  "redeven-local-ui",
+			UpstreamAddress:   endpointURL.Host,
+			Metadata:          metadata,
+		})
+		if issueErr != nil {
+			return localIssuedPending{}, issueErr
+		}
+		artifact = json.RawMessage(issued.ArtifactJSON())
+		authorizationRecord = issued.AuthorizationRecord()
+	}
 	projection := localProjectionJSON()
 	receipt, err := s.authStore.issue(
-		issued.AuthorizationRecord(), pending, channelID, accessSessionID, expiresAt,
+		authorizationRecord, pending, channelID, accessSessionID, expiresAt,
 		digestB64u(artifact), digestB64u([]byte(projection)), spendOrigin, localTargetBindingJSON(),
 	)
 	if err != nil {
@@ -1984,7 +2063,11 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	privateLoopback := isTrustedLocalUIBridge(r)
 	wsURL, err := s.directWSURLFromRequest(r)
+	if privateLoopback {
+		wsURL, err = privateLoopbackWSURLFromRequest(r)
+	}
 	if err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
@@ -2010,7 +2093,7 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "local access session unavailable", http.StatusLocked)
 		return
 	}
-	acquisition, err := s.mintPending(meta, wsURL, spendOrigin, traceID, accessSessionID, accessExpiresAt)
+	acquisition, err := s.mintPending(meta, wsURL, spendOrigin, traceID, accessSessionID, accessExpiresAt, privateLoopback)
 	if err != nil {
 		if s.log != nil {
 			s.log.Error("failed to mint connect artifact", "error", err)

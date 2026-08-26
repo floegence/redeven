@@ -136,6 +136,7 @@ export type ReinstallTargetCoordinatorDependencies = Readonly<{
     targetRoot: string,
     executor: RuntimeHostAccessExecutor,
     platform: ReinstallTargetPlatform,
+    preparedPackage: PreparedReinstallRuntimePackage | null,
     signal?: AbortSignal,
   ) => Promise<
     Readonly<{
@@ -735,10 +736,7 @@ export class ReinstallTargetCoordinator {
 
       if (!journalPhaseAtLeast(persistedPhase, 'runtime_installed')) {
         targetPlatform = await this.dependencies.prepare_platform(currentResolved, executor, signal);
-        const processSessionTask = this.dependencies
-        .prepare_process_session(currentResolved, repeated.root, executor, targetPlatform, signal)
-          .catch(() => null);
-        const packageTask = this.dependencies.prepare_runtime_package(
+        preparedPackage = await this.dependencies.prepare_runtime_package(
           currentResolved,
           repeated.root,
           operationID,
@@ -749,8 +747,22 @@ export class ReinstallTargetCoordinator {
           },
           signal,
         );
-        [processSession, preparedPackage] = await Promise.all([processSessionTask, packageTask]);
         await persistPhase('package_batch_prepared_and_verified');
+        try {
+          processSession = await this.dependencies.prepare_process_session(
+            currentResolved,
+            repeated.root,
+            executor,
+            targetPlatform,
+            preparedPackage,
+            signal,
+          );
+        } catch (error) {
+          if (cached.preview.mode === 'preserve_data') {
+            throw error;
+          }
+          processSession = null;
+        }
         await this.dependencies.mark_in_progress(currentResolved, cached.preview.preflight_id).catch(() => undefined);
         await this.dependencies.close_sessions(currentResolved).catch(() => undefined);
 
@@ -860,6 +872,7 @@ export class ReinstallTargetCoordinator {
               activeTargetRoot,
               executor,
               targetPlatform ?? await this.dependencies.prepare_platform(activeDescriptor, executor, signal),
+              preparedPackage,
               signal,
             );
             processSession = cleanupSession;

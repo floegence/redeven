@@ -304,9 +304,9 @@ import {
 } from './runtimeProcessInventory';
 import { startDesktopModelSource, type ManagedDesktopModelSource } from './desktopModelSource';
 import {
-  prepareDesktopRuntimeMaintenanceHelperAsset,
   prepareDesktopRuntimeUploadAsset,
   pruneDesktopRuntimePackageCache,
+  runtimeProcessHelperArchiveFromRuntimePackage,
   runtimePackageCacheRoot,
   runtimeReleaseFetchPolicy,
 } from './runtimePackageCache';
@@ -317,13 +317,12 @@ import {
 import {
   PUBLIC_REDEVEN_RELEASE_BASE_URL,
   buildDesktopSSHReleaseAssetURL,
-  desktopSSHReleasePackageName,
-  ensureDesktopSSHVerifiedReleaseManifest,
   resolveDesktopSSHRemotePlatform,
   type DesktopSSHRemotePlatform,
 } from './sshReleaseAssets';
 import {
   ensureRuntimePlacementReady,
+  managedContainerRuntimeBinaryPath,
   openContainerRuntimeProcessSession,
   type RuntimePlacementProgress,
 } from './runtimePlacementManager';
@@ -3209,7 +3208,7 @@ async function resolveDirectReinstallTarget(
   return descriptor;
 }
 
-async function reinstallTargetHelperPlatform(
+async function reinstallTargetPlatform(
   descriptor: ReinstallTargetDescriptor,
   executor: ReturnType<typeof runtimeHostExecutor>,
   signal?: AbortSignal,
@@ -3226,26 +3225,6 @@ async function reinstallTargetHelperPlatform(
     throw new Error('Desktop could not determine the reinstall target platform.');
   }
   return resolveDesktopSSHRemotePlatform(lines[0]!, lines[1]!);
-}
-
-async function reinstallTargetHelperArchive(
-  descriptor: ReinstallTargetDescriptor,
-  executor: ReturnType<typeof runtimeHostExecutor>,
-  preparedPlatform?: DesktopSSHRemotePlatform,
-  signal?: AbortSignal,
-): Promise<Buffer | undefined> {
-  if (descriptor.host_access.kind === 'local_host' && descriptor.placement.kind === 'host_process') {
-    return undefined;
-  }
-  const platform = preparedPlatform ?? (await reinstallTargetHelperPlatform(descriptor, executor, signal));
-  return prepareDesktopRuntimeMaintenanceHelperAsset({
-    runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
-    releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
-    assetCacheRoot: desktopRuntimePackageCacheRoot(),
-    sourceRuntimeRoot: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined,
-    platform,
-    fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
-  });
 }
 
 async function closeDesktopSessionsForReinstallTarget(
@@ -3326,9 +3305,11 @@ async function prepareFreshReinstallRuntimePackage(
   onProgress?: (tasks: readonly DesktopComponentTaskProgress[]) => void,
   signal?: AbortSignal,
 ): Promise<PreparedReinstallRuntimePackage> {
+  const sourceRuntimeRoot = compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined;
   const strategy: ReinstallRuntimePackageStrategy = descriptor.host_access.kind === 'ssh_host'
     && descriptor.placement.kind === 'host_process'
     && descriptor.placement.bootstrap_strategy === 'remote_install'
+    && sourceRuntimeRoot === undefined
     ? 'remote_install'
     : 'desktop_upload';
   const releaseTag = resolveSSHRuntimeReleaseTag();
@@ -3345,19 +3326,18 @@ async function prepareFreshReinstallRuntimePackage(
   };
   onProgress?.([initial]);
   const report = (progress: ReinstallRuntimePackageProgress) => onProgress?.([progress]);
-  if (strategy === 'remote_install') {
-    const manifest = await ensureDesktopSSHVerifiedReleaseManifest({
-      releaseTag,
-      releaseBaseURL,
-      cacheRoot: desktopRuntimePackageCacheRoot(),
-      fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
-    });
-    const packageName = desktopSSHReleasePackageName(platform, 'runtime');
-    const archiveSHA256 = manifest.sha256_by_asset_name.get(packageName) ?? '';
-    if (!/^[a-f0-9]{64}$/u.test(archiveSHA256)) {
-      throw new Error(`Verified release manifest does not include ${packageName}.`);
-    }
-    return prepareReinstallRuntimePackage({
+  const asset = await prepareDesktopRuntimeUploadAsset({
+    runtimeReleaseTag: releaseTag,
+    releaseBaseURL,
+    assetCacheRoot: desktopRuntimePackageCacheRoot(),
+    packageKind: 'runtime',
+    sourceRuntimeRoot,
+    platform,
+    fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
+    signal,
+  });
+  const archiveSHA256 = asset.cacheEntry?.sha256 ?? crypto.createHash('sha256').update(asset.archiveData).digest('hex');
+  const prepared = await prepareReinstallRuntimePackage({
       executor,
       placement: descriptor.placement,
       target_root: targetRoot,
@@ -3368,37 +3348,17 @@ async function prepareFreshReinstallRuntimePackage(
       architecture: platform.goarch,
       strategy,
       archive_sha256: archiveSHA256,
-      remote_url: buildDesktopSSHReleaseAssetURL(releaseBaseURL, releaseTag, packageName),
+      archive_size_bytes: asset.archiveData.byteLength,
+      ...(strategy === 'remote_install'
+        ? { remote_url: buildDesktopSSHReleaseAssetURL(releaseBaseURL, releaseTag, asset.cacheEntry!.key.package_name) }
+        : { archive: asset.archiveData }),
       signal,
       on_progress: report,
     });
-  }
-  const asset = await prepareDesktopRuntimeUploadAsset({
-    runtimeReleaseTag: releaseTag,
-    releaseBaseURL,
-    assetCacheRoot: desktopRuntimePackageCacheRoot(),
-    packageKind: 'runtime',
-    sourceRuntimeRoot: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined,
-    platform,
-    fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
-    signal,
-  });
-  return prepareReinstallRuntimePackage({
-    executor,
-    placement: descriptor.placement,
-    target_root: targetRoot,
-    operation_id: operationID,
-    release_tag: releaseTag,
-    commit,
-    platform: platform.goos,
-    architecture: platform.goarch,
-    strategy,
-    archive: asset.archiveData,
-    archive_sha256: asset.cacheEntry?.sha256 ?? crypto.createHash('sha256').update(asset.archiveData).digest('hex'),
-    archive_size_bytes: asset.archiveData.byteLength,
-    signal,
-    on_progress: report,
-  });
+  return {
+    ...prepared,
+    process_helper_archive: runtimeProcessHelperArchiveFromRuntimePackage(asset.archiveData),
+  };
 }
 
 async function installFreshReinstallRuntime(
@@ -3538,17 +3498,14 @@ function reinstallTargetCoordinator(): ReinstallTargetCoordinator {
         descriptor.environment_id,
         descriptor.ssh_password,
       ),
-      prepare_platform: (descriptor, executor, signal) => reinstallTargetHelperPlatform(descriptor, executor, signal),
-      prepare_process_session: async (descriptor, targetRoot, executor, platform, signal) => openReinstallTargetProcessSession({
+      prepare_platform: (descriptor, executor, signal) => reinstallTargetPlatform(descriptor, executor, signal),
+      prepare_process_session: async (descriptor, targetRoot, executor, _platform, preparedPackage, signal) => openReinstallTargetProcessSession({
         executor,
         placement: descriptor.placement,
         target_root: targetRoot,
-        helper_archive: await reinstallTargetHelperArchive(
-          descriptor,
-          executor,
-          platform as DesktopSSHRemotePlatform,
-          signal,
-        ),
+        ...(preparedPackage?.process_helper_archive
+          ? { helper_archive: preparedPackage.process_helper_archive }
+          : { helper_executable: `${targetRoot.replace(/\/$/u, '')}/runtime/managed/bin/redeven` }),
         local_helper_executable: bundledRuntimeExecutablePath(),
         signal,
       }),
@@ -10399,13 +10356,9 @@ function runtimeLifecycleWorkflowFailure(
     ? activeStepID
     : reportedFailedStepID ?? activeStepID;
   if (activeStep?.tasks?.length && activeStep.status === 'running') {
-    const failedTaskID = reportedFailedStepID === 'preparing_runtime_package'
-      || reportedFailedStepID === 'installing_runtime_package'
-      ? 'runtime'
-      : 'maintenance_helper';
     workflow.updateStepTasks(activeStepID, activeStep.tasks.map((task) => ({
       ...task,
-      status: task.id === failedTaskID ? 'failed' : task.status === 'running' ? 'canceled' : task.status,
+      status: task.id === 'runtime' ? 'failed' : task.status === 'running' ? 'canceled' : task.status,
     })), input.fallback.summary);
   }
   const failurePlan = runtimeLifecyclePlanIncludingStep({
@@ -10630,8 +10583,6 @@ function runtimeLifecyclePhaseFromPlacement(
     case 'checking_container': return 'checking_container';
     case 'detecting_platform': return 'detecting_platform';
     case 'checking_runtime': return 'checking_runtime_package';
-    case 'preparing_maintenance_helper': return 'preparing_maintenance_helper';
-    case 'maintenance_helper_ready': return 'preparing_maintenance_helper';
     case 'discovering_runtime_instances': return 'discovering_runtime_instances';
     case 'stopping_runtime_process': return 'stopping_runtime_process';
     case 'verifying_runtime_stopped': return 'verifying_runtime_stopped';
@@ -10654,8 +10605,6 @@ function sshRuntimeLifecyclePhase(
     case 'ssh_checking_runtime':
     case 'ssh_runtime_ready': return 'checking_runtime_package';
     case 'ssh_detecting_platform': return 'detecting_platform';
-    case 'ssh_preparing_process_helper': return 'preparing_maintenance_helper';
-    case 'ssh_process_helper_ready': return 'preparing_maintenance_helper';
     case 'ssh_preparing_upload': return 'preparing_runtime_package';
     case 'ssh_runtime_package_ready': return 'preparing_runtime_package';
     case 'ssh_remote_installing':
@@ -10681,88 +10630,38 @@ type DirectRuntimeLifecycleProgressReporter = (
   tasks?: readonly DesktopComponentTaskProgress[],
 ) => void;
 
-function concurrentRuntimePreparationReporter<Progress extends Readonly<{
+function runtimePackageProgressReporter<Progress extends Readonly<{
   phase: string;
   title: string;
   detail: string;
 }>>(input: Readonly<{
   strategy: DesktopComponentTaskProgress['strategy'];
   mapPhase: (phase: Progress['phase']) => DesktopRuntimeLifecyclePhase;
-  helperPhase: Progress['phase'];
-  helperReadyPhase: Progress['phase'];
   runtimeReadyPhase: Progress['phase'];
-  discoveringPhase: Progress['phase'];
-  cleanupPhase?: Progress['phase'];
   runtimeTaskPhase: (phase: Progress['phase']) => DesktopComponentTaskProgress['phase'] | null;
   update: DirectRuntimeLifecycleProgressReporter;
 }>): (progress: Progress) => void {
-  const tasks = new Map<DesktopComponentTaskProgress['id'], DesktopComponentTaskProgress>();
-  const publishTasks = (detail: string): void => {
+  const publishRuntimeTask = (
+    detail: string,
+    status: DesktopComponentTaskProgress['status'],
+    phase: DesktopComponentTaskProgress['phase'],
+  ): void => {
     input.update(
-      'preparing_maintenance_helper',
-      'Preparing Runtime resources',
+      'preparing_runtime_package',
+      'Preparing Runtime package',
       detail,
       undefined,
-      [...tasks.values()],
+      [{ id: 'runtime', status, phase, strategy: input.strategy }],
     );
   };
   return (progress) => {
-    if (progress.phase === input.helperPhase) {
-      tasks.set('maintenance_helper', {
-        id: 'maintenance_helper',
-        status: 'running',
-        phase: 'preparing',
-        strategy: 'desktop_upload',
-      });
-      publishTasks(progress.detail);
-      return;
-    }
-    if (progress.phase === input.helperReadyPhase) {
-      tasks.set('maintenance_helper', {
-        id: 'maintenance_helper',
-        status: 'succeeded',
-        phase: 'ready',
-        strategy: 'desktop_upload',
-      });
-      publishTasks(progress.detail);
-      return;
-    }
     const runtimePhase = input.runtimeTaskPhase(progress.phase);
     if (runtimePhase) {
-      tasks.set('runtime', {
-        id: 'runtime',
-        status: 'running',
-        phase: runtimePhase,
-        strategy: input.strategy,
-      });
-      publishTasks(progress.detail);
+      publishRuntimeTask(progress.detail, 'running', runtimePhase);
       return;
     }
     if (progress.phase === input.runtimeReadyPhase) {
-      tasks.set('runtime', {
-        id: 'runtime',
-        status: 'succeeded',
-        phase: 'ready',
-        strategy: input.strategy,
-      });
-      publishTasks(progress.detail);
-      return;
-    }
-    if (progress.phase === input.discoveringPhase && tasks.size > 0) {
-      for (const [id, task] of tasks) {
-        tasks.set(id, {
-          ...task,
-          status: 'succeeded',
-          phase: 'ready',
-        });
-      }
-      publishTasks('The maintenance helper and Runtime package are ready.');
-    }
-    if (
-      progress.phase === input.cleanupPhase
-      && [...tasks.values()].some((task) => task.status === 'running')
-    ) {
-      publishTasks(progress.detail);
+      publishRuntimeTask(progress.detail, 'succeeded', 'ready');
       return;
     }
     input.update(input.mapPhase(progress.phase), progress.title, progress.detail);
@@ -12960,6 +12859,10 @@ async function openProviderEnvironmentWithOpenSession(args: Readonly<{
 async function openLocalEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_local_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
+  const bridgeOpenResult = await openRuntimePlacementBridgeFromLauncher(request);
+  if (bridgeOpenResult) {
+    return bridgeOpenResult;
+  }
   const preferences = await loadDesktopPreferencesCached();
   const environment = findLocalEnvironmentByID(preferences, request.environment_id);
   if (!environment) {
@@ -12972,10 +12875,6 @@ async function openLocalEnvironmentFromLauncher(
         shouldRefreshSnapshot: true,
       },
     );
-  }
-  const bridgeOpenResult = await openRuntimePlacementBridgeFromLauncher(request);
-  if (bridgeOpenResult) {
-    return bridgeOpenResult;
   }
   const requestedRoute = request.route === 'local_host' || request.route === 'remote_desktop'
     ? request.route
@@ -14389,34 +14288,23 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
         tasks,
       });
     };
-    const reportContainerProgress = concurrentRuntimePreparationReporter<RuntimePlacementProgress>({
+    const reportContainerProgress = runtimePackageProgressReporter<RuntimePlacementProgress>({
       strategy: 'desktop_upload',
       mapPhase: runtimeLifecyclePhaseFromPlacement,
-      helperPhase: 'preparing_maintenance_helper',
-      helperReadyPhase: 'maintenance_helper_ready',
       runtimeReadyPhase: 'runtime_package_ready',
-      discoveringPhase: 'discovering_runtime_instances',
       runtimeTaskPhase: (phase) => phase === 'preparing_runtime_package' ? 'preparing' : null,
       update: updateProgress,
     });
-    const reportSSHProgress = concurrentRuntimePreparationReporter<DesktopSSHRuntimeProgress>({
+    const reportSSHProgress = runtimePackageProgressReporter<DesktopSSHRuntimeProgress>({
       strategy: input.host_access.kind === 'ssh_host'
         && sshDetailsFromRuntimePlacement(input.host_access, input.placement).bootstrap_strategy === 'remote_install'
         ? 'remote_install'
         : 'desktop_upload',
       mapPhase: sshRuntimeLifecyclePhase,
-      helperPhase: 'ssh_preparing_process_helper',
-      helperReadyPhase: 'ssh_process_helper_ready',
       runtimeReadyPhase: 'ssh_runtime_package_ready',
-      discoveringPhase: 'ssh_discovering_runtime_instances',
-      cleanupPhase: 'ssh_cleaning_startup_resources',
       runtimeTaskPhase: (phase) => {
         switch (phase) {
           case 'ssh_preparing_upload': return 'preparing';
-          case 'ssh_remote_installing':
-          case 'ssh_creating_upload_dir':
-          case 'ssh_uploading_archive':
-          case 'ssh_installing_upload': return 'transferring';
           default: return null;
         }
       },
@@ -14544,16 +14432,12 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
               executor,
               placement: preparedContainer.placement as Extract<DesktopRuntimePlacement, { kind: 'container_process' }>,
               runtime_binary_path: 'redeven',
-              runtime_release_tag: resolveSSHRuntimeReleaseTag(),
-              release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
-              source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
-              asset_cache_root: desktopRuntimePackageCacheRoot(),
               signal: lifecycleSignal,
               on_progress: reportContainerProgress,
             };
             const processSession = await openContainerRuntimeProcessSession({
               ...processArgs,
-              prefer_managed_helper: true,
+              helper_binary_path: managedContainerRuntimeBinaryPath(preparedContainer.placement.runtime_root),
             });
             try {
               await executeDirectRuntimeStop({
@@ -14631,7 +14515,7 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
           };
           const processSession = await openManagedSSHRuntimeProcessSession({
             ...inventoryArgs,
-            preferManagedHelper: true,
+            helperBinaryPath: 'managed',
           });
           try {
             await executeDirectRuntimeStop({
@@ -14675,6 +14559,11 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
         }
       }
       if (input.operation !== 'stop') {
+        updateProgress(
+          'runtime_ready',
+          'Verifying Runtime access',
+          `Desktop is verifying the private bridge, Runtime Service, and Local UI on "${input.label}".`,
+        );
         await verifyManagedRuntimeLifecycleAccess({
           targetID,
           environmentID: input.environment_id,

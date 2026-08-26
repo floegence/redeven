@@ -488,6 +488,8 @@ export async function probeLocalRuntimeBridgeHealth(
     ok: true,
     value: {
       ...result.value,
+      local_ui_url: startup.local_ui_url,
+      local_ui_urls: startup.local_ui_urls,
       local_ui_bridge_url: bridge.bridgeURL,
       local_ui_bridge_token: bridge.bridgeToken,
     },
@@ -510,6 +512,8 @@ export async function probeLocalRuntimeBridgeStartup(
     ok: true,
     value: {
       ...result.value,
+      local_ui_url: startup.local_ui_url,
+      local_ui_urls: startup.local_ui_urls,
       local_ui_bridge_url: bridge.bridgeURL,
       local_ui_bridge_token: bridge.bridgeToken,
     },

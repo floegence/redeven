@@ -1717,7 +1717,6 @@
     "reinstallCheckingDetail": "Desktop は確認済みのホスト、コンテナ、Redeven ルートを再検証しています。",
     "reinstallTargetResolvedDetail": "Desktop は正確に登録された Redeven ターゲットを確認しました。",
     "reinstallSessionsClosedDetail": "Desktop はこのターゲットに接続された環境ウィンドウと bridge を閉じました。",
-    "reinstallHelperPreparingDetail": "Desktop は現在のメンテナンス helper を古い Redeven ルートの外に準備しています。",
     "reinstallInventoryDetail": "Desktop はこの正確なターゲットに属する Redeven プロセスを識別しています。",
     "reinstallStoppingProcessesDetail": "Desktop はこの対象の Redeven プロセスを停止しています。",
     "reinstallProcessesStoppedDetail": "Desktop はこのターゲットに古い Redeven プロセスが残っていないことを確認しました。",
@@ -1846,7 +1845,6 @@
     "checkingContainer": "コンテナを確認中",
     "detectingPlatform": "プラットフォームを検出中",
     "checkingRuntimePackage": "ランタイム パッケージの確認",
-    "preparingMaintenanceHelper": "ランタイムリソースを準備",
     "stoppingRuntimeProcess": "ランタイム プロセスの停止",
     "verifyingRuntimeStopped": "ランタイムの停止の確認",
     "verifyingRuntimeInventory": "ランタイムプロセス一覧を確認",
@@ -1987,8 +1985,7 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "ランタイム",
-      "maintenanceHelper": "メンテナンスヘルパー"
+      "runtime": "ランタイム"
     }
   },
   "runtimeMessage": {

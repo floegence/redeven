@@ -1721,7 +1721,6 @@
     "reinstallCheckingDetail": "O Desktop está validando novamente o host, o contêiner e a raiz do Redeven confirmados.",
     "reinstallTargetResolvedDetail": "O Desktop confirmou o destino exato do Redeven registrado.",
     "reinstallSessionsClosedDetail": "O Desktop fechou as janelas de ambiente e os bridges conectados a este destino.",
-    "reinstallHelperPreparingDetail": "O Desktop está preparando o helper de manutenção atual fora da raiz antiga do Redeven.",
     "reinstallInventoryDetail": "O Desktop está identificando os processos do Redeven pertencentes a este destino exato.",
     "reinstallStoppingProcessesDetail": "O Desktop está interrompendo os processos do Redeven deste destino.",
     "reinstallProcessesStoppedDetail": "O Desktop verificou que nenhum processo antigo do Redeven permanece neste destino.",
@@ -1850,7 +1849,6 @@
     "checkingContainer": "Verificando contêiner",
     "detectingPlatform": "Detectando plataforma",
     "checkingRuntimePackage": "Verificando o pacote de tempo de execução",
-    "preparingMaintenanceHelper": "Preparando recursos do ambiente de execução",
     "stoppingRuntimeProcess": "Parando o processo de tempo de execução",
     "verifyingRuntimeStopped": "Verificando o tempo de execução interrompido",
     "verifyingRuntimeInventory": "Verificando o inventário de processos do tempo de execução",
@@ -1991,8 +1989,7 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "Ambiente de execução",
-      "maintenanceHelper": "Auxiliar de manutenção"
+      "runtime": "Ambiente de execução"
     }
   },
   "runtimeMessage": {

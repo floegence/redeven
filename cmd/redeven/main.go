@@ -726,6 +726,7 @@ func (c *cli) runCmd(args []string) int {
 			Logger:                   localUILogger,
 			Bind:                     localUIBind,
 			DisableSelfUpgrade:       mode == runModeDesktop,
+			DesktopPrivateAccess:     mode == runModeDesktop,
 			EffectiveRunMode:         string(effectiveRunMode),
 			RemoteEnabled:            processRemoteEnabled,
 			ControlplaneBaseURL:      cfg.ControlplaneBaseURL,

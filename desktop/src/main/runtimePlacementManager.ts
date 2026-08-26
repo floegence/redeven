@@ -22,7 +22,6 @@ import {
   containerRuntimeProbeCommand,
   containerRuntimeUnavailableMessage,
   containerRuntimeUploadedInstallCommand,
-  type DesktopContainerRuntimePlatform,
   parseContainerInspectJSON,
   parseContainerPlatformProbeOutput,
 } from './containerRuntime';
@@ -50,8 +49,8 @@ import {
   type DesktopSSHRemoteRuntimeProbeResult,
 } from './sshRuntime';
 import {
-  prepareDesktopRuntimeMaintenanceHelperAsset,
   prepareDesktopRuntimeUploadAsset,
+  runtimeProcessHelperArchiveFromRuntimePackage,
   runtimeReleaseFetchPolicy,
 } from './runtimePackageCache';
 
@@ -60,8 +59,6 @@ export type RuntimePlacementProgressPhase =
   | 'checking_container'
   | 'detecting_platform'
   | 'checking_runtime'
-  | 'preparing_maintenance_helper'
-  | 'maintenance_helper_ready'
   | 'discovering_runtime_instances'
   | 'stopping_runtime_process'
   | 'verifying_runtime_stopped'
@@ -131,11 +128,6 @@ type ContainerRuntimeProcessCommandArgs = Readonly<{
   executor: RuntimeHostAccessExecutor;
   placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
   runtime_binary_path: string;
-  runtime_release_tag: string;
-  release_base_url: string;
-  source_runtime_root?: string;
-  asset_cache_root: string;
-  platform?: DesktopContainerRuntimePlatform;
   signal?: AbortSignal;
   on_progress?: (progress: RuntimePlacementProgress) => void;
 }>;
@@ -168,7 +160,7 @@ function normalizeRuntimeReleaseTag(raw: string): string {
   return clean.startsWith('v') ? clean : `v${clean}`;
 }
 
-function managedContainerRuntimeBinaryPath(runtimeRoot: string): string {
+export function managedContainerRuntimeBinaryPath(runtimeRoot: string): string {
   const clean = compact(runtimeRoot).replace(/\/+$/u, '');
   return `${clean || '/'}/runtime/managed/bin/redeven`.replace(/^\/\//u, '/');
 }
@@ -197,7 +189,6 @@ export async function openContainerRuntimeProcessSession(
     Readonly<{
       helper_binary_path?: string;
       helper_archive?: Buffer;
-      prefer_managed_helper?: boolean;
     }>,
 ): Promise<ContainerRuntimeProcessSession> {
   const commandInput = {
@@ -211,65 +202,22 @@ export async function openContainerRuntimeProcessSession(
   let uploadedHelperBinary = '';
   let runtimeBinaryPath = args.runtime_binary_path;
   let closed = false;
-  if (helperBinary === '' && args.prefer_managed_helper) {
-    const managedProbe = await probeContainerRuntime(
-      args.executor,
-      args.placement,
-      normalizeRuntimeReleaseTag(args.runtime_release_tag),
-      args.signal,
-    ).catch(() => null);
-    if (managedProbe?.status === 'ready') {
-      helperBinary = managedProbe.binary_path;
-      runtimeBinaryPath = managedProbe.binary_path;
-    }
-  }
   if (helperBinary === '') {
-    emitProgress(
-      args.on_progress,
-      'preparing_maintenance_helper',
-      'Preparing maintenance helper',
-      'Desktop is preparing the lightweight Runtime process helper for this container operation.',
-    );
-    let platform = args.platform;
-    if (!platform) {
-      const platformResult = await args.executor.run(
-        containerRuntimePlatformProbeCommand({
-          engine: args.placement.container_engine,
-          container_id: args.placement.container_id,
-        }),
-        { signal: args.signal },
-      );
-      platform = parseContainerPlatformProbeOutput(platformResult.stdout);
+    if (!args.helper_archive) {
+      throw new Error('Desktop requires the installed Runtime or the prepared Runtime package for container process inspection.');
     }
-    const archive =
-      args.helper_archive ??
-      (await prepareDesktopRuntimeMaintenanceHelperAsset({
-        runtimeReleaseTag: args.runtime_release_tag,
-        releaseBaseURL: args.release_base_url,
-        assetCacheRoot: args.asset_cache_root,
-        sourceRuntimeRoot: compact(args.source_runtime_root) || undefined,
-        platform,
-        fetchPolicy: runtimeReleaseFetchPolicy(45_000, args.signal),
-        signal: args.signal,
-      }));
     const staged = await args.executor.run(
       containerRuntimeProcessHelperStageCommand({
         engine: args.placement.container_engine,
         container_id: args.placement.container_id,
       }),
-      { stdinData: archive, signal: args.signal },
+      { stdinData: args.helper_archive, signal: args.signal },
     );
     helperBinary = compact(staged.stdout.split(/\r?\n/u).filter(Boolean).at(-1));
     if (helperBinary === '') {
       throw new Error('Desktop could not stage the current Runtime process helper in the container.');
     }
     uploadedHelperBinary = helperBinary;
-    emitProgress(
-      args.on_progress,
-      'maintenance_helper_ready',
-      'Maintenance helper ready',
-      'Desktop staged the current lightweight Runtime process helper in the container.',
-    );
   }
   const run = async (
     operation: 'inventory' | 'stop',
@@ -599,48 +547,38 @@ export async function ensureRuntimePlacementReady(
       placement,
       runtime_binary_path:
         compact(args.runtime_binary_path) || managedContainerRuntimeBinaryPath(placement.runtime_root),
-      runtime_release_tag: runtimeReleaseTag,
-      release_base_url: args.release_base_url,
-      source_runtime_root: args.source_runtime_root,
-      asset_cache_root: args.asset_cache_root,
-      platform,
       signal: args.signal,
       on_progress: args.on_progress,
     };
-    const processSessionTask = probe.status === 'ready'
-      ? openContainerRuntimeProcessSession({
-          ...processCommandArgs,
-          helper_binary_path: probe.binary_path,
-        })
-      : openContainerRuntimeProcessSession(processCommandArgs);
-    const packagePreparationTask = shouldInstallRuntime
-      ? (() => {
-          emitProgress(
-            args.on_progress,
-            'preparing_runtime_package',
-            'Preparing runtime package',
-            `Desktop is preparing the ${platform.platform_label} Redeven ${runtimeReleaseTag} package for this container.`,
-          );
-          return prepareDesktopRuntimeUploadAsset({
-            runtimeReleaseTag,
-            releaseBaseURL: args.release_base_url,
-            assetCacheRoot: args.asset_cache_root,
-            sourceRuntimeRoot: compact(args.source_runtime_root),
-            platform,
-            fetchPolicy: runtimeReleaseFetchPolicy(args.timeout_ms ?? 45_000, args.signal),
-            signal: args.signal,
-          }).then((prepared) => {
-            emitProgress(
-              args.on_progress,
-              'runtime_package_ready',
-              'Runtime package ready',
-              'Desktop prepared and verified the Runtime package for this container operation.',
-            );
-            return prepared;
-          });
-        })()
-      : Promise.resolve(null);
-    [preparedRuntimeAsset, processSession] = await Promise.all([packagePreparationTask, processSessionTask]);
+    if (shouldInstallRuntime) {
+      emitProgress(
+        args.on_progress,
+        'preparing_runtime_package',
+        'Preparing runtime package',
+        `Desktop is preparing the ${platform.platform_label} Redeven ${runtimeReleaseTag} package for this container.`,
+      );
+      preparedRuntimeAsset = await prepareDesktopRuntimeUploadAsset({
+        runtimeReleaseTag,
+        releaseBaseURL: args.release_base_url,
+        assetCacheRoot: args.asset_cache_root,
+        sourceRuntimeRoot: compact(args.source_runtime_root),
+        platform,
+        fetchPolicy: runtimeReleaseFetchPolicy(args.timeout_ms ?? 45_000, args.signal),
+        signal: args.signal,
+      });
+      emitProgress(
+        args.on_progress,
+        'runtime_package_ready',
+        'Runtime package ready',
+        'Desktop prepared and verified the Runtime package for this container operation.',
+      );
+    }
+    processSession = await openContainerRuntimeProcessSession({
+      ...processCommandArgs,
+      ...(preparedRuntimeAsset
+        ? { helper_archive: runtimeProcessHelperArchiveFromRuntimePackage(preparedRuntimeAsset.archiveData) }
+        : { helper_binary_path: probe.binary_path }),
+    });
     emitProgress(
       args.on_progress,
       'discovering_runtime_instances',

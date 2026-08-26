@@ -25,6 +25,14 @@ const bootMocks = vi.hoisted(() => {
       source,
       lifecycle: createLifecycle(),
     })),
+    createPrivateLoopbackDirectConnectionConfig: vi.fn(({ source, privateLoopback }: {
+      source: unknown;
+      privateLoopback: unknown;
+    }) => Object.freeze({
+      source,
+      privateLoopback,
+      lifecycle: createLifecycle(),
+    })),
     createProxyBootstrapOwner: vi.fn(() => {
       const owner = Object.freeze({ generation: owners.length + 1 });
       owners.push(owner);
@@ -43,6 +51,7 @@ const bootMocks = vi.hoisted(() => {
 vi.mock('@floegence/floe-webapp-boot', () => ({
   closeProxyBootstrap: bootMocks.closeProxyBootstrap,
   createArtifactDirectConnectionConfig: bootMocks.createArtifactDirectConnectionConfig,
+  createPrivateLoopbackDirectConnectionConfig: bootMocks.createPrivateLoopbackDirectConnectionConfig,
   createProxyBootstrapOwner: bootMocks.createProxyBootstrapOwner,
   createProxyRuntimeTunnelConnectionConfig: bootMocks.createProxyRuntimeTunnelConnectionConfig,
 }));
@@ -55,6 +64,7 @@ describe('createEnvAppConnectionRuntime', () => {
     bootMocks.lifecycles.length = 0;
     bootMocks.closeProxyBootstrap.mockClear();
     bootMocks.createArtifactDirectConnectionConfig.mockClear();
+    bootMocks.createPrivateLoopbackDirectConnectionConfig.mockClear();
     bootMocks.createProxyBootstrapOwner.mockClear();
     bootMocks.createProxyRuntimeTunnelConnectionConfig.mockClear();
   });
@@ -63,7 +73,7 @@ describe('createEnvAppConnectionRuntime', () => {
     const source = Object.freeze({ acquire: vi.fn() });
     const localSource = vi.fn(() => source);
     const runtime = createEnvAppConnectionRuntime({
-      localSource,
+      local: { kind: 'public_tls', source: localSource },
       remoteSource: () => Object.freeze({ acquire: vi.fn() }),
       proxyBootstrap: () => ({}),
     });
@@ -112,7 +122,7 @@ describe('createEnvAppConnectionRuntime', () => {
   it('reuses the exact source while disconnect and replacement dispose distinct generations', async () => {
     const source = Object.freeze({ acquire: vi.fn() });
     const runtime = createEnvAppConnectionRuntime({
-      localSource: () => source,
+      local: { kind: 'public_tls', source: () => source },
       remoteSource: () => Object.freeze({ acquire: vi.fn() }),
       proxyBootstrap: () => ({}),
     });
@@ -151,5 +161,27 @@ describe('createEnvAppConnectionRuntime', () => {
     await expect(runtime.createConfig('remote')).rejects.toThrow('config failed');
     expect(bootMocks.closeProxyBootstrap).toHaveBeenCalledTimes(1);
     expect(bootMocks.closeProxyBootstrap).toHaveBeenCalledWith(bootMocks.owners[0]);
+  });
+
+  it('uses the dedicated private-loopback config only for the explicit Desktop transport', async () => {
+    const source = Object.freeze({ acquire: vi.fn() });
+    const runtime = createEnvAppConnectionRuntime({
+      local: {
+        kind: 'desktop_private_bridge_v2',
+        origin: 'http://127.0.0.1:43123',
+        source: () => source as never,
+      },
+      remoteSource: () => Object.freeze({ acquire: vi.fn() }),
+      proxyBootstrap: () => ({}),
+    });
+
+    const lease = await runtime.createConfig('local');
+
+    expect(bootMocks.createPrivateLoopbackDirectConnectionConfig).toHaveBeenCalledWith({
+      source,
+      privateLoopback: { origin: 'http://127.0.0.1:43123' },
+    });
+    expect(bootMocks.createArtifactDirectConnectionConfig).not.toHaveBeenCalled();
+    lease.dispose();
   });
 });
