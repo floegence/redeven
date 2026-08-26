@@ -17,6 +17,8 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
+import { I18nProvider } from '../i18n';
+import { EnvContext } from '../pages/EnvContext';
 import { RedevenWorkbenchSurface } from './surface/RedevenWorkbenchSurface';
 
 const workbenchMocks = vi.hoisted(() => ({
@@ -484,6 +486,52 @@ describe('redevenWorkbenchWidgets assistant metadata', () => {
       singleton: true,
       icon: FlowerWorkbenchIcon,
     });
+  });
+
+  it('keeps the Flower host engaged while the selected widget lifecycle is hot', async () => {
+    const flower = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.ai');
+    if (!flower?.body) throw new Error('missing Flower widget body');
+    const Body = flower.body;
+    const setFlowerWorkbenchHost = vi.fn();
+    const env = Object.assign(
+      () => ({
+        permissions: {
+          can_read: true,
+          can_write: true,
+          can_execute: true,
+        },
+      }),
+      { state: 'ready' },
+    );
+    const [lifecycle, setLifecycle] = createSignal<'hot' | 'cold'>('hot');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <I18nProvider>
+        <EnvContext.Provider value={{ env, setFlowerWorkbenchHost } as any}>
+          <Body
+            widgetId="widget-flower-1"
+            title="Flower"
+            type="redeven.ai"
+            selected
+            filtered={false}
+            lifecycle={lifecycle()}
+          />
+        </EnvContext.Provider>
+      </I18nProvider>
+    ), host);
+
+    await Promise.resolve();
+    const flowerHost = host.querySelector('[data-flower-workbench-host]');
+    expect(flowerHost).toBeInstanceOf(HTMLElement);
+    expect(setFlowerWorkbenchHost).toHaveBeenLastCalledWith(flowerHost, true);
+
+    setLifecycle('cold');
+    await Promise.resolve();
+    expect(setFlowerWorkbenchHost).toHaveBeenLastCalledWith(flowerHost, false);
+
+    dispose();
+    host.remove();
   });
 
   it('shows Go to for existing singleton assistant widgets in the canvas context menu', () => {

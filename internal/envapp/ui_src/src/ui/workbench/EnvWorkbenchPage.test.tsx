@@ -4002,6 +4002,16 @@ describe('EnvWorkbenchPage', () => {
     await controller.open(target);
     expect(surfaceApiMocks.createWidget).toHaveBeenCalledTimes(1);
     expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(1);
+    expect(surfaceApiMocks.focusWidget).toHaveBeenLastCalledWith(pluginWidget, { centerViewport: true });
+
+    await controller.open(target, {
+      widgetType: 'redeven.plugin',
+      centerWorld: { worldX: 960, worldY: 540 },
+      frame: { x: 400, y: 160, width: 1120, height: 760 },
+    });
+    expect(surfaceApiMocks.createWidget).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(1);
+    expect(surfaceApiMocks.focusWidget).toHaveBeenLastCalledWith(pluginWidget, { centerViewport: true });
 
     const renamedTarget = { ...target, displayName: 'Containers renamed' };
     await controller.open(renamedTarget);

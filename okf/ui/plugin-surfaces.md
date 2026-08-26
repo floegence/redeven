@@ -57,8 +57,11 @@ tiles and pinned Dock items use the released Floe Webapp drag transaction. Over
 the canvas it projects the standard `redeven.plugin` frame from its 1120 by 760
 world-unit definition; pointer release commits the same resolved world center,
 so zoom, pan, and edge auto-pan cannot move the created widget away from its
-preview. A canvas drop creates a fresh widget without recentering the viewport,
-while a Dock drop only pins the inventory item. Cancellation or release outside
+preview. A canvas drop creates one widget without recentering the viewport only
+when that exact plugin instance and surface is absent. A repeated drop or pinned
+Dock click activates, focuses, and centers the existing widget, so one exact
+target cannot occupy two Workbench widgets; different targets may coexist. A
+Dock drop only pins the inventory item. Cancellation or release outside
 both targets performs no action. Workbench pins declare Floe Webapp's
 `after-components` placement, so they follow the built-in component group and
 Flower in saved order; the external drag placeholder uses the same placement.
