@@ -114,6 +114,18 @@ html:not(.dark) .redeven-welcome-surface {
   color: var(--primary);
 }
 
+.redeven-desktop-titlebar-corner-actions {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset, 0px));
+  app-region: no-drag;
+  user-select: auto;
+}
+
 .redeven-desktop-update-button {
   display: inline-flex;
   height: 1.875rem;

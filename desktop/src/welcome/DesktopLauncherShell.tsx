@@ -1,4 +1,4 @@
-import type { JSX } from 'solid-js';
+import { Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { BottomBar, TopBar } from '@floegence/floe-webapp-core/layout';
 
@@ -8,6 +8,7 @@ export type DesktopLauncherShellProps = Readonly<{
   topBarLabel: string;
   logo: JSX.Element;
   trailingActions?: JSX.Element;
+  topBarCornerActions?: JSX.Element;
   bottomBarLeading?: JSX.Element;
   bottomBarTrailing?: JSX.Element;
   /** Tailwind height class for the bottom bar, defaults to 'h-7' (28px). */
@@ -51,11 +52,21 @@ export function DesktopLauncherShell(props: DesktopLauncherShellProps) {
         {props.skipLinkLabel}
       </a>
 
-      <TopBar
-        ariaLabel={props.topBarLabel}
-        logo={props.logo}
-        actions={props.trailingActions}
-      />
+      <div class="relative shrink-0">
+        <TopBar
+          ariaLabel={props.topBarLabel}
+          logo={props.logo}
+          actions={props.trailingActions}
+        />
+        <Show when={props.topBarCornerActions}>
+          <div
+            class="redeven-desktop-titlebar-corner-actions"
+            data-redeven-desktop-titlebar-no-drag="true"
+          >
+            {props.topBarCornerActions}
+          </div>
+        </Show>
+      </div>
 
       <div class="relative min-h-0 min-w-0 flex-1 overflow-hidden">{props.children}</div>
 

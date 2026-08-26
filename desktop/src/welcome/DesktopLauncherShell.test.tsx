@@ -33,6 +33,7 @@ async function renderShell(): Promise<string> {
       topBarLabel="Redeven Desktop toolbar"
       logo={<button type="button">Logo</button>}
       trailingActions={<button type="button">Theme</button>}
+      topBarCornerActions={<button type="button">Check for Updates</button>}
       bottomBarLeading={<span>Connect Environment</span>}
       bottomBarTrailing={<span>Disconnected</span>}
     >
@@ -49,6 +50,9 @@ describe('DesktopLauncherShell', () => {
     expect(html).toContain('data-top-bar-logo="true"');
     expect(html).toContain('data-top-bar-actions="true"');
     expect(html).toContain('Search desktop commands...');
+    expect(html).toContain('class="redeven-desktop-titlebar-corner-actions"');
+    expect(html).toContain('data-redeven-desktop-titlebar-no-drag="true"');
+    expect(html).toContain('Check for Updates');
     expect(html).not.toContain('data-redeven-desktop-titlebar-region="center"');
   });
 

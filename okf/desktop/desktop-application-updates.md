@@ -8,7 +8,7 @@ timestamp: 2026-08-25T00:00:00Z
 # Summary
 
 Redeven Desktop exposes one update coordinator to the permanent Welcome
-content-header entry, application menu, command palette, settings, status bar,
+titlebar-corner entry, application menu, command palette, settings, status bar,
 and compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed
 architecture-specific appcast. Packaged Linux uses `electron-updater` metadata
 for the matching DEB or RPM package. Development, unsupported, and incorrectly
@@ -26,11 +26,13 @@ releases are the only automatic or manual feed candidates. The user must open
 the native Sparkle window or the Redeven Linux dialog before downloading or
 installing an update.
 
-The Welcome content header always shows a labeled check action in its
-upper-right action group. Its accessible label reports the current update
-state, checking animates the icon, and an available or ready update adds a
-visible indicator. The status-bar entry remains a compact secondary route to
-the same coordinator.
+The Welcome titlebar always shows a labeled check action in its far-right corner
+slot. The slot respects the platform window-control end inset, while the
+centered command search and nearby language and appearance actions keep their
+existing positions. The accessible label reports the current update state,
+checking animates the icon, and an available or ready update adds a visible
+indicator. The status-bar entry remains a compact secondary route to the same
+coordinator.
 
 Automatic checks are persisted only for Linux. macOS scheduling is delegated to
 Sparkle with a 24-hour interval and automatic installation disabled. No client
