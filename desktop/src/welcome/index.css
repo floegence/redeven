@@ -2768,6 +2768,7 @@ html:not(.dark) .redeven-header-separator {
   gap: 0;
   padding: 0;
   overflow: hidden;
+  scrollbar-gutter: auto;
 }
 
 .redeven-environment-progress__body {
@@ -3798,6 +3799,7 @@ pre,
   gap: 0;
   padding: 0;
   overflow: hidden;
+  scrollbar-gutter: auto;
 }
 
 .redeven-gateway-action-panel__body {
