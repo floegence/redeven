@@ -73,17 +73,23 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
   return { host, onSelectSession };
 }
 
-function dispatchDragEvent(target: Element, type: 'dragstart' | 'dragover' | 'drop' | 'dragend', dataTransfer: DataTransfer, clientY = 0) {
+function dispatchDragEvent(
+  target: Element,
+  type: 'dragstart' | 'dragover' | 'drop' | 'dragend',
+  dataTransfer: DataTransfer,
+  clientY = 0,
+  clientX = 12,
+) {
   const dispatchTarget = type === 'dragstart'
     ? target.querySelector('[data-terminal-session-drag-handle]') ?? target
     : target;
   if (type === 'dragstart') {
     dispatchMouseInteraction(dispatchTarget, 'mousedown', { clientX: 0, clientY: 0 });
-    dispatchMouseInteraction(dispatchTarget, 'mousemove', { clientX: 12, clientY: 0 });
+    dispatchMouseInteraction(dispatchTarget, 'mousemove', { clientX, clientY });
   }
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
-  Object.defineProperty(event, 'clientX', { value: 12 });
+  Object.defineProperty(event, 'clientX', { value: clientX });
   Object.defineProperty(event, 'clientY', { value: clientY });
   dispatchTarget.dispatchEvent(event);
   return event;
@@ -675,6 +681,41 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(onRelocateSession).toHaveBeenCalledWith('session-1', 'default', null);
   });
 
+  it('renders a session-shaped drag preview constrained to the sidebar', () => {
+    const item = navigationItem({ id: 'session-1', title: 'build shell' });
+    const { host } = renderNavigator(item, vi.fn(), {
+      groups: [{
+        id: 'default', name: 'Default', defaultWorkingDir: '/workspace', isDefault: true,
+        expanded: true, itemIds: ['session-1'], totalSessionCount: 1,
+      }],
+    });
+    const boundary = host.querySelector<HTMLElement>('[data-terminal-drag-boundary]')!;
+    const sessionRow = host.querySelector<HTMLElement>('[data-terminal-session-row="session-1"]')!;
+    Object.defineProperty(boundary, 'getBoundingClientRect', {
+      value: () => ({ top: 50, left: 100, width: 286, height: 400, right: 386, bottom: 450, x: 100, y: 50, toJSON: () => ({}) }),
+    });
+    Object.defineProperty(sessionRow, 'getBoundingClientRect', {
+      value: () => ({ top: 120, left: 120, width: 230, height: 52, right: 350, bottom: 172, x: 120, y: 120, toJSON: () => ({}) }),
+    });
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(sessionRow, 'dragstart', dataTransfer, 130, 140);
+    const preview = boundary.querySelector<HTMLElement>('[data-terminal-drag-preview="session"]')!;
+    expect(boundary.className).toContain('overflow-hidden');
+    expect(preview.parentElement).toBe(boundary);
+    expect(preview.textContent).toContain('build shell');
+    expect(preview.style.width).toBe('230px');
+    expect(preview.style.height).toBe('52px');
+    expect(preview.style.transform).toBe('translate3d(20px, 70px, 0)');
+    expect(preview.querySelector('[data-terminal-session-row]')).toBeNull();
+
+    dispatchDragEvent(boundary, 'dragover', dataTransfer, 900, 900);
+    expect(preview.style.transform).toBe('translate3d(56px, 348px, 0)');
+
+    document.dispatchEvent(new Event('dragend', { bubbles: true }));
+    expect(boundary.querySelector('[data-terminal-drag-preview]')).toBeNull();
+  });
+
   it('shows before and after placement lines while reordering sessions', () => {
     const onRelocateSession = vi.fn();
     const firstItem = navigationItem({ id: 'session-1', title: 'alpha' });
@@ -753,7 +794,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(onRelocateSession).toHaveBeenCalledWith('session-4', 'default', 'session-3');
   });
 
-  it('reorders movable groups with one canonical boundary and a compact textless preview', () => {
+  it('reorders movable groups with one canonical boundary and a group-shaped preview', () => {
     const onReorderGroup = vi.fn();
     const { host } = renderNavigator(navigationItem({ id: 'session-1' }), vi.fn(), {
       groups: [{
@@ -772,21 +813,31 @@ describe('TerminalSessionNavigator agent status presentation', () => {
       onReorderGroup,
     });
     const defaultHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="default"]')!;
+    const dragBoundary = host.querySelector<HTMLElement>('[data-terminal-drag-boundary]')!;
     const alphaHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="alpha"]')!;
     const betaHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="beta"]')!;
     const gammaHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="gamma"]')!;
     expect(defaultHeader.getAttribute('draggable')).toBe('false');
     expect(gammaHeader.getAttribute('draggable')).toBe('true');
-    for (const [row, top] of [[alphaHeader, 100], [betaHeader, 144]] as const) {
+    Object.defineProperty(dragBoundary, 'getBoundingClientRect', {
+      value: () => ({ top: 0, left: 0, width: 286, height: 600, right: 286, bottom: 600, x: 0, y: 0, toJSON: () => ({}) }),
+    });
+    for (const [row, top] of [[alphaHeader, 100], [betaHeader, 144], [gammaHeader, 188]] as const) {
       Object.defineProperty(row, 'getBoundingClientRect', {
-        value: () => ({ top, height: 44, bottom: top + 44, left: 0, right: 200, width: 200, x: 0, y: top, toJSON: () => ({}) }),
+        value: () => ({ top, height: 44, bottom: top + 44, left: 5, right: 281, width: 276, x: 5, y: top, toJSON: () => ({}) }),
       });
     }
     const dataTransfer = createDataTransfer();
 
-    dispatchDragEvent(gammaHeader, 'dragstart', dataTransfer);
+    dispatchDragEvent(gammaHeader, 'dragstart', dataTransfer, 200, 24);
     expect(dataTransfer.setDragImage).toHaveBeenCalledTimes(1);
-    expect(document.body.querySelector('[data-terminal-drag-preview="group"]')?.textContent).toBe('');
+    const preview = dragBoundary.querySelector<HTMLElement>('[data-terminal-drag-preview="group"]')!;
+    expect(preview.textContent).toContain('Gamma');
+    expect(preview.style.width).toBe('276px');
+    expect(preview.style.height).toBe('44px');
+    expect(preview.parentElement).toBe(dragBoundary);
+    expect((dataTransfer.setDragImage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0])
+      .toHaveProperty('dataset.terminalNativeDragImage', 'true');
     dispatchDragEvent(alphaHeader, 'dragover', dataTransfer, 140);
     expect(host.querySelectorAll('[data-terminal-group-order-drop-hint]')).toHaveLength(1);
     expect(host.querySelector('[data-terminal-group-order-drop-hint="beta"]')?.getAttribute('data-terminal-group-order-drop-position')).toBe('before');
