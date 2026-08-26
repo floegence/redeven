@@ -12911,12 +12911,18 @@ function SettingsApplyTimingControl(props: Readonly<{
     <div class="redeven-settings-apply-row redeven-boundary-panel grid gap-3 rounded-md border px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div class="min-w-0">
         <div class="text-xs font-medium text-foreground">{props.i18n.t('settings.applyTimingTitle')}</div>
-        <Show when={props.value === 'restart_now'}>
-          <div class="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-warning-foreground">
+        <div class="mt-1 grid">
+          <div
+            aria-hidden={props.value === 'restart_now' ? undefined : 'true'}
+            class={cn(
+              'col-start-1 row-start-1 flex items-start gap-1.5 text-[11px] leading-5 text-warning-foreground',
+              props.value !== 'restart_now' && 'invisible',
+            )}
+          >
             <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
             <span>{props.i18n.t('settings.applyTimingHelp')}</span>
           </div>
-        </Show>
+        </div>
       </div>
       <div class="min-w-0 sm:min-w-[15rem]">
         <SegmentedControl
@@ -13265,12 +13271,24 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               void props.saveSettings({ restartRuntime: restartAfterSave() });
             }}
           >
-            <Show when={restartAfterSave()}>
-              <Refresh class="mr-1.5 h-3.5 w-3.5" />
-            </Show>
-            {restartAfterSave()
-              ? props.i18n.t('settings.saveAndRestart')
-              : props.i18n.t('settings.saveSettings')}
+            <Refresh
+              aria-hidden="true"
+              class={cn('mr-1.5 h-3.5 w-3.5', !restartAfterSave() && 'invisible')}
+            />
+            <span aria-hidden="true" class="grid">
+              <span class={cn(
+                'col-start-1 row-start-1',
+                restartAfterSave() ? 'visible' : 'invisible',
+              )}>
+                {props.i18n.t('settings.saveAndRestart')}
+              </span>
+              <span class={cn(
+                'col-start-1 row-start-1',
+                restartAfterSave() ? 'invisible' : 'visible',
+              )}>
+                {props.i18n.t('settings.saveSettings')}
+              </span>
+            </span>
           </Button>
         </div>
       )}

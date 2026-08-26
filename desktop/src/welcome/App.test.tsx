@@ -2371,6 +2371,8 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('props.runtimeRestartAvailable && hasPendingChanges()');
     expect(dialogSrc).toContain("const [applyTiming, setApplyTiming] = createSignal<DesktopSettingsApplyTiming>('next_start')");
     expect(dialogSrc).toContain("applyTiming() === 'restart_now'");
+    expect(appSrc).toContain("props.value !== 'restart_now' && 'invisible'");
+    expect(dialogSrc).toContain("restartAfterSave() ? 'visible' : 'invisible'");
     expect(dialogSrc).toContain('disabled={!hasPendingChanges() || !accessValidation().valid}');
     expect(dialogSrc).toContain('queueMicrotask(() => passwordInputRef?.focus())');
     expect(dialogSrc).not.toContain('props.openDesktopUpdates');
