@@ -258,11 +258,15 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<TopBarIconButton label={topBarLogoLabel()} onClick={activateTopBarLogo}>');
   });
 
-  it('keeps a labeled Desktop update entry in the upper-right Welcome actions', () => {
+  it('keeps a labeled Desktop update entry in the far-right titlebar corner', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
     const trailingActions = appSrc.slice(
       appSrc.indexOf('trailingActions={('),
+      appSrc.indexOf('topBarCornerActions={('),
+    );
+    const cornerActions = appSrc.slice(
+      appSrc.indexOf('topBarCornerActions={('),
       appSrc.indexOf('bottomBarLeading={('),
     );
     const surfaceStart = appSrc.indexOf('function ConnectEnvironmentSurface(');
@@ -271,18 +275,18 @@ describe('DesktopWelcomeShell', () => {
     const surfaceHeader = appSrc.slice(surfaceHeaderStart, surfaceHeaderEnd);
 
     expect(trailingActions).not.toContain('redeven-desktop-update-button');
-    expect(appSrc).toContain('desktopUpdateSnapshot={desktopUpdateSnapshot()}');
-    expect(appSrc).toContain('checkForDesktopUpdates={checkForDesktopUpdates}');
-    expect(surfaceHeader).toContain('class="flex flex-wrap items-center justify-end gap-2"');
-    expect(surfaceHeader).toContain('class="redeven-desktop-update-button"');
-    expect(surfaceHeader).toContain('data-update-state={props.desktopUpdateSnapshot.state}');
-    expect(surfaceHeader).toContain('onClick={props.checkForDesktopUpdates}');
-    expect(surfaceHeader).toContain("<span>{props.i18n.t('desktopUpdate.checkForUpdates')}</span>");
-    expect(surfaceHeader).toContain("props.desktopUpdateSnapshot.state === 'checking' ? 'animate-spin' : ''");
-    expect(surfaceHeader).toContain('class="redeven-desktop-update-button__indicator" aria-hidden="true"');
-    expect(surfaceHeader.indexOf('redeven-desktop-update-button')).toBeLessThan(
-      surfaceHeader.indexOf("props.i18n.t('environmentCenter.newEnvironmentShort')"),
-    );
+    expect(surfaceHeader).not.toContain('redeven-desktop-update-button');
+    expect(appSrc).not.toContain('desktopUpdateSnapshot={desktopUpdateSnapshot()}');
+    expect(appSrc).not.toContain('checkForDesktopUpdates={checkForDesktopUpdates}');
+    expect(cornerActions).toContain('class="redeven-desktop-update-button"');
+    expect(cornerActions).toContain('data-update-state={desktopUpdateSnapshot().state}');
+    expect(cornerActions).toContain('onClick={checkForDesktopUpdates}');
+    expect(cornerActions).toContain("<span>{i18n().t('desktopUpdate.checkForUpdates')}</span>");
+    expect(cornerActions).toContain("desktopUpdateSnapshot().state === 'checking' ? 'animate-spin' : ''");
+    expect(cornerActions).toContain('class="redeven-desktop-update-button__indicator" aria-hidden="true"');
+    expect(styles).toContain('.redeven-desktop-titlebar-corner-actions {');
+    expect(styles).toContain('padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset, 0px));');
+    expect(styles).toContain('app-region: no-drag;');
     expect(styles).toContain('.redeven-desktop-update-button {');
     expect(styles).toContain(".redeven-desktop-update-button[data-update-state='available']");
   });

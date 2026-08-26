@@ -6271,6 +6271,31 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             />
           </div>
         )}
+        topBarCornerActions={(
+          <button
+            type="button"
+            class="redeven-desktop-update-button"
+            data-update-state={desktopUpdateSnapshot().state}
+            aria-label={i18n().t('desktopUpdate.statusButton', {
+              status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
+            })}
+            title={i18n().t('desktopUpdate.statusButton', {
+              status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
+            })}
+            onClick={checkForDesktopUpdates}
+          >
+            <Refresh
+              class={cn(
+                'h-3.5 w-3.5 shrink-0',
+                desktopUpdateSnapshot().state === 'checking' ? 'animate-spin' : '',
+              )}
+            />
+            <span>{i18n().t('desktopUpdate.checkForUpdates')}</span>
+            <Show when={desktopUpdateSnapshot().state === 'available' || desktopUpdateSnapshot().state === 'ready'}>
+              <span class="redeven-desktop-update-button__indicator" aria-hidden="true" />
+            </Show>
+          </button>
+        )}
         bottomBarLeading={(
           <div class="flex items-center gap-1.5 min-w-0">
             <span class="redeven-bottom-bar-metric">
@@ -6350,8 +6375,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               gatewaySourceFilter={gatewaySourceFilter()}
               gatewayQuery={gatewayQuery()}
               gatewayEntries={gatewayEntries()}
-              desktopUpdateSnapshot={desktopUpdateSnapshot()}
-              checkForDesktopUpdates={checkForDesktopUpdates}
               lifecycleProgressFocusRequest={lifecycleProgressFocusRequest()}
               consumeLifecycleProgressFocusRequest={(requestID) => {
                 setLifecycleProgressFocusRequest((current) => (
@@ -6901,8 +6924,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   gatewaySourceFilter: string;
   gatewayQuery: string;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
-  desktopUpdateSnapshot: DesktopUpdateSnapshot;
-  checkForDesktopUpdates: () => void;
   lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
   consumeLifecycleProgressFocusRequest: (requestID: number) => void;
   setLibrarySourceFilter: (value: string) => void;
@@ -7096,7 +7117,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                   {props.i18n.t(headerCopy().descriptionKey)}
                 </p>
               </div>
-              <div class="flex flex-wrap items-center justify-end gap-2">
+              <div class="flex items-center gap-2">
                 <Show when={props.activeTab === 'environments' || props.activeTab === 'gateways'}>
                   <div class="relative w-full sm:w-[14.5rem]">
                     <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -7139,29 +7160,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     </span>
                   </DesktopTooltip>
                 </Show>
-                <button
-                  type="button"
-                  class="redeven-desktop-update-button"
-                  data-update-state={props.desktopUpdateSnapshot.state}
-                  aria-label={props.i18n.t('desktopUpdate.statusButton', {
-                    status: desktopUpdateStatusLabel(props.i18n, props.desktopUpdateSnapshot),
-                  })}
-                  title={props.i18n.t('desktopUpdate.statusButton', {
-                    status: desktopUpdateStatusLabel(props.i18n, props.desktopUpdateSnapshot),
-                  })}
-                  onClick={props.checkForDesktopUpdates}
-                >
-                  <Refresh
-                    class={cn(
-                      'h-3.5 w-3.5 shrink-0',
-                      props.desktopUpdateSnapshot.state === 'checking' ? 'animate-spin' : '',
-                    )}
-                  />
-                  <span>{props.i18n.t('desktopUpdate.checkForUpdates')}</span>
-                  <Show when={props.desktopUpdateSnapshot.state === 'available' || props.desktopUpdateSnapshot.state === 'ready'}>
-                    <span class="redeven-desktop-update-button__indicator" aria-hidden="true" />
-                  </Show>
-                </button>
                 <Show when={props.activeTab === 'environments'}>
                   <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
                     <Plus class="mr-1 h-3.5 w-3.5" />
