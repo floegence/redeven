@@ -683,9 +683,11 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(dragOver.defaultPrevented).toBe(true);
     expect(drop.defaultPrevented).toBe(true);
     expect(onRelocateSession).toHaveBeenCalledWith('session-1', 'default', null);
+    expect(host.querySelector('[data-terminal-drag-preview]')).toBeNull();
   });
 
-  it('renders a session-shaped drag preview constrained to the sidebar', () => {
+  it('returns an invalid session drag preview to its source inside the sidebar', async () => {
+    vi.useFakeTimers();
     const item = navigationItem({ id: 'session-1', title: 'build shell' });
     const { host } = renderNavigator(item, vi.fn(), {
       groups: [{
@@ -717,6 +719,15 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(preview.style.transform).toBe('translate3d(56px, 348px, 0)');
 
     document.dispatchEvent(new Event('dragend', { bubbles: true }));
+    expect(preview.dataset.terminalDragPreviewReturning).toBe('true');
+    expect(sessionRow.getAttribute('aria-grabbed')).toBe('false');
+    expect(boundary.querySelector('[data-terminal-drag-preview]')).toBe(preview);
+
+    await vi.advanceTimersByTimeAsync(20);
+    expect(preview.style.transform).toBe('translate3d(20px, 70px, 0)');
+    expect(preview.style.opacity).toBe('0');
+
+    await vi.advanceTimersByTimeAsync(220);
     expect(boundary.querySelector('[data-terminal-drag-preview]')).toBeNull();
   });
 
@@ -851,6 +862,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-group-order-drop-hint="beta"]')?.getAttribute('data-terminal-group-order-drop-position')).toBe('before');
     dispatchDragEvent(betaHeader, 'drop', dataTransfer, 150);
     expect(onReorderGroup).toHaveBeenCalledWith('gamma', 'beta');
+    expect(host.querySelector('[data-terminal-drag-preview]')).toBeNull();
   });
 
   it('moves a group into the explicit list-end placement zone', () => {
@@ -881,7 +893,43 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(onReorderGroup).toHaveBeenCalledWith('alpha', null);
   });
 
-  it('clears every drag affordance when a native drag ends outside the navigator', () => {
+  it('returns an invalid group drag preview to its source', async () => {
+    vi.useFakeTimers();
+    const { host } = renderNavigator(navigationItem({ id: 'session-1' }), vi.fn(), {
+      groups: [{
+        id: 'default', name: 'Default', defaultWorkingDir: '/workspace', isDefault: true,
+        expanded: false, itemIds: [], totalSessionCount: 0,
+      }, {
+        id: 'alpha', name: 'Alpha', defaultWorkingDir: '/alpha', isDefault: false,
+        expanded: false, itemIds: ['session-1'], totalSessionCount: 1,
+      }],
+    });
+    const boundary = host.querySelector<HTMLElement>('[data-terminal-drag-boundary]')!;
+    const alphaHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="alpha"]')!;
+    Object.defineProperty(boundary, 'getBoundingClientRect', {
+      value: () => ({ top: 0, left: 0, width: 286, height: 600, right: 286, bottom: 600, x: 0, y: 0, toJSON: () => ({}) }),
+    });
+    Object.defineProperty(alphaHeader, 'getBoundingClientRect', {
+      value: () => ({ top: 100, left: 5, width: 276, height: 44, right: 281, bottom: 144, x: 5, y: 100, toJSON: () => ({}) }),
+    });
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(alphaHeader, 'dragstart', dataTransfer, 112, 20);
+    const preview = boundary.querySelector<HTMLElement>('[data-terminal-drag-preview="group"]')!;
+    dispatchDragEvent(boundary, 'dragover', dataTransfer, 590, 400);
+    expect(preview.style.transform).toBe('translate3d(10px, 556px, 0)');
+
+    document.dispatchEvent(new Event('dragend', { bubbles: true }));
+    expect(preview.dataset.terminalDragPreviewReturning).toBe('true');
+    expect(alphaHeader.getAttribute('aria-grabbed')).toBe('false');
+
+    await vi.advanceTimersByTimeAsync(20);
+    expect(preview.style.transform).toBe('translate3d(5px, 100px, 0)');
+    await vi.advanceTimersByTimeAsync(220);
+    expect(boundary.querySelector('[data-terminal-drag-preview]')).toBeNull();
+  });
+
+  it('clears drop affordances immediately when a native drag ends outside the navigator', () => {
     const item = navigationItem({ id: 'session-1' });
     const { host } = renderNavigator(item, vi.fn(), {
       groups: [{
