@@ -1,30 +1,40 @@
-export function CodespacesActivityBarGlyph() {
+const CODESPACES_FOLD_PATH = 'M9.2 5.95Q9.62 5.9 9.9 6.23l.35.43q.27.32-.03.62L6.4 12l3.82 4.72q.3.3.03.62l-.35.43q-.28.33-.7.28l-4.58-5.27q-.3-.35-.3-.78t.3-.78Z';
+const CODESPACES_SLASH_PATH = 'M13.33 5.72q.15-.44.6-.29l.52.18q.45.15.3.6l-4.07 12.07q-.15.44-.6.29l-.52-.18q-.45-.15-.3-.6Z';
+
+function CodespacesFoldedMark(props: {
+  fill: string;
+  surface?: 'activity-bar';
+  transform?: string;
+}) {
   return (
-    <g data-codespaces-icon-surface="activity-bar">
-      <rect
-        data-codespaces-icon-part="workspace"
-        x="4.25"
-        y="4.75"
-        width="15.5"
-        height="14.5"
-        rx="3.25"
-        fill="none"
-        stroke="currentColor"
-        stroke-opacity=".84"
-        stroke-width="1.75"
+    <g
+      data-codespaces-icon-surface={props.surface}
+      data-codespaces-icon-mark="folded-facets"
+      fill={props.fill}
+      transform={props.transform}
+    >
+      <path
+        data-codespaces-icon-part="fold-left"
+        d={CODESPACES_FOLD_PATH}
+        fill-opacity=".86"
       />
       <path
-        data-codespaces-icon-part="code-brackets"
-        d="M9.5 9.25 7.25 12l2.25 2.75M14.5 9.25 16.75 12l-2.25 2.75"
-        fill="none"
-        stroke="currentColor"
-        stroke-opacity=".84"
-        stroke-width="1.75"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+        data-codespaces-icon-part="fold-right"
+        d={CODESPACES_FOLD_PATH}
+        fill-opacity=".86"
+        transform="matrix(-1 0 0 1 24 0)"
+      />
+      <path
+        data-codespaces-icon-part="slash-facet"
+        d={CODESPACES_SLASH_PATH}
+        fill-opacity=".7"
       />
     </g>
   );
+}
+
+export function CodespacesActivityBarGlyph() {
+  return <CodespacesFoldedMark fill="currentColor" surface="activity-bar" />;
 }
 
 export function CodespacesWorkbenchIcon(props: { class?: string }) {
@@ -49,28 +59,7 @@ export function CodespacesWorkbenchIcon(props: { class?: string }) {
         stroke="var(--foreground)"
         stroke-opacity=".08"
       />
-      <rect
-        data-codespaces-icon-part="workspace"
-        x="9.5"
-        y="10.25"
-        width="29"
-        height="27.5"
-        rx="6.2"
-        fill="none"
-        stroke="#4f7fad"
-        stroke-opacity=".86"
-        stroke-width="2.25"
-      />
-      <path
-        data-codespaces-icon-part="code-brackets"
-        d="M21 17.75 15.75 24 21 30.25M27 17.75 32.25 24 27 30.25"
-        fill="none"
-        stroke="#4f7fad"
-        stroke-opacity=".96"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
+      <CodespacesFoldedMark fill="#4f7fad" transform="translate(2.4 2.4) scale(1.8)" />
     </svg>
   );
 }
