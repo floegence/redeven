@@ -170,7 +170,6 @@ describe('Flower Desktop model source E2E', () => {
       bootstrap_strategy: 'desktop_upload',
       release_base_url: '',
     }, {
-      forwardedLocalUIURL: 'http://127.0.0.1:41111/',
       label: 'gzcom',
     }));
     expect(desktopSession?.target_route).toBe('remote_desktop');

@@ -1009,7 +1009,6 @@ describe('desktopWelcomeState', () => {
           }, {
             environmentID: sshTarget.id,
             label: 'SSH Lab',
-            forwardedLocalUIURL: 'http://127.0.0.1:40111/',
           }),
           lifecycle: 'open',
           startup: {

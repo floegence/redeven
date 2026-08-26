@@ -106,7 +106,6 @@ export function resolveDesktopSessionTransport(
   startup: StartupReport,
   options: DesktopSessionTransportOptions = {},
 ): DesktopSessionTransport {
-  const displayURL = startup.local_ui_url;
   if (target.kind === 'local_environment' && target.route === 'local_host' && options.placementBridge !== true) {
     const baseURL = requireLocalUIBridgeURL(startup);
     requireLocalUIBridgeToken(startup);
@@ -114,7 +113,7 @@ export function resolveDesktopSessionTransport(
       kind: 'native_local_bridge',
       baseURL,
       entryURL: buildLocalUIEnvAppEntryURL(baseURL),
-      displayURL,
+      displayURL: baseURL,
       allowedBaseURL: baseURL,
       proxyPolicy: 'direct',
       partition: directPartition(target),
@@ -123,12 +122,12 @@ export function resolveDesktopSessionTransport(
 
   if (options.placementBridge === true || target.kind === 'ssh_environment') {
     requireLocalUIBridgeToken(startup);
-    const baseURL = rootURL(startup.local_ui_url);
+    const baseURL = requireLocalUIBridgeURL(startup);
     return {
       kind: 'placement_bridge',
       baseURL,
       entryURL: buildLocalUIEnvAppEntryURL(baseURL),
-      displayURL,
+      displayURL: baseURL,
       allowedBaseURL: baseURL,
       proxyPolicy: 'direct',
       partition: directPartition(target),
@@ -143,7 +142,7 @@ export function resolveDesktopSessionTransport(
       kind: 'gateway_bridge',
       baseURL: rootURL(startup.local_ui_url),
       entryURL: startup.local_ui_url,
-      displayURL,
+      displayURL: startup.local_ui_url,
       allowedBaseURL: startup.local_ui_url,
       proxyPolicy: 'direct',
       partition: directPartition(target),
@@ -158,7 +157,7 @@ export function resolveDesktopSessionTransport(
       kind: 'provider_remote',
       baseURL: rootURL(startup.local_ui_url),
       entryURL: startup.local_ui_url,
-      displayURL,
+      displayURL: startup.local_ui_url,
       allowedBaseURL: startup.local_ui_url,
       proxyPolicy: 'system',
       partition: '',
@@ -172,7 +171,7 @@ export function resolveDesktopSessionTransport(
     kind: 'external_local_ui',
     baseURL: rootURL(startup.local_ui_url),
     entryURL: buildLocalUIEnvAppEntryURL(startup.local_ui_url),
-    displayURL,
+    displayURL: startup.local_ui_url,
     allowedBaseURL: startup.local_ui_url,
     proxyPolicy: 'system',
     partition: '',

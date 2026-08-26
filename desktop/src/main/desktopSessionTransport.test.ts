@@ -32,7 +32,7 @@ describe('resolveDesktopSessionTransport', () => {
       kind: 'native_local_bridge',
       baseURL: 'http://127.0.0.1:43123/',
       entryURL: 'http://127.0.0.1:43123/_redeven_proxy/env/',
-      displayURL: 'http://100.126.191.114:23998/',
+      displayURL: 'http://127.0.0.1:43123/',
       allowedBaseURL: 'http://127.0.0.1:43123/',
       proxyPolicy: 'direct',
       partition: 'redeven-direct:env%3Alocal%3Alocal_host',
@@ -48,7 +48,7 @@ describe('resolveDesktopSessionTransport', () => {
       kind: 'native_local_bridge',
       baseURL: 'http://127.0.0.1:43123/',
       entryURL: 'http://127.0.0.1:43123/_redeven_proxy/env/',
-      displayURL: '',
+      displayURL: 'http://127.0.0.1:43123/',
       allowedBaseURL: 'http://127.0.0.1:43123/',
       proxyPolicy: 'direct',
       partition: 'redeven-direct:env%3Alocal%3Alocal_host',
@@ -73,8 +73,8 @@ describe('resolveDesktopSessionTransport', () => {
       local_ui_url: 'http://127.0.0.1:44000/',
     }, { placementBridge: true })).toMatchObject({
       kind: 'placement_bridge',
-      baseURL: 'http://127.0.0.1:44000/',
-      entryURL: 'http://127.0.0.1:44000/_redeven_proxy/env/',
+      baseURL: 'http://127.0.0.1:43123/',
+      entryURL: 'http://127.0.0.1:43123/_redeven_proxy/env/',
       proxyPolicy: 'direct',
     });
   });
@@ -91,16 +91,17 @@ describe('resolveDesktopSessionTransport', () => {
       runtime_root: '~/.redeven',
       bootstrap_strategy: 'auto',
       release_base_url: 'https://github.com/floegence/redeven/releases',
-      forwarded_local_ui_url: 'http://127.0.0.1:44000/',
     };
     const transport = resolveDesktopSessionTransport(target, {
-      local_ui_url: 'http://127.0.0.1:44000/',
-      local_ui_urls: ['http://127.0.0.1:44000/'],
+      local_ui_url: '',
+      local_ui_urls: [],
       local_ui_bridge_url: 'http://127.0.0.1:44000/',
       local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     });
     expect(transport.kind).toBe('placement_bridge');
     expect(transport.proxyPolicy).toBe('direct');
+    expect(transport.baseURL).toBe('http://127.0.0.1:44000/');
+    expect(transport.displayURL).toBe('http://127.0.0.1:44000/');
     expect(transport.partition.startsWith('persist:')).toBe(false);
   });
 

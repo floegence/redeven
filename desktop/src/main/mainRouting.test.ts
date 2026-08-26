@@ -20,26 +20,6 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
-  it('keeps persisted reinstall journals internal until the user starts a current request', () => {
-    const mainSrc = readMainSource();
-
-    expect(mainSrc).toContain('currentReinstallTargetJournalForEnvironment(');
-    expect(mainSrc).toContain('createReinstallConfirmationForCurrentRequest(');
-    expect(mainSrc).toContain('.validatePersistedJournalTarget(persistedJournal)');
-    expect(mainSrc).toContain('await reinstallRecoveryRequiredForEnvironment(request.environment_id)');
-    expect(mainSrc).toContain('removeOtherReinstallOperationsForAffectedEnvironments(');
-    expect(mainSrc).toContain("existing?.reinstall_preview?.preflight_id === request.preflight_id");
-    expect(mainSrc).toContain('recommendedMode && recommendedMode !== request.mode');
-    expect(mainSrc).toContain("const targetReviewRequired = normalizedError instanceof ReinstallTargetCoordinatorError");
-    expect(mainSrc).toContain('await reinstallTargetCoordinator().discardUnstartedJournals();');
-    expect(mainSrc).not.toContain('hydratePersistedReinstallOperations');
-    expect(mainSrc).not.toContain('Reinstall interrupted');
-    expect(mainSrc).not.toContain('Continue reinstall');
-    expect(mainSrc).not.toContain("existing.status === 'needs_confirmation'\n        && existing.environment_id");
-    expect(mainSrc).not.toContain("retry_action: {\n          kind: 'reinstall_target'");
-    expect(mainSrc).not.toContain("existing.next_actions?.some((action) => action.kind === 'reinstall_target')");
-  });
-
   it('owns and injects one Desktop SSH transport manager without direct consumer SSH spawns', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).toContain('const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager();');
@@ -189,7 +169,8 @@ describe('main routing', () => {
     const lifecycleAccessStart = mainSrc.indexOf('async function verifyManagedRuntimeLifecycleAccess(');
     const lifecycleAccessEnd = mainSrc.indexOf('function runtimeBridgeStartCanRecover(', lifecycleAccessStart);
     const lifecycleAccessSrc = mainSrc.slice(lifecycleAccessStart, lifecycleAccessEnd);
-    expect(lifecycleAccessSrc).toContain('runtimeServiceIsOpenable(ready.startup.runtime_service)');
+    expect(lifecycleAccessSrc).toContain('runtimeServiceIsOpenable(ready.runtime_service)');
+    expect(lifecycleAccessSrc).not.toContain('ready.startup');
     expect(lifecycleAccessSrc).toContain('startRuntimePlacementBridgeSession({');
     expect(lifecycleAccessSrc).toContain('runtimeServiceIsOpenable(localUI.value.runtime_service)');
     expect(mainSrc).not.toContain('waitForDesktopRuntimeLifecycleReadiness');

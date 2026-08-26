@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalRuntimeHostExecutor } from './runtimeHostAccess';
 import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
 import type { PreparedReinstallRuntimePackage } from './reinstallRuntimePackage';
+import type { StartupReport } from './startup';
 import {
   ReinstallTargetCoordinator,
   ReinstallTargetCoordinatorError,
@@ -58,6 +59,30 @@ function preparedPackage(operationID = 'test-operation'): PreparedReinstallRunti
   };
 }
 
+function startupReport(): StartupReport {
+  return {
+    local_ui_url: '',
+    local_ui_urls: [],
+    local_ui_bridge_url: 'http://127.0.0.1:43124/',
+    local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    pid: 71,
+    runtime_service: {
+      runtime_version: 'v1',
+      runtime_commit: 'abc',
+      protocol_version: 'redeven-runtime-v2',
+      compatibility: 'compatible',
+      remote_enabled: false,
+      open_readiness: { state: 'openable' },
+      active_workload: {
+        terminal_count: 0,
+        session_count: 0,
+        task_count: 0,
+        port_forward_count: 0,
+      },
+    },
+  };
+}
+
 function coordinatorDependencies(
   journalRoot: string,
   currentDescriptor: () => ReinstallTargetDescriptor,
@@ -101,7 +126,10 @@ function coordinatorDependencies(
       events.push('install_runtime');
       await fs.writeFile(path.join(targetRoot, 'fresh-component'), 'current');
     },
-    start_runtime: async () => { events.push('start_runtime'); },
+    start_runtime: async () => {
+      events.push('start_runtime');
+      return startupReport();
+    },
     verify_fresh_identity: async (_descriptor, targetRoot) => {
       events.push('verify_fresh_identity');
       expect(await fs.readFile(path.join(targetRoot, 'fresh-component'), 'utf8')).toBe('current');
@@ -231,6 +259,7 @@ describe('ReinstallTargetCoordinator', () => {
       start_runtime: async () => {
         startCommandStarted();
         await startCommandGate;
+        return startupReport();
       },
     });
     const preview = await coordinator.preview({ environment_id: current.environment_id });
@@ -263,6 +292,7 @@ describe('ReinstallTargetCoordinator', () => {
         if (startAttempts === 1) {
           throw new Error('simulated Desktop interruption before Runtime startup');
         }
+        return startupReport();
       },
     };
     let coordinator = new ReinstallTargetCoordinator(dependencies);
@@ -278,8 +308,54 @@ describe('ReinstallTargetCoordinator', () => {
 
     coordinator = new ReinstallTargetCoordinator(dependencies);
     await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
-    expect(installAttempts).toBe(1);
+    expect(installAttempts).toBe(2);
     expect(startAttempts).toBe(2);
+  });
+
+  it('replaces a runtime_started recovery with the current Desktop package', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    const journalRoot = path.join(parent, 'journal');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    let currentCommit = 'old-commit';
+    const installedCommits: string[] = [];
+    const dependencies: ReinstallTargetCoordinatorDependencies = {
+      ...coordinatorDependencies(journalRoot, () => current, []),
+      prepare_runtime_package: async () => ({
+        ...preparedPackage(),
+        commit: currentCommit,
+      }),
+      install_runtime: async (_descriptor, _freshRoot, _mode, prepared) => {
+        installedCommits.push(prepared.commit);
+      },
+      start_runtime: async () => ({
+        ...startupReport(),
+        runtime_service: {
+          ...startupReport().runtime_service!,
+          runtime_commit: currentCommit,
+        },
+      }),
+      verify_fresh_identity: async (_descriptor, _freshRoot, prepared) => {
+        if (prepared.commit === 'old-commit') {
+          throw new Error('simulated Desktop interruption after Runtime startup');
+        }
+      },
+    };
+    let coordinator = new ReinstallTargetCoordinator(dependencies);
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+
+    await expect(coordinator.execute(preview.preflight_id)).rejects.toMatchObject({
+      code: 'reinstall_retryable',
+    });
+    await expect(coordinator.readPersistedJournals()).resolves.toEqual([
+      expect.objectContaining({ phase: 'runtime_started' }),
+    ]);
+
+    currentCommit = 'current-commit';
+    coordinator = new ReinstallTargetCoordinator(dependencies);
+    await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
+    expect(installedCommits).toEqual(['old-commit', 'current-commit']);
   });
 
   it('rolls back preserve-data replacement failures and recommends wipe reinstall', async () => {
@@ -290,7 +366,7 @@ describe('ReinstallTargetCoordinator', () => {
     const current = descriptor(targetRoot);
     const rollback = vi.fn(async () => undefined);
     const finalize = vi.fn(async () => undefined);
-    const restartRestoredRuntime = vi.fn(async () => undefined);
+    const restartRestoredRuntime = vi.fn(async () => startupReport());
     const coordinator = new ReinstallTargetCoordinator({
       ...coordinatorDependencies(journalRoot, () => current, []),
       prepare_runtime_package: async () => preparedPackage(),
@@ -565,9 +641,9 @@ describe('ReinstallTargetCoordinator', () => {
       coordinator = new ReinstallTargetCoordinator(coordinatorOptions);
       await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
       await expect(fs.readFile(path.join(targetRoot, 'fresh-component'), 'utf8')).resolves.toBe('current');
-      expect(installAttempts).toBe(1);
-      expect(identityAttempts).toBe(failurePoint === 'verify_identity' ? 2 : 1);
-      expect(processSessionAttempts).toBe(1);
+      expect(installAttempts).toBe(2);
+      expect(identityAttempts).toBe(2);
+      expect(processSessionAttempts).toBe(2);
       expect((await fs.readdir(parent)).some((entry) => entry.startsWith('managed-redeven.redeven-quarantine-'))).toBe(false);
     },
   );

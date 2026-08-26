@@ -56,7 +56,6 @@ export type SSHDesktopTarget = Readonly<{
   bootstrap_strategy: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
   release_base_url: string;
   connect_timeout_seconds?: number | null;
-  forwarded_local_ui_url: string;
 }>;
 
 export type GatewayDesktopTarget = Readonly<{
@@ -291,7 +290,6 @@ export function buildExternalLocalUIDesktopTarget(
 type BuildSSHDesktopTargetOptions = Readonly<{
   environmentID?: string;
   label?: string;
-  forwardedLocalUIURL: string;
   sessionKeyOverride?: `ssh:${string}`;
 }>;
 
@@ -300,7 +298,6 @@ export function buildSSHDesktopTarget(
   options: BuildSSHDesktopTargetOptions,
 ): SSHDesktopTarget {
   const details = normalizeDesktopSSHEnvironmentDetails(rawDetails);
-  const forwardedLocalUIURL = normalizeLocalUIBaseURL(options.forwardedLocalUIURL);
   const environmentID = compact(options.environmentID) || buildSSHEnvironmentID(details);
   return {
     kind: 'ssh_environment',
@@ -314,7 +311,6 @@ export function buildSSHDesktopTarget(
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
-    forwarded_local_ui_url: forwardedLocalUIURL,
   };
 }
 

@@ -155,7 +155,7 @@ export function buildRuntimePlacementBridgePlan(input: Readonly<{
   runtime_binary_path?: string;
   command_kind?: RuntimePlacementBridgeCommandKind;
 }>): RuntimePlacementBridgePlan {
-  const runtimeBinaryPath = compact(input.runtime_binary_path) || 'redeven';
+  const runtimeBinaryPath = compact(input.runtime_binary_path) || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
   const commandKind = input.command_kind ?? 'runtime';
   const stateRoot = desktopRuntimePlacementStateRoot(input.placement);
   if (input.placement.kind === 'host_process') {

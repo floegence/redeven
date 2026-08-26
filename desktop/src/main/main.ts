@@ -801,8 +801,9 @@ type RuntimePlacementReadyRecord = Readonly<{
   target_id: DesktopProviderRuntimeLinkTargetID;
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
-  runtime_binary_path: string;
-  startup?: StartupReport;
+  runtime_pid?: number;
+  runtime_started_at_unix_ms?: number;
+  runtime_service?: RuntimeServiceSnapshot;
 }>;
 
 type SavedRuntimeTargetState = Readonly<{
@@ -1478,7 +1479,6 @@ async function openRuntimePlacementBridgeForReadyRecord(
   const session = await startRuntimePlacementBridgeSession({
     host_access: readyRecord.host_access,
     placement: readyRecord.placement,
-    runtime_binary_path: readyRecord.runtime_binary_path,
     ssh_password: sshPassword,
     ssh_credential_scope: readyRecord.environment_id,
     ssh_transport_manager: desktopSSHTransportManager,
@@ -1489,7 +1489,7 @@ async function openRuntimePlacementBridgeForReadyRecord(
     environmentID: readyRecord.environment_id,
     label: readyRecord.label,
     session,
-    runtimeBinaryPath: readyRecord.runtime_binary_path,
+    runtimeBinaryPath: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   });
   const desktopModelSource = await startDesktopModelSourceForStartup({
     label: nextRecord.label,
@@ -2235,8 +2235,9 @@ async function inspectRuntimePlacementTargetState(
           target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.hostAccess, target.targetID),
           host_access: target.hostAccess,
           placement: target.placement,
-          runtime_binary_path: details.runtime_root,
-          startup: status.startup,
+          runtime_pid: status.startup.pid,
+          runtime_started_at_unix_ms: status.startup.started_at_unix_ms,
+          runtime_service: status.startup.runtime_service,
         };
         sshRuntimeReadyByKey.set(runtimeKey, {
           runtime_key: runtimeKey,
@@ -2446,8 +2447,9 @@ async function inspectRuntimePlacementTargetState(
             target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.hostAccess, target.targetID),
             host_access: target.hostAccess,
             placement: resolution.placement,
-            runtime_binary_path: probe.binary_path,
-            startup: report.startup,
+            runtime_pid: report.startup.pid,
+            runtime_started_at_unix_ms: report.startup.started_at_unix_ms,
+            runtime_service: report.startup.runtime_service,
           };
           runtimePlacementReadyByTargetID.set(target.targetID, readyRecord);
           if (maintenance) {
@@ -3378,9 +3380,9 @@ async function startFreshReinstallRuntime(
   targetRoot: string,
   executor: ReturnType<typeof runtimeHostExecutor>,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<StartupReport> {
   const placement = resolvedReinstallRuntimePlacement(descriptor, targetRoot);
-  await startReinstallRuntime({
+  return startReinstallRuntime({
     executor,
     placement,
     target_root: targetRoot,
@@ -3412,6 +3414,8 @@ async function rollbackFreshReinstallRuntime(
 async function verifyFreshDirectReinstallTarget(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
+  preparedPackage: PreparedReinstallRuntimePackage,
+  startup: StartupReport,
   executor: ReturnType<typeof runtimeHostExecutor>,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -3421,13 +3425,14 @@ async function verifyFreshDirectReinstallTarget(
     placement,
     target_root: targetRoot,
     state_root: desktopRuntimePlacementStateRoot(placement),
+    prepared: preparedPackage,
+    startup,
     signal,
   });
   const affectedIDs = new Set(descriptor.affected_environment_ids);
   const registeredDescriptors = directReinstallTargetDescriptors(await loadDesktopPreferencesCached())
     .filter((candidate) => affectedIDs.has(candidate.environment_id));
   const targets = registeredDescriptors.length > 0 ? registeredDescriptors : [descriptor];
-  const runtimeBinaryPath = `${targetRoot.replace(/\/$/u, '')}/runtime/managed/bin/redeven`;
   for (const target of targets) {
     const targetID = desktopRuntimeTargetID(target.host_access, target.placement, target.environment_id);
     runtimePlacementReadyByTargetID.set(targetID, {
@@ -3437,8 +3442,9 @@ async function verifyFreshDirectReinstallTarget(
       target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.host_access, targetID),
       host_access: target.host_access,
       placement: resolvedReinstallRuntimePlacement(target, targetRoot),
-      runtime_binary_path: runtimeBinaryPath,
-      startup: ready.startup,
+      runtime_pid: ready.startup.pid,
+      runtime_started_at_unix_ms: ready.startup.started_at_unix_ms,
+      runtime_service: ready.startup.runtime_service,
     });
   }
 }
@@ -3461,13 +3467,12 @@ async function verifyReinstallTargetCatalogAndLocalUI(
     descriptor.host_access,
     descriptor.placement,
   );
-  if (!ready?.startup) {
+  if (!ready?.runtime_service) {
     throw new Error('Fresh Runtime readiness is unavailable after installation.');
   }
   const bridge = await startRuntimePlacementBridgeSession({
     host_access: descriptor.host_access,
     placement,
-    runtime_binary_path: ready.runtime_binary_path,
     ssh_password: descriptor.ssh_password,
     ssh_credential_scope: descriptor.environment_id,
     ssh_transport_manager: desktopSSHTransportManager,
@@ -6746,10 +6751,11 @@ function reinstallConfirmationAction(preview: ReinstallTargetPreview) {
   };
 }
 
-function createReinstallConfirmationForCurrentRequest(
+function createReinstallOperationForCurrentRequest(
   journal: ReinstallTargetJournal,
 ): DesktopLauncherOperationSnapshot {
   const preview = journal.preview;
+  const needsConfirmation = journal.phase === 'confirmation';
   const operation = launcherOperations.create({
     operation_key: preview.operation_key,
     action: 'reinstall_target',
@@ -6757,17 +6763,39 @@ function createReinstallConfirmationForCurrentRequest(
     subject_id: journal.environment_id,
     environment_id: journal.environment_id,
     environment_label: preview.label,
-    status: 'needs_confirmation',
+    status: needsConfirmation ? 'needs_confirmation' : 'failed',
     active_progress_surface: 'reinstall',
-    phase: 'confirmation',
+    phase: needsConfirmation ? 'confirmation' : journal.phase,
     title: 'Reinstall Redeven',
     title_key: 'environmentAction.reinstallRedeven',
-    detail: 'Review the deletion list and confirm before Redeven is reinstalled.',
-    detail_key: 'confirm.reinstallTargetDescription',
-    step_progress: reinstallTargetStepProgress('confirmation'),
+    detail: needsConfirmation
+      ? 'Review the deletion list and confirm before Redeven is reinstalled.'
+      : 'Desktop will revalidate the confirmed target and continue the interrupted reinstall.',
+    detail_key: needsConfirmation ? 'confirm.reinstallTargetDescription' : 'progress.reinstallCheckingDetail',
+    step_progress: reinstallTargetStepProgress(
+      needsConfirmation ? 'confirmation' : journal.phase,
+      needsConfirmation ? 'running' : 'failed',
+    ),
     reinstall_preview: preview,
     cancelable: false,
-    next_actions: [reinstallConfirmationAction(preview)],
+    failure: needsConfirmation ? undefined : desktopOperationFailurePresentation({
+      code: 'operation_failed',
+      title: 'Reinstall requires attention',
+      titleKey: 'confirm.reinstallFailedTitle',
+      summary: 'Desktop will revalidate the confirmed target and continue the interrupted reinstall.',
+      summaryKey: 'progress.reinstallCheckingDetail',
+    }),
+    next_actions: needsConfirmation
+      ? [reinstallConfirmationAction(preview)]
+      : [{
+          kind: 'reinstall_target',
+          environment_id: journal.environment_id,
+          preflight_id: journal.preflight_id,
+          operation_key: preview.operation_key,
+          mode: preview.mode,
+          label: 'Continue',
+          label_key: 'environmentAction.continue',
+        }],
   });
   removeOtherReinstallOperationsForAffectedEnvironments(
     operation.operation_key,
@@ -6808,9 +6836,10 @@ async function previewReinstallTargetFromLauncher(
         operationStartedAtUnixMS: existing.started_at_unix_ms,
       });
     }
-    const operation = existing?.status === 'needs_confirmation'
+    const operation = existing?.action === 'reinstall_target'
+      && (existing.status === 'needs_confirmation' || existing.status === 'failed')
       ? existing
-      : createReinstallConfirmationForCurrentRequest(persistedJournal);
+      : createReinstallOperationForCurrentRequest(persistedJournal);
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('previewed_reinstall_target', {
       operationKey: operation.operation_key,
@@ -13323,8 +13352,9 @@ function savedRuntimePlacementReadyRecord(
     // startup report's state_dir points at the nested local-environment state
     // directory, which is not a valid bridge --state-root.
     placement,
-    runtime_binary_path: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-    startup: sshReady.startup,
+    runtime_pid: sshReady.startup.pid,
+    runtime_started_at_unix_ms: sshReady.startup.started_at_unix_ms,
+    runtime_service: sshReady.startup.runtime_service,
   };
   runtimePlacementReadyByTargetID.set(targetID, readyRecord);
   return readyRecord;
@@ -13351,7 +13381,7 @@ async function verifyManagedRuntimeLifecycleAccess(args: Readonly<{
     args.hostAccess,
     args.placement,
   );
-  if (!ready?.startup || !runtimeServiceIsOpenable(ready.startup.runtime_service)) {
+  if (!ready?.runtime_service || !runtimeServiceIsOpenable(ready.runtime_service)) {
     throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
       code: 'runtime_access_verification_failed',
       title: 'Runtime access verification failed',
@@ -13363,7 +13393,6 @@ async function verifyManagedRuntimeLifecycleAccess(args: Readonly<{
   const bridge = await startRuntimePlacementBridgeSession({
     host_access: args.hostAccess,
     placement: ready.placement,
-    runtime_binary_path: ready.runtime_binary_path,
     ssh_password: args.sshPassword,
     ssh_credential_scope: args.environmentID,
     ssh_transport_manager: desktopSSHTransportManager,
@@ -13386,14 +13415,6 @@ async function verifyManagedRuntimeLifecycleAccess(args: Readonly<{
         targetLabel: args.label,
       }));
     }
-    runtimePlacementReadyByTargetID.set(args.targetID, {
-      ...ready,
-      startup: {
-        ...bridge.startup,
-        ...localUI.value,
-        local_ui_bridge_url: bridge.startup.local_ui_bridge_url,
-      },
-    });
   } finally {
     await bridge.disconnect().catch(() => undefined);
   }
@@ -13535,7 +13556,6 @@ async function openRuntimePlacementBridgeFromLauncher(
         ), {
           environmentID,
           label,
-          forwardedLocalUIURL: existingBridge?.startup.local_ui_url ?? readyRecord?.startup?.local_ui_url ?? 'http://127.0.0.1/',
           sessionKeyOverride: desktopSessionKeyFromRuntimeTargetID(targetID) as `ssh:${string}`,
         })
       : buildManagedLocalRuntimeDesktopTarget(environmentID, label);
@@ -13711,7 +13731,7 @@ async function openRuntimePlacementBridgeFromLauncher(
             }
           }
         }
-        let runtimeBinaryPath = readyRecord!.runtime_binary_path;
+        const runtimeBinaryPath = DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
         placement = readyRecord!.placement;
         const sshPassword = savedRuntimePlacementSSHPassword(
           preferences,
@@ -13884,7 +13904,6 @@ async function openRuntimePlacementBridgeFromLauncher(
               }));
             }
             placement = readyRecord.placement;
-            runtimeBinaryPath = readyRecord.runtime_binary_path;
           }
         }
         bridgeProxyDurationMS = Date.now() - bridgeProxyStartedAtUnixMS;
@@ -13983,7 +14002,6 @@ async function openRuntimePlacementBridgeFromLauncher(
             }));
           }
           placement = readyRecord.placement;
-          runtimeBinaryPath = readyRecord.runtime_binary_path;
           const nextBridgeStartedAtUnixMS = Date.now();
           bridgeSession = await startRuntimePlacementBridgeSession({
             host_access: hostAccess,
@@ -14078,7 +14096,6 @@ async function openRuntimePlacementBridgeFromLauncher(
           ), {
             environmentID: record.environment_id,
             label: record.label,
-            forwardedLocalUIURL: record.startup.local_ui_url,
             sessionKeyOverride: desktopSessionKeyFromRuntimeTargetID(targetID) as `ssh:${string}`,
           })
         : target;
@@ -14482,8 +14499,9 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
             target_id: providerRuntimeLinkTargetIDForRuntimeTarget(input.host_access, targetID),
             host_access: input.host_access,
             placement: ready.placement,
-            runtime_binary_path: ready.runtime_binary_path,
-            startup: ready.startup,
+            runtime_pid: ready.startup?.pid,
+            runtime_started_at_unix_ms: ready.startup?.started_at_unix_ms,
+            runtime_service: ready.startup?.runtime_service,
           });
         }
       } else {
@@ -15236,7 +15254,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
           const targetID = runtimeTargetIDFromRequest(request);
           const runtimeRecord = runtimePlacementBridgeRecordForRequest(request);
           const readyRecord = runtimePlacementReadyByTargetID.get(targetID) ?? null;
-          const runtimeService = runtimeRecord?.startup.runtime_service ?? readyRecord?.startup?.runtime_service;
+          const runtimeService = runtimeRecord?.startup.runtime_service ?? readyRecord?.runtime_service;
           if (runtimeService) {
             await syncLinkedProviderRuntimeHealthFromService(runtimeService).catch(() => undefined);
           }
