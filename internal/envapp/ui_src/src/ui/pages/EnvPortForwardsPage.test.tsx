@@ -614,6 +614,37 @@ describe('EnvPortForwardsPage', () => {
     expect(String((duplicateBody as Record<string, unknown> | null)?.request_id)).toMatch(/^envapp-/u);
   });
 
+  it('preserves a duplicated host runtime bundle when saving template edits', async () => {
+    const source = {
+      template_id: 'tmpl-host-copy', service_family_id: 'family-copy', name: 'DeepSeek Harness host copy', description: 'Host deployment',
+      source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, version: '0.1.1-rc.2', developer_preview: false,
+      deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }],
+      spec: { schema_version: 1, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web', runtime_bundle: 'deepseek-harness-0.1.1-rc.2-node-24.19.0' } },
+    };
+    let updateBody: Record<string, any> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [source] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-service-templates/tmpl-host-copy' && init?.method === 'PUT') {
+        updateBody = JSON.parse(String(init.body));
+        return source;
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    document.querySelector<HTMLButtonElement>('button[title="Edit template"]')?.click();
+    await flushPage();
+    const save = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save template');
+    save?.click();
+
+    await waitForAssertion(() => expect(updateBody?.spec?.host?.runtime_bundle).toBe('deepseek-harness-0.1.1-rc.2-node-24.19.0'));
+  });
+
   it('restores an active managed operation and exposes cancellation after a page reload', async () => {
     const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
     const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, active_operation: activeOperation };

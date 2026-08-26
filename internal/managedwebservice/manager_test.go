@@ -2,17 +2,11 @@ package managedwebservice
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,49 +15,26 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-func TestCatalogAvailabilityRequiresUsableSignedArtifact(t *testing.T) {
+func TestCatalogMakesReleaseLockedHostRuntimeAvailableWithoutOnlineCatalog(t *testing.T) {
 	t.Parallel()
 	if (runtime.GOOS != "linux" && runtime.GOOS != "darwin") || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
 		t.Skip("native managed service is intentionally unavailable on this platform")
 	}
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var response atomic.Value
-	response.Store([]byte(`{"latest":"not-a-managed-service-catalog"}`))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(response.Load().([]byte)) }))
-	defer server.Close()
 	manager := &Manager{
-		scope:   &filesystemscope.Registry{},
-		catalog: &catalogClient{client: server.Client(), catalogURL: server.URL, packageOrigin: defaultPackageOrigin, publicKey: publicKey, keyID: managedCatalogKeyID},
+		scope:     &filesystemscope.Registry{},
+		downloads: defaultPackageDownloadClient(),
 	}
 	templates, err := manager.Catalog(context.Background())
 	hostTemplate := templateByID(templates, DeepSeekHarnessHostTemplateID)
-	if err != nil || len(templates) != 2 || hostTemplate == nil || hostTemplate.Available || hostTemplate.ReasonCode != "CATALOG_UNAVAILABLE" {
-		t.Fatalf("unpublished catalog availability = %+v, err=%v", templates, err)
-	}
-
-	payload := catalogPayload{
-		TemplateID: DeepSeekHarnessTemplateID,
-		Version:    DeepSeekHarnessVersion,
-		Platforms: map[string]nativeArtifact{currentPlatformKey(): {
-			DownloadURL: defaultPackageOrigin + "/managed/deepseek-harness.tar.gz", SHA256: strings.Repeat("a", 64), SizeBytes: 1024, ExecutableRelPath: "bin/dsh",
-		}},
-	}
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response.Store(signedCatalogBytes(t, privateKey, payloadBytes))
-	templates, err = manager.Catalog(context.Background())
-	hostTemplate = templateByID(templates, DeepSeekHarnessHostTemplateID)
 	if err != nil || len(templates) != 2 || hostTemplate == nil || !hostTemplate.Available || hostTemplate.ReasonCode != "" {
-		t.Fatalf("signed catalog availability = %+v, err=%v", templates, err)
+		t.Fatalf("release-locked host availability = %+v, err=%v", templates, err)
+	}
+	if !hostTemplate.Duplicateable || hostTemplate.Spec == nil || hostTemplate.Spec.Host == nil || hostTemplate.Spec.Host.RuntimeBundle != deepSeekRuntimeBundleID {
+		t.Fatalf("release-locked host template = %+v", hostTemplate)
 	}
 }
 
-func TestCatalogKeepsPinnedDockerTemplateAvailableWithoutNativeCatalog(t *testing.T) {
+func TestCatalogKeepsPinnedDockerTemplateAvailable(t *testing.T) {
 	t.Parallel()
 	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 		t.Skip("the built-in Docker template supports amd64 and arm64")
@@ -71,14 +42,6 @@ func TestCatalogKeepsPinnedDockerTemplateAvailableWithoutNativeCatalog(t *testin
 	if runningInsideContainer() {
 		t.Skip("nested Docker is intentionally unavailable")
 	}
-	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"latest":"not-a-managed-service-catalog"}`))
-	}))
-	defer server.Close()
 	adapter, err := containers.NewAdapter(catalogDockerEngineClient{})
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +49,7 @@ func TestCatalogKeepsPinnedDockerTemplateAvailableWithoutNativeCatalog(t *testin
 	manager := &Manager{
 		scope:      &filesystemscope.Registry{},
 		containers: adapter,
-		catalog:    &catalogClient{client: server.Client(), catalogURL: server.URL, packageOrigin: defaultPackageOrigin, publicKey: publicKey, keyID: managedCatalogKeyID},
+		downloads:  defaultPackageDownloadClient(),
 	}
 
 	templates, err := manager.Catalog(context.Background())

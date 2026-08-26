@@ -3,8 +3,6 @@ package managedwebservice
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
@@ -19,12 +17,10 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"invalid":true}`)) }))
-	defer server.Close()
 	manager := &Manager{
-		registry: registry,
-		scope:    &filesystemscope.Registry{},
-		catalog:  &catalogClient{client: server.Client(), catalogURL: server.URL},
+		registry:  registry,
+		scope:     &filesystemscope.Registry{},
+		downloads: defaultPackageDownloadClient(),
 	}
 	source, err := manager.CreateTemplate(context.Background(), TemplateWriteRequest{
 		RequestID: "request-template-source",
@@ -53,6 +49,26 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 	replayed, err := manager.DuplicateTemplate(context.Background(), source.TemplateID, TemplateDuplicateRequest{RequestID: "request-template-copy", Name: "Local preview copy"})
 	if err != nil || replayed.TemplateID != copy.TemplateID {
 		t.Fatalf("duplicate idempotent replay = %+v, err=%v", replayed, err)
+	}
+}
+
+func TestDuplicateBuiltInHostRetainsReleaseLockedRuntime(t *testing.T) {
+	t.Parallel()
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	manager := &Manager{registry: registry, scope: &filesystemscope.Registry{}, downloads: defaultPackageDownloadClient()}
+	copy, err := manager.DuplicateTemplate(context.Background(), DeepSeekHarnessHostTemplateID, TemplateDuplicateRequest{
+		RequestID: "request-duplicate-builtin-host",
+		Name:      "DeepSeek Harness host copy",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copy.Source != "custom" || copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || copy.Spec.Host.Artifact != nil {
+		t.Fatalf("duplicated built-in host = %+v", copy)
 	}
 }
 

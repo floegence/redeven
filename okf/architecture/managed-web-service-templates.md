@@ -30,7 +30,7 @@ A definition contains display metadata, a Web endpoint, optional input parameter
 
 Host scripts are trusted executable user content and therefore require execute authority. Redeven never asks for or stores sudo credentials. Compose validation rejects builds, published ports, privileged/host namespaces, capability additions, devices, engine sockets, host env/label files, arbitrary binds, external or host-backed volumes, external named networks, scaling, profiles, includes, configs, and secrets. Only `${REDEVEN_WORKSPACE}`, project-owned named volumes, and tmpfs are allowed mount sources.
 
-Every custom edit increments its revision. Duplicate creates an editable custom template at revision 1, records source template and revision, and assigns a new service-family identity. It copies no instance, operation, data, runtime identity, configuration, or secret. Original and duplicate can therefore be installed together. A built-in can be duplicated only when its exact audited package or image digest is present; an incomplete catalog never creates a broken copy.
+Every custom edit increments its revision. Duplicate creates an editable custom template at revision 1, records source template and revision, and assigns a new service-family identity. It copies no instance, operation, data, runtime identity, configuration, or secret. Original and duplicate can therefore be installed together. A built-in can be duplicated only when its release-locked runtime bundle or exact image digest is present; an incomplete release manifest never creates a broken copy.
 
 An installed service retains its canonical definition and SHA-256. Editing its source affects only a future deployment. Deleting a definition is blocked while that definition owns an installed service.
 

@@ -38,7 +38,22 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 		return "", "", err
 	}
 	executable := ""
-	if spec.Host.Artifact != nil {
+	if spec.Host.RuntimeBundle != "" {
+		if spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || d.manager.nativeRuntime == nil {
+			return "", "", serviceError("TEMPLATE_RUNTIME_BUNDLE_INVALID", "The saved host runtime bundle is not available in this Redeven release.", 409, false, nil)
+		}
+		artifact, ok := auditedNativeArtifact(currentPlatformKey())
+		if !ok {
+			return "", "", serviceError("PLATFORM_UNSUPPORTED", "This Redeven release does not include a host runtime for the Environment platform.", 409, false, nil)
+		}
+		if err := validateNativeArtifact(artifact, d.manager.nativeRuntime.client, defaultNodePackageOrigin); err != nil {
+			return "", "", err
+		}
+		executable, err = d.manager.nativeRuntime.installRuntimeBundle(ctx, service, artifact, installRoot, progress)
+		if err != nil {
+			return "", "", err
+		}
+	} else if spec.Host.Artifact != nil {
 		artifact := nativeArtifact{DownloadURL: spec.Host.Artifact.DownloadURL, SizeBytes: spec.Host.Artifact.SizeBytes, SHA256: spec.Host.Artifact.SHA256, ExecutableRelPath: spec.Host.Artifact.ExecutableRelPath}
 		if err := validateCustomHostArtifact(artifact); err != nil {
 			return "", "", err
@@ -52,7 +67,7 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 		defer os.RemoveAll(staging)
 		archive := filepath.Join(staging, "package.tar.gz")
 		progress("downloading", 2)
-		if err := downloadNativeArchive(ctx, d.manager.catalog.packageHTTPClient(), artifact, archive); err != nil {
+		if err := downloadNativeArchive(ctx, d.manager.downloads.packageHTTPClient(), artifact, archive); err != nil {
 			return "", "", err
 		}
 		progress("verifying", 3)

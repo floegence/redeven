@@ -102,7 +102,7 @@ type ManagedTemplateSpec = Readonly<{
   kind: 'host' | 'container' | 'compose';
   endpoint: Readonly<{ scheme: 'http' | 'https'; container_port?: number; fixed_host_port?: number; path?: string; health_path?: string; startup_timeout_sec?: number }>;
   parameters?: ReadonlyArray<Readonly<{ name: string; label: string; description?: string; type: 'text' | 'number' | 'boolean' | 'secret' | 'path'; required?: boolean; default?: string }>>;
-  host?: Readonly<{ install_script?: string; start_script: string; stop_script?: string; uninstall_script?: string; artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }> }>;
+  host?: Readonly<{ install_script?: string; start_script: string; stop_script?: string; uninstall_script?: string; artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>; runtime_bundle?: string }>;
   container?: Readonly<{ image: string; entrypoint?: ReadonlyArray<string>; command?: ReadonlyArray<string>; environment?: Readonly<Record<string, string>>; mounts?: ReadonlyArray<Readonly<{ type: 'workspace' | 'bind' | 'volume' | 'tmpfs'; source?: string; target: string; read_only?: boolean }>>; user?: string; read_only_root: boolean; memory_bytes?: number; cpus?: number; pids_limit?: number }>;
   compose?: Readonly<{ yaml: string; main_service: string }>;
 }>;
@@ -220,7 +220,7 @@ function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string)
   };
   const common = { schema_version: 1 as const, kind: draft.kind, endpoint, parameters: original?.parameters ?? [] };
   const spec: ManagedTemplateSpec = draft.kind === 'host'
-    ? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.artifact ? { artifact: original.host.artifact } : {}) } }
+    ? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.artifact ? { artifact: original.host.artifact } : {}), ...(original?.host?.runtime_bundle ? { runtime_bundle: original.host.runtime_bundle } : {}) } }
     : draft.kind === 'container'
       ? { ...common, container: { image: draft.image.trim(), entrypoint: draft.entrypoint.trim() ? [draft.entrypoint.trim()] : [], command: draft.command.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean), environment: parseTemplateEnvironment(draft.environment), mounts: original?.container?.mounts ?? [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'data', target: '/data' }, { type: 'tmpfs', target: '/tmp' }], user: original?.container?.user ?? '', read_only_root: true, memory_bytes: original?.container?.memory_bytes, cpus: original?.container?.cpus, pids_limit: original?.container?.pids_limit || 512 } }
       : { ...common, compose: { yaml: draft.composeYAML, main_service: draft.mainService.trim() } };
