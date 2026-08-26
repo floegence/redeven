@@ -715,15 +715,15 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(preview.style.transform).toBe('translate3d(20px, 70px, 0)');
     expect(preview.querySelector('[data-terminal-session-row]')).toBeNull();
 
-    dispatchDragEvent(boundary, 'dragover', dataTransfer, 900, 900);
+    const invalidDragOver = dispatchDragEvent(boundary, 'dragover', dataTransfer, 900, 900);
+    expect(invalidDragOver.defaultPrevented).toBe(true);
     expect(preview.style.transform).toBe('translate3d(56px, 348px, 0)');
 
-    document.dispatchEvent(new Event('dragend', { bubbles: true }));
+    const invalidDrop = dispatchDragEvent(boundary, 'drop', dataTransfer, 900, 900);
+    expect(invalidDrop.defaultPrevented).toBe(true);
     expect(preview.dataset.terminalDragPreviewReturning).toBe('true');
     expect(sessionRow.getAttribute('aria-grabbed')).toBe('false');
     expect(boundary.querySelector('[data-terminal-drag-preview]')).toBe(preview);
-
-    await vi.advanceTimersByTimeAsync(20);
     expect(preview.style.transform).toBe('translate3d(20px, 70px, 0)');
     expect(preview.style.opacity).toBe('0');
 
@@ -916,14 +916,14 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     dispatchDragEvent(alphaHeader, 'dragstart', dataTransfer, 112, 20);
     const preview = boundary.querySelector<HTMLElement>('[data-terminal-drag-preview="group"]')!;
-    dispatchDragEvent(boundary, 'dragover', dataTransfer, 590, 400);
+    const invalidDragOver = dispatchDragEvent(boundary, 'dragover', dataTransfer, 590, 400);
+    expect(invalidDragOver.defaultPrevented).toBe(true);
     expect(preview.style.transform).toBe('translate3d(10px, 556px, 0)');
 
-    document.dispatchEvent(new Event('dragend', { bubbles: true }));
+    const invalidDrop = dispatchDragEvent(boundary, 'drop', dataTransfer, 590, 400);
+    expect(invalidDrop.defaultPrevented).toBe(true);
     expect(preview.dataset.terminalDragPreviewReturning).toBe('true');
     expect(alphaHeader.getAttribute('aria-grabbed')).toBe('false');
-
-    await vi.advanceTimersByTimeAsync(20);
     expect(preview.style.transform).toBe('translate3d(5px, 100px, 0)');
     await vi.advanceTimersByTimeAsync(220);
     expect(boundary.querySelector('[data-terminal-drag-preview]')).toBeNull();
@@ -962,6 +962,18 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     expect(servicesGroup.getAttribute('data-terminal-group-drop-target')).toBeNull();
     expect(sessionRow.getAttribute('aria-grabbed')).toBe('false');
+  });
+
+  it('does not intercept unrelated external drags', () => {
+    const { host } = renderNavigator(navigationItem({ id: 'session-1' }));
+    const boundary = host.querySelector<HTMLElement>('[data-terminal-drag-boundary]')!;
+    const dataTransfer = createDataTransfer();
+    dataTransfer.setData('text/plain', 'external content');
+
+    const dragOver = dispatchDragEvent(boundary, 'dragover', dataTransfer);
+
+    expect(dragOver.defaultPrevented).toBe(false);
+    expect(dataTransfer.dropEffect).toBe('none');
   });
 
   it('opens the same group menu from right click and the overflow action', () => {
