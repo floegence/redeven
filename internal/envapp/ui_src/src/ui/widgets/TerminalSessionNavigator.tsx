@@ -391,23 +391,42 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     setDropIntent(null);
     setGroupDropIntent(null);
   };
+  const resolveDragBoundaryGeometry = () => {
+    if (!dragBoundaryEl) return null;
+    const rect = dragBoundaryEl.getBoundingClientRect();
+    const width = dragBoundaryEl.offsetWidth || rect.width;
+    const height = dragBoundaryEl.offsetHeight || rect.height;
+    const scaleX = width > 0 && rect.width > 0 ? rect.width / width : 1;
+    const scaleY = height > 0 && rect.height > 0 ? rect.height / height : 1;
+    return {
+      rect,
+      width,
+      height,
+      scaleX: Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1,
+      scaleY: Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1,
+    };
+  };
   const updateDragPreviewPosition = (clientX: number, clientY: number) => {
-    if (!dragBoundaryEl || !dragPreviewEl || !dragPreviewMetrics) return;
-    const boundaryRect = dragBoundaryEl.getBoundingClientRect();
-    const maxLeft = Math.max(0, boundaryRect.width - dragPreviewMetrics.width);
-    const maxTop = Math.max(0, boundaryRect.height - dragPreviewMetrics.height);
-    const left = Math.min(maxLeft, Math.max(0, clientX - boundaryRect.left - dragPreviewMetrics.pointerOffsetX));
-    const top = Math.min(maxTop, Math.max(0, clientY - boundaryRect.top - dragPreviewMetrics.pointerOffsetY));
+    const geometry = resolveDragBoundaryGeometry();
+    if (!geometry || !dragPreviewEl || !dragPreviewMetrics) return;
+    const maxLeft = Math.max(0, geometry.width - dragPreviewMetrics.width);
+    const maxTop = Math.max(0, geometry.height - dragPreviewMetrics.height);
+    const localPointerX = (clientX - geometry.rect.left) / geometry.scaleX;
+    const localPointerY = (clientY - geometry.rect.top) / geometry.scaleY;
+    const left = Math.min(maxLeft, Math.max(0, localPointerX - dragPreviewMetrics.pointerOffsetX));
+    const top = Math.min(maxTop, Math.max(0, localPointerY - dragPreviewMetrics.pointerOffsetY));
     dragPreviewEl.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
   };
   const beginDragPreview = (event: DragEvent, kind: 'session' | 'group', source: HTMLElement) => {
-    if (!dragBoundaryEl || !event.dataTransfer) return;
+    const geometry = resolveDragBoundaryGeometry();
+    if (!dragBoundaryEl || !geometry || !event.dataTransfer) return;
     clearDragPreview();
     installTransparentNativeDragImage(event);
     const sourceRect = source.getBoundingClientRect();
-    const boundaryRect = dragBoundaryEl.getBoundingClientRect();
-    const width = Math.min(sourceRect.width, boundaryRect.width);
-    const height = Math.min(sourceRect.height, boundaryRect.height);
+    const sourceWidth = source.offsetWidth || sourceRect.width / geometry.scaleX;
+    const sourceHeight = source.offsetHeight || sourceRect.height / geometry.scaleY;
+    const width = Math.min(sourceWidth, geometry.width);
+    const height = Math.min(sourceHeight, geometry.height);
     const preview = document.createElement('div');
     preview.className = `pointer-events-none absolute left-0 top-0 z-[60] overflow-hidden bg-sidebar/95 opacity-95 shadow-[0_10px_28px_color-mix(in_srgb,var(--foreground)_18%,transparent)] will-change-transform ${kind === 'group' ? 'rounded-lg' : 'rounded-md'}`;
     preview.dataset.terminalDragPreview = kind;
@@ -431,8 +450,8 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     dragPreviewMetrics = {
       width,
       height,
-      pointerOffsetX: Math.min(width, Math.max(0, event.clientX - sourceRect.left)),
-      pointerOffsetY: Math.min(height, Math.max(0, event.clientY - sourceRect.top)),
+      pointerOffsetX: Math.min(width, Math.max(0, (event.clientX - sourceRect.left) / geometry.scaleX)),
+      pointerOffsetY: Math.min(height, Math.max(0, (event.clientY - sourceRect.top) / geometry.scaleY)),
       source,
     };
     updateDragPreviewPosition(event.clientX, event.clientY);
@@ -446,7 +465,8 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     const preview = dragPreviewEl;
     const metrics = dragPreviewMetrics;
     clearDragSignals();
-    if (!preview || !metrics || !dragBoundaryEl) {
+    const geometry = resolveDragBoundaryGeometry();
+    if (!preview || !metrics || !geometry) {
       clearDragPreview();
       return;
     }
@@ -454,12 +474,11 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
       clearDragPreview();
       return;
     }
-    const boundaryRect = dragBoundaryEl.getBoundingClientRect();
     const sourceRect = metrics.source.getBoundingClientRect();
-    const maxLeft = Math.max(0, boundaryRect.width - metrics.width);
-    const maxTop = Math.max(0, boundaryRect.height - metrics.height);
-    const sourceLeft = Math.min(maxLeft, Math.max(0, sourceRect.left - boundaryRect.left));
-    const sourceTop = Math.min(maxTop, Math.max(0, sourceRect.top - boundaryRect.top));
+    const maxLeft = Math.max(0, geometry.width - metrics.width);
+    const maxTop = Math.max(0, geometry.height - metrics.height);
+    const sourceLeft = Math.min(maxLeft, Math.max(0, (sourceRect.left - geometry.rect.left) / geometry.scaleX));
+    const sourceTop = Math.min(maxTop, Math.max(0, (sourceRect.top - geometry.rect.top) / geometry.scaleY));
     const targetTransform = `translate3d(${Math.round(sourceLeft)}px, ${Math.round(sourceTop)}px, 0)`;
     if (preview.style.transform === targetTransform) {
       clearDragPreview();
