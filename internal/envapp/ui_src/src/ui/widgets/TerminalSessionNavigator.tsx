@@ -548,6 +548,70 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     draggedGroupId()
     || event.dataTransfer?.types.includes('application/x-redeven-terminal-group'),
   );
+  const updateGroupOrderDropIntent = (
+    event: DragEvent,
+    targetGroup: TerminalSessionNavigationGroup,
+    requestedPosition: 'before' | 'after',
+  ) => {
+    const draggedId = draggedGroupFromEvent(event);
+    if (!draggedId || draggedId === targetGroup.id) {
+      setGroupDropIntent(null);
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    const orderedTargets = navigationGroups()
+      .filter((group) => !group.isDefault && !group.pending && group.id !== draggedId);
+    let nextIntent: Readonly<{
+      beforeGroupId: string | null;
+      targetGroupId: string;
+      position: 'before' | 'after';
+    }>;
+    if (targetGroup.isDefault) {
+      const firstTarget = orderedTargets[0];
+      if (!firstTarget) {
+        setGroupDropIntent(null);
+        return;
+      }
+      nextIntent = {
+        beforeGroupId: firstTarget.id,
+        targetGroupId: firstTarget.id,
+        position: 'before',
+      };
+    } else {
+      const targetIndex = orderedTargets.findIndex((group) => group.id === targetGroup.id);
+      if (targetIndex < 0) {
+        setGroupDropIntent(null);
+        return;
+      }
+      const nextTarget = orderedTargets[targetIndex + 1];
+      nextIntent = requestedPosition === 'before' || !nextTarget
+        ? {
+            beforeGroupId: requestedPosition === 'before' ? targetGroup.id : null,
+            targetGroupId: targetGroup.id,
+            position: requestedPosition,
+          }
+        : {
+            beforeGroupId: nextTarget.id,
+            targetGroupId: nextTarget.id,
+            position: 'before',
+          };
+    }
+    const originalOrder = navigationGroups()
+      .filter((group) => !group.isDefault && !group.pending)
+      .map((group) => group.id);
+    const projected = originalOrder.filter((groupId) => groupId !== draggedId);
+    const projectedIndex = nextIntent.beforeGroupId
+      ? projected.indexOf(nextIntent.beforeGroupId)
+      : -1;
+    projected.splice(projectedIndex >= 0 ? projectedIndex : projected.length, 0, draggedId);
+    if (projected.every((groupId, index) => groupId === originalOrder[index])) {
+      setGroupDropIntent(null);
+      return;
+    }
+    setGroupDropIntent(nextIntent);
+  };
   const commitDrop = (event: DragEvent) => {
     const intent = dropIntent();
     const sessionId = draggedSessionFromEvent(event);
@@ -835,7 +899,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                   <Index each={navigationGroups()}>
                     {(navigationGroup) => (
                       <div
-                        class="group/tree relative mb-3 transition-opacity duration-150"
+                        class="group/tree relative pb-3 transition-opacity duration-150"
                         classList={{
                           'opacity-35': draggedGroupId() === navigationGroup().id,
                         }}
@@ -843,6 +907,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         data-terminal-tree-group={navigationGroup().id}
                         data-terminal-group-pending={navigationGroup().pending ? 'true' : 'false'}
                         aria-busy={navigationGroup().pending ? 'true' : undefined}
+                        onDragOver={(event) => {
+                          if (!acceptsTerminalGroupDrag(event)) return;
+                          updateGroupOrderDropIntent(event, navigationGroup(), 'after');
+                        }}
+                        onDrop={(event) => {
+                          if (acceptsTerminalGroupDrag(event)) commitGroupDrop(event);
+                        }}
                       >
                         <Show when={groupDropIntent()?.targetGroupId === navigationGroup().id}>
                           <span
@@ -882,61 +953,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           onDragEnd={returnDragPreview}
                           onDragOver={(event) => {
                             if (acceptsTerminalGroupDrag(event)) {
-                              const draggedId = draggedGroupFromEvent(event);
-                              if (!draggedId || draggedId === navigationGroup().id) {
-                                setGroupDropIntent(null);
-                                return;
-                              }
-                              event.preventDefault();
-                              event.stopPropagation();
-                              if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-                              const orderedTargets = navigationGroups()
-                                .filter((group) => !group.isDefault && !group.pending && group.id !== draggedId);
-                              if (navigationGroup().isDefault) {
-                                const firstTarget = orderedTargets[0];
-                                if (!firstTarget) {
-                                  setGroupDropIntent(null);
-                                  return;
-                                }
-                                setGroupDropIntent({
-                                  beforeGroupId: firstTarget.id,
-                                  targetGroupId: firstTarget.id,
-                                  position: 'before',
-                                });
-                                return;
-                              }
-                              const targetIndex = orderedTargets.findIndex((group) => group.id === navigationGroup().id);
-                              if (targetIndex < 0) {
-                                setGroupDropIntent(null);
-                                return;
-                              }
                               const rect = event.currentTarget.getBoundingClientRect();
                               const useUpperBoundary = event.clientY < rect.top + rect.height / 2;
-                              const nextTarget = orderedTargets[targetIndex + 1];
-                              const nextIntent = useUpperBoundary || !nextTarget
-                                ? {
-                                    beforeGroupId: useUpperBoundary ? navigationGroup().id : null,
-                                    targetGroupId: navigationGroup().id,
-                                    position: useUpperBoundary ? 'before' as const : 'after' as const,
-                                  }
-                                : {
-                                    beforeGroupId: nextTarget.id,
-                                    targetGroupId: nextTarget.id,
-                                    position: 'before' as const,
-                                  };
-                              const originalOrder = navigationGroups()
-                                .filter((group) => !group.isDefault && !group.pending)
-                                .map((group) => group.id);
-                              const projected = originalOrder.filter((groupId) => groupId !== draggedId);
-                              const projectedIndex = nextIntent.beforeGroupId
-                                ? projected.indexOf(nextIntent.beforeGroupId)
-                                : -1;
-                              projected.splice(projectedIndex >= 0 ? projectedIndex : projected.length, 0, draggedId);
-                              if (projected.every((groupId, index) => groupId === originalOrder[index])) {
-                                setGroupDropIntent(null);
-                                return;
-                              }
-                              setGroupDropIntent(nextIntent);
+                              updateGroupOrderDropIntent(
+                                event,
+                                navigationGroup(),
+                                useUpperBoundary ? 'before' : 'after',
+                              );
                               return;
                             }
                             if (navigationGroup().pending || !acceptsTerminalSessionDrag(event)) return;
@@ -1099,7 +1122,10 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               ...nextIntent,
                             });
                           }}
-                          onDrop={commitDrop}
+                          onDrop={(event) => {
+                            if (acceptsTerminalGroupDrag(event)) commitGroupDrop(event);
+                            else commitDrop(event);
+                          }}
                         >
                           <span
                             class="pointer-events-none absolute -left-5 top-1/2 h-px w-5 bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))]"

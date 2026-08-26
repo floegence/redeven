@@ -876,6 +876,36 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-drag-preview]')).toBeNull();
   });
 
+  it('keeps the full expanded group body available as an after-group drop target', () => {
+    const onReorderGroup = vi.fn();
+    const { host } = renderNavigator(navigationItem({ id: 'session-1' }), vi.fn(), {
+      groups: [{
+        id: 'default', name: 'Default', defaultWorkingDir: '/workspace', isDefault: true,
+        expanded: false, itemIds: [], totalSessionCount: 0,
+      }, {
+        id: 'alpha', name: 'Alpha', defaultWorkingDir: '/alpha', isDefault: false,
+        expanded: false, itemIds: [], totalSessionCount: 0,
+      }, {
+        id: 'beta', name: 'Beta', defaultWorkingDir: '/beta', isDefault: false,
+        expanded: true, itemIds: ['session-1'], totalSessionCount: 1,
+      }, {
+        id: 'gamma', name: 'Gamma', defaultWorkingDir: '/gamma', isDefault: false,
+        expanded: false, itemIds: [], totalSessionCount: 0,
+      }],
+      onReorderGroup,
+    });
+    const alphaHeader = host.querySelector<HTMLElement>('[data-terminal-group-header="alpha"]')!;
+    const betaBody = host.querySelector<HTMLElement>('[data-terminal-tree-child="session-1"]')!;
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(alphaHeader, 'dragstart', dataTransfer);
+    dispatchDragEvent(betaBody, 'dragover', dataTransfer);
+
+    expect(host.querySelector('[data-terminal-group-order-drop-hint="gamma"]')?.getAttribute('data-terminal-group-order-drop-position')).toBe('before');
+    dispatchDragEvent(betaBody, 'drop', dataTransfer);
+    expect(onReorderGroup).toHaveBeenCalledWith('alpha', 'gamma');
+  });
+
   it('moves a group into the explicit list-end placement zone', () => {
     const onReorderGroup = vi.fn();
     const { host } = renderNavigator(navigationItem({ id: 'session-1' }), vi.fn(), {
