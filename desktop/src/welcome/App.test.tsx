@@ -2315,6 +2315,8 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('redeven-settings-status-overview grid min-w-0');
     expect(dialogSrc).toContain('redeven-settings-state-card--current redeven-boundary-panel');
     expect(dialogSrc).toContain('redeven-settings-state-card--next redeven-boundary-panel');
+    expect(dialogSrc.match(/redeven-settings-state-glyph[^"]*rounded-full/gu)).toHaveLength(2);
+    expect(dialogSrc).not.toMatch(/redeven-settings-state-glyph[^"]*rounded-md/u);
     expect(dialogSrc).toContain('redeven-tile redeven-boundary-panel redeven-surface-panel--interactive');
     expect(dialogSrc).toContain('sm:grid-cols-[minmax(0,1fr)_2.25rem_minmax(0,1fr)]');
     expect(dialogSrc).toContain('redeven-surface-control bg-background');
