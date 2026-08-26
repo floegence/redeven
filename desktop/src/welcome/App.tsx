@@ -187,6 +187,7 @@ import {
   desktopPasswordStateTranslationKey,
   desktopSettingsDraftRequiresRuntimeRestart,
   deriveDesktopAccessDraftModel,
+  validateDesktopAccessDraft,
 } from '../shared/desktopAccessModel';
 import {
   buildEnvironmentLibrarySummaryModel,
@@ -2316,33 +2317,6 @@ function localizedWindowsLabel(i18n: DesktopI18n, count: number): string {
 
 function localizedVisibleLabel(i18n: DesktopI18n, count: number): string {
   return i18n.t('launcher.visibleCount', { count });
-}
-
-function settingsAddressCardTitle(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
-  return accessMode === 'custom_exposure' ? i18n.t('settings.bindAddressTitle') : i18n.t('settings.portTitle');
-}
-
-function settingsAddressCardHelp(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
-  if (accessMode === 'custom_exposure') {
-    return i18n.t('settings.bindAddressHelp');
-  }
-  return accessMode === 'shared_local_network'
-    ? i18n.t('settings.sharedPortHelp')
-    : i18n.t('settings.localPortHelp');
-}
-
-function settingsProtectionCardTitle(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
-  return accessMode === 'local_only' ? i18n.t('settings.protectionTitle') : i18n.t('settings.passwordTitle');
-}
-
-function settingsProtectionCardHelp(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
-  if (accessMode === 'shared_local_network') {
-    return i18n.t('settings.sharedPasswordHelp');
-  }
-  if (accessMode === 'custom_exposure') {
-    return i18n.t('settings.customPasswordHelp');
-  }
-  return i18n.t('settings.localProtectionHelp');
 }
 
 function compactLocalizedPasswordStateTagLabel(
@@ -5483,8 +5457,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function applyAccessFixedPort(portText: string): void {
-    updateSettingsDraft((current) => applyDesktopAccessFixedPortToDraft(current, portText));
+  function applyAccessFixedPort(
+    portText: string,
+    accessMode: Exclude<DesktopAccessMode, 'custom_exposure'>,
+  ): void {
+    updateSettingsDraft((current) => applyDesktopAccessFixedPortToDraft(current, portText, accessMode));
   }
 
   function toggleAutoPort(enabled: boolean): void {
@@ -6544,10 +6521,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         runtimeRestartAvailable={settingsRuntimeRestartAvailable()}
         cancelSettings={cancelSettings}
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
-        openDesktopUpdates={() => {
-          cancelSettings();
-          checkForDesktopUpdates();
-        }}
       />
 
       <ConnectionDialog
@@ -12840,8 +12813,6 @@ const CONNECTION_DIALOG_CLASS = cn(
   'redeven-welcome-dialog-panel--connection',
 );
 
-const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile redeven-boundary-panel rounded-md border px-4 py-4 redeven-settings-detail-card';
-
 function accessModeIcon(mode: DesktopAccessMode): (props?: { class?: string }) => JSX.Element {
   switch (mode) {
     case 'shared_local_network':
@@ -12883,23 +12854,6 @@ function SettingsHelpBadge(props: Readonly<{
   );
 }
 
-function SettingsCardHeading(props: Readonly<{
-  title: string;
-  help?: string;
-  i18n: DesktopI18n;
-  accessory?: JSX.Element;
-}>) {
-  return (
-    <div class="flex w-full items-start justify-between gap-3">
-      <div class="flex min-w-0 items-center gap-2">
-        <div class="min-w-0 text-sm font-medium text-foreground">{props.title}</div>
-        <SettingsHelpBadge label={props.title} content={props.help} i18n={props.i18n} />
-      </div>
-      {props.accessory}
-    </div>
-  );
-}
-
 function SettingsSectionHeader(props: Readonly<{
   label: string;
   hint?: string;
@@ -12908,14 +12862,40 @@ function SettingsSectionHeader(props: Readonly<{
   return (
     <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <div class="flex items-baseline gap-2">
-        <h3 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <h3 class="text-xs font-semibold text-foreground">
           {props.label}
         </h3>
         <Show when={props.hint}>
-          <span class="text-[11px] text-muted-foreground/70">{props.hint}</span>
+          <span class="text-[11px] text-muted-foreground">{props.hint}</span>
         </Show>
       </div>
       {props.accessory}
+    </div>
+  );
+}
+
+function SettingsFormRow(props: Readonly<{
+  controlID: string;
+  label: string;
+  help?: string;
+  required?: boolean;
+  accessory?: JSX.Element;
+  i18n: DesktopI18n;
+  children: JSX.Element;
+}>) {
+  return (
+    <div class="redeven-settings-form-row grid gap-2 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-start sm:gap-x-4">
+      <div class="flex min-h-8 flex-wrap items-center gap-1.5">
+        <label for={props.controlID} class="text-xs font-medium text-foreground">
+          {props.label}
+          <Show when={props.required}>
+            <span aria-hidden="true" class="ml-0.5 text-destructive">*</span>
+          </Show>
+        </label>
+        <SettingsHelpBadge label={props.label} content={props.help} i18n={props.i18n} />
+        {props.accessory}
+      </div>
+      <div class="min-w-0">{props.children}</div>
     </div>
   );
 }
@@ -12928,10 +12908,15 @@ function SettingsApplyTimingControl(props: Readonly<{
   i18n: DesktopI18n;
 }>) {
   return (
-    <div class="redeven-divider grid gap-3 border-t pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <div class="redeven-settings-apply-row redeven-boundary-panel grid gap-3 rounded-md border px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div class="min-w-0">
         <div class="text-xs font-medium text-foreground">{props.i18n.t('settings.applyTimingTitle')}</div>
-        <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{props.i18n.t('settings.applyTimingHelp')}</div>
+        <Show when={props.value === 'restart_now'}>
+          <div class="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-warning-foreground">
+            <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+            <span>{props.i18n.t('settings.applyTimingHelp')}</span>
+          </div>
+        </Show>
       </div>
       <div class="min-w-0 sm:min-w-[15rem]">
         <SegmentedControl
@@ -13143,7 +13128,10 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   settingsErrorRef: (value: HTMLElement) => void;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
   applyAccessMode: (mode: DesktopAccessMode) => void;
-  applyAccessFixedPort: (portText: string) => void;
+  applyAccessFixedPort: (
+    portText: string,
+    accessMode: Exclude<DesktopAccessMode, 'custom_exposure'>,
+  ) => void;
   toggleAutoPort: (enabled: boolean) => void;
 	saveSettings: (options?: Readonly<{
 		restartRuntime?: boolean;
@@ -13151,7 +13139,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   runtimeRestartAvailable: boolean;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
-  openDesktopUpdates: () => void;
 }>) {
   const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
   const [applyTiming, setApplyTiming] = createSignal<DesktopSettingsApplyTiming>('next_start');
@@ -13162,14 +13149,11 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     mode_override: accessModeOverride(),
   }));
   const accessModel = createMemo(() => deriveDesktopAccessDraftModel(props.draft, accessModelOptions()));
-  const addressCardTitle = createMemo(() => settingsAddressCardTitle(props.i18n, accessModel().access_mode));
-  const addressCardHelp = createMemo(() => settingsAddressCardHelp(props.i18n, accessModel().access_mode));
-  const protectionCardTitle = createMemo(() => settingsProtectionCardTitle(props.i18n, accessModel().access_mode));
-  const protectionCardHelp = createMemo(() => settingsProtectionCardHelp(props.i18n, accessModel().access_mode));
   const runtimeAddress = createMemo(() => describeLocalizedRuntimeAddress(props.i18n, accessModel().current_runtime_url));
   const nextStartAddress = createMemo(() => describeLocalizedNextStartAddress(props.i18n, accessModel()));
   const settingsEnvironmentLabel = createMemo(() => trimString(props.baselineSnapshot.environment_label) || props.i18n.t('desktop.environment'));
-  const settingsWindowTitle = createMemo(() => props.i18n.t('settings.settingsWindowTitle', {
+  const settingsWindowTitle = createMemo(() => props.i18n.t('settings.settingsWindowTitle'));
+  const settingsWindowDescription = createMemo(() => props.i18n.t('settings.settingsWindowDescription', {
     label: settingsEnvironmentLabel(),
   }));
   const settingsSaveLabel = createMemo(() => props.i18n.t('settings.saveEnvironmentSettings', {
@@ -13212,11 +13196,23 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   // See ConnectionDialog: memoize the open boolean so that identity churn
   // upstream never re-triggers the overlay-mask focus trap mid-typing.
   const isOpen = createMemo(() => props.open);
-  const restartRequired = createMemo(() => (
+  const hasPendingChanges = createMemo(() => (
     desktopSettingsDraftRequiresRuntimeRestart(props.baselineSnapshot.draft, props.draft)
   ));
-  const showApplyTimingChoice = createMemo(() => props.runtimeRestartAvailable && restartRequired());
+  const accessValidation = createMemo(() => validateDesktopAccessDraft(props.draft, accessModelOptions()));
+  const showApplyTimingChoice = createMemo(
+    () => props.runtimeRestartAvailable && hasPendingChanges() && accessValidation().valid,
+  );
   const restartAfterSave = createMemo(() => showApplyTimingChoice() && applyTiming() === 'restart_now');
+  const selectedAccessModeLabel = createMemo(() => {
+    const option = props.baselineSnapshot.access_mode_options.find((candidate) => candidate.value === accessModel().access_mode);
+    return option ? localizedAccessModeOption(props.i18n, option).label : '';
+  });
+  const portInputValue = createMemo(() => (
+    accessModel().port_mode === 'auto'
+      ? accessModel().fixed_port_value
+      : accessModel().bind_port_text
+  ));
   createEffect(() => {
     const passwordRequirementMissing = props.open
       && accessModel().password_required
@@ -13228,7 +13224,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   });
 
   function selectAccessMode(mode: DesktopAccessMode): void {
-    setAccessModeOverride(mode === 'custom_exposure' ? mode : null);
+    setAccessModeOverride(mode);
     props.applyAccessMode(mode);
   }
 
@@ -13245,287 +13241,263 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
         }
       }}
       title={settingsWindowTitle()}
+      description={settingsWindowDescription()}
       class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
       footer={(
-        <div class="flex w-full items-center justify-between gap-2">
-          <Button size="sm" variant="ghost" onClick={props.openDesktopUpdates}>
-            <Refresh class="mr-1.5 h-3.5 w-3.5" />
-            {props.i18n.t('desktopUpdate.checkForUpdates')}
+        <div class="flex w-full justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={props.cancelSettings}>
+            {props.i18n.t('common.cancel')}
           </Button>
-          <div class="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={props.cancelSettings}>
-              {props.i18n.t('common.cancel')}
-            </Button>
-            <Button
-              size="sm"
-              variant="default"
-              disabled={!accessModel().password_requirement_satisfied}
-              loading={busyStateMatchesAction(props.busyState, 'save_settings')}
-              aria-label={restartAfterSave()
+          <Button
+            size="sm"
+            variant="default"
+            disabled={!hasPendingChanges() || !accessValidation().valid}
+            loading={busyStateMatchesAction(props.busyState, 'save_settings')}
+            aria-label={restartAfterSave()
+              ? props.i18n.t('settings.saveAndRestartEnvironmentSettings', { label: settingsEnvironmentLabel() })
+              : settingsSaveLabel()}
+            title={!hasPendingChanges()
+              ? props.i18n.t('settings.noChangesToSave')
+              : restartAfterSave()
                 ? props.i18n.t('settings.saveAndRestartEnvironmentSettings', { label: settingsEnvironmentLabel() })
                 : settingsSaveLabel()}
-              title={restartAfterSave()
-                ? props.i18n.t('settings.saveAndRestartEnvironmentSettings', { label: settingsEnvironmentLabel() })
-                : settingsSaveLabel()}
-              onClick={() => {
-                void props.saveSettings({ restartRuntime: restartAfterSave() });
-              }}
-            >
-              <Show when={restartAfterSave()}>
-                <Refresh class="mr-1.5 h-3.5 w-3.5" />
-              </Show>
-              {restartAfterSave()
-                ? props.i18n.t('settings.saveAndRestart')
-                : props.i18n.t('settings.saveSettings')}
-            </Button>
-          </div>
+            onClick={() => {
+              void props.saveSettings({ restartRuntime: restartAfterSave() });
+            }}
+          >
+            <Show when={restartAfterSave()}>
+              <Refresh class="mr-1.5 h-3.5 w-3.5" />
+            </Show>
+            {restartAfterSave()
+              ? props.i18n.t('settings.saveAndRestart')
+              : props.i18n.t('settings.saveSettings')}
+          </Button>
         </div>
       )}
     >
       <div class="space-y-5">
-        <div class="space-y-6">
-            <div class="redeven-settings-statusbar redeven-boundary-panel overflow-hidden rounded-md border">
-              <div class="redeven-divide-children grid divide-y sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
-                <div class="flex items-start gap-3 px-4 py-3">
-                  <div class={cn(
-                    'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors',
-                    accessModel().current_runtime_url !== ''
-                      ? 'border-success/30 bg-success/10 text-success'
-                      : 'border-border/60 bg-muted/30 text-muted-foreground',
-                  )}>
-                    <div class={cn(
-                      'h-1.5 w-1.5 rounded-full',
-                      accessModel().current_runtime_url !== '' ? 'bg-success' : 'bg-muted-foreground/50',
-                    )} />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.runtimeLabel')}</div>
-                    <div class={cn(
-                      'mt-0.5 truncate text-xs font-medium text-foreground',
-                      runtimeAddress().primary_monospace && 'font-mono text-[12px]',
-                    )}>
-                      {runtimeAddress().primary}
-                    </div>
-                  </div>
-                </div>
-                <div class="hidden items-center justify-center px-4 text-muted-foreground sm:flex">
-                  <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </div>
-                <div class="flex items-start gap-3 px-4 py-3">
-                  <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
-                    {(() => {
-                      const Icon = accessModeIcon(accessModel().access_mode);
-                      return <Icon class="h-3.5 w-3.5" />;
-                    })()}
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.nextStartLabel')}</div>
-                    <div class="mt-0.5 flex items-baseline gap-1.5">
-                      <div class={cn(
-                        'truncate text-xs font-medium text-foreground',
-                        nextStartAddress().primary_monospace && 'font-mono text-[12px]',
-                      )}>
-                        {nextStartAddress().primary}
-                      </div>
-                      <Show when={nextStartAddress().hint}>
-                        <div class="truncate text-[11px] text-muted-foreground">{nextStartAddress().hint}</div>
-                      </Show>
-                    </div>
-                  </div>
-                </div>
-              </div>
+        <div class="redeven-settings-statusbar redeven-boundary-panel rounded-md border px-4 py-2.5">
+          <div class="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+            <div class="flex min-w-0 shrink-0 items-baseline gap-2">
+              <span class={cn(
+                'h-2 w-2 shrink-0 rounded-full',
+                accessModel().current_runtime_url !== '' ? 'bg-success' : 'bg-muted-foreground/45',
+              )} />
+              <span class="shrink-0 text-[11px] font-medium text-muted-foreground">{props.i18n.t('settings.runtimeLabel')}</span>
+              <span class={cn(
+                'min-w-0 truncate text-xs font-medium text-foreground',
+                runtimeAddress().primary_monospace && 'font-mono',
+              )}>
+                {runtimeAddress().primary}
+              </span>
             </div>
-
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.accessSecurityTitle')}</div>
-              <div class="mt-1 text-sm text-foreground">{props.i18n.t('settings.accessSecurityDescription')}</div>
+            <div class="ml-4 flex shrink-0 items-center text-muted-foreground sm:ml-0">
+              <svg class="h-3.5 w-3.5 rotate-90 sm:rotate-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
             </div>
+            <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span class="shrink-0 text-[11px] font-medium text-muted-foreground">{props.i18n.t('settings.nextStartLabel')}</span>
+              <span class="min-w-0 truncate text-xs font-medium text-foreground">{selectedAccessModeLabel()}</span>
+              <span aria-hidden="true" class="text-muted-foreground/60">·</span>
+              <span class={cn(
+                'min-w-0 truncate text-xs text-muted-foreground',
+                nextStartAddress().primary_monospace && 'font-mono',
+              )}>
+                {nextStartAddress().primary}
+                <Show when={nextStartAddress().hint}>
+                  <span> {nextStartAddress().hint}</span>
+                </Show>
+              </span>
+            </div>
+          </div>
+        </div>
 
-            <div class="space-y-6">
-              <section>
-                <SettingsSectionHeader
-                  label={props.i18n.t('settings.visibilityTitle')}
-                  hint={props.i18n.t('settings.visibilityDescription')}
-                />
-                <div
-                  role="radiogroup"
-                  aria-label={props.i18n.t('settings.visibilityTitle')}
-                  class="mt-3 grid gap-3 sm:grid-cols-3"
-                >
-                  <For each={props.baselineSnapshot.access_mode_options}>
-                    {(option, index) => {
-                      const selected = createMemo(() => accessModel().access_mode === option.value);
-                      const localizedOption = createMemo(() => localizedAccessModeOption(props.i18n, option));
-                      const Icon = accessModeIcon(option.value);
-                      return (
-                        <button
-                          type="button"
-                          id={`${visibilityGroupID}-${option.value}`}
-                          role="radio"
-                          aria-checked={selected()}
-                          tabIndex={selected() ? 0 : -1}
-                          class={cn(
-                            'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-md border px-4 py-3.5 text-left transition-[border-color,background-color,box-shadow] duration-150',
-                            selected()
-                              ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_32%,transparent)_inset]'
-                              : 'redeven-tile redeven-boundary-panel redeven-surface-panel--interactive hover:-translate-y-[1px] hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
-                          )}
-                          onClick={() => selectAccessMode(option.value)}
-                          onKeyDown={(event) => {
-                            const options = props.baselineSnapshot.access_mode_options;
-                            const nextIndex = rovingRadioIndexForKey(event.key, index(), options.length);
-                            if (nextIndex === null) {
-                              return;
-                            }
-                            event.preventDefault();
-                            const nextOption = options[nextIndex];
-                            if (!nextOption) {
-                              return;
-                            }
-                            selectAccessMode(nextOption.value);
-                            focusAccessMode(nextOption.value);
-                          }}
-                        >
-                          <div class="flex items-start justify-between gap-3">
-                            <div class={cn(
-                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors',
-                              selected()
-                                ? 'border-primary/40 bg-primary/15 text-primary'
-                                : 'redeven-surface-control bg-muted/25 text-muted-foreground group-hover:text-foreground',
-                            )}>
-                              <Icon class="h-4 w-4" />
-                            </div>
-                            <div class={cn(
-                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
-                              selected()
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'redeven-surface-control bg-background',
-                            )}>
-                              <Show when={selected()}>
-                                <Check class="h-2.5 w-2.5" />
-                              </Show>
-                            </div>
-                          </div>
-                          <div class="mt-1 text-sm font-semibold text-foreground">{localizedOption().label}</div>
-                          <div class="text-[11px] leading-[1.55] text-muted-foreground">{localizedOption().description}</div>
-                        </button>
-                      );
+        <section>
+          <SettingsSectionHeader
+            label={props.i18n.t('settings.visibilityTitle')}
+            hint={props.i18n.t('settings.visibilityDescription')}
+          />
+          <div
+            role="radiogroup"
+            aria-label={props.i18n.t('settings.visibilityTitle')}
+            class="mt-3 grid gap-2.5 sm:grid-cols-3"
+          >
+            <For each={props.baselineSnapshot.access_mode_options}>
+              {(option, index) => {
+                const selected = createMemo(() => accessModel().access_mode === option.value);
+                const localizedOption = createMemo(() => localizedAccessModeOption(props.i18n, option));
+                const Icon = accessModeIcon(option.value);
+                return (
+                  <button
+                    type="button"
+                    id={`${visibilityGroupID}-${option.value}`}
+                    role="radio"
+                    aria-checked={selected()}
+                    tabIndex={selected() ? 0 : -1}
+                    class={cn(
+                      'redeven-visibility-card group relative flex cursor-pointer items-start gap-3 rounded-md border px-3 py-3 text-left transition-[border-color,background-color,box-shadow,transform] duration-150',
+                      selected()
+                        ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_32%,transparent)_inset]'
+                        : 'redeven-tile redeven-boundary-panel redeven-surface-panel--interactive hover:-translate-y-[1px] hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
+                    )}
+                    onClick={() => selectAccessMode(option.value)}
+                    onKeyDown={(event) => {
+                      const options = props.baselineSnapshot.access_mode_options;
+                      const nextIndex = rovingRadioIndexForKey(event.key, index(), options.length);
+                      if (nextIndex === null) return;
+                      event.preventDefault();
+                      const nextOption = options[nextIndex];
+                      if (!nextOption) return;
+                      selectAccessMode(nextOption.value);
+                      focusAccessMode(nextOption.value);
                     }}
-                  </For>
-                </div>
-              </section>
+                  >
+                    <span class={cn(
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors',
+                      selected()
+                        ? 'border-primary/40 bg-primary/15 text-primary'
+                        : 'redeven-surface-control bg-muted/25 text-muted-foreground group-hover:text-foreground',
+                    )}>
+                      <Icon class="h-3.5 w-3.5" />
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="block text-xs font-semibold text-foreground">{localizedOption().label}</span>
+                      <span class="mt-1 block text-[11px] leading-[1.45] text-muted-foreground">{localizedOption().description}</span>
+                    </span>
+                    <span class={cn(
+                      'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                      selected()
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'redeven-surface-control bg-background',
+                    )}>
+                      <Show when={selected()}><Check class="h-2.5 w-2.5" /></Show>
+                    </span>
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+        </section>
 
-              <section>
-                <SettingsSectionHeader
-                  label={props.i18n.t('settings.detailsTitle')}
-                  hint={props.i18n.t('settings.detailsDescription', {
-                    address: addressCardTitle().toLowerCase(),
-                    protection: protectionCardTitle().toLowerCase(),
-                  })}
-                />
-                <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
-                    <SettingsCardHeading title={addressCardTitle()} help={addressCardHelp()} i18n={props.i18n} />
-                    <div class="mt-3 space-y-3">
-                      <Show
-                        when={accessModel().access_mode === 'custom_exposure'}
-                        fallback={(
-                          <>
-                            <label class="block">
-                              <span class="sr-only">{props.i18n.t('settings.portLabel')}</span>
-                              <Input
-                                value={accessModel().fixed_port_value}
-                                inputMode="numeric"
-                                disabled={accessModel().port_mode === 'auto'}
-                                size="sm"
-                                class="w-full"
-                                aria-label={props.i18n.t('settings.portLabel')}
-                                placeholder="23998"
-                                onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
-                              />
-                            </label>
-                            <Show when={accessModel().access_mode === 'local_only'}>
-                              <div class="redeven-surface-inset rounded-md border border-dashed px-3 py-2.5">
-                                <Checkbox
-                                  checked={accessModel().port_mode === 'auto'}
-                                  onChange={props.toggleAutoPort}
-                                  label={props.i18n.t('settings.autoSelectPort')}
-                                  size="sm"
-                                />
-                              </div>
-                            </Show>
-                          </>
-                        )}
-                      >
-                        <SettingsFieldInput
-                          field={props.baselineSnapshot.host_fields[0]!}
-                          value={props.draft.local_ui_bind}
-                          updateDraftField={props.updateDraftField}
-                          sectionTitle={addressCardTitle()}
-                          i18n={props.i18n}
+        <section>
+          <SettingsSectionHeader label={props.i18n.t('settings.detailsTitle')} />
+          <div class="redeven-settings-form-panel redeven-boundary-panel mt-3 rounded-md border px-4 py-3.5">
+            <div class="space-y-3.5">
+              <Show
+                when={accessModel().access_mode === 'custom_exposure'}
+                fallback={(
+                  <SettingsFormRow
+                    controlID="local-ui-port"
+                    label={props.i18n.t('settings.portLabel')}
+                    help={accessModel().access_mode === 'shared_local_network'
+                      ? props.i18n.t('settings.sharedPortHelp')
+                      : props.i18n.t('settings.localPortHelp')}
+                    i18n={props.i18n}
+                  >
+                    <div class="space-y-1.5">
+                      <div class={cn(
+                        'grid gap-2',
+                        accessModel().access_mode === 'local_only' && 'sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center',
+                      )}>
+                        <Input
+                          id="local-ui-port"
+                          value={portInputValue()}
+                          inputMode="numeric"
+                          disabled={accessModel().port_mode === 'auto'}
+                          size="sm"
+                          class={cn(
+                            'w-full',
+                            accessValidation().address_error_key && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+                          )}
+                          aria-invalid={accessValidation().address_error_key ? 'true' : undefined}
+                          aria-describedby={accessValidation().address_error_key ? 'local-ui-port-error' : undefined}
+                          placeholder="23998"
+                          onInput={(event) => props.applyAccessFixedPort(
+                            event.currentTarget.value,
+                            accessModel().access_mode === 'shared_local_network' ? 'shared_local_network' : 'local_only',
+                          )}
                         />
-                      </Show>
-                    </div>
-                  </div>
-
-                  <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
-                    <SettingsCardHeading title={protectionCardTitle()} help={protectionCardHelp()} i18n={props.i18n} />
-                    <div class="mt-3">
-                      <Show
-                        when={accessModel().access_mode === 'local_only'}
-                        fallback={(
-                          <LocalUIPasswordField
-                            snapshot={props.baselineSnapshot}
-                            draft={props.draft}
-                            passwordStateID={accessModel().password_state_id}
-                            passwordStateTone={accessModel().password_state_tone}
-                            passwordRequired={accessModel().password_required}
-                            passwordInvalid={!accessModel().password_requirement_satisfied}
-                            localUIPasswordCanClear={localUIPasswordCanClear()}
-                            updateDraftField={props.updateDraftField}
-                            clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
-                            inputRef={(value) => { passwordInputRef = value; }}
-                            sectionTitle={protectionCardTitle()}
-                            i18n={props.i18n}
+                        <Show when={accessModel().access_mode === 'local_only'}>
+                          <Checkbox
+                            checked={accessModel().port_mode === 'auto'}
+                            onChange={props.toggleAutoPort}
+                            label={props.i18n.t('settings.autoSelectPort')}
+                            size="sm"
                           />
-                        )}
-                      >
-                        <div class="redeven-surface-inset flex items-start gap-2.5 rounded-md border border-dashed px-3 py-2.5">
-                          <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <div class="text-[11px] leading-[1.55] text-muted-foreground">
-                            {props.i18n.t('settings.localOnlyProtectionNote')}
-                          </div>
+                        </Show>
+                      </div>
+                      <Show when={accessValidation().address_error_key}>
+                        <div id="local-ui-port-error" role="alert" class="flex items-start gap-1.5 text-[11px] leading-5 text-destructive">
+                          <AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span>{props.i18n.t(accessValidation().address_error_key!)}</span>
+                        </div>
+                      </Show>
+                      <Show when={accessModel().access_mode === 'local_only'}>
+                        <div class="flex items-start gap-2 text-[11px] leading-5 text-muted-foreground">
+                          <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span>{props.i18n.t('settings.localOnlyProtectionNote')}</span>
                         </div>
                       </Show>
                     </div>
-                  </div>
-                </div>
-              </section>
-
-            </div>
-
-            <Show when={showApplyTimingChoice()}>
-              <SettingsApplyTimingControl
-                value={applyTiming()}
-                onChange={setApplyTiming}
-                i18n={props.i18n}
-              />
-            </Show>
-
-            <Show when={props.settingsError}>
-              <div
-                ref={props.settingsErrorRef}
-                tabIndex={-1}
-                id="settings-error"
-                role="alert"
-                class="rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none"
+                  </SettingsFormRow>
+                )}
               >
-                {props.settingsError}
-              </div>
-            </Show>
+                <SettingsFieldInput
+                  field={props.baselineSnapshot.host_fields[0]!}
+                  value={props.draft.local_ui_bind}
+                  updateDraftField={props.updateDraftField}
+                  i18n={props.i18n}
+                  invalid={Boolean(accessValidation().address_error_key)}
+                  errorId="local-ui-bind-error"
+                  errorMessage={accessValidation().address_error_key
+                    ? props.i18n.t(accessValidation().address_error_key!)
+                    : ''}
+                />
+              </Show>
+
+              <Show when={accessModel().access_mode !== 'local_only'}>
+                <LocalUIPasswordField
+                  snapshot={props.baselineSnapshot}
+                  draft={props.draft}
+                  passwordStateID={accessModel().password_state_id}
+                  passwordStateTone={accessModel().password_state_tone}
+                  passwordRequired={accessModel().password_required}
+                  passwordInvalid={Boolean(accessValidation().password_error_key)}
+                  localUIPasswordCanClear={localUIPasswordCanClear()}
+                  updateDraftField={props.updateDraftField}
+                  clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
+                  inputRef={(value) => { passwordInputRef = value; }}
+                  supportingContent={(
+                    <Show when={accessModel().network_exposure && !accessValidation().address_error_key}>
+                      <div class="flex items-start gap-2 text-[11px] leading-5 text-muted-foreground">
+                        <ShieldCheck class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span>{props.i18n.t('settings.networkTrustNote')}</span>
+                      </div>
+                    </Show>
+                  )}
+                  i18n={props.i18n}
+                />
+              </Show>
             </div>
+          </div>
+        </section>
+
+        <Show when={showApplyTimingChoice()}>
+          <SettingsApplyTimingControl value={applyTiming()} onChange={setApplyTiming} i18n={props.i18n} />
+        </Show>
+
+        <Show when={props.settingsError}>
+          <div
+            ref={props.settingsErrorRef}
+            tabIndex={-1}
+            id="settings-error"
+            role="alert"
+            class="rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none"
+          >
+            {props.settingsError}
+          </div>
+        </Show>
       </div>
     </Dialog>
   );
@@ -15595,38 +15567,32 @@ function LocalUIPasswordField(props: Readonly<{
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
   clearStoredLocalUIPassword: () => void;
   inputRef?: (value: HTMLInputElement) => void;
-  sectionTitle?: string;
+  supportingContent?: JSX.Element;
 }>) {
+  const statusTag = (
+    <Tag
+      variant={passwordStateTagVariant(props.passwordStateTone)}
+      tone="soft"
+      size="sm"
+      class="cursor-default whitespace-nowrap"
+    >
+      {compactLocalizedPasswordStateTagLabel(props.i18n, props.passwordStateID)}
+    </Tag>
+  );
   return (
-    <div class="space-y-3">
-      <div class="flex flex-wrap gap-1.5">
-        <Tag
-          variant={passwordStateTagVariant(props.passwordStateTone)}
-          tone="soft"
-          size="sm"
-          class="cursor-default whitespace-nowrap"
-        >
-          {compactLocalizedPasswordStateTagLabel(props.i18n, props.passwordStateID)}
-        </Tag>
-        <Show when={trimString(props.draft.local_ui_password) !== ''}>
-          <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-            {props.i18n.t('settings.replacementQueued')}
-          </Tag>
-        </Show>
-      </div>
-      <SettingsFieldInput
-        field={props.snapshot.host_fields[1]!}
-        value={props.draft.local_ui_password}
-        updateDraftField={props.updateDraftField}
-        sectionTitle={props.sectionTitle}
-        i18n={props.i18n}
-        required={props.passwordRequired}
-        invalid={props.passwordInvalid}
-        errorId="local-ui-password-required-error"
-        errorMessage={props.passwordInvalid ? props.i18n.t('settings.sharedPasswordRequired') : ''}
-        inputRef={props.inputRef}
-      />
-      <Show when={props.localUIPasswordCanClear}>
+    <SettingsFieldInput
+      field={props.snapshot.host_fields[1]!}
+      value={props.draft.local_ui_password}
+      updateDraftField={props.updateDraftField}
+      i18n={props.i18n}
+      required={props.passwordRequired}
+      invalid={props.passwordInvalid}
+      errorId="local-ui-password-required-error"
+      errorMessage={props.passwordInvalid ? props.i18n.t('settings.sharedPasswordRequired') : ''}
+      inputRef={props.inputRef}
+      accessory={statusTag}
+      supportingContent={props.supportingContent}
+      trailing={props.localUIPasswordCanClear ? (
         <div class="flex justify-end">
           <button
             type="button"
@@ -15636,8 +15602,8 @@ function LocalUIPasswordField(props: Readonly<{
             {props.i18n.t('settings.removeStoredPassword')}
           </button>
         </div>
-      </Show>
-    </div>
+      ) : undefined}
+    />
   );
 }
 
@@ -15646,17 +15612,18 @@ function SettingsFieldInput(props: Readonly<{
   value: string;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
   i18n: DesktopI18n;
-  sectionTitle?: string;
   required?: boolean;
   invalid?: boolean;
   errorId?: string;
   errorMessage?: string;
   inputRef?: (value: HTMLInputElement) => void;
+  accessory?: JSX.Element;
+  trailing?: JSX.Element;
+  supportingContent?: JSX.Element;
 }>) {
   const compactLabel = createMemo(() => compactLocalizedSettingsFieldLabel(props.i18n, props.field));
   const helpText = createMemo(() => localizedSettingsFieldHelp(props.i18n, props.field));
   const placeholderText = createMemo(() => localizedSettingsFieldPlaceholder(props.i18n, props.field));
-  const showVisibleLabel = createMemo(() => compactLabel() !== trimString(props.sectionTitle));
   const describedBy = createMemo(() => {
     const values = (props.field.describedBy ?? []).filter((value) => {
       if (value === props.field.helpId) {
@@ -15671,47 +15638,50 @@ function SettingsFieldInput(props: Readonly<{
   });
 
   return (
-    <label classList={{ hidden: props.field.hidden }} class="grid h-full gap-2.5">
-      <Show
-        when={showVisibleLabel()}
-        fallback={<span class="sr-only">{compactLabel()}</span>}
-      >
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-medium text-foreground">{compactLabel()}</span>
-          <SettingsHelpBadge label={compactLabel()} content={helpText()} i18n={props.i18n} />
-        </div>
-      </Show>
-      <Input
-        ref={props.inputRef}
-        id={props.field.id}
-        name={props.field.name}
-        value={props.value}
-        type={props.field.type ?? 'text'}
-        autocomplete={props.field.autocomplete}
-        inputMode={props.field.inputMode}
-        placeholder={placeholderText()}
-        spellcheck={false}
-        aria-describedby={describedBy()}
-        aria-invalid={props.invalid || undefined}
+    <Show when={!props.field.hidden}>
+      <SettingsFormRow
+        controlID={props.field.id}
+        label={compactLabel()}
+        help={helpText()}
         required={props.required}
-        aria-label={showVisibleLabel() ? undefined : compactLabel()}
-        size="sm"
-        class={cn(
-          'w-full',
-          props.invalid && 'border-destructive focus:border-destructive focus:ring-destructive/20',
-        )}
-        onInput={(event) => props.updateDraftField(props.field.name, event.currentTarget.value)}
-      />
-      <Show when={props.errorId && trimString(props.errorMessage) !== ''}>
-        <div id={props.errorId} role="alert" class="flex items-start gap-1.5 text-[11px] leading-5 text-destructive">
-          <AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{props.errorMessage}</span>
+        accessory={props.accessory}
+        i18n={props.i18n}
+      >
+        <div class="space-y-2">
+          <Input
+            ref={props.inputRef}
+            id={props.field.id}
+            name={props.field.name}
+            value={props.value}
+            type={props.field.type ?? 'text'}
+            autocomplete={props.field.autocomplete}
+            inputMode={props.field.inputMode}
+            placeholder={placeholderText()}
+            spellcheck={false}
+            aria-describedby={describedBy()}
+            aria-invalid={props.invalid || undefined}
+            required={props.required}
+            size="sm"
+            class={cn(
+              'w-full',
+              props.invalid && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+            )}
+            onInput={(event) => props.updateDraftField(props.field.name, event.currentTarget.value)}
+          />
+          <Show when={props.errorId && trimString(props.errorMessage) !== ''}>
+            <div id={props.errorId} role="alert" class="flex items-start gap-1.5 text-[11px] leading-5 text-destructive">
+              <AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{props.errorMessage}</span>
+            </div>
+          </Show>
+          {props.trailing}
+          {props.supportingContent}
+          <Show when={helpText() !== '' && props.field.helpId}>
+            <div id={props.field.helpId!} class="sr-only">{helpText()}</div>
+          </Show>
         </div>
-      </Show>
-      <Show when={helpText() !== '' && props.field.helpId}>
-        <div id={props.field.helpId!} class="sr-only">{helpText()}</div>
-      </Show>
-    </label>
+      </SettingsFormRow>
+    </Show>
   );
 }
 

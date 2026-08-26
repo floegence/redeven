@@ -3337,6 +3337,20 @@ html:not(.dark) .redeven-empty-panel {
     color-mix(in srgb, var(--card) 96%, var(--background) 4%);
 }
 
+.redeven-settings-form-panel,
+.redeven-settings-apply-row {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--foreground) 1.5%, transparent), transparent 56%),
+    color-mix(in srgb, var(--card) 97%, var(--background) 3%);
+}
+
+@media (forced-colors: active) {
+  .redeven-visibility-card[aria-checked='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+  }
+}
+
 /* ── Interior tile surface ── */
 
 .redeven-tile {
@@ -3481,17 +3495,6 @@ pre,
 
 .redeven-popover-panel-collapse > div {
   overflow: hidden;
-}
-
-/* ─── settings detail card hover ─── */
-
-.redeven-settings-detail-card {
-  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
-}
-
-.redeven-settings-detail-card:hover {
-  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
-  box-shadow: 0 4px 16px -12px color-mix(in srgb, var(--foreground) 20%, transparent);
 }
 
 /* ── Card header: runtime metadata chip ── */
@@ -4148,8 +4151,12 @@ pre,
     transition-duration: 1ms;
   }
 
-  .redeven-settings-detail-card {
+  .redeven-visibility-card {
     transition-duration: 1ms;
+  }
+
+  .redeven-visibility-card:hover {
+    transform: none;
   }
 
   .redeven-status-indicator__dot {
