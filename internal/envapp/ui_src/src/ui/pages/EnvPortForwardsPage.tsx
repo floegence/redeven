@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ExternalLink, Globe, Plus, RefreshIcon, Save, Search, Trash, Play, Stop, Refresh, FileText } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ExternalLink, Globe, Plus, RefreshIcon, Save, Search, Trash, Play, Stop, Refresh, FileText, Copy, Pencil } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -13,6 +13,7 @@ import {
   CardTitle,
   Checkbox,
   Input,
+  Textarea,
   Tag,
   type TagProps,
 } from '@floegence/floe-webapp-core/ui';
@@ -77,7 +78,11 @@ type ForwardSession = Readonly<{
 type ManagedService = Readonly<{
   service_id: string;
   template_id: string;
-  deployment: 'native' | 'docker';
+  service_family_id: string;
+  name: string;
+  description?: string;
+  template_source: 'builtin' | 'custom';
+  deployment: ManagedDeployment;
   workspace_path: string;
   version: string;
   desired_state: string;
@@ -87,6 +92,18 @@ type ManagedService = Readonly<{
   last_error_code?: string;
   last_error_message?: string;
   active_operation?: ManagedOperation;
+}>;
+
+type ManagedDeployment = 'native' | 'docker' | 'host' | 'container' | 'compose';
+
+type ManagedTemplateSpec = Readonly<{
+  schema_version: 1;
+  kind: 'host' | 'container' | 'compose';
+  endpoint: Readonly<{ scheme: 'http' | 'https'; container_port?: number; fixed_host_port?: number; path?: string; health_path?: string; startup_timeout_sec?: number }>;
+  parameters?: ReadonlyArray<Readonly<{ name: string; label: string; description?: string; type: 'text' | 'number' | 'boolean' | 'secret' | 'path'; required?: boolean; default?: string }>>;
+  host?: Readonly<{ install_script?: string; start_script: string; stop_script?: string; uninstall_script?: string; artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }> }>;
+  container?: Readonly<{ image: string; entrypoint?: ReadonlyArray<string>; command?: ReadonlyArray<string>; environment?: Readonly<Record<string, string>>; mounts?: ReadonlyArray<Readonly<{ type: 'workspace' | 'bind' | 'volume' | 'tmpfs'; source?: string; target: string; read_only?: boolean }>>; user?: string; read_only_root: boolean; memory_bytes?: number; cpus?: number; pids_limit?: number }>;
+  compose?: Readonly<{ yaml: string; main_service: string }>;
 }>;
 
 type ManagedCatalogTemplate = Readonly<{
@@ -99,12 +116,115 @@ type ManagedCatalogTemplate = Readonly<{
   data_location: string;
   source_url: string;
   docker_source_url: string;
-  deployments: ReadonlyArray<{ deployment: 'native' | 'docker'; available: boolean; reason_code?: string }>;
+  source: 'builtin' | 'custom';
+  deployment: ManagedDeployment;
+  container_mode?: 'single' | 'compose';
+  revision: number;
+  editable: boolean;
+  duplicateable: boolean;
+  derived_from_template_id?: string;
+  service_family_id: string;
+  available: boolean;
+  reason_code?: string;
+  reason?: string;
+  deployments: ReadonlyArray<{ deployment: ManagedDeployment; available: boolean; reason_code?: string; reason?: string }>;
   workspace_roots: ReadonlyArray<{ id: string; label: string; path: string }>;
+  spec?: ManagedTemplateSpec;
 }>;
 
 type ManagedOperation = Readonly<{ operation_id: string; service_id: string; state: string; stage: string; progress_current: number; progress_total: number; error_message?: string }>;
 type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
+type TemplateCategory = 'host' | 'container';
+type TemplateDrawerView = 'catalog' | 'install' | 'editor';
+type TemplateEditorDraft = {
+  templateID?: string;
+  name: string;
+  description: string;
+  version: string;
+  kind: 'host' | 'container' | 'compose';
+  scheme: 'http' | 'https';
+  path: string;
+  healthPath: string;
+  containerPort: string;
+  installScript: string;
+  startScript: string;
+  stopScript: string;
+  uninstallScript: string;
+  image: string;
+  entrypoint: string;
+  command: string;
+  environment: string;
+  composeYAML: string;
+  mainService: string;
+  originalSpec?: ManagedTemplateSpec;
+};
+
+function emptyTemplateDraft(kind: 'host' | 'container' | 'compose'): TemplateEditorDraft {
+  return {
+    name: '', description: '', version: '', kind, scheme: 'http', path: '/', healthPath: '/', containerPort: '3000',
+    installScript: '', startScript: kind === 'host' ? 'exec your-server --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"' : '', stopScript: '', uninstallScript: '',
+    image: '', entrypoint: '', command: '', environment: '',
+    composeYAML: 'services:\n  web:\n    image: nginx:stable-alpine\n', mainService: 'web',
+  };
+}
+
+function draftFromTemplate(template: ManagedCatalogTemplate): TemplateEditorDraft {
+  const spec = template.spec;
+  const kind = spec?.kind ?? (template.deployment === 'native' ? 'host' : template.deployment === 'docker' ? 'container' : template.deployment as 'host' | 'container' | 'compose');
+  const draft = emptyTemplateDraft(kind);
+  return {
+    ...draft,
+    templateID: template.template_id,
+    name: template.name,
+    description: template.description ?? '',
+    version: template.version ?? '',
+    scheme: spec?.endpoint.scheme ?? 'http',
+    path: spec?.endpoint.path ?? '/',
+    healthPath: spec?.endpoint.health_path ?? '/',
+    containerPort: String(spec?.endpoint.container_port ?? 3000),
+    installScript: spec?.host?.install_script ?? '',
+    startScript: spec?.host?.start_script ?? draft.startScript,
+    stopScript: spec?.host?.stop_script ?? '',
+    uninstallScript: spec?.host?.uninstall_script ?? '',
+    image: spec?.container?.image ?? '',
+    entrypoint: spec?.container?.entrypoint?.[0] ?? '',
+    command: spec?.container?.command?.join('\n') ?? '',
+    environment: Object.entries(spec?.container?.environment ?? {}).map(([key, value]) => `${key}=${value}`).join('\n'),
+    composeYAML: spec?.compose?.yaml ?? draft.composeYAML,
+    mainService: spec?.compose?.main_service ?? draft.mainService,
+    originalSpec: spec,
+  };
+}
+
+function parseTemplateEnvironment(raw: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const line of raw.split(/\r?\n/u)) {
+    if (!line.trim()) continue;
+    const separator = line.indexOf('=');
+    if (separator <= 0) throw new Error('TEMPLATE_ENV_INVALID');
+    result[line.slice(0, separator).trim()] = line.slice(separator + 1);
+  }
+  return result;
+}
+
+function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string) {
+  const original = draft.originalSpec;
+  const endpoint = {
+    ...(original?.endpoint ?? {}),
+    scheme: draft.scheme,
+    path: draft.path.trim() || '/',
+    health_path: draft.healthPath.trim() || '/',
+    startup_timeout_sec: original?.endpoint.startup_timeout_sec || 60,
+    ...(draft.kind === 'host' ? {} : { container_port: Number(draft.containerPort) }),
+  };
+  const common = { schema_version: 1 as const, kind: draft.kind, endpoint, parameters: original?.parameters ?? [] };
+  const spec: ManagedTemplateSpec = draft.kind === 'host'
+    ? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.artifact ? { artifact: original.host.artifact } : {}) } }
+    : draft.kind === 'container'
+      ? { ...common, container: { image: draft.image.trim(), entrypoint: draft.entrypoint.trim() ? [draft.entrypoint.trim()] : [], command: draft.command.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean), environment: parseTemplateEnvironment(draft.environment), mounts: original?.container?.mounts ?? [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'data', target: '/data' }, { type: 'tmpfs', target: '/tmp' }], user: original?.container?.user ?? '', read_only_root: true, memory_bytes: original?.container?.memory_bytes, cpus: original?.container?.cpus, pids_limit: original?.container?.pids_limit || 512 } }
+      : { ...common, compose: { yaml: draft.composeYAML, main_service: draft.mainService.trim() } };
+  return { request_id: requestID, name: draft.name.trim(), description: draft.description.trim(), version: draft.version.trim(), spec };
+}
 
 export type WebServiceOpenRoute =
   | Readonly<{ kind: 'browser_direct'; url: string; label: 'Direct' }>
@@ -446,6 +566,15 @@ function managedStageLabel(stage: string, i18n: WebServicesI18n): string {
   }
 }
 
+function managedDeploymentLabel(deployment: ManagedDeployment, i18n: WebServicesI18n): string {
+  switch (deployment) {
+    case 'native':
+    case 'host': return i18n.t('webServices.managed.hostDeployment');
+    case 'compose': return i18n.t('webServices.managed.composeDeployment');
+    default: return i18n.t('webServices.managed.containerDeployment');
+  }
+}
+
 function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const running = () => props.service.observed_state === 'running';
@@ -453,8 +582,8 @@ function ManagedServiceCard(props: { service: ManagedService; busy: boolean; can
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
   return (
-    <Card class={cn('border', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-deepseek-card">
-      <CardHeader class="pb-2"><div class="flex items-start justify-between gap-2"><div class="min-w-0"><CardTitle class="text-sm">DeepSeek Harness</CardTitle><CardDescription class="text-xs mt-0.5">v{props.service.version} · {props.service.deployment === 'docker' ? i18n.t('webServices.managed.docker') : i18n.t('webServices.managed.direct')}</CardDescription></div><Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag></div></CardHeader>
+    <Card class={cn('border transition-colors', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card">
+      <CardHeader class="pb-2"><div class="flex items-start justify-between gap-2"><div class="min-w-0"><CardTitle class="text-sm truncate">{props.service.name || props.service.template_id}</CardTitle><CardDescription class="text-xs mt-0.5">{props.service.version ? `v${props.service.version} · ` : ''}{managedDeploymentLabel(props.service.deployment, i18n)}</CardDescription></div><Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag></div></CardHeader>
       <CardContent class="pt-0 pb-2"><div class="space-y-1 text-[11px]"><div class="flex justify-between gap-3"><span class="text-muted-foreground">{i18n.t('webServices.managed.workspace')}</span><span class="font-mono truncate" title={props.service.workspace_path}>{props.service.workspace_path}</span></div><Show when={props.service.last_error_code}><p class="text-destructive">{i18n.t('webServices.managed.stages.failed')}</p></Show></div></CardContent>
       <CardFooter class={cn('pt-2 flex flex-wrap items-center gap-2 border-t', redevenDividerRoleClass())}>
         <Button size="sm" variant="default" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="w-3.5 h-3.5 mr-1" />{i18n.t('webServices.actions.open')}</Button>
@@ -712,14 +841,22 @@ export function EnvPortForwardsPage() {
   const forwardsRenderable = () => forwards.state === 'ready' || forwards.state === 'refreshing';
 
   const [managedState, setManagedState] = createSignal<ManagedService[]>([]);
-  const [managedTemplate, setManagedTemplate] = createSignal<ManagedCatalogTemplate | null>(null);
+  const [managedTemplates, setManagedTemplates] = createSignal<ManagedCatalogTemplate[]>([]);
   const [managedLoading, setManagedLoading] = createSignal(false);
   const [managedLoadError, setManagedLoadError] = createSignal(false);
   const [managedBusy, setManagedBusy] = createSignal(false);
   const [managedOperation, setManagedOperation] = createSignal<ManagedOperation | null>(null);
   const [workspacePath, setWorkspacePath] = createSignal('');
-  const [deployment, setDeployment] = createSignal<'native' | 'docker'>('native');
-  const [managedInstallOpen, setManagedInstallOpen] = createSignal(false);
+  const [templateDrawerOpen, setTemplateDrawerOpen] = createSignal(false);
+  const [templateDrawerView, setTemplateDrawerView] = createSignal<TemplateDrawerView>('catalog');
+  const [templateCategory, setTemplateCategory] = createSignal<TemplateCategory>('host');
+  const [templateSearch, setTemplateSearch] = createSignal('');
+  const [selectedTemplateID, setSelectedTemplateID] = createSignal<string | null>(null);
+  const [templateDraft, setTemplateDraft] = createSignal<TemplateEditorDraft | null>(null);
+  const [templateSaving, setTemplateSaving] = createSignal(false);
+  const [templateDuplicate, setTemplateDuplicate] = createSignal<ManagedCatalogTemplate | null>(null);
+  const [templateDuplicateName, setTemplateDuplicateName] = createSignal('');
+  const [templateDelete, setTemplateDelete] = createSignal<ManagedCatalogTemplate | null>(null);
   const [managedLogs, setManagedLogs] = createSignal<string[] | null>(null);
   let managedStreamAbort: AbortController | null = null;
   let resumedOperationID: string | null = null;
@@ -729,14 +866,14 @@ export function EnvPortForwardsPage() {
     setManagedLoading(true);
     try {
       const [catalog, services] = await Promise.all([
-        refreshCatalog || !managedTemplate()
+        refreshCatalog || managedTemplates().length === 0
           ? fetchLocalApiJSON<{ templates: ManagedCatalogTemplate[] }>('/_redeven_proxy/api/managed-web-services/catalog', { method: 'GET' })
-          : Promise.resolve({ templates: [managedTemplate()!] }),
+          : Promise.resolve({ templates: managedTemplates() }),
         fetchLocalApiJSON<{ services: ManagedService[] }>('/_redeven_proxy/api/managed-web-services', { method: 'GET' }),
       ]);
-      const template = catalog.templates?.[0] ?? null;
-      setManagedTemplate(template);
-      setWorkspacePath((current) => current.trim() || template?.workspace_roots?.[0]?.path || '');
+      const templates = Array.isArray(catalog.templates) ? catalog.templates : [];
+      setManagedTemplates(templates);
+      setWorkspacePath((current) => current.trim() || templates[0]?.workspace_roots?.[0]?.path || '');
       const nextServices = Array.isArray(services.services) ? services.services : [];
       setManagedState(nextServices);
       setManagedLoadError(false);
@@ -799,20 +936,24 @@ export function EnvPortForwardsPage() {
 
   const managedRequestID = () => `envapp-${crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
 
+  const selectedTemplate = createMemo(() => managedTemplates().find((template) => template.template_id === selectedTemplateID()) ?? null);
+
   const installManaged = async () => {
-    const template = managedTemplate();
-    if (!template || managedState().length > 0 || !canManageManagedService()) return;
+    const template = selectedTemplate();
+    if (!template || !template.available || managedState().some((service) => service.service_family_id === template.service_family_id) || !canManageManagedService()) return;
     setManagedBusy(true);
     setManagedOperation(null);
     const useDesktopWindow = desktopShellWebServiceWindowOpenAvailable();
-    const reservedWindow = useDesktopWindow ? null : window.open('about:blank', 'redeven_managed_deepseek_harness');
+    const reservedWindow = useDesktopWindow ? null : window.open('about:blank', `redeven_managed_${template.template_id}`);
     try {
-      const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: deployment(), workspace_path: workspacePath().trim() }) });
+      const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim() }) });
       setManagedOperation(result.operation);
       const operation = await waitManagedOperation(result.operation.operation_id);
       if (operation.state !== 'succeeded') throw new Error(operation.error_message || i18n.t('webServices.notifications.failedToAddTitle'));
-      setManagedInstallOpen(false);
-      await loadManaged(false);
+      setTemplateDrawerView('catalog');
+      setSelectedTemplateID(null);
+      setTemplateDrawerOpen(false);
+      await loadManaged(true);
       bumpRefresh();
       const refreshed = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
       const forward = refreshed.forwards?.find((item) => item.forward_id === result.service.forward_id);
@@ -898,16 +1039,102 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  const selectedDeploymentAvailability = () => managedTemplate()?.deployments.find((item) => item.deployment === deployment());
-  const deploymentUnavailableReason = () => {
-    switch (selectedDeploymentAvailability()?.reason_code) {
+  const templateUnavailableReason = (template: ManagedCatalogTemplate | null | undefined) => {
+    switch (template?.reason_code) {
       case 'PLATFORM_UNSUPPORTED': return i18n.t('webServices.managed.unavailable.platform');
       case 'CATALOG_TRUST_UNAVAILABLE': return i18n.t('webServices.managed.unavailable.catalogTrust');
       case 'CATALOG_UNAVAILABLE': return i18n.t('webServices.managedCatalogUnavailable');
       case 'NESTED_DOCKER_UNSUPPORTED': return i18n.t('webServices.managed.unavailable.nestedDocker');
       case 'DOCKER_UNAVAILABLE': return i18n.t('webServices.managed.unavailable.docker');
-      default: return '';
+      case 'COMPOSE_UNAVAILABLE': return i18n.t('webServices.managed.unavailable.compose');
+      default: return template?.reason ?? '';
     }
+  };
+
+  const templateInstalled = (template: ManagedCatalogTemplate) => managedState().some((service) => service.service_family_id === template.service_family_id);
+  const filteredTemplates = createMemo(() => {
+    const query = templateSearch().trim().toLowerCase();
+    return managedTemplates().filter((template) => {
+      const isHost = template.deployment === 'native' || template.deployment === 'host';
+      if ((templateCategory() === 'host') !== isHost) return false;
+      if (!query) return true;
+      return `${template.name}\n${template.description}\n${template.version}`.toLowerCase().includes(query);
+    });
+  });
+
+  const openTemplateCatalog = () => {
+    setTemplateDrawerView('catalog');
+    setSelectedTemplateID(null);
+    setTemplateDraft(null);
+    setTemplateDrawerOpen(true);
+  };
+
+  const beginTemplateInstall = (template: ManagedCatalogTemplate) => {
+    if (!template.available || templateInstalled(template)) return;
+    setSelectedTemplateID(template.template_id);
+    setWorkspacePath(template.workspace_roots?.[0]?.path || '');
+    setTemplateDrawerView('install');
+  };
+
+  const beginTemplateCreate = (kind: 'host' | 'container' | 'compose') => {
+    setTemplateDraft(emptyTemplateDraft(kind));
+    setTemplateDrawerView('editor');
+  };
+
+  const beginTemplateEdit = (template: ManagedCatalogTemplate) => {
+    if (!template.editable) return;
+    setTemplateDraft(draftFromTemplate(template));
+    setTemplateDrawerView('editor');
+  };
+
+  const saveTemplate = async () => {
+    const draft = templateDraft();
+    if (!draft || !canManageManagedService()) return;
+    setTemplateSaving(true);
+    try {
+      const body = templateRequestFromDraft(draft, managedRequestID());
+      if (draft.templateID) {
+        await fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-service-templates/${encodeURIComponent(draft.templateID)}`, { method: 'PUT', body: JSON.stringify(body) });
+      } else {
+        await fetchLocalApiJSON('/_redeven_proxy/api/managed-web-service-templates', { method: 'POST', body: JSON.stringify(body) });
+      }
+      await loadManaged(true);
+      setTemplateDraft(null);
+      setTemplateDrawerView('catalog');
+      notify.success(i18n.t('webServices.managed.templateSaved'), i18n.t('webServices.managed.templateSavedMessage'));
+    } catch (error) {
+      const message = error instanceof Error && error.message === 'TEMPLATE_ENV_INVALID' ? i18n.t('webServices.managed.environmentInvalid') : error instanceof Error ? error.message : String(error);
+      notify.error(i18n.t('webServices.managed.templateSaveFailed'), message);
+    } finally { setTemplateSaving(false); }
+  };
+
+  const duplicateTemplate = async () => {
+    const source = templateDuplicate();
+    if (!source || !templateDuplicateName().trim() || !canManageManagedService()) return;
+    setTemplateSaving(true);
+    try {
+      await fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-service-templates/${encodeURIComponent(source.template_id)}/duplicate`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), name: templateDuplicateName().trim() }) });
+      setTemplateDuplicate(null);
+      setTemplateDuplicateName('');
+      await loadManaged(true);
+      notify.success(i18n.t('webServices.managed.templateDuplicated'), i18n.t('webServices.managed.templateDuplicatedMessage'));
+    } catch (error) {
+      notify.error(i18n.t('webServices.managed.templateDuplicateFailed'), error instanceof Error ? error.message : String(error));
+    } finally { setTemplateSaving(false); }
+  };
+
+  const deleteTemplate = async () => {
+    const target = templateDelete();
+    if (!target || !canManageManagedService()) return;
+    setTemplateSaving(true);
+    try {
+      await fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-service-templates/${encodeURIComponent(target.template_id)}`, { method: 'DELETE' });
+      setTemplateDelete(null);
+      await loadManaged(true);
+      notify.success(i18n.t('webServices.managed.templateDeleted'), i18n.t('webServices.managed.templateDeletedMessage'));
+    } catch (error) {
+      notify.error(i18n.t('webServices.managed.templateDeleteFailed'), error instanceof Error ? error.message : String(error));
+    } finally { setTemplateSaving(false); }
   };
 
   const confirmManagedUninstall = () => {
@@ -950,6 +1177,11 @@ export function EnvPortForwardsPage() {
       if (aHealthy !== bHealthy) return bHealthy - aHealthy;
       return (b.last_opened_at_unix_ms || 0) - (a.last_opened_at_unix_ms || 0);
     });
+  });
+
+  const filteredManagedServices = createMemo(() => {
+    const query = searchQuery().trim().toLowerCase();
+    return managedState().filter((service) => !query || `${service.name}\n${service.description ?? ''}\n${service.workspace_path}\n${service.template_id}`.toLowerCase().includes(query));
   });
 
   // Busy state for individual operations
@@ -1163,6 +1395,17 @@ export function EnvPortForwardsPage() {
               <Button
                 size="sm"
                 variant="outline"
+                onClick={openTemplateCatalog}
+                disabled={managedLoading() || (permissionReady() && !canRead())}
+                class={outlineControlClass}
+                data-testid="service-templates-button"
+              >
+                <FileText class="w-3.5 h-3.5 sm:mr-1" />
+                <span class="hidden sm:inline">{i18n.t('webServices.managed.serviceTemplates')}</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={() => { bumpRefresh(); void loadManaged(true); }}
                 disabled={!!busyID() || forwards.loading || managedLoading()}
                 aria-label={i18n.t('webServices.actions.refresh')}
@@ -1185,29 +1428,6 @@ export function EnvPortForwardsPage() {
                 <span class="hidden sm:inline">{i18n.t('webServices.actions.addService')}</span>
               </Button>
             </div>
-          </div>
-
-          <div class="border-y py-4" data-testid="managed-web-services-section">
-            <div class="flex items-start justify-between gap-3">
-              <div><div class="text-sm font-semibold">{i18n.t('webServices.managed.title')}</div><div class="text-xs text-muted-foreground mt-1">{i18n.t('webServices.managed.description')}</div></div>
-              <Show when={managedState().length === 0}>
-                <Button size="sm" variant="default" onClick={() => setManagedInstallOpen(true)} disabled={managedLoading() || managedBusy() || !managedTemplate() || !canManageManagedService()}><Plus class="w-3.5 h-3.5 mr-1" />{i18n.t('webServices.managed.deploy')}</Button>
-              </Show>
-            </div>
-            <Show when={managedState().length > 0}>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3"><For each={managedState()}>{(service) => <ManagedServiceCard service={service} busy={managedBusy()} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />}</For></div>
-            </Show>
-            <Show when={managedLoadError()}><p class="mt-3 text-xs text-warning">{i18n.t('webServices.errors.loadFailedPrefix')}</p></Show>
-            <Show when={managedOperation()} keyed>
-              {(operation) => (
-                <div class="mt-3 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite">
-                  <Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show>
-                  <span>{managedStageLabel(operation.stage, i18n)}</span>
-                  <span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span>
-                  <Show when={['pending', 'running', 'cancelling'].includes(operation.state)}><Button size="sm" variant="ghost" onClick={() => void cancelManagedOperation()} disabled={operation.state === 'cancelling' || !canManageManagedService()}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show>
-                </div>
-              )}
-            </Show>
           </div>
 
           <form
@@ -1327,7 +1547,7 @@ export function EnvPortForwardsPage() {
           </Show>
 
           {/* Search bar - only show when there are services */}
-          <Show when={unmanagedForwards().length > 0}>
+          <Show when={unmanagedForwards().length > 0 || managedState().length > 0}>
             <div class="flex items-center gap-2">
               <div class="relative w-full max-w-sm">
                 <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -1378,38 +1598,33 @@ export function EnvPortForwardsPage() {
               </div>
             </Show>
 
-            <Show when={forwardsRenderable() && !forwards.error}>
-              <Show
-                when={unmanagedForwards().length > 0}
-                fallback={<Show when={managedState().length === 0}><EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} /></Show>}
-              >
-                <Show
-                  when={filteredForwards().length > 0}
-                  fallback={
-                    <div class="flex flex-col items-center justify-center py-12 px-4">
-                      <p class="text-sm text-muted-foreground">{i18n.t('webServices.search.noMatches', { query: searchQuery() })}</p>
-                      <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">
-                        {i18n.t('webServices.search.clear')}
-                      </Button>
-                    </div>
-                  }
-                >
-                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <For each={filteredForwards()}>
-                      {(f) => (
-                        <PortForwardCard
-                          forward={f}
-                          busy={busyID() === f.forward_id}
-                          busyText={busyID() === f.forward_id ? busyText() : undefined}
-                          onOpen={() => void doOpen(f)}
-                          onDelete={() => setDeleteID(f.forward_id)}
-                        />
-                      )}
-                    </For>
+            <Show when={(forwardsRenderable() || managedState().length > 0) && !forwards.error}>
+              <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}>
+                <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
+                  <div class="flex flex-col items-center justify-center py-12 px-4">
+                    <p class="text-sm text-muted-foreground">{i18n.t('webServices.search.noMatches', { query: searchQuery() })}</p>
+                    <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button>
+                  </div>
+                }>
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="unified-web-services-grid">
+                    <For each={filteredManagedServices()}>{(service) => (
+                      <ManagedServiceCard service={service} busy={managedBusy()} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
+                    )}</For>
+                    <For each={filteredForwards()}>{(f) => (
+                      <PortForwardCard forward={f} busy={busyID() === f.forward_id} busyText={busyID() === f.forward_id ? busyText() : undefined} onOpen={() => void doOpen(f)} onDelete={() => setDeleteID(f.forward_id)} />
+                    )}</For>
                   </div>
                 </Show>
               </Show>
             </Show>
+            <Show when={managedLoadError()}><p class="mt-3 text-xs text-warning">{i18n.t('webServices.errors.loadFailedPrefix')}</p></Show>
+            <Show when={managedOperation()} keyed>{(operation) => (
+              <div class="mt-3 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite">
+                <Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show>
+                <span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span>
+                <Show when={['pending', 'running', 'cancelling'].includes(operation.state)}><Button size="sm" variant="ghost" onClick={() => void cancelManagedOperation()} disabled={operation.state === 'cancelling' || !canManageManagedService()}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show>
+              </div>
+            )}</Show>
           </div>
         </PanelContent>
       </Panel>
@@ -1418,62 +1633,110 @@ export function EnvPortForwardsPage() {
       <CreateForwardDialog open={createOpen()} loading={createLoading()} onOpenChange={setCreateOpen} onCreate={doCreate} />
 
       <Dialog
-        open={managedInstallOpen()}
-        onOpenChange={(open) => { if (!managedBusy()) setManagedInstallOpen(open); }}
-        title={i18n.t('webServices.managed.dialogTitle')}
+        open={templateDrawerOpen()}
+        onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) setTemplateDrawerOpen(open); }}
+        title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
+        description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
+        class="!fixed !inset-y-2 !right-2 !left-auto !m-0 !h-[calc(100%-1rem)] !max-h-none !w-[min(920px,calc(100%-1rem))] !max-w-none !rounded-lg"
         footer={
-          <div class="flex justify-end gap-2">
-            <Show
-              when={managedBusy()}
-              fallback={(
-                <>
-                  <Button size="sm" variant="outline" onClick={() => setManagedInstallOpen(false)}>{i18n.t('webServices.actions.cancel')}</Button>
-                  <Button size="sm" variant="default" onClick={() => void installManaged()} disabled={!canManageManagedService() || !workspacePath().trim() || !selectedDeploymentAvailability()?.available}>{i18n.t('webServices.managed.installStart')}</Button>
-                </>
-              )}
-            >
-              <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation()} disabled={!managedOperation() || managedOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+          <div class="flex w-full items-center justify-between gap-2">
+            <Show when={templateDrawerView() !== 'catalog'} fallback={<span />}>
+              <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); }} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             </Show>
+            <div class="ml-auto flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setTemplateDrawerOpen(false)} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button>
+              <Show when={templateDrawerView() === 'install'}>
+                <Show when={managedBusy()} fallback={<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={!canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available}>{i18n.t('webServices.managed.installStart')}</Button>}>
+                  <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation()} disabled={!managedOperation() || managedOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+                </Show>
+              </Show>
+              <Show when={templateDrawerView() === 'editor'}>
+                <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !templateDraft()?.name.trim()}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</Button>
+              </Show>
+            </div>
           </div>
         }
       >
-        <div class="space-y-4">
-          <div>
-            <div class="flex items-center gap-2"><div class="text-sm font-semibold">DeepSeek Harness</div><Show when={managedTemplate()?.developer_preview}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag></Show></div>
-            <div class="text-xs text-muted-foreground mt-1">{i18n.t('webServices.managed.templateDescription')}</div>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <Button size="sm" variant={deployment() === 'native' ? 'default' : 'outline'} onClick={() => setDeployment('native')} disabled={managedBusy() || !managedTemplate()?.deployments.find((item) => item.deployment === 'native')?.available}>{i18n.t('webServices.managed.direct')}</Button>
-            <Button size="sm" variant={deployment() === 'docker' ? 'default' : 'outline'} onClick={() => setDeployment('docker')} disabled={managedBusy() || !managedTemplate()?.deployments.find((item) => item.deployment === 'docker')?.available}>{i18n.t('webServices.managed.docker')}</Button>
-          </div>
-          <Show when={deploymentUnavailableReason()} keyed>{(reason) => <p class="text-xs text-warning">{reason}</p>}</Show>
-          <Show when={deployment() === 'docker'}>
-            <div class="rounded-md border border-warning/25 bg-warning/[0.06] p-3 text-xs">
-              <div class="font-medium">{i18n.t('webServices.managed.communityImage')}</div>
-              <p class="mt-1 text-muted-foreground">{i18n.t('webServices.managed.communityImageNote')}</p>
-              <a class="mt-1 inline-flex items-center gap-1 text-primary hover:underline" href={managedTemplate()?.docker_source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a>
+        <div class="min-h-0 space-y-4 overflow-y-auto pr-1" data-testid="service-template-drawer">
+          <Show when={templateDrawerView() === 'catalog'}>
+            <div class="sticky top-0 z-10 -mx-1 space-y-3 bg-card px-1 pb-2">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="inline-flex rounded-md border bg-muted/30 p-1">
+                  <Button size="sm" variant={templateCategory() === 'host' ? 'default' : 'ghost'} onClick={() => setTemplateCategory('host')}>{i18n.t('webServices.managed.hostTemplates')}</Button>
+                  <Button size="sm" variant={templateCategory() === 'container' ? 'default' : 'ghost'} onClick={() => setTemplateCategory('container')}>{i18n.t('webServices.managed.containerTemplates')}</Button>
+                </div>
+                <div class="flex items-center gap-2">
+                  <Show when={templateCategory() === 'host'} fallback={<><Button size="sm" variant="outline" onClick={() => beginTemplateCreate('container')} disabled={!canManageManagedService()}><Plus class="mr-1 h-3.5 w-3.5" />{i18n.t('webServices.managed.newContainerTemplate')}</Button><Button size="sm" variant="outline" onClick={() => beginTemplateCreate('compose')} disabled={!canManageManagedService()}><Plus class="mr-1 h-3.5 w-3.5" />{i18n.t('webServices.managed.newComposeTemplate')}</Button></>}>
+                    <Button size="sm" variant="outline" onClick={() => beginTemplateCreate('host')} disabled={!canManageManagedService()}><Plus class="mr-1 h-3.5 w-3.5" />{i18n.t('webServices.managed.newHostTemplate')}</Button>
+                  </Show>
+                </div>
+              </div>
+              <div class="relative"><Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={templateSearch()} onInput={(event) => setTemplateSearch(event.currentTarget.value)} placeholder={i18n.t('webServices.managed.searchTemplates')} class="pl-8" /></div>
             </div>
-          </Show>
-          <div>
-            <label class="block text-xs font-medium mb-1">{i18n.t('webServices.managed.workspace')}</label>
-            <Input value={workspacePath()} onInput={(event) => setWorkspacePath(event.currentTarget.value)} disabled={managedBusy()} class="w-full font-mono" placeholder={i18n.t('webServices.managed.workspacePlaceholder')} />
-            <Show when={(managedTemplate()?.workspace_roots?.length ?? 0) > 0}>
-              <div class="mt-2 flex flex-wrap gap-1.5">
-                <For each={managedTemplate()?.workspace_roots ?? []}>{(root) => <Button size="sm" variant="ghost" onClick={() => setWorkspacePath(root.path)} disabled={managedBusy()} title={root.path}>{root.label || root.path}</Button>}</For>
+            <Show when={filteredTemplates().length > 0} fallback={<div class="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noTemplates')}</div>}>
+              <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <For each={filteredTemplates()}>{(template) => (
+                  <Card class={cn('border transition-colors', !template.available && 'opacity-70', redevenSurfaceRoleClass('panelInteractive'))} data-template-id={template.template_id}>
+                    <CardHeader class="pb-2">
+                      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><CardTitle class="truncate text-sm">{template.name}</CardTitle><CardDescription class="mt-1 line-clamp-2 text-xs">{template.description}</CardDescription></div><Tag variant={template.source === 'builtin' ? 'info' : 'neutral'} tone="soft" size="sm">{template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}</Tag></div>
+                    </CardHeader>
+                    <CardContent class="space-y-2 pb-2 pt-0 text-xs">
+                      <div class="flex flex-wrap gap-1.5"><Tag variant="neutral" tone="soft" size="sm">{managedDeploymentLabel(template.deployment, i18n)}</Tag><Show when={template.version}><Tag variant="neutral" tone="soft" size="sm">v{template.version}</Tag></Show><Show when={template.developer_preview}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag></Show></div>
+                      <Show when={!template.available}><div class="flex items-start gap-2 rounded-md border border-warning/25 bg-warning/[0.06] p-2 text-warning"><AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{templateUnavailableReason(template)}</span></div></Show>
+                      <Show when={templateInstalled(template)}><p class="text-muted-foreground">{i18n.t('webServices.managed.templateInstalled')}</p></Show>
+                    </CardContent>
+                    <CardFooter class={cn('flex flex-wrap items-center gap-1 border-t pt-2', redevenDividerRoleClass())}>
+                      <Button size="sm" variant="default" onClick={() => beginTemplateInstall(template)} disabled={!template.available || templateInstalled(template) || !canManageManagedService()}>{templateInstalled(template) ? i18n.t('webServices.managed.installed') : i18n.t('webServices.managed.deploy')}</Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setTemplateDuplicate(template); setTemplateDuplicateName(i18n.t('webServices.managed.copyName', { name: template.name })); }} disabled={!template.duplicateable || !canManageManagedService()} title={i18n.t('webServices.managed.duplicate')}><Copy class="h-3.5 w-3.5" /></Button>
+                      <Show when={template.editable}><Button size="sm" variant="ghost" onClick={() => beginTemplateEdit(template)} disabled={!canManageManagedService()} title={i18n.t('webServices.managed.editTemplate')}><Pencil class="h-3.5 w-3.5" /></Button><Button size="sm" variant="ghost" onClick={() => setTemplateDelete(template)} disabled={templateInstalled(template) || !canManageManagedService()} title={i18n.t('webServices.managed.deleteTemplate')}><Trash class="h-3.5 w-3.5" /></Button></Show>
+                    </CardFooter>
+                  </Card>
+                )}</For>
               </div>
             </Show>
-          </div>
-          <div class="grid gap-1 text-xs text-muted-foreground">
-            <div><span class="text-foreground">{i18n.t('webServices.managed.currentEnvironment')}:</span> {ctx.env()?.name || ctx.env_id()}</div>
-            <div><span class="text-foreground">{i18n.t('webServices.managed.version')}:</span> v{managedTemplate()?.version}</div>
-            <div><span class="text-foreground">{i18n.t('webServices.managed.disk')}:</span> {managedTemplate() ? Math.round(managedTemplate()!.disk_bytes / 1024 / 1024 / 1024) : 2} GB</div>
-            <div><span class="text-foreground">{i18n.t('webServices.managed.dataLocation')}:</span> <span class="font-mono">{deployment() === 'docker' ? i18n.t('webServices.managed.docker') : managedTemplate()?.data_location}</span></div>
-          </div>
-          <p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.apiKeyNote')}</p>
-          <a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={managedTemplate()?.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a>
-          <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"><InlineButtonSnakeLoading /><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
+          </Show>
+
+          <Show when={templateDrawerView() === 'install' && selectedTemplate()} keyed>{(template) => (
+            <div class="space-y-5">
+              <div class="rounded-lg border bg-muted/20 p-4"><div class="flex items-center gap-2"><h3 class="text-base font-semibold">{template.name}</h3><Tag variant={template.source === 'builtin' ? 'info' : 'neutral'} tone="soft" size="sm">{template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}</Tag></div><p class="mt-1 text-sm text-muted-foreground">{template.description}</p></div>
+              <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.workspace')}</label><Input value={workspacePath()} onInput={(event) => setWorkspacePath(event.currentTarget.value)} disabled={managedBusy()} class="w-full font-mono" placeholder={i18n.t('webServices.managed.workspacePlaceholder')} /><div class="mt-2 flex flex-wrap gap-1.5"><For each={template.workspace_roots ?? []}>{(root) => <Button size="sm" variant="ghost" onClick={() => setWorkspacePath(root.path)} disabled={managedBusy()} title={root.path}>{root.label || root.path}</Button>}</For></div></div>
+              <div class="grid gap-2 rounded-md border p-3 text-xs text-muted-foreground sm:grid-cols-2"><div><span class="text-foreground">{i18n.t('webServices.managed.currentEnvironment')}:</span> {ctx.env()?.name || ctx.env_id()}</div><div><span class="text-foreground">{i18n.t('webServices.managed.deployment')}:</span> {managedDeploymentLabel(template.deployment, i18n)}</div><div><span class="text-foreground">{i18n.t('webServices.managed.version')}:</span> {template.version || i18n.t('webServices.managed.customVersion')}</div><div><span class="text-foreground">{i18n.t('webServices.managed.dataLocation')}:</span> {i18n.t('webServices.managed.managedPrivateData')}</div></div>
+              <Show when={template.docker_source_url}><div class="rounded-md border border-warning/25 bg-warning/[0.06] p-3 text-xs"><div class="font-medium">{i18n.t('webServices.managed.communityImage')}</div><p class="mt-1 text-muted-foreground">{i18n.t('webServices.managed.communityImageNote')}</p></div></Show>
+              <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
+              <Show when={template.source === 'builtin'}><p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.apiKeyNote')}</p></Show>
+              <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
+            </div>
+          )}</Show>
+
+          <Show when={templateDrawerView() === 'editor' && templateDraft()} keyed>{(draft) => (
+            <div class="space-y-5">
+              <div class="rounded-md border border-warning/25 bg-warning/[0.05] p-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.customTemplateSafety')}</div>
+              <div class="grid gap-3 sm:grid-cols-2"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={draft.name} onInput={(event) => setTemplateDraft({ ...draft, name: event.currentTarget.value })} /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateVersion')}</label><Input value={draft.version} onInput={(event) => setTemplateDraft({ ...draft, version: event.currentTarget.value })} /></div></div>
+              <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateDescriptionLabel')}</label><Textarea value={draft.description} onInput={(event) => setTemplateDraft({ ...draft, description: event.currentTarget.value })} rows={2} /></div>
+              <div class="grid gap-3 sm:grid-cols-3"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.webScheme')}</label><select class="h-9 w-full rounded-md border bg-background px-2 text-sm" value={draft.scheme} onChange={(event) => setTemplateDraft({ ...draft, scheme: event.currentTarget.value as 'http' | 'https' })}><option value="http">HTTP</option><option value="https">HTTPS</option></select></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.webPath')}</label><Input value={draft.path} onInput={(event) => setTemplateDraft({ ...draft, path: event.currentTarget.value })} class="font-mono" /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.healthPath')}</label><Input value={draft.healthPath} onInput={(event) => setTemplateDraft({ ...draft, healthPath: event.currentTarget.value })} class="font-mono" /></div></div>
+              <Show when={draft.kind === 'host'}>
+                <div class="rounded-md border p-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.hostScriptNote')}</div>
+                <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.installScript')}</label><Textarea value={draft.installScript} onInput={(event) => setTemplateDraft({ ...draft, installScript: event.currentTarget.value })} rows={5} class="font-mono text-xs" /></div>
+                <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.startScript')}</label><Textarea value={draft.startScript} onInput={(event) => setTemplateDraft({ ...draft, startScript: event.currentTarget.value })} rows={7} class="font-mono text-xs" /></div>
+                <div class="grid gap-3 sm:grid-cols-2"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.stopScript')}</label><Textarea value={draft.stopScript} onInput={(event) => setTemplateDraft({ ...draft, stopScript: event.currentTarget.value })} rows={4} class="font-mono text-xs" /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.uninstallScript')}</label><Textarea value={draft.uninstallScript} onInput={(event) => setTemplateDraft({ ...draft, uninstallScript: event.currentTarget.value })} rows={4} class="font-mono text-xs" /></div></div>
+              </Show>
+              <Show when={draft.kind === 'container'}>
+                <div class="grid gap-3 sm:grid-cols-[1fr_160px]"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerImage')}</label><Input value={draft.image} onInput={(event) => setTemplateDraft({ ...draft, image: event.currentTarget.value })} class="font-mono" /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerPort')}</label><Input value={draft.containerPort} onInput={(event) => setTemplateDraft({ ...draft, containerPort: event.currentTarget.value })} inputmode="numeric" /></div></div>
+                <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.entrypoint')}</label><Input value={draft.entrypoint} onInput={(event) => setTemplateDraft({ ...draft, entrypoint: event.currentTarget.value })} class="font-mono" /></div>
+                <div class="grid gap-3 sm:grid-cols-2"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.commandArguments')}</label><Textarea value={draft.command} onInput={(event) => setTemplateDraft({ ...draft, command: event.currentTarget.value })} rows={6} class="font-mono text-xs" /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.environmentVariables')}</label><Textarea value={draft.environment} onInput={(event) => setTemplateDraft({ ...draft, environment: event.currentTarget.value })} rows={6} class="font-mono text-xs" /></div></div>
+              </Show>
+              <Show when={draft.kind === 'compose'}>
+                <div class="grid gap-3 sm:grid-cols-[1fr_180px]"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.composeMainService')}</label><Input value={draft.mainService} onInput={(event) => setTemplateDraft({ ...draft, mainService: event.currentTarget.value })} /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerPort')}</label><Input value={draft.containerPort} onInput={(event) => setTemplateDraft({ ...draft, containerPort: event.currentTarget.value })} inputmode="numeric" /></div></div>
+                <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.composeYAML')}</label><Textarea value={draft.composeYAML} onInput={(event) => setTemplateDraft({ ...draft, composeYAML: event.currentTarget.value })} rows={18} class="font-mono text-xs" /></div>
+              </Show>
+            </div>
+          )}</Show>
         </div>
       </Dialog>
+
+      <Dialog open={templateDuplicate() !== null} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-sm text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
+
+      <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-sm">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
 
       <Dialog open={managedLogs() !== null} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
 

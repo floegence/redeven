@@ -88,16 +88,67 @@ func TestManagedWebServiceJSONRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestManagedTemplateDuplicateRequiresLifecyclePermission(t *testing.T) {
+	t.Parallel()
+	backend := &managedBackendStub{}
+	channelID := "ch_managed_template_duplicate"
+	requestBody := `{"request_id":"request-template-copy","name":"Preview copy"}`
+
+	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+	request := httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/tmpl_source/duplicate", strings.NewReader(requestBody))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response := httptest.NewRecorder()
+	readServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusForbidden || backend.duplicateCalls != 0 {
+		t.Fatalf("read-only duplicate status=%d calls=%d", response.Code, backend.duplicateCalls)
+	}
+
+	fullServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
+	request = httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/tmpl_source/duplicate", strings.NewReader(requestBody))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	fullServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusCreated || backend.duplicateCalls != 1 || backend.lastDuplicate.Name != "Preview copy" {
+		t.Fatalf("full duplicate status=%d calls=%d request=%+v body=%s", response.Code, backend.duplicateCalls, backend.lastDuplicate, response.Body.String())
+	}
+}
+
 type managedBackendStub struct {
 	catalog            []managedwebservice.Template
 	createCalls        int
 	operateCalls       int
 	lastCreate         managedwebservice.CreateRequest
+	duplicateCalls     int
+	lastDuplicate      managedwebservice.TemplateDuplicateRequest
 	subscribeOperation pfregistry.ManagedOperation
 }
 
 func (b *managedBackendStub) Catalog(context.Context) ([]managedwebservice.Template, error) {
 	return append([]managedwebservice.Template(nil), b.catalog...), nil
+}
+func (b *managedBackendStub) Template(_ context.Context, templateID string) (*managedwebservice.Template, error) {
+	for i := range b.catalog {
+		if b.catalog[i].TemplateID == templateID {
+			copy := b.catalog[i]
+			return &copy, nil
+		}
+	}
+	return nil, managedwebserviceTestError("TEMPLATE_NOT_FOUND", http.StatusNotFound)
+}
+func (b *managedBackendStub) CreateTemplate(_ context.Context, request managedwebservice.TemplateWriteRequest) (*managedwebservice.Template, error) {
+	return &managedwebservice.Template{TemplateID: "tmpl_created", Name: request.Name, Deployment: request.Spec.Kind, Revision: 1}, nil
+}
+func (b *managedBackendStub) UpdateTemplate(_ context.Context, templateID string, request managedwebservice.TemplateWriteRequest) (*managedwebservice.Template, error) {
+	return &managedwebservice.Template{TemplateID: templateID, Name: request.Name, Deployment: request.Spec.Kind, Revision: 2}, nil
+}
+func (b *managedBackendStub) DeleteTemplate(context.Context, string) error { return nil }
+func (b *managedBackendStub) DuplicateTemplate(_ context.Context, _ string, request managedwebservice.TemplateDuplicateRequest) (*managedwebservice.Template, error) {
+	b.duplicateCalls++
+	b.lastDuplicate = request
+	return &managedwebservice.Template{TemplateID: "tmpl_copy", Name: request.Name, Revision: 1}, nil
+}
+func (b *managedBackendStub) ValidateTemplate(context.Context, managedwebservice.TemplateWriteRequest) error {
+	return nil
 }
 func (b *managedBackendStub) List(context.Context) ([]managedwebservice.ServiceView, error) {
 	return []managedwebservice.ServiceView{}, nil
@@ -124,4 +175,8 @@ func (b *managedBackendStub) Subscribe(string) (<-chan pfregistry.ManagedOperati
 }
 func (b *managedBackendStub) Logs(context.Context, string, int) (*managedwebservice.LogResult, error) {
 	return &managedwebservice.LogResult{}, nil
+}
+
+func managedwebserviceTestError(code string, status int) error {
+	return &managedwebservice.Error{Code: code, Message: code, HTTPStatus: status}
 }

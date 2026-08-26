@@ -239,13 +239,13 @@ func TestAdapterPruneOperationsRevalidateAndForwardExactIdentities(t *testing.T)
 
 func TestCLIClientBuildsAdvancedContainerAndVolumeArgv(t *testing.T) {
 	runner := &fakeCommandRunner{outputs: map[string]string{
-		"docker run -d --name api --restart unless-stopped --network bridge --pid host --ipc private --cpus 1.5 --memory 67108864 --privileged --read-only --pids-limit 512 --shm-size 1073741824 --user 1000:1000 --security-opt no-new-privileges:true --label com.example.instance=api-one --publish 127.0.0.1:8080:80/tcp --publish 53/udp --mount type=bind,source=/srv/api,target=/workspace,readonly --mount type=volume,source=cache,target=/cache --tmpfs /tmp:rw,noexec,nosuid,nodev,size=536870912 --cap-add NET_ADMIN --cap-drop SYS_ADMIN --device /dev/kvm:/dev/kvm:rwm -e MODE=prod ghcr.io/acme/api@" + testSHA256Digest + " server --listen 80": "container_123\n",
+		"docker run -d --name api --restart unless-stopped --network bridge --pid host --ipc private --cpus 1.5 --memory 67108864 --privileged --read-only --pids-limit 512 --shm-size 1073741824 --user 1000:1000 --entrypoint /app/entry --security-opt no-new-privileges:true --label com.example.instance=api-one --publish 127.0.0.1:8080:80/tcp --publish 53/udp --mount type=bind,source=/srv/api,target=/workspace,readonly --mount type=volume,source=cache,target=/cache --tmpfs /tmp:rw,noexec,nosuid,nodev,size=536870912 --cap-add NET_ADMIN --cap-drop SYS_ADMIN --device /dev/kvm:/dev/kvm:rwm -e MODE=prod ghcr.io/acme/api@" + testSHA256Digest + " server --listen 80": "container_123\n",
 		"docker volume create --driver local --opt type=nfs --opt o=addr=10.0.0.1 data": "data\n",
 	}}
 	client := &CLIClient{Runner: runner}
 	created, err := client.CreateContainer(context.Background(), ContainerCreateRequest{
 		Engine: EngineDocker, Name: "api", Image: "ghcr.io/acme/api@" + testSHA256Digest,
-		Command: []string{"server", "--listen", "80"}, Env: []string{"MODE=prod"},
+		Entrypoint: "/app/entry", Command: []string{"server", "--listen", "80"}, Env: []string{"MODE=prod"},
 		RestartPolicy: "unless-stopped", NetworkMode: "bridge", PIDMode: "host", IPCMode: "private",
 		CPUCount: 1.5, MemoryBytes: 64 * 1024 * 1024, Privileged: true,
 		ReadOnlyRoot: true, PIDsLimit: 512, ShmSizeBytes: 1024 * 1024 * 1024,

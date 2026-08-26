@@ -7,7 +7,7 @@
     "frontmatter": {
       "okf_version": "0.2"
     },
-    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first temporary opens, explicit persistence, and isolated Desktop routing.\n- [Managed Web Services](architecture/managed-web-services.md) - Install and operate reviewed DeepSeek Harness packages while preserving exact runtime identity, loopback-only access, and protected forwarding.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md) - Bound revisioned workspace capture, transport resources, mutation coordination, and linked-worktree removal.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.\n- [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.\n- [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.\n- [Containers operation observation](architecture/containers-operation-observation.md) - Observe resource-local mutations to terminal reconciliation while keeping unsigned candidates outside official release trust.\n- [Container resources capability](architecture/container-resources-capability.md) - Register Docker and Podman business access while preserving explicit `containers.read` admission.\n\n## Security\n\n- [Local UI network exposure](security/local-ui-network-exposure.md) - Explicit device identity and client trust, HTTPS/WSS transport, exact authority checks, and fail-closed TLS.\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.\n\n## Desktop\n\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Separate direct Runtime health and recovery from access-only Gateway, Provider, and URL readiness.\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Execute SSH-host and SSH-container lifecycle actions through one direct Desktop owner.\n- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.\n- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep one storage owner per card, migrate retired SSH records once, and serialize rename, pin, and removal safely.\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Own Local, SSH, and container Runtime lifecycle through one process-local Desktop coordinator.\n- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Recover an exact managed Runtime root with a Runtime-only package and minimal Desktop journal.\n- [Desktop application updates](desktop/desktop-application-updates.md) - Coordinate signed macOS Sparkle and Linux DEB/RPM updates with one stateful installation boundary.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Run the optional standalone identity, catalog, open-session, and access forwarding service.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.\n- [Env App floating layer order](ui/env-app-floating-layer-order.md) - Order movable windows, Flower, plugin surfaces, blocking modals, and command UI through one product contract.\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.\n- [Git browser visual states](ui/git-browser-visual-states.md) - Keep selection, current-branch facts, Git status tones, hover, and focus visually independent across themes.\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.\n- [Terminal session groups](ui/terminal-session-groups.md) - Persist one Environment group catalog and project it consistently through Activity and Workbench placement trees.\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.\n- [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.\n- [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.\n- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.\n- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.\n- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.\n- [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Use the product v1 first-release baseline, capability-bound upload staging, canonical identity binding, and future contiguous migrations.\n- [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.\n- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.\n- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.\n- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.\n- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.\n- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Define signed pairing, catalog, profile, open-session, and access-only Gateway routes.\n- [RCPP v3 provider API](protocol/rcpp-v2-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
+    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first temporary opens, explicit persistence, and isolated Desktop routing.\n- [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Discover, define, duplicate, and deploy Environment-local host, single-container, and Compose service definitions.\n- [Managed Web Services](architecture/managed-web-services.md) - Operate immutable template snapshots with exact runtime identity, recovery, loopback-only access, and protected forwarding.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md) - Bound revisioned workspace capture, transport resources, mutation coordination, and linked-worktree removal.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.\n- [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.\n- [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.\n- [Containers operation observation](architecture/containers-operation-observation.md) - Observe resource-local mutations to terminal reconciliation while keeping unsigned candidates outside official release trust.\n- [Container resources capability](architecture/container-resources-capability.md) - Register Docker and Podman business access while preserving explicit `containers.read` admission.\n\n## Security\n\n- [Local UI network exposure](security/local-ui-network-exposure.md) - Explicit device identity and client trust, HTTPS/WSS transport, exact authority checks, and fail-closed TLS.\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.\n\n## Desktop\n\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Separate direct Runtime health and recovery from access-only Gateway, Provider, and URL readiness.\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Execute SSH-host and SSH-container lifecycle actions through one direct Desktop owner.\n- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.\n- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep one storage owner per card, migrate retired SSH records once, and serialize rename, pin, and removal safely.\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Own Local, SSH, and container Runtime lifecycle through one process-local Desktop coordinator.\n- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Recover an exact managed Runtime root with a Runtime-only package and minimal Desktop journal.\n- [Desktop application updates](desktop/desktop-application-updates.md) - Coordinate signed macOS Sparkle and Linux DEB/RPM updates with one stateful installation boundary.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Run the optional standalone identity, catalog, open-session, and access forwarding service.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.\n- [Env App floating layer order](ui/env-app-floating-layer-order.md) - Order movable windows, Flower, plugin surfaces, blocking modals, and command UI through one product contract.\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.\n- [Git browser visual states](ui/git-browser-visual-states.md) - Keep selection, current-branch facts, Git status tones, hover, and focus visually independent across themes.\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.\n- [Terminal session groups](ui/terminal-session-groups.md) - Persist one Environment group catalog and project it consistently through Activity and Workbench placement trees.\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.\n- [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.\n- [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.\n- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.\n- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.\n- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.\n- [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Use the product v1 first-release baseline, capability-bound upload staging, canonical identity binding, and future contiguous migrations.\n- [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.\n- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.\n- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.\n- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.\n- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.\n- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Define signed pairing, catalog, profile, open-session, and access-only Gateway routes.\n- [RCPP v3 provider API](protocol/rcpp-v2-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
     "sections": [
       {
         "title": "Architecture",
@@ -92,20 +92,35 @@
             "section_count": 2
           },
           {
+            "concept_id": "architecture.managed-web-service-templates",
+            "path": "architecture/managed-web-service-templates.md",
+            "type": "Product Contract",
+            "title": "Managed Web Service Templates",
+            "description": "Discover, define, duplicate, and deploy Environment-local host, container, and Compose service definitions.",
+            "tags": [
+              "containers",
+              "permissions",
+              "templates",
+              "ui",
+              "web-services"
+            ],
+            "summary": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.\n- Outcome: users open one right-side Service templates drawer, browse host or container cards, create custom definitions, duplicate any complete definition, and deploy into the current Environment without crowding the Web Services page.\n- Invariants: built-ins are immutable; custom templates are explicit and revisioned; duplication copies definition only into a new family; container cards stay visible with a concrete disabled reason; deployed services use snapshots rather than live definitions.\n- Failure boundary: malformed, incomplete, unsafe, unavailable, or conflicting definitions are rejected before lifecycle work. A template with an installed service cannot be deleted.",
+            "section_count": 3
+          },
+          {
             "concept_id": "architecture.managed-web-services",
             "path": "architecture/managed-web-services.md",
             "type": "Runtime Contract",
             "title": "Managed Web Services",
-            "description": "Install, operate, recover, and expose reviewed Web Service templates through Redeven-owned lifecycle coordination.",
+            "description": "Deploy, operate, recover, and expose immutable Web Service template snapshots through one Redeven-owned lifecycle boundary.",
             "tags": [
               "architecture",
               "containers",
               "runtime",
               "security",
-              "ui",
               "web-services"
             ],
-            "summary": "- Authority: Redeven owns installation, lifecycle state, exact runtime identity, and protected-forward registration for a managed Web Service; the installed application owns its settings and credentials.\n- Outcome: an authorized user can install, start, health-check, open, stop, restart, inspect, retry, or uninstall one fixed DeepSeek Harness instance in the current Environment through either a reviewed native package or a hardened Docker container.\n- Invariants: every upstream artifact is selected by a signed Redeven catalog, the application port listens only on loopback, the forward identity remains stable, lifecycle requests are idempotent and serialized, and Redeven never receives a DeepSeek Harness API key.\n- Failure boundary: invalid catalog data, identity drift, occupied ports, unavailable deployment prerequisites, interrupted operations, or unhealthy processes fail closed. Redeven cleans only resources carrying the exact stored identity and never searches for or terminates unrelated processes or containers.",
+            "summary": "- Authority: Redeven owns an installed service's immutable template snapshot, lifecycle state, exact runtime identity, private runtime data, and protected forward. The application owns its settings and credentials.\n- Outcome: a deployment requested from the [Service template center](managed-web-service-templates.md) becomes one managed card alongside manually registered Web Services and can be opened, stopped, started, restarted, inspected, retried, or uninstalled.\n- Invariants: one installed instance exists per service family; every Web port binds only to loopback; lifecycle requests are idempotent and serialized; every destructive action verifies the exact stored identity; credentials never enter records, audits, or returned logs.\n- Failure boundary: invalid snapshots, identity drift, unavailable prerequisites, occupied ports, interrupted operations, unhealthy processes, or unverified artifacts fail closed. Redeven never scans for or terminates unrelated processes, containers, projects, or volumes.",
             "section_count": 5
           },
           {
@@ -1296,6 +1311,12 @@
         "path": "architecture/local-ui-surface.md",
         "concept_id": "architecture.local-ui-surface",
         "title": "Local UI surface"
+      },
+      {
+        "label": "Managed Web Service Templates",
+        "path": "architecture/managed-web-service-templates.md",
+        "concept_id": "architecture.managed-web-service-templates",
+        "title": "Managed Web Service Templates"
       },
       {
         "label": "Managed Web Services",
@@ -4281,142 +4302,243 @@
       ]
     },
     {
+      "path": "architecture/managed-web-service-templates.md",
+      "concept_id": "architecture.managed-web-service-templates",
+      "type": "Product Contract",
+      "title": "Managed Web Service Templates",
+      "description": "Discover, define, duplicate, and deploy Environment-local host, container, and Compose service definitions.",
+      "tags": [
+        "containers",
+        "permissions",
+        "templates",
+        "ui",
+        "web-services"
+      ],
+      "timestamp": "2026-08-26T00:00:00Z",
+      "frontmatter": {
+        "description": "Discover, define, duplicate, and deploy Environment-local host, container, and Compose service definitions.",
+        "tags": [
+          "containers",
+          "permissions",
+          "templates",
+          "ui",
+          "web-services"
+        ],
+        "timestamp": "2026-08-26T00:00:00Z",
+        "title": "Managed Web Service Templates",
+        "type": "Product Contract"
+      },
+      "body_length": 6082,
+      "summary": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.\n- Outcome: users open one right-side Service templates drawer, browse host or container cards, create custom definitions, duplicate any complete definition, and deploy into the current Environment without crowding the Web Services page.\n- Invariants: built-ins are immutable; custom templates are explicit and revisioned; duplication copies definition only into a new family; container cards stay visible with a concrete disabled reason; deployed services use snapshots rather than live definitions.\n- Failure boundary: malformed, incomplete, unsafe, unavailable, or conflicting definitions are rejected before lifecycle work. A template with an installed service cannot be deleted.",
+      "sections": [
+        {
+          "id": "interaction-contract",
+          "title": "Interaction contract",
+          "level": 1,
+          "body": "The Web Services header provides one **Service templates** action. It opens a large right-side drawer with search and **Host templates** / **Container templates** categories. This replaces the separate one-click-deployment strip. Managed and manually registered services remain in one responsive main grid.\n\nContainer cards remain discoverable but disabled when Docker is unavailable, the Environment is itself in a container, workspace mounting is unavailable, or Docker Compose is missing. The card explains the exact reason. DeepSeek Harness is represented by separate reviewed host and community-container cards; the latter links its source and is never described as an official DeepSeek image.\n\nUsers with read permission can inspect templates. Users with Web Service read, write, and execute permission can create, edit, duplicate, delete, or deploy custom templates. The drawer editor provides metadata, endpoint/health paths, host lifecycle scripts, guided single-container fields, and Compose YAML. User-visible copy is localized in every published locale.",
+          "char_count": 1065
+        },
+        {
+          "id": "definition-and-duplication-contract",
+          "title": "Definition and duplication contract",
+          "level": 1,
+          "body": "A definition contains display metadata, a Web endpoint, optional input parameters, and exactly one kind:\n\n- Host: optional install, stop, and uninstall scripts; one required foreground start script; optional HTTPS archive with exact size, SHA-256, and safe relative executable path.\n- Single container: one image, one container Web port, optional entrypoint, arguments, environment, user, resource bounds, and workspace, named-volume, bind, or tmpfs mounts.\n- Compose: one inline document, one entry service, and one container Web port.\n\nHost scripts are trusted executable user content and therefore require execute authority. Redeven never asks for or stores sudo credentials. Compose validation rejects builds, published ports, privileged/host namespaces, capability additions, devices, engine sockets, host env/label files, arbitrary binds, external or host-backed volumes, external named networks, scaling, profiles, includes, configs, and secrets. Only `${REDEVEN_WORKSPACE}`, project-owned named volumes, and tmpfs are allowed mount sources.\n\nEvery custom edit increments its revision. Duplicate creates an editable custom template at revision 1, records source template and revision, and assigns a new service-family identity. It copies no instance, operation, data, runtime identity, configuration, or secret. Original and duplicate can therefore be installed together. A built-in can be duplicated only when its exact audited package or image digest is present; an incomplete catalog never creates a broken copy.\n\nAn installed service retains its canonical definition and SHA-256. Editing its source affects only a future deployment. Deleting a definition is blocked while that definition owns an installed service.",
+          "char_count": 1725
+        },
+        {
+          "id": "persistence-and-api",
+          "title": "Persistence and API",
+          "level": 1,
+          "body": "Registry schema v3 adds `managed_web_service_templates` and idempotent template request records. A custom record stores metadata, deployment kind, revision, canonical JSON, SHA-256, duplicate lineage, unique service-family identity, and timestamps. Secrets are never part of template records.\n\nTemplate routes are:\n\n- `GET|POST /_redeven_proxy/api/managed-web-service-templates`\n- `POST /_redeven_proxy/api/managed-web-service-templates/validate`\n- `GET|PUT|DELETE /_redeven_proxy/api/managed-web-service-templates/{id}`\n- `POST /_redeven_proxy/api/managed-web-service-templates/{id}/duplicate`\n\nReads require Web Service read permission; mutations require read, write, and execute. Bodies are strict and bounded. Create and duplicate requests use opaque request identities and fingerprints so matching retries return the original definition and conflicting reuse fails. Audit events record only bounded name, identifier, kind, revision, and action—not definitions or script contents.",
+          "char_count": 984
+        }
+      ],
+      "evidence": [
+        {
+          "id": "redeven:internal/managedwebservice/templates.go:0:validates definitions, revisions, hashes, duplicate lineage, independent families, parameters, and availability.",
+          "source": "redeven:internal/managedwebservice/templates.go",
+          "description": "Validates definitions, revisions, hashes, duplicate lineage, independent families, parameters, and availability."
+        },
+        {
+          "id": "redeven:internal/managedwebservice/types.go:0:defines public template, endpoint, host, container, compose, and duplicate contracts.",
+          "source": "redeven:internal/managedwebservice/types.go",
+          "description": "Defines public template, endpoint, host, container, Compose, and duplicate contracts."
+        },
+        {
+          "id": "redeven:internal/portforward/registry/managed.go:0:persists templates, request fingerprints, lineage, revisions, and in-use deletion protection.",
+          "source": "redeven:internal/portforward/registry/managed.go",
+          "description": "Persists templates, request fingerprints, lineage, revisions, and in-use deletion protection."
+        },
+        {
+          "id": "redeven:internal/codeapp/appserver/managed_web_services.go:0:routes template apis and applies permissions, body limits, stable errors, and bounded audit details.",
+          "source": "redeven:internal/codeapp/appserver/managed_web_services.go",
+          "description": "Routes template APIs and applies permissions, body limits, stable errors, and bounded audit details."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:0:presents the drawer, categories, disabled reasons, custom editors, duplication, deployment, and unified service grid.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx",
+          "description": "Presents the drawer, categories, disabled reasons, custom editors, duplication, deployment, and unified service grid."
+        },
+        {
+          "id": "redeven:internal/managedwebservice/templates_test.go:0:covers independent duplication, immutable hash identity, and compose host-escape rejection.",
+          "source": "redeven:internal/managedwebservice/templates_test.go",
+          "description": "Covers independent duplication, immutable hash identity, and Compose host-escape rejection."
+        },
+        {
+          "id": "redeven:internal/codeapp/appserver/managed_web_services_test.go:0:covers template route authority and duplicate api behavior.",
+          "source": "redeven:internal/codeapp/appserver/managed_web_services_test.go",
+          "description": "Covers template route authority and duplicate API behavior."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx:0:covers discovery, container unavailability, duplication, unified cards, and uninstall interaction.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx",
+          "description": "Covers discovery, container unavailability, duplication, unified cards, and uninstall interaction."
+        }
+      ],
+      "snippet": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.",
+      "links": [
+        {
+          "label": "Managed Web Services",
+          "path": "architecture/managed-web-services.md",
+          "concept_id": "architecture.managed-web-services",
+          "title": "Managed Web Services"
+        }
+      ],
+      "backlinks": [
+        {
+          "label": "Managed Web Services",
+          "path": "architecture/managed-web-services.md",
+          "concept_id": "architecture.managed-web-services",
+          "title": "Managed Web Services"
+        },
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
+    },
+    {
       "path": "architecture/managed-web-services.md",
       "concept_id": "architecture.managed-web-services",
       "type": "Runtime Contract",
       "title": "Managed Web Services",
-      "description": "Install, operate, recover, and expose reviewed Web Service templates through Redeven-owned lifecycle coordination.",
+      "description": "Deploy, operate, recover, and expose immutable Web Service template snapshots through one Redeven-owned lifecycle boundary.",
       "tags": [
         "architecture",
         "containers",
         "runtime",
         "security",
-        "ui",
         "web-services"
       ],
-      "timestamp": "2026-08-25T00:00:00Z",
+      "timestamp": "2026-08-26T00:00:00Z",
       "frontmatter": {
-        "description": "Install, operate, recover, and expose reviewed Web Service templates through Redeven-owned lifecycle coordination.",
+        "description": "Deploy, operate, recover, and expose immutable Web Service template snapshots through one Redeven-owned lifecycle boundary.",
         "tags": [
           "architecture",
           "containers",
           "runtime",
           "security",
-          "ui",
           "web-services"
         ],
-        "timestamp": "2026-08-25T00:00:00Z",
+        "timestamp": "2026-08-26T00:00:00Z",
         "title": "Managed Web Services",
         "type": "Runtime Contract"
       },
-      "body_length": 11682,
-      "summary": "- Authority: Redeven owns installation, lifecycle state, exact runtime identity, and protected-forward registration for a managed Web Service; the installed application owns its settings and credentials.\n- Outcome: an authorized user can install, start, health-check, open, stop, restart, inspect, retry, or uninstall one fixed DeepSeek Harness instance in the current Environment through either a reviewed native package or a hardened Docker container.\n- Invariants: every upstream artifact is selected by a signed Redeven catalog, the application port listens only on loopback, the forward identity remains stable, lifecycle requests are idempotent and serialized, and Redeven never receives a DeepSeek Harness API key.\n- Failure boundary: invalid catalog data, identity drift, occupied ports, unavailable deployment prerequisites, interrupted operations, or unhealthy processes fail closed. Redeven cleans only resources carrying the exact stored identity and never searches for or terminates unrelated processes or containers.",
+      "body_length": 7606,
+      "summary": "- Authority: Redeven owns an installed service's immutable template snapshot, lifecycle state, exact runtime identity, private runtime data, and protected forward. The application owns its settings and credentials.\n- Outcome: a deployment requested from the [Service template center](managed-web-service-templates.md) becomes one managed card alongside manually registered Web Services and can be opened, stopped, started, restarted, inspected, retried, or uninstalled.\n- Invariants: one installed instance exists per service family; every Web port binds only to loopback; lifecycle requests are idempotent and serialized; every destructive action verifies the exact stored identity; credentials never enter records, audits, or returned logs.\n- Failure boundary: invalid snapshots, identity drift, unavailable prerequisites, occupied ports, interrupted operations, unhealthy processes, or unverified artifacts fail closed. Redeven never scans for or terminates unrelated processes, containers, projects, or volumes.",
       "sections": [
         {
-          "id": "product-contract",
-          "title": "Product contract",
+          "id": "deployment-execution",
+          "title": "Deployment execution",
           "level": 1,
-          "body": "The Web Services page presents reviewed templates separately from manual address-first forwarding. The first template is DeepSeek Harness `0.1.1-rc.2`, identified as Developer Preview software. The current Environment is the deployment target; choosing another host remains the responsibility of the existing Environment switcher. One Environment can own at most one DeepSeek Harness instance.\n\nThe install surface shows the fixed version, estimated disk requirement, managed data location, accessible workspace roots, upstream source, and deployment availability. Direct installation and Docker are explicit alternatives. A deployment is enabled only after Redeven fetches and verifies the fixed-version signed catalog and finds a usable audited artifact; an unavailable, unpublished, malformed, or incomplete catalog disables installation with a stable reason. Docker is also disabled when its daemon is unavailable or the Environment is already inside a container. Docker copy identifies the selected image as community packaging rather than an official DeepSeek distribution.\n\nInstall is one user action with observable stages: environment check, download or pull, verification, installation, start, health check, and completion. Progress arrives through an authenticated fetch stream so the same Local API access material applies to the event request. Successful installation reserves the browser action from the initiating gesture and opens the existing protected Web Service route. The resulting managed card is the lifecycle owner and exposes Open, Start, Stop, Restart, Logs, Retry install when applicable, and Uninstall. It is not duplicated in the ordinary saved-forward list.\n\nUninstall retains application data by default. Deleting data requires an explicit destructive confirmation and administrator or owner authority. Removing a service also removes its protected forward, while its terminal operation history remains available for audit and idempotency. Application credentials, including API keys, are configured only in DeepSeek Harness itself; Redeven request models reject unknown credential fields, and operation logs and audit details must not contain secrets.",
-          "char_count": 2183
+          "body": "A deployment reports environment check, download/pull, verification, installation, start, health, forward registration, and open through an authenticated Local API stream. The managed card owns Start, Stop, Restart, Retry, Logs, and Uninstall; its backing forward is hidden from manual controls.\n\nThe instance saves the exact template revision, canonical definition, SHA-256, service-family identity, workspace, non-secret configuration, and runtime manifest before execution. Later template edits do not alter it. Secret inputs live only in a private `0600` Runtime file and are removed on uninstall.\n\nHost scripts run through `/bin/sh -eu` as the current OS user with workspace, private data, loopback host, reserved port, and optional verified executable variables. Start remains foreground. Stop-script failure cannot bypass exact process-group cleanup; a PID outside the current Runtime generation is never adopted or killed.\n\nSingle-container deployment pulls first and requires a verifiable immutable OCI digest. It creates the exact image with `cap-drop ALL`, `no-new-privileges`, a read-only root, PID limit, bridge networking, project-owned volumes, hardened tmpfs, and exactly one `127.0.0.1` host publication.\n\nCompose pins every image and hashes its private generated configuration. Only the entry service receives the loopback Web port. Each lifecycle action verifies configuration, project, one-container-per-service membership, labels, images, hardening, and sidecar isolation.",
+          "char_count": 1493
         },
         {
-          "id": "deployment-contract",
-          "title": "Deployment contract",
+          "id": "built-in-deepseek-harness",
+          "title": "Built-in DeepSeek Harness",
           "level": 1,
-          "body": "## Signed catalog and native packages\n\nRedeven reads the fixed public catalog endpoint `https://version.agent.redeven.com/v1/managed-web-services/deepseek-harness/0.1.1-rc.2.json` and accepts only an Ed25519-signed envelope with the compiled trust identity, the exact `deepseek-harness` template id, and version `0.1.1-rc.2`. Cross-origin redirects, untrusted package origins, malformed signatures, unexpected fields, invalid sizes, and invalid digests are rejected. Catalog publication is a release prerequisite rather than a runtime fallback: every platform entry must be tied to the reviewed source revision, version, license inventory, architecture, package size, SHA-256, and executable path.\n\nNative deployment supports Linux and macOS on amd64 and arm64. Its reviewed archive includes the fixed Node.js runtime, DeepSeek Harness, and required native dependencies, so installation does not depend on a host Node.js. Redeven downloads into a private staging directory, verifies the declared byte count and SHA-256, accepts only regular files and directories whose paths remain inside the archive root, and atomically renames the verified tree into the Runtime private state directory. Partial staging is removed on failure or Runtime startup.\n\nThe native launcher runs from the selected workspace with its data and logs under the managed private state root, passes `--host 127.0.0.1`, and records an instance-specific process identity. Stop and cleanup operate only on a process held by the current Runtime generation with the exact identity. A live persisted PID without matching in-memory ownership is treated as an identity conflict, not adopted or killed.\n\n## Hardened Docker deployment\n\nDocker deployment accepts only `runzhliu/deepseek-harness:0.1.1-rc.2` combined with the signed catalog's immutable `sha256` OCI digest for the current amd64 or arm64 architecture. Mutable tags such as `latest` are never resolved. The container uses a service-specific label and exact container id, runs non-root with a read-only root filesystem, drops all capabilities, enables `no-new-privileges`, applies a PID limit, uses bounded shared memory and hardened temporary filesystems, and mounts only its managed data volume plus the selected workspace.\n\nThe container publishes exactly the Harness Web port `3080` to its reserved host port on `127.0.0.1`. It does not publish the image's `6080` noVNC port. Before start, stop, removal, logs, or data deletion, Redeven re-inspects the exact stored container, labels, image digest, port mapping, and hardening policy. Data deletion additionally verifies the stored volume name and creation identity.",
-          "char_count": 2643
+          "body": "DeepSeek Harness remains Developer Preview software fixed at `0.1.1-rc.2`. The host and container cards share one service family, so one Environment can own at most one built-in DeepSeek Harness instance. Redeven does not automatically follow upstream releases.\n\nHost deployment supports Linux and macOS on amd64 and arm64. Redeven accepts only an exact Ed25519-signed catalog entry and downloads a platform archive containing fixed Node.js, DeepSeek Harness, and native dependencies. It verifies trusted origin, declared size, SHA-256, safe archive paths, executable layout, and then atomically installs private state. The launcher binds `127.0.0.1`.\n\nContainer deployment identifies `runzhliu/deepseek-harness:0.1.1-rc.2` as community packaging, not a DeepSeek official distribution. The signed catalog supplies the reviewed amd64 or arm64 OCI digest. The container runs non-root under the hardened policy, mounts a private data volume and selected workspace, publishes only Harness port `3080` to loopback, and never publishes `6080`/noVNC.\n\nCatalog publication requires reviewed source/version, licenses, architecture, digest, hardening, persistence, WebSocket, loopback, and protected-routing smoke tests. Third-party notices distinguish on-demand software from code embedded in Redeven.",
+          "char_count": 1292
         },
         {
-          "id": "lifecycle-and-persistence",
-          "title": "Lifecycle and persistence",
+          "id": "persistence-and-recovery",
+          "title": "Persistence and recovery",
           "level": 1,
-          "body": "The port-forward registry schema version 2 adds managed service and operation records through the contiguous v1-to-v2 migration while preserving every existing forward. Service, stable protected forward, and initial install operation are created in one transaction. A managed forward cannot be removed through the ordinary delete-forward API; only successful managed uninstall removes the service and its forward in one transaction.\n\nEvery mutation carries an opaque `request_id`. Redeven persists a request fingerprint and returns the original operation only when a repeated id has the same action and payload; conflicting reuse fails with `IDEMPOTENCY_CONFLICT`. At most one pending, running, or cancelling operation exists for a service. A snapshot is emitted before live progress, and terminal state remains queryable after the service is uninstalled.\n\nRuntime startup marks incomplete operations `interrupted`, cleans only their verified partial resource, and leaves the service stopped in an error state for an explicit user retry; it never silently resumes an interrupted operation. A service whose desired state is `running` and whose latest operation was already terminal receives a new start recovery operation. Runtime shutdown cancels active work and stops known running instances while retaining their desired state for recovery. Cancellation and failures clean only verified partial resources, persist stable error codes, and leave retry as a user-visible action.\n\nHealth succeeds only after the application responds on its assigned loopback port. Redeven then exposes the stable forward through the existing Local and remote Environment protected routes described by [Web Service browser sessions](web-service-browser-sessions.md). Stopping retains the forward identity and managed card; the protected route may report the existing unavailable-service state until the service starts again.",
-          "char_count": 1904
+          "body": "Port-forward registry schema v3 is the contiguous successor of v1 and v2. It preserves existing forwards and v2 DeepSeek Harness instances, adds template persistence, and expands managed services with source, revision, definition hash, immutable snapshot, service family, configuration, and runtime manifest. Every edge verifies the exact historical shape before applying and commits migration, data, metadata, version, and final verification atomically. Drift, future versions, or failure leave the prior database unchanged.\n\nService, stable protected forward, and initial install operation are created in one transaction. Repeated request identities return the original operation only for the same fingerprint; conflicting reuse fails. At most one operation is pending, running, or cancelling per service.\n\nStartup marks incomplete work `interrupted`, cleans only verifiable partial resources, and waits for Retry. A terminal instance with desired state `running` receives a recovery Start. Shutdown stops exact known runtimes while retaining desired state. Stop preserves the forward and card.\n\nUninstall retains data by default. Deleting data requires a second destructive confirmation and administrator or owner authority. Removal revalidates every process, container, Compose project, volume, and configuration identity before deleting it, then atomically removes the service and forward while retaining terminal operation history.\n\nHealth succeeds only after the application responds on its assigned loopback port. Redeven exposes the stable identity through the Local and remote protected routes defined by [Web Service browser sessions](web-service-browser-sessions.md).",
+          "char_count": 1679
         },
         {
-          "id": "api-and-authorization",
-          "title": "API and authorization",
+          "id": "local-api-and-authorization",
+          "title": "Local API and authorization",
           "level": 1,
-          "body": "The Local API surface is:\n\n- `GET /_redeven_proxy/api/managed-web-services/catalog`\n- `GET /_redeven_proxy/api/managed-web-services`\n- `POST /_redeven_proxy/api/managed-web-services`\n- `POST /_redeven_proxy/api/managed-web-services/{id}/operations`\n- `GET /_redeven_proxy/api/managed-web-services/{id}/logs`\n- `POST /_redeven_proxy/api/managed-web-service-operations/{id}/cancel`\n- `GET /_redeven_proxy/api/managed-web-service-operations/{id}/events`\n\nCatalog, list, logs, and event streams require Web Service read permission. Install, lifecycle operations, and cancellation require read, write, and execute permission. Uninstall with data deletion additionally requires administrator or owner authority. Mutation attempts append a bounded audit event with template, deployment, workspace, service, operation, action, and delete-data intent as applicable; credential values are never accepted or recorded.",
-          "char_count": 906
+          "body": "Catalog/list/create live under `/_redeven_proxy/api/managed-web-services`; lifecycle/logs use its `{id}` routes; cancellation/events use `.../managed-web-service-operations/{id}`. Reads require Web Service read permission. Mutations require read, write, and execute; data deletion also requires administrator or owner. Bodies and audits are bounded and exclude definitions, scripts, values, and secrets.",
+          "char_count": 403
         },
         {
-          "id": "release-and-scope-boundaries",
-          "title": "Release and scope boundaries",
+          "id": "scope-boundaries",
+          "title": "Scope boundaries",
           "level": 1,
-          "body": "DeepSeek Harness remains fixed until a reviewed Redeven change advances its version. A community image enters the signed catalog only after the selected source commit, DSH version, both architectures, OCI digest, licenses, hardening behavior, loopback publication, persistence, WebSocket behavior, and protected routing pass release smoke tests. Native archives retain upstream license and dependency notices; the community image retains its own operating-system and package notices. The repository third-party inventory distinguishes on-demand software from code embedded in Redeven.\n\nThis contract does not include Windows native installation, multiple instances, cross-Environment scheduling, nested Docker, automatic upgrades, native-to-Docker data migration, public or LAN application listeners, or management of DeepSeek Harness API keys.",
-          "char_count": 844
+          "body": "This contract does not include Windows host deployment, cross-Environment scheduling, nested Docker, automatic upgrades, migration between deployment kinds, public or LAN listeners, arbitrary multi-port publication, or Redeven management of application API keys.",
+          "char_count": 262
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/managedwebservice/catalog.go:0:verifies the signed fixed-version catalog and trusted package origin.",
-          "source": "redeven:internal/managedwebservice/catalog.go",
-          "description": "Verifies the signed fixed-version catalog and trusted package origin."
-        },
-        {
-          "id": "redeven:internal/managedwebservice/native.go:0:installs verified native archives atomically and owns exact native process lifecycle, loopback launch, data, logs, and cleanup.",
-          "source": "redeven:internal/managedwebservice/native.go",
-          "description": "Installs verified native archives atomically and owns exact native process lifecycle, loopback launch, data, logs, and cleanup."
-        },
-        {
-          "id": "redeven:internal/managedwebservice/docker.go:0:pins the community image digest and verifies hardened container, volume, and network identity.",
-          "source": "redeven:internal/managedwebservice/docker.go",
-          "description": "Pins the community image digest and verifies hardened container, volume, and network identity."
-        },
-        {
-          "id": "redeven:internal/managedwebservice/manager.go:0:coordinates idempotent serialized operations, recovery, health checks, cancellation, state, and event snapshots.",
+          "id": "redeven:internal/managedwebservice/manager.go:0:coordinates immutable instances, family admission, lifecycle, recovery, health, and forwarding.",
           "source": "redeven:internal/managedwebservice/manager.go",
-          "description": "Coordinates idempotent serialized operations, recovery, health checks, cancellation, state, and event snapshots."
+          "description": "Coordinates immutable instances, family admission, lifecycle, recovery, health, and forwarding."
         },
         {
-          "id": "redeven:internal/portforward/registry/schema.go:0:defines the contiguous port-forward registry v1-to-v2 migration.",
+          "id": "redeven:internal/managedwebservice/custom_host.go:0:owns host script execution, exact process cleanup, verified packages, private data, and redacted logs.",
+          "source": "redeven:internal/managedwebservice/custom_host.go",
+          "description": "Owns host script execution, exact process cleanup, verified packages, private data, and redacted logs."
+        },
+        {
+          "id": "redeven:internal/managedwebservice/custom_container.go:0:pins and verifies single-container images, labels, volumes, hardening, and loopback identity.",
+          "source": "redeven:internal/managedwebservice/custom_container.go",
+          "description": "Pins and verifies single-container images, labels, volumes, hardening, and loopback identity."
+        },
+        {
+          "id": "redeven:internal/managedwebservice/custom_compose.go:0:generates and verifies hardened exact-project compose deployments.",
+          "source": "redeven:internal/managedwebservice/custom_compose.go",
+          "description": "Generates and verifies hardened exact-project Compose deployments."
+        },
+        {
+          "id": "redeven:internal/portforward/registry/schema.go:0:defines contiguous v1-to-v3 migrations and exact historical/target verification.",
           "source": "redeven:internal/portforward/registry/schema.go",
-          "description": "Defines the contiguous port-forward registry v1-to-v2 migration."
+          "description": "Defines contiguous v1-to-v3 migrations and exact historical/target verification."
         },
         {
-          "id": "redeven:internal/portforward/registry/managed.go:0:persists managed lifecycle records and atomically owns protected-forward creation and removal.",
+          "id": "redeven:internal/portforward/registry/managed.go:0:persists snapshots, operations, families, and protected-forward ownership.",
           "source": "redeven:internal/portforward/registry/managed.go",
-          "description": "Persists managed lifecycle records and atomically owns protected-forward creation and removal."
+          "description": "Persists snapshots, operations, families, and protected-forward ownership."
         },
         {
-          "id": "redeven:internal/codeapp/appserver/managed_web_services.go:0:enforces local api permissions, strict request bodies, audit events, and sse progress.",
+          "id": "redeven:internal/codeapp/appserver/managed_web_services.go:0:enforces local api permissions, strict bodies, audit events, and authenticated progress.",
           "source": "redeven:internal/codeapp/appserver/managed_web_services.go",
-          "description": "Enforces Local API permissions, strict request bodies, audit events, and SSE progress."
+          "description": "Enforces Local API permissions, strict bodies, audit events, and authenticated progress."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:0:presents deployment selection, progress, lifecycle, logs, opening, and destructive uninstall confirmation.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx",
-          "description": "Presents deployment selection, progress, lifecycle, logs, opening, and destructive uninstall confirmation."
-        },
-        {
-          "id": "redeven:internal/managedwebservice/manager_test.go:0:covers operation idempotency, concurrency, cancellation, event snapshots, identity rejection, and log redaction.",
+          "id": "redeven:internal/managedwebservice/manager_test.go:0:covers idempotency, concurrency, cancellation, recovery, identity rejection, and redaction.",
           "source": "redeven:internal/managedwebservice/manager_test.go",
-          "description": "Covers operation idempotency, concurrency, cancellation, event snapshots, identity rejection, and log redaction."
+          "description": "Covers idempotency, concurrency, cancellation, recovery, identity rejection, and redaction."
         },
         {
-          "id": "redeven:internal/portforward/registry/registry_test.go:0:covers migration preservation, rollback, drift and future rejection, protected forwards, and atomic lifecycle persistence.",
+          "id": "redeven:internal/portforward/registry/registry_test.go:0:covers preservation, drift/future rejection, rollback, and atomic persistence.",
           "source": "redeven:internal/portforward/registry/registry_test.go",
-          "description": "Covers migration preservation, rollback, drift and future rejection, protected forwards, and atomic lifecycle persistence."
-        },
-        {
-          "id": "redeven:internal/codeapp/appserver/managed_web_services_test.go:0:covers route permissions, administrator-only data deletion, strict credential rejection, and sse terminal snapshots.",
-          "source": "redeven:internal/codeapp/appserver/managed_web_services_test.go",
-          "description": "Covers route permissions, administrator-only data deletion, strict credential rejection, and SSE terminal snapshots."
-        },
-        {
-          "id": "redeven:internal/capabilities/containers/resources_v3_test.go:0:verifies the hardened docker create request and cli mapping.",
-          "source": "redeven:internal/capabilities/containers/resources_v3_test.go",
-          "description": "Verifies the hardened Docker create request and CLI mapping."
-        },
-        {
-          "id": "redeven:scripts/generate_third_party_notices.mjs:0:generates the on-demand deepseek harness and community image notices.",
-          "source": "redeven:scripts/generate_third_party_notices.mjs",
-          "description": "Generates the on-demand DeepSeek Harness and community image notices."
+          "description": "Covers preservation, drift/future rejection, rollback, and atomic persistence."
         }
       ],
-      "snippet": "- Authority: Redeven owns installation, lifecycle state, exact runtime identity, and protected-forward registration for a managed Web Service; the installed application owns its settings and credentials. - Outcome: an authorized user can in",
+      "snippet": "- Authority: Redeven owns an installed service's immutable template snapshot, lifecycle state, exact runtime identity, private runtime data, and protected forward. The application owns its settings and credentials. - Outcome: a deployment r",
       "links": [
+        {
+          "label": "Service template center",
+          "path": "architecture/managed-web-service-templates.md",
+          "concept_id": "architecture.managed-web-service-templates",
+          "title": "Managed Web Service Templates"
+        },
         {
           "label": "Web Service browser sessions",
           "path": "architecture/web-service-browser-sessions.md",
@@ -4425,6 +4547,12 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Managed Web Service Templates",
+          "path": "architecture/managed-web-service-templates.md",
+          "concept_id": "architecture.managed-web-service-templates",
+          "title": "Managed Web Service Templates"
+        },
         {
           "label": "Web Service browser sessions",
           "path": "architecture/web-service-browser-sessions.md",
@@ -10045,5 +10173,5 @@
       ]
     }
   ],
-  "source_sha256": "aed2929017e5dbb921f8528302ae7c20628872eec7db221fe1d3cd480c372a12"
+  "source_sha256": "f30b94358dd9a3c28820a5f5c75e96e8fb4eac5cce624edc4253a2459ce8384e"
 }

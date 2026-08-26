@@ -16,15 +16,19 @@ import (
 const (
 	managedServicesAPIBase   = "/_redeven_proxy/api/managed-web-services"
 	managedOperationsAPIBase = "/_redeven_proxy/api/managed-web-service-operations"
+	managedTemplatesAPIBase  = "/_redeven_proxy/api/managed-web-service-templates"
 )
 
 func (g *Server) handleManagedWebServicesAPI(w http.ResponseWriter, r *http.Request) bool {
-	if r == nil || (!strings.HasPrefix(r.URL.Path, managedServicesAPIBase) && !strings.HasPrefix(r.URL.Path, managedOperationsAPIBase)) {
+	if r == nil || (!strings.HasPrefix(r.URL.Path, managedServicesAPIBase) && !strings.HasPrefix(r.URL.Path, managedOperationsAPIBase) && !strings.HasPrefix(r.URL.Path, managedTemplatesAPIBase)) {
 		return false
 	}
 	if g.managed == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "managed Web Services are not ready", ErrorCode: "MANAGED_WEB_SERVICES_UNAVAILABLE"})
 		return true
+	}
+	if strings.HasPrefix(r.URL.Path, managedTemplatesAPIBase) {
+		return g.handleManagedTemplateRoute(w, r)
 	}
 
 	switch {
@@ -81,6 +85,141 @@ func (g *Server) handleManagedWebServicesAPI(w http.ResponseWriter, r *http.Requ
 	}
 	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 	return true
+}
+
+func (g *Server) handleManagedTemplateRoute(w http.ResponseWriter, r *http.Request) bool {
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, managedTemplatesAPIBase), "/")
+	parts := []string{}
+	if rest != "" {
+		parts = strings.Split(rest, "/")
+	}
+	if r.Method == http.MethodGet && len(parts) == 0 {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
+			return true
+		}
+		templates, err := g.managed.Catalog(r.Context())
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"templates": templates}})
+		return true
+	}
+	if r.Method == http.MethodPost && len(parts) == 1 && parts[0] == "validate" {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+			return true
+		}
+		var req managedwebservice.TemplateWriteRequest
+		if err := decodeManagedTemplateJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		if err := g.managed.ValidateTemplate(r.Context(), req); err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"valid": true}})
+		return true
+	}
+	if r.Method == http.MethodPost && len(parts) == 0 {
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+		if !ok {
+			return true
+		}
+		var req managedwebservice.TemplateWriteRequest
+		if err := decodeManagedTemplateJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		detail := templateAuditDetail(req.Name, req.Spec.Kind)
+		template, err := g.managed.CreateTemplate(r.Context(), req)
+		if err != nil {
+			g.appendAudit(meta, "managed_web_service_template_create", "failure", detail, err)
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		detail["template_id"], detail["revision"] = template.TemplateID, template.Revision
+		g.appendAudit(meta, "managed_web_service_template_create", "success", detail, nil)
+		writeJSON(w, http.StatusCreated, apiResp{OK: true, Data: template})
+		return true
+	}
+	if len(parts) == 1 && strings.TrimSpace(parts[0]) != "" {
+		templateID := strings.TrimSpace(parts[0])
+		if r.Method == http.MethodGet {
+			if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
+				return true
+			}
+			template, err := g.managed.Template(r.Context(), templateID)
+			if err != nil {
+				writeManagedWebServiceError(w, err)
+				return true
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: template})
+			return true
+		}
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+		if !ok {
+			return true
+		}
+		if r.Method == http.MethodPut {
+			var req managedwebservice.TemplateWriteRequest
+			if err := decodeManagedTemplateJSON(r, &req); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+				return true
+			}
+			detail := templateAuditDetail(req.Name, req.Spec.Kind)
+			detail["template_id"] = templateID
+			template, err := g.managed.UpdateTemplate(r.Context(), templateID, req)
+			if err != nil {
+				g.appendAudit(meta, "managed_web_service_template_update", "failure", detail, err)
+				writeManagedWebServiceError(w, err)
+				return true
+			}
+			detail["revision"] = template.Revision
+			g.appendAudit(meta, "managed_web_service_template_update", "success", detail, nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: template})
+			return true
+		}
+		if r.Method == http.MethodDelete {
+			detail := map[string]any{"template_id": templateID}
+			if err := g.managed.DeleteTemplate(r.Context(), templateID); err != nil {
+				g.appendAudit(meta, "managed_web_service_template_delete", "failure", detail, err)
+				writeManagedWebServiceError(w, err)
+				return true
+			}
+			g.appendAudit(meta, "managed_web_service_template_delete", "success", detail, nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return true
+		}
+	}
+	if r.Method == http.MethodPost && len(parts) == 2 && strings.TrimSpace(parts[0]) != "" && parts[1] == "duplicate" {
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+		if !ok {
+			return true
+		}
+		var req managedwebservice.TemplateDuplicateRequest
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		detail := map[string]any{"source_template_id": strings.TrimSpace(parts[0]), "name": truncateString(req.Name, 80)}
+		template, err := g.managed.DuplicateTemplate(r.Context(), parts[0], req)
+		if err != nil {
+			g.appendAudit(meta, "managed_web_service_template_duplicate", "failure", detail, err)
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		detail["template_id"], detail["revision"] = template.TemplateID, template.Revision
+		g.appendAudit(meta, "managed_web_service_template_duplicate", "success", detail, nil)
+		writeJSON(w, http.StatusCreated, apiResp{OK: true, Data: template})
+		return true
+	}
+	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+	return true
+}
+
+func templateAuditDetail(name string, deployment managedwebservice.Deployment) map[string]any {
+	return map[string]any{"name": truncateString(name, 80), "deployment": truncateString(string(deployment), 20)}
 }
 
 func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Request) bool {
@@ -231,7 +370,15 @@ func (g *Server) streamManagedOperationEvents(w http.ResponseWriter, r *http.Req
 }
 
 func decodeManagedJSON(r *http.Request, destination any) error {
-	decoder := json.NewDecoder(io.LimitReader(r.Body, 64*1024))
+	return decodeManagedJSONLimit(r, destination, 64*1024)
+}
+
+func decodeManagedTemplateJSON(r *http.Request, destination any) error {
+	return decodeManagedJSONLimit(r, destination, 768*1024)
+}
+
+func decodeManagedJSONLimit(r *http.Request, destination any, limit int64) error {
+	decoder := json.NewDecoder(io.LimitReader(r.Body, limit))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
 		return err

@@ -26,6 +26,7 @@ type ContainerCreateRequest struct {
 	EndpointID    EndpointID             `json:"endpoint_id,omitempty"`
 	Name          string                 `json:"name,omitempty"`
 	Image         string                 `json:"image"`
+	Entrypoint    string                 `json:"entrypoint,omitempty"`
 	Command       []string               `json:"command,omitempty"`
 	Env           []string               `json:"env,omitempty"`
 	Labels        map[string]string      `json:"labels,omitempty"`
@@ -225,11 +226,14 @@ func validateContainerCreateRequest(req ContainerCreateRequest) error {
 	if name := strings.TrimSpace(req.Name); name != "" && !containerNamePattern.MatchString(name) {
 		return errors.New("container name is invalid")
 	}
+	if entrypoint := strings.TrimSpace(req.Entrypoint); strings.HasPrefix(entrypoint, "-") || hasControl(entrypoint) {
+		return errors.New("container entrypoint is invalid")
+	}
 	if len(req.Command) > 128 || len(req.Env) > 256 || len(req.Ports) > 128 || len(req.Mounts) > 128 ||
 		len(req.CapAdd) > 128 || len(req.CapDrop) > 128 || len(req.Devices) > 128 || len(req.SecurityOpts) > 32 || len(req.Labels) > 64 {
 		return errors.New("container create request exceeds resource limits")
 	}
-	for _, value := range append(append([]string(nil), req.Command...), req.Env...) {
+	for _, value := range append(append([]string{req.Entrypoint}, req.Command...), req.Env...) {
 		if hasControl(value) {
 			return errors.New("container command or environment entry is invalid")
 		}

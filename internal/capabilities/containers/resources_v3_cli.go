@@ -53,6 +53,9 @@ func (c *CLIClient) CreateContainer(ctx context.Context, req ContainerCreateRequ
 	if user := strings.TrimSpace(req.User); user != "" {
 		args = append(args, "--user", user)
 	}
+	if entrypoint := strings.TrimSpace(req.Entrypoint); entrypoint != "" {
+		args = append(args, "--entrypoint", entrypoint)
+	}
 	for _, option := range req.SecurityOpts {
 		args = append(args, "--security-opt", strings.TrimSpace(option))
 	}

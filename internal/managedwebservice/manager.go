@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -41,6 +42,9 @@ type Manager struct {
 	catalog    *catalogClient
 	native     deploymentDriver
 	docker     deploymentDriver
+	host       deploymentDriver
+	container  deploymentDriver
+	compose    deploymentDriver
 
 	requestMu    sync.Mutex
 	mu           sync.Mutex
@@ -73,6 +77,9 @@ func New(opts ManagerOptions) (*Manager, error) {
 	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: defaultCatalogClient(), cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
 	m.native = &nativeDriver{log: logger, stateDir: root, client: m.catalog.packageHTTPClient()}
 	m.docker = &dockerDriver{adapter: opts.Containers, stateDir: root}
+	m.host = &hostScriptDriver{manager: m, processes: map[string]nativeProcess{}}
+	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
+	m.compose = &composeTemplateDriver{manager: m, adapter: opts.Containers}
 	if err := m.registry.MarkManagedOperationsInterrupted(context.Background()); err != nil {
 		return nil, err
 	}
@@ -171,6 +178,39 @@ func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
 			}
 		}
 	}
+	workspaceRoots := m.workspaceRoots()
+	hostSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: `exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"`}}
+	containerSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: auditedDockerImage, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {Type: "workspace", Target: "/workspace"}, {Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512}}
+	if catalogErr == nil {
+		if artifact, ok := payload.Platforms[currentPlatformKey()]; ok {
+			hostSpec.Host.Artifact = &HostArtifactSpec{DownloadURL: artifact.DownloadURL, SizeBytes: artifact.SizeBytes, SHA256: artifact.SHA256, ExecutableRelPath: artifact.ExecutableRelPath}
+		}
+		if artifact, ok := payload.Docker["linux-"+runtime.GOARCH]; ok {
+			containerSpec.Container.Image = artifact.Image + "@" + artifact.Digest
+		}
+	}
+	items := []Template{
+		{TemplateID: DeepSeekHarnessHostTemplateID, Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", Source: "builtin", Deployment: DeploymentNative, Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(hostSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentNative, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason}}, WorkspaceRoots: workspaceRoots, Spec: &hostSpec},
+		{TemplateID: DeepSeekHarnessContainerTemplateID, Name: "DeepSeek Harness · Container", Description: "Run the reviewed community DeepSeek Harness image in Docker.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Source: "builtin", Deployment: DeploymentDocker, ContainerMode: "single", Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(containerSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentDocker, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason}}, WorkspaceRoots: workspaceRoots, Spec: &containerSpec},
+	}
+	if m.registry != nil {
+		custom, err := m.registry.ListManagedTemplates(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, record := range custom {
+			item, err := m.templateFromRecord(ctx, record)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, *item)
+		}
+	}
+	sortTemplates(items)
+	return items, nil
+}
+
+func (m *Manager) workspaceRoots() []WorkspaceRoot {
 	pathContext := m.scope.PathContext()
 	workspaceRoots := make([]WorkspaceRoot, 0, len(pathContext.Roots))
 	for _, root := range pathContext.Roots {
@@ -179,11 +219,7 @@ func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
 		}
 		workspaceRoots = append(workspaceRoots, WorkspaceRoot{ID: root.ID, Label: root.Label, Path: root.PathAbs})
 	}
-	return []Template{{
-		TemplateID: DeepSeekHarnessTemplateID, Name: "DeepSeek Harness", Description: "Run DeepSeek Harness as an authenticated, environment-local Web Service.", Version: DeepSeekHarnessVersion, DeveloperPreview: true,
-		DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker",
-		Deployments: []DeploymentAvailability{{Deployment: DeploymentNative, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason}, {Deployment: DeploymentDocker, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason}}, WorkspaceRoots: workspaceRoots,
-	}}, nil
+	return workspaceRoots
 }
 
 func (m *Manager) dockerAvailability(ctx context.Context) (bool, string, string) {
@@ -222,9 +258,23 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, ServiceView{ManagedService: service, ActiveOperation: active})
+		name, description := m.serviceDisplayMetadata(ctx, service)
+		out = append(out, ServiceView{ManagedService: service, Name: name, Description: description, ActiveOperation: active})
 	}
 	return out, nil
+}
+
+func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry.ManagedService) (string, string) {
+	switch service.TemplateID {
+	case DeepSeekHarnessTemplateID, DeepSeekHarnessHostTemplateID:
+		return "DeepSeek Harness · Host", "Run DeepSeek Harness directly in the current Environment."
+	case DeepSeekHarnessContainerTemplateID:
+		return "DeepSeek Harness · Container", "Run the reviewed community DeepSeek Harness image in Docker."
+	}
+	if record, err := m.registry.GetManagedTemplate(ctx, service.TemplateID); err == nil && record != nil {
+		return record.Name, record.Description
+	}
+	return service.TemplateID, ""
 }
 
 func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult, error) {
@@ -233,7 +283,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	m.requestMu.Lock()
 	defer m.requestMu.Unlock()
-	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath))
+	parameterJSON, _ := json.Marshal(req.Parameters)
+	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), string(parameterJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -249,24 +300,59 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		}
 		return &CreateResult{Service: *service, Operation: *existing}, nil
 	}
-	if req.TemplateID != DeepSeekHarnessTemplateID {
-		return nil, serviceError("TEMPLATE_NOT_FOUND", "The managed Web Service template was not found.", 404, false, nil)
+	templateID := strings.TrimSpace(req.TemplateID)
+	if templateID == DeepSeekHarnessTemplateID {
+		if req.Deployment == DeploymentDocker {
+			templateID = DeepSeekHarnessContainerTemplateID
+		} else {
+			templateID = DeepSeekHarnessHostTemplateID
+		}
 	}
-	if req.Deployment != DeploymentNative && req.Deployment != DeploymentDocker {
-		return nil, serviceError("DEPLOYMENT_INVALID", "Choose direct installation or Docker.", 400, false, nil)
+	template, err := m.Template(ctx, templateID)
+	if err != nil {
+		return nil, err
+	}
+	if !template.Available {
+		return nil, serviceError(template.ReasonCode, template.Reason, 409, true, nil)
+	}
+	existingServices, err := m.registry.ListManagedServices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, existing := range existingServices {
+		if existing.ServiceFamilyID == template.ServiceFamilyID {
+			return nil, serviceError("INSTANCE_ALREADY_EXISTS", "This service template family already has an instance in the Environment.", 409, false, nil)
+		}
+	}
+	if template.Spec == nil {
+		return nil, serviceError("TEMPLATE_UNAVAILABLE", "The template deployment definition is unavailable.", 409, true, nil)
+	}
+	if req.Deployment != "" && req.TemplateID != DeepSeekHarnessTemplateID && req.Deployment != template.Deployment {
+		return nil, serviceError("DEPLOYMENT_INVALID", "The requested deployment type does not match the selected template.", 400, false, nil)
 	}
 	resolved, err := m.scope.Resolve(strings.TrimSpace(req.WorkspacePath), filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true, ForWrite: true})
 	if err != nil {
 		return nil, serviceError("WORKSPACE_UNAVAILABLE", "The workspace directory is not writable or is outside this Environment's allowed roots.", 400, false, err)
 	}
-	if req.Deployment == DeploymentDocker {
+	if template.Deployment == DeploymentDocker || template.Deployment == DeploymentContainer || template.Deployment == DeploymentCompose {
 		if ok, code, reason := m.dockerAvailability(ctx); !ok {
 			return nil, serviceError(code, reason, 409, true, nil)
 		}
 	}
-	port, err := reserveLoopbackPort()
+	configuration, secretValues, err := resolveTemplateInputs(*template.Spec, req.Parameters)
 	if err != nil {
-		return nil, serviceError("PORT_UNAVAILABLE", "No loopback port is available for DeepSeek Harness.", 503, true, err)
+		return nil, err
+	}
+	configurationJSON, err := json.Marshal(configuration)
+	if err != nil {
+		return nil, err
+	}
+	port := template.Spec.Endpoint.FixedHostPort
+	if port == 0 {
+		port, err = reserveLoopbackPort()
+	}
+	if err != nil {
+		return nil, serviceError("PORT_UNAVAILABLE", "No loopback port is available for this managed Web Service.", 503, true, err)
 	}
 	serviceID, err := randomID("mws")
 	if err != nil {
@@ -281,11 +367,19 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		return nil, err
 	}
 	now := time.Now().UnixMilli()
-	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: req.TemplateID, Deployment: string(req.Deployment), WorkspacePath: resolved.RealAbs, Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
-	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("http://127.0.0.1:%d", port), Name: "DeepSeek Harness", Description: "Managed by Redeven", CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	snapshotJSON, snapshotHash, err := canonicalTemplateSpec(*template.Spec)
+	if err != nil {
+		return nil, err
+	}
+	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: string(configurationJSON), Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
+		return nil, serviceError("SERVICE_SECRETS_WRITE_FAILED", "The managed-service secret parameters could not be stored securely.", 500, false, err)
+	}
 	if err := m.registry.CreateManagedServiceWithOperation(ctx, service, forward, op); err != nil {
-		return nil, serviceError("INSTANCE_ALREADY_EXISTS", "This Environment already has a DeepSeek Harness instance.", 409, false, err)
+		_ = os.Remove(m.serviceSecretPath(serviceID))
+		return nil, err
 	}
 	m.launch(service, op, false)
 	return &CreateResult{Service: service, Operation: op}, nil
@@ -439,11 +533,16 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 
 func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
 	m.progress(op, "environment_check", 1)
-	payload, err := m.catalog.resolve(ctx)
-	if err != nil {
-		return err
+	payload := catalogPayload{}
+	var err error
+	if service.TemplateSource == "builtin" || service.Deployment == string(DeploymentNative) || service.Deployment == string(DeploymentDocker) {
+		payload, err = m.catalog.resolve(ctx)
+		if err != nil {
+			return err
+		}
 	}
-	m.progress(op, map[Deployment]string{DeploymentNative: "downloading", DeploymentDocker: "pulling"}[Deployment(service.Deployment)], 2)
+	stage := map[Deployment]string{DeploymentNative: "downloading", DeploymentDocker: "pulling", DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[Deployment(service.Deployment)]
+	m.progress(op, stage, 2)
 	runtimeID, artifact, err := driver.Install(ctx, service, payload, func(stage string, current int64) { m.progress(op, stage, current) })
 	if err != nil {
 		return err
@@ -462,9 +561,9 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 		return err
 	}
 	m.progress(op, "health_check", 6)
-	if err := waitHealthy(ctx, service.RuntimePort); err != nil {
+	if err := m.waitHealthy(ctx, service); err != nil {
 		_ = driver.Stop(context.Background(), service)
-		return serviceError("HEALTH_CHECK_FAILED", "DeepSeek Harness did not become healthy on its loopback port.", 502, true, err)
+		return serviceError("HEALTH_CHECK_FAILED", "The managed Web Service did not become healthy on its loopback port.", 502, true, err)
 	}
 	running, blank := "running", ""
 	service.DesiredState, service.ObservedState = running, running
@@ -486,9 +585,9 @@ func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedServi
 		return err
 	}
 	m.progress(op, "health_check", 6)
-	if err := waitHealthy(ctx, service.RuntimePort); err != nil {
+	if err := m.waitHealthy(ctx, service); err != nil {
 		_ = driver.Stop(context.Background(), service)
-		return serviceError("HEALTH_CHECK_FAILED", "DeepSeek Harness did not become healthy on its loopback port.", 502, true, err)
+		return serviceError("HEALTH_CHECK_FAILED", "The managed Web Service did not become healthy on its loopback port.", 502, true, err)
 	}
 	blank := ""
 	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &running, LastErrorCode: &blank, LastErrorMessage: &blank})
@@ -519,6 +618,9 @@ func (m *Manager) runUninstall(ctx context.Context, service *pfregistry.ManagedS
 	// Once destructive removal starts, finish it and its database transaction.
 	// Cancelling between those effects would leave an unverifiable half-uninstall.
 	if err := driver.Uninstall(context.Background(), service, deleteData); err != nil {
+		return err
+	}
+	if err := os.Remove(m.serviceSecretPath(service.ServiceID)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	op.State = "succeeded"
@@ -725,13 +827,20 @@ type deploymentDriver interface {
 }
 
 func (m *Manager) driver(deployment Deployment) deploymentDriver {
-	if deployment == DeploymentNative {
+	switch deployment {
+	case DeploymentNative:
 		return m.native
-	}
-	if deployment == DeploymentDocker {
+	case DeploymentDocker:
 		return m.docker
+	case DeploymentHost:
+		return m.host
+	case DeploymentContainer:
+		return m.container
+	case DeploymentCompose:
+		return m.compose
+	default:
+		return nil
 	}
-	return nil
 }
 
 func reserveLoopbackPort() (int, error) {
@@ -742,10 +851,26 @@ func reserveLoopbackPort() (int, error) {
 	defer listener.Close()
 	return listener.Addr().(*net.TCPAddr).Port, nil
 }
-func waitHealthy(ctx context.Context, port int) error {
-	deadline := time.Now().Add(45 * time.Second)
+func (m *Manager) waitHealthy(ctx context.Context, service *pfregistry.ManagedService) error {
+	endpoint := WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 45}
+	if spec, err := templateSpecFromService(service); err == nil {
+		endpoint = spec.Endpoint
+	}
+	if endpoint.Scheme == "" {
+		endpoint.Scheme = "http"
+	}
+	if endpoint.HealthProtocol != "" {
+		endpoint.Scheme = endpoint.HealthProtocol
+	}
+	if endpoint.HealthPath == "" {
+		endpoint.HealthPath = "/"
+	}
+	if endpoint.StartupTimeout <= 0 {
+		endpoint.StartupTimeout = 45
+	}
+	deadline := time.Now().Add(time.Duration(endpoint.StartupTimeout) * time.Second)
 	client := &http.Client{Timeout: 2 * time.Second}
-	target := fmt.Sprintf("http://127.0.0.1:%d/", port)
+	target := fmt.Sprintf("%s://127.0.0.1:%d%s", endpoint.Scheme, service.RuntimePort, endpoint.HealthPath)
 	for time.Now().Before(deadline) {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 		if resp, err := client.Do(req); err == nil {
