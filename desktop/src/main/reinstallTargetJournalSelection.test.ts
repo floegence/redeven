@@ -47,7 +47,7 @@ function journal(input: Readonly<{
 }
 
 describe('reinstall target journal selection', () => {
-  it('restores only the newest journal for each physical target', () => {
+  it('selects only the newest internal recovery journal for each physical target', () => {
     const older = journal({
       preflightID: 'older',
       physicalTargetFingerprint: 'target-a',

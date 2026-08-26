@@ -548,7 +548,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
 }
 
 describe('buildEnvironmentDisplayStateModel', () => {
-  it('keeps every direct lifecycle action available when a recovery marker is present', () => {
+  it('uses one reinstall action and one refresh action when recovery is required', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({ local_environment: local }),
@@ -561,27 +561,26 @@ describe('buildEnvironmentDisplayStateModel', () => {
       reinstall_required: true,
     });
 
-    expect(model.action_presentation.primary_action).toMatchObject({
-      intent: 'open_with_preflight',
-      label: 'Open',
-      enabled: true,
+    expect(model).toMatchObject({
+      status_label: 'REINSTALL REQUIRED',
+      status_tone: 'warning',
     });
-    expect(model.action_presentation.menu_actions.map((item) => item.id)).toEqual(expect.arrayContaining([
-      'start_runtime',
-      'stop_runtime',
-      'restart_runtime',
-      'update_runtime',
-      'refresh_runtime',
-      'reinstall_target_wipe',
-      'reinstall_target_preserve',
-    ]));
-    expect(model.action_presentation.menu_actions
-      .filter((item) => item.id !== 'connect_provider_runtime')
-      .every((item) => item.action.enabled)).toBe(true);
+    expect(model.action_presentation.primary_action).toMatchObject({
+      intent: 'reinstall_target',
+      label: 'Reinstall Redeven',
+      enabled: true,
+      reinstall_mode: 'wipe_data',
+    });
+    expect(model.action_presentation.menu_actions).toEqual([
+      expect.objectContaining({
+        id: 'refresh_runtime',
+        action: expect.objectContaining({ intent: 'refresh_runtime', enabled: true }),
+      }),
+    ]);
     expect(model.action_presentation.primary_action_overlay).toBeUndefined();
   });
 
-  it('keeps the complete managed menu even when a stale snapshot hides every lifecycle plan', () => {
+  it('does not revive hidden lifecycle plans while recovery is required', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({ local_environment: local }),
@@ -599,21 +598,9 @@ describe('buildEnvironmentDisplayStateModel', () => {
       reinstall_required: true,
     }).action_presentation.menu_actions;
 
-    expect(actions.slice(0, 7).map((item) => item.id)).toEqual([
-      'start_runtime',
-      'stop_runtime',
-      'restart_runtime',
-      'update_runtime',
-      'refresh_runtime',
-      'reinstall_target_wipe',
-      'reinstall_target_preserve',
+    expect(actions).toEqual([
+      expect.objectContaining({ id: 'refresh_runtime' }),
     ]);
-    expect(actions.filter((item) => item.id !== 'connect_provider_runtime')
-      .every((item) => item.action.enabled)).toBe(true);
-    expect(actions).toEqual(expect.arrayContaining([expect.objectContaining({
-      id: 'connect_provider_runtime',
-      action: expect.objectContaining({ enabled: false }),
-    })]));
   });
 
   it('keeps Reinstall Redeven in the normal Local Environment runtime menu', () => {
@@ -654,7 +641,7 @@ describe('buildEnvironmentDisplayStateModel', () => {
     expect(model.action_presentation.primary_action_overlay).toBeUndefined();
   });
 
-  it('does not let a recovery marker replace the normal primary action', () => {
+  it('lets a recovery marker replace Open with the standard reinstall action', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({ local_environment: local }),
@@ -667,7 +654,10 @@ describe('buildEnvironmentDisplayStateModel', () => {
       reinstall_required: true,
     });
 
-    expect(model.action_presentation.primary_action).toMatchObject({ intent: 'open_with_preflight' });
+    expect(model.action_presentation.primary_action).toMatchObject({
+      intent: 'reinstall_target',
+      label: 'Reinstall Redeven',
+    });
   });
 
   it('classifies openable online runtimes as ready without calling them open windows', () => {

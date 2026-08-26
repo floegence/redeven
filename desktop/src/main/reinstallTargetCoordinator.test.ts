@@ -475,6 +475,49 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(fs.lstat(path.join(parent, quarantine!))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('discards only unstarted confirmation journals after Desktop restart', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    const dependencies = coordinatorDependencies(path.join(parent, 'journal'), () => current, []);
+    const coordinator = new ReinstallTargetCoordinator({
+      ...dependencies,
+      prepare_runtime_package: async () => {
+        throw new Error('simulated package preparation interruption');
+      },
+    });
+    const started = await coordinator.preview({ environment_id: current.environment_id });
+    await expect(coordinator.execute(started.preflight_id)).rejects.toMatchObject({ code: 'reinstall_retryable' });
+    const unstarted = await coordinator.preview({ environment_id: current.environment_id });
+
+    expect((await coordinator.readPersistedJournals()).map((journal) => journal.preflight_id).sort()).toEqual([
+      started.preflight_id,
+      unstarted.preflight_id,
+    ].sort());
+
+    await coordinator.discardUnstartedJournals();
+
+    await expect(coordinator.readPersistedJournals()).resolves.toEqual([
+      expect.objectContaining({ preflight_id: started.preflight_id, phase: 'target_resolved' }),
+    ]);
+  });
+
+  it('retires local recovery journals after current Environment health is verified', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    const coordinator = new ReinstallTargetCoordinator(
+      coordinatorDependencies(path.join(parent, 'journal'), () => current, []),
+    );
+    await coordinator.preview({ environment_id: current.environment_id });
+
+    await coordinator.retireJournalsForEnvironments([current.environment_id]);
+
+    await expect(coordinator.readPersistedJournals()).resolves.toEqual([]);
+  });
+
   it.each(['verify_identity', 'verify_catalog'] as const)(
     'continues wipe reinstall after an interrupted %s phase',
     async (failurePoint) => {

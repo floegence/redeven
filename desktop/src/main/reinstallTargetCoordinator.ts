@@ -1038,6 +1038,33 @@ export class ReinstallTargetCoordinator {
     return journals;
   }
 
+  async discardUnstartedJournals(): Promise<void> {
+    const journals = await this.readPersistedJournals();
+    await Promise.all(journals
+      .filter((journal) => journal.phase === 'confirmation')
+      .map(async (journal) => {
+        await fs.rm(journalFile(this.dependencies.journal_root, journal.preflight_id), { force: true });
+        this.preflights.delete(journal.preflight_id);
+      }));
+  }
+
+  async retireJournalsForEnvironments(environmentIDs: readonly string[]): Promise<void> {
+    const affected = new Set(environmentIDs.map(compact).filter(Boolean));
+    if (affected.size === 0) {
+      return;
+    }
+    const journals = await this.readPersistedJournals();
+    await Promise.all(journals
+      .filter((journal) => (
+        affected.has(journal.environment_id)
+        || journal.affected_environment_ids.some((environmentID) => affected.has(environmentID))
+      ))
+      .map(async (journal) => {
+        await fs.rm(journalFile(this.dependencies.journal_root, journal.preflight_id), { force: true });
+        this.preflights.delete(journal.preflight_id);
+      }));
+  }
+
   private async removeSupersededConfirmationJournals(
     physicalTargetFingerprint: string,
   ): Promise<void> {
@@ -1074,7 +1101,8 @@ export class ReinstallTargetCoordinator {
     const descriptor = await this.dependencies.resolve_target({
       environment_id: journal.environment_id,
     });
-    // Hydration only compares the durable registered identity. The physical
+    // Current-request recovery only compares the durable registered identity.
+    // The physical
     // root may be a remote alias or an old canonical representation; it is
     // re-resolved through the direct maintenance channel when work resumes.
     const descriptorFingerprint = reinstallTargetDescriptorFingerprint(descriptor);

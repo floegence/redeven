@@ -1623,6 +1623,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('force_runtime_update');
     expect(appSrc).toContain('forceRuntimeUpdate: true');
     expect(appSrc).toContain("'Reinstall Redeven': 'environmentAction.reinstallRedeven'");
+    expect(appSrc).toContain("'REINSTALL REQUIRED': 'environmentStatus.reinstallRequired'");
     expect(appSrc).not.toContain("confirmText={i18n().t('confirm.reinstallTargetConfirm')}");
     expect(appSrc).not.toContain('reinstallTarget()');
     expect(appSrc).not.toContain('reinstallTargetStepProgress(\'preflight\')');
