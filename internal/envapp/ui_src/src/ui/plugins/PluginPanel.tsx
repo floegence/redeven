@@ -192,6 +192,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       id: tile.item.inventoryKey,
       label: tile.item.displayName,
       icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
+      dockPlacement: 'after-components',
       canvasPlacement: target && props.onDropPlugin ? {
         widgetType: 'redeven.plugin',
         onDrop: (placement) => {

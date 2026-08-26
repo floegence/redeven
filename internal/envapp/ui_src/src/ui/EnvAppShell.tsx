@@ -1126,6 +1126,7 @@ export function EnvAppShell() {
       id: tile.item.inventoryKey,
       label: tile.item.displayName,
       icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
+      dockPlacement: 'after-components',
       active: false,
       onContextMenu: (request) => setPluginPinMenu({
         placement: 'workbench',
@@ -4066,6 +4067,22 @@ export function EnvAppShell() {
 
   const activityItems = (): ActivityBarItem[] => {
     const items: ActivityBarItem[] = [];
+    const pluginPanelItem: ActivityBarItem = {
+      id: 'plugins',
+      icon: Grid3x3,
+      label: i18n.t('uiCopy.plugin.panelTitle'),
+      collapseBehavior: 'preserve',
+      buttonRef: (trigger) => updatePluginPanel({ trigger }),
+      ariaExpanded: pluginsPanelOpen,
+      ariaControls: 'redeven-plugin-switcher',
+      ariaHasPopup: 'dialog',
+      onClick: () => updatePluginPanel({
+        open: !(pluginsPanelOpen() && pluginsPanelPlacement() === 'activity'),
+        placement: 'activity',
+      }),
+    };
+
+    if (!layout.isMobile()) items.push(pluginPanelItem);
 
     items.push(
       { id: 'terminal', icon: ActivityBarTerminalIcon, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve' },
@@ -4090,20 +4107,16 @@ export function EnvAppShell() {
       { id: 'codespaces', icon: ActivityBarCodespacesIcon, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
       { id: 'ports', icon: ActivityBarPortsIcon, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
     );
-    items.push({
-        id: 'plugins',
-        icon: Grid3x3,
-        label: i18n.t('uiCopy.plugin.panelTitle'),
+    if (layout.isMobile()) items.push(pluginPanelItem);
+    if (canUseFlower()) {
+      items.push({
+        id: 'ai',
+        icon: FlowerNavigationIcon,
+        label: i18n.t('shell.nav.flower'),
         collapseBehavior: 'preserve',
-        buttonRef: (trigger) => updatePluginPanel({ trigger }),
-        ariaExpanded: pluginsPanelOpen,
-        ariaControls: 'redeven-plugin-switcher',
-        ariaHasPopup: 'dialog',
-        onClick: () => updatePluginPanel({
-          open: !(pluginsPanelOpen() && pluginsPanelPlacement() === 'activity'),
-          placement: 'activity',
-        }),
-    });
+        onClick: () => activateActivitySurface('ai'),
+      });
+    }
     if (!layout.isMobile()) {
       for (const tile of pinnedActivityPluginTiles()) {
         items.push({
@@ -4120,15 +4133,6 @@ export function EnvAppShell() {
           }),
         });
       }
-    }
-    if (canUseFlower()) {
-      items.push({
-        id: 'ai',
-        icon: FlowerNavigationIcon,
-        label: i18n.t('shell.nav.flower'),
-        collapseBehavior: 'preserve',
-        onClick: () => activateActivitySurface('ai'),
-      });
     }
     return items;
   };

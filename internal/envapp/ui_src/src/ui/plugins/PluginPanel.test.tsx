@@ -381,6 +381,7 @@ describe('PluginPanel', () => {
     const tile = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
     tile.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
 
+    expect(dragItem.dockPlacement).toBe('after-components');
     expect(dragItem.canvasPlacement.widgetType).toBe('redeven.plugin');
     const placement = {
       widgetType: 'redeven.plugin',
