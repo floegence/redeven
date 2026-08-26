@@ -19,42 +19,47 @@ describe('Codespaces icons', () => {
     document.body.innerHTML = '';
   });
 
-  it('renders the Activity Bar icon as a monochrome code workspace', () => {
+  it('renders the Activity Bar icon as three custom filled facets', () => {
     const host = renderIcon(ActivityBarCodespacesIcon);
     const icon = host.querySelector('[data-codespaces-icon-surface="activity-bar"]');
-    const workspace = icon?.querySelector('[data-codespaces-icon-part="workspace"]');
-    const codeBrackets = icon?.querySelector('[data-codespaces-icon-part="code-brackets"]');
+    const leftFold = icon?.querySelector('[data-codespaces-icon-part="fold-left"]');
+    const rightFold = icon?.querySelector('[data-codespaces-icon-part="fold-right"]');
+    const slashFacet = icon?.querySelector('[data-codespaces-icon-part="slash-facet"]');
 
     expect(icon).toBeTruthy();
-    expect(icon?.children).toHaveLength(2);
-    expect(workspace?.getAttribute('fill')).toBe('none');
-    expect(workspace?.getAttribute('stroke')).toBe('currentColor');
-    expect(workspace?.getAttribute('stroke-width')).toBe('1.75');
-    expect(codeBrackets?.getAttribute('stroke')).toBe('currentColor');
-    expect(codeBrackets?.getAttribute('stroke-width')).toBe('1.75');
-    expect(codeBrackets?.getAttribute('stroke-linecap')).toBe('round');
-    expect(codeBrackets?.getAttribute('stroke-linejoin')).toBe('round');
-    expect(icon?.querySelector('[data-codespaces-icon-part="keyboard"]')).toBeNull();
-    expect(icon?.querySelector('[data-codespaces-icon-part="mouse"]')).toBeNull();
+    expect(icon?.children).toHaveLength(3);
+    expect(icon?.getAttribute('fill')).toBe('currentColor');
+    expect(leftFold?.tagName.toLowerCase()).toBe('path');
+    expect(rightFold?.tagName.toLowerCase()).toBe('path');
+    expect(slashFacet?.tagName.toLowerCase()).toBe('path');
+    expect(leftFold?.getAttribute('fill-opacity')).toBe('.86');
+    expect(rightFold?.getAttribute('fill-opacity')).toBe('.86');
+    expect(slashFacet?.getAttribute('fill-opacity')).toBe('.7');
+    expect(leftFold?.getAttribute('stroke')).toBeNull();
+    expect(rightFold?.getAttribute('stroke')).toBeNull();
+    expect(slashFacet?.getAttribute('stroke')).toBeNull();
+    expect(icon?.querySelector('rect')).toBeNull();
+    expect(icon?.querySelector('text')).toBeNull();
   });
 
-  it('carries the same restrained code-workspace symbol into Workbench', () => {
+  it('reuses the same open folded mark in Workbench without an inner frame', () => {
     const host = renderIcon(CodespacesWorkbenchIcon);
     const icon = host.querySelector('[data-codespaces-icon-surface="workbench"]');
     const tile = icon?.querySelector('[data-codespaces-icon-part="tile"]');
-    const workspace = icon?.querySelector('[data-codespaces-icon-part="workspace"]');
-    const codeBrackets = icon?.querySelector('[data-codespaces-icon-part="code-brackets"]');
+    const mark = icon?.querySelector('[data-codespaces-icon-mark]');
+    const activityHost = renderIcon(ActivityBarCodespacesIcon);
+    const activityMark = activityHost.querySelector('[data-codespaces-icon-surface="activity-bar"]');
 
     expect(icon).toBeTruthy();
     expect(icon?.querySelector('defs')).toBeNull();
     expect(tile?.getAttribute('fill')).toContain('color-mix');
-    expect(workspace?.getAttribute('fill')).toBe('none');
-    expect(workspace?.getAttribute('stroke')).toBe('#4f7fad');
-    expect(codeBrackets?.getAttribute('stroke')).toBe('#4f7fad');
-    expect(codeBrackets?.getAttribute('stroke-linecap')).toBe('round');
-    expect(codeBrackets?.getAttribute('stroke-linejoin')).toBe('round');
-    expect(icon?.querySelector('[data-codespaces-icon-part="monitor"]')).toBeNull();
-    expect(icon?.querySelector('[data-codespaces-icon-part="keyboard"]')).toBeNull();
-    expect(icon?.querySelector('[data-codespaces-icon-part="mouse"]')).toBeNull();
+    expect(mark?.getAttribute('fill')).toBe('#4f7fad');
+    expect(mark?.getAttribute('transform')).toBe('translate(2.4 2.4) scale(1.8)');
+    expect(mark?.querySelectorAll('path')).toHaveLength(3);
+    expect(mark?.querySelectorAll('rect')).toHaveLength(0);
+    expect(mark?.querySelectorAll('text')).toHaveLength(0);
+    expect(Array.from(mark?.querySelectorAll('path') ?? [], (path) => path.getAttribute('d')))
+      .toEqual(Array.from(activityMark?.querySelectorAll('path') ?? [], (path) => path.getAttribute('d')));
+    expect(icon?.querySelectorAll('rect')).toHaveLength(1);
   });
 });
