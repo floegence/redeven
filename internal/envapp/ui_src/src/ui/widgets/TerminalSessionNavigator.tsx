@@ -306,35 +306,52 @@ export function describeTerminalSessionNavigationItem(
   return joinTerminalStatusAnnouncements(descriptions, t);
 }
 
-function installCompactDragPreview(event: DragEvent, kind: 'session' | 'group') {
+function installTransparentNativeDragImage(event: DragEvent) {
   if (typeof document === 'undefined'
     || !event.dataTransfer
     || typeof event.dataTransfer.setDragImage !== 'function') return;
-  const preview = document.createElement('span');
-  preview.className = 'fixed -left-[999px] -top-[999px] z-[9999] flex h-9 w-9 items-center justify-center rounded-[10px] border border-border/60 bg-popover/95 shadow-[0_8px_22px_color-mix(in_srgb,var(--foreground)_18%,transparent)]';
-  preview.dataset.terminalDragPreview = kind;
-  preview.setAttribute('aria-hidden', 'true');
-  const glyph = document.createElement('span');
-  glyph.className = kind === 'group'
-    ? 'relative block h-3.5 w-[18px] rounded-[4px] bg-primary/75 before:absolute before:-top-1 before:left-0.5 before:h-1.5 before:w-2 before:rounded-t-[3px] before:bg-primary/75'
-    : 'grid grid-cols-2 gap-[3px]';
-  if (kind === 'session') {
-    for (let index = 0; index < 6; index += 1) {
-      const dot = document.createElement('span');
-      dot.className = 'h-[3px] w-[3px] rounded-full bg-primary/80';
-      glyph.append(dot);
+  const transparentImage = document.createElement('span');
+  transparentImage.className = 'pointer-events-none fixed left-0 top-0 h-px w-px opacity-0';
+  transparentImage.dataset.terminalNativeDragImage = 'true';
+  transparentImage.setAttribute('aria-hidden', 'true');
+  document.body.append(transparentImage);
+  event.dataTransfer.setDragImage(transparentImage, 0, 0);
+  requestAnimationFrame(() => transparentImage.remove());
+}
+
+function sanitizeDragPreviewClone(clone: HTMLElement) {
+  for (const element of [clone, ...clone.querySelectorAll<HTMLElement>('*')]) {
+    for (const attribute of [...element.attributes]) {
+      if (attribute.name === 'id'
+        || attribute.name === 'title'
+        || attribute.name === 'draggable'
+        || attribute.name === 'tabindex'
+        || attribute.name === 'aria-describedby'
+        || attribute.name === 'aria-current'
+        || attribute.name === 'aria-grabbed'
+        || attribute.name === 'aria-haspopup'
+        || attribute.name.startsWith('data-terminal-')
+        || attribute.name === 'data-testid') {
+        element.removeAttribute(attribute.name);
+      }
     }
+    element.tabIndex = -1;
+    element.style.pointerEvents = 'none';
   }
-  preview.append(glyph);
-  document.body.append(preview);
-  event.dataTransfer.setDragImage(preview, 18, 18);
-  requestAnimationFrame(() => preview.remove());
 }
 
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const i18n = useI18n();
   const sidebarWidth = () => (props.mobile ? 232 : 286);
   let drawerDialogEl: HTMLDivElement | undefined;
+  let dragBoundaryEl: HTMLDivElement | undefined;
+  let dragPreviewEl: HTMLDivElement | undefined;
+  let dragPreviewMetrics: Readonly<{
+    width: number;
+    height: number;
+    pointerOffsetX: number;
+    pointerOffsetY: number;
+  }> | null = null;
   const navigationGroups = createMemo<readonly TerminalSessionNavigationGroup[]>(() => props.groups ?? [{
     id: 'default',
     name: 'Default',
@@ -357,7 +374,58 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     targetGroupId: string | null;
     position: 'before' | 'after';
   }> | null>(null);
+  const clearDragPreview = () => {
+    dragPreviewEl?.remove();
+    dragPreviewEl = undefined;
+    dragPreviewMetrics = null;
+  };
+  const updateDragPreviewPosition = (clientX: number, clientY: number) => {
+    if (!dragBoundaryEl || !dragPreviewEl || !dragPreviewMetrics) return;
+    const boundaryRect = dragBoundaryEl.getBoundingClientRect();
+    const maxLeft = Math.max(0, boundaryRect.width - dragPreviewMetrics.width);
+    const maxTop = Math.max(0, boundaryRect.height - dragPreviewMetrics.height);
+    const left = Math.min(maxLeft, Math.max(0, clientX - boundaryRect.left - dragPreviewMetrics.pointerOffsetX));
+    const top = Math.min(maxTop, Math.max(0, clientY - boundaryRect.top - dragPreviewMetrics.pointerOffsetY));
+    dragPreviewEl.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+  };
+  const beginDragPreview = (event: DragEvent, kind: 'session' | 'group', source: HTMLElement) => {
+    if (!dragBoundaryEl || !event.dataTransfer) return;
+    clearDragPreview();
+    installTransparentNativeDragImage(event);
+    const sourceRect = source.getBoundingClientRect();
+    const boundaryRect = dragBoundaryEl.getBoundingClientRect();
+    const width = Math.min(sourceRect.width, boundaryRect.width);
+    const height = Math.min(sourceRect.height, boundaryRect.height);
+    const preview = document.createElement('div');
+    preview.className = `pointer-events-none absolute left-0 top-0 z-[60] overflow-hidden bg-sidebar/95 opacity-95 shadow-[0_10px_28px_color-mix(in_srgb,var(--foreground)_18%,transparent)] will-change-transform ${kind === 'group' ? 'rounded-lg' : 'rounded-md'}`;
+    preview.dataset.terminalDragPreview = kind;
+    preview.dataset.terminalDragPreviewSource = source.dataset.terminalSessionRow
+      ?? source.dataset.terminalGroupHeader
+      ?? '';
+    preview.setAttribute('aria-hidden', 'true');
+    preview.setAttribute('inert', '');
+    preview.style.width = `${width}px`;
+    preview.style.height = `${height}px`;
+    const clone = source.cloneNode(true) as HTMLElement;
+    sanitizeDragPreviewClone(clone);
+    clone.style.width = '100%';
+    clone.style.height = '100%';
+    clone.style.margin = '0';
+    clone.style.opacity = '1';
+    clone.style.transform = 'none';
+    preview.append(clone);
+    dragBoundaryEl.append(preview);
+    dragPreviewEl = preview;
+    dragPreviewMetrics = {
+      width,
+      height,
+      pointerOffsetX: Math.min(width, Math.max(0, event.clientX - sourceRect.left)),
+      pointerOffsetY: Math.min(height, Math.max(0, event.clientY - sourceRect.top)),
+    };
+    updateDragPreviewPosition(event.clientX, event.clientY);
+  };
   const clearDragState = () => {
+    clearDragPreview();
     setDraggedSessionId(null);
     setDraggedGroupId(null);
     setDropIntent(null);
@@ -365,13 +433,17 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   };
   if (typeof document !== 'undefined' && typeof window !== 'undefined') {
     const clearNativeDragState = () => clearDragState();
+    const updateNativeDragPreview = (event: DragEvent) => updateDragPreviewPosition(event.clientX, event.clientY);
+    document.addEventListener('dragover', updateNativeDragPreview, true);
     document.addEventListener('dragend', clearNativeDragState);
     document.addEventListener('drop', clearNativeDragState);
     window.addEventListener('blur', clearNativeDragState);
     onCleanup(() => {
+      document.removeEventListener('dragover', updateNativeDragPreview, true);
       document.removeEventListener('dragend', clearNativeDragState);
       document.removeEventListener('drop', clearNativeDragState);
       window.removeEventListener('blur', clearNativeDragState);
+      clearDragPreview();
     });
   }
   const draggedSessionTitle = createMemo(() => {
@@ -586,8 +658,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
               : 'hidden'
             : '!w-[286px] !min-w-[286px] !max-w-[286px] overflow-hidden'}`}
         >
-          <SidebarContent class="flex h-full min-h-0 flex-col overflow-hidden">
-            <div class="shrink-0 space-y-2">
+          <SidebarContent class="h-full min-h-0 overflow-hidden">
+            <div
+              ref={dragBoundaryEl}
+              class="relative flex h-full min-h-0 flex-col overflow-hidden"
+              data-terminal-drag-boundary
+            >
+              <div class="shrink-0 space-y-2">
               <div class="flex items-center gap-2 px-0.5">
                 <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent/55 text-sidebar-accent-foreground">
                   <TerminalSessionChromeIcon avatar={props.activeAvatar} class="h-3.5 w-3.5" />
@@ -722,7 +799,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             if (navigationGroup().isDefault || navigationGroup().pending || !event.dataTransfer) return;
                             event.dataTransfer.effectAllowed = 'move';
                             event.dataTransfer.setData('application/x-redeven-terminal-group', navigationGroup().id);
-                            installCompactDragPreview(event, 'group');
+                            beginDragPreview(event, 'group', event.currentTarget);
                             setDraggedGroupId(navigationGroup().id);
                             setDraggedSessionId(null);
                             setDropIntent(null);
@@ -1045,7 +1122,8 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               if (!event.dataTransfer) return;
                               event.dataTransfer.effectAllowed = 'move';
                               event.dataTransfer.setData('application/x-redeven-terminal-session', sessionId);
-                              installCompactDragPreview(event, 'session');
+                              const source = event.currentTarget.closest<HTMLElement>('[data-terminal-session-row]');
+                              if (source) beginDragPreview(event, 'session', source);
                               setDraggedSessionId(sessionId);
                               setDraggedGroupId(null);
                               setDropIntent(null);
@@ -1337,6 +1415,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
             <span class="sr-only" aria-live="polite" data-terminal-drag-announcement>
               {draggedSessionId() ? dropAnnouncement() : ''}
             </span>
+            </div>
           </SidebarContent>
         </Sidebar>
       </div>
