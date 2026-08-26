@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { Package, Search, X } from '@floegence/floe-webapp-core/icons';
@@ -23,6 +23,7 @@ import type { PluginPinPlacement } from './pluginDockPins';
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const CATEGORY_FILTER_THRESHOLD = 6;
+const PANEL_CLOSE_DURATION_MS = 150;
 const CATEGORY_IDS: readonly PluginPresentationCategory[] = [
   'development',
   'infrastructure',
@@ -31,6 +32,9 @@ const CATEGORY_IDS: readonly PluginPresentationCategory[] = [
   'productivity',
   'other',
 ];
+
+type PluginPanelMotionState = 'entering' | 'open' | 'closing';
+type PluginPanelMotionKind = 'modal' | 'mobile-sheet' | 'workbench-popover';
 
 export type PluginPanelProps = {
   id?: string;
@@ -54,7 +58,9 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const [query, setQuery] = createSignal('');
   const [category, setCategory] = createSignal<PluginPresentationCategory | 'all'>('all');
   const [mounted, setMounted] = createSignal(props.open);
-  const [closing, setClosing] = createSignal(false);
+  const [motionState, setMotionStateSignal] = createSignal<PluginPanelMotionState>(
+    props.open ? 'entering' : 'closing',
+  );
   const [pinMenu, setPinMenu] = createSignal<Readonly<{
     inventoryKey: string;
     request: BarItemContextMenuRequest;
@@ -74,8 +80,14 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   let restoreFocusAfterClose = false;
   let focusRestoreTarget: HTMLElement | null = null;
   let closeTimer: number | undefined;
+  let entranceRequest = 0;
+  const isWorkbenchPopup = () => props.placement === 'workbench';
+  const motionKind = (): PluginPanelMotionKind => props.mobile
+    ? 'mobile-sheet'
+    : (isWorkbenchPopup() ? 'workbench-popover' : 'modal');
 
   onCleanup(() => {
+    entranceRequest += 1;
     if (closeTimer !== undefined) window.clearTimeout(closeTimer);
   });
 
@@ -85,18 +97,47 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
         window.clearTimeout(closeTimer);
         closeTimer = undefined;
       }
-      setMounted(true);
-      setClosing(false);
+      const reversingClose = untrack(mounted) && untrack(motionState) === 'closing';
+      if (!untrack(mounted)) setMounted(true);
+      if (reversingClose) {
+        entranceRequest += 1;
+        setMotionStateSignal('open');
+        return;
+      }
+      setMotionStateSignal('entering');
+      if (prefersReducedPluginMotion()) {
+        setMotionStateSignal('open');
+        return;
+      }
+      const request = ++entranceRequest;
+      queueMicrotask(() => {
+        if (request !== entranceRequest || !props.open || !untrack(mounted)) return;
+        // Flush the entering pose before changing state so the transition is
+        // reversible instead of replaying a fixed keyframe on rapid toggles.
+        panelRef?.getBoundingClientRect();
+        setMotionStateSignal('open');
+      });
       return;
     }
     setPinMenu(null);
-    if (!mounted()) return;
-    setClosing(true);
+    entranceRequest += 1;
+    if (!untrack(mounted)) return;
+    if (prefersReducedPluginMotion()) {
+      setMounted(false);
+      return;
+    }
+    setMotionStateSignal('closing');
     closeTimer = window.setTimeout(() => {
-      setClosing(false);
       setMounted(false);
       closeTimer = undefined;
-    }, 150);
+    }, PANEL_CLOSE_DURATION_MS);
+  });
+
+  createEffect(() => {
+    const trigger = props.trigger;
+    const kind = motionKind();
+    if (!props.open) return;
+    queueMicrotask(() => applyPluginPanelMotionGeometry(panelRef, trigger, kind));
   });
 
   const pluginTiles = createMemo(() => props.model.tiles.filter(isPluginTile));
@@ -111,7 +152,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     tile.item.lifecycleState === 'needs_attention' || tile.item.lifecycleState === 'update_available'
   )).length);
   const visible = () => props.open || mounted();
-  const isWorkbenchPopup = () => props.placement === 'workbench';
   const dismiss = () => {
     restoreFocusAfterClose = true;
     props.onClose();
@@ -409,20 +449,25 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             id={props.id}
             owner={trigger()}
             estimatedSize={{ width: 320, height: 380 }}
-            surfaceRef={(element) => { panelRef = element; }}
+            surfaceRef={(element) => {
+              panelRef = element;
+              applyPluginPanelMotionGeometry(element, props.trigger, 'workbench-popover');
+            }}
             onOwnerDisconnect={dismiss}
-            role="dialog"
+            role={props.open ? 'dialog' : undefined}
             data-plugin-panel-motion-axis="y"
-            data-plugin-panel-motion-state={closing() ? 'closing' : 'open'}
+            data-plugin-panel-motion-kind="workbench-popover"
+            data-plugin-panel-motion-state={motionState()}
             tabIndex={-1}
             aria-label={i18n.t('uiCopy.plugin.launcherTitle')}
             aria-describedby="plugin-launcher-description"
             class={cn(
-              'redeven-plugin-motion pointer-events-auto flex max-h-[min(380px,calc(100dvh-120px))] w-[min(320px,calc(100vw-24px))] min-h-0 origin-bottom flex-col overflow-hidden rounded-lg text-foreground ease-out duration-150 motion-reduce:animate-none',
-              closing() ? 'plugin-panel-popover-close' : 'plugin-panel-popover-open',
+              'plugin-panel-surface redeven-plugin-motion flex max-h-[min(380px,calc(100dvh-120px))] w-[min(320px,calc(100vw-24px))] min-h-0 flex-col overflow-hidden rounded-lg text-foreground',
             )}
           >
-            {panelContents()}
+            <div data-plugin-panel-content class="redeven-plugin-motion flex min-h-0 flex-1 flex-col">
+              {panelContents()}
+            </div>
           </WorkbenchDockPopoverSurface>
         )}
       </Show>
@@ -430,11 +475,12 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
         <Portal>
           <div
             data-plugin-launcher-backdrop={visible() ? '' : undefined}
+            data-plugin-launcher-motion-state={visible() ? motionState() : undefined}
             hidden={!visible()}
-            inert={!visible()}
-            aria-hidden={visible() ? undefined : 'true'}
+            inert={!props.open}
+            aria-hidden={props.open ? undefined : 'true'}
             class={cn(
-              'redeven-plugin-motion fixed inset-0 flex animate-in fade-in duration-150 motion-reduce:animate-none',
+              'plugin-panel-backdrop redeven-plugin-motion fixed inset-0 flex',
               'bg-[var(--redeven-overlay-scrim)]',
               props.mobile ? 'items-end' : 'items-center justify-center p-4',
             )}
@@ -445,22 +491,32 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
           >
             <div
               id={props.id}
-              ref={panelRef}
-              role={visible() ? 'dialog' : undefined}
+              ref={(element) => {
+                panelRef = element;
+                applyPluginPanelMotionGeometry(
+                  element,
+                  props.trigger,
+                  props.mobile ? 'mobile-sheet' : 'modal',
+                );
+              }}
+              role={props.open ? 'dialog' : undefined}
               data-plugin-panel-motion-axis="y"
-              data-plugin-panel-motion-state={visible() ? (closing() ? 'closing' : 'open') : undefined}
+              data-plugin-panel-motion-kind={props.mobile ? 'mobile-sheet' : 'modal'}
+              data-plugin-panel-motion-state={visible() ? motionState() : undefined}
               tabIndex={-1}
-              aria-modal={visible() ? 'true' : undefined}
-              aria-labelledby={visible() ? 'plugin-launcher-title' : undefined}
-              aria-describedby={visible() ? 'plugin-launcher-description' : undefined}
+              aria-modal={props.open ? 'true' : undefined}
+              aria-labelledby={props.open ? 'plugin-launcher-title' : undefined}
+              aria-describedby={props.open ? 'plugin-launcher-description' : undefined}
               class={cn(
-                'redeven-plugin-motion pointer-events-auto flex min-h-0 w-full origin-bottom flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl ease-out motion-reduce:animate-none',
+                'plugin-panel-surface redeven-plugin-motion flex min-h-0 w-full flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl',
                 props.mobile
-                  ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0 animate-in fade-in duration-200'
-                  : 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg animate-in fade-in duration-200',
+                  ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0'
+                  : 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg',
               )}
             >
-              {panelContents()}
+              <div data-plugin-panel-content class="redeven-plugin-motion flex min-h-0 flex-1 flex-col">
+                {panelContents()}
+              </div>
             </div>
           </div>
         </Portal>
@@ -556,4 +612,52 @@ function categoryLabel(category: PluginPresentationCategory, i18n: I18nHelpers):
 
 function statusLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
   return pluginLifecycleLabel(item, i18n);
+}
+
+function prefersReducedPluginMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+function applyPluginPanelMotionGeometry(
+  panel: HTMLElement | undefined,
+  trigger: HTMLElement | null | undefined,
+  kind: PluginPanelMotionKind,
+): void {
+  if (!panel) return;
+  let originX = '50%';
+  let originY = '50%';
+  let enterX = 0;
+  let enterY = 12;
+  if (kind === 'mobile-sheet') {
+    originY = '100%';
+    enterY = 18;
+  } else if (kind === 'workbench-popover') {
+    originY = '100%';
+    enterY = 10;
+  } else {
+    const triggerRect = trigger?.isConnected ? trigger.getBoundingClientRect() : undefined;
+    const viewportWidth = Math.max(window.innerWidth, 1);
+    const viewportHeight = Math.max(window.innerHeight, 1);
+    if (triggerRect && triggerRect.width > 0 && triggerRect.height > 0) {
+      const triggerCenterX = triggerRect.left + triggerRect.width / 2;
+      const triggerCenterY = triggerRect.top + triggerRect.height / 2;
+      originX = `${formatMotionNumber(clamp(triggerCenterX / viewportWidth * 100, 8, 92))}%`;
+      originY = `${formatMotionNumber(clamp(triggerCenterY / viewportHeight * 100, 8, 92))}%`;
+      enterX = clamp((triggerCenterX - viewportWidth / 2) * 0.04, -18, 18);
+      enterY = clamp((triggerCenterY - viewportHeight / 2) * 0.035, -14, 14);
+    }
+  }
+
+  panel.style.setProperty('--redeven-plugin-panel-origin-x', originX);
+  panel.style.setProperty('--redeven-plugin-panel-origin-y', originY);
+  panel.style.setProperty('--redeven-plugin-panel-enter-x', `${formatMotionNumber(enterX)}px`);
+  panel.style.setProperty('--redeven-plugin-panel-enter-y', `${formatMotionNumber(enterY)}px`);
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function formatMotionNumber(value: number): string {
+  return String(Number(value.toFixed(2)));
 }
