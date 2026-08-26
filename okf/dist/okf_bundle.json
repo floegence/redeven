@@ -469,7 +469,7 @@
               "sparkle",
               "updates"
             ],
-            "summary": "Redeven Desktop exposes one update coordinator to the permanent Welcome top-bar\nentry, application menu, command palette, settings, status bar, and\ncompatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed\narchitecture-specific appcast. Packaged Linux uses `electron-updater` metadata\nfor the matching DEB or RPM package. Development, unsupported, and incorrectly\nplaced macOS builds fail closed and provide a manual recovery path.",
+            "summary": "Redeven Desktop exposes one update coordinator to the permanent Welcome\ncontent-header entry, application menu, command palette, settings, status bar,\nand compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed\narchitecture-specific appcast. Packaged Linux uses `electron-updater` metadata\nfor the matching DEB or RPM package. Development, unsupported, and incorrectly\nplaced macOS builds fail closed and provide a manual recovery path.",
             "section_count": 2
           }
         ]
@@ -5644,15 +5644,15 @@
         "title": "Desktop application updates",
         "type": "Desktop Contract"
       },
-      "body_length": 4375,
-      "summary": "Redeven Desktop exposes one update coordinator to the permanent Welcome top-bar\nentry, application menu, command palette, settings, status bar, and\ncompatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed\narchitecture-specific appcast. Packaged Linux uses `electron-updater` metadata\nfor the matching DEB or RPM package. Development, unsupported, and incorrectly\nplaced macOS builds fail closed and provide a manual recovery path.",
+      "body_length": 4421,
+      "summary": "Redeven Desktop exposes one update coordinator to the permanent Welcome\ncontent-header entry, application menu, command palette, settings, status bar,\nand compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed\narchitecture-specific appcast. Packaged Linux uses `electron-updater` metadata\nfor the matching DEB or RPM package. Development, unsupported, and incorrectly\nplaced macOS builds fail closed and provide a manual recovery path.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Check and presentation\n\nThe coordinator owns the states `idle`, `checking`, `available`, `downloading`,\n`ready`, `installing`, `blocked`, and `error`. A check is serialized; repeated\nrequests reuse the current operation and never start a second download. Startup\nchecks begin after 30 seconds and are limited to once per 24 hours. Stable\nreleases are the only automatic or manual feed candidates. The user must open\nthe native Sparkle window or the Redeven Linux dialog before downloading or\ninstalling an update.\n\nThe Welcome top bar always shows a labeled check action. Its accessible label\nreports the current update state, checking animates the icon, and an available\nor ready update adds a visible indicator. The status-bar entry remains a compact\nsecondary route to the same coordinator.\n\nAutomatic checks are persisted only for Linux. macOS scheduling is delegated to\nSparkle with a 24-hour interval and automatic installation disabled. No client\nrequest contains a GitHub token or a repository-specific credential.\n\n## Installation interlock\n\nInstallation is a one-shot action. Before the installer is called, Desktop\nblocks new Launcher operations, closes Desktop sessions and windows, retires\nDesktop transports, and stops only the verified local bundled Runtime. External\nProvider and Gateway processes are outside this cleanup boundary. A cleanup or\nidentity verification failure prevents the installer call, restores the\nLauncher, and reports an actionable error.\n\nmacOS updates are enabled only when the app bundle is inside `/Applications`.\nThe blocked state offers Finder reveal and the Applications folder action. The\nfirst release that contains Sparkle remains a manual install; later signed DMG\nreleases are eligible for the feed.\n\n## Release and trust\n\nRelease jobs run in the protected `redeven-release` environment. Apple\nDeveloper ID signing and notarization inputs, the Sparkle Ed25519 private key,\npublic key, Team ID, and API credentials are environment secrets only. CI\nvalidates the Sparkle keypair, writes temporary key material with restrictive\npermissions, and removes it after signing. Source and logs contain no account\nidentifiers, keychain names, private keys, or reference-product identity.\n\nStable tags produce signed x64 and arm64 appcasts, signed release notes, and\nnotarized/stapled DMGs. Prerelease tags produce no Sparkle feed. The release\ncollector requires the exact stable inventory, and appcasts, notes, Linux\nmetadata, and installers are included in `SHA256SUMS`, the Cosign signature,\nremote readback, and byte-level comparison.",
-          "char_count": 2579
+          "body": "## Check and presentation\n\nThe coordinator owns the states `idle`, `checking`, `available`, `downloading`,\n`ready`, `installing`, `blocked`, and `error`. A check is serialized; repeated\nrequests reuse the current operation and never start a second download. Startup\nchecks begin after 30 seconds and are limited to once per 24 hours. Stable\nreleases are the only automatic or manual feed candidates. The user must open\nthe native Sparkle window or the Redeven Linux dialog before downloading or\ninstalling an update.\n\nThe Welcome content header always shows a labeled check action in its\nupper-right action group. Its accessible label reports the current update\nstate, checking animates the icon, and an available or ready update adds a\nvisible indicator. The status-bar entry remains a compact secondary route to\nthe same coordinator.\n\nAutomatic checks are persisted only for Linux. macOS scheduling is delegated to\nSparkle with a 24-hour interval and automatic installation disabled. No client\nrequest contains a GitHub token or a repository-specific credential.\n\n## Installation interlock\n\nInstallation is a one-shot action. Before the installer is called, Desktop\nblocks new Launcher operations, closes Desktop sessions and windows, retires\nDesktop transports, and stops only the verified local bundled Runtime. External\nProvider and Gateway processes are outside this cleanup boundary. A cleanup or\nidentity verification failure prevents the installer call, restores the\nLauncher, and reports an actionable error.\n\nmacOS updates are enabled only when the app bundle is inside `/Applications`.\nThe blocked state offers Finder reveal and the Applications folder action. The\nfirst release that contains Sparkle remains a manual install; later signed DMG\nreleases are eligible for the feed.\n\n## Release and trust\n\nRelease jobs run in the protected `redeven-release` environment. Apple\nDeveloper ID signing and notarization inputs, the Sparkle Ed25519 private key,\npublic key, Team ID, and API credentials are environment secrets only. CI\nvalidates the Sparkle keypair, writes temporary key material with restrictive\npermissions, and removes it after signing. Source and logs contain no account\nidentifiers, keychain names, private keys, or reference-product identity.\n\nStable tags produce signed x64 and arm64 appcasts, signed release notes, and\nnotarized/stapled DMGs. Prerelease tags produce no Sparkle feed. The release\ncollector requires the exact stable inventory, and appcasts, notes, Linux\nmetadata, and installers are included in `SHA256SUMS`, the Cosign signature,\nremote readback, and byte-level comparison.",
+          "char_count": 2618
         },
         {
           "id": "boundaries",
@@ -5706,7 +5706,7 @@
           "description": "Protected Sparkle appcast job and release artifact publication."
         }
       ],
-      "snippet": "Redeven Desktop exposes one update coordinator to the permanent Welcome top-bar entry, application menu, command palette, settings, status bar, and compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed architecture-specifi",
+      "snippet": "Redeven Desktop exposes one update coordinator to the permanent Welcome content-header entry, application menu, command palette, settings, status bar, and compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -9900,5 +9900,5 @@
       ]
     }
   ],
-  "source_sha256": "ed1053be97348244792b237239fc9657f6c4817fbf1a21ae8dba1eaaa3809a6b"
+  "source_sha256": "db391404978af979ffb816ef9866eb31583f09f362ce25e1fa79422ed053cee9"
 }
