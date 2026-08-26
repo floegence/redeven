@@ -3554,6 +3554,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		activityUpdater(terminalProcessActivity(snapshot, terminalProcessResultPayload(snapshot)), nil)
 	}
 	snapshot := proc.WaitForYieldContext(ctx, parsed.YieldMS)
+	r.observeTerminalOutputEncodingRepair(snapshot, "exec")
 	result := terminalProcessResultPayload(snapshot)
 	outcome.Result = result
 	if snapshot.Status == terminalProcessStatusRunning {
@@ -3611,6 +3612,7 @@ func (r *run) toolTerminalRead(processID string, afterSeq int64) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	r.observeTerminalOutputEncodingRepair(snapshot, "read")
 	return terminalProcessResultPayload(snapshot), nil
 }
 
@@ -3626,6 +3628,7 @@ func (r *run) toolTerminalWrite(processID string, input string) (any, error) {
 		return nil, err
 	}
 	snapshot, err := proc.Write(input)
+	r.observeTerminalOutputEncodingRepair(snapshot, "write")
 	if err != nil {
 		return terminalProcessResultPayload(snapshot), err
 	}
@@ -3640,12 +3643,28 @@ func (r *run) toolTerminalTerminate(ctx context.Context, processID string) (any,
 		return nil, err
 	}
 	snapshot, err := proc.TerminateForActiveTurn(ctx)
+	r.observeTerminalOutputEncodingRepair(snapshot, "terminate")
 	if err != nil {
 		return terminalProcessResultPayload(snapshot), err
 	}
 	payload := terminalProcessResultPayload(snapshot)
 	payload["terminated"] = true
 	return payload, nil
+}
+
+func (r *run) observeTerminalOutputEncodingRepair(snapshot terminalProcessSnapshot, source string) {
+	if r == nil || !snapshot.outputUTF8Repaired {
+		return
+	}
+	r.debug(
+		"ai.run.terminal.output_utf8_repaired",
+		"source", source,
+		"process_id", snapshot.ProcessID,
+		"tool_id", snapshot.ToolID,
+		"first_seq", snapshot.FirstSeq,
+		"last_seq", snapshot.LastSeq,
+		"total_bytes", snapshot.TotalBytes,
+	)
 }
 
 func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additions int, deletions int) {

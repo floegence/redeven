@@ -177,8 +177,7 @@ func (s *Service) threadViewFromSummary(ctx context.Context, th *threadstore.Thr
 		view.RunError = strings.TrimSpace(summary.Error)
 	default:
 		view.RunStatus = string(RunStateFailed)
-		view.RunError = strings.TrimSpace(summary.Error)
-		view.RunErrorCode = classifyRunFailureCode(errors.New(view.RunError), "floret_turn_failed")
+		view.RunErrorCode, view.RunError = projectRunFailure(summary.Error, "floret_turn_failed")
 	}
 	if summary.Activity == flruntime.ThreadActivityActive {
 		view.ActiveRunID = strings.TrimSpace(summary.TurnID.String())
@@ -283,7 +282,8 @@ func threadViewRunState(current flruntime.ThreadView) (string, string, string) {
 	case *current.LastOutcome == flruntime.TurnOutcomeInterrupted:
 		return string(RunStateFailed), "floret_turn_interrupted", strings.TrimSpace(current.Error)
 	default:
-		return string(RunStateFailed), classifyRunFailureCode(errors.New(strings.TrimSpace(current.Error)), "floret_turn_failed"), strings.TrimSpace(current.Error)
+		code, message := projectRunFailure(current.Error, "floret_turn_failed")
+		return string(RunStateFailed), code, message
 	}
 }
 
@@ -613,8 +613,7 @@ func applyThreadRuntimeSummary(view *ThreadView, current flruntime.ThreadView) {
 		view.RunStatus = string(RunStateSuccess)
 	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeFailed:
 		view.RunStatus = string(RunStateFailed)
-		view.RunErrorCode = classifyRunFailureCode(errors.New(strings.TrimSpace(current.Error)), "floret_turn_failed")
-		view.RunError = strings.TrimSpace(current.Error)
+		view.RunErrorCode, view.RunError = projectRunFailure(current.Error, "floret_turn_failed")
 	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeCancelled:
 		view.RunStatus = string(RunStateCanceled)
 	}

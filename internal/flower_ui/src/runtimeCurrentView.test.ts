@@ -49,6 +49,21 @@ describe('applyFlowerRuntimeCurrentView', () => {
     });
   });
 
+  it('preserves the server-classified authority consistency error', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 9, activity: 'idle', turn_id: 'turn-a',
+      last_outcome: 'failed',
+      error: 'The committed tool result could not be verified.',
+      run_error_code: 'floret_authority_consistency_failed',
+      items: [{ id: 'user:turn-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'hello' }],
+    });
+
+    expect(result.error).toEqual({
+      code: 'floret_authority_consistency_failed',
+      message: 'The committed tool result could not be verified.',
+    });
+  });
+
   it('does not render a duplicated current item twice', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 9, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',

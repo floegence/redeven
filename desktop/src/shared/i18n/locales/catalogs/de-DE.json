@@ -118,6 +118,7 @@
       "runErrorModelGatewayContractFailed": "Die Modellquelle hat einen unvollständigen Tool-Aufruf zurückgegeben. Es wurde kein Tool ausgeführt. Versuche es erneut oder wähle ein anderes Modell.",
       "runErrorFloretEngineFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da die Orchestrierungs-Engine ausgefallen ist.",
       "runErrorFloretControlContractFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da das Modell ein von der aktuellen Laufzeit nicht unterstütztes Tool angefordert hat.",
+      "runErrorFloretAuthorityConsistencyFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da das festgeschriebene Tool-Ergebnis nicht verifiziert werden konnte. Das Tool wurde nicht erneut ausgeführt; sende zum Fortfahren eine neue Nachricht.",
       "runErrorRuntimeRestarted": "Die lokale Laufzeit wurde neu gestartet, bevor diese Antwort abgeschlossen war. Starte eine neue Antwort, sobald die Laufzeit bereit ist.",
       "runtimeRestartedDivider": "Redeven-Laufzeit neu gestartet",
       "messageErrorTitle": "Nachricht fehlgeschlagen",

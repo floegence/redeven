@@ -47,6 +47,7 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "floret effect authorization rejection", err: errors.New("effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret wrapped effect authorization rejection", err: errors.New("floret effect is unauthorized: effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret active turn admission", err: errors.New("thread already has an active turn"), want: runErrorCodeFloretAdmissionBlocked},
+		{name: "floret authority consistency", err: errors.New("floret authority state is corrupt: session tree authority state is corrupt"), want: runErrorCodeFloretAuthorityConsistency},
 		{name: "unknown preserves fallback", err: errors.New("other failure"), want: runErrorCodeFloretEngineFailed},
 	}
 
@@ -123,5 +124,18 @@ func TestUserFacingRunErrorPresentsModelGatewayContractFailure(t *testing.T) {
 	}
 	if !strings.Contains(lower, "model source") || !strings.Contains(lower, "no tool was run") {
 		t.Fatalf("msg=%q, want model-source integrity presentation", msg)
+	}
+}
+
+func TestUserFacingRunErrorHidesAuthorityFailureDetails(t *testing.T) {
+	t.Parallel()
+
+	msg := userFacingRunError(runErrorCodeFloretAuthorityConsistency, "floret authority state is corrupt")
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "authority state is corrupt") || strings.Contains(lower, "session tree") {
+		t.Fatalf("msg=%q exposed authority internals", msg)
+	}
+	if !strings.Contains(lower, "tool result") || !strings.Contains(lower, "not run again") {
+		t.Fatalf("msg=%q, want safe result-consistency guidance", msg)
 	}
 }
