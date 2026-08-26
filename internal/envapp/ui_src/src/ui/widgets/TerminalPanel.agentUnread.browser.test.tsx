@@ -56,9 +56,22 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     terminal: {
       listSessions: vi.fn(async () => ({ sessions: rpcState.sessions })),
+      listGroups: vi.fn(async () => ({
+        groups: [{
+          id: 'default',
+          name: 'Default',
+          defaultWorkingDir: '/',
+          sortOrder: 0,
+          createdAtMs: 1,
+          updatedAtMs: 1,
+          isDefault: true,
+        }],
+        revision: 1,
+      })),
       createSession: vi.fn(),
       deleteSession: vi.fn(),
       onSessionsChanged: vi.fn(() => () => undefined),
+      onGroupCatalogChanged: vi.fn(() => () => undefined),
       onForegroundCommandUpdate: vi.fn(() => () => undefined),
       onOutputActivityUpdate: vi.fn((handler: (event: any) => void) => {
         rpcState.outputActivityHandler = handler;
@@ -135,6 +148,7 @@ function stockAgentSession(identity: 'pi' | 'claude' | 'codex') {
   const displayName = identity === 'pi' ? 'Pi' : identity === 'claude' ? 'Claude Code' : 'Codex';
   return {
     id: 'agent-session',
+    groupId: 'default',
     name: displayName,
     workingDir: '/workspace',
     createdAtMs: 1,
@@ -225,8 +239,12 @@ describe('TerminalPanel stock Agent unread integration', () => {
       expect(document.activeElement).toBe(outside);
 
       publishOutput('streaming', 2);
+      await vi.waitFor(() => expect(latestCatalog?.sessions()[0]?.outputActivity).toMatchObject({
+        phase: 'streaming',
+        revision: 2,
+      }));
       await vi.waitFor(() => expect(
-        host.querySelectorAll('[data-terminal-output-state="streaming"]'),
+        host.querySelectorAll('[data-terminal-output-trigger="agent-session"][data-terminal-activity-source="output"]'),
       ).toHaveLength(2));
       expect(host.querySelectorAll('[data-terminal-attention-state="unread"]')).toHaveLength(0);
 
@@ -246,7 +264,7 @@ describe('TerminalPanel stock Agent unread integration', () => {
 
       publishOutput('streaming', 4);
       await vi.waitFor(() => expect(
-        host.querySelectorAll('[data-terminal-output-state="streaming"]'),
+        host.querySelectorAll('[data-terminal-output-trigger="agent-session"][data-terminal-activity-source="output"]'),
       ).toHaveLength(2));
       expect(host.querySelectorAll('[data-terminal-attention-state="unread"]')).toHaveLength(0);
 

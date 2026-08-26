@@ -296,6 +296,9 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 		log:              logger,
 		sessionLifecycle: make(map[string]SessionLifecycleRecord),
 		workloadReleases: make(map[string]func()),
+		groupCatalog:     newMemoryGroupCatalog(root),
+		sessionGroupIDs:  make(map[string]string),
+		deletingGroupIDs: make(map[string]struct{}),
 	}
 
 	manager.term = termgo.NewManager(termgo.ManagerConfig{

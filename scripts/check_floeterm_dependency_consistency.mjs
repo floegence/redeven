@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedVersion = '0.17.0';
+const expectedVersion = '0.17.1';
 const packageName = '@floegence/floeterm-terminal-web';
 const goModule = 'github.com/floegence/floeterm/terminal-go';
 
@@ -46,10 +46,10 @@ export function validateFloetermDependencies(root = repoRoot) {
   const pnpmLock = read(root, 'internal/envapp/ui_src/pnpm-lock.yaml');
   assert(pnpmLock.includes(`specifier: ${expectedVersion}`), 'pnpm importer Floeterm specifier is stale');
   assert(pnpmLock.includes(`'${packageName}@${expectedVersion}':`), 'pnpm Floeterm snapshot is missing');
-  assert(pnpmLock.includes('sha512-7TtIROImcRYz/C7AADdcbI4qS91l3fFMgtLIn5bF97Xe7t1veswjY4j4D6CKT9rar35hixeDGyVZ2fOhvIuqQw=='), 'pnpm Floeterm integrity is not the published artifact');
+  assert(pnpmLock.includes('sha512-nyGrZ8xb+IOdPJw3XoyleOaBgd2ol8KYjl3ITuU5CR5nUikb9dnbxhtVAIbbhOYJNQwQq6eD+g4tQyWn8FZQJw=='), 'pnpm Floeterm integrity is not the published artifact');
 
   const goSum = read(root, 'go.sum');
-  assert(goSum.includes(`${goModule} v${expectedVersion} h1:trk6AilxabNloxO/Xtj51uha6VqcGW7UxsVoWDXRQFQ=`), 'go.sum is missing the published terminal-go checksum');
+  assert(goSum.includes(`${goModule} v${expectedVersion} h1:OmfTgsmLqDY62xRwN2DYJt2oMA7E3eugjXu+sYEg3wY=`), 'go.sum is missing the published terminal-go checksum');
   assert(goSum.includes(`${goModule} v${expectedVersion}/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=`), 'go.sum is missing the published terminal-go go.mod checksum');
 
   const floetermSumVersions = goSum
@@ -67,11 +67,11 @@ export function validateFloetermDependencies(root = repoRoot) {
   for (const filePath of walkFiles(okfRoot)) {
     if (filePath.endsWith(`${path.sep}log.md`)) continue;
     const source = fs.readFileSync(filePath, 'utf8');
-    assert(!source.includes('terminal-go v0.11.4') && !source.includes('terminal-go v0.11.2'), `${path.relative(root, filePath)} retains a stale terminal-go contract`);
-    assert(!source.includes('terminal-web v0.16.6'), `${path.relative(root, filePath)} retains a stale terminal-web contract`);
+    assert(!source.includes('terminal-go v0.17.0') && !source.includes('terminal-go v0.11.4') && !source.includes('terminal-go v0.11.2'), `${path.relative(root, filePath)} retains a stale terminal-go contract`);
+    assert(!source.includes('terminal-web v0.17.0') && !source.includes('terminal-web v0.16.6'), `${path.relative(root, filePath)} retains a stale terminal-web contract`);
   }
 
-  for (const stale of ['0.16.6', 'v0.11.4', 'v0.11.2']) {
+  for (const stale of ['0.17.0', '0.16.6', 'v0.11.4', 'v0.11.2']) {
     assert(!goMod.includes(stale) && !packageManifestText.includes(stale), `active Floeterm manifests retain stale version ${stale}`);
   }
   return { version: expectedVersion };

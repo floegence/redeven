@@ -522,6 +522,50 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(paste.defaultPrevented).toBe(true);
   });
 
+  it('keeps a captured drag selectable when the pointer jumps beyond the canvas edge', async () => {
+    const runtime = harness();
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'outside-edge-selection', 24, 2));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForPaint();
+
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
+    const setPointerCapture = vi.fn();
+    const releasePointerCapture = vi.fn();
+    Object.defineProperties(canvas, {
+      setPointerCapture: { configurable: true, value: setPointerCapture },
+      hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+    });
+    const bounds = canvas.getBoundingClientRect();
+    const pointer = (type: 'pointerdown' | 'pointermove' | 'pointerup', x: number) => canvas.dispatchEvent(new PointerEvent(type, {
+      pointerId: 11,
+      button: 0,
+      buttons: type === 'pointerup' ? 0 : 1,
+      clientX: x,
+      clientY: bounds.top + 4,
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    pointer('pointerdown', bounds.left + 2);
+    pointer('pointermove', bounds.right + 200);
+    pointer('pointerup', bounds.right + 200);
+
+    expect(setPointerCapture).toHaveBeenCalledWith(11);
+    expect(releasePointerCapture).toHaveBeenCalledWith(11);
+    expect(runtime.getViewport()?.getSelectionText()).toContain('outside-edge-selection');
+
+    const setData = vi.fn();
+    const copy = new Event('copy', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(copy, 'clipboardData', { value: { setData } });
+    input.dispatchEvent(copy);
+
+    expect(copy.defaultPrevented).toBe(true);
+    expect(setData).toHaveBeenCalledWith('text/plain', 'outside-edge-selection');
+  });
+
   it('keeps a click selection-free, selects words and rows on repeated clicks, and preserves drag selection', async () => {
     const runtime = harness();
     mounted.push(runtime);
