@@ -34,6 +34,10 @@ describe('localUIBind', () => {
     expect(() => parseLocalUIBind('example.com:24000')).toThrow('host must be localhost or an IP literal');
   });
 
+  it('rejects IPv4-mapped IPv6 hosts through the shared parser', () => {
+    expect(() => parseLocalUIBind('[::ffff:192.168.1.20]:24000')).toThrow('IPv4-mapped IPv6 hosts are not supported');
+  });
+
   it('treats localhost as conflicting with explicit loopback binds on the same port', () => {
     expect(localUIBindsConflict('localhost:23998', '127.0.0.1:23998')).toBe(true);
     expect(localUIBindsConflict('localhost:23998', '[::1]:23998')).toBe(true);

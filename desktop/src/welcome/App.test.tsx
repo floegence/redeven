@@ -2284,12 +2284,12 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('props.baselineSnapshot.access_mode_options');
     expect(appSrc).toContain("aria-label={props.i18n.t('settings.visibilityTitle')}");
-    expect(appSrc).toContain("props.i18n.t('settings.accessSecurityDescription')");
+    expect(appSrc).toContain("props.i18n.t('settings.settingsWindowDescription'");
     expect(appSrc).toContain("props.i18n.t('settings.visibilityDescription')");
     expect(appSrc).toContain("i18n.t('environmentCenter.localLinksTooltipTitle')");
     expect(appSrc).toContain("i18n.t('environmentCenter.localLinksTooltipDescription')");
     expect(appSrc).toContain("props.i18n.t('settings.localOnlyProtectionNote')");
-    expect(appSrc).toContain("i18n.t('settings.sharedPasswordHelp')");
+    expect(appSrc).toContain("props.i18n.t('settings.networkTrustNote')");
   });
 
   it('uses the shared surface hierarchy for Local Environment Settings boundaries', () => {
@@ -2299,13 +2299,14 @@ describe('DesktopWelcomeShell', () => {
     const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
 
     expect(appSrc).toContain("'redeven-settings-dialog',");
-    expect(appSrc).toContain("'redeven-tile redeven-boundary-panel rounded-md border px-4 py-4 redeven-settings-detail-card'");
     expect(dialogSrc).toContain('redeven-settings-statusbar redeven-boundary-panel');
     expect(dialogSrc).toContain('redeven-tile redeven-boundary-panel redeven-surface-panel--interactive');
-    expect(dialogSrc).toContain('redeven-divide-children grid divide-y');
+    expect(dialogSrc).toContain('flex min-w-0 flex-col gap-1.5 sm:flex-row');
     expect(dialogSrc).toContain('redeven-surface-control bg-background');
-    expect(dialogSrc.match(/redeven-surface-inset/g)).toHaveLength(2);
-    expect(dialogSrc).toContain('redeven-divider flex items-start');
+    expect(dialogSrc).toContain('redeven-settings-form-panel redeven-boundary-panel');
+    expect(appSrc).toContain('redeven-settings-form-row grid gap-2');
+    expect(appSrc).toContain('redeven-settings-apply-row redeven-boundary-panel');
+    expect(dialogSrc).not.toContain('redeven-settings-detail-card');
     expect(dialogSrc).toContain('tabIndex={selected() ? 0 : -1}');
     expect(dialogSrc).toContain('rovingRadioIndexForKey(event.key, index(), options.length)');
     expect(dialogSrc).toContain('selectAccessMode(nextOption.value);');
@@ -2348,41 +2349,33 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('settings.visibilityTitle')");
     expect(appSrc).toContain("props.i18n.t('settings.detailsTitle')");
     expect(appSrc).toContain("props.i18n.t('settings.runtimeLabel')");
-    expect(appSrc).toContain("props.i18n.t('settings.accessSecurityTitle')");
+    expect(appSrc).toContain("props.i18n.t('settings.settingsWindowDescription'");
+    expect(appSrc).not.toContain("props.i18n.t('settings.accessSecurityTitle')");
   });
 
-  it('keeps plaintext network review inside the settings dialog with focus restoration', () => {
+  it('keeps network settings compact, validated, and aligned with the TLS access contract', () => {
     const appSrc = readWelcomeSource();
     const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
     const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
     const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
 
-    expect(dialogSrc).toContain("const [step, setStep] = createSignal<'edit' | 'review'>('edit')");
-    expect(dialogSrc).toContain("props.i18n.t('settings.plaintextNetworkExposureTitle')");
-    expect(dialogSrc).toContain("props.i18n.t('settings.reviewPlaintextExposureTitle')");
-    expect(dialogSrc).toContain("props.i18n.t('settings.plaintextExposureBoundary')");
-    expect(dialogSrc).toContain("props.i18n.t('settings.acceptPlaintextExposureRisk')");
-    expect(dialogSrc).toContain('<SettingsFlowIndicator');
     expect(dialogSrc).toContain('<SettingsApplyTimingControl');
-    expect(appSrc).toContain("props.i18n.t('settings.settingsStepsLabel')");
     expect(appSrc).toContain("props.i18n.t('settings.applyTimingTitle')");
     expect(appSrc).toContain("props.i18n.t('settings.applyNextStart')");
     expect(appSrc).toContain("props.i18n.t('settings.applyRestartNow')");
     expect(appSrc).toContain("props.i18n.t('settings.sharedPasswordRequired')");
-    expect(dialogSrc).toContain("props.i18n.t('common.next')");
+    expect(appSrc).toContain("props.i18n.t('settings.networkTrustNote')");
+    expect(dialogSrc).toContain('validateDesktopAccessDraft(props.draft, accessModelOptions())');
     expect(dialogSrc).toContain("props.i18n.t('settings.saveAndRestart')");
     expect(dialogSrc).toContain('desktopSettingsDraftRequiresRuntimeRestart(props.baselineSnapshot.draft, props.draft)');
-    expect(dialogSrc).toContain('props.runtimeRestartAvailable && restartRequired()');
+    expect(dialogSrc).toContain('props.runtimeRestartAvailable && hasPendingChanges()');
     expect(dialogSrc).toContain("const [applyTiming, setApplyTiming] = createSignal<DesktopSettingsApplyTiming>('next_start')");
     expect(dialogSrc).toContain("applyTiming() === 'restart_now'");
-    expect(dialogSrc).toContain('disabled={!accessModel().password_requirement_satisfied}');
-    expect(dialogSrc).toContain('disabled={!riskAccepted() || !accessModel().password_requirement_satisfied}');
-    expect(dialogSrc).toContain('compactLocalizedPasswordStateTagLabel(props.i18n, accessModel().password_state_id)');
-    expect(dialogSrc).toContain('queueMicrotask(() => reviewHeadingRef?.focus())');
-    expect(dialogSrc).toContain('queueMicrotask(() => reviewTriggerRef?.focus())');
-    expect(dialogSrc).not.toContain("props.i18n.t('settings.enablePlaintextNetworkAccess')");
-    expect(dialogSrc).not.toContain("props.i18n.t('settings.passwordEnabled')");
-    expect(dialogSrc).not.toContain("props.i18n.t('settings.reviewExposure')");
+    expect(dialogSrc).toContain('disabled={!hasPendingChanges() || !accessValidation().valid}');
+    expect(dialogSrc).toContain('queueMicrotask(() => passwordInputRef?.focus())');
+    expect(dialogSrc).not.toContain('props.openDesktopUpdates');
+    expect(dialogSrc).not.toContain("props.i18n.t('desktopUpdate.checkForUpdates')");
+    expect(dialogSrc).not.toContain('plaintext');
     expect(dialogSrc).not.toContain('<ConfirmDialog');
   });
 

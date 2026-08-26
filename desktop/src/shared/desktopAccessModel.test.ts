@@ -8,6 +8,7 @@ import {
   deriveDesktopAccessDraftModel,
   desktopAccessModeForDraft,
   desktopSettingsDraftRequiresRuntimeRestart,
+  validateDesktopAccessDraft,
 } from './desktopAccessModel';
 import type { DesktopSettingsDraft } from './settingsIPC';
 
@@ -116,6 +117,49 @@ describe('desktopAccessModel', () => {
 
     const autoDisabled = applyDesktopAccessAutoPortToDraft(autoEnabled, false);
     expect(autoDisabled.local_ui_bind).toBe('localhost:23998');
+  });
+
+  it('keeps the selected preset host while a fixed port is temporarily invalid', () => {
+    const cleared = applyDesktopAccessFixedPortToDraft(draft({
+      local_ui_bind: '0.0.0.0:23998',
+    }), '', 'shared_local_network');
+    expect(cleared.local_ui_bind).toBe('0.0.0.0');
+
+    const repaired = applyDesktopAccessFixedPortToDraft(cleared, '24000', 'shared_local_network');
+    expect(repaired.local_ui_bind).toBe('0.0.0.0:24000');
+  });
+
+  it('validates preset ports, custom IPv4 and IPv6 binds, and network passwords', () => {
+    expect(validateDesktopAccessDraft(draft({
+      local_ui_bind: 'localhost:',
+    }), { mode_override: 'local_only' })).toEqual({
+      valid: false,
+      address_error_key: 'settings.portInvalid',
+    });
+
+    expect(validateDesktopAccessDraft(draft({
+      local_ui_bind: '192.168.1.20:23998',
+      local_ui_password: 'secret',
+    }), { mode_override: 'custom_exposure' })).toEqual({ valid: true });
+
+    expect(validateDesktopAccessDraft(draft({
+      local_ui_bind: '[::1]:0',
+    }), { mode_override: 'custom_exposure' })).toEqual({ valid: true });
+
+    expect(validateDesktopAccessDraft(draft({
+      local_ui_bind: '0.0.0.0:23998',
+    }), { mode_override: 'shared_local_network' })).toEqual({
+      valid: false,
+      password_error_key: 'settings.sharedPasswordRequired',
+    });
+
+    expect(validateDesktopAccessDraft(draft({
+      local_ui_bind: 'example.com:23998',
+      local_ui_password: 'secret',
+    }), { mode_override: 'custom_exposure' })).toEqual({
+      valid: false,
+      address_error_key: 'settings.bindAddressInvalid',
+    });
   });
 
   it('builds summary items around visibility and next-start address instead of raw bind presets', () => {

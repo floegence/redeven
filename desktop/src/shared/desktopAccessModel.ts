@@ -9,12 +9,16 @@ import type {
   DesktopPasswordStateID,
   DesktopSettingsSummaryItem,
 } from './desktopSettingsSurface';
+import {
+  DEFAULT_DESKTOP_LOCAL_UI_BIND,
+  parseLocalUIBind,
+} from './localUIBind';
 
 export const DEFAULT_DESKTOP_FIXED_PORT = 23998;
 export const DEFAULT_DESKTOP_FIXED_PORT_TEXT = String(DEFAULT_DESKTOP_FIXED_PORT);
-export const DEFAULT_DESKTOP_LOCAL_UI_BIND = `localhost:${DEFAULT_DESKTOP_FIXED_PORT_TEXT}`;
 export const DEFAULT_DESKTOP_SHARED_LOCAL_UI_BIND = `0.0.0.0:${DEFAULT_DESKTOP_FIXED_PORT_TEXT}`;
 export const DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND = '127.0.0.1:0';
+export { DEFAULT_DESKTOP_LOCAL_UI_BIND };
 
 export const DESKTOP_ACCESS_MODE_OPTIONS: readonly DesktopAccessModeOption[] = [
   {
@@ -59,6 +63,12 @@ export type DesktopAccessModelOptions = Readonly<{
   local_ui_password_configured?: boolean;
   runtime_password_required?: boolean;
   mode_override?: DesktopAccessMode | null;
+}>;
+
+export type DesktopAccessDraftValidation = Readonly<{
+  valid: boolean;
+  address_error_key?: 'settings.portInvalid' | 'settings.bindAddressInvalid';
+  password_error_key?: 'settings.sharedPasswordRequired';
 }>;
 
 function trimString(value: unknown): string {
@@ -303,6 +313,34 @@ export function deriveDesktopAccessDraftModel(
   };
 }
 
+export function validateDesktopAccessDraft(
+  draft: DesktopSettingsDraft,
+  options: DesktopAccessModelOptions = {},
+): DesktopAccessDraftValidation {
+  const model = deriveDesktopAccessDraftModel(draft, options);
+  let addressErrorKey: DesktopAccessDraftValidation['address_error_key'];
+  try {
+    if (trimString(draft.local_ui_bind) === '') {
+      throw new Error('missing Local UI bind');
+    }
+    parseLocalUIBind(trimString(draft.local_ui_bind));
+  } catch {
+    addressErrorKey = model.access_mode === 'custom_exposure'
+      ? 'settings.bindAddressInvalid'
+      : 'settings.portInvalid';
+  }
+  const passwordErrorKey = !addressErrorKey
+    && model.password_required
+    && !model.password_requirement_satisfied
+    ? 'settings.sharedPasswordRequired' as const
+    : undefined;
+  return {
+    valid: addressErrorKey === undefined && passwordErrorKey === undefined,
+    ...(addressErrorKey ? { address_error_key: addressErrorKey } : {}),
+    ...(passwordErrorKey ? { password_error_key: passwordErrorKey } : {}),
+  };
+}
+
 export function desktopSettingsDraftRequiresRuntimeRestart(
   baseline: DesktopSettingsDraft,
   draft: DesktopSettingsDraft,
@@ -409,10 +447,12 @@ export function applyDesktopAccessModeToDraft(
 export function applyDesktopAccessFixedPortToDraft(
   draft: DesktopSettingsDraft,
   portText: string,
+  accessMode?: Exclude<DesktopAccessMode, 'custom_exposure'>,
 ): DesktopSettingsDraft {
   const model = deriveDesktopAccessDraftModel(draft);
   const nextPort = trimString(portText);
-  const nextHost = model.access_mode === 'shared_local_network' ? '0.0.0.0' : 'localhost';
+  const nextMode = accessMode ?? model.access_mode;
+  const nextHost = nextMode === 'shared_local_network' ? '0.0.0.0' : 'localhost';
   return {
     ...draft,
     local_ui_bind: formatHostPort(nextHost, nextPort),
