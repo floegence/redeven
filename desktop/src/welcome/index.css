@@ -2279,7 +2279,7 @@ html:not(.dark) .redeven-header-separator {
   min-height: 2.75rem;
   max-height: var(--redeven-anchored-overlay-max-height, none);
   border-radius: 0.75rem;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--redeven-action-popover-border);
   background: var(--popover);
   box-shadow:
@@ -2339,7 +2339,11 @@ html:not(.dark) .redeven-header-separator {
   display: grid;
   width: 100%;
   min-width: 0;
+  max-height: inherit;
   padding: 1.125rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   background: transparent;
 }
 
@@ -3793,6 +3797,7 @@ pre,
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 0;
   padding: 0;
+  overflow: hidden;
 }
 
 .redeven-gateway-action-panel__body {

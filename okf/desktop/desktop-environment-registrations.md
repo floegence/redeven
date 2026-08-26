@@ -31,6 +31,8 @@ Every Launcher Operation declares one `active_progress_surface`: `open`, `runtim
 
 The main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.
 
+Each action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. Parent and body scrollbars must never overlap.
+
 # Evidence
 
 - `redeven:desktop/src/shared/desktopLauncherIPC.ts:1` - Explicit registration reference and progress-surface contracts.
