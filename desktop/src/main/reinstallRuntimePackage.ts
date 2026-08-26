@@ -9,6 +9,7 @@ import {
 } from './containerRuntime';
 import {
   formatBlockedLaunchDiagnostics,
+  parseAvailableLaunchReport,
   parseLaunchReport,
   type LaunchReport,
 } from './launchReport';
@@ -301,11 +302,8 @@ async function readStartupReport(args: Readonly<{
       ...(args.signal ? { signal: args.signal } : {}),
       timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
     });
-    if (result.stdout.trim() === '') {
-      return { report: null, error: null };
-    }
     try {
-      return { report: parseLaunchReport(result.stdout), error: null };
+      return { report: parseAvailableLaunchReport(result.stdout), error: null };
     } catch (error) {
       throw invalidStartupReportError(result.stdout, error);
     }

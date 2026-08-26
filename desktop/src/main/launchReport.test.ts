@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
+import {
+  formatBlockedLaunchDiagnostics,
+  parseAvailableLaunchReport,
+  parseLaunchReport,
+} from './launchReport';
 
 describe('launchReport', () => {
+  it('treats an empty launch report read as not published', () => {
+    expect(parseAvailableLaunchReport('')).toBeNull();
+    expect(parseAvailableLaunchReport('  \n')).toBeNull();
+  });
+
   it('parses a ready launch report payload', () => {
     expect(parseLaunchReport(JSON.stringify({
       status: 'ready',

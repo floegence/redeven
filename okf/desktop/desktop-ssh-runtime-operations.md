@@ -31,7 +31,7 @@ The remote command snippets each perform one bounded action: probe, stage helper
 
 ## User-facing result
 
-The Launcher Operation exists before the first SSH command and reports the actual active phase. SSH connection failure, missing container, unavailable engine, package preparation failure, command exit, and Runtime readiness failure remain distinct structured errors with technical stderr available in details. A valid blocked startup report is a Runtime start failure with the reported reason; only malformed or contract-invalid JSON is labeled an invalid startup report.
+The Launcher Operation exists before the first SSH command and reports the actual active phase. SSH connection failure, missing container, unavailable engine, package preparation failure, command exit, and Runtime readiness failure remain distinct structured errors with technical stderr available in details. The session-specific startup-report reader returns an empty successful result until Runtime atomically publishes the report; Desktop treats that state as pending within the existing bounded startup deadline. A nonzero report-read result is a target-command failure, a valid blocked report is a Runtime start failure with the reported reason, and only a nonempty malformed or contract-invalid report is labeled invalid. Start, Restart, Update, Open recovery, and Reinstall consume this one report-availability contract.
 
 An SSH or SSH-container registration always retains its direct lifecycle menu. A Gateway-only or Provider-only Environment has no SSH authority and therefore cannot borrow this execution path.
 

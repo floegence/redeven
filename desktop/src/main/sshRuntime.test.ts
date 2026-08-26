@@ -64,6 +64,30 @@ describe('sshRuntime', () => {
     expect(source).not.toContain('readyTimeoutMs: startupTimeoutMs');
   });
 
+  it('returns no startup report until the session report file exists', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-ssh-report-read-'));
+    const stateRoot = path.join(root, 'state');
+    const sessionToken = 'session-token';
+    const reportPath = path.join(stateRoot, 'runtime', 'sessions', sessionToken, 'startup-report.json');
+    try {
+      const readReport = () => execFileSync('sh', [
+        '-c',
+        buildManagedSSHReportReadScript(),
+        'redeven-ssh-report-read-test',
+        root,
+        stateRoot,
+        sessionToken,
+      ], { encoding: 'utf8' });
+
+      expect(readReport()).toBe('');
+      fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+      fs.writeFileSync(reportPath, '{"status":"ready"}\n');
+      expect(readReport()).toBe('{"status":"ready"}\n');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('returns a structured SSH connection failure without exposing stderr labels as the summary', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-ssh-runtime-test-'));
     const fakeSSH = path.join(tempDir, 'ssh.cjs');
@@ -139,8 +163,6 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('managed_root="${runtime_root%/}/runtime/managed"');
     expect(buildManagedSSHStartScript()).not.toContain('runtime/releases/${target_release_tag}/bin/redeven');
     expect(buildManagedSSHStartScript()).not.toContain('runtime/releases/${release_tag}/bin/redeven');
-    expect(buildManagedSSHReportReadScript()).toContain('if [ -f "$report_path" ]; then');
-    expect(buildManagedSSHReportReadScript()).not.toContain('if [ ! -f "$report_path" ]; then');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
     expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${managed_root}'}/${MANAGED_RUNTIME_STAMP_FILENAME}"`);
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'slot_release_tag=%s\\n' \"$slot_release_tag\"");
@@ -462,7 +484,6 @@ describe('sshRuntime', () => {
     expect(source).toContain('const result = await runSSHControlCommand(');
     expect(source).toContain("code: 'ssh_connection_interrupted'");
     expect(source).toContain('recordSSHControlCheckFailure(session, error);');
-    expect(source).toContain('parseLaunchReport(result.stdout)');
     expect(source).not.toContain('formatBlockedLaunchDiagnostics(launchReport)');
     expect(source).toContain('const replacementInventory = await processSession.inspect();');
     expect(source).toContain('await processSession.stop(replacementInventory, stopTimeoutMs);');

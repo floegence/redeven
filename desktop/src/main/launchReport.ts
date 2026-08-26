@@ -39,6 +39,13 @@ export type LaunchBlockedReport = Readonly<{
 
 export type LaunchReport = LaunchReadyReport | LaunchBlockedReport;
 
+export function parseAvailableLaunchReport(raw: string): LaunchReport | null {
+  if (raw.trim() === '') {
+    return null;
+  }
+  return parseLaunchReport(raw);
+}
+
 function normalizeOptionalString(value: unknown): string | undefined {
   const text = String(value ?? '').trim();
   return text || undefined;

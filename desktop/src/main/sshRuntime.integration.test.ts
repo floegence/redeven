@@ -33,9 +33,11 @@ type FakeSSHScenario =
   | 'upload_temp_dir_connection_interrupted'
   | 'upload_install_connection_interrupted'
   | 'report_connection_interrupted'
+  | 'report_read_failed'
   | 'master_readiness_noise'
   | 'master_readiness_timeout'
   | 'no_report'
+  | 'delayed_report'
   | 'quick_exit_report'
   | 'blocked_report'
   | 'invalid_report'
@@ -554,15 +556,26 @@ if (args.includes('-M') && args.includes('-N')) {
       break;
     case 'redeven-ssh-read-report':
       if (readState().startup_session_token !== remoteScriptArgs()[2]) {
-        process.exit(1);
+        process.exit(0);
       }
       appendLog('read_report');
+      if (scenario === 'report_read_failed') {
+        process.stderr.write('startup report directory is not readable\n');
+        process.exit(73);
+      }
       if (scenario === 'report_connection_interrupted') {
         interruptControlConnection('Connection closed by remote host while reading the startup report.');
         break;
       }
       if (scenario === 'no_report') {
-        process.exit(1);
+        process.exit(0);
+      }
+      if (scenario === 'delayed_report') {
+        const state = readState();
+        if (state.empty_report_seen !== true) {
+          writeState({ ...state, empty_report_seen: true });
+          process.exit(0);
+        }
       }
       if (scenario === 'blocked_report') {
         process.stdout.write(JSON.stringify({
@@ -711,8 +724,10 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
   await fs.writeFile(statePath, JSON.stringify({
     installed: scenario === 'ready'
       || scenario === 'report_connection_interrupted'
+      || scenario === 'report_read_failed'
       || scenario === 'master_readiness_noise'
       || scenario === 'no_report'
+      || scenario === 'delayed_report'
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report'
       || scenario === 'status_blocked_without_socket'
@@ -720,8 +735,10 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
     installed_version: 'v1.2.3',
     runtime_live: scenario === 'ready'
       || scenario === 'report_connection_interrupted'
+      || scenario === 'report_read_failed'
       || scenario === 'master_readiness_noise'
       || scenario === 'no_report'
+      || scenario === 'delayed_report'
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report'
       || scenario === 'status_blocked_without_socket'
@@ -1094,6 +1111,24 @@ describe('sshRuntime integration', () => {
     }
   }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 
+  it('waits when the startup report file has not been published yet', async () => {
+    const fixture = await createFakeSSHFixture('delayed_report');
+    let ready: ManagedSSHRuntimeReady | null = null;
+    try {
+      ready = await startWithFakeSSH(fixture, 'remote_install', {
+        forceRuntimeUpdate: true,
+        runtimeProcessIntent: 'update',
+      });
+
+      expect(ready.startup.local_ui_url).toBe('http://127.0.0.1:39001/');
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.filter((event) => event.event === 'read_report')).toHaveLength(2);
+    } finally {
+      await ready?.stop();
+      await removeFakeSSHFixture(fixture);
+    }
+  }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
+
   it('keeps SSH runtime readiness separate from the Desktop bridge session', async () => {
     const fixture = await createFakeSSHFixture('ready');
     let ready: ManagedSSHRuntimeReady | null = null;
@@ -1438,6 +1473,24 @@ describe('sshRuntime integration', () => {
       expect(eventNames.filter((event) => event === 'read_report')).toHaveLength(1);
       expect(eventNames).toContain('master_interrupted');
       expect(eventNames).not.toContain('forward_start');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it('reports a failed startup-report read as the target command failure', async () => {
+    const fixture = await createFakeSSHFixture('report_read_failed');
+    try {
+      const failure = await captureDesktopOperationFailure(() => startWithFakeSSH(fixture, 'auto'));
+
+      expect(failure).toMatchObject({
+        code: 'runtime_host_command_failed',
+        title_key: 'progress.runtimeHostCommandFailedTitle',
+        summary_key: 'progress.runtimeHostCommandFailedSummary',
+      });
+      expect(failure.diagnostics?.map((item) => item.text).join('\n')).toContain(
+        'startup report directory is not readable',
+      );
     } finally {
       await removeFakeSSHFixture(fixture);
     }
