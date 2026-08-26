@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/capabilities/containers"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -60,6 +61,132 @@ func TestCatalogAvailabilityRequiresUsableSignedArtifact(t *testing.T) {
 	if err != nil || len(templates) != 2 || hostTemplate == nil || !hostTemplate.Available || hostTemplate.ReasonCode != "" {
 		t.Fatalf("signed catalog availability = %+v, err=%v", templates, err)
 	}
+}
+
+func TestCatalogKeepsPinnedDockerTemplateAvailableWithoutNativeCatalog(t *testing.T) {
+	t.Parallel()
+	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+		t.Skip("the built-in Docker template supports amd64 and arm64")
+	}
+	if runningInsideContainer() {
+		t.Skip("nested Docker is intentionally unavailable")
+	}
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"latest":"not-a-managed-service-catalog"}`))
+	}))
+	defer server.Close()
+	adapter, err := containers.NewAdapter(catalogDockerEngineClient{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{
+		scope:      &filesystemscope.Registry{},
+		containers: adapter,
+		catalog:    &catalogClient{client: server.Client(), catalogURL: server.URL, packageOrigin: defaultPackageOrigin, publicKey: publicKey, keyID: managedCatalogKeyID},
+	}
+
+	templates, err := manager.Catalog(context.Background())
+	containerTemplate := templateByID(templates, DeepSeekHarnessContainerTemplateID)
+	if err != nil || containerTemplate == nil || !containerTemplate.Available || containerTemplate.ReasonCode != "" {
+		t.Fatalf("pinned Docker template = %+v, err=%v", containerTemplate, err)
+	}
+	if containerTemplate.Spec == nil || containerTemplate.Spec.Container == nil || !strings.Contains(containerTemplate.Spec.Container.Image, "@sha256:") {
+		t.Fatalf("pinned Docker template spec = %+v", containerTemplate.Spec)
+	}
+}
+
+func TestDockerInstallUsesPinnedCatalogWithoutOnlineCatalogLookup(t *testing.T) {
+	t.Parallel()
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	service := pfregistry.ManagedService{
+		ServiceID: "mws_pinned_docker", TemplateID: DeepSeekHarnessContainerTemplateID,
+		Deployment: string(DeploymentDocker), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
+		DesiredState: "running", ObservedState: "installing", ForwardID: "pf_pinned_docker", RuntimePort: 3080,
+	}
+	op := pfregistry.ManagedOperation{
+		OperationID: "mop_pinned_docker", ServiceID: service.ServiceID, RequestID: "request-pinned-docker",
+		RequestFingerprint: "fingerprint", Action: string(ActionInstall), State: "running", Stage: "environment_check",
+	}
+	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, op); err != nil {
+		t.Fatal(err)
+	}
+
+	installErr := errors.New("stop after catalog capture")
+	driver := &captureInstallCatalogDriver{installErr: installErr}
+	manager := &Manager{registry: registry, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	if err := manager.runInstall(context.Background(), &service, &op, driver); !errors.Is(err, installErr) {
+		t.Fatalf("runInstall() error = %v", err)
+	}
+	for _, platform := range []string{"linux-amd64", "linux-arm64"} {
+		artifact, ok := driver.catalog.Docker[platform]
+		if !ok || artifact.Image != auditedDockerImage || !dockerDigestPattern.MatchString(artifact.Digest) {
+			t.Fatalf("captured Docker artifact %s = %+v", platform, artifact)
+		}
+	}
+}
+
+type catalogDockerEngineClient struct{}
+
+type captureInstallCatalogDriver struct {
+	catalog    catalogPayload
+	installErr error
+}
+
+func (d *captureInstallCatalogDriver) Install(_ context.Context, _ *pfregistry.ManagedService, catalog catalogPayload, _ func(string, int64)) (string, string, error) {
+	d.catalog = catalog
+	return "", "", d.installErr
+}
+
+func (*captureInstallCatalogDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {
+	return "", errors.New("unexpected start")
+}
+
+func (*captureInstallCatalogDriver) Stop(context.Context, *pfregistry.ManagedService) error {
+	return errors.New("unexpected stop")
+}
+
+func (*captureInstallCatalogDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool) error {
+	return errors.New("unexpected uninstall")
+}
+
+func (*captureInstallCatalogDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
+	return errors.New("unexpected cleanup")
+}
+
+func (*captureInstallCatalogDriver) Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error) {
+	return nil, errors.New("unexpected logs")
+}
+
+func (catalogDockerEngineClient) Status(_ context.Context, engine containers.Engine) (containers.EngineStatus, error) {
+	return containers.EngineStatus{Engine: engine, Available: engine == containers.EngineDocker, Version: "test"}, nil
+}
+
+func (catalogDockerEngineClient) List(context.Context, containers.Engine, bool) ([]containers.EngineContainer, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (catalogDockerEngineClient) Inspect(context.Context, containers.Engine, string) (containers.EngineContainer, error) {
+	return containers.EngineContainer{}, errors.New("not implemented")
+}
+
+func (catalogDockerEngineClient) Action(context.Context, containers.EngineActionRequest) (containers.EngineActionResult, error) {
+	return containers.EngineActionResult{}, errors.New("not implemented")
+}
+
+func (catalogDockerEngineClient) TailLogs(context.Context, containers.EngineLogsRequest) (containers.EngineLogsResult, error) {
+	return containers.EngineLogsResult{}, errors.New("not implemented")
+}
+
+func (catalogDockerEngineClient) PullImage(context.Context, containers.Engine, string) (containers.EngineImageResult, error) {
+	return containers.EngineImageResult{}, errors.New("not implemented")
 }
 
 func templateByID(templates []Template, templateID string) *Template {

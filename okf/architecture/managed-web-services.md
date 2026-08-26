@@ -30,9 +30,9 @@ DeepSeek Harness remains Developer Preview software fixed at `0.1.1-rc.2`. The h
 
 Host deployment supports Linux and macOS on amd64 and arm64. Redeven accepts only an exact Ed25519-signed catalog entry and downloads a platform archive containing fixed Node.js, DeepSeek Harness, and native dependencies. It verifies trusted origin, declared size, SHA-256, safe archive paths, executable layout, and then atomically installs private state. The launcher binds `127.0.0.1`.
 
-Container deployment identifies `runzhliu/deepseek-harness:0.1.1-rc.2` as community packaging, not a DeepSeek official distribution. The signed catalog supplies the reviewed amd64 or arm64 OCI digest. The container runs non-root under the hardened policy, mounts a private data volume and selected workspace, publishes only Harness port `3080` to loopback, and never publishes `6080`/noVNC.
+Container deployment identifies `runzhliu/deepseek-harness:0.1.1-rc.2` as community packaging, not a DeepSeek official distribution. The signed Redeven release pins the separately reviewed amd64 and arm64 OCI manifest digests in the Runtime, so a missing online native-package catalog cannot turn the container path into a mutable-tag pull. The container runs non-root under the hardened policy, mounts a private data volume and selected workspace, publishes only Harness port `3080` to loopback, and never publishes `6080`/noVNC.
 
-Catalog publication requires reviewed source/version, licenses, architecture, digest, hardening, persistence, WebSocket, loopback, and protected-routing smoke tests. Third-party notices distinguish on-demand software from code embedded in Redeven.
+Release-manifest or catalog publication requires reviewed source/version, licenses, architecture, digest, hardening, persistence, WebSocket, loopback, and protected-routing smoke tests. Native packages remain gated by the exact Ed25519-signed online catalog; container deployment remains gated by the exact per-platform digest compiled into the signed Redeven release. Third-party notices distinguish on-demand software from code embedded in Redeven.
 
 # Persistence and recovery
 

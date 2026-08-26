@@ -149,6 +149,10 @@ func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
 		nativeReasonCode, nativeReason = "PLATFORM_UNSUPPORTED", "Direct installation supports Linux and macOS on x64 or arm64."
 	}
 	dockerAvailable, dockerReasonCode, dockerReason := m.dockerAvailability(ctx)
+	dockerArtifact, dockerArtifactAvailable := auditedDockerArtifact("linux-" + runtime.GOARCH)
+	if dockerAvailable && (!dockerArtifactAvailable || dockerArtifact.Image != auditedDockerImage || !dockerDigestPattern.MatchString(strings.TrimSpace(dockerArtifact.Digest))) {
+		dockerAvailable, dockerReasonCode, dockerReason = false, "DOCKER_PLATFORM_UNSUPPORTED", "The reviewed DeepSeek Harness image does not include this CPU architecture."
+	}
 	catalogCtx, cancelCatalog := context.WithTimeout(ctx, 4*time.Second)
 	payload, catalogErr := m.catalog.resolve(catalogCtx)
 	cancelCatalog()
@@ -161,20 +165,11 @@ func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
 		if nativeAvailable {
 			nativeAvailable, nativeReasonCode, nativeReason = false, reasonCode, reason
 		}
-		if dockerAvailable {
-			dockerAvailable, dockerReasonCode, dockerReason = false, reasonCode, reason
-		}
 	} else {
 		if nativeAvailable {
 			artifact, ok := payload.Platforms[currentPlatformKey()]
 			if !ok || validateNativeArtifact(artifact, m.catalog.packageHTTPClient(), m.catalog.packageOrigin) != nil {
 				nativeAvailable, nativeReasonCode, nativeReason = false, "CATALOG_UNAVAILABLE", "The audited catalog does not include a usable native package for this Environment."
-			}
-		}
-		if dockerAvailable {
-			artifact, ok := payload.Docker["linux-"+runtime.GOARCH]
-			if !ok || artifact.Image != auditedDockerImage || !dockerDigestPattern.MatchString(strings.TrimSpace(artifact.Digest)) {
-				dockerAvailable, dockerReasonCode, dockerReason = false, "CATALOG_UNAVAILABLE", "The audited catalog does not include a usable Docker image for this Environment."
 			}
 		}
 	}
@@ -185,9 +180,9 @@ func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
 		if artifact, ok := payload.Platforms[currentPlatformKey()]; ok {
 			hostSpec.Host.Artifact = &HostArtifactSpec{DownloadURL: artifact.DownloadURL, SizeBytes: artifact.SizeBytes, SHA256: artifact.SHA256, ExecutableRelPath: artifact.ExecutableRelPath}
 		}
-		if artifact, ok := payload.Docker["linux-"+runtime.GOARCH]; ok {
-			containerSpec.Container.Image = artifact.Image + "@" + artifact.Digest
-		}
+	}
+	if dockerArtifactAvailable {
+		containerSpec.Container.Image = dockerArtifact.Image + "@" + dockerArtifact.Digest
 	}
 	items := []Template{
 		{TemplateID: DeepSeekHarnessHostTemplateID, Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", Source: "builtin", Deployment: DeploymentNative, Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(hostSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentNative, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason}}, WorkspaceRoots: workspaceRoots, Spec: &hostSpec},
@@ -535,11 +530,14 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 	m.progress(op, "environment_check", 1)
 	payload := catalogPayload{}
 	var err error
-	if service.TemplateSource == "builtin" || service.Deployment == string(DeploymentNative) || service.Deployment == string(DeploymentDocker) {
+	switch Deployment(service.Deployment) {
+	case DeploymentNative:
 		payload, err = m.catalog.resolve(ctx)
-		if err != nil {
-			return err
-		}
+	case DeploymentDocker:
+		payload = auditedDockerCatalog()
+	}
+	if err != nil {
+		return err
 	}
 	stage := map[Deployment]string{DeploymentNative: "downloading", DeploymentDocker: "pulling", DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[Deployment(service.Deployment)]
 	m.progress(op, stage, 2)
