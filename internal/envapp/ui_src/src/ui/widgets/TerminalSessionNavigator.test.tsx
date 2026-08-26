@@ -731,6 +731,47 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(boundary.querySelector('[data-terminal-drag-preview]')).toBeNull();
   });
 
+  it('uses sidebar-local drag geometry inside a scaled workbench widget', async () => {
+    vi.useFakeTimers();
+    const { host } = renderNavigator(navigationItem({ id: 'session-1', title: 'scaled shell' }), vi.fn(), {
+      groups: [{
+        id: 'default', name: 'Default', defaultWorkingDir: '/workspace', isDefault: true,
+        expanded: true, itemIds: ['session-1'], totalSessionCount: 1,
+      }],
+    });
+    const boundary = host.querySelector<HTMLElement>('[data-terminal-drag-boundary]')!;
+    const sessionRow = host.querySelector<HTMLElement>('[data-terminal-session-row="session-1"]')!;
+    Object.defineProperties(boundary, {
+      offsetWidth: { value: 286 },
+      offsetHeight: { value: 400 },
+      getBoundingClientRect: {
+        value: () => ({ top: 50, left: 100, width: 143, height: 200, right: 243, bottom: 250, x: 100, y: 50, toJSON: () => ({}) }),
+      },
+    });
+    Object.defineProperties(sessionRow, {
+      offsetWidth: { value: 230 },
+      offsetHeight: { value: 52 },
+      getBoundingClientRect: {
+        value: () => ({ top: 120, left: 120, width: 115, height: 26, right: 235, bottom: 146, x: 120, y: 120, toJSON: () => ({}) }),
+      },
+    });
+    const dataTransfer = createDataTransfer();
+
+    dispatchDragEvent(sessionRow, 'dragstart', dataTransfer, 130, 140);
+    const preview = boundary.querySelector<HTMLElement>('[data-terminal-drag-preview="session"]')!;
+    expect(preview.style.width).toBe('230px');
+    expect(preview.style.height).toBe('52px');
+    expect(preview.style.transform).toBe('translate3d(40px, 140px, 0)');
+
+    dispatchDragEvent(boundary, 'dragover', dataTransfer, 200, 230);
+    expect(preview.style.transform).toBe('translate3d(56px, 280px, 0)');
+    dispatchDragEvent(boundary, 'drop', dataTransfer, 200, 230);
+    expect(preview.style.transform).toBe('translate3d(40px, 140px, 0)');
+
+    await vi.advanceTimersByTimeAsync(220);
+    expect(boundary.querySelector('[data-terminal-drag-preview]')).toBeNull();
+  });
+
   it('shows before and after placement lines while reordering sessions', () => {
     const onRelocateSession = vi.fn();
     const firstItem = navigationItem({ id: 'session-1', title: 'alpha' });
