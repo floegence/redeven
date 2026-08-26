@@ -12884,7 +12884,7 @@ function SettingsFormRow(props: Readonly<{
   children: JSX.Element;
 }>) {
   return (
-    <div class="redeven-settings-form-row grid gap-2 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-start sm:gap-x-4">
+    <div class="redeven-settings-form-row grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-start sm:gap-x-4">
       <div class="flex min-h-8 flex-wrap items-center gap-1.5">
         <label for={props.controlID} class="text-xs font-medium text-foreground">
           {props.label}
@@ -12908,10 +12908,33 @@ function SettingsApplyTimingControl(props: Readonly<{
   i18n: DesktopI18n;
 }>) {
   return (
-    <div class="redeven-settings-apply-row redeven-boundary-panel grid gap-3 rounded-md border px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <div class="redeven-settings-apply-row redeven-boundary-panel grid gap-2 rounded-md border px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-start sm:gap-x-4">
+      <div class="flex min-h-8 items-center text-xs font-medium text-foreground">
+        {props.i18n.t('settings.applyTimingTitle')}
+      </div>
       <div class="min-w-0">
-        <div class="text-xs font-medium text-foreground">{props.i18n.t('settings.applyTimingTitle')}</div>
-        <div class="mt-1 grid">
+        <div class="w-full sm:max-w-[16rem]">
+          <SegmentedControl
+            value={props.value}
+            onChange={(value) => props.onChange(value as DesktopSettingsApplyTiming)}
+            options={[
+              { value: 'next_start', label: props.i18n.t('settings.applyNextStart') },
+              { value: 'restart_now', label: props.i18n.t('settings.applyRestartNow') },
+            ]}
+            size="sm"
+          />
+        </div>
+        <div aria-live="polite" class="mt-1.5 grid min-w-0">
+          <div
+            aria-hidden={props.value === 'next_start' ? undefined : 'true'}
+            class={cn(
+              'col-start-1 row-start-1 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground',
+              props.value !== 'next_start' && 'invisible',
+            )}
+          >
+            <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+            <span>{props.i18n.t('settings.applyNextStartHelp')}</span>
+          </div>
           <div
             aria-hidden={props.value === 'restart_now' ? undefined : 'true'}
             class={cn(
@@ -12923,17 +12946,6 @@ function SettingsApplyTimingControl(props: Readonly<{
             <span>{props.i18n.t('settings.applyTimingHelp')}</span>
           </div>
         </div>
-      </div>
-      <div class="min-w-0 sm:min-w-[15rem]">
-        <SegmentedControl
-          value={props.value}
-          onChange={(value) => props.onChange(value as DesktopSettingsApplyTiming)}
-          options={[
-            { value: 'next_start', label: props.i18n.t('settings.applyNextStart') },
-            { value: 'restart_now', label: props.i18n.t('settings.applyRestartNow') },
-          ]}
-          size="sm"
-        />
       </div>
     </div>
   );
@@ -13294,40 +13306,63 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
       )}
     >
       <div class="space-y-5">
-        <div class="redeven-settings-statusbar redeven-boundary-panel rounded-md border px-4 py-2.5">
-          <div class="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-            <div class="flex min-w-0 shrink-0 items-baseline gap-2">
+        <div
+          aria-label={`${props.i18n.t('settings.runtimeLabel')} ${runtimeAddress().primary}; ${props.i18n.t('settings.nextStartLabel')} ${selectedAccessModeLabel()}`}
+          class="redeven-settings-status-overview grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_2.25rem_minmax(0,1fr)] sm:items-stretch sm:gap-0"
+          role="group"
+        >
+          <div class="redeven-settings-state-card redeven-settings-state-card--current redeven-boundary-panel flex min-w-0 items-center gap-3 rounded-md border px-3.5 py-3">
+            <span class="redeven-settings-state-glyph redeven-surface-control relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/20" aria-hidden="true">
+              <Show
+                when={accessModel().current_runtime_url !== ''}
+                fallback={<Stop class="h-5 w-5 text-muted-foreground" />}
+              >
+                <Play class="h-4 w-4 text-success" />
+              </Show>
+            </span>
+            <span class="min-w-0">
+              <span class="block text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                {props.i18n.t('settings.runtimeLabel')}
+              </span>
               <span class={cn(
-                'h-2 w-2 shrink-0 rounded-full',
-                accessModel().current_runtime_url !== '' ? 'bg-success' : 'bg-muted-foreground/45',
-              )} />
-              <span class="shrink-0 text-[11px] font-medium text-muted-foreground">{props.i18n.t('settings.runtimeLabel')}</span>
-              <span class={cn(
-                'min-w-0 truncate text-xs font-medium text-foreground',
+                'mt-1 block truncate text-xs font-semibold text-foreground',
                 runtimeAddress().primary_monospace && 'font-mono',
               )}>
                 {runtimeAddress().primary}
               </span>
-            </div>
-            <div class="ml-4 flex shrink-0 items-center text-muted-foreground sm:ml-0">
-              <svg class="h-3.5 w-3.5 rotate-90 sm:rotate-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            </span>
+          </div>
+
+          <div class="redeven-settings-state-connector relative flex min-h-5 items-center justify-center text-muted-foreground" aria-hidden="true">
+            <span class="absolute h-full w-px bg-border sm:h-px sm:w-full" />
+            <span class="redeven-surface-control relative flex h-6 w-6 items-center justify-center rounded-full border bg-background shadow-sm">
+              <svg class="h-3 w-3 rotate-90 sm:rotate-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
-            </div>
-            <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span class="shrink-0 text-[11px] font-medium text-muted-foreground">{props.i18n.t('settings.nextStartLabel')}</span>
-              <span class="min-w-0 truncate text-xs font-medium text-foreground">{selectedAccessModeLabel()}</span>
-              <span aria-hidden="true" class="text-muted-foreground/60">·</span>
-              <span class={cn(
-                'min-w-0 truncate text-xs text-muted-foreground',
-                nextStartAddress().primary_monospace && 'font-mono',
-              )}>
-                {nextStartAddress().primary}
-                <Show when={nextStartAddress().hint}>
-                  <span> {nextStartAddress().hint}</span>
-                </Show>
+            </span>
+          </div>
+
+          <div class="redeven-settings-state-card redeven-settings-state-card--next redeven-boundary-panel flex min-w-0 items-center gap-3 rounded-md border px-3.5 py-3">
+            <span class="redeven-settings-state-glyph flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-primary" aria-hidden="true">
+              {accessModeIcon(accessModel().access_mode)({ class: 'h-4 w-4' })}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                {props.i18n.t('settings.nextStartLabel')}
               </span>
-            </div>
+              <span class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <span class="text-xs font-semibold text-foreground">{selectedAccessModeLabel()}</span>
+                <span class={cn(
+                  'redeven-settings-endpoint-badge min-w-0 rounded-sm bg-muted/60 px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground',
+                  nextStartAddress().primary_monospace && 'font-mono',
+                )}>
+                  {nextStartAddress().primary}
+                  <Show when={nextStartAddress().hint}>
+                    <span> · {nextStartAddress().hint}</span>
+                  </Show>
+                </span>
+              </span>
+            </span>
           </div>
         </div>
 

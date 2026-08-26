@@ -2299,9 +2299,11 @@ describe('DesktopWelcomeShell', () => {
     const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
 
     expect(appSrc).toContain("'redeven-settings-dialog',");
-    expect(dialogSrc).toContain('redeven-settings-statusbar redeven-boundary-panel');
+    expect(dialogSrc).toContain('redeven-settings-status-overview grid min-w-0');
+    expect(dialogSrc).toContain('redeven-settings-state-card--current redeven-boundary-panel');
+    expect(dialogSrc).toContain('redeven-settings-state-card--next redeven-boundary-panel');
     expect(dialogSrc).toContain('redeven-tile redeven-boundary-panel redeven-surface-panel--interactive');
-    expect(dialogSrc).toContain('flex min-w-0 flex-col gap-1.5 sm:flex-row');
+    expect(dialogSrc).toContain('sm:grid-cols-[minmax(0,1fr)_2.25rem_minmax(0,1fr)]');
     expect(dialogSrc).toContain('redeven-surface-control bg-background');
     expect(dialogSrc).toContain('redeven-settings-form-panel redeven-boundary-panel');
     expect(appSrc).toContain('redeven-settings-form-row grid gap-2');
@@ -2363,6 +2365,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('settings.applyTimingTitle')");
     expect(appSrc).toContain("props.i18n.t('settings.applyNextStart')");
     expect(appSrc).toContain("props.i18n.t('settings.applyRestartNow')");
+    expect(appSrc).toContain("props.i18n.t('settings.applyNextStartHelp')");
+    expect(appSrc).toContain('aria-live="polite" class="mt-1.5 grid min-w-0"');
     expect(appSrc).toContain("props.i18n.t('settings.sharedPasswordRequired')");
     expect(appSrc).toContain("props.i18n.t('settings.networkTrustNote')");
     expect(dialogSrc).toContain('validateDesktopAccessDraft(props.draft, accessModelOptions())');
@@ -2371,7 +2375,12 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('props.runtimeRestartAvailable && hasPendingChanges()');
     expect(dialogSrc).toContain("const [applyTiming, setApplyTiming] = createSignal<DesktopSettingsApplyTiming>('next_start')");
     expect(dialogSrc).toContain("applyTiming() === 'restart_now'");
+    expect(appSrc).toContain("props.value !== 'next_start' && 'invisible'");
     expect(appSrc).toContain("props.value !== 'restart_now' && 'invisible'");
+    expect(dialogSrc).toContain('redeven-settings-status-overview');
+    expect(dialogSrc).toContain('redeven-settings-state-card--current');
+    expect(dialogSrc).toContain('redeven-settings-state-card--next');
+    expect(appSrc).toContain('sm:grid-cols-[9rem_minmax(0,1fr)]');
     expect(dialogSrc).toContain("restartAfterSave() ? 'visible' : 'invisible'");
     expect(dialogSrc).toContain('disabled={!hasPendingChanges() || !accessValidation().valid}');
     expect(dialogSrc).toContain('queueMicrotask(() => passwordInputRef?.focus())');

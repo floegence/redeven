@@ -623,7 +623,7 @@
     "languageSourceFallback": "Fallback-Sprache",
     "accessSecurityTitle": "Zugriff & Sicherheit",
     "accessSecurityDescription": "Dieses Redeven-Profil behält eine lokale Umgebungslaufzeit für die aktuelle Bindung bei.",
-    "runtimeLabel": "Aktuell",
+    "runtimeLabel": "Aktueller Status",
     "nextStartLabel": "Nächster Start",
     "nextStartAddressLabel": "Adresse beim nächsten Start",
     "visibilityTitle": "Zugriff",
@@ -690,6 +690,7 @@
     "bindAddressInvalid": "Geben Sie einen gültigen Host und Port ein, zum Beispiel 192.168.1.20:23998.",
     "noChangesToSave": "Keine Änderungen zu speichern",
     "applyTimingTitle": "Wann Änderungen wirksam werden",
+    "applyNextStartHelp": "Änderungen werden beim nächsten Start der Umgebung wirksam. Aktuelle Verbindungen bleiben bestehen.",
     "applyTimingHelp": "Ein sofortiger Neustart unterbricht aktive Umgebungsverbindungen.",
     "applyNextStart": "Beim nächsten Start",
     "applyRestartNow": "Jetzt neu starten"

@@ -623,7 +623,7 @@
     "languageSourceFallback": "フォールバック言語",
     "accessSecurityTitle": "アクセスとセキュリティ",
     "accessSecurityDescription": "この Redeven プロファイルは、現在のバインディングに対して 1 つのローカル環境ランタイムを保持します。",
-    "runtimeLabel": "現在",
+    "runtimeLabel": "現在の状態",
     "nextStartLabel": "次回起動",
     "nextStartAddressLabel": "次回起動アドレス",
     "visibilityTitle": "アクセス範囲",
@@ -690,6 +690,7 @@
     "bindAddressInvalid": "有効なホストとポートを入力してください（例：192.168.1.20:23998）。",
     "noChangesToSave": "保存する変更はありません",
     "applyTimingTitle": "変更の適用タイミング",
+    "applyNextStartHelp": "変更は環境の次回起動時に反映されます。現在の接続は中断されません。",
     "applyTimingHelp": "今すぐ再起動すると、ローカル環境への現在の接続が中断されます。",
     "applyNextStart": "次回起動時に適用",
     "applyRestartNow": "今すぐ再起動"
