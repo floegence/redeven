@@ -13330,7 +13330,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             class="redeven-settings-state-card redeven-settings-state-card--current redeven-boundary-panel flex min-w-0 items-center gap-3 rounded-md border px-3.5 py-3"
             data-status-tone={props.runtimeStatusTone}
           >
-            <span class="redeven-settings-state-glyph redeven-surface-control relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/20" aria-hidden="true">
+            <span class="redeven-settings-state-glyph redeven-surface-control relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-muted/20" aria-hidden="true">
               <RuntimeStatusOrb running={props.runtimeRunning} dark={props.dark} />
             </span>
             <span class="min-w-0">
@@ -13353,7 +13353,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           </div>
 
           <div class="redeven-settings-state-card redeven-settings-state-card--next redeven-boundary-panel flex min-w-0 items-center gap-3 rounded-md border px-3.5 py-3">
-            <span class="redeven-settings-state-glyph flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-primary" aria-hidden="true">
+            <span class="redeven-settings-state-glyph flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary" aria-hidden="true">
               {accessModeIcon(accessModel().access_mode)({ class: 'h-4 w-4' })}
             </span>
             <span class="min-w-0 flex-1">
