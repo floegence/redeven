@@ -25,7 +25,9 @@ or blind retry.
 ## Discovery and exact inventory
 
 The Activity Bar `Plugins` entry opens a Shell-root Launcher without changing
-the current normal surface. Desktop uses a centered modal with a search field,
+the current normal surface. On desktop it is the permanent first Activity Bar
+entry, followed by built-in Activities, Flower, and then user-pinned plugins in
+saved order. Desktop uses a centered modal with a search field,
 responsive icon grid, stable scrolling body, and fixed footer; mobile uses a
 bottom sheet with the same controls and at least 44px touch targets. Search normalizes Unicode with
 NFKC and locale-aware case folding, matches display name, canonical keywords,
@@ -57,7 +59,10 @@ world-unit definition; pointer release commits the same resolved world center,
 so zoom, pan, and edge auto-pan cannot move the created widget away from its
 preview. A canvas drop creates a fresh widget without recentering the viewport,
 while a Dock drop only pins the inventory item. Cancellation or release outside
-both targets performs no action. Pin persistence is one renderer- and
+both targets performs no action. Workbench pins declare Floe Webapp's
+`after-components` placement, so they follow the built-in component group and
+Flower in saved order; the external drag placeholder uses the same placement.
+Pin persistence is one renderer- and
 environment-scoped v2 record with independent ordered `activityInventoryKeys`
 and `workbenchInventoryKeys` lists. v1 Dock order migrates only into the
 Workbench list. Duplicate operations are idempotent, malformed or future state
@@ -411,6 +416,7 @@ stable component id derived from `inventoryKey`. Released
 keeps its DOM while other Activity pages are selected. View activation drives
 the released `visible` and `hidden` lifecycle, and returning to the page does not
 create another slot. The Activity Bar, top bar, and bottom bar remain visible.
+Pinned Activity entries follow Flower and retain the saved pin order.
 Mobile never receives dynamic plugin tab entries and continues to use the
 Launcher and Activity window presentation.
 
@@ -443,7 +449,8 @@ Placement operations are globally serialized. Move, revision replacement, and
 removal await old-slot close before state or a fresh slot commits. Every new
 placement receives a fresh lease, iframe, and surface instance; no iframe moves.
 Clicking a pinned Dock item creates or focuses the same standard widget, and its
-drag placement uses the released world-coordinate drop result. Unpinning the
+drag placement uses the released world-coordinate drop result. Pinned Dock items
+follow the built-in component group and Flower in saved order. Unpinning the
 Dock removes only the shortcut and never removes an existing canvas widget.
 
 ## Confirmation and teardown

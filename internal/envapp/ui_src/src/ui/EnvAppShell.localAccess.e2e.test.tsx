@@ -1149,6 +1149,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
             <button
               type="button"
               data-workbench-dock-item={item.id}
+              data-workbench-dock-placement={item.dockPlacement}
               aria-haspopup={item.onContextMenu ? 'menu' : undefined}
               onClick={() => item.onActivate?.()}
               onContextMenu={(event) => {
@@ -3177,6 +3178,47 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('keeps the desktop Plugin Panel first and appends Activity pins after Flower in saved order', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = activityPluginProjection(2);
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(projection);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const pinOrder = [projection.items[1].inventoryKey, projection.items[0].inventoryKey];
+    const restoredPins = JSON.stringify({
+      schemaVersion: 2,
+      activityInventoryKeys: pinOrder,
+      workbenchInventoryKeys: [],
+    });
+    window.localStorage.setItem('redeven.plugin-dock-pins:default', restoredPins);
+    window.localStorage.setItem('redeven.plugin-dock-pins:env_local', restoredPins);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      const pinnedIDs = pinOrder.map((inventoryKey) => (
+        `redeven.plugin.activity:${encodeURIComponent(inventoryKey)}`
+      ));
+      await flushUntil(() => activityItemsState.items.some((item) => item.id === pinnedIDs[1]), 60);
+
+      expect(activityItemsState.items.map((item) => item.id)).toEqual([
+        'plugins',
+        'terminal',
+        'monitor',
+        'files',
+        'codespaces',
+        'ports',
+        'ai',
+        ...pinnedIDs,
+      ]);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('opens a pinned Activity plugin in the kept-alive main area and retires it before Workbench placement', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -3333,6 +3375,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(stored.workbenchInventoryKeys).toEqual([inventoryKey]);
 
       const dockButton = host.querySelector(`[data-workbench-dock-item="${inventoryKey}"]`) as HTMLButtonElement;
+      expect(dockButton.dataset.workbenchDockPlacement).toBe('after-components');
       dockButton.click();
       await flushUntil(() => workbenchPluginSurfaceState.open.mock.calls.length === 1);
       dockButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
@@ -3743,6 +3786,16 @@ describe('EnvAppShell environment entry affordances', () => {
 
     try {
       await flushAsync();
+      await flushUntil(() => activityItemsState.items.some((item) => item.id === 'ai'));
+      expect(activityItemsState.items.map((item) => item.id)).toEqual([
+        'terminal',
+        'monitor',
+        'files',
+        'codespaces',
+        'ports',
+        'plugins',
+        'ai',
+      ]);
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
       await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
