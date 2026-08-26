@@ -346,11 +346,15 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   let drawerDialogEl: HTMLDivElement | undefined;
   let dragBoundaryEl: HTMLDivElement | undefined;
   let dragPreviewEl: HTMLDivElement | undefined;
+  let dragPreviewReturnFrame: number | undefined;
+  let dragPreviewReturnTimer: number | undefined;
+  let dragPreviewReturning = false;
   let dragPreviewMetrics: Readonly<{
     width: number;
     height: number;
     pointerOffsetX: number;
     pointerOffsetY: number;
+    source: HTMLElement;
   }> | null = null;
   const navigationGroups = createMemo<readonly TerminalSessionNavigationGroup[]>(() => props.groups ?? [{
     id: 'default',
@@ -375,9 +379,20 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     position: 'before' | 'after';
   }> | null>(null);
   const clearDragPreview = () => {
+    if (dragPreviewReturnFrame !== undefined) window.cancelAnimationFrame(dragPreviewReturnFrame);
+    if (dragPreviewReturnTimer !== undefined) window.clearTimeout(dragPreviewReturnTimer);
     dragPreviewEl?.remove();
     dragPreviewEl = undefined;
+    dragPreviewReturnFrame = undefined;
+    dragPreviewReturnTimer = undefined;
+    dragPreviewReturning = false;
     dragPreviewMetrics = null;
+  };
+  const clearDragSignals = () => {
+    setDraggedSessionId(null);
+    setDraggedGroupId(null);
+    setDropIntent(null);
+    setGroupDropIntent(null);
   };
   const updateDragPreviewPosition = (clientX: number, clientY: number) => {
     if (!dragBoundaryEl || !dragPreviewEl || !dragPreviewMetrics) return;
@@ -421,28 +436,68 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
       height,
       pointerOffsetX: Math.min(width, Math.max(0, event.clientX - sourceRect.left)),
       pointerOffsetY: Math.min(height, Math.max(0, event.clientY - sourceRect.top)),
+      source,
     };
     updateDragPreviewPosition(event.clientX, event.clientY);
   };
   const clearDragState = () => {
     clearDragPreview();
-    setDraggedSessionId(null);
-    setDraggedGroupId(null);
-    setDropIntent(null);
-    setGroupDropIntent(null);
+    clearDragSignals();
+  };
+  const returnDragPreview = () => {
+    if (dragPreviewReturning) return;
+    const preview = dragPreviewEl;
+    const metrics = dragPreviewMetrics;
+    clearDragSignals();
+    if (!preview || !metrics || !dragBoundaryEl) {
+      clearDragPreview();
+      return;
+    }
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      clearDragPreview();
+      return;
+    }
+    const boundaryRect = dragBoundaryEl.getBoundingClientRect();
+    const sourceRect = metrics.source.getBoundingClientRect();
+    const maxLeft = Math.max(0, boundaryRect.width - metrics.width);
+    const maxTop = Math.max(0, boundaryRect.height - metrics.height);
+    const sourceLeft = Math.min(maxLeft, Math.max(0, sourceRect.left - boundaryRect.left));
+    const sourceTop = Math.min(maxTop, Math.max(0, sourceRect.top - boundaryRect.top));
+    const targetTransform = `translate3d(${Math.round(sourceLeft)}px, ${Math.round(sourceTop)}px, 0)`;
+    if (preview.style.transform === targetTransform) {
+      clearDragPreview();
+      return;
+    }
+    dragPreviewReturning = true;
+    preview.dataset.terminalDragPreviewReturning = 'true';
+    preview.style.transitionProperty = 'transform, opacity';
+    preview.style.transitionDuration = '160ms';
+    preview.style.transitionTimingFunction = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    void preview.offsetWidth;
+    const finishReturn = () => {
+      if (dragPreviewEl !== preview) return;
+      clearDragPreview();
+    };
+    preview.addEventListener('transitionend', finishReturn, { once: true });
+    dragPreviewReturnFrame = window.requestAnimationFrame(() => {
+      if (dragPreviewEl !== preview) return;
+      preview.style.transform = targetTransform;
+      preview.style.opacity = '0';
+    });
+    dragPreviewReturnTimer = window.setTimeout(finishReturn, 220);
   };
   if (typeof document !== 'undefined' && typeof window !== 'undefined') {
-    const clearNativeDragState = () => clearDragState();
+    const returnNativeDragState = () => returnDragPreview();
     const updateNativeDragPreview = (event: DragEvent) => updateDragPreviewPosition(event.clientX, event.clientY);
     document.addEventListener('dragover', updateNativeDragPreview, true);
-    document.addEventListener('dragend', clearNativeDragState);
-    document.addEventListener('drop', clearNativeDragState);
-    window.addEventListener('blur', clearNativeDragState);
+    document.addEventListener('dragend', returnNativeDragState);
+    document.addEventListener('drop', returnNativeDragState);
+    window.addEventListener('blur', clearDragState);
     onCleanup(() => {
       document.removeEventListener('dragover', updateNativeDragPreview, true);
-      document.removeEventListener('dragend', clearNativeDragState);
-      document.removeEventListener('drop', clearNativeDragState);
-      window.removeEventListener('blur', clearNativeDragState);
+      document.removeEventListener('dragend', returnNativeDragState);
+      document.removeEventListener('drop', returnNativeDragState);
+      window.removeEventListener('blur', clearDragState);
       clearDragPreview();
     });
   }
@@ -484,19 +539,25 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const commitDrop = (event: DragEvent) => {
     const intent = dropIntent();
     const sessionId = draggedSessionFromEvent(event);
-    clearDragState();
-    if (!intent || !sessionId) return;
+    if (!intent || !sessionId) {
+      returnDragPreview();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
+    clearDragState();
     props.onRelocateSession?.(sessionId, intent.groupId, intent.beforeSessionId);
   };
   const commitGroupDrop = (event: DragEvent) => {
     const intent = groupDropIntent();
     const groupId = draggedGroupFromEvent(event);
-    clearDragState();
-    if (!intent || !groupId) return;
+    if (!intent || !groupId) {
+      returnDragPreview();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
+    clearDragState();
     props.onReorderGroup?.(groupId, intent.beforeGroupId);
   };
 
@@ -805,7 +866,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             setDropIntent(null);
                             setGroupDropIntent(null);
                           }}
-                          onDragEnd={clearDragState}
+                          onDragEnd={returnDragPreview}
                           onDragOver={(event) => {
                             if (acceptsTerminalGroupDrag(event)) {
                               const draggedId = draggedGroupFromEvent(event);
@@ -1129,7 +1190,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               setDropIntent(null);
                               setGroupDropIntent(null);
                             }}
-                            onDragEnd={clearDragState}
+                            onDragEnd={returnDragPreview}
                           >
                             <Show
                               when={agentIdentity()}
