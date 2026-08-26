@@ -5895,7 +5895,7 @@
         "title": "Desktop Environment registration ownership",
         "type": "Desktop Contract"
       },
-      "body_length": 5429,
+      "body_length": 5716,
       "summary": "Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; SSH host and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
       "sections": [
         {
@@ -5923,8 +5923,8 @@
           "id": "operation-presentation",
           "title": "Operation presentation",
           "level": 1,
-          "body": "Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline. A lifecycle operation started directly owns and completes its Operation. A lifecycle recovery invoked by Open is a child stage: it updates Runtime progress without finishing or scheduling removal of the parent, then explicitly returns ownership to Open. The renderer creates and binds lifecycle disclosure to the exact `operation_key` and `started_at_unix_ms`. Lifecycle timeline selection never chooses an attempt by recency or combines retained and current operations for the same Environment.\n\nThe main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.",
-          "char_count": 1132
+          "body": "Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline. A lifecycle operation started directly owns and completes its Operation. A lifecycle recovery invoked by Open is a child stage: it updates Runtime progress without finishing or scheduling removal of the parent, then explicitly returns ownership to Open. The renderer creates and binds lifecycle disclosure to the exact `operation_key` and `started_at_unix_ms`. Lifecycle timeline selection never chooses an attempt by recency or combines retained and current operations for the same Environment.\n\nThe main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.\n\nEach action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. Parent and body scrollbars must never overlap.",
+          "char_count": 1419
         }
       ],
       "evidence": [
@@ -10189,5 +10189,5 @@
       ]
     }
   ],
-  "source_sha256": "8769a0ca1e96af346e7bca2ae7942b3f7f6e5018a9b8d62496c3067a0ef15982"
+  "source_sha256": "358fddd9444f73dbb972e73b24ed72cba947d123ad290971dc6dc8a3e9deba62"
 }
