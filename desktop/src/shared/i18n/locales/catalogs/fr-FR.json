@@ -623,7 +623,7 @@
     "languageSourceFallback": "Langue de secours",
     "accessSecurityTitle": "Accès et sécurité",
     "accessSecurityDescription": "Ce profil Redeven conserve un environnement d'exécution d'environnement local pour la liaison actuelle.",
-    "runtimeLabel": "Actuel",
+    "runtimeLabel": "État actuel",
     "nextStartLabel": "Prochain démarrage",
     "nextStartAddressLabel": "Adresse au prochain démarrage",
     "visibilityTitle": "Accès",
@@ -690,6 +690,7 @@
     "bindAddressInvalid": "Saisissez un hôte et un port valides, par exemple 192.168.1.20:23998.",
     "noChangesToSave": "Aucune modification à enregistrer",
     "applyTimingTitle": "Prise d’effet des modifications",
+    "applyNextStartHelp": "Les modifications s’appliqueront au prochain démarrage de l’environnement. Les connexions actuelles resteront actives.",
     "applyTimingHelp": "Un redémarrage immédiat interrompra les connexions actives à l’environnement.",
     "applyNextStart": "Au prochain démarrage",
     "applyRestartNow": "Redémarrer maintenant"

@@ -623,7 +623,7 @@
     "languageSourceFallback": "Idioma de respaldo",
     "accessSecurityTitle": "Acceso y seguridad",
     "accessSecurityDescription": "Este perfil Redeven mantiene un tiempo de ejecución de entorno local para el enlace actual.",
-    "runtimeLabel": "Actual",
+    "runtimeLabel": "Estado actual",
     "nextStartLabel": "Siguiente inicio",
     "nextStartAddressLabel": "Dirección del siguiente inicio",
     "visibilityTitle": "Acceso",
@@ -690,6 +690,7 @@
     "bindAddressInvalid": "Introduce un host y un puerto válidos, por ejemplo 192.168.1.20:23998.",
     "noChangesToSave": "No hay cambios que guardar",
     "applyTimingTitle": "Cuándo se aplicarán los cambios",
+    "applyNextStartHelp": "Los cambios se aplicarán la próxima vez que se inicie el entorno. Las conexiones actuales seguirán activas.",
     "applyTimingHelp": "Reiniciar ahora interrumpirá las conexiones activas al entorno.",
     "applyNextStart": "En el próximo inicio",
     "applyRestartNow": "Reiniciar ahora"

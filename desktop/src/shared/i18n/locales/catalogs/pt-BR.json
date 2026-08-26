@@ -623,7 +623,7 @@
     "languageSourceFallback": "Idioma de fallback",
     "accessSecurityTitle": "Acesso e segurança",
     "accessSecurityDescription": "Este perfil Redeven mantém um tempo de execução do Ambiente Local para a ligação atual.",
-    "runtimeLabel": "Atual",
+    "runtimeLabel": "Status atual",
     "nextStartLabel": "Próxima inicialização",
     "nextStartAddressLabel": "Endereço da próxima inicialização",
     "visibilityTitle": "Acesso",
@@ -690,6 +690,7 @@
     "bindAddressInvalid": "Digite um host e uma porta válidos, por exemplo 192.168.1.20:23998.",
     "noChangesToSave": "Não há alterações para salvar",
     "applyTimingTitle": "Quando as alterações entram em vigor",
+    "applyNextStartHelp": "As alterações serão aplicadas na próxima inicialização do ambiente. As conexões atuais permanecerão ativas.",
     "applyTimingHelp": "Reiniciar agora interromperá as conexões ativas com o ambiente.",
     "applyNextStart": "Na próxima inicialização",
     "applyRestartNow": "Reiniciar agora"

@@ -625,7 +625,7 @@
     "languageSourceFallback": "Резервный язык",
     "accessSecurityTitle": "Доступ и безопасность",
     "accessSecurityDescription": "Этот профиль Redeven сохраняет одну среду выполнения локальной среды для текущей привязки.",
-    "runtimeLabel": "Сейчас",
+    "runtimeLabel": "Текущее состояние",
     "nextStartLabel": "Следующий запуск",
     "nextStartAddressLabel": "Адрес следующего запуска",
     "visibilityTitle": "Доступ",
@@ -692,6 +692,7 @@
     "bindAddressInvalid": "Введите допустимые узел и порт, например 192.168.1.20:23998.",
     "noChangesToSave": "Нет изменений для сохранения",
     "applyTimingTitle": "Когда применить изменения",
+    "applyNextStartHelp": "Изменения вступят в силу при следующем запуске окружения. Текущие подключения останутся активными.",
     "applyTimingHelp": "Немедленный перезапуск прервёт активные подключения к окружению.",
     "applyNextStart": "При следующем запуске",
     "applyRestartNow": "Перезапустить сейчас"

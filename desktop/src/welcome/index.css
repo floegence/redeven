@@ -3329,12 +3329,16 @@ html:not(.dark) .redeven-empty-panel {
   outline-offset: 2px;
 }
 
-/* ── Settings status strip ── */
+/* ── Settings state comparison ── */
 
-.redeven-settings-statusbar {
+.redeven-settings-state-card {
+  background: color-mix(in srgb, var(--card) 97%, var(--background) 3%);
+}
+
+.redeven-settings-state-card--next {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--primary) 3%, transparent), transparent 60%),
-    color-mix(in srgb, var(--card) 96%, var(--background) 4%);
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 7%, transparent), transparent 58%),
+    color-mix(in srgb, var(--card) 97%, var(--background) 3%);
 }
 
 .redeven-settings-form-panel,
@@ -3348,6 +3352,19 @@ html:not(.dark) .redeven-empty-panel {
   .redeven-visibility-card[aria-checked='true'] {
     outline: 2px solid Highlight;
     outline-offset: -3px;
+  }
+
+  .redeven-settings-state-card--next,
+  .redeven-settings-state-glyph {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  .redeven-settings-state-card--next {
+    outline: 1px solid Highlight;
+    outline-offset: -2px;
   }
 }
 

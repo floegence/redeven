@@ -623,7 +623,7 @@
     "languageSourceFallback": "대체 언어",
     "accessSecurityTitle": "접근 및 보안",
     "accessSecurityDescription": "이 Redeven 프로필은 현재 바인딩에 대해 하나의 로컬 환경 런타임을 유지합니다.",
-    "runtimeLabel": "현재",
+    "runtimeLabel": "현재 상태",
     "nextStartLabel": "다음 시작",
     "nextStartAddressLabel": "다음 시작 주소",
     "visibilityTitle": "접근 범위",
@@ -690,6 +690,7 @@
     "bindAddressInvalid": "유효한 호스트와 포트를 입력하세요. 예: 192.168.1.20:23998",
     "noChangesToSave": "저장할 변경 사항이 없습니다",
     "applyTimingTitle": "적용 시점",
+    "applyNextStartHelp": "변경 사항은 환경을 다음에 시작할 때 적용됩니다. 현재 연결은 유지됩니다.",
     "applyTimingHelp": "지금 다시 시작하면 활성 환경 연결이 중단됩니다.",
     "applyNextStart": "다음 시작 시 적용",
     "applyRestartNow": "지금 다시 시작"
