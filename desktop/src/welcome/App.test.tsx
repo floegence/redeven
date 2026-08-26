@@ -1759,6 +1759,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('onProgressOpenChange={props.onLifecycleProgressOpenChange}');
     expect(appSrc).toContain('function EnvironmentProgressPanel');
     expect(appSrc).toContain('environmentProgressMeterPercent(props.progress)');
+    expect(appSrc).toContain('environmentProgressStageElapsedSeconds(props.progress, clockNow())');
+    expect(appSrc).not.toContain('const [stepStartedAt, setStepStartedAt] = createSignal(Date.now());');
     expect(appSrc).toContain('primaryAction?: EnvironmentActionModel;');
     expect(appSrc).toContain('runPrimaryAction?: (action: EnvironmentActionModel) => void;');
     expect(appSrc).toContain('const panelPrimaryAction = createMemo(() => localizedProgressPanelPrimaryAction(');

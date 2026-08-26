@@ -86,6 +86,36 @@ function operationIsActive(snapshot: DesktopLauncherOperationSnapshot): boolean 
     || snapshot.status === 'cleanup_running';
 }
 
+function stepProgressWithAuthoritativeTiming(
+  next: NonNullable<DesktopLauncherOperationSnapshot['step_progress']>,
+  previous: DesktopLauncherOperationSnapshot['step_progress'],
+  activeStepStartedAtUnixMS: number,
+): NonNullable<DesktopLauncherOperationSnapshot['step_progress']> {
+  const previousSteps = new Map((previous?.steps ?? []).map((step) => [step.id, step]));
+  const previousActiveStep = previousSteps.get(previous?.active_step_id ?? '');
+  const continuesActiveStep = previous?.active_step_id === next.active_step_id
+    && previousActiveStep?.status === 'running';
+  return {
+    ...next,
+    steps: next.steps.map((step) => {
+      const previousStep = previousSteps.get(step.id);
+      const previousStartedAtUnixMS = Number(previousStep?.started_at_unix_ms);
+      const preservedStartedAtUnixMS = Number.isFinite(previousStartedAtUnixMS)
+        && previousStartedAtUnixMS > 0
+        ? Math.floor(previousStartedAtUnixMS)
+        : undefined;
+      const isActiveRunningStep = step.id === next.active_step_id && step.status === 'running';
+      const startedAtUnixMS = isActiveRunningStep
+        && (!continuesActiveStep || preservedStartedAtUnixMS === undefined)
+        ? activeStepStartedAtUnixMS
+        : preservedStartedAtUnixMS;
+      return startedAtUnixMS === undefined
+        ? step
+        : { ...step, started_at_unix_ms: startedAtUnixMS };
+    }),
+  };
+}
+
 function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopLauncherActionProgress {
   // IMPORTANT: Launcher operations transport structured failure presentation
   // only. The registry must not infer user-facing copy from raw errors.
@@ -376,7 +406,13 @@ export class LauncherOperationRegistry {
       ...(input.lifecycle_progress ? { lifecycle_progress: input.lifecycle_progress } : {}),
       ...(input.open_progress ? { open_progress: input.open_progress } : {}),
       ...(input.open_timing ? { open_timing: input.open_timing } : {}),
-      ...(input.step_progress ? { step_progress: input.step_progress } : {}),
+      ...(input.step_progress ? {
+        step_progress: stepProgressWithAuthoritativeTiming(
+          input.step_progress,
+          undefined,
+          startedAtUnixMs,
+        ),
+      } : {}),
       ...(input.reinstall_preview ? { reinstall_preview: input.reinstall_preview } : {}),
       ...(input.gateway_diagnosis ? { gateway_diagnosis: input.gateway_diagnosis } : {}),
       ...(input.presentation_context ? { presentation_context: input.presentation_context } : {}),
@@ -432,10 +468,14 @@ export class LauncherOperationRegistry {
           current.open_progress?.phase,
         )
       : patch.open_timing;
+    const nextStepProgress = patch.step_progress
+      ? stepProgressWithAuthoritativeTiming(patch.step_progress, current.step_progress, now)
+      : patch.step_progress;
     const next: DesktopLauncherOperationSnapshot = {
       ...current,
       ...patch,
       ...(nextOpenTiming ? { open_timing: nextOpenTiming } : {}),
+      ...(nextStepProgress ? { step_progress: nextStepProgress } : {}),
       updated_at_unix_ms: now,
     };
     const titlePresentationChanged = patch.status !== undefined

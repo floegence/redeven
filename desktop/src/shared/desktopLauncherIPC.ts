@@ -88,6 +88,7 @@ export type DesktopStepProgressStep = Readonly<{
   label: string;
   label_key?: DesktopTranslationKey;
   status: DesktopStepProgressStepStatus;
+  started_at_unix_ms?: number;
   detail?: string;
   detail_key?: DesktopTranslationKey;
   tasks?: readonly DesktopComponentTaskProgress[];
