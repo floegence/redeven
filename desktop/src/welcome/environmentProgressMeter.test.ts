@@ -4,7 +4,11 @@ import type {
   DesktopLauncherActionProgress,
   DesktopStepProgressStep,
 } from '../shared/desktopLauncherIPC';
-import { environmentProgressMeterPercent } from './environmentProgressMeter';
+import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
+import {
+  environmentProgressMeterPercent,
+  environmentProgressStageElapsedSeconds,
+} from './environmentProgressMeter';
 
 function gatewayRefreshProgress(input: Readonly<{
   status: DesktopLauncherActionProgress['status'];
@@ -34,6 +38,17 @@ function step(id: string, status: DesktopStepProgressStep['status']): DesktopSte
     id,
     label: id,
     status,
+  };
+}
+
+function timedStep(
+  id: string,
+  status: DesktopStepProgressStep['status'],
+  startedAtUnixMS: number,
+): DesktopStepProgressStep {
+  return {
+    ...step(id, status),
+    started_at_unix_ms: startedAtUnixMS,
   };
 }
 
@@ -106,5 +121,58 @@ describe('environmentProgressMeterPercent', () => {
         environment_label: 'Environment',
       },
     })).toBe(75);
+  });
+});
+
+describe('environmentProgressStageElapsedSeconds', () => {
+  it('uses the main-process active-step timestamp instead of popup mount time', () => {
+    const progress = gatewayRefreshProgress({
+      status: 'running',
+      activeStepID: 'checking_gateway_package',
+      steps: [
+        step('checking_gateway_service', 'succeeded'),
+        timedStep('checking_gateway_package', 'running', 10_000),
+        step('refreshing_gateway_catalog', 'pending'),
+      ],
+    });
+
+    expect(environmentProgressStageElapsedSeconds(progress, 17_900)).toBe(7);
+    expect(environmentProgressStageElapsedSeconds(progress, 25_100)).toBe(15);
+  });
+
+  it('does not show a running timer for terminal progress', () => {
+    const progress = gatewayRefreshProgress({
+      status: 'failed',
+      activeStepID: 'checking_gateway_package',
+      steps: [timedStep('checking_gateway_package', 'failed', 10_000)],
+    });
+
+    expect(environmentProgressStageElapsedSeconds(progress, 25_100)).toBe(0);
+  });
+
+  it('uses timing only from the active progress surface', () => {
+    const progress: DesktopLauncherActionProgress = {
+      ...gatewayRefreshProgress({
+        status: 'running',
+        activeStepID: 'stale_gateway_step',
+        steps: [timedStep('stale_gateway_step', 'running', 16_000)],
+      }),
+      action: 'update_environment_runtime',
+      environment_id: 'environment-1',
+      active_progress_surface: 'runtime_lifecycle',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        operation: 'update',
+        phase: 'installing_runtime_package',
+        targetLabel: 'Environment',
+        stepStates: [{
+          id: 'installing_runtime_package',
+          status: 'running',
+          started_at_unix_ms: 10_000,
+        }],
+      }),
+    };
+
+    expect(environmentProgressStageElapsedSeconds(progress, 17_900)).toBe(7);
   });
 });

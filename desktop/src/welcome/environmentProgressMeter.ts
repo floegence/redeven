@@ -15,6 +15,38 @@ export function environmentProgressMeterPercent(
   return 0;
 }
 
+export function environmentProgressStageElapsedSeconds(
+  progress: DesktopLauncherActionProgress,
+  nowUnixMS: number,
+): number {
+  if (
+    progress.status !== 'running'
+    && progress.status !== 'canceling'
+    && progress.status !== 'cleanup_running'
+  ) {
+    return 0;
+  }
+  let startedAtUnixMS = 0;
+  if (progress.active_progress_surface === 'reinstall' || progress.active_progress_surface === 'gateway') {
+    const stepProgress = progress.step_progress;
+    const activeStep = stepProgress?.steps.find((step) => step.id === stepProgress.active_step_id);
+    startedAtUnixMS = Number(activeStep?.started_at_unix_ms);
+  } else if (progress.active_progress_surface === 'runtime_lifecycle') {
+    const lifecycleProgress = progress.lifecycle_progress;
+    const activeStep = lifecycleProgress?.steps.find((step) => step.id === lifecycleProgress.active_step_id);
+    startedAtUnixMS = Number(activeStep?.started_at_unix_ms);
+  }
+  const currentUnixMS = Number(nowUnixMS);
+  if (
+    !Number.isFinite(startedAtUnixMS)
+    || startedAtUnixMS <= 0
+    || !Number.isFinite(currentUnixMS)
+  ) {
+    return 0;
+  }
+  return Math.max(0, Math.floor((currentUnixMS - startedAtUnixMS) / 1_000));
+}
+
 function percentFromStageProgress(current: Readonly<{ stage_index: number; stage_count: number }> | undefined): number {
   if (!current || current.stage_count <= 0) {
     return 0;

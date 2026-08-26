@@ -29,6 +29,8 @@ Migration writes an external journal before committing canonical catalogs. The j
 
 Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline. A lifecycle operation started directly owns and completes its Operation. A lifecycle recovery invoked by Open is a child stage: it updates Runtime progress without finishing or scheduling removal of the parent, then explicitly returns ownership to Open. The renderer creates and binds lifecycle disclosure to the exact `operation_key` and `started_at_unix_ms`. Lifecycle timeline selection never chooses an attempt by recency or combines retained and current operations for the same Environment.
 
+The main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.
+
 # Evidence
 
 - `redeven:desktop/src/shared/desktopLauncherIPC.ts:1` - Explicit registration reference and progress-surface contracts.
@@ -39,3 +41,4 @@ Every Launcher Operation declares one `active_progress_surface`: `open`, `runtim
 - `redeven:desktop/src/main/main.ts:1` - Serialized persistence, atomic removal, and parent/child operation ownership.
 - `redeven:desktop/src/welcome/environmentLifecycleDisclosure.ts:1` - Exact attempt binding.
 - `redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:1` - Active-surface-only progress and recovery actions.
+- `redeven:desktop/src/welcome/environmentProgressMeter.ts:1` - Snapshot-based progress percentage and elapsed-time projection.

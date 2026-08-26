@@ -331,7 +331,10 @@ import {
   type EnvironmentLifecycleDisclosureState,
   type EnvironmentLifecycleAttempt,
 } from './environmentLifecycleDisclosure';
-import { environmentProgressMeterPercent } from './environmentProgressMeter';
+import {
+  environmentProgressMeterPercent,
+  environmentProgressStageElapsedSeconds,
+} from './environmentProgressMeter';
 import {
   type EnvironmentProgressPrimaryPresentation,
   environmentProgressPanelPrimaryAction,
@@ -8742,30 +8745,11 @@ function EnvironmentProgressPanel(props: Readonly<{
   });
   const runtimeSteps = createMemo(() => runtimeLifecycle()?.steps ?? []);
   const [clockNow, setClockNow] = createSignal(Date.now());
-  const [stepStartedAt, setStepStartedAt] = createSignal(Date.now());
-  let lastStepID = '';
-  createEffect(() => {
-    const stepID = stepProgress()?.active_step_id ?? '';
-    if (stepID !== '' && stepID !== lastStepID) {
-      lastStepID = stepID;
-      setStepStartedAt(Date.now());
-    }
-  });
   const elapsedTimer = setInterval(() => setClockNow(Date.now()), 1_000);
   onCleanup(() => clearInterval(elapsedTimer));
-  const activeStageElapsedSeconds = createMemo(() => {
-    const lifecycle = runtimeLifecycle();
-    if (props.progress.status === 'succeeded' || props.progress.status === 'failed' || props.progress.status === 'canceled') {
-      return 0;
-    }
-    if (stepProgress()) {
-      return Math.max(0, Math.floor((clockNow() - stepStartedAt()) / 1_000));
-    }
-    if (!lifecycle) return 0;
-    const active = lifecycle.steps.find((step) => step.id === lifecycle.active_step_id);
-    if (!active?.started_at_unix_ms) return 0;
-    return Math.max(0, Math.floor((clockNow() - active.started_at_unix_ms) / 1_000));
-  });
+  const activeStageElapsedSeconds = createMemo(() => (
+    environmentProgressStageElapsedSeconds(props.progress, clockNow())
+  ));
   const stepEntering = createRuntimeLifecycleStepAnimation(
     runtimeSteps,
     () => runtimeLifecycle()?.plan_revision ?? 0,

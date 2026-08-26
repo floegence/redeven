@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
+import { reinstallTargetStepProgress } from '../shared/desktopReinstallProgress';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { LauncherOperationConflictError, LauncherOperationRegistry } from './launcherOperations';
 
@@ -116,6 +117,46 @@ describe('LauncherOperationRegistry', () => {
 
     expect(operation.started_at_unix_ms).toBe(42_001);
     expect(registry.progressItems()[0]?.started_at_unix_ms).toBe(42_001);
+  });
+
+  it('owns active step timing independently of progress popup visibility', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'reinstall:dev',
+      action: 'reinstall_target',
+      active_progress_surface: 'reinstall',
+      subject_kind: 'runtime_target',
+      subject_id: 'dev',
+      environment_id: 'dev',
+      phase: 'direct_channel_open',
+      title: 'Reinstall Redeven',
+      detail: 'Desktop is opening the direct channel.',
+      step_progress: reinstallTargetStepProgress('direct_channel_open'),
+    });
+
+    expect(operation.step_progress?.steps.find((step) => step.id === 'direct_channel_open'))
+      .toEqual(expect.objectContaining({ started_at_unix_ms: 1_000 }));
+
+    now.mockReturnValue(6_000);
+    registry.update(operation.operation_key, {
+      detail: 'Desktop is still opening the direct channel.',
+      step_progress: reinstallTargetStepProgress('direct_channel_open'),
+    });
+    expect(registry.get(operation.operation_key)?.step_progress?.steps.find((step) => step.id === 'direct_channel_open'))
+      .toEqual(expect.objectContaining({ started_at_unix_ms: 1_000 }));
+
+    now.mockReturnValue(9_000);
+    registry.update(operation.operation_key, {
+      phase: 'target_resolved',
+      detail: 'Desktop resolved the target.',
+      step_progress: reinstallTargetStepProgress('target_resolved'),
+    });
+    const progress = registry.progressItems()[0]?.step_progress;
+    expect(progress?.steps.find((step) => step.id === 'direct_channel_open'))
+      .toEqual(expect.objectContaining({ started_at_unix_ms: 1_000 }));
+    expect(progress?.steps.find((step) => step.id === 'target_resolved'))
+      .toEqual(expect.objectContaining({ started_at_unix_ms: 9_000 }));
   });
 
   it('derives presentation and cancellation only from the active surface', () => {
