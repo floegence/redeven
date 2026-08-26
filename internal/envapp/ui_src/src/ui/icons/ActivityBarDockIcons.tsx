@@ -75,37 +75,101 @@ export function ActivityBarPortsIcon(props: { class?: string }) {
 
 export function ActivityBarSwitchIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <rect x="4" y="6" width="14" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".5" />
-      <path d="M18,7.25 L21,4 L21,10.5 Z" fill="currentColor" fill-opacity=".7" />
-      <rect x="6" y="15.5" width="14" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".5" />
-      <path d="M6,16.75 L3,13.5 L3,20 Z" fill="currentColor" fill-opacity=".7" />
-      <line x1="12" y1="8.5" x2="12" y2="15.5" stroke="currentColor" stroke-opacity=".1" stroke-width=".8" stroke-dasharray="2 2" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      style={{ width: '1.5rem', height: '1.5rem' }}
+      class={props.class}
+      aria-hidden="true"
+      data-activity-bar-icon="switch-environment"
+    >
+      <circle
+        data-activity-bar-icon-part="switch-anchor"
+        cx="4.5"
+        cy="7.5"
+        r="1"
+        fill="currentColor"
+        fill-opacity=".72"
+      />
+      <path
+        data-activity-bar-icon-part="switch-route"
+        d="M7.1 7.5h10.3m0 0-2.8-2.8m2.8 2.8-2.8 2.8"
+        stroke="currentColor"
+        stroke-opacity=".86"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <circle
+        data-activity-bar-icon-part="switch-anchor"
+        cx="19.5"
+        cy="16.5"
+        r="1"
+        fill="currentColor"
+        fill-opacity=".72"
+      />
+      <path
+        data-activity-bar-icon-part="switch-route"
+        d="M16.9 16.5H6.6m0 0 2.8-2.8m-2.8 2.8 2.8 2.8"
+        stroke="currentColor"
+        stroke-opacity=".86"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
   );
 }
 
 export function ActivityBarSettingsIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <polygon
-        points="8.05,5.16 15.95,5.16 19.9,12 15.95,18.84 8.05,18.84 4.1,12"
-        fill="currentColor"
-        fill-opacity=".06"
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      style={{ width: '1.5rem', height: '1.5rem' }}
+      class={props.class}
+      aria-hidden="true"
+      data-activity-bar-icon="runtime-settings"
+    >
+      <path
+        data-activity-bar-icon-part="settings-rails"
+        d="M7 4.5v3.6m0 3.9v7.5M12 4.5v7.8m0 3.9v3.3M17 4.5v2.2m0 3.9v8.9"
         stroke="currentColor"
-        stroke-opacity=".78"
-        stroke-width="1.9"
-        stroke-linejoin="round"
+        stroke-opacity=".5"
+        stroke-width="1.55"
+        stroke-linecap="round"
       />
-      <circle
-        cx="12"
-        cy="12"
-        r="3.05"
+      <rect
+        data-activity-bar-icon-part="settings-control"
+        x="5.35"
+        y="8.1"
+        width="3.3"
+        height="3.9"
+        rx="1.4"
         fill="currentColor"
-        fill-opacity=".05"
-        stroke="currentColor"
-        stroke-opacity=".55"
-        stroke-width="1.45"
+        fill-opacity=".86"
+      />
+      <rect
+        data-activity-bar-icon-part="settings-control"
+        x="10.35"
+        y="12.3"
+        width="3.3"
+        height="3.9"
+        rx="1.4"
+        fill="currentColor"
+        fill-opacity=".86"
+      />
+      <rect
+        data-activity-bar-icon-part="settings-control"
+        x="15.35"
+        y="6.7"
+        width="3.3"
+        height="3.9"
+        rx="1.4"
+        fill="currentColor"
+        fill-opacity=".86"
       />
     </svg>
   );
