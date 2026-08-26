@@ -115,24 +115,19 @@ describe('RuntimeLifecycleWorkflow', () => {
     ]);
   });
 
-  it('keeps parallel helper and package tasks on one observable preparation step', () => {
+  it('keeps the Runtime package task on one observable preparation step', () => {
     const subject = workflow();
     subject.commitPlan({
       state: 'executing',
       steps: [
         'checking_host',
         'checking_runtime_package',
-        'preparing_maintenance_helper',
+        'preparing_runtime_package',
         'discovering_runtime_instances',
       ],
     });
-    subject.advanceToStep('preparing_maintenance_helper', 'Preparing Runtime resources');
-    subject.updateStepTasks('preparing_maintenance_helper', [{
-      id: 'maintenance_helper',
-      status: 'running',
-      phase: 'preparing',
-      strategy: 'desktop_upload',
-    }, {
+    subject.advanceToStep('preparing_runtime_package', 'Preparing Runtime package');
+    subject.updateStepTasks('preparing_runtime_package', [{
       id: 'runtime',
       status: 'running',
       phase: 'transferring',
@@ -140,9 +135,8 @@ describe('RuntimeLifecycleWorkflow', () => {
     }]);
 
     const hydrated = RuntimeLifecycleWorkflow.fromProgress(subject.progress());
-    expect(hydrated.progress().steps.find((step) => step.id === 'preparing_maintenance_helper')?.tasks)
+    expect(hydrated.progress().steps.find((step) => step.id === 'preparing_runtime_package')?.tasks)
       .toEqual([
-        expect.objectContaining({ id: 'maintenance_helper', status: 'running' }),
         expect.objectContaining({ id: 'runtime', phase: 'transferring' }),
       ]);
   });
@@ -574,7 +568,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       omitted_steps: [
         { id: 'stopping_runtime_process' as const, reason: 'runtime_process_absent' as const },
         { id: 'verifying_runtime_stopped' as const, reason: 'runtime_process_absent' as const },
-        { id: 'detecting_platform' as const, reason: 'managed_helper_not_required' as const },
+        { id: 'detecting_platform' as const, reason: 'runtime_package_current' as const },
       ],
     };
     const input = {

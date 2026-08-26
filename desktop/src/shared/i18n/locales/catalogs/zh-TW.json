@@ -1717,7 +1717,6 @@
     "reinstallCheckingDetail": "Desktop 正在重新核驗已確認的主機、容器和 Redeven 根目錄。",
     "reinstallTargetResolvedDetail": "Desktop 已確認精確登記的 Redeven 目標。",
     "reinstallSessionsClosedDetail": "Desktop 已關閉連線至此目標的環境視窗和 bridge。",
-    "reinstallHelperPreparingDetail": "Desktop 正在舊 Redeven 根目錄之外準備目前版本的維護 helper。",
     "reinstallInventoryDetail": "Desktop 正在識別屬於此精確目標的 Redeven 處理程序。",
     "reinstallStoppingProcessesDetail": "Desktop 正在停止此目標的 Redeven 處理程序。",
     "reinstallProcessesStoppedDetail": "Desktop 已確認此目標沒有殘留舊 Redeven 處理程序。",
@@ -1846,7 +1845,6 @@
     "checkingContainer": "檢查容器",
     "detectingPlatform": "偵測平台",
     "checkingRuntimePackage": "檢查運行時包",
-    "preparingMaintenanceHelper": "準備運行時資源",
     "stoppingRuntimeProcess": "停止運行時進程",
     "verifyingRuntimeStopped": "驗證運轉時已停止",
     "verifyingRuntimeInventory": "驗證運行時程序",
@@ -1987,8 +1985,7 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "執行階段",
-      "maintenanceHelper": "維護輔助程式"
+      "runtime": "執行階段"
     }
   },
   "runtimeMessage": {

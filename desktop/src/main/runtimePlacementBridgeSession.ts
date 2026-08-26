@@ -556,9 +556,15 @@ export async function startRuntimePlacementBridgeSession(
         actions: ['open_connection_center'],
       });
     }
+    // The bridge process owns every active proxy stream. Stop it before
+    // waiting for proxy teardown so a lingering HTTP connection cannot hold
+    // lifecycle completion open indefinitely.
+    transport?.command.kill('SIGTERM');
     failActiveStreams(error ?? new Error('Runtime Placement Bridge session is closed.'));
-    await proxyClose?.().catch(() => undefined);
-    await (transport ? closeStreamingCommand(transport.command) : Promise.resolve());
+    await Promise.all([
+      proxyClose?.().catch(() => undefined) ?? Promise.resolve(),
+      transport?.command.closed.catch(() => undefined) ?? Promise.resolve(),
+    ]);
     recoveryListeners.clear();
     resolveClosed(failure ? { kind: 'failed', failure } : { kind: 'closed' });
   };

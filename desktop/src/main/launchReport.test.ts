@@ -61,6 +61,29 @@ describe('launchReport', () => {
     });
   });
 
+  it('parses a private Desktop launch report without a public Local UI URL', () => {
+    expect(parseLaunchReport(JSON.stringify({
+      status: 'ready',
+      local_ui_bridge_url: 'http://127.0.0.1:43124/',
+      local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      password_required: false,
+      effective_run_mode: 'desktop',
+      remote_enabled: false,
+    }))).toEqual({
+      status: 'ready',
+      startup: {
+        local_ui_url: '',
+        local_ui_urls: [],
+        local_ui_bridge_url: 'http://127.0.0.1:43124/',
+        local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        password_required: false,
+        effective_run_mode: 'desktop',
+        remote_enabled: false,
+        state_dir: undefined,
+      },
+    });
+  });
+
   it('parses a blocked launch report payload', () => {
     expect(parseLaunchReport(JSON.stringify({
       status: 'blocked',

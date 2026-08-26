@@ -16,7 +16,6 @@ export type DesktopRuntimeLifecyclePhase =
   | 'checking_container'
   | 'detecting_platform'
   | 'checking_runtime_package'
-  | 'preparing_maintenance_helper'
   | 'discovering_runtime_instances'
   | 'stopping_runtime_process'
   | 'verifying_runtime_stopped'
@@ -60,8 +59,7 @@ export type DesktopRuntimeLifecycleOmittedStepReason =
   | 'runtime_already_openable'
   | 'runtime_already_stopped'
   | 'runtime_package_current'
-  | 'runtime_process_absent'
-  | 'managed_helper_not_required';
+  | 'runtime_process_absent';
 
 export type DesktopRuntimeLifecycleOmittedStep = Readonly<{
   id: DesktopRuntimeLifecycleStepID;
@@ -109,7 +107,6 @@ export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase
   checking_container: 'Checking container',
   detecting_platform: 'Detecting platform',
   checking_runtime_package: 'Checking runtime package',
-  preparing_maintenance_helper: 'Preparing maintenance helper',
   discovering_runtime_instances: 'Discovering runtime processes',
   stopping_runtime_process: 'Stopping runtime process',
   verifying_runtime_stopped: 'Verifying runtime stopped',

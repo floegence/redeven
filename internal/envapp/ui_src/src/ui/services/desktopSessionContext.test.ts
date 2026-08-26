@@ -53,7 +53,7 @@ describe('desktopSessionContext', () => {
           provider_id: ' provider-1 ',
           env_public_id: ' env_demo ',
           label: ' Demo Environment ',
-          document_transport: 'desktop_private_bridge_v1',
+          document_transport: 'desktop_private_bridge_v2',
         }),
       },
     } as unknown as Window;
@@ -70,7 +70,7 @@ describe('desktopSessionContext', () => {
       provider_id: 'provider-1',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
-      document_transport: 'desktop_private_bridge_v1',
+      document_transport: 'desktop_private_bridge_v2',
     });
     expect(desktopRendererStorageScopeID()).toBe('provider:https%3A%2F%2Fredeven.test:env:env_demo');
   });

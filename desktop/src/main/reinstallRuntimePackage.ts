@@ -44,6 +44,7 @@ export type PreparedReinstallRuntimePackage = Readonly<{
   archive_sha256: string;
   archive_size_bytes: number;
   executable_sha256: string;
+  process_helper_archive?: Buffer;
 }>;
 
 export type ReinstallRuntimeReady = Readonly<{

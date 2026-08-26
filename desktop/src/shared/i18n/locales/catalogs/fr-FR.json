@@ -1721,7 +1721,6 @@
     "reinstallCheckingDetail": "Desktop revérifie l’hôte, le conteneur et la racine Redeven confirmés.",
     "reinstallTargetResolvedDetail": "Desktop a confirmé la cible Redeven enregistrée avec précision.",
     "reinstallSessionsClosedDetail": "Desktop a fermé les fenêtres d’environnement et les bridges connectés à cette cible.",
-    "reinstallHelperPreparingDetail": "Desktop prépare le helper de maintenance actuel hors de l’ancienne racine Redeven.",
     "reinstallInventoryDetail": "Desktop identifie les processus Redeven appartenant précisément à cette cible.",
     "reinstallStoppingProcessesDetail": "Desktop arrête les processus Redeven de cette cible.",
     "reinstallProcessesStoppedDetail": "Desktop a vérifié qu’aucun ancien processus Redeven ne subsiste pour cette cible.",
@@ -1850,7 +1849,6 @@
     "checkingContainer": "Vérification du conteneur",
     "detectingPlatform": "Détection de la plateforme",
     "checkingRuntimePackage": "Vérification du package d'exécution",
-    "preparingMaintenanceHelper": "Préparation des ressources d’exécution",
     "stoppingRuntimeProcess": "Arrêt du processus d'exécution",
     "verifyingRuntimeStopped": "Vérification de l'arrêt du processus d'exécution",
     "verifyingRuntimeInventory": "Vérification de l’inventaire des processus d’exécution",
@@ -1991,8 +1989,7 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "Moteur d’exécution",
-      "maintenanceHelper": "Assistant de maintenance"
+      "runtime": "Moteur d’exécution"
     }
   },
   "runtimeMessage": {

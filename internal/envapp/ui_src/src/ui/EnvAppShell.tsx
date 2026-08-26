@@ -147,7 +147,10 @@ import { fileItemFromPath } from './utils/filePreviewItem';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
 import { createUIPresentationEventRecorder } from './services/uiPresentationTransactions';
-import { createEnvAppConnectionRuntime } from './services/connectionRuntime';
+import {
+  createEnvAppConnectionRuntime,
+  type EnvAppLocalConnection,
+} from './services/connectionRuntime';
 import { TerminalSessionCatalogProvider } from './services/terminalSessionCatalog';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
@@ -2732,36 +2735,55 @@ export function EnvAppShell() {
     }
   };
 
+  const localArtifactSourceCallbacks = {
+    beforeAcquire: async () => {
+      pluginSessionReadinessCoordinator.cancel('Plugin session credential is being replaced');
+      setStagedPluginSession(undefined);
+      setPluginSessionReady(false);
+      setPluginRuntimeRecoveryComplete(false);
+      if (!readPluginSessionCredential()) return;
+      pluginConfirmationQueue.cancelAll();
+      await retireActivityPluginPages();
+      await Promise.allSettled([
+        pluginSurfaceCoordinator.closeAll(),
+        workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
+      ]);
+      setActivityPluginWindows([]);
+      clearPluginSessionCredential();
+    },
+    afterCredentialStaged: (binding: PluginSessionCredentialBinding) => {
+      if (pluginSessionRetired()) {
+        clearPluginSessionCredential();
+        return;
+      }
+      setStagedPluginSession({
+        binding,
+        previousClient: protocol.status() === 'connected' ? protocol.session?.() : null,
+      });
+    },
+  };
+  const localConnection: EnvAppLocalConnection | undefined =
+    localTransportSecurity.transport === 'desktop_private_bridge_v2'
+      ? {
+        kind: 'desktop_private_bridge_v2',
+        origin: window.location.origin,
+        source: () => createLocalDirectArtifactSource({
+          ...localArtifactSourceCallbacks,
+          transport: 'desktop_private_bridge_v2',
+        }),
+      }
+      : localTransportSecurity.transport === 'public_tls'
+        ? {
+          kind: 'public_tls',
+          source: () => createLocalDirectArtifactSource({
+            ...localArtifactSourceCallbacks,
+            transport: 'public_tls',
+          }),
+        }
+        : undefined;
+
   const connectionRuntime = createEnvAppConnectionRuntime({
-    ...(localTransportSecurity.policy ? {
-      localSource: () => createLocalDirectArtifactSource({
-        beforeAcquire: async () => {
-          pluginSessionReadinessCoordinator.cancel('Plugin session credential is being replaced');
-          setStagedPluginSession(undefined);
-          setPluginSessionReady(false);
-          setPluginRuntimeRecoveryComplete(false);
-          if (!readPluginSessionCredential()) return;
-          pluginConfirmationQueue.cancelAll();
-          await retireActivityPluginPages();
-          await Promise.allSettled([
-            pluginSurfaceCoordinator.closeAll(),
-            workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
-          ]);
-          setActivityPluginWindows([]);
-          clearPluginSessionCredential();
-        },
-        afterCredentialStaged: (binding) => {
-          if (pluginSessionRetired()) {
-            clearPluginSessionCredential();
-            return;
-          }
-          setStagedPluginSession({
-            binding,
-            previousClient: protocol.status() === 'connected' ? protocol.session?.() : null,
-          });
-        },
-      }),
-    } : {}),
+    ...(localConnection ? { local: localConnection } : {}),
     remoteSource: () => createEnvProxyArtifactSource({
       endpointId: envId,
       floeApp: FLOE_APP_AGENT,

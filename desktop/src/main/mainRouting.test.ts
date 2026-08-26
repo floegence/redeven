@@ -100,16 +100,14 @@ describe('main routing', () => {
     expect(startupSrc).not.toContain('gatewayReinstallPairingRequired');
   });
 
-  it('keeps failed concurrent SSH preparation on the resource step during cleanup', () => {
+  it('projects one Runtime package task without a maintenance-helper task', () => {
     const mainSrc = readMainSource();
-    const reporterStart = mainSrc.indexOf('function concurrentRuntimePreparationReporter<');
+    const reporterStart = mainSrc.indexOf('function runtimePackageProgressReporter<');
     const reporterEnd = mainSrc.indexOf('function buildOpenConnectionProgress(', reporterStart);
     const reporterSrc = mainSrc.slice(reporterStart, reporterEnd);
-    expect(reporterSrc).toContain("cleanupPhase?: Progress['phase'];");
-    expect(reporterSrc).toContain('progress.phase === input.cleanupPhase');
-    expect(reporterSrc).toContain("task.status === 'running'");
-    expect(reporterSrc).toContain('publishTasks(progress.detail);');
-    expect(mainSrc).toContain("cleanupPhase: 'ssh_cleaning_startup_resources',");
+    expect(reporterSrc).toContain("[{ id: 'runtime', status, phase, strategy: input.strategy }]");
+    expect(reporterSrc).not.toContain('maintenance_helper');
+    expect(mainSrc).not.toContain('concurrentRuntimePreparationReporter');
   });
 
   it('keeps direct targets isolated from the Gateway store and pairing flow', () => {
@@ -124,11 +122,14 @@ describe('main routing', () => {
     const openEnd = mainSrc.indexOf('async function openRemoteEnvironmentFromLauncher(', openStart);
     const openSrc = mainSrc.slice(openStart, openEnd);
     expect(openSrc).not.toContain('reinstallTargetRequired(');
+    expect(openSrc.indexOf('await openRuntimePlacementBridgeFromLauncher(request)')).toBeLessThan(
+      openSrc.indexOf('findLocalEnvironmentByID(preferences, request.environment_id)'),
+    );
 
     expect(mainSrc).toContain('new ReinstallTargetCoordinator({');
     expect(mainSrc).toContain('close_sessions: closeDesktopSessionsForReinstallTarget');
     expect(mainSrc).toContain(
-      'prepare_process_session: async (descriptor, targetRoot, executor, platform, signal) => openReinstallTargetProcessSession',
+      'prepare_process_session: async (descriptor, targetRoot, executor, _platform, preparedPackage, signal) => openReinstallTargetProcessSession',
     );
     const freshInstallStart = mainSrc.indexOf('async function installFreshReinstallRuntime(');
     const freshInstallEnd = mainSrc.indexOf('async function startFreshReinstallRuntime(', freshInstallStart);
@@ -1091,16 +1092,18 @@ describe('main routing', () => {
     expect(refreshRuntimeSrc).not.toContain('markSavedRuntimeTargetUsed(preferences');
   });
 
-  it('prepares the container package and process session together before inventory and activation', () => {
+  it('prepares one container Runtime package before deriving the process helper and modifying the target', () => {
     const managerSrc = fs.readFileSync(path.join(__dirname, 'runtimePlacementManager.ts'), 'utf8');
-    const prepareIndex = managerSrc.indexOf('return prepareDesktopRuntimeUploadAsset({');
-    const batchIndex = managerSrc.indexOf('[preparedRuntimeAsset, processSession] = await Promise.all([');
+    const prepareIndex = managerSrc.indexOf('preparedRuntimeAsset = await prepareDesktopRuntimeUploadAsset({');
+    const sessionIndex = managerSrc.indexOf('processSession = await openContainerRuntimeProcessSession({');
+    const helperIndex = managerSrc.indexOf('runtimeProcessHelperArchiveFromRuntimePackage(preparedRuntimeAsset.archiveData)');
     const inventoryIndex = managerSrc.indexOf('const processInventory = await processSession.inspect();');
     const stopIndex = managerSrc.indexOf('await processSession.stop(processInventory);');
     const installIndex = managerSrc.indexOf('containerRuntimeUploadedInstallCommand({');
     expect(prepareIndex).toBeGreaterThanOrEqual(0);
-    expect(batchIndex).toBeGreaterThan(prepareIndex);
-    expect(inventoryIndex).toBeGreaterThan(batchIndex);
+    expect(sessionIndex).toBeGreaterThan(prepareIndex);
+    expect(helperIndex).toBeGreaterThan(sessionIndex);
+    expect(inventoryIndex).toBeGreaterThan(helperIndex);
     expect(stopIndex).toBeGreaterThan(inventoryIndex);
     expect(installIndex).toBeGreaterThan(stopIndex);
   });

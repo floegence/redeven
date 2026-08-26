@@ -39,6 +39,22 @@ describe('resolveDesktopSessionTransport', () => {
     });
   });
 
+  it('opens a native Local Environment from a bridge-only Desktop startup report', () => {
+    expect(resolveDesktopSessionTransport(localTarget, {
+      ...localStartup,
+      local_ui_url: '',
+      local_ui_urls: [],
+    })).toEqual({
+      kind: 'native_local_bridge',
+      baseURL: 'http://127.0.0.1:43123/',
+      entryURL: 'http://127.0.0.1:43123/_redeven_proxy/env/',
+      displayURL: '',
+      allowedBaseURL: 'http://127.0.0.1:43123/',
+      proxyPolicy: 'direct',
+      partition: 'redeven-direct:env%3Alocal%3Alocal_host',
+    });
+  });
+
   it('rejects a private bridge startup that omits authorization', () => {
     expect(() => resolveDesktopSessionTransport(localTarget, {
       ...localStartup,
@@ -172,6 +188,15 @@ describe('desktopPrivateBridgeRequestHeaders', () => {
       { Accept: '*/*' },
     )).toEqual({
       Accept: '*/*',
+      'X-Redeven-Desktop-Bridge-Token': localStartup.local_ui_bridge_token,
+    });
+    expect(desktopPrivateBridgeRequestHeaders(
+      transport,
+      localStartup,
+      'ws://127.0.0.1:43123/flowersec/v3/direct',
+      { Upgrade: 'websocket' },
+    )).toEqual({
+      Upgrade: 'websocket',
       'X-Redeven-Desktop-Bridge-Token': localStartup.local_ui_bridge_token,
     });
     expect(desktopPrivateBridgeRequestHeaders(

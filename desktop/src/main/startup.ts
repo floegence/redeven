@@ -30,7 +30,7 @@ function parseRuntimeControlEndpoint(value: unknown): DesktopRuntimeControlEndpo
   const protocolVersion = String(record.protocol_version ?? '').trim();
   const baseURL = String(record.base_url ?? '').trim();
   const token = String(record.token ?? '').trim();
-	if (!protocolVersion || !baseURL || !token) {
+  if (!protocolVersion || !baseURL || !token) {
     return undefined;
   }
   const expiresAt = Number(record.expires_at_unix_ms);
@@ -50,13 +50,6 @@ function normalizePositiveInteger(value: unknown): number | undefined {
 export function parseStartupReport(raw: string): StartupReport {
   const parsed = JSON.parse(raw) as Record<string, unknown>;
   const localUIURL = String(parsed.local_ui_url ?? '').trim();
-  if (!localUIURL) {
-    throw new Error('startup report missing local_ui_url');
-  }
-
-  const localUIURLs = Array.isArray(parsed.local_ui_urls)
-    ? parsed.local_ui_urls.map((value) => String(value ?? '').trim()).filter(Boolean)
-    : [];
   const runtimeControl = parseRuntimeControlEndpoint(parsed.runtime_control);
   const exposure = parsed.exposure == null ? undefined : parseLocalUIExposure(parsed.exposure);
   const localUIBridgeURLRaw = String(parsed.local_ui_bridge_url ?? '').trim();
@@ -66,10 +59,16 @@ export function parseStartupReport(raw: string): StartupReport {
   if (Boolean(localUIBridgeURL) !== Boolean(localUIBridgeToken)) {
     throw new Error('startup report must include matching private Local UI bridge URL and authorization');
   }
+  if (!localUIURL && !localUIBridgeURL) {
+    throw new Error('startup report missing Local UI endpoint');
+  }
+  const localUIURLs = localUIURL && Array.isArray(parsed.local_ui_urls)
+    ? parsed.local_ui_urls.map((value) => String(value ?? '').trim()).filter(Boolean)
+    : [];
 
   return {
     local_ui_url: localUIURL,
-    local_ui_urls: localUIURLs.length > 0 ? localUIURLs : [localUIURL],
+    local_ui_urls: localUIURL && localUIURLs.length === 0 ? [localUIURL] : localUIURLs,
     ...(localUIBridgeURL ? { local_ui_bridge_url: localUIBridgeURL } : {}),
     ...(localUIBridgeToken ? { local_ui_bridge_token: localUIBridgeToken } : {}),
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),

@@ -191,6 +191,79 @@ func TestServerStartPublishesRuntimeControlStatus(t *testing.T) {
 	}
 }
 
+func TestServerStartDesktopModeUsesOnlyPrivateBridgeWithoutDeviceCA(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	bind, err := ParseBind("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("ParseBind() error = %v", err)
+	}
+	stateRoot := t.TempDir()
+	socketDir, err := os.MkdirTemp("/tmp", "rdv-localui-private-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(socketDir) }()
+	s := &Server{
+		log:                    discardLogger(),
+		bind:                   bind,
+		configPath:             cfgPath,
+		stateRoot:              stateRoot,
+		stateDir:               filepath.Dir(cfgPath),
+		runtimeControlSockPath: filepath.Join(socketDir, "control.sock"),
+		version:                "dev",
+		desktopPrivateAccess:   true,
+		effectiveRunMode:       "local",
+		appServer:              newTestAppServer(t, cfgPath),
+		a:                      newRuntimeControlTestAgent(t, cfgPath),
+		pending:                make(map[string]pendingDirect),
+		directAuthorities:      make(map[string]string),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Fatalf("Start() without device CA error = %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	status, err := runtimemanagement.LoadStatus(ctx, s.runtimeControlSockPath, time.Second)
+	if err != nil {
+		t.Fatalf("LoadStatus() error = %v", err)
+	}
+	if status.State != runtimemanagement.AttachStateReady || status.Endpoint == nil {
+		t.Fatalf("unexpected runtime status: %#v", status)
+	}
+	if status.Endpoint.LocalUIURL != "" || len(status.Endpoint.LocalUIURLs) != 0 {
+		t.Fatalf("Desktop-only Runtime published public Local UI URLs: %#v", status.Endpoint)
+	}
+	if status.Endpoint.LocalUIBridgeURL == "" || status.Endpoint.LocalUIBridgeToken == "" {
+		t.Fatalf("Desktop-only Runtime did not publish its private bridge: %#v", status.Endpoint)
+	}
+	if s.srv != nil || len(s.listeners) != 0 || len(s.directServers) != 0 {
+		t.Fatalf("Desktop-only Runtime created public listeners")
+	}
+	if s.deviceCA != nil {
+		t.Fatal("Desktop-only Runtime loaded a device CA")
+	}
+	if _, err := os.Stat(filepath.Join(stateRoot, localUIDeviceCADirName)); !os.IsNotExist(err) {
+		t.Fatalf("Desktop-only Runtime created device CA state: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, status.Endpoint.LocalUIBridgeURL+"api/local/runtime/health", nil)
+	if err != nil {
+		t.Fatalf("NewRequest(bridge) error = %v", err)
+	}
+	req.Header.Set(localDesktopBridgeTokenHeader, status.Endpoint.LocalUIBridgeToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do(bridge) error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Desktop bridge health status = %d", resp.StatusCode)
+	}
+}
+
 func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	bind, err := ParseBind("127.0.0.1:0")

@@ -1716,11 +1716,7 @@ describe('sshRuntime integration', () => {
     ]));
     expect(eventNames.filter((event) => event === 'probe_platform')).toHaveLength(1);
     expect(eventNames).not.toContain('helper_platform');
-    expect(progressPhases).toContain('ssh_process_helper_ready');
     expect(progressPhases).toContain('ssh_runtime_package_ready');
-    expect(progressPhases.indexOf('ssh_process_helper_ready')).toBeLessThan(
-      progressPhases.indexOf('ssh_discovering_runtime_instances'),
-    );
     expect(progressPhases.indexOf('ssh_runtime_package_ready')).toBeLessThan(
       progressPhases.indexOf('ssh_discovering_runtime_instances'),
     );

@@ -16,7 +16,7 @@ const stageHelperScript = [
   'cat > "$archive"',
   'tar -xzf "$archive" -C "$helper_root"',
   'helper="$helper_root/redeven"',
-  '[ -x "$helper" ] || { echo "current Redeven maintenance helper is missing" >&2; exit 50; }',
+  '[ -x "$helper" ] || { echo "current Redeven process tool is missing" >&2; exit 50; }',
   'trap - EXIT INT TERM',
   'printf "%s\\n" "$helper"',
 ].join('\n');
@@ -27,7 +27,7 @@ const processCommandScript = [
   'operation="$2"',
   'target_root="$3"',
   'inventory_digest="${4:-}"',
-  '[ -x "$helper" ] || { echo "current Redeven maintenance helper is unavailable" >&2; exit 50; }',
+  '[ -x "$helper" ] || { echo "current Redeven process tool is unavailable" >&2; exit 50; }',
   'case "$operation" in',
   '  inventory) "$helper" desktop-target-process-inventory --target-root "$target_root" ;;',
   '  stop) "$helper" desktop-target-process-stop --target-root "$target_root" --expected-inventory-digest "$inventory_digest" --best-effort --grace-period 5s ;;',
@@ -72,7 +72,7 @@ function parseInventory(raw: string): ReinstallTargetProcessInventory {
     typeof value.summary.blocked !== 'number' ||
     typeof value.inventory_digest !== 'string'
   ) {
-    throw new Error('Current Redeven maintenance helper returned an invalid process inventory.');
+    throw new Error('Current Redeven process tool returned an invalid process inventory.');
   }
   return value as ReinstallTargetProcessInventory;
 }
@@ -89,6 +89,7 @@ export async function openReinstallTargetProcessSession(
     placement: DesktopRuntimePlacement;
     target_root: string;
     helper_archive?: Buffer;
+    helper_executable?: string;
     local_helper_executable?: string;
     signal?: AbortSignal;
   }>,
@@ -97,11 +98,11 @@ export async function openReinstallTargetProcessSession(
     args.executor.host_access.kind === 'local_host' && args.placement.kind === 'host_process'
       ? String(args.local_helper_executable ?? '').trim()
       : '';
-  let helper = localHelper;
+  let helper = String(args.helper_executable ?? '').trim() || localHelper;
   let stagedHelper = '';
   if (helper === '') {
     if (!args.helper_archive) {
-      throw new Error('Desktop did not prepare the current Redeven maintenance helper.');
+      throw new Error('Desktop did not prepare the current Redeven process tool.');
     }
     const staged = await args.executor.run(
       placementCommand(args.placement, stageHelperScript, 'redeven-target-process-helper-stage'),
@@ -118,7 +119,7 @@ export async function openReinstallTargetProcessSession(
         .filter(Boolean)
         .at(-1) ?? '';
     if (helper === '') {
-      throw new Error('Desktop could not stage the current Redeven maintenance helper.');
+      throw new Error('Desktop could not stage the current Redeven process tool.');
     }
     stagedHelper = helper;
   }

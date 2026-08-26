@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const uploadAssetMocks = vi.hoisted(() => ({
   prepareDesktopRuntimeUploadAsset: vi.fn(),
-  prepareDesktopRuntimeMaintenanceHelperAsset: vi.fn(),
+  runtimeProcessHelperArchiveFromRuntimePackage: vi.fn(),
 }));
 
 vi.mock('./runtimePackageCache', async () => {
@@ -14,7 +14,7 @@ vi.mock('./runtimePackageCache', async () => {
   return {
     ...actual,
     prepareDesktopRuntimeUploadAsset: uploadAssetMocks.prepareDesktopRuntimeUploadAsset,
-    prepareDesktopRuntimeMaintenanceHelperAsset: uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset,
+    runtimeProcessHelperArchiveFromRuntimePackage: uploadAssetMocks.runtimeProcessHelperArchiveFromRuntimePackage,
   };
 });
 
@@ -34,13 +34,11 @@ describe('runtimePlacementManager', () => {
   beforeEach(() => {
     originalPath = process.env.PATH ?? '';
     uploadAssetMocks.prepareDesktopRuntimeUploadAsset.mockReset();
-    uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset.mockReset();
+    uploadAssetMocks.runtimeProcessHelperArchiveFromRuntimePackage.mockReset();
     uploadAssetMocks.prepareDesktopRuntimeUploadAsset.mockResolvedValue({
       archiveData: Buffer.from('redeven-archive'),
     });
-    uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset.mockResolvedValue(
-      Buffer.from('redeven-helper-archive'),
-    );
+    uploadAssetMocks.runtimeProcessHelperArchiveFromRuntimePackage.mockReturnValue(Buffer.from('redeven-helper-archive'));
   });
 
   afterEach(() => {
@@ -243,15 +241,13 @@ describe('runtimePlacementManager', () => {
       runtimeReleaseTag: 'v1.2.3',
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
-    expect(uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset).toHaveBeenCalledTimes(1);
+    expect(uploadAssetMocks.runtimeProcessHelperArchiveFromRuntimePackage).toHaveBeenCalledTimes(1);
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
       'checking_runtime',
-      'preparing_maintenance_helper',
       'preparing_runtime_package',
       'runtime_package_ready',
-      'maintenance_helper_ready',
       'discovering_runtime_instances',
       'installing_runtime',
       'starting_runtime_daemon',
@@ -340,7 +336,7 @@ describe('runtimePlacementManager', () => {
       sourceRuntimeRoot: tempDir,
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
-    expect(uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset).toHaveBeenCalledTimes(1);
+    expect(uploadAssetMocks.runtimeProcessHelperArchiveFromRuntimePackage).toHaveBeenCalledTimes(1);
   });
 
   it('replaces a ready container runtime when the user explicitly requests an update', async () => {
@@ -663,16 +659,14 @@ describe('runtimePlacementManager', () => {
         runtimeReleaseTag: 'v1.2.3',
         platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
       }));
-      expect(uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset).toHaveBeenCalledTimes(1);
+      expect(uploadAssetMocks.runtimeProcessHelperArchiveFromRuntimePackage).toHaveBeenCalledTimes(1);
       expect(progressPhases).toEqual([
         'checking_host',
         'checking_container',
         'detecting_platform',
         'checking_runtime',
-        'preparing_maintenance_helper',
         'preparing_runtime_package',
         'runtime_package_ready',
-        'maintenance_helper_ready',
         'discovering_runtime_instances',
         'installing_runtime',
         'starting_runtime_daemon',

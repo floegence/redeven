@@ -1,5 +1,10 @@
 import type { ArtifactSource, JsonValue } from '@floegence/flowersec-core';
-import type { SpendBindingView, SpendCommitRequest } from '@floegence/floe-webapp-boot';
+import type { PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
+import type {
+  PrivateLoopbackControlplaneArtifactSourceOptions,
+  SpendBindingView,
+  SpendCommitRequest,
+} from '@floegence/floe-webapp-boot';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { applyLocalAccessResumeHeader } from './localAccessAuth';
@@ -469,18 +474,24 @@ export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   return request;
 }
 
-export type LocalDirectArtifactSourceOptions = Readonly<{
+type LocalDirectArtifactSourceCallbacks = Readonly<{
   beforeAcquire?: (context: Readonly<{ signal: AbortSignal }>) => void | Promise<void>;
   afterCredentialStaged?: (binding: PluginSessionCredentialBinding) => void;
 }>;
 
-export async function createLocalDirectArtifactSource(
-  options: LocalDirectArtifactSourceOptions = {},
-): Promise<ArtifactSource> {
-  const { createControlplaneArtifactSource } = await import('@floegence/floe-webapp-boot/artifact-source');
-	return createControlplaneArtifactSource({
-		baseUrl: window.location.origin,
-		endpointId: 'env_local',
+export type LocalDirectArtifactSourceOptions = LocalDirectArtifactSourceCallbacks & Readonly<{
+  transport: 'public_tls' | 'desktop_private_bridge_v2';
+}>;
+
+export async function createLocalDirectArtifactSource<
+  Transport extends LocalDirectArtifactSourceOptions['transport'],
+>(
+  options: LocalDirectArtifactSourceCallbacks & Readonly<{ transport: Transport }>,
+): Promise<Transport extends 'desktop_private_bridge_v2' ? PrivateLoopbackArtifactSourceV1 : ArtifactSource> {
+  const boot = await import('@floegence/floe-webapp-boot/artifact-source');
+  const sourceOptions: PrivateLoopbackControlplaneArtifactSourceOptions = {
+    baseUrl: window.location.origin,
+    endpointId: 'env_local',
     fetch: async (_input, init) => {
       const signal = init?.signal ?? new AbortController().signal;
       await options.beforeAcquire?.({ signal });
@@ -530,7 +541,11 @@ export async function createLocalDirectArtifactSource(
       floeApp: 'com.floegence.redeven.agent',
       origin: window.location.origin,
     }),
-  });
+  };
+  const source = options.transport === 'desktop_private_bridge_v2'
+    ? boot.createPrivateLoopbackControlplaneArtifactSource(sourceOptions)
+    : boot.createControlplaneArtifactSource(sourceOptions);
+  return source as Transport extends 'desktop_private_bridge_v2' ? PrivateLoopbackArtifactSourceV1 : ArtifactSource;
 }
 
 export async function waitForLocalPluginSessionReady(

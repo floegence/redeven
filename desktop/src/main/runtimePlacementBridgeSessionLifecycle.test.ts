@@ -841,6 +841,21 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
     }
   });
 
+  it('stops the bridge command before waiting for active proxy sockets to close', async () => {
+    const command = createMockBridgeCommand();
+    const session = await startMockedSession(command);
+    const socket = await connectLoopback(session.local_ui_url);
+    try {
+      const disconnecting = session.disconnect();
+      expect(command.kill).toHaveBeenCalledWith('SIGTERM');
+      await disconnecting;
+      await waitForClosedSocket(socket);
+    } finally {
+      socket.destroy();
+      await session.disconnect();
+    }
+  });
+
   it('closes the loopback proxy and active sockets when the bridge command exits', async () => {
     const command = createMockBridgeCommand();
     const session = await startMockedSession(command);

@@ -109,14 +109,6 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 		if report.PasswordRequired != report.Exposure.PasswordRequired {
 			return errors.New("password_required does not match exposure")
 		}
-		report.LocalUIURL = strings.TrimSpace(report.LocalUIURL)
-		if report.LocalUIURL == "" {
-			return errors.New("missing local_ui_url")
-		}
-		report.LocalUIURLs = compactStrings(report.LocalUIURLs)
-		if len(report.LocalUIURLs) == 0 {
-			report.LocalUIURLs = []string{report.LocalUIURL}
-		}
 		normalizedBridgeURL, err := runtimemanagement.NormalizeLocalUIBridgeURL(report.LocalUIBridgeURL)
 		if err != nil {
 			return fmt.Errorf("invalid local_ui_bridge_url: %w", err)
@@ -125,6 +117,13 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 		report.LocalUIBridgeToken = normalizeLocalUIBridgeToken(report.LocalUIBridgeToken)
 		if report.LocalUIBridgeToken == "" {
 			return errors.New("invalid local_ui_bridge_token")
+		}
+		report.LocalUIURL = strings.TrimSpace(report.LocalUIURL)
+		report.LocalUIURLs = compactStrings(report.LocalUIURLs)
+		if report.LocalUIURL == "" {
+			report.LocalUIURLs = nil
+		} else if len(report.LocalUIURLs) == 0 {
+			report.LocalUIURLs = []string{report.LocalUIURL}
 		}
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
 		report.ProviderOrigin = strings.TrimSpace(report.ProviderOrigin)

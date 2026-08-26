@@ -41,7 +41,13 @@ export function desktopPrivateBridgeRequestHeaders(
   try {
     const request = new URL(requestURL);
     const allowed = new URL(transport.allowedBaseURL);
-    if (request.origin !== allowed.origin || request.protocol !== 'http:') {
+    const privateProtocol = request.protocol === 'http:' || request.protocol === 'ws:';
+    if (
+      allowed.protocol !== 'http:'
+      || !privateProtocol
+      || request.hostname !== allowed.hostname
+      || request.port !== allowed.port
+    ) {
       return requestHeaders;
     }
   } catch {
@@ -130,6 +136,9 @@ export function resolveDesktopSessionTransport(
   }
 
   if (target.kind === 'gateway_environment') {
+    if (!startup.local_ui_url) {
+      throw new Error('Gateway session is missing its external Local UI URL.');
+    }
     return {
       kind: 'gateway_bridge',
       baseURL: rootURL(startup.local_ui_url),
@@ -142,6 +151,9 @@ export function resolveDesktopSessionTransport(
   }
 
   if (target.kind === 'local_environment') {
+    if (!startup.local_ui_url) {
+      throw new Error('Provider session is missing its external Local UI URL.');
+    }
     return {
       kind: 'provider_remote',
       baseURL: rootURL(startup.local_ui_url),
@@ -153,6 +165,9 @@ export function resolveDesktopSessionTransport(
     };
   }
 
+  if (!startup.local_ui_url) {
+    throw new Error('External Local UI session is missing its URL.');
+  }
   return {
     kind: 'external_local_ui',
     baseURL: rootURL(startup.local_ui_url),

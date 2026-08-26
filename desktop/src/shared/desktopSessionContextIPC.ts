@@ -46,7 +46,7 @@ export type DesktopSessionContextSnapshot = Readonly<{
   env_public_id?: string;
   label?: string;
   local_ui_exposure?: LocalUIExposure;
-  document_transport?: 'desktop_private_bridge_v1';
+  document_transport?: 'desktop_private_bridge_v2';
 }>;
 
 export type DesktopSessionAppReadyState = 'access_gate_interactive' | 'runtime_connected';

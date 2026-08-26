@@ -12,9 +12,9 @@ vi.mock('./sshReleaseTrust', async (importOriginal) => ({
 }));
 
 import {
-  prepareDesktopRuntimeMaintenanceHelperAsset,
   prepareDesktopRuntimeUploadAsset,
   pruneDesktopRuntimePackageCache,
+  runtimeProcessHelperArchiveFromRuntimePackage,
   runtimePackageCacheRoot,
   runtimeReleaseFetchPolicy,
 } from './runtimePackageCache';
@@ -504,32 +504,19 @@ describe('runtimePackageCache', () => {
     }
   }, 15_000);
 
-  it('builds the source maintenance helper without staging the full Runtime suite', async () => {
+  it('extracts the process helper from the verified Runtime archive', async () => {
     const fixture = await createSourceRuntimeFixture();
     const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
     try {
-      const first = await prepareDesktopRuntimeMaintenanceHelperAsset({
-        runtimeReleaseTag: 'v1.2.3',
-        releaseBaseURL: 'https://mirror.example.invalid/releases',
-        assetCacheRoot: fixture.cacheRoot,
+      const runtime = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
         sourceRuntimeRoot: fixture.root,
         platform,
-        fetchPolicy: runtimeReleaseFetchPolicy(45_000),
       });
-      const cached = await prepareDesktopRuntimeMaintenanceHelperAsset({
-        runtimeReleaseTag: 'v1.2.3',
-        releaseBaseURL: 'https://mirror.example.invalid/releases',
-        assetCacheRoot: fixture.cacheRoot,
-        sourceRuntimeRoot: fixture.root,
-        platform,
-        fetchPolicy: runtimeReleaseFetchPolicy(45_000),
-      });
+      const helper = runtimeProcessHelperArchiveFromRuntimePackage(runtime.archiveData);
 
-      expect(tarGzipEntryNames(first)).toEqual(['redeven']);
-      expect(cached).toEqual(first);
-      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({
-        code: 'ENOENT',
-      });
+      expect(tarGzipEntryNames(helper)).toEqual(['redeven']);
+      expect((await fs.readFile(fixture.buildLogPath, 'utf8')).match(/^assets:/gmu)).toHaveLength(1);
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }

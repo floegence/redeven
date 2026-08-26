@@ -8416,8 +8416,6 @@ function localizedRuntimeLifecyclePhaseLabel(i18n: DesktopI18n, phase: DesktopRu
       return i18n.t('progress.detectingPlatform');
     case 'checking_runtime_package':
       return i18n.t('progress.checkingRuntimePackage');
-    case 'preparing_maintenance_helper':
-      return i18n.t('progress.preparingMaintenanceHelper');
     case 'discovering_runtime_instances':
       return i18n.t('progress.discoveringRuntimeInstances');
     case 'stopping_runtime_process':
@@ -9085,9 +9083,7 @@ function EnvironmentProgressPanel(props: Readonly<{
                                   <span class="redeven-environment-progress__component-task-name">
                                     {props.i18n.t(task.id === 'gateway'
                                       ? 'progress.componentName.gateway'
-                                      : task.id === 'maintenance_helper'
-                                        ? 'progress.componentName.maintenanceHelper'
-                                        : 'progress.componentName.runtime')}
+                                      : 'progress.componentName.runtime')}
                                   </span>
                                   <span class="redeven-environment-progress__component-task-phase">{props.i18n.t(`progress.componentPhase.${task.phase}` as 'progress.componentPhase.preparing')}</span>
                                   <span class="redeven-environment-progress__component-task-strategy">{props.i18n.t(task.strategy === 'desktop_upload' ? 'common.desktopUpload' : 'common.remoteInstall')}</span>

@@ -326,12 +326,15 @@ export async function startRuntimePlacementLoopbackProxy(
     url: localForwardURL(addr.port),
     port: addr.port,
     close: async () => {
+      // Stop accepting new requests synchronously. Active sockets are owned by
+      // this proxy and are destroyed below, so lifecycle cleanup must not wait
+      // indefinitely for net.Server's close callback.
+      if (server.listening) {
+        server.close();
+      }
       for (const socket of sockets) {
         socket.destroy();
       }
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-      });
     },
   };
 }

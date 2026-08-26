@@ -107,7 +107,7 @@ describe('runtimeState', () => {
     try {
       const result = await probeLocalRuntimeBridgeHealth(startup);
       expect(expectProbeSuccess(result)).toMatchObject({
-        local_ui_url: bridgeURL,
+        local_ui_url: 'http://127.0.0.1:26800/',
         local_ui_bridge_url: bridgeURL,
         local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         started_at_unix_ms: 123,

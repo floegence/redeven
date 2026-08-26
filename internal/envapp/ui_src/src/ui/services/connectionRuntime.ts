@@ -1,4 +1,5 @@
 import type { ArtifactSource } from '@floegence/flowersec-core';
+import type { PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
 import type { ConnectConfig } from '@floegence/floe-webapp-protocol';
 import type { ProxyBootstrapOwnerOptions } from '@floegence/floe-webapp-boot';
 
@@ -9,8 +10,19 @@ export type EnvAppConnectionConfigLease = Readonly<{
   dispose(): void;
 }>;
 
+export type EnvAppLocalConnection =
+  | Readonly<{
+    kind: 'public_tls';
+    source: () => ArtifactSource | Promise<ArtifactSource>;
+  }>
+  | Readonly<{
+    kind: 'desktop_private_bridge_v2';
+    origin: string;
+    source: () => PrivateLoopbackArtifactSourceV1 | Promise<PrivateLoopbackArtifactSourceV1>;
+  }>;
+
 export type EnvAppConnectionRuntimeOptions = Readonly<{
-  localSource?: () => ArtifactSource | Promise<ArtifactSource>;
+  local?: EnvAppLocalConnection;
   remoteSource: () => ArtifactSource | Promise<ArtifactSource>;
   proxyBootstrap: () => ProxyBootstrapOwnerOptions | Promise<ProxyBootstrapOwnerOptions>;
 }>;
@@ -33,10 +45,10 @@ function loadBootModule(): Promise<BootModule> {
   return request;
 }
 
-function createCachedSource(
-  factory: () => ArtifactSource | Promise<ArtifactSource>,
-): () => Promise<ArtifactSource> {
-  let sourcePromise: Promise<ArtifactSource> | undefined;
+function createCachedSource<Source>(
+  factory: () => Source | Promise<Source>,
+): () => Promise<Source> {
+  let sourcePromise: Promise<Source> | undefined;
   return () => {
     if (sourcePromise) return sourcePromise;
     const request = Promise.resolve().then(factory).catch((error) => {
@@ -63,23 +75,39 @@ function createConfigLease(config: ConnectConfig): EnvAppConnectionConfigLease {
 export function createEnvAppConnectionRuntime(
   options: EnvAppConnectionRuntimeOptions,
 ): EnvAppConnectionRuntime {
-  const localSource = options.localSource ? createCachedSource(options.localSource) : undefined;
+  const local = options.local?.kind === 'desktop_private_bridge_v2'
+    ? {
+      kind: options.local.kind,
+      origin: options.local.origin,
+      source: createCachedSource(options.local.source),
+    } as const
+    : options.local
+      ? { kind: options.local.kind, source: createCachedSource(options.local.source) } as const
+      : undefined;
   const remoteSource = createCachedSource(options.remoteSource);
 
   return Object.freeze({
     async createConfig(mode) {
-      const [boot, source, proxyBootstrapOptions] = await Promise.all([
-        loadBootModule(),
-        mode === 'local'
-          ? localSource?.() ?? Promise.reject(new Error('Local connection is unavailable'))
-          : remoteSource(),
-        mode === 'remote' ? options.proxyBootstrap() : undefined,
-      ]);
-
       if (mode === 'local') {
-        return createConfigLease(boot.createArtifactDirectConnectionConfig({ source }));
+        if (!local) throw new Error('Local connection is unavailable');
+        const boot = await loadBootModule();
+        if (local.kind === 'desktop_private_bridge_v2') {
+          const source = await local.source();
+          return createConfigLease(boot.createPrivateLoopbackDirectConnectionConfig({
+            source,
+            privateLoopback: { origin: local.origin },
+          }));
+        }
+        return createConfigLease(boot.createArtifactDirectConnectionConfig({
+          source: await local.source(),
+        }));
       }
 
+      const [boot, source, proxyBootstrapOptions] = await Promise.all([
+        loadBootModule(),
+        remoteSource(),
+        options.proxyBootstrap(),
+      ]);
       const proxyBootstrap = boot.createProxyBootstrapOwner(proxyBootstrapOptions ?? {});
       try {
         const config = boot.createProxyRuntimeTunnelConnectionConfig({
