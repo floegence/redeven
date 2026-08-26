@@ -2292,6 +2292,19 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('settings.networkTrustNote')");
   });
 
+  it('uses the selected Environment health and card status for the settings runtime state', () => {
+    const appSrc = readWelcomeSource();
+    const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
+    const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
+    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
+
+    expect(appSrc).toContain('const runtime = buildEnvironmentSettingsRuntimeModel(environment);');
+    expect(appSrc).toContain('statusLabel: localizedEnvironmentStatusLabel(i18n(), runtime.status_label)');
+    expect(dialogSrc).toContain('<RuntimeStatusOrb running={props.runtimeRunning} dark={props.dark} />');
+    expect(dialogSrc).toContain('{props.runtimeStatusLabel}');
+    expect(dialogSrc).not.toContain("accessModel().current_runtime_url !== ''");
+  });
+
   it('uses the shared surface hierarchy for Local Environment Settings boundaries', () => {
     const appSrc = readWelcomeSource();
     const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');

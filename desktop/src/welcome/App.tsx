@@ -193,6 +193,7 @@ import {
   buildEnvironmentLibrarySummaryModel,
   buildEnvironmentLibraryLayoutModel,
   buildEnvironmentCardModel,
+  buildEnvironmentSettingsRuntimeModel,
   buildEnvironmentCardFactsModel,
   buildGatewaySourceRowModel,
   ICON_ENDPOINTS,
@@ -247,10 +248,7 @@ import {
   reconcileDesktopSettingsDraftSession,
   updateDesktopSettingsDraftSessionDraft,
 } from './settingsDraftSession';
-import {
-  describeNextStartAddress,
-  describeRuntimeAddress,
-} from './welcomeCopy';
+import { describeNextStartAddress } from './welcomeCopy';
 import {
   createDesktopThemeStorageAdapter,
   desktopStateStorageBridge,
@@ -264,6 +262,7 @@ import {
   type DesktopThemePickerSnapshot,
 } from './DesktopThemePicker';
 import { rovingRadioIndexForKey } from './rovingRadioGroup';
+import { RuntimeStatusOrb } from './RuntimeStatusOrb';
 import { desktopControlPlaneKey, suggestControlPlaneDisplayLabel } from '../shared/controlPlaneProvider';
 import {
   DESKTOP_ACTION_TOAST_LIMIT,
@@ -2393,13 +2392,6 @@ function describeLocalizedNextStartAddress(
   }
 }
 
-function describeLocalizedRuntimeAddress(i18n: DesktopI18n, value: string) {
-  const display = describeRuntimeAddress(value);
-  return display.primary === 'Not running'
-    ? { ...display, primary: i18n.t('settings.notRunning') }
-    : display;
-}
-
 async function copyToClipboard(text: string): Promise<void> {
   const value = trimString(text);
   if (!value) {
@@ -2927,6 +2919,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ?? snapshot().environments.find((environment) => environment.kind === 'provider_environment')
       ?? null
   ));
+  const settingsRuntimePresentation = createMemo(() => {
+    const environment = selectedSettingsEnvironmentEntry();
+    if (!environment) {
+      return {
+        running: false,
+        statusLabel: i18n().t('settings.notRunning'),
+        statusTone: 'neutral' as const,
+      };
+    }
+    const runtime = buildEnvironmentSettingsRuntimeModel(environment);
+    return {
+      running: runtime.running,
+      statusLabel: localizedEnvironmentStatusLabel(i18n(), runtime.status_label),
+      statusTone: runtime.status_tone,
+    };
+  });
   const settingsRuntimeRestartAvailable = createMemo(() => {
     const environment = selectedSettingsEnvironmentEntry();
     return environment?.kind === 'local_environment'
@@ -6519,6 +6527,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         toggleAutoPort={toggleAutoPort}
         saveSettings={saveSettings}
         runtimeRestartAvailable={settingsRuntimeRestartAvailable()}
+        runtimeRunning={settingsRuntimePresentation().running}
+        runtimeStatusLabel={settingsRuntimePresentation().statusLabel}
+        runtimeStatusTone={settingsRuntimePresentation().statusTone}
+        dark={theme.resolvedTheme() === 'dark'}
         cancelSettings={cancelSettings}
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
       />
@@ -13151,10 +13163,14 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     accessMode: Exclude<DesktopAccessMode, 'custom_exposure'>,
   ) => void;
   toggleAutoPort: (enabled: boolean) => void;
-	saveSettings: (options?: Readonly<{
-		restartRuntime?: boolean;
+  saveSettings: (options?: Readonly<{
+    restartRuntime?: boolean;
   }>) => Promise<void>;
   runtimeRestartAvailable: boolean;
+  runtimeRunning: boolean;
+  runtimeStatusLabel: string;
+  runtimeStatusTone: EnvironmentCardTone;
+  dark: boolean;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
 }>) {
@@ -13167,7 +13183,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     mode_override: accessModeOverride(),
   }));
   const accessModel = createMemo(() => deriveDesktopAccessDraftModel(props.draft, accessModelOptions()));
-  const runtimeAddress = createMemo(() => describeLocalizedRuntimeAddress(props.i18n, accessModel().current_runtime_url));
   const nextStartAddress = createMemo(() => describeLocalizedNextStartAddress(props.i18n, accessModel()));
   const settingsEnvironmentLabel = createMemo(() => trimString(props.baselineSnapshot.environment_label) || props.i18n.t('desktop.environment'));
   const settingsWindowTitle = createMemo(() => props.i18n.t('settings.settingsWindowTitle'));
@@ -13307,28 +13322,23 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     >
       <div class="space-y-5">
         <div
-          aria-label={`${props.i18n.t('settings.runtimeLabel')} ${runtimeAddress().primary}; ${props.i18n.t('settings.nextStartLabel')} ${selectedAccessModeLabel()}`}
+          aria-label={`${props.i18n.t('settings.runtimeLabel')} ${props.runtimeStatusLabel}; ${props.i18n.t('settings.nextStartLabel')} ${selectedAccessModeLabel()}`}
           class="redeven-settings-status-overview grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_2.25rem_minmax(0,1fr)] sm:items-stretch sm:gap-0"
           role="group"
         >
-          <div class="redeven-settings-state-card redeven-settings-state-card--current redeven-boundary-panel flex min-w-0 items-center gap-3 rounded-md border px-3.5 py-3">
+          <div
+            class="redeven-settings-state-card redeven-settings-state-card--current redeven-boundary-panel flex min-w-0 items-center gap-3 rounded-md border px-3.5 py-3"
+            data-status-tone={props.runtimeStatusTone}
+          >
             <span class="redeven-settings-state-glyph redeven-surface-control relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/20" aria-hidden="true">
-              <Show
-                when={accessModel().current_runtime_url !== ''}
-                fallback={<Stop class="h-5 w-5 text-muted-foreground" />}
-              >
-                <Play class="h-4 w-4 text-success" />
-              </Show>
+              <RuntimeStatusOrb running={props.runtimeRunning} dark={props.dark} />
             </span>
             <span class="min-w-0">
               <span class="block text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 {props.i18n.t('settings.runtimeLabel')}
               </span>
-              <span class={cn(
-                'mt-1 block truncate text-xs font-semibold text-foreground',
-                runtimeAddress().primary_monospace && 'font-mono',
-              )}>
-                {runtimeAddress().primary}
+              <span class="redeven-settings-runtime-status mt-1 block truncate text-xs font-semibold text-foreground">
+                {props.runtimeStatusLabel}
               </span>
             </span>
           </div>

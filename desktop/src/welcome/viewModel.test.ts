@@ -37,6 +37,7 @@ import {
   buildEnvironmentCardModel,
   buildEnvironmentCardEndpointsModel,
   buildEnvironmentCardFactsModel,
+  buildEnvironmentSettingsRuntimeModel,
   buildGatewayRowModel,
   buildGatewaySourceRowModel,
   FACT_LABEL_ICONS,
@@ -548,6 +549,27 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
 }
 
 describe('buildEnvironmentDisplayStateModel', () => {
+  it('keeps settings ready and animated when runtime health is online without a Local UI URL', () => {
+    const local = testLocalEnvironment();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(providerRuntimeService({ state: 'openable' }), {
+          local_ui_url: '',
+        }),
+      },
+    });
+    const entry = snapshot.environments.find((environment) => environment.id === local.id);
+
+    expect(entry).toBeTruthy();
+    expect(entry!.local_ui_url).toBe('');
+    expect(buildEnvironmentSettingsRuntimeModel(entry!)).toEqual({
+      running: true,
+      status_label: 'READY',
+      status_tone: 'success',
+    });
+  });
+
   it('uses one reinstall action and one refresh action when recovery is required', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
