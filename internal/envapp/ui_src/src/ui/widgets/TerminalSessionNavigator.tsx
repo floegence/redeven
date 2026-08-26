@@ -661,7 +661,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
           <SidebarContent class="h-full min-h-0 overflow-hidden">
             <div
               ref={dragBoundaryEl}
-              class="relative flex h-full min-h-0 flex-col overflow-hidden"
+              class="relative flex h-full min-h-0 select-none flex-col overflow-hidden"
               data-terminal-drag-boundary
             >
               <div class="shrink-0 space-y-2">
@@ -703,7 +703,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                 <Input
                   size="sm"
                   value={props.filterQuery}
-                  class="w-full pl-7 pr-7"
+                  class="w-full select-text pl-7 pr-7"
                   placeholder={i18n.t('terminal.searchSessions')}
                   aria-label={i18n.t('terminal.searchSessions')}
                   data-testid="terminal-session-filter"

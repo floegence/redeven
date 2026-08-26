@@ -603,10 +603,14 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const { host } = renderNavigator(navigationItem());
     const newSession = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-session"]');
     const newGroup = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-group"]');
+    const boundary = host.querySelector<HTMLElement>('[data-terminal-drag-boundary]');
+    const filter = host.querySelector<HTMLInputElement>('[data-testid="terminal-session-filter"]');
 
     expect(newSession).toBeNull();
     expect(newGroup?.textContent).toContain('New group');
     expect(newGroup?.querySelector('svg')).not.toBeNull();
+    expect(boundary?.className).toContain('select-none');
+    expect(filter?.className).toContain('select-text');
   });
 
   it('keeps the session row selection-only and reserves dragging for the avatar handle', () => {
