@@ -154,7 +154,7 @@ export function ServiceTemplateTile(props: {
       aria-selected={props.selected}
       tabIndex={props.selected ? 0 : -1}
       class={cn(
-        'service-template-card service-template-tile min-w-0 rounded-xl border p-4 text-left text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'service-template-card service-template-tile min-w-0 rounded-xl p-4 text-left text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         props.selected && 'service-template-card--selected',
         props.template.installed && 'service-template-card--installed',
         !props.template.available && 'service-template-card--unavailable',
@@ -167,7 +167,7 @@ export function ServiceTemplateTile(props: {
     >
       <div class="flex min-w-0 items-start gap-3">
         <div
-          class={cn('service-template-identity__icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border', props.template.brandIcon && 'service-template-identity__icon--brand')}
+          class={cn('service-template-identity__icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', props.template.brandIcon && 'service-template-identity__icon--brand')}
           data-template-kind={props.template.kind}
           data-template-brand={props.template.brandIcon}
         >
@@ -230,14 +230,14 @@ export function ServiceTemplateDetailsPane(props: {
   };
   return (
     <aside
-      class="service-template-details min-w-0 rounded-2xl border p-5"
+      class="service-template-details min-w-0"
       data-testid="service-template-details"
       data-template-id={props.template.id}
       aria-label={props.template.name}
     >
       <div class="flex min-w-0 items-start justify-between gap-3">
         <div
-          class={cn('service-template-details__icon flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border', props.template.brandIcon && 'service-template-identity__icon--brand')}
+          class={cn('service-template-details__icon flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl', props.template.brandIcon && 'service-template-identity__icon--brand')}
           data-template-kind={props.template.kind}
           data-template-brand={props.template.brandIcon}
         >
@@ -267,7 +267,7 @@ export function ServiceTemplateDetailsPane(props: {
         </div>
       </dl>
 
-      <div class="service-template-details__status mt-4 rounded-xl px-3 py-2.5">
+      <div class="mt-4">
         <ServiceTemplateStatus template={props.template} detailed />
       </div>
 
@@ -408,7 +408,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
         >
           <div class="service-template-catalog__layout service-template-catalog__layout--with-details">
             <div
-              class="service-template-catalog__canvas min-w-0 rounded-2xl p-4"
+              class="service-template-catalog__canvas min-w-0"
               role="listbox"
               aria-label={i18n.t('webServices.managed.serviceTemplates')}
               data-testid="service-template-gallery"
@@ -460,12 +460,14 @@ function TemplateGroup(props: {
   return (
     <Show when={props.templates.length > 0}>
       <section class="service-template-group" role="group" aria-label={props.title} data-testid="service-template-group">
-        <div class="mb-3 flex items-end justify-between gap-3 px-0.5">
+        <div class="mb-3 px-0.5">
           <div class="min-w-0">
-            <h2 class="text-sm font-semibold leading-5 text-foreground">{props.title}</h2>
+            <div class="flex min-w-0 items-center gap-2">
+              <h2 class="truncate text-sm font-semibold leading-5 text-foreground">{props.title}</h2>
+              <span class="service-template-group__count shrink-0 rounded-full px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">{props.templates.length}</span>
+            </div>
             <p class="mt-0.5 text-[11px] leading-4 text-muted-foreground">{props.description}</p>
           </div>
-          <span class="service-template-group__count shrink-0 rounded-full px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">{props.templates.length}</span>
         </div>
         <div class="service-template-grid grid gap-3">
           <For each={props.templates}>{(template) => (
