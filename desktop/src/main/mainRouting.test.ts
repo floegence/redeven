@@ -618,6 +618,8 @@ describe('main routing', () => {
       probeSrc.indexOf('presence: runtimeTargetPresenceFromState(target, state)'),
     );
     expect(probeSrc).toContain('health: runtimeTargetHealthFromState(target, state)');
+    expect(mainSrc).toContain('runtime_pid: state.startup.pid');
+    expect(mainSrc).toContain('started_at_unix_ms: state.startup.started_at_unix_ms');
   });
 
   it('lets dev SSH bootstrap use an explicit runtime release tag without changing the bundled runtime version', () => {
@@ -979,6 +981,9 @@ describe('main routing', () => {
     expect(bridgeOpenSrc.indexOf('pendingRuntimePlacementOpenByTargetID.set(targetID, openTask)')).toBeLessThan(
       bridgeOpenSrc.indexOf('return openTask;'),
     );
+    expect(bridgeOpenSrc).toContain('canReuseFreshRuntimeOpenPreflight(cachedHealth, readyRecord)');
+    expect(bridgeOpenSrc).toContain("? 'fresh_health_reused'");
+    expect(bridgeOpenSrc).toContain('if (!joinedLifecycleMutation && !reusedFreshRuntimePreflight) {');
     expect(bridgeOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)');
     expect(bridgeOpenSrc.indexOf('const existingSession = liveSession(sessionKey)')).toBeLessThan(
       bridgeOpenSrc.indexOf('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)'),
@@ -997,6 +1002,9 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain("phase: 'opening_bridge_proxy'");
     expect(bridgeOpenSrc).toContain('runtimeBridgeStartCanRecover(error)');
     expect(bridgeOpenSrc).toContain('MANAGED_ENVIRONMENT_OPEN_BRIDGE_START_RETRY_DELAYS_MS');
+    expect(bridgeOpenSrc).toContain('cachedPreflightRefreshAttempted = true');
+    expect(bridgeOpenSrc).toContain("runtimeProbeCacheDecision = 'fresh_health_retry_refreshed'");
+    expect(bridgeOpenSrc).toContain('const refreshedReadyRecord = savedRuntimePlacementReadyRecord(');
     expect(bridgeOpenSrc).toContain('The Runtime is still starting. Desktop will retry the connection before restarting it.');
     expect(bridgeOpenSrc).toContain('managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID');
     expect(bridgeOpenSrc).toContain('MAX_MANAGED_ENVIRONMENT_OPEN_BRIDGE_RECOVERY_ATTEMPTS');
@@ -1006,6 +1014,7 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain('The SSH Runtime stopped while Desktop was connecting.');
     expect(bridgeOpenSrc).toContain("phase: 'checking_env_app_readiness'");
     expect(bridgeOpenSrc.match(/probeLocalRuntimeBridgeStartup\(bridgeSession\.startup/gu)).toHaveLength(1);
+    expect(bridgeOpenSrc).toContain('shellCacheScope: targetID');
     expect(bridgeOpenSrc).toContain('desktopFailureForRuntimePlacementBridgeReadiness(');
     expect(bridgeOpenSrc).not.toContain('Runtime Placement Bridge readiness failed (');
     expect(bridgeOpenSrc).toContain('local_ui_url: bridgeSession.startup.local_ui_url');

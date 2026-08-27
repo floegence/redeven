@@ -22,12 +22,14 @@ export type RuntimeProbeOptions = Readonly<{
   timeoutMs?: number;
   signal?: AbortSignal;
   headers?: Readonly<Record<string, string>>;
+  shellCacheScope?: string;
 }>;
 
 type NormalizedRuntimeProbeOptions = Readonly<{
   timeoutMs: number;
   signal?: AbortSignal;
   headers?: Readonly<Record<string, string>>;
+  shellCacheScope?: string;
 }>;
 
 export type RuntimeProbeFailureStage = 'runtime_health' | 'env_app_shell' | 'env_app_asset';
@@ -56,6 +58,7 @@ type RuntimeProbeStatus = Readonly<{
   local_ui_urls?: readonly string[];
   password_required: boolean;
   exposure?: LocalUIExposure;
+  pid?: number;
   started_at_unix_ms?: number;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
@@ -194,6 +197,10 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
       password_required: data.password_required,
       exposure,
       ...(() => {
+        const pid = normalizePositiveInteger(data.pid);
+        return pid ? { pid } : {};
+      })(),
+      ...(() => {
         const startedAtUnixMS = normalizePositiveInteger(data.started_at_unix_ms);
         return startedAtUnixMS ? { started_at_unix_ms: startedAtUnixMS } : {};
       })(),
@@ -328,9 +335,18 @@ async function probeEnvAppShell(
   return { result: 'ready', assetFingerprint };
 }
 
-function envAppShellRuntimeIdentity(baseURL: string, status: RuntimeProbeStatus): string {
+function envAppShellCacheNamespace(
+  baseURL: string,
+  options: NormalizedRuntimeProbeOptions,
+): string {
+  const shellCacheScope = String(options.shellCacheScope ?? '').trim();
+  return shellCacheScope ? `target:${shellCacheScope}` : `url:${baseURL}`;
+}
+
+function envAppShellRuntimeIdentity(cacheNamespace: string, status: RuntimeProbeStatus): string {
   return [
-    baseURL,
+    cacheNamespace,
+    status.pid ?? 0,
     status.started_at_unix_ms ?? 0,
     status.runtime_service?.runtime_version ?? '',
     status.runtime_service?.runtime_commit ?? '',
@@ -343,13 +359,13 @@ function envAppShellProbeCacheKey(runtimeIdentity: string, assetFingerprint: str
 }
 
 function rememberEnvAppShellSuccess(
-  baseURL: string,
+  cacheNamespace: string,
   runtimeIdentity: string,
   assetFingerprint: string,
 ): void {
-  const baseURLPrefix = `${baseURL}|`;
+  const cacheNamespacePrefix = `${cacheNamespace}|`;
   for (const [identity, previousFingerprint] of envAppShellFingerprintByRuntimeIdentity) {
-    if (identity !== runtimeIdentity && identity.startsWith(baseURLPrefix)) {
+    if (identity !== runtimeIdentity && identity.startsWith(cacheNamespacePrefix)) {
       envAppShellFingerprintByRuntimeIdentity.delete(identity);
       envAppShellSuccessCache.delete(envAppShellProbeCacheKey(identity, previousFingerprint));
     }
@@ -363,7 +379,8 @@ async function probeEnvAppShellCached(
   status: RuntimeProbeStatus,
   options: NormalizedRuntimeProbeOptions,
 ): Promise<EnvAppShellProbeResult> {
-  const runtimeIdentity = envAppShellRuntimeIdentity(baseURL, status);
+  const cacheNamespace = envAppShellCacheNamespace(baseURL, options);
+  const runtimeIdentity = envAppShellRuntimeIdentity(cacheNamespace, status);
   const cachedFingerprint = envAppShellFingerprintByRuntimeIdentity.get(runtimeIdentity);
   if (cachedFingerprint) {
     if (envAppShellSuccessCache.has(envAppShellProbeCacheKey(runtimeIdentity, cachedFingerprint))) {
@@ -373,7 +390,7 @@ async function probeEnvAppShellCached(
   }
   const outcome = await probeEnvAppShell(baseURL, options);
   if (outcome.result === 'ready' && outcome.assetFingerprint) {
-    rememberEnvAppShellSuccess(baseURL, runtimeIdentity, outcome.assetFingerprint);
+    rememberEnvAppShellSuccess(cacheNamespace, runtimeIdentity, outcome.assetFingerprint);
   }
   return outcome.result;
 }
@@ -405,6 +422,7 @@ function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatu
     local_ui_urls: localUIURLs,
     password_required: status.password_required,
     ...(status.exposure ? { exposure: status.exposure } : {}),
+    ...(status.pid ? { pid: status.pid } : {}),
     ...(status.started_at_unix_ms ? { started_at_unix_ms: status.started_at_unix_ms } : {}),
     ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
   };
@@ -415,6 +433,7 @@ function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
     status: 'online',
     password_required: startup.password_required === true,
     ...(startup.exposure ? { exposure: startup.exposure } : {}),
+    ...(startup.pid ? { pid: startup.pid } : {}),
     ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
     ...(startup.runtime_service ? { runtime_service: startup.runtime_service } : {}),
   };
@@ -426,6 +445,9 @@ function normalizedProbeOptions(options: RuntimeProbeOptions): NormalizedRuntime
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
     ...(options.signal ? { signal: options.signal } : {}),
     ...(options.headers ? { headers: options.headers } : {}),
+    ...(String(options.shellCacheScope ?? '').trim()
+      ? { shellCacheScope: String(options.shellCacheScope).trim() }
+      : {}),
   };
 }
 

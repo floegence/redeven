@@ -117,11 +117,13 @@ import { desktopSessionContextSnapshotFromTarget } from './desktopSessionContext
 import { buildDesktopRuntimeLaunchPlan, desktopAutoStartRuntimeEnabled } from './desktopLaunch';
 import { loadDesktopBundle, type DesktopBundle } from './desktopBundle';
 import {
+  desktopWelcomeRuntimeHealthForEnvironment,
   DesktopWelcomeRuntimeHealthStore,
   type DesktopWelcomeRuntimeHealthProbeEvent,
   type DesktopWelcomeRuntimeHealthProbeResult,
   type DesktopWelcomeRuntimeHealthTarget,
 } from './desktopWelcomeRuntimeHealth';
+import { canReuseFreshRuntimeOpenPreflight } from './runtimeOpenPreflight';
 import {
   resolveConfiguredDesktopCacheRoot,
   resolveConfiguredDesktopTempRoot,
@@ -805,6 +807,12 @@ type RuntimePlacementReadyRecord = Readonly<{
   runtime_started_at_unix_ms?: number;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
+
+type RuntimeOpenPreflightCacheDecision =
+  | 'fresh_health_reused'
+  | 'health_refreshed'
+  | 'joined_lifecycle_reused'
+  | 'fresh_health_retry_refreshed';
 
 type SavedRuntimeTargetState = Readonly<{
   running: boolean;
@@ -3501,6 +3509,7 @@ async function verifyReinstallTargetCatalogAndLocalUI(
     const localUI = await probeLocalRuntimeBridgeStartup(bridge.startup, {
       timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
       signal,
+      shellCacheScope: targetID,
     });
     if (!localUI.ok || !runtimeServiceIsOpenable(localUI.value.runtime_service)) {
       throw new Error('Desktop could not verify the fresh Local UI through the direct channel.');
@@ -4380,12 +4389,18 @@ function runtimeTargetHealthFromState(
     );
   }
   if (state.running || state.maintenance) {
-    return onlineRuntimeHealth(
-      source,
-      state.local_ui_url,
-      state.runtime_service,
-      state.maintenance,
-    );
+    return {
+      ...onlineRuntimeHealth(
+        source,
+        state.local_ui_url,
+        state.runtime_service,
+        state.maintenance,
+      ),
+      ...(state.startup?.pid ? { runtime_pid: state.startup.pid } : {}),
+      ...(state.startup?.started_at_unix_ms
+        ? { started_at_unix_ms: state.startup.started_at_unix_ms }
+        : {}),
+    };
   }
   return offlineRuntimeHealth(
     source,
@@ -8677,6 +8692,7 @@ function recordEnvironmentOpenTiming(
   operation: DesktopLauncherOperationSnapshot | null,
   detail: Readonly<{
     runtime_probe_duration_ms?: number;
+    runtime_probe_cache_decision?: RuntimeOpenPreflightCacheDecision;
     bridge_proxy_duration_ms?: number;
     desktop_model_source_duration_ms?: number;
   }> = {},
@@ -8689,6 +8705,7 @@ function recordEnvironmentOpenTiming(
     {
       total_duration_ms: Math.max(0, Date.now() - startedAt),
       ...(detail.runtime_probe_duration_ms !== undefined ? { runtime_probe_duration_ms: detail.runtime_probe_duration_ms } : {}),
+      ...(detail.runtime_probe_cache_decision ? { runtime_probe_cache_decision: detail.runtime_probe_cache_decision } : {}),
       ...(detail.bridge_proxy_duration_ms !== undefined ? { bridge_proxy_duration_ms: detail.bridge_proxy_duration_ms } : {}),
       ...(detail.desktop_model_source_duration_ms !== undefined ? { desktop_model_source_duration_ms: detail.desktop_model_source_duration_ms } : {}),
       window_created_ms: elapsedSince(startedAt, sessionRecord.window_created_at_unix_ms),
@@ -13421,6 +13438,7 @@ async function verifyManagedRuntimeLifecycleAccess(args: Readonly<{
     const localUI = await probeLocalRuntimeBridgeStartup(bridge.startup, {
       timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
       signal: args.signal,
+      shellCacheScope: args.targetID,
     });
     if (!localUI.ok || !runtimeServiceIsOpenable(localUI.value.runtime_service)) {
       throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
@@ -13554,12 +13572,6 @@ async function openRuntimePlacementBridgeFromLauncher(
         });
       }
     }
-    const runtimeProbeStartedAtUnixMS = Date.now();
-    if (!joinedLifecycleMutation) {
-      await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
-    }
-    runtimeProbeDurationMS = Date.now() - runtimeProbeStartedAtUnixMS;
-    const existingBridge = runtimePlacementBridgeRegistry.get(targetID);
     let readyRecord = savedRuntimePlacementReadyRecord(
       targetID,
       environmentID,
@@ -13567,6 +13579,31 @@ async function openRuntimePlacementBridgeFromLauncher(
       hostAccess,
       placement,
     );
+    const cachedHealth = desktopWelcomeRuntimeHealthForEnvironment(
+      welcomeRuntimeHealthStore.snapshot(),
+      environmentID,
+      targetID,
+    );
+    const reusedFreshRuntimePreflight = !joinedLifecycleMutation
+      && canReuseFreshRuntimeOpenPreflight(cachedHealth, readyRecord);
+    let runtimeProbeCacheDecision: RuntimeOpenPreflightCacheDecision = joinedLifecycleMutation
+      ? 'joined_lifecycle_reused'
+      : reusedFreshRuntimePreflight
+        ? 'fresh_health_reused'
+        : 'health_refreshed';
+    const runtimeProbeStartedAtUnixMS = Date.now();
+    if (!joinedLifecycleMutation && !reusedFreshRuntimePreflight) {
+      await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
+      readyRecord = savedRuntimePlacementReadyRecord(
+        targetID,
+        environmentID,
+        label,
+        hostAccess,
+        placement,
+      );
+    }
+    runtimeProbeDurationMS = Date.now() - runtimeProbeStartedAtUnixMS;
+    const existingBridge = runtimePlacementBridgeRegistry.get(targetID);
     const target = (readyRecord?.host_access ?? existingBridge?.session.host_access ?? hostAccess).kind === 'ssh_host'
       ? buildSSHDesktopTarget(sshDetailsFromRuntimePlacement(
           (readyRecord?.host_access ?? existingBridge?.session.host_access ?? hostAccess) as Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'ssh_host' }>>,
@@ -13773,6 +13810,7 @@ async function openRuntimePlacementBridgeFromLauncher(
         const bridgeProxyStartedAtUnixMS = Date.now();
         let bridgeRecoveryAttempt = 0;
         let bridgeStartupRetryAttempt = 0;
+        let cachedPreflightRefreshAttempted = false;
         for (;;) {
           try {
             bridgeSession = await startRuntimePlacementBridgeSession({
@@ -13787,6 +13825,31 @@ async function openRuntimePlacementBridgeFromLauncher(
             });
             break;
           } catch (error) {
+            if (
+              reusedFreshRuntimePreflight
+              && !cachedPreflightRefreshAttempted
+              && hostAccess.kind === 'ssh_host'
+              && runtimeBridgeStartCanRecover(error)
+            ) {
+              cachedPreflightRefreshAttempted = true;
+              runtimeProbeCacheDecision = 'fresh_health_retry_refreshed';
+              const retryProbeStartedAtUnixMS = Date.now();
+              await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
+              runtimeProbeDurationMS = (runtimeProbeDurationMS ?? 0)
+                + (Date.now() - retryProbeStartedAtUnixMS);
+              const refreshedReadyRecord = savedRuntimePlacementReadyRecord(
+                targetID,
+                environmentID,
+                label,
+                hostAccess,
+                placement,
+              );
+              if (refreshedReadyRecord) {
+                readyRecord = refreshedReadyRecord;
+                placement = refreshedReadyRecord.placement;
+                continue;
+              }
+            }
             const bridgeCanRetryDuringStartup = hostAccess.kind === 'ssh_host'
               && runtimeBridgeStartCanRecover(error)
               && bridgeStartupRetryAttempt < MANAGED_ENVIRONMENT_OPEN_BRIDGE_START_RETRY_DELAYS_MS.length;
@@ -13941,6 +14004,7 @@ async function openRuntimePlacementBridgeFromLauncher(
           readiness = await probeLocalRuntimeBridgeStartup(bridgeSession.startup, {
             timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
             signal,
+            shellCacheScope: targetID,
           });
           if (readiness.ok) {
             break;
@@ -14207,6 +14271,7 @@ async function openRuntimePlacementBridgeFromLauncher(
     });
     recordEnvironmentOpenTiming(sessionRecord!, completedOperation, {
       runtime_probe_duration_ms: runtimeProbeDurationMS,
+      runtime_probe_cache_decision: runtimeProbeCacheDecision,
       bridge_proxy_duration_ms: bridgeProxyDurationMS,
       desktop_model_source_duration_ms: desktopModelSourceDurationMS,
     });

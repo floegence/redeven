@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop runtime readiness
 description: Direct Runtime health, access readiness, and Open recovery boundaries.
 tags: [desktop, runtime, startup, readiness]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 # Summary
 
@@ -34,6 +34,8 @@ probe -> decide -> lifecycle when needed -> re-probe same target -> open
 
 A healthy Runtime opens directly. A stopped Runtime offers Start and Open. An incompatible Runtime offers Update and Open. Unknown or failed health offers Refresh with the real direct-channel diagnostic. A successful lifecycle step cannot complete Open until the same target produces a fresh compatible readiness observation. That observation carries Runtime health only; Open must create the live placement bridge before resolving an Env App URL, and an empty public `local_ui_url` is valid for a managed Desktop-private Runtime.
 
+Open may reuse a Welcome health observation for the separate status preflight only while it remains inside the 30-second freshness window and matches the exact target's ready record by Runtime PID, process start identity, and Runtime Service build identity. Missing identity, stale or failed health, non-openable service state, or any mismatch forces the normal direct probe. A reused observation never supplies a bridge URL or credential: Open still creates the live placement bridge, verifies its current private token, and probes Runtime health and Env App readiness through that bridge. The first recoverable bridge-start failure after reuse forces one status refresh before the existing bounded bridge retry and lifecycle recovery flow continues.
+
 Runtime process health, Runtime Service compatibility, Local UI availability, Workspace readiness, AI readiness, Provider link, and Gateway access are separate facts. AI or Provider failure does not make a healthy Runtime installation unavailable. Gateway failure affects only sessions routed through that Gateway.
 
 ## Capability and progress
@@ -56,6 +58,7 @@ Read-only health probes do not start, stop, repair, or reconnect Runtime. Access
 - `redeven:desktop/src/main/runtimePlacementManager.ts:1` - Container process replacement, startup waiting, and ready Runtime snapshots.
 - `redeven:desktop/src/main/reinstallRuntimePackage.ts:1` - Reinstall startup, single-process inventory, and Runtime Service terminal verification.
 - `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - One probe/decide/lifecycle/re-probe/open flow.
+- `redeven:desktop/src/main/runtimeOpenPreflight.ts:1` - Fresh status reuse requires exact process and Runtime Service identity.
 - `redeven:desktop/src/main/launcherOperations.ts:1` - Authoritative progress surface and terminal state.
 - `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Direct managed versus access-only capability boundary.
 - `redeven:desktop/src/welcome/App.tsx:1` - Localized action menu, progress, and recovery presentation.
