@@ -164,7 +164,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	agent, err := buildFloretThreadAgent(
 		r,
 		initialSurface,
-		contextWindow,
+		floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens, req.ModelCapability.MaxOutputTokens),
 		req.Options,
 		flProvider,
 		toolSurfaceProvider,
@@ -186,7 +186,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 func buildFloretThreadAgent(
 	r *run,
 	surface runToolSurface,
-	contextWindow int,
+	contextPolicy flconfig.ContextPolicy,
 	options RunOptions,
 	provider *floretProviderAdapter,
 	toolSurfaceProvider flruntime.ToolSurfaceProvider,
@@ -207,7 +207,7 @@ func buildFloretThreadAgent(
 		agentOptions = append(agentOptions, flruntime.WithAgentManualCompactions(manualCompactions))
 	}
 	return flruntime.NewAgent(
-		redevenFloretAgentConfig(surface.SystemPrompt, floretModelContextPolicy(contextWindow, options.MaxOutputTokens), options.ReasoningSelection),
+		redevenFloretAgentConfig(surface.SystemPrompt, contextPolicy, options.ReasoningSelection),
 		provider,
 		agentOptions...,
 	)
@@ -273,9 +273,13 @@ func normalizedFloretGatewayBaseURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
-func floretModelContextPolicy(contextWindow int, maxOutput int) flconfig.ContextPolicy {
+func floretModelContextPolicy(contextWindow int, requestedMaxOutput int, capabilityMaxOutput int) flconfig.ContextPolicy {
 	if contextWindow <= 0 {
 		contextWindow = modelGatewayDefaultContextWindowTokens
+	}
+	maxOutput := requestedMaxOutput
+	if maxOutput <= 0 {
+		maxOutput = capabilityMaxOutput
 	}
 	return flconfig.ContextPolicy{
 		ContextWindowTokens:   int64(contextWindow),
