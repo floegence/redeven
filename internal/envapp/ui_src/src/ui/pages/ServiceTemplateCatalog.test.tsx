@@ -107,35 +107,44 @@ describe('ServiceTemplateCatalog', () => {
     return { onCategoryChange, onCreate, onDeploy, onDuplicate, onEdit, onDelete, onQueryChange };
   }
 
-  it('groups built-in and custom templates into full-width cards with category counts', () => {
+  it('presents built-in and custom templates as a selectable gallery with a detail pane', () => {
     mount();
 
     expect(host.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(2);
     expect(host.querySelectorAll('[data-testid="service-template-card"]')).toHaveLength(2);
     expect(host.querySelector('[data-testid="deepseek-harness-logo"]')).toBeTruthy();
-    expect(host.querySelector('.grid')).toBeNull();
+    expect(host.querySelector('[data-testid="service-template-gallery"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="service-template-details"]')).toBeTruthy();
+    expect(host.querySelector('[data-template-id="deepseek-harness-host"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('DeepSeek Harness');
     expect(host.textContent).toContain('Built-in templates');
     expect(host.textContent).toContain('Custom templates');
     expect(host.textContent).toContain('Host templates 2');
     expect(host.textContent).toContain('Container templates 1');
   });
 
-  it('keeps deploy visible and moves duplicate, edit, and delete into the labeled menu', () => {
+  it('keeps primary and secondary actions in the selected template detail pane', () => {
     const actions = mount();
     const builtInCard = host.querySelector<HTMLElement>('[data-template-id="deepseek-harness-host"]')!;
     const customCard = host.querySelector<HTMLElement>('[data-template-id="custom-host"]')!;
 
-    builtInCard.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
-    builtInCard.querySelector<HTMLButtonElement>('[data-dropdown-items] button')?.click();
-    const customItems = customCard.querySelectorAll<HTMLButtonElement>('[data-dropdown-items] button');
+    expect(builtInCard.querySelector('[data-testid="service-template-primary"]')).toBeNull();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-template-details"] [data-dropdown-items] button')?.click();
+
+    customCard.click();
+    expect(customCard.getAttribute('aria-selected')).toBe('true');
+    host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
+    const customItems = host.querySelectorAll<HTMLButtonElement>('[data-testid="service-template-details"] [data-dropdown-items] button');
     customItems.item(1).click();
     customItems.item(2).click();
 
     expect(actions.onDeploy).toHaveBeenCalledWith('deepseek-harness-host');
+    expect(actions.onDeploy).toHaveBeenCalledWith('custom-host');
     expect(actions.onDuplicate).toHaveBeenCalledWith('deepseek-harness-host');
     expect(actions.onEdit).toHaveBeenCalledWith('custom-host');
     expect(actions.onDelete).toHaveBeenCalledWith('custom-host');
-    expect(builtInCard.textContent).toContain('More');
+    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('More');
   });
 
   it('routes category and create-menu choices through the catalog toolbar', () => {
@@ -149,6 +158,18 @@ describe('ServiceTemplateCatalog', () => {
     expect(actions.onCreate).toHaveBeenCalledWith('host');
   });
 
+  it('moves selection and the detail pane together with arrow keys', () => {
+    mount();
+    const builtInCard = host.querySelector<HTMLButtonElement>('[data-template-id="deepseek-harness-host"]')!;
+    const customCard = host.querySelector<HTMLButtonElement>('[data-template-id="custom-host"]')!;
+
+    builtInCard.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(customCard.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(customCard);
+    expect(host.querySelector('[data-testid="service-template-details"]')?.getAttribute('aria-label')).toBe('Workspace dashboard');
+  });
+
   it('keeps unavailable and installed cards readable while disabling deployment', () => {
     const unavailable = { ...builtIn, available: false, availabilityReason: 'Docker is unavailable.' };
     const installed = { ...custom, installed: true };
@@ -157,11 +178,12 @@ describe('ServiceTemplateCatalog', () => {
     const unavailableCard = host.querySelector<HTMLElement>('[data-template-id="deepseek-harness-host"]')!;
     const installedCard = host.querySelector<HTMLElement>('[data-template-id="custom-host"]')!;
     expect(unavailableCard.className).not.toContain('opacity');
-    expect(unavailableCard.textContent).toContain('Docker is unavailable.');
-    expect(unavailableCard.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
+    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Docker is unavailable.');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
     expect(installedCard.getAttribute('data-template-state')).toBe('installed');
-    expect(installedCard.textContent).toContain('This service family already has an instance');
-    expect(installedCard.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
+    installedCard.click();
+    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('This service family already has an instance');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
   });
 
   it('shows a distinct no-results state and clears the search', () => {

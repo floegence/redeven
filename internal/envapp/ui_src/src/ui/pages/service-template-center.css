@@ -1,33 +1,123 @@
 @layer components {
-  .service-template-card {
-    --service-template-card-surface: color-mix(
-      in srgb,
-      var(--redeven-surface-panel) 62%,
-      var(--redeven-surface-panel-elevated) 38%
+  .service-template-toolbar {
+    background: linear-gradient(
+      to bottom,
+      var(--redeven-surface-panel) 82%,
+      color-mix(in srgb, var(--redeven-surface-panel) 92%, transparent)
     );
-    background: var(--service-template-card-surface) !important;
-    border-color: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--redeven-stroke-overlay) 28%) !important;
+  }
+
+  .service-template-switcher {
+    padding: 2px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--redeven-surface-control-muted) 78%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--redeven-stroke-divider) 72%, transparent);
+  }
+
+  .service-template-switcher__item {
+    transition: color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+  }
+
+  .service-template-switcher__item[aria-selected='true'] {
+    color: var(--foreground);
+    background: var(--redeven-surface-panel-elevated);
+    box-shadow:
+      0 1px 3px color-mix(in srgb, var(--redeven-surface-shadow-source) 18%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--redeven-stroke-overlay) 58%, transparent);
+  }
+
+  .service-template-switcher__count,
+  .service-template-group__count {
+    background: color-mix(in srgb, var(--redeven-surface-control-muted) 78%, transparent);
+  }
+
+  .service-template-switcher__item[aria-selected='true'] .service-template-switcher__count {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  }
+
+  .service-template-catalog__layout {
+    display: grid;
+    min-width: 0;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .service-template-catalog__layout--with-details {
+    grid-template-columns: minmax(0, 1fr) minmax(17.5rem, 19.5rem);
+  }
+
+  .service-template-catalog__canvas {
+    background: color-mix(in srgb, var(--redeven-surface-control-muted) 56%, var(--redeven-surface-panel));
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--redeven-stroke-divider) 68%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 10%, transparent);
+  }
+
+  .service-template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-template-card {
+    min-height: 9.75rem;
+    overflow: hidden;
+    appearance: none;
+    background: var(--redeven-surface-panel-elevated);
+    border-color: color-mix(in srgb, var(--redeven-stroke-panel) 76%, transparent);
+    box-shadow:
+      0 1px 2px color-mix(in srgb, var(--redeven-surface-shadow-source) 11%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 14%, transparent);
     transform: translateY(0);
     transition-property: transform, border-color, background-color, box-shadow;
-    transition-duration: 180ms;
+    transition-duration: 160ms;
     transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .service-template-card__footer {
-    border-color: var(--redeven-stroke-divider);
+  .service-template-tile__description {
+    display: -webkit-box;
+    min-height: 2.5rem;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
-  .service-template-identity__icon {
-    border-color: var(--redeven-stroke-divider);
-    background: color-mix(in srgb, var(--redeven-surface-control-muted) 72%, var(--redeven-surface-panel));
-    color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground));
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 24%, transparent);
+  .service-template-tile__source {
+    text-transform: uppercase;
+  }
+
+  .service-template-card--selected {
+    border-color: color-mix(in srgb, var(--primary) 58%, var(--redeven-stroke-overlay));
+    background: color-mix(in srgb, var(--redeven-surface-panel-elevated) 94%, var(--primary) 6%);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
+      0 10px 22px -18px color-mix(in srgb, var(--primary) 48%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 20%, transparent);
+  }
+
+  .service-template-card--installed {
+    background: color-mix(in srgb, var(--redeven-surface-panel-elevated) 95%, var(--redeven-status-success) 5%);
+  }
+
+  .service-template-card--installed.service-template-card--selected {
+    border-color: color-mix(in srgb, var(--redeven-status-success-border) 72%, var(--primary));
+  }
+
+  .service-template-card--unavailable {
+    border-color: color-mix(in srgb, var(--redeven-status-warning-border) 52%, var(--redeven-stroke-panel));
+  }
+
+  .service-template-identity__icon,
+  .service-template-details__icon {
+    border-color: color-mix(in srgb, var(--redeven-stroke-divider) 78%, transparent);
+    background: color-mix(in srgb, var(--redeven-surface-control-muted) 64%, var(--redeven-surface-panel-elevated));
+    color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 26%, transparent);
     transform: scale(1);
-    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .service-template-identity__icon--brand {
-    background: color-mix(in srgb, var(--primary) 8%, var(--redeven-surface-panel-elevated));
+    background: color-mix(in srgb, var(--primary) 9%, var(--redeven-surface-panel-elevated));
     color: color-mix(in srgb, var(--primary) 86%, var(--foreground));
   }
 
@@ -37,17 +127,34 @@
   }
 
   .service-template-status-dot {
-    background: var(--redeven-status-neutral);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--redeven-status-neutral) 10%, transparent);
+    background: color-mix(in srgb, var(--primary) 68%, var(--redeven-status-neutral));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
   }
 
-  .service-template-card--installed {
-    border-color: var(--redeven-status-success-border) !important;
-    background: color-mix(in srgb, var(--service-template-card-surface) 94%, var(--redeven-status-success) 6%) !important;
+  .service-template-details {
+    position: sticky;
+    top: 4.25rem;
+    background: var(--redeven-surface-panel-elevated);
+    border-color: color-mix(in srgb, var(--redeven-stroke-overlay) 70%, var(--redeven-stroke-panel));
+    box-shadow:
+      0 18px 38px -30px color-mix(in srgb, var(--redeven-surface-shadow-source) 52%, transparent),
+      0 4px 12px -10px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 18%, transparent);
+    animation: service-template-detail-enter 160ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .service-template-card--unavailable {
-    border-color: color-mix(in srgb, var(--redeven-status-warning-border) 70%, var(--redeven-stroke-panel)) !important;
+  .service-template-details__metadata {
+    border-color: color-mix(in srgb, var(--redeven-stroke-divider) 78%, transparent);
+  }
+
+  .service-template-details__status {
+    background: color-mix(in srgb, var(--redeven-surface-control-muted) 62%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--redeven-stroke-divider) 62%, transparent);
+  }
+
+  .service-template-more {
+    border-color: color-mix(in srgb, var(--redeven-stroke-overlay) 76%, var(--redeven-stroke-divider));
+    background: color-mix(in srgb, var(--redeven-surface-control-muted) 48%, transparent);
   }
 
   .service-template-empty {
@@ -68,16 +175,19 @@
   @media (hover: hover) and (pointer: fine) {
     .service-template-card:hover {
       transform: translateY(-1px);
-      border-color: color-mix(in srgb, var(--foreground) 16%, var(--redeven-stroke-panel)) !important;
-      background: color-mix(in srgb, var(--service-template-card-surface) 96%, var(--foreground) 4%) !important;
+      border-color: color-mix(in srgb, var(--foreground) 18%, var(--redeven-stroke-panel));
       box-shadow:
-        0 12px 24px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 42%, transparent),
-        0 4px 10px -8px color-mix(in srgb, var(--redeven-surface-shadow-source) 28%, transparent),
-        inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 12%, transparent);
+        0 12px 24px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 46%, transparent),
+        0 4px 10px -8px color-mix(in srgb, var(--redeven-surface-shadow-source) 30%, transparent),
+        inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 18%, transparent);
+    }
+
+    .service-template-card--selected:hover {
+      border-color: color-mix(in srgb, var(--primary) 66%, var(--redeven-stroke-overlay));
     }
 
     .service-template-card:hover .service-template-identity__icon {
-      transform: scale(1.018);
+      transform: scale(1.025);
     }
 
     .service-template-card:active {
@@ -86,40 +196,75 @@
     }
   }
 
+  @media (max-width: 779px) {
+    .service-template-catalog__layout--with-details {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .service-template-details {
+      position: static;
+    }
+  }
+
   @media (max-width: 639px) {
     .service-template-toolbar > div {
       align-items: stretch;
     }
 
-    .service-template-toolbar [role='tablist'],
-    .service-template-toolbar [role='tab'] {
-      flex: 1;
-    }
-
+    .service-template-switcher,
+    .service-template-search,
+    .service-template-create-trigger,
     .service-template-toolbar [data-testid='service-template-create-menu'] {
       width: 100%;
     }
 
-    .service-template-card__footer {
+    .service-template-switcher__item {
+      flex: 1;
+    }
+
+    .service-template-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .service-template-catalog__canvas {
+      padding: 12px;
+    }
+
+    .service-template-details__actions {
       align-items: stretch;
       flex-direction: column;
     }
 
-    .service-template-card__actions,
-    .service-template-primary {
+    .service-template-primary,
+    .service-template-more,
+    .service-template-details__actions > * {
       width: 100%;
     }
+  }
+}
 
-    .service-template-primary {
-      flex: 1;
-    }
+@keyframes service-template-detail-enter {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .service-template-card,
-  .service-template-identity__icon {
+  .service-template-identity__icon,
+  .service-template-details__icon,
+  .service-template-switcher__item {
     transform: none !important;
     transition: none !important;
+  }
+
+  .service-template-details {
+    animation: none !important;
   }
 }

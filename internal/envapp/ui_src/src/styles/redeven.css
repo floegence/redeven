@@ -30,6 +30,10 @@
   --floe-floating-origin: right center;
 }
 
+[data-floe-dialog-panel].env-app-drawer-panel.service-template-explorer-drawer {
+  width: min(68rem, calc(100vw - 4rem));
+}
+
 [data-floe-dialog-overlay-root]:has(.env-app-drawer-panel) {
   app-region: no-drag;
 }
@@ -43,6 +47,10 @@
     top: var(--redeven-desktop-titlebar-height, 0px);
     width: 100vw;
     border-radius: 0;
+  }
+
+  [data-floe-dialog-panel].env-app-drawer-panel.service-template-explorer-drawer {
+    width: 100vw;
   }
 }
 

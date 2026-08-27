@@ -1707,6 +1707,7 @@ export function EnvPortForwardsPage() {
 
       <EnvAppDrawer
         open={templateDrawerOpen()}
+        class="service-template-explorer-drawer"
         onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) setTemplateDrawerOpen(open); }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
