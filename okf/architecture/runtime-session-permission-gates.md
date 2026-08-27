@@ -28,4 +28,4 @@ Browser or UI-side permission claims remain non-authoritative. Frontend terminal
 - `redeven:internal/session/types.go:29` - Process launch is allowed only when write and execute are both effective.
 - `redeven:internal/ai/run.go:4325` - Hosted terminal command dispatch rechecks the process-launch capability before starting a process.
 - `redeven:internal/monitor/service.go:150` - Monitor registers the cached Runtime process metrics endpoint as protected read-only access while retaining execute on system-wide monitoring.
-- `redeven:internal/envapp/ui_src/src/ui/EnvironmentRuntimeStatusTooltip.tsx:226` - Env App scopes metrics requests to the active tooltip interaction and preserves partial information on local failures.
+- `redeven:internal/envapp/ui_src/src/ui/EnvironmentRuntimeStatusTooltip.tsx:302` - Env App scopes metrics requests to the active tooltip interaction and preserves partial information on local failures.

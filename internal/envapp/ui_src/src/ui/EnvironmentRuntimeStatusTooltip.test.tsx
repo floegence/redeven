@@ -80,10 +80,15 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       processStartedAtMs: Date.now() - 3_600_000,
       runtimeService: { runtimeVersion: 'v2.4.1' },
     });
-    runtimeHarness.metrics.mockReset().mockResolvedValue({
-      cpuPercent: 12.34,
-      memoryBytes: 128 * 1024 * 1024,
-      sampledAtMs: Date.now(),
+    let metricSample = 0;
+    runtimeHarness.metrics.mockReset().mockImplementation(async () => {
+      const sample = metricSample;
+      metricSample += 1;
+      return {
+        cpuPercent: 12.34 + sample,
+        memoryBytes: (128 + sample) * 1024 * 1024,
+        sampledAtMs: Date.now() + sample,
+      };
     });
 
     host = document.createElement('div');
@@ -137,6 +142,8 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       expect(tooltip.querySelector('[data-runtime-memory]')?.textContent).toBe('128 MB');
       expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
       expect(runtimeHarness.metrics).toHaveBeenCalledTimes(1);
+      expect(tooltip.querySelector('[data-runtime-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('1');
+      expect(tooltip.querySelector('[data-runtime-sparkline="memory"]')?.getAttribute('data-sample-count')).toBe('1');
 
       const trigger = host.querySelector<HTMLElement>('[data-environment-runtime-trigger]')!;
       trigger.click();
@@ -147,6 +154,8 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       await flushPromises();
       expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
       expect(runtimeHarness.metrics).toHaveBeenCalledTimes(2);
+      expect(tooltip.querySelector('[data-runtime-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('2');
+      expect(tooltip.querySelector('[data-runtime-sparkline="cpu"] .environment-runtime-sparkline-line')?.getAttribute('d')).toContain('L');
 
       const anchor = host.querySelector<HTMLElement>('[data-redeven-tooltip-anchor]')!;
       trigger.dispatchEvent(new MouseEvent('mouseleave'));
