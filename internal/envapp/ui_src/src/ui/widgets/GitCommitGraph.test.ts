@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { describe, expect, it, vi } from 'vitest';
 import type { GitCommitSummary } from '../protocol/redeven_v1';
-import { GitCommitGraph, buildCommitGraphRows } from './GitCommitGraph';
+import { GitCommitGraph, buildCommitGraphRows, resolveCommitGraphGeometry } from './GitCommitGraph';
 
 function commit(hash: string, parents: string[], subject: string): GitCommitSummary {
   return {
@@ -37,6 +37,48 @@ describe('buildCommitGraphRows', () => {
     expect(new Set(rows.map((row) => row.columns))).toEqual(new Set([2]));
     expect(rows[0]?.afterLanes[1]?.colorIndex).toBe(rows[2]?.nodeColorIndex);
     expect(rows[0]?.nodeColorIndex).toBe(rows[1]?.nodeColorIndex);
+  });
+});
+
+describe('resolveCommitGraphGeometry', () => {
+  it('keeps the natural lane spacing for simple graphs', () => {
+    expect(resolveCommitGraphGeometry(1, 180)).toMatchObject({
+      width: 36,
+      laneWidth: 16,
+      paddingX: 10,
+    });
+    expect(resolveCommitGraphGeometry(2, 180)).toMatchObject({
+      width: 52,
+      laneWidth: 16,
+      paddingX: 10,
+    });
+  });
+
+  it.each([
+    { columns: 22, containerWidth: 180, expectedWidth: 52 },
+    { columns: 22, containerWidth: 240, expectedWidth: 108 },
+    { columns: 22, containerWidth: 520, expectedWidth: 234 },
+    { columns: 22, containerWidth: 650, expectedWidth: 292.5 },
+    { columns: 30, containerWidth: 650, expectedWidth: 292.5 },
+  ])('reserves commit summary space for $columns lanes at $containerWidth px', ({ columns, containerWidth, expectedWidth }) => {
+    const geometry = resolveCommitGraphGeometry(columns, containerWidth);
+
+    expect(geometry.width).toBe(expectedWidth);
+    expect(geometry.width).toBeLessThanOrEqual(containerWidth * 0.45);
+    expect(containerWidth - geometry.width).toBeGreaterThanOrEqual(128);
+    expect(geometry.laneWidth).toBeLessThanOrEqual(16);
+  });
+
+  it('expands one geometry monotonically as the sidebar grows', () => {
+    const widths = [180, 240, 520, 650]
+      .map((containerWidth) => resolveCommitGraphGeometry(22, containerWidth).width);
+
+    expect(widths).toEqual([...widths].sort((left, right) => left - right));
+    expect(new Set(widths).size).toBe(widths.length);
+  });
+
+  it('uses the minimum sidebar width before a real measurement is available', () => {
+    expect(resolveCommitGraphGeometry(22, 0)).toEqual(resolveCommitGraphGeometry(22, 180));
   });
 });
 
@@ -164,6 +206,7 @@ describe('GitCommitGraph layout', () => {
 
       const firstSubject = host.querySelector('[data-commit-graph-subject="commit003"]');
       expect(firstSubject?.textContent).toBe('Latest commit');
+      expect(host.textContent).not.toContain('Selected');
     } finally {
       dispose();
     }

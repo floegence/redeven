@@ -7,7 +7,7 @@ timestamp: 2026-07-30T00:00:00Z
 ---
 # Summary
 
-Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light retains Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Hover and keyboard focus provide separate transient feedback. If a theme cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette or ambiguous neutral styling.
+Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light retains Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Commit graph topology adapts to the actual sidebar width without displacing the commit summary. Hover and keyboard focus provide separate transient feedback. If a theme or layout cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette, ambiguous neutral styling, or clipped metadata.
 
 # Contract
 
@@ -17,17 +17,25 @@ Selected navigation, branch rows, history rows, status summaries, and changed-fi
 
 The Current branch chip is independent of selection styling. It always uses the current-branch chip tokens, including when the current branch is selected. Git change and health tones such as success, warning, danger, info, and remote-branch violet remain on semantic icons, badges, paths, and values; they must not determine a selection indicator or focus ring.
 
+## Commit graph layout
+
+The history sidebar has one measured geometry owner for static rails, row connectors, nodes, and row columns. Simple histories retain the natural 16-pixel lane spacing. When topology is wider than the sidebar budget, the graph uses at most 45% of the commit row and compresses lane spacing, nodes, and strokes together while preserving every lane and connection. The commit summary keeps the remaining width, with a 128-pixel target where the sidebar can provide it; subject and author truncate within their own cells while hash and time remain visible. Sidebar resizing recomputes this geometry directly and does not create horizontal scrolling, rewrite the persisted sidebar width, or select a second compact layout.
+
+The selected row surface and the main commit detail are the selection presentation. The history summary does not add a competing inline `Selected` label. Complex topology cannot change commit selection, detail loading, context actions, or keyboard behavior.
+
 ## Theme and accessibility
 
 Every built-in light and dark shell preset inherits the complete Git interaction token set. Themes, including Classic Dark, derive selected surfaces from Floe's published `selection-bg` and derive selection indicators and focus rings from the theme `ring`, with a small foreground mixture in dark themes where needed to preserve adjacent-color contrast. This keeps warm, green, violet, neutral, and blue themes within their own interaction identity. Light themes use a restrained selection mixture over the panel; dark themes use a stronger mixture so selection does not disappear into dark panels, while Classic Dark keeps a quieter surface mixture suited to its elevated panels. Classic Light explicitly retains Redeven's validated blue roles. Selected text and current-chip text meet a 4.5:1 contrast target. Selection indicators and focus rings meet a 3:1 adjacent-color target, while selected, hover, and idle surfaces retain measurable perceptual separation. Forced-colors mode exposes selected borders, indicators, focus outlines, and current-chip boundaries through system colors.
 
 # Boundaries
 
-This contract changes presentation only. It does not alter Git state, selection ownership, keyboard navigation, ARIA state, workspace generation, or Files decoration. Product themes may vary selection hue and surrounding surfaces, but they must not replace interaction roles with Git semantic status colors, inherit a fixed palette from another theme, or make Current a proxy for selection.
+This contract changes presentation only. It does not alter Git state, selection ownership, keyboard navigation, ARIA state, workspace generation, sidebar-width persistence, or Files decoration. Product themes may vary selection hue and surrounding surfaces, but they must not replace interaction roles with Git semantic status colors, inherit a fixed palette from another theme, or make Current a proxy for selection.
 
 # Evidence
 
 - redeven:internal/envapp/ui_src/src/styles/redeven.css - Defines the shared light, dark, and forced-colors Git interaction tokens and state classes.
 - redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx - Verifies computed contrast and perceptual separation across all built-in shell themes.
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitChrome.ts - Centralizes selectable row, navigation, secondary text, selection chip, and current-branch helpers.
+- redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitGraph.tsx - Owns topology construction and the single width-bounded graph geometry.
+- redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitGraph.browser.test.tsx - Verifies complex topology containment, summary visibility, resizing, and rail-to-node alignment in a real browser.
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitWorkbenchSidebar.e2e.test.tsx - Covers independent current and selected branch combinations.
