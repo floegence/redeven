@@ -6,6 +6,17 @@ const allowedFloetermInitialModules = new Set([
   '@floegence/floeterm-terminal-web/dist/utils/logger.js',
 ]);
 
+const viteContentHashPattern = /-[A-Za-z0-9_-]{8}(?=\.[A-Za-z0-9]+$)/u;
+
+export function findForbiddenInitialAssetNames(assets, forbiddenNames) {
+  const semanticAssetNames = assets.map((asset) => (
+    asset.replace(viteContentHashPattern, '').toLowerCase()
+  ));
+  return forbiddenNames.filter((name) => (
+    semanticAssetNames.some((asset) => asset.includes(name.toLowerCase()))
+  ));
+}
+
 function isForbiddenInitialModule(moduleId) {
   if (moduleId === '@floegence/floe-webapp-boot'
       || moduleId.startsWith('@floegence/floe-webapp-boot/')) {
