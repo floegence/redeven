@@ -6,6 +6,7 @@ import {
 } from '@floegence/redevplugin-ui';
 
 import type { PluginLifecycleAPI } from './pluginApi';
+import { ApprovedInstallInventoryRefreshError } from './pluginApprovedInstallSetup';
 import {
   executionInstallFailure,
   inventoryInstallFailure,
@@ -134,7 +135,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
       return;
     }
 
-    put({ ...projection, observation: 'refreshing', failure: undefined }, attempt.generation);
+    put({ ...projection, observation: 'finalizing', failure: undefined }, attempt.generation);
     let inventory: PluginInventoryProjection | undefined;
     try {
       inventory = await withTimeout(
@@ -153,7 +154,6 @@ export function createPluginInstallCoordinator(options: Readonly<{
       return;
     }
 
-    put({ ...projection, observation: 'authorizing', failure: undefined }, attempt.generation);
     try {
       await options.completeApprovedInstall(
         projection.pluginInstanceID,
@@ -161,7 +161,15 @@ export function createPluginInstallCoordinator(options: Readonly<{
         attempt.controller.signal,
       );
       remove(projection.pluginInstanceID, attempt.generation);
-    } catch {
+    } catch (error) {
+      if (error instanceof ApprovedInstallInventoryRefreshError) {
+        put({
+          ...projection,
+          observation: 'refresh_failed',
+          failure: inventoryInstallFailure(),
+        }, attempt.generation);
+        return;
+      }
       put({
         ...projection,
         observation: 'activation_failed',
@@ -290,7 +298,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
       const projection: PluginInstallExecutionProjection = {
         pluginID,
         pluginInstanceID,
-        observation: execution.status === 'completed' ? 'refreshing' : 'watching',
+        observation: execution.status === 'completed' ? 'finalizing' : 'watching',
         execution,
         progress: [],
       };
@@ -483,8 +491,7 @@ function installOperationActive(projection: PluginInstallExecutionProjection): b
   return projection.observation === 'starting'
     || projection.observation === 'watching'
     || projection.observation === 'reconnecting'
-    || projection.observation === 'refreshing'
-    || projection.observation === 'authorizing';
+    || projection.observation === 'finalizing';
 }
 
 function mergeProgress(

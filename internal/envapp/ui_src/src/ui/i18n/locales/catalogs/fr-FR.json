@@ -4218,9 +4218,8 @@
           "enable": "Activation..."
         },
         "starting": "Préparation de l’installation...",
-        "authorizing": "Accord des autorisations sélectionnées lors de l'installation...",
+        "finalizing": "Finalisation de l’installation...",
         "activationFailed": "Le plugin est installé et activé, mais la configuration des autorisations n’est pas terminée. Réessayez la configuration.",
-        "refreshing": "Installation terminée. Actualisation du centre de plugins...",
         "reconnecting": "Connexion interrompue. Reconnexion à la même installation...",
         "refreshFailed": "Le plugin est installé, mais le centre de plugins n’a pas pu actualiser l’inventaire.",
         "retryRefresh": "Actualiser l’inventaire",

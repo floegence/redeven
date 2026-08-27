@@ -32,9 +32,8 @@ export function PluginInstallStatus(props: {
     && props.projection.observation !== 'refresh_failed'
     && props.projection.observation !== 'activation_failed'
     && (
-      props.projection.observation === 'refreshing'
+      props.projection.observation === 'finalizing'
       || props.projection.observation === 'reconnecting'
-      || props.projection.observation === 'authorizing'
       || execution()?.status !== 'completed'
     );
   const recovery = () => props.projection.failure?.recovery ?? 'none';
@@ -43,8 +42,7 @@ export function PluginInstallStatus(props: {
   const statusIcon = () => (
     failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed'
       ? AlertTriangle
-      : props.projection.observation === 'authorizing'
-        || props.projection.observation === 'refreshing'
+      : props.projection.observation === 'finalizing'
         || props.projection.observation === 'reconnecting'
         ? RefreshIcon
       : execution()?.status === 'completed'
@@ -106,8 +104,7 @@ function installStatusLabel(
 ): string {
   if (projection.observation === 'starting') return i18n.t('uiCopy.plugin.installOperation.starting');
   if (projection.observation === 'reconnecting') return i18n.t('uiCopy.plugin.installOperation.reconnecting');
-  if (projection.observation === 'refreshing') return i18n.t('uiCopy.plugin.installOperation.refreshing');
-  if (projection.observation === 'authorizing') return i18n.t('uiCopy.plugin.installOperation.authorizing');
+  if (projection.observation === 'finalizing') return i18n.t('uiCopy.plugin.installOperation.finalizing');
   if (projection.observation === 'activation_failed') return i18n.t('uiCopy.plugin.installOperation.activationFailed');
   if (projection.observation === 'refresh_failed') return i18n.t('uiCopy.plugin.installOperation.refreshFailed');
   const execution = projection.execution;

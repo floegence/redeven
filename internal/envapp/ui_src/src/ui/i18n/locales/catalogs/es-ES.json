@@ -4218,9 +4218,8 @@
           "enable": "Activando..."
         },
         "starting": "Preparando la instalación...",
-        "authorizing": "Concediendo los permisos seleccionados durante la instalación...",
+        "finalizing": "Finalizando la instalación...",
         "activationFailed": "El complemento está instalado y activado, pero no se completó la configuración de permisos. Reintenta la configuración.",
-        "refreshing": "Instalación completada. Actualizando el centro de plugins...",
         "reconnecting": "Se interrumpió la conexión. Reconectando a la misma instalación...",
         "refreshFailed": "El plugin se instaló, pero el centro de plugins no pudo actualizar el inventario.",
         "retryRefresh": "Actualizar inventario",
