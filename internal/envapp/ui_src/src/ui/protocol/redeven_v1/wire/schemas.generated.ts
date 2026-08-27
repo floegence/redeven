@@ -3849,6 +3849,21 @@ export const redevenWireSchemas = {
             },
             "required": []
           },
+          "ai_readiness": {
+            "kind": "object",
+            "properties": {
+              "state": {
+                "kind": "string"
+              },
+              "reason_code": {
+                "kind": "string"
+              },
+              "issue_count": {
+                "kind": "number"
+              }
+            },
+            "required": []
+          },
           "active_workload": {
             "kind": "object",
             "properties": {
@@ -3899,6 +3914,34 @@ export const redevenWireSchemas = {
                 "required": []
               },
               "provider_link": {
+                "kind": "object",
+                "properties": {
+                  "supported": {
+                    "kind": "union",
+                    "options": [
+                      {
+                        "kind": "literal",
+                        "value": false
+                      },
+                      {
+                        "kind": "literal",
+                        "value": true
+                      }
+                    ]
+                  },
+                  "bind_method": {
+                    "kind": "string"
+                  },
+                  "reason_code": {
+                    "kind": "string"
+                  },
+                  "message": {
+                    "kind": "string"
+                  }
+                },
+                "required": []
+              },
+              "runtime_gateway": {
                 "kind": "object",
                 "properties": {
                   "supported": {

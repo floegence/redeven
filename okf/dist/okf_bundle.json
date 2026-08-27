@@ -5014,7 +5014,7 @@
         "desktop",
         "runtime-service"
       ],
-      "timestamp": "2026-08-17T00:00:00Z",
+      "timestamp": "2026-08-27T00:00:00Z",
       "frontmatter": {
         "description": "Runtime identity, independent compatibility, access readiness, workload inventory, and optional Gateway supervision.",
         "tags": [
@@ -5023,19 +5023,19 @@
           "desktop",
           "runtime-service"
         ],
-        "timestamp": "2026-08-17T00:00:00Z",
+        "timestamp": "2026-08-27T00:00:00Z",
         "title": "Runtime Service snapshot",
         "type": "Runtime Contract"
       },
-      "body_length": 3341,
+      "body_length": 4107,
       "summary": "The Runtime Service snapshot is a typed boundary between Runtime, Desktop, Local UI, and optional Gateway supervision. Runtime protocol/version, compatibility epoch, capabilities, service readiness, and workload identity are explicit facts. Gateway is optional for Runtime startup and ordinary access; its absence only closes Redeven-managed lifecycle actions.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime publishes its own service protocol and independent component version. Gateway compatibility is negotiated by protocol, epoch, capability set, signed manifest, and Runtime artifact digest; equal version strings are not required. A missing or incompatible Gateway fails closed only for lifecycle management. Runtime Connect, Workspace, terminal, files, web, and Runtime UI remain available according to their own gates.\n\nThe snapshot includes target identity, generation-bound workload/process inventory, snapshot revision, inventory digest, lifecycle fence state, and typed `unknown` values when inventory is unavailable or malformed. A supervisor can begin/release a fence and perform token-bound shutdown, but Runtime does not create Gateway operations, permits, locks, or recovery records. Fence release requires the exact token while a fence is active. After a successful replacement starts a new Runtime process with no inherited fence, releasing the consumed non-empty token is idempotent so Gateway can persist the operation outcome without manufacturing cross-process Runtime state. External OS maintenance is outside the product lifecycle authority; the next Gateway enablement revalidates identity, protocol, epoch, capabilities, and digest.\n\nRuntime liveness and startup reporting remain independent from optional AI/model-source readiness. Building a Runtime Service snapshot reads the process-local binding and workload leases; it does not issue a model-source RPC or scan historical Floret threads. A temporarily unavailable model source therefore cannot make an already listening Runtime appear to have exited, and active workload counts come from the in-memory admission leases until their canonical terminal view releases them.",
-          "char_count": 1751
+          "body": "Runtime publishes its own service protocol and independent component version. Gateway compatibility is negotiated by protocol, epoch, capability set, signed manifest, and Runtime artifact digest; equal version strings are not required. A missing or incompatible Gateway fails closed only for lifecycle management. Runtime Connect, Workspace, terminal, files, web, and Runtime UI remain available according to their own gates.\n\nThe snapshot includes target identity, generation-bound workload/process inventory, snapshot revision, inventory digest, lifecycle fence state, and typed `unknown` values when inventory is unavailable or malformed. A supervisor can begin/release a fence and perform token-bound shutdown, but Runtime does not create Gateway operations, permits, locks, or recovery records. Fence release requires the exact token while a fence is active. After a successful replacement starts a new Runtime process with no inherited fence, releasing the consumed non-empty token is idempotent so Gateway can persist the operation outcome without manufacturing cross-process Runtime state. External OS maintenance is outside the product lifecycle authority; the next Gateway enablement revalidates identity, protocol, epoch, capabilities, and digest.\n\nRuntime liveness and startup reporting remain independent from optional AI/model-source readiness. Building a Runtime Service snapshot reads the process-local binding and workload leases; it does not issue a model-source RPC or scan historical Floret threads. A temporarily unavailable model source therefore cannot make an already listening Runtime appear to have exited, and active workload counts come from the in-memory admission leases until their canonical terminal view releases them.\n\n`sys.ping` carries the complete normalized Runtime Service snapshot. The Local UI wire contract must accept open and AI readiness, active workload, Desktop model-source, Provider-link and Runtime Gateway capabilities, plus bindings before its strict generated validator decodes the response. Runtime snapshot fields and generated wire schemas change together; an unknown response key must not turn a healthy Runtime into a reconnect loop.",
+          "char_count": 2191
         },
         {
           "id": "boundaries",
@@ -5087,6 +5087,18 @@
           "source": "redeven:internal/ai/desktop_model_source.go",
           "line": 372,
           "description": "Process-local Desktop model-source binding snapshot used by Runtime status."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/wire/sys.ts:1:local ui wire shape for the complete `sys.ping` runtime service snapshot.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/wire/sys.ts",
+          "line": 1,
+          "description": "Local UI wire shape for the complete `sys.ping` Runtime Service snapshot."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.test.ts:48:strict response decoding coverage for ai readiness and runtime gateway capability fields.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.test.ts",
+          "line": 48,
+          "description": "Strict response decoding coverage for AI readiness and Runtime Gateway capability fields."
         }
       ],
       "snippet": "The Runtime Service snapshot is a typed boundary between Runtime, Desktop, Local UI, and optional Gateway supervision. Runtime protocol/version, compatibility epoch, capabilities, service readiness, and workload identity are explicit facts.",
@@ -10282,5 +10294,5 @@
       ]
     }
   ],
-  "source_sha256": "65fc5ffc56de74688ea79aa4ad43165a273c7703e65114225601fd6d7bd9b8ab"
+  "source_sha256": "5f69b1b3abd337bb138ffb873733e8b7672b2f1f255d7e96228412d4e52d6c84"
 }

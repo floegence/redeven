@@ -45,6 +45,61 @@ describe('Redeven v1 terminal notifications', () => {
     expect(call).toHaveBeenCalledWith(3001, {}, expect.any(Function));
   });
 
+  it('accepts the complete runtime service snapshot returned by sys ping', async () => {
+    const call = vi.fn(async (
+      _typeId: number,
+      _payload: unknown,
+      decodeResponse: (payload: unknown) => unknown,
+    ) => decodeResponse({
+      server_time_ms: 42,
+      process_started_at_ms: 41,
+      version: 'v1.4.2',
+      runtime_service: {
+        runtime_version: 'v1.4.2',
+        protocol_version: 'redeven-runtime-v2',
+        remote_enabled: false,
+        compatibility: 'compatible',
+        open_readiness: { state: 'openable' },
+        ai_readiness: {
+          state: 'degraded',
+          reason_code: 'host_thread_settings_missing',
+          issue_count: 2,
+        },
+        active_workload: {
+          terminal_count: 1,
+          session_count: 1,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+        capabilities: {
+          desktop_model_source: { supported: true, bind_method: 'runtime_control_v2' },
+          provider_link: { supported: false },
+          runtime_gateway: { supported: true, bind_method: 'runtime_control_v2' },
+        },
+        bindings: {
+          desktop_model_source: { state: 'bound' },
+          provider_link: { state: 'unsupported', remote_enabled: false },
+        },
+      },
+    }));
+    const rpc = createRedevenV1Rpc({ call, onNotify: vi.fn() } as any);
+
+    await expect(rpc.sys.ping()).resolves.toMatchObject({
+      processStartedAtMs: 41,
+      runtimeService: {
+        aiReadiness: {
+          state: 'degraded',
+          reasonCode: 'host_thread_settings_missing',
+          issueCount: 2,
+        },
+        capabilities: {
+          runtimeGateway: { supported: true, bindMethod: 'runtime_control_v2' },
+        },
+      },
+    });
+    expect(call).toHaveBeenCalledWith(4001, {}, expect.any(Function));
+  });
+
   it('keeps terminal metadata notifications on unique consecutive type IDs', () => {
     const notifyHandlers = new Map<number, (payload: unknown) => void>();
     const onNotify = vi.fn((

@@ -33,6 +33,21 @@ export type RuntimeServiceOpenReadiness = {
   message?: string;
 };
 
+export type RuntimeServiceAIReadinessState =
+  | 'ready'
+  | 'degraded'
+  | 'unavailable'
+  | 'inspecting'
+  | 'migrating'
+  | 'verifying'
+  | 'blocked';
+
+export type RuntimeServiceAIReadiness = {
+  state: RuntimeServiceAIReadinessState;
+  reasonCode?: string;
+  issueCount: number;
+};
+
 export type RuntimeServiceWorkload = {
   terminalCount: number;
   sessionCount: number;
@@ -97,10 +112,12 @@ export type RuntimeServiceSnapshot = {
   minimumRuntimeVersion?: string;
   compatibilityReviewId?: string;
   openReadiness?: RuntimeServiceOpenReadiness;
+  aiReadiness?: RuntimeServiceAIReadiness;
   activeWorkload: RuntimeServiceWorkload;
   capabilities?: {
     desktopModelSource: RuntimeServiceCapability;
     providerLink: RuntimeServiceCapability;
+    runtimeGateway?: RuntimeServiceCapability;
   };
   bindings?: {
     desktopModelSource: RuntimeServiceBinding;
