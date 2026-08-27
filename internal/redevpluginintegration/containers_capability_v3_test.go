@@ -203,7 +203,7 @@ func TestContainersPartialPruneRequiresUnknownOutcomeReconciliation(t *testing.T
 		PendingIdentities:   []string{"sha256:b"},
 		Cause:               errors.New("second identity failed"),
 	}
-	err := containerBusinessErrorForBinding(capability.ExecutionBinding{CapabilityVersion: containersCapabilityV3Version}, cause)
+	err := containerMutationBusinessError(cause)
 	if outcome := mutation.ForError(err); outcome != mutation.OutcomeUnknown {
 		t.Fatalf("partial prune mutation outcome = %q, want unknown", outcome)
 	}
@@ -296,7 +296,7 @@ func TestContainersPreflightProjectionKeepsExactDigestButOmitsSensitiveInputs(t 
 	}
 }
 
-func TestContainerResourceBusinessErrorSeparatesRecoveryStates(t *testing.T) {
+func TestContainerCapabilityBusinessErrorSeparatesRecoveryStates(t *testing.T) {
 	for _, test := range []struct {
 		cause error
 		code  string
@@ -309,8 +309,8 @@ func TestContainerResourceBusinessErrorSeparatesRecoveryStates(t *testing.T) {
 		{containers.ErrReferenceStateIncomplete, "CONTAINER_REFERENCE_STATE_INCOMPLETE"},
 	} {
 		var businessError *capability.BusinessError
-		if err := containerResourceBusinessError(test.cause); !errors.As(err, &businessError) || businessError.Code != test.code {
-			t.Fatalf("containerResourceBusinessError(%v) = %#v, want %s", test.cause, businessError, test.code)
+		if err := containerCapabilityBusinessError(test.cause); !errors.As(err, &businessError) || businessError.Code != test.code {
+			t.Fatalf("containerCapabilityBusinessError(%v) = %#v, want %s", test.cause, businessError, test.code)
 		}
 		validateContainersV3CandidateBusinessError(t, businessError)
 	}

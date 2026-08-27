@@ -39,7 +39,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		result, err := a.containers.ListEndpoints(ctx, containers.EndpointListRequest{Engine: input.Engine})
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(map[string]any{"engine": string(input.Engine), "endpoints": result.Endpoints})
 	case containers.MethodEndpointsStatus:
@@ -49,7 +49,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		result, err := a.containers.EndpointStatus(ctx, containers.EndpointStatusRequest{Engine: input.Engine, EndpointID: input.EndpointID})
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(map[string]any{"endpoint": result})
 	case containers.MethodComposeProjectsList:
@@ -59,7 +59,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		items, err := a.containers.ListComposeProjects(ctx, containers.ComposeProjectListRequest{Engine: input.Engine, EndpointID: input.EndpointID})
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(map[string]any{"engine": string(input.Engine), "endpoint_id": input.EndpointID, "projects": items})
 	case containers.MethodComposeProjectsInspect:
@@ -69,7 +69,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		item, err := a.containers.InspectComposeProject(ctx, composeRequest(input))
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(map[string]any{"engine": string(input.Engine), "endpoint_id": input.EndpointID, "project": item})
 	case containers.MethodComposeProjectsPreflight:
@@ -79,7 +79,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		plan, err := a.containers.ComposeProjectPreflight(ctx, input.Action, composeRequest(input))
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	case containers.MethodPodsList:
@@ -89,7 +89,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		items, err := a.containers.ListPods(ctx, containers.PodListRequest{Engine: input.Engine, EndpointID: input.EndpointID})
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(map[string]any{"engine": string(input.Engine), "endpoint_id": input.EndpointID, "pods": items})
 	case containers.MethodPodsInspect:
@@ -99,7 +99,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		item, err := a.containers.InspectPod(ctx, podRequest(input))
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(map[string]any{"engine": string(input.Engine), "endpoint_id": input.EndpointID, "pod": item})
 	case containers.MethodPodsCreatePreflight:
@@ -109,7 +109,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		plan, err := a.containers.CreatePodPreflight(ctx, input)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	case containers.MethodPodsActionPreflight:
@@ -119,7 +119,7 @@ func (a *containersCapabilityAdapter) invokeWorkspaceSync(ctx context.Context, m
 		}
 		plan, err := a.containers.PodActionPreflight(ctx, input.Action, podRequest(input))
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	default:

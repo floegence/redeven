@@ -63,11 +63,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		stats, err := a.containers.Stats(bound, input.Engine, input.ContainerID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "stats": stats}, input.EndpointID))
 	case containers.MethodContainersCreatePreflight:
@@ -77,7 +77,7 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		plan, err := a.containers.CreatePreflight(input)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	case containers.MethodContainersRemovePreflight:
@@ -87,11 +87,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		plan, err := a.containers.RemovePreflight(bound, input)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	case containers.MethodImagesList:
@@ -101,11 +101,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		items, err := a.containers.ListImages(bound, input.Engine)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "images": items, "partial_failure_count": imageReferenceFailureCount(items)}, input.EndpointID))
 	case containers.MethodImagesInspect:
@@ -115,11 +115,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		item, err := a.containers.InspectImage(bound, containers.ImageInspectRequest{Engine: input.Engine, EndpointID: input.EndpointID, Image: input.Image})
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "image": item}, input.EndpointID))
 	case containers.MethodImagesHistory:
@@ -129,11 +129,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		items, err := a.containers.HistoryImage(bound, containers.ImageHistoryRequest{Engine: input.Engine, EndpointID: input.EndpointID, Image: input.Image})
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "image": input.Image, "history": items}, input.EndpointID))
 	case containers.MethodImagesRemovePreflight:
@@ -143,11 +143,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		plan, err := a.containers.RemoveImagePreflight(bound, input)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	case containers.MethodVolumesList:
@@ -157,11 +157,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		items, err := a.containers.ListVolumes(bound, input.Engine)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "volumes": items, "partial_failure_count": volumeReferenceFailureCount(items)}, input.EndpointID))
 	case containers.MethodVolumesInspect:
@@ -171,11 +171,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		item, err := a.containers.InspectVolume(bound, containers.VolumeInspectRequest{Engine: input.Engine, EndpointID: input.EndpointID, Name: input.Name})
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "volume": item}, input.EndpointID))
 	case containers.MethodVolumesCreatePreflight:
@@ -185,7 +185,7 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		plan, err := a.containers.CreateVolumePreflight(input)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	case containers.MethodVolumesRemovePreflight:
@@ -195,11 +195,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		plan, err := a.containers.RemoveVolumePreflight(bound, input)
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	case containers.MethodImagesPrunePreflight, containers.MethodVolumesPrunePreflight:
@@ -211,7 +211,7 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		var err error
 		bound, bindErr := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if bindErr != nil {
-			return capability.Result{}, containerResourceBusinessError(bindErr)
+			return capability.Result{}, containerCapabilityBusinessError(bindErr)
 		}
 		if method == containers.MethodImagesPrunePreflight {
 			plan, err = a.containers.PruneImagesPreflight(bound, containers.ResourcePruneRequest{Engine: input.Engine, EndpointID: input.EndpointID, ResourceIdentities: input.ResourceIdentities})
@@ -219,7 +219,7 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 			plan, err = a.containers.PruneVolumesPreflight(bound, containers.ResourcePruneRequest{Engine: input.Engine, EndpointID: input.EndpointID, ResourceIdentities: input.ResourceIdentities})
 		}
 		if err != nil {
-			return capability.Result{}, containerResourceBusinessError(err)
+			return capability.Result{}, containerCapabilityBusinessError(err)
 		}
 		return resourcePlanResult(plan)
 	default:
@@ -350,54 +350,8 @@ func resourceResult(value map[string]any) (capability.Result, error) {
 	return capability.Result{Data: prepared}, nil
 }
 
-func containerResourceBusinessError(cause error) error {
-	code := ""
-	message := ""
-	switch {
-	case errors.Is(cause, containers.ErrResourcePrunePartial):
-		code = "CONTAINER_OPERATION_FAILED"
-		message = "The container operation failed"
-	case errors.Is(cause, containers.ErrResourcePruneReconcile):
-		code = "CONTAINER_OPERATION_FAILED"
-		message = "The container operation failed"
-	case errors.Is(cause, containers.ErrCLIUnavailable):
-		code = "CONTAINER_CLI_UNAVAILABLE"
-		message = "The selected container engine CLI is not installed"
-	case errors.Is(cause, containers.ErrBackendUnreachable):
-		code = "CONTAINER_ENGINE_UNREACHABLE"
-		message = "The selected container engine service is unreachable"
-	case errors.Is(cause, containers.ErrDaemonStopped):
-		code = "CONTAINER_DAEMON_STOPPED"
-		message = "The selected container engine service is not running"
-	case errors.Is(cause, containers.ErrPermissionDenied):
-		code = "CONTAINER_PERMISSION_DENIED"
-		message = "Permission to access the container engine was denied"
-	case errors.Is(cause, containers.ErrEngineTimeout), errors.Is(cause, context.DeadlineExceeded):
-		code = "CONTAINER_OPERATION_TIMEOUT"
-		message = "The container engine operation timed out"
-	case errors.Is(cause, containers.ErrReferenceStateIncomplete):
-		code = "CONTAINER_REFERENCE_STATE_INCOMPLETE"
-		message = "Container reference state is incomplete"
-	case errors.Is(cause, containers.ErrEndpointNotFound):
-		code = "CONTAINER_ENDPOINT_NOT_FOUND"
-		message = "The selected container engine endpoint is unavailable"
-	default:
-		return containerBusinessError(cause)
-	}
-	businessError, err := capability.NewBusinessError(code, message, nil)
-	if err != nil {
-		return errors.New("container resource capability business error is invalid")
-	}
-	return businessError
-}
-
-func containerBusinessErrorForBinding(binding capability.ExecutionBinding, cause error) error {
-	var mapped error
-	if binding.CapabilityVersion == containersCapabilityV3Version || binding.CapabilityVersion == containersCapabilityV4Version {
-		mapped = containerResourceBusinessError(cause)
-	} else {
-		mapped = containerBusinessError(cause)
-	}
+func containerMutationBusinessError(cause error) error {
+	mapped := containerCapabilityBusinessError(cause)
 	if errors.Is(cause, containers.ErrResourcePrunePartial) || errors.Is(cause, containers.ErrResourcePruneReconcile) {
 		return mutation.Unknown(mapped)
 	}
