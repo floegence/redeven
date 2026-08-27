@@ -1,7 +1,12 @@
 import { Show, createEffect, createSignal, onCleanup, createMemo, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { createFloatingPresence, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
-import { resolveAnchoredOverlayPosition, type AnchoredOverlayPlacement, type AnchoredOverlayPosition } from './anchoredOverlay';
+import {
+  resolveAnchoredOverlayPosition,
+  type AnchoredOverlayMarginInput,
+  type AnchoredOverlayPlacement,
+  type AnchoredOverlayPosition,
+} from './anchoredOverlay';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export interface TooltipProps {
@@ -12,7 +17,10 @@ export interface TooltipProps {
   class?: string;
   anchorClass?: string;
   clickToToggle?: boolean;
+  dismissOnTriggerClick?: boolean;
   disabled?: boolean;
+  viewportMargin?: AnchoredOverlayMarginInput | (() => AnchoredOverlayMarginInput);
+  onOpenChange?: (open: boolean) => void;
 }
 
 function tooltipArrowClass(placement: AnchoredOverlayPlacement): string {
@@ -80,12 +88,16 @@ export function Tooltip(props: TooltipProps) {
     const viewportHeight = viewport?.height ?? window.innerHeight;
     const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
     const viewportOffsetTop = viewport?.offsetTop ?? 0;
+    const viewportMargin = typeof props.viewportMargin === 'function'
+      ? props.viewportMargin()
+      : props.viewportMargin;
 
     const nextPosition = resolveAnchoredOverlayPosition({
       anchorRect,
       overlaySize: { width: tooltipRect.width, height: tooltipRect.height },
       viewport: { width: viewportWidth, height: viewportHeight },
       preferredPlacement: props.placement,
+      margin: viewportMargin,
     });
 
     setPosition({
@@ -187,9 +199,14 @@ export function Tooltip(props: TooltipProps) {
     }
   });
 
+  createEffect(() => {
+    props.onOpenChange?.(visible());
+  });
+
   onCleanup(() => {
     clearTimeoutHandle();
     clearFrameHandle();
+    props.onOpenChange?.(false);
   });
 
   return (
@@ -211,6 +228,7 @@ export function Tooltip(props: TooltipProps) {
       onClick={() => {
         if (props.disabled) return;
         if (!props.clickToToggle) {
+          if (props.dismissOnTriggerClick === false) return;
           dismissed = true;
           dismissTransient();
           return;

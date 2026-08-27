@@ -461,15 +461,9 @@
     "runtimeStatus": {
       "triggerLabel": "État de l’environnement {environment}",
       "runtime": "Environnement d’exécution",
-      "version": "Version",
       "started": "Démarré",
       "cpu": "CPU",
-      "memory": "Mémoire",
-      "unavailable": "Indisponible",
-      "connectionUnavailable": "Connectez-vous à l’environnement d’exécution pour charger les détails.",
-      "detailsUnavailable": "Les détails de l’environnement d’exécution sont temporairement indisponibles.",
-      "monitorPermissionRequired": "L’autorisation d’exécution est requise pour afficher l’utilisation des ressources de l’environnement.",
-      "metricsUnavailable": "L’utilisation des ressources de l’environnement est temporairement indisponible."
+      "memory": "Mémoire"
     },
     "flowerCompanion": {
       "openAria": "Volet Flower. {status}",
@@ -829,8 +823,8 @@
     }
   },
   "runtimeMonitor": {
-    "permissionTitle": "Autorisation d’exécution requise",
-    "permissionDescription": "La surveillance est désactivée car l'autorisation d'exécution n'est pas accordée pour cette session.",
+    "permissionTitle": "Autorisation de lecture requise",
+    "permissionDescription": "Les données de surveillance ne sont pas accessibles, car cette session ne dispose pas de l’autorisation de lecture.",
     "monitorRequestFailed": "Échec de la requête de surveillance",
     "cpuUsage": "Utilisation CPU",
     "networkTraffic": "Trafic réseau",
@@ -882,6 +876,7 @@
     "askFlower": "Demander à Flower",
     "copyName": "Copier le nom",
     "copyPid": "Copier le PID",
+    "killExecuteRequired": "L’autorisation d’exécution est requise pour arrêter un processus.",
     "kill": "Tuer les conversations"
   },
   "flowerChat": {

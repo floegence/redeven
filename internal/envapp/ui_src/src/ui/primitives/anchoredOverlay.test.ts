@@ -41,4 +41,18 @@ describe('resolveAnchoredOverlayPosition', () => {
     expect(result.arrowOffset).toBeGreaterThanOrEqual(12);
     expect(result.arrowOffset).toBeLessThanOrEqual(168);
   });
+
+  it('respects asymmetric safe margins while keeping the arrow on the anchor', () => {
+    const result = resolveAnchoredOverlayPosition({
+      anchorRect: { left: 8, top: 520, right: 240, bottom: 544, width: 232, height: 24 },
+      overlaySize: { width: 292, height: 160 },
+      viewport: { width: 1280, height: 800 },
+      preferredPlacement: 'top',
+      margin: { top: 8, right: 8, bottom: 8, left: 56 },
+    });
+
+    expect(result.placement).toBe('top');
+    expect(result.left).toBe(56);
+    expect(result.arrowOffset).toBe(68);
+  });
 });

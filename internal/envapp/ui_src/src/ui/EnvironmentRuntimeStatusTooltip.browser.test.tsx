@@ -50,6 +50,12 @@ function applyTheme(name: 'classic-light' | 'classic-dark'): void {
 }
 
 function mountAtBottom(displayName: string) {
+  const activityBar = document.createElement('div');
+  activityBar.dataset.floeShellSlot = 'activity-bar';
+  activityBar.style.position = 'fixed';
+  activityBar.style.inset = '0 auto 0 0';
+  activityBar.style.width = '48px';
+  document.body.appendChild(activityBar);
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.left = '8px';
@@ -61,11 +67,11 @@ function mountAtBottom(displayName: string) {
       identity={{ source: 'local_runtime', displayName, displayID: 'env_local' }}
       connectionStatus="connected"
       connectionLabel="Connected"
-      canExecute={true}
+      canRead={true}
       mobile={false}
     />
   ), host);
-  return { host, dispose };
+  return { activityBar, host, dispose };
 }
 
 afterEach(() => {
@@ -87,10 +93,11 @@ describe('Environment Runtime tooltip browser presentation', () => {
       const tooltip = await waitFor(() => document.body.querySelector<HTMLElement>('[role="tooltip"]'));
       const triggerRect = trigger.getBoundingClientRect();
       const tooltipRect = tooltip.getBoundingClientRect();
+      const activityBarRect = runtime.activityBar.getBoundingClientRect();
       const style = getComputedStyle(tooltip);
 
       expect(tooltip.dataset.placement).toBe('top');
-      expect(tooltipRect.left).toBeGreaterThanOrEqual(8);
+      expect(tooltipRect.left).toBeGreaterThanOrEqual(activityBarRect.right + 8);
       expect(tooltipRect.top).toBeGreaterThanOrEqual(8);
       expect(tooltipRect.bottom).toBeLessThanOrEqual(triggerRect.top);
       expect(tooltipRect.right).toBeLessThanOrEqual(window.innerWidth - 8);
@@ -116,9 +123,10 @@ describe('Environment Runtime tooltip browser presentation', () => {
       await userEvent.hover(trigger);
       const tooltip = await waitFor(() => document.body.querySelector<HTMLElement>('[role="tooltip"]'));
       const tooltipRect = tooltip.getBoundingClientRect();
+      const activityBarRect = runtime.activityBar.getBoundingClientRect();
       const name = tooltip.querySelector<HTMLElement>('.environment-runtime-tooltip-name')!;
 
-      expect(tooltipRect.left).toBeGreaterThanOrEqual(8);
+      expect(tooltipRect.left).toBeGreaterThanOrEqual(activityBarRect.right + 8);
       expect(tooltipRect.right).toBeLessThanOrEqual(352);
       expect(tooltipRect.width).toBeLessThanOrEqual(344);
       expect(getComputedStyle(name).textOverflow).toBe('ellipsis');

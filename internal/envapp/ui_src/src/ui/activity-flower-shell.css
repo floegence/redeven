@@ -310,6 +310,10 @@ html.dark .flower-activity-companion:is(
 }
 
 .environment-runtime-tooltip-version {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 0.625rem;
+  align-items: center;
   overflow: hidden;
   color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground));
   font-variant-numeric: tabular-nums;
@@ -379,6 +383,10 @@ html.dark .flower-activity-companion:is(
 }
 
 .environment-runtime-tooltip-metric-heading strong {
+  display: inline-flex;
+  min-height: 1.25rem;
+  align-items: center;
+  justify-content: flex-end;
   overflow: hidden;
   font-size: 0.9375rem;
   font-variant-numeric: tabular-nums;
@@ -432,6 +440,38 @@ html.dark .flower-activity-companion:is(
   vector-effect: non-scaling-stroke;
 }
 
+.environment-runtime-value-skeleton {
+  background: color-mix(in srgb, var(--muted-foreground) 12%, transparent);
+}
+
+.environment-runtime-value-skeleton {
+  display: inline-block;
+  height: 0.5625rem;
+  border-radius: 999px;
+}
+
+.environment-runtime-version-skeleton {
+  width: 2.75rem;
+}
+
+.environment-runtime-metric-value-skeleton {
+  width: 2.875rem;
+  height: 0.6875rem;
+}
+
+.environment-runtime-started-skeleton {
+  width: min(8.5rem, 52vw);
+}
+
+.environment-runtime-sparkline-skeleton {
+  fill: color-mix(in srgb, var(--muted-foreground) 9%, transparent);
+}
+
+.environment-runtime-value-skeleton[data-loading='true'],
+.environment-runtime-sparkline-skeleton[data-loading='true'] {
+  animation: environment-runtime-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
 .environment-runtime-tooltip-started {
   display: grid;
   min-width: 0;
@@ -451,24 +491,23 @@ html.dark .flower-activity-companion:is(
   white-space: nowrap;
 }
 
-.environment-runtime-tooltip-notice {
-  position: relative;
-  margin: -0.25rem 0 0;
-  padding-left: 0.625rem;
-  color: var(--muted-foreground);
-  font-size: 0.625rem;
-  line-height: 0.9375rem;
+@keyframes environment-runtime-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.46;
+  }
+
+  50% {
+    opacity: 0.88;
+  }
 }
 
-.environment-runtime-tooltip-notice::before {
-  position: absolute;
-  top: 0.375rem;
-  left: 0;
-  width: 0.25rem;
-  height: 0.25rem;
-  border-radius: 999px;
-  background: currentColor;
-  content: '';
+@media (prefers-reduced-motion: reduce) {
+  .environment-runtime-value-skeleton[data-loading='true'],
+  .environment-runtime-sparkline-skeleton[data-loading='true'] {
+    animation: none;
+    opacity: 0.68;
+  }
 }
 
 .flower-activity-companion-anchor {

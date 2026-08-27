@@ -19,6 +19,15 @@ export interface AnchoredOverlayViewport {
   height: number;
 }
 
+export interface AnchoredOverlayMargin {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
+export type AnchoredOverlayMarginInput = number | AnchoredOverlayMargin;
+
 export interface AnchoredOverlayPosition {
   placement: AnchoredOverlayPlacement;
   left: number;
@@ -32,7 +41,7 @@ export interface ResolveAnchoredOverlayPositionOptions {
   viewport: AnchoredOverlayViewport;
   preferredPlacement?: AnchoredOverlayPlacement;
   gap?: number;
-  margin?: number;
+  margin?: AnchoredOverlayMarginInput;
   arrowInset?: number;
 }
 
@@ -55,10 +64,23 @@ function oppositePlacement(placement: AnchoredOverlayPlacement): AnchoredOverlay
   }
 }
 
+function normalizeMargin(input: AnchoredOverlayMarginInput | undefined): Required<AnchoredOverlayMargin> {
+  if (typeof input === 'number') {
+    const margin = Math.max(0, input);
+    return { top: margin, right: margin, bottom: margin, left: margin };
+  }
+  return {
+    top: Math.max(0, input?.top ?? 8),
+    right: Math.max(0, input?.right ?? 8),
+    bottom: Math.max(0, input?.bottom ?? 8),
+    left: Math.max(0, input?.left ?? 8),
+  };
+}
+
 export function resolveAnchoredOverlayPosition(options: ResolveAnchoredOverlayPositionOptions): AnchoredOverlayPosition {
   const preferredPlacement = options.preferredPlacement ?? 'top';
   const gap = Math.max(0, options.gap ?? 8);
-  const margin = Math.max(0, options.margin ?? 8);
+  const margin = normalizeMargin(options.margin);
   const arrowInset = Math.max(8, options.arrowInset ?? 12);
 
   const { anchorRect, overlaySize, viewport } = options;
@@ -66,10 +88,10 @@ export function resolveAnchoredOverlayPosition(options: ResolveAnchoredOverlayPo
   const anchorCenterY = anchorRect.top + (anchorRect.height / 2);
 
   const availableSpace = {
-    top: anchorRect.top - margin - gap,
-    bottom: viewport.height - anchorRect.bottom - margin - gap,
-    left: anchorRect.left - margin - gap,
-    right: viewport.width - anchorRect.right - margin - gap,
+    top: anchorRect.top - margin.top - gap,
+    bottom: viewport.height - anchorRect.bottom - margin.bottom - gap,
+    left: anchorRect.left - margin.left - gap,
+    right: viewport.width - anchorRect.right - margin.right - gap,
   } satisfies Record<AnchoredOverlayPlacement, number>;
 
   const orderedPlacements = [
@@ -108,8 +130,8 @@ export function resolveAnchoredOverlayPosition(options: ResolveAnchoredOverlayPo
       break;
   }
 
-  left = clamp(left, margin, viewport.width - overlaySize.width - margin);
-  top = clamp(top, margin, viewport.height - overlaySize.height - margin);
+  left = clamp(left, margin.left, viewport.width - overlaySize.width - margin.right);
+  top = clamp(top, margin.top, viewport.height - overlaySize.height - margin.bottom);
 
   const arrowOffset = placement === 'top' || placement === 'bottom'
     ? clamp(anchorCenterX - left, arrowInset, overlaySize.width - arrowInset)

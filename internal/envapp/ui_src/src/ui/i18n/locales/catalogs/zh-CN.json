@@ -461,15 +461,9 @@
     "runtimeStatus": {
       "triggerLabel": "查看 {environment} 的环境状态",
       "runtime": "运行时",
-      "version": "版本",
       "started": "启动时间",
       "cpu": "CPU",
-      "memory": "内存",
-      "unavailable": "暂不可用",
-      "connectionUnavailable": "连接运行时后即可加载详情。",
-      "detailsUnavailable": "运行时详情暂不可用。",
-      "monitorPermissionRequired": "需要执行权限才能查看环境资源占用。",
-      "metricsUnavailable": "环境资源占用暂不可用。"
+      "memory": "内存"
     },
     "flowerCompanion": {
       "openAria": "Flower 伴随工作区。{status}",
@@ -829,8 +823,8 @@
     }
   },
   "runtimeMonitor": {
-    "permissionTitle": "需要执行权限",
-    "permissionDescription": "此会话未授予执行权限，因此监控已禁用。",
+    "permissionTitle": "需要读取权限",
+    "permissionDescription": "此会话未授予读取权限，因此无法查看监控数据。",
     "monitorRequestFailed": "监控请求失败",
     "cpuUsage": "CPU 使用率",
     "networkTraffic": "网络流量",
@@ -882,6 +876,7 @@
     "askFlower": "询问 Flower",
     "copyName": "复制名称",
     "copyPid": "复制 PID",
+    "killExecuteRequired": "终止进程需要执行权限。",
     "kill": "杀死"
   },
   "flowerChat": {

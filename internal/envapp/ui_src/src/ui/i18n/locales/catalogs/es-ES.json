@@ -461,15 +461,9 @@
     "runtimeStatus": {
       "triggerLabel": "Estado del entorno {environment}",
       "runtime": "Tiempo de ejecución",
-      "version": "Versión",
       "started": "Inicio",
       "cpu": "CPU",
-      "memory": "Memoria",
-      "unavailable": "No disponible",
-      "connectionUnavailable": "Conéctate al tiempo de ejecución para cargar los detalles.",
-      "detailsUnavailable": "Los detalles del tiempo de ejecución no están disponibles temporalmente.",
-      "monitorPermissionRequired": "Se requiere permiso de ejecución para ver el uso de recursos del entorno.",
-      "metricsUnavailable": "El uso de recursos del entorno no está disponible temporalmente."
+      "memory": "Memoria"
     },
     "flowerCompanion": {
       "openAria": "Panel complementario de Flower. {status}",
@@ -829,8 +823,8 @@
     }
   },
   "runtimeMonitor": {
-    "permissionTitle": "Se requiere permiso de ejecución",
-    "permissionDescription": "La supervisión está desactivada porque esta sesión no tiene permiso de ejecución.",
+    "permissionTitle": "Se requiere permiso de lectura",
+    "permissionDescription": "No se pueden ver los datos de supervisión porque esta sesión no tiene permiso de lectura.",
     "monitorRequestFailed": "Error en la solicitud de supervisión",
     "cpuUsage": "Uso de CPU",
     "networkTraffic": "Tráfico de red",
@@ -882,6 +876,7 @@
     "askFlower": "Preguntar Flower",
     "copyName": "Copiar nombre",
     "copyPid": "Copiar PID",
+    "killExecuteRequired": "Se requiere permiso de ejecución para finalizar un proceso.",
     "kill": "Matar"
   },
   "flowerChat": {

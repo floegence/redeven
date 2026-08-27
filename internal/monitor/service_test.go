@@ -155,7 +155,17 @@ func TestService_StartPublishesCachedSnapshot(t *testing.T) {
 	systemBefore := systemCalls.Load()
 	processBefore := processCalls.Load()
 
-	resp := svc.snapshotResponse("memory")
+	router := sessionrpc.NewRouter()
+	svc.Register(router, &session.Meta{CanRead: true})
+	resp, err := rpcutil.CallJSON[sysMonitorReq, sysMonitorResp](
+		context.Background(),
+		router,
+		TypeID_SYS_MONITOR,
+		&sysMonitorReq{SortBy: "memory"},
+	)
+	if err != nil {
+		t.Fatalf("system monitor RPC error = %v", err)
+	}
 	if resp.CPUUsage != 37.5 {
 		t.Fatalf("cpu_usage = %v, want 37.5", resp.CPUUsage)
 	}
@@ -176,37 +186,90 @@ func TestService_StartPublishesCachedSnapshot(t *testing.T) {
 	}
 }
 
-func TestService_SystemMonitorStillRequiresExecutePermission(t *testing.T) {
+func TestService_SystemMonitorRequiresReadPermission(t *testing.T) {
 	t.Parallel()
 
 	svc := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.mu.Lock()
 	svc.hasSystem = true
 	svc.systemSnap = monitorSnapshot{data: sysMonitorResp{Platform: "test", Processes: []processInfo{}}}
+	svc.hasProcesses = true
+	svc.processSnap = processSnapshot{metrics: []processWithMetrics{{
+		pid:         42,
+		name:        "runtime-worker",
+		cpuPercent:  12.5,
+		memoryBytes: 256 << 20,
+		username:    "reader",
+	}}}
 	svc.mu.Unlock()
 
 	readOnlyRouter := sessionrpc.NewRouter()
 	svc.Register(readOnlyRouter, &session.Meta{CanRead: true, CanExecute: false})
-	_, err := rpcutil.CallJSON[sysMonitorReq, sysMonitorResp](
+	readOnlyResp, err := rpcutil.CallJSON[sysMonitorReq, sysMonitorResp](
 		context.Background(),
 		readOnlyRouter,
 		TypeID_SYS_MONITOR,
 		&sysMonitorReq{},
 	)
+	if err != nil {
+		t.Fatalf("system monitor RPC with read permission error = %v", err)
+	}
+	if len(readOnlyResp.Processes) != 1 || readOnlyResp.Processes[0].Name != "runtime-worker" || readOnlyResp.Processes[0].Username != "reader" {
+		t.Fatalf("read-only system monitor processes = %#v, want full process details", readOnlyResp.Processes)
+	}
+
+	executeOnlyRouter := sessionrpc.NewRouter()
+	svc.Register(executeOnlyRouter, &session.Meta{CanExecute: true})
+	_, err = rpcutil.CallJSON[sysMonitorReq, sysMonitorResp](
+		context.Background(),
+		executeOnlyRouter,
+		TypeID_SYS_MONITOR,
+		&sysMonitorReq{},
+	)
+	rpcErr, ok := err.(*sessionrpc.Error)
+	if !ok || rpcErr.Code != 403 || rpcErr.Message != "read permission denied" {
+		t.Fatalf("system monitor RPC error = %#v, want 403 read permission denied", err)
+	}
+}
+
+func TestService_KillProcessStillRequiresExecutePermission(t *testing.T) {
+	t.Parallel()
+
+	var killCalls atomic.Int32
+	svc := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.collectors.killProcess = func(context.Context, int32) error {
+		killCalls.Add(1)
+		return nil
+	}
+
+	readOnlyRouter := sessionrpc.NewRouter()
+	svc.Register(readOnlyRouter, &session.Meta{CanRead: true, CanExecute: false})
+	_, err := rpcutil.CallJSON[killProcessReq, killProcessResp](
+		context.Background(),
+		readOnlyRouter,
+		TypeID_SYS_MONITOR_KILL_PROCESS,
+		&killProcessReq{PID: 42},
+	)
 	rpcErr, ok := err.(*sessionrpc.Error)
 	if !ok || rpcErr.Code != 403 || rpcErr.Message != "execute permission denied" {
-		t.Fatalf("system monitor RPC error = %#v, want 403 execute permission denied", err)
+		t.Fatalf("kill process RPC error = %#v, want 403 execute permission denied", err)
+	}
+	if killCalls.Load() != 0 {
+		t.Fatalf("kill process collector calls = %d, want 0", killCalls.Load())
 	}
 
 	executeRouter := sessionrpc.NewRouter()
 	svc.Register(executeRouter, &session.Meta{CanExecute: true})
-	if _, err := rpcutil.CallJSON[sysMonitorReq, sysMonitorResp](
+	if _, err := rpcutil.CallJSON[killProcessReq, killProcessResp](
 		context.Background(),
 		executeRouter,
-		TypeID_SYS_MONITOR,
-		&sysMonitorReq{},
+		TypeID_SYS_MONITOR_KILL_PROCESS,
+		&killProcessReq{PID: 42},
 	); err != nil {
-		t.Fatalf("system monitor RPC with execute permission error = %v", err)
+		t.Fatalf("kill process RPC with execute permission error = %v", err)
+	}
+	if killCalls.Load() != 1 {
+		t.Fatalf("kill process collector calls = %d, want 1", killCalls.Load())
 	}
 }
 

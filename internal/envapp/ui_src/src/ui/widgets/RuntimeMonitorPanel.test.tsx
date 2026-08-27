@@ -42,6 +42,7 @@ const clipboardMocks = vi.hoisted(() => ({
 
 const envContextMocks = vi.hoisted(() => ({
   openFlowerTurnLauncher: vi.fn(),
+  permissions: { can_read: true, can_execute: true },
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -103,7 +104,7 @@ vi.mock('../protocol/redeven_v1', () => ({
 
 vi.mock('../pages/EnvContext', () => {
   const envAccessor = Object.assign(
-    () => ({ permissions: { can_execute: true } }),
+    () => ({ permissions: envContextMocks.permissions }),
     { state: 'ready' },
   );
 
@@ -160,6 +161,7 @@ describe('RuntimeMonitorPanel', () => {
     clipboardMocks.writeText.mockReset();
     clipboardMocks.writeText.mockResolvedValue(undefined);
     envContextMocks.openFlowerTurnLauncher.mockReset();
+    envContextMocks.permissions = { can_read: true, can_execute: true };
 
     Object.defineProperty(window.navigator, 'clipboard', {
       configurable: true,
@@ -184,6 +186,47 @@ describe('RuntimeMonitorPanel', () => {
     await flushPanel();
 
     expect(host.firstElementChild?.className).toContain('runtime-monitor-panel');
+  });
+
+  it('loads monitoring with read permission and keeps process termination execute-gated', async () => {
+    envContextMocks.permissions = { can_read: true, can_execute: false };
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(
+      makeSnapshot(1, [
+        { pid: 4242, name: 'node', cpuPercent: 42, memoryBytes: 268_435_456, username: 'alice' },
+      ]),
+    );
+
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
+    await flushPanel();
+
+    expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain('node');
+
+    const processRow = host.querySelector('tr[data-monitor-process-selected]') as HTMLTableRowElement | null;
+    processRow?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await flushPanel();
+
+    const killButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Kill'));
+    expect(killButton?.disabled).toBe(true);
+    expect(killButton?.title).toBe('Execute permission is required to terminate a process.');
+    expect(rpcMocks.monitor.killProcess).not.toHaveBeenCalled();
+  });
+
+  it('does not request monitoring without read permission', async () => {
+    envContextMocks.permissions = { can_read: false, can_execute: true };
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
+
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
+    await flushPanel();
+
+    expect(host.textContent).toContain('Permission denied');
+    expect(rpcMocks.monitor.getSysMonitor).not.toHaveBeenCalled();
+    expect(rpcMocks.sessions.listActiveSessions).not.toHaveBeenCalled();
   });
 
   it('uses distinct semantic line colors for CPU, download, and upload', async () => {

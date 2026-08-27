@@ -1224,15 +1224,9 @@ export const enUS = defineDictionary({
     runtimeStatus: {
       triggerLabel: 'Environment status for {environment}',
       runtime: 'Runtime',
-      version: 'Version',
       started: 'Started',
       cpu: 'CPU',
       memory: 'Memory',
-      unavailable: 'Unavailable',
-      connectionUnavailable: 'Connect to the Runtime to load details.',
-      detailsUnavailable: 'Runtime details are temporarily unavailable.',
-      monitorPermissionRequired: 'Execute permission is required to view environment usage.',
-      metricsUnavailable: 'Environment usage is temporarily unavailable.',
     },
     flowerCompanion: {
       openAria: 'Flower companion. {status}',
@@ -1592,8 +1586,8 @@ export const enUS = defineDictionary({
     },
   },
   runtimeMonitor: {
-    permissionTitle: 'Execute permission required',
-    permissionDescription: 'Monitoring is disabled because execute permission is not granted for this session.',
+    permissionTitle: 'Read permission required',
+    permissionDescription: 'Monitoring data cannot be viewed because read permission is not granted for this session.',
     monitorRequestFailed: 'Monitor request failed',
     cpuUsage: 'CPU Usage',
     networkTraffic: 'Network Traffic',
@@ -1645,6 +1639,7 @@ export const enUS = defineDictionary({
     askFlower: 'Ask Flower',
     copyName: 'Copy name',
     copyPid: 'Copy PID',
+    killExecuteRequired: 'Execute permission is required to terminate a process.',
     kill: 'Kill',
   },
   flowerChat: {
