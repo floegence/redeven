@@ -12,10 +12,13 @@ import {
   testLocalEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
+  abandonEnvironmentLifecycleDisclosureAttempt,
   beginEnvironmentLifecycleDisclosure,
+  bindEnvironmentLifecycleDisclosureOperation,
   closeEnvironmentLifecycleDisclosure,
   environmentActionStartsLifecycleDisclosure,
   environmentLifecycleDisclosureHasPendingRequest,
+  focusEnvironmentLifecycleDisclosure,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
   visibleEnvironmentLifecycleProgress,
@@ -83,7 +86,7 @@ function restartReadyProgress(environmentID: string, startedAt = 200): DesktopLa
 
 function beginDisclosure(
   environmentID: string,
-  intent: 'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'update_runtime' | 'refresh_runtime',
+  intent: 'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'update_runtime' | 'refresh_runtime' | 'reinstall_target',
 ) {
   const operationKey = intent === 'update_runtime'
     ? 'runtime-op'
@@ -92,6 +95,27 @@ function beginDisclosure(
     operation_key: operationKey,
     started_at_unix_ms: 300,
   });
+}
+
+function reinstallProgress(input: Readonly<{
+  environmentID: string;
+  operationKey: string;
+  startedAt: number;
+  status?: DesktopLauncherActionProgress['status'];
+}>): DesktopLauncherActionProgress {
+  return {
+    action: 'reinstall_target',
+    environment_id: input.environmentID,
+    environment_label: 'Local Environment',
+    operation_key: input.operationKey,
+    subject_kind: 'runtime_target',
+    subject_id: input.environmentID,
+    started_at_unix_ms: input.startedAt,
+    status: input.status ?? 'running',
+    phase: input.status === 'needs_confirmation' ? 'confirmation' : 'preflight',
+    title: 'Reinstall Redeven',
+    detail: 'Desktop is preparing the reinstall.',
+  };
 }
 
 function actionLifecycleProgress(input: Readonly<{
@@ -490,5 +514,194 @@ describe('environmentLifecycleDisclosure', () => {
       action: 'refresh_environment_runtime',
       environment_id: environment.id,
     })).toBe(true);
+  });
+
+  it('opens one pending disclosure for the first reinstall click and ignores older progress', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginDisclosure(environment.id, 'reinstall_target');
+    const oldFailure = reinstallProgress({
+      environmentID: environment.id,
+      operationKey: 'reinstall-old',
+      startedAt: state!.started_at_unix_ms - 1,
+      status: 'failed',
+    });
+
+    expect(state).toEqual(expect.objectContaining({
+      environment_id: environment.id,
+      intent: 'reinstall_target',
+      visibility: 'open',
+      operation_binding: 'next_reinstall',
+    }));
+    expect(reconcileEnvironmentLifecycleDisclosure(state, [environment], [oldFailure])).toBe(state);
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: oldFailure,
+      disclosure: state,
+    })).toBeNull();
+  });
+
+  it('binds the first new reinstall operation whether progress arrives before or after the action result', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginDisclosure(environment.id, 'reinstall_target');
+    const current = reinstallProgress({
+      environmentID: environment.id,
+      operationKey: 'reinstall-current',
+      startedAt: state!.started_at_unix_ms + 1,
+    });
+    const delayed = reconcileEnvironmentLifecycleDisclosure(state, [environment], []);
+    const boundAfterDelay = reconcileEnvironmentLifecycleDisclosure(delayed, [environment], [current]);
+    const boundImmediately = reconcileEnvironmentLifecycleDisclosure(state, [environment], [current]);
+
+    for (const bound of [boundAfterDelay, boundImmediately]) {
+      expect(bound).toEqual(expect.objectContaining({
+        operation_key: 'reinstall-current',
+        operation_binding: 'exact',
+        last_progress: current,
+      }));
+      expect(visibleEnvironmentLifecycleProgress({
+        environment,
+        selectedProgress: current,
+        disclosure: bound,
+      })).toBe(current);
+    }
+  });
+
+  it('binds target-owned reinstall progress for the selected registration', () => {
+    const target = localEnvironmentEntry();
+    const targetID = target.managed_runtime_target_id;
+    if (!targetID) {
+      throw new Error('Expected a managed Runtime target id.');
+    }
+    const registration = {
+      ...target,
+      id: 'registration:local',
+      managed_runtime_target_id: targetID,
+    };
+    const state = beginDisclosure(registration.id, 'reinstall_target');
+    const current = reinstallProgress({
+      environmentID: targetID,
+      operationKey: 'reinstall-shared-target',
+      startedAt: state!.started_at_unix_ms + 1,
+    });
+    const bound = reconcileEnvironmentLifecycleDisclosure(state, [registration], [current]);
+
+    expect(bound).toEqual(expect.objectContaining({
+      operation_key: 'reinstall-shared-target',
+      last_progress: current,
+    }));
+  });
+
+  it('binds an existing operation returned by the action without reopening through a second focus path', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginDisclosure(environment.id, 'reinstall_target');
+    const attempt = {
+      operation_key: state!.operation_key,
+      started_at_unix_ms: state!.started_at_unix_ms,
+    };
+    const existing = reinstallProgress({
+      environmentID: environment.id,
+      operationKey: 'reinstall-existing',
+      startedAt: state!.started_at_unix_ms - 100,
+      status: 'failed',
+    });
+    const identified = bindEnvironmentLifecycleDisclosureOperation(state, environment.id, attempt, {
+      operation_key: existing.operation_key!,
+      started_at_unix_ms: existing.started_at_unix_ms!,
+    });
+    const bound = reconcileEnvironmentLifecycleDisclosure(identified, [environment], [existing]);
+
+    expect(bound).toEqual(expect.objectContaining({
+      operation_key: 'reinstall-existing',
+      operation_binding: 'exact',
+      last_progress: existing,
+    }));
+  });
+
+  it('keeps the latest clicked Environment as the only disclosure owner', () => {
+    const firstEnvironment = localEnvironmentEntry();
+    const secondEnvironment = {
+      ...firstEnvironment,
+      id: 'local:second',
+      managed_runtime_target_id: undefined,
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const first = beginDisclosure(firstEnvironment.id, 'reinstall_target');
+    const second = beginEnvironmentLifecycleDisclosure(
+      first,
+      secondEnvironment.id,
+      'reinstall_target',
+      {
+        operation_key: 'second-request',
+        started_at_unix_ms: first!.started_at_unix_ms + 1,
+      },
+    );
+    const lateFirstProgress = reinstallProgress({
+      environmentID: firstEnvironment.id,
+      operationKey: 'reinstall-first',
+      startedAt: second!.started_at_unix_ms + 1,
+    });
+
+    expect(reconcileEnvironmentLifecycleDisclosure(
+      second,
+      [firstEnvironment, secondEnvironment],
+      [lateFirstProgress],
+    )).toBe(second);
+    expect(second?.environment_id).toBe(secondEnvironment.id);
+  });
+
+  it('abandons only an unbound failed request and preserves progress owned by the main process', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginDisclosure(environment.id, 'reinstall_target');
+    const attempt = {
+      operation_key: state!.operation_key,
+      started_at_unix_ms: state!.started_at_unix_ms,
+    };
+    const current = reinstallProgress({
+      environmentID: environment.id,
+      operationKey: 'reinstall-current',
+      startedAt: state!.started_at_unix_ms + 1,
+      status: 'failed',
+    });
+    const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [current]);
+
+    expect(abandonEnvironmentLifecycleDisclosureAttempt(state, environment.id, attempt)).toBeNull();
+    expect(abandonEnvironmentLifecycleDisclosureAttempt(bound, environment.id, attempt)).toBe(bound);
+  });
+
+  it('routes an exact external focus request through the same disclosure state', () => {
+    const environment = localEnvironmentEntry();
+    const progress = reinstallProgress({
+      environmentID: environment.id,
+      operationKey: 'reinstall-confirmation',
+      startedAt: 900,
+      status: 'needs_confirmation',
+    });
+    const focused = focusEnvironmentLifecycleDisclosure(null, environment.id, progress);
+
+    expect(focused).toEqual(expect.objectContaining({
+      environment_id: environment.id,
+      visibility: 'open',
+      operation_key: 'reinstall-confirmation',
+      operation_binding: 'exact',
+      last_progress: progress,
+    }));
+  });
+
+  it('starts disclosure only for a fresh reinstall preview, not for confirmation', () => {
+    expect(environmentActionStartsLifecycleDisclosure({
+      intent: 'reinstall_target',
+      label: 'Reinstall Redeven',
+      enabled: true,
+      variant: 'outline',
+    })).toBe(true);
+    expect(environmentActionStartsLifecycleDisclosure({
+      intent: 'reinstall_target',
+      label: 'Reinstall Redeven',
+      enabled: true,
+      variant: 'outline',
+      operation_key: 'reinstall-confirmation',
+      preflight_id: 'preflight-confirmation',
+    })).toBe(false);
   });
 });

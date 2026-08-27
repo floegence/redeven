@@ -318,12 +318,15 @@ import {
   runEnvironmentOpenPreflight,
 } from './environmentOpenPreflight';
 import {
+  abandonEnvironmentLifecycleDisclosureAttempt,
   beginEnvironmentLifecycleDisclosure,
+  bindEnvironmentLifecycleDisclosureOperation,
   closeEnvironmentLifecycleDisclosure,
   createEnvironmentLifecycleAttempt,
   environmentActionStartsLifecycleDisclosure,
   environmentLifecycleDisclosureForEnvironment,
   environmentLifecycleDisclosureHasPendingRequest,
+  focusEnvironmentLifecycleDisclosure,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
   visibleEnvironmentLifecycleProgress,
@@ -3688,38 +3691,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  function focusEnvironmentOperationProgress(
-    environmentID: string,
-    result: DesktopLauncherActionSuccess,
-  ): void {
-    if (
-      result.outcome !== 'previewed_reinstall_target'
-      && result.outcome !== 'reinstall_target_in_progress'
-    ) {
-      return;
-    }
-    const operationKey = trimString(result.operation_key || result.reinstall_preview?.operation_key);
-    const startedAtUnixMS = Number(result.operation_started_at_unix_ms);
-    if (
-      operationKey === ''
-      || !Number.isFinite(startedAtUnixMS)
-      || startedAtUnixMS <= 0
-    ) {
-      return;
-    }
-    setActiveCenterTab('environments');
-    setLibrarySourceFilter('');
-    setLibraryQuery('');
-    lifecycleProgressFocusRequestSequence += 1;
-    setLifecycleProgressFocusRequest({
-      request_id: lifecycleProgressFocusRequestSequence,
-      operation_key: operationKey,
-      started_at_unix_ms: Math.floor(startedAtUnixMS),
-      subject_kind: 'environment',
-      subject_id: environmentID,
-    });
-  }
-
   function clearOperationProgressFocus(operationKey: string): void {
     const cleanOperationKey = trimString(operationKey);
     if (cleanOperationKey === '') {
@@ -4985,11 +4956,30 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return openRemoteEnvironment(environment.local_ui_url, errorTarget, environment);
   }
 
+  function bindReinstallOperationResult(
+    result: DesktopLauncherActionSuccess | null,
+    bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
+  ): void {
+    if (
+      (result?.outcome !== 'previewed_reinstall_target'
+        && result?.outcome !== 'reinstall_target_in_progress')
+      || !result.operation_key
+      || !result.operation_started_at_unix_ms
+    ) {
+      return;
+    }
+    bindOperation?.({
+      operation_key: result.operation_key,
+      started_at_unix_ms: result.operation_started_at_unix_ms,
+    });
+  }
+
   async function triggerLocalEnvironmentAction(
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     attempt?: EnvironmentLifecycleAttempt,
+    bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
   ): Promise<boolean> {
     switch (action.intent) {
       case 'open':
@@ -5043,9 +5033,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               mode: action.reinstall_mode ?? 'wipe_data',
               impact_acknowledged: true,
             }, errorTarget);
-            if (result) {
-              focusEnvironmentOperationProgress(environment.id, result);
-            }
+            bindReinstallOperationResult(result, bindOperation);
             return result?.outcome === 'reinstalled_target'
               || result?.outcome === 'reinstall_target_in_progress';
           }
@@ -5054,9 +5042,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             environment_id: environment.id,
             mode: action.reinstall_mode ?? 'wipe_data',
           }, errorTarget);
-          if (result) {
-            focusEnvironmentOperationProgress(environment.id, result);
-          }
+          bindReinstallOperationResult(result, bindOperation);
           return result?.outcome === 'previewed_reinstall_target';
         }
       case 'connect_provider_runtime':
@@ -6948,6 +6934,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
     attempt?: EnvironmentLifecycleAttempt,
+    bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
   ) => Promise<boolean>;
   refreshEnvironmentRuntime: (
     environment: DesktopEnvironmentEntry,
@@ -7371,6 +7358,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
     attempt?: EnvironmentLifecycleAttempt,
+    bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
   ) => Promise<boolean>;
   refreshEnvironmentRuntime: (
     environment: DesktopEnvironmentEntry,
@@ -7525,6 +7513,31 @@ function EnvironmentCardsPanel(props: Readonly<{
     ));
   };
 
+  const abandonLifecycleProgressDisclosure = (
+    environmentID: string,
+    attempt: EnvironmentLifecycleAttempt,
+  ) => {
+    const current = lifecycleDisclosureState();
+    const next = abandonEnvironmentLifecycleDisclosureAttempt(current, environmentID, attempt);
+    if (next === current) {
+      return;
+    }
+    setLifecycleDisclosureState(next);
+    setActiveEnvironmentOverlayState((overlay) => (
+      closeEnvironmentLibraryOverlayState(overlay, 'lifecycle_progress', environmentID)
+    ));
+  };
+
+  const bindLifecycleProgressDisclosure = (
+    environmentID: string,
+    attempt: EnvironmentLifecycleAttempt,
+    operation: EnvironmentLifecycleAttempt,
+  ) => {
+    setLifecycleDisclosureState((current) => (
+      bindEnvironmentLifecycleDisclosureOperation(current, environmentID, attempt, operation)
+    ));
+  };
+
   let handledLifecycleProgressFocusRequestID = 0;
   createEffect(() => {
     const request = props.lifecycleProgressFocusRequest;
@@ -7541,12 +7554,16 @@ function EnvironmentCardsPanel(props: Readonly<{
     }
     const progress = progressForEnvironmentFocusRequest(environment, props.actionProgress, request);
     if (
-      trimString(progress?.operation_key) !== request.operation_key
+      !progress
+      || trimString(progress.operation_key) !== request.operation_key
       || (progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms
     ) {
       return;
     }
     handledLifecycleProgressFocusRequestID = request.request_id;
+    setLifecycleDisclosureState((current) => (
+      focusEnvironmentLifecycleDisclosure(current, environment.id, progress)
+    ));
     setLifecycleProgressOpen(environment.id, true);
     props.consumeLifecycleProgressFocusRequest(request.request_id);
   });
@@ -7682,6 +7699,8 @@ function EnvironmentCardsPanel(props: Readonly<{
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
                     beginLifecycleDisclosure={(intent, attempt) => beginLifecycleProgressDisclosure(environmentID, intent, attempt)}
+                    abandonLifecycleDisclosure={(attempt) => abandonLifecycleProgressDisclosure(environmentID, attempt)}
+                    bindLifecycleDisclosure={(attempt, operation) => bindLifecycleProgressDisclosure(environmentID, attempt, operation)}
                   />
                 )}
               </For>
@@ -7726,6 +7745,8 @@ function EnvironmentCardsPanel(props: Readonly<{
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
                     beginLifecycleDisclosure={(intent, attempt) => beginLifecycleProgressDisclosure(environmentID, intent, attempt)}
+                    abandonLifecycleDisclosure={(attempt) => abandonLifecycleProgressDisclosure(environmentID, attempt)}
+                    bindLifecycleDisclosure={(attempt, operation) => bindLifecycleProgressDisclosure(environmentID, attempt, operation)}
                   />
                 )}
               </For>
@@ -9982,6 +10003,11 @@ function EnvironmentConnectionCard(props: Readonly<{
     intent: EnvironmentLifecycleDisclosureIntent,
     attempt: EnvironmentLifecycleAttempt,
   ) => void;
+  abandonLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt) => void;
+  bindLifecycleDisclosure: (
+    attempt: EnvironmentLifecycleAttempt,
+    operation: EnvironmentLifecycleAttempt,
+  ) => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -9992,6 +10018,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
     attempt?: EnvironmentLifecycleAttempt,
+    bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
   ) => Promise<boolean>;
   refreshEnvironmentRuntime: (
     environment: DesktopEnvironmentEntry,
@@ -10066,12 +10093,22 @@ function EnvironmentConnectionCard(props: Readonly<{
       setRememberedOpenConnectionProgress(null);
     }
   });
-  const visibleRuntimeLifecycleProgress = createMemo(() => visibleEnvironmentLifecycleProgress({
+  const visibleManagedLifecycleProgress = createMemo(() => visibleEnvironmentLifecycleProgress({
     environment: props.environment,
-    selectedProgress: runtimeLifecycleProgress(),
+    selectedProgress: reinstallTargetProgress() ?? runtimeLifecycleProgress(),
     disclosure: props.lifecycleDisclosure,
     busyState: props.busyState,
   }));
+  const visibleRuntimeLifecycleProgress = createMemo(() => (
+    visibleManagedLifecycleProgress()?.action === 'reinstall_target'
+      ? null
+      : visibleManagedLifecycleProgress()
+  ));
+  const visibleReinstallTargetProgress = createMemo(() => (
+    visibleManagedLifecycleProgress()?.action === 'reinstall_target'
+      ? visibleManagedLifecycleProgress()
+      : null
+  ));
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
   const windowBusyActions = [
     'open_local_environment',
@@ -10239,7 +10276,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           busyState={props.busyState}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
           runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}
-          reinstallTargetProgress={reinstallTargetProgress()}
+          reinstallTargetProgress={visibleReinstallTargetProgress()}
           openConnectionProgress={visibleOpenConnectionProgress()}
           cancelOperation={props.cancelOperation}
           dismissOperation={props.dismissOperation}
@@ -10293,7 +10330,13 @@ function EnvironmentConnectionCard(props: Readonly<{
                 action,
                 'connect',
                 lifecycleAttempt,
+                lifecycleAttempt
+                  ? (operation) => props.bindLifecycleDisclosure(lifecycleAttempt, operation)
+                  : undefined,
               );
+              if (!completed && lifecycleAttempt) {
+                props.abandonLifecycleDisclosure(lifecycleAttempt);
+              }
               if (!completed || !action.continue_open_after_completion) {
                 return;
               }
