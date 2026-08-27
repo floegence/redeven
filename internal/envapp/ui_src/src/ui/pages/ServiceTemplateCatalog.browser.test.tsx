@@ -162,7 +162,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(getComputedStyle(search).cursor).toBe('text');
   });
 
-  it('animates the content surface in the direction of the selected category', async () => {
+  it('presents the selected category without fading and honors reduced motion', async () => {
     const host = document.createElement('div');
     host.className = 'mx-auto w-[900px] max-w-full bg-card p-4';
     document.body.appendChild(host);
@@ -198,7 +198,25 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const content = document.querySelector<HTMLElement>('[data-testid="service-template-category-content"]')!;
     expect(content.dataset.templateCategory).toBe('container');
     expect(content.dataset.transitionDirection).toBe('1');
-    expect(content.getAnimations().length).toBeGreaterThan(0);
+    const categoryAnimation = content.getAnimations().find((animation) => (
+      (animation.effect as KeyframeEffect | null)?.target === content
+    ));
+    expect(categoryAnimation).toBeDefined();
+    const keyframes = (categoryAnimation!.effect as KeyframeEffect).getKeyframes();
+    expect(keyframes.some((frame) => String(frame.transform).includes('10px'))).toBe(true);
+    expect(keyframes.every((frame) => frame.opacity === undefined || frame.opacity === '1')).toBe(true);
+    expect(getComputedStyle(content).opacity).toBe('1');
+
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    const hostTab = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab) => tab.textContent?.includes('Host templates'))!;
+    await userEvent.click(hostTab);
+    const reducedContent = document.querySelector<HTMLElement>('[data-testid="service-template-category-content"]')!;
+    const reducedAnimations = reducedContent.getAnimations().filter((animation) => (
+      (animation.effect as KeyframeEffect | null)?.target === reducedContent
+    ));
+    expect(reducedContent.dataset.templateCategory).toBe('host');
+    expect(reducedAnimations).toHaveLength(0);
   });
 
   it('keeps catalog menus above the drawer and closes from the outside backdrop', async () => {
