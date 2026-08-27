@@ -93,9 +93,14 @@ describe('Environment Runtime tooltip browser presentation', () => {
       expect(tooltipRect.top).toBeGreaterThanOrEqual(8);
       expect(tooltipRect.bottom).toBeLessThanOrEqual(triggerRect.top);
       expect(tooltipRect.right).toBeLessThanOrEqual(window.innerWidth - 8);
+      expect(tooltipRect.width).toBeLessThanOrEqual(294);
+      expect(tooltipRect.height).toBeLessThanOrEqual(180);
       expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
       expect(tooltip.textContent).toContain('v2.4.1');
       expect(tooltip.textContent).toContain('96 MB');
+      expect(tooltip.querySelectorAll('[data-runtime-sparkline]')).toHaveLength(2);
+      expect(tooltip.querySelector('.environment-runtime-tooltip-details')).toBeNull();
+      expect(getComputedStyle(tooltip.querySelector<HTMLElement>('.environment-runtime-tooltip-metric')!).borderTopWidth).toBe('0px');
     } finally {
       runtime.dispose();
     }

@@ -33,6 +33,51 @@ type EnvironmentRuntimeStatusTooltipProps = Readonly<{
 type RequestFailure = 'unavailable' | 'permission';
 
 const METRICS_REFRESH_INTERVAL_MS = 2_000;
+const METRIC_HISTORY_LIMIT = 18;
+const SPARKLINE_WIDTH = 120;
+const SPARKLINE_HEIGHT = 28;
+const SPARKLINE_PADDING = 2;
+
+type SparklineGeometry = Readonly<{
+  linePath: string;
+  areaPath: string;
+  lastX: number;
+  lastY: number;
+}>;
+
+function sparklineGeometry(values: readonly number[]): SparklineGeometry | null {
+  const samples = values.filter(Number.isFinite);
+  if (samples.length === 0) return null;
+
+  const minimum = Math.min(...samples);
+  const maximum = Math.max(...samples);
+  const spread = maximum - minimum;
+  const rangePadding = spread > 0
+    ? spread * 0.18
+    : Math.max(Math.abs(maximum) * 0.08, 1);
+  const lowerBound = minimum - rangePadding;
+  const upperBound = maximum + rangePadding;
+  const range = Math.max(upperBound - lowerBound, 1);
+  const drawableHeight = SPARKLINE_HEIGHT - (SPARKLINE_PADDING * 2);
+
+  const pointFor = (value: number, index: number, count: number) => ({
+    x: count === 1 ? SPARKLINE_WIDTH : (index / (count - 1)) * SPARKLINE_WIDTH,
+    y: SPARKLINE_PADDING + ((upperBound - value) / range) * drawableHeight,
+  });
+  const points = samples.length === 1
+    ? [{ ...pointFor(samples[0], 0, 1), x: 0 }, pointFor(samples[0], 0, 1)]
+    : samples.map((value, index) => pointFor(value, index, samples.length));
+  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
+  const first = points[0];
+  const last = points[points.length - 1];
+
+  return {
+    linePath,
+    areaPath: `${linePath} L${last.x.toFixed(2)},${SPARKLINE_HEIGHT} L${first.x.toFixed(2)},${SPARKLINE_HEIGHT} Z`,
+    lastX: last.x,
+    lastY: last.y,
+  };
+}
 
 function sourceAccentClass(source: EnvSessionSource): string {
   if (source === 'local_runtime') return 'text-primary';
@@ -72,6 +117,29 @@ function formatMemoryBytes(
   return `${formatNumber(size, { maximumFractionDigits: unitIndex === 0 ? 0 : 1 })} ${units[unitIndex]}`;
 }
 
+function MetricSparkline(props: Readonly<{ values: readonly number[]; tone: 'cpu' | 'memory' }>) {
+  const geometry = createMemo(() => sparklineGeometry(props.values));
+  return (
+    <svg
+      class={`environment-runtime-sparkline environment-runtime-sparkline-${props.tone}`}
+      viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      data-runtime-sparkline={props.tone}
+      data-sample-count={props.values.length}
+    >
+      <path class="environment-runtime-sparkline-guide" d={`M0,${SPARKLINE_HEIGHT - 1} L${SPARKLINE_WIDTH},${SPARKLINE_HEIGHT - 1}`} />
+      <Show when={geometry()}>{(current) => (
+        <>
+          <path class="environment-runtime-sparkline-area" d={current().areaPath} />
+          <path class="environment-runtime-sparkline-line" d={current().linePath} />
+          <circle class="environment-runtime-sparkline-point" cx={current().lastX} cy={current().lastY} r="1.6" />
+        </>
+      )}</Show>
+    </svg>
+  );
+}
+
 function EnvironmentSourceIcon(props: Readonly<{ source: EnvSessionSource }>) {
   return (
     <span class={`shrink-0 w-3.5 h-3.5 flex items-center justify-center ${sourceAccentClass(props.source)}`}>
@@ -93,7 +161,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   const [hovered, setHovered] = createSignal(false);
   const [focused, setFocused] = createSignal(false);
   const [ping, setPing] = createSignal<SysPingResponse | null>(null);
-  const [metrics, setMetrics] = createSignal<RuntimeProcessMetrics | null>(null);
+  const [metricHistory, setMetricHistory] = createSignal<RuntimeProcessMetrics[]>([]);
   const [pingFailure, setPingFailure] = createSignal<RequestFailure | null>(null);
   const [metricsFailure, setMetricsFailure] = createSignal<RequestFailure | null>(null);
   const [pingLoading, setPingLoading] = createSignal(false);
@@ -110,6 +178,9 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   const connected = () => props.connectionStatus === 'connected' && protocol.status() === 'connected';
   const unavailableLabel = () => i18n.t('shell.runtimeStatus.unavailable');
   const loadingLabel = () => i18n.t('shell.status.loading');
+  const metrics = () => metricHistory().at(-1) ?? null;
+  const cpuHistory = createMemo(() => metricHistory().map((sample) => sample.cpuPercent));
+  const memoryHistory = createMemo(() => metricHistory().map((sample) => sample.memoryBytes));
 
   const sourceLabel = createMemo(() => {
     switch (props.identity.source) {
@@ -194,7 +265,13 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
     pendingMetrics = { connection, promise: activeRequest };
     void activeRequest.then((value) => {
       if (generation !== requestGeneration) return;
-      setMetrics(value);
+      setMetricHistory((current) => {
+        const last = current.at(-1);
+        if (last?.sampledAtMs === value.sampledAtMs) {
+          return [...current.slice(0, -1), value];
+        }
+        return [...current, value].slice(-METRIC_HISTORY_LIMIT);
+      });
       setMetricsFailure(null);
     }).catch((error: unknown) => {
       if (generation !== requestGeneration) return;
@@ -214,7 +291,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
     pendingMetrics = null;
     if (currentProtocolStatus !== 'connected') {
       setPing(null);
-      setMetrics(null);
+      setMetricHistory([]);
       setPingFailure(null);
       setMetricsFailure(null);
       setPingLoading(false);
@@ -238,7 +315,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
       }, METRICS_REFRESH_INTERVAL_MS);
     } else if (!connected()) {
       setPing(null);
-      setMetrics(null);
+      setMetricHistory([]);
       setPingFailure(null);
       setMetricsFailure(null);
       setPingLoading(false);
@@ -260,7 +337,14 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
       <div class="environment-runtime-tooltip-header">
         <div class="min-w-0">
           <div class="environment-runtime-tooltip-name" title={props.identity.displayName}>{props.identity.displayName}</div>
-          <div class="environment-runtime-tooltip-kicker">{i18n.t('shell.runtimeStatus.runtime')}</div>
+          <div class="environment-runtime-tooltip-context">
+            <span>{sourceLabel()}</span>
+            <span aria-hidden="true">·</span>
+            <span>{i18n.t('shell.runtimeStatus.runtime')}</span>
+            <span class="environment-runtime-tooltip-version" data-runtime-version>
+              {runtimeVersion() || (pingLoading() ? loadingLabel() : unavailableLabel())}
+            </span>
+          </div>
         </div>
         <div class={`environment-runtime-tooltip-status ${statusClass(props.connectionStatus)}`}>
           <span class="environment-runtime-tooltip-status-dot" aria-hidden="true" />
@@ -268,26 +352,26 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
         </div>
       </div>
 
-      <dl class="environment-runtime-tooltip-details">
-        <div>
-          <dt>{i18n.t('shell.runtimeStatus.version')}</dt>
-          <dd data-runtime-version>{runtimeVersion() || (pingLoading() ? loadingLabel() : unavailableLabel())}</dd>
-        </div>
-        <div>
-          <dt>{i18n.t('shell.runtimeStatus.started')}</dt>
-          <dd data-runtime-started>{startedAt() || (pingLoading() ? loadingLabel() : unavailableLabel())}</dd>
-        </div>
-      </dl>
-
       <div class="environment-runtime-tooltip-metrics">
-        <div>
-          <span>{i18n.t('shell.runtimeStatus.cpu')}</span>
-          <strong data-runtime-cpu>{cpuLabel()}</strong>
-        </div>
-        <div>
-          <span>{i18n.t('shell.runtimeStatus.memory')}</span>
-          <strong data-runtime-memory>{memoryLabel()}</strong>
-        </div>
+        <section class="environment-runtime-tooltip-metric">
+          <div class="environment-runtime-tooltip-metric-heading">
+            <span>{i18n.t('shell.runtimeStatus.cpu')}</span>
+            <strong data-runtime-cpu>{cpuLabel()}</strong>
+          </div>
+          <MetricSparkline values={cpuHistory()} tone="cpu" />
+        </section>
+        <section class="environment-runtime-tooltip-metric">
+          <div class="environment-runtime-tooltip-metric-heading">
+            <span>{i18n.t('shell.runtimeStatus.memory')}</span>
+            <strong data-runtime-memory>{memoryLabel()}</strong>
+          </div>
+          <MetricSparkline values={memoryHistory()} tone="memory" />
+        </section>
+      </div>
+
+      <div class="environment-runtime-tooltip-started">
+        <span>{i18n.t('shell.runtimeStatus.started')}</span>
+        <span data-runtime-started>{startedAt() || (pingLoading() ? loadingLabel() : unavailableLabel())}</span>
       </div>
 
       <Show when={!connected()}>
