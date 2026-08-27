@@ -2209,7 +2209,7 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
         value: environment.ssh_details?.bootstrap_strategy === 'desktop_upload'
           ? 'Desktop upload'
           : environment.ssh_details?.bootstrap_strategy === 'remote_install'
-            ? 'Remote fallback'
+            ? 'Remote download & install'
             : 'Automatic',
       },
     ].filter((item) => item.value !== '');

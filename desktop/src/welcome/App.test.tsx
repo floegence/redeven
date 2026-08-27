@@ -2237,7 +2237,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('async function ' + 'connectFrom' + 'Dialog()');
     expect(appSrc).toContain("label: props.i18n.t('connectionDialog.automatic')");
     expect(appSrc).toContain("label: props.i18n.t('connectionDialog.desktopUpload')");
-    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.remoteFallback')");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.remoteDownloadInstall')");
+    expect(appSrc).not.toContain('remoteFallback');
     expect(appSrc).toContain("props.i18n.t('connectionDialog.bootstrapHelp')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.sshDestination')");
     expect(appSrc).toContain("import { SSHDestinationCombobox } from './SSHDestinationCombobox';");
