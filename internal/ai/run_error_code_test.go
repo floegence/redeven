@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	flruntime "github.com/floegence/floret/v5/runtime"
 	openai "github.com/openai/openai-go"
 )
 
@@ -137,5 +138,67 @@ func TestUserFacingRunErrorHidesAuthorityFailureDetails(t *testing.T) {
 	}
 	if !strings.Contains(lower, "tool result") || !strings.Contains(lower, "not run again") {
 		t.Fatalf("msg=%q, want safe result-consistency guidance", msg)
+	}
+}
+
+func TestProjectFloretTurnFailureUsesTypedCanonicalCode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		failure    *flruntime.ThreadTurnFailure
+		legacy     string
+		wantCode   string
+		hiddenText string
+	}{
+		{
+			name: "engine contract",
+			failure: &flruntime.ThreadTurnFailure{
+				Code:    flruntime.ThreadTurnFailureEngineContract,
+				Message: "provider attempt superseded with pending canonical tool batch",
+			},
+			wantCode: runErrorCodeFloretEngineFailed, hiddenText: "pending canonical tool batch",
+		},
+		{
+			name: "storage",
+			failure: &flruntime.ThreadTurnFailure{
+				Code:    flruntime.ThreadTurnFailureStorage,
+				Message: "private repository write failed",
+			},
+			wantCode: runErrorCodeFloretEngineFailed, hiddenText: "repository write",
+		},
+		{
+			name: "control contract",
+			failure: &flruntime.ThreadTurnFailure{
+				Code:    flruntime.ThreadTurnFailureControlError,
+				Message: `provider returned unregistered tool name "task_complete"`,
+			},
+			wantCode: runErrorCodeFloretControlContract, hiddenText: "task_complete",
+		},
+		{
+			name: "legacy authority failure",
+			failure: &flruntime.ThreadTurnFailure{
+				Code:    flruntime.ThreadTurnFailureLegacyUnclassified,
+				Message: "floret authority state is corrupt",
+			},
+			wantCode: runErrorCodeFloretAuthorityConsistency, hiddenText: "authority state is corrupt",
+		},
+		{
+			name:     "nil typed failure preserves historical classification",
+			legacy:   "Flower tool call requires id, name, and args",
+			wantCode: runErrorCodeModelGatewayContract, hiddenText: "requires id",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			code, message := projectFloretTurnFailure(testCase.failure, testCase.legacy, "floret_turn_failed")
+			if code != testCase.wantCode {
+				t.Fatalf("code=%q, want %q", code, testCase.wantCode)
+			}
+			if message == "" || strings.Contains(strings.ToLower(message), strings.ToLower(testCase.hiddenText)) {
+				t.Fatalf("message=%q exposed internal failure text %q", message, testCase.hiddenText)
+			}
+		})
 	}
 }

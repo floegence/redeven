@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	flruntime "github.com/floegence/floret/v5/runtime"
 	openai "github.com/openai/openai-go"
 )
 
@@ -128,6 +129,38 @@ func projectRunFailure(raw string, fallbackCode string) (string, string) {
 	raw = strings.TrimSpace(raw)
 	code := classifyRunFailureCode(errors.New(raw), fallbackCode)
 	return code, userFacingRunError(code, raw)
+}
+
+// projectFloretTurnFailure is the single presentation boundary for canonical
+// Floret turn failures. Typed codes own classification; legacy text parsing is
+// retained only for historical views that do not carry Failure.
+func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, legacyRaw string, legacyFallbackCode string) (string, string) {
+	if failure == nil {
+		return projectRunFailure(legacyRaw, legacyFallbackCode)
+	}
+	message := strings.TrimSpace(failure.Message)
+	switch failure.Code {
+	case flruntime.ThreadTurnFailureProvider:
+		return projectRunFailure(message, legacyFallbackCode)
+	case flruntime.ThreadTurnFailureControlError:
+		return runErrorCodeFloretControlContract, userFacingRunError(runErrorCodeFloretControlContract, message)
+	case flruntime.ThreadTurnFailureEffectOutcomeUnknown:
+		return runErrorCodeFloretAuthorityConsistency, userFacingRunError(runErrorCodeFloretAuthorityConsistency, message)
+	case flruntime.ThreadTurnFailureInterrupted:
+		return "floret_turn_interrupted", "Flower's runtime stopped before this reply finished. Start a new reply to continue."
+	case flruntime.ThreadTurnFailureCancelled:
+		return "", ""
+	case flruntime.ThreadTurnFailureToolDispatch,
+		flruntime.ThreadTurnFailureAuthorizationUnavailable,
+		flruntime.ThreadTurnFailureAuthorizationContract,
+		flruntime.ThreadTurnFailureStorage,
+		flruntime.ThreadTurnFailureEngineContract:
+		return runErrorCodeFloretEngineFailed, userFacingRunError(runErrorCodeFloretEngineFailed, message)
+	case flruntime.ThreadTurnFailureLegacyUnclassified:
+		return projectRunFailure(message, legacyFallbackCode)
+	default:
+		return runErrorCodeFloretEngineFailed, userFacingRunError(runErrorCodeFloretEngineFailed, message)
+	}
 }
 
 func providerHTTPStatusRunErrorCode(status int) string {

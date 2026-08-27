@@ -68,8 +68,16 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 			projectCurrentAttachmentURLs(input, current.Queue[index].Input.Attachments, threadID, "", current.Queue[index].ID)
 		}
 	}
-	if rawError := strings.TrimSpace(current.Error); rawError != "" {
-		code, message := projectRunFailure(rawError, "floret_turn_failed")
+	// Floret's typed failure is consumed at this boundary. The internal message
+	// and deprecated Error mirror must not become a second public UI contract.
+	delete(root, "failure")
+	delete(root, "error")
+	if current.Failure != nil || strings.TrimSpace(current.Error) != "" {
+		code, message := projectFloretTurnFailure(current.Failure, current.Error, "floret_turn_failed")
+		if code == "" && message == "" {
+			delete(root, "run_error_code")
+			return json.Marshal(root)
+		}
 		root["run_error_code"] = code
 		root["error"] = message
 	}

@@ -48,9 +48,13 @@ Context pressure and whole-thread usage remain separate projections. The context
 Summary runtime state only triggers revalidation. Product settings revisions do not enter that signature and cannot start runtime recovery. Exhausted finite recovery remains stopped until a newer runtime signature or an explicit user reload arrives. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, an active-turn admission failure, or an in-flight Stop request proves that a turn may still be active.
 
 Runtime failures are classified once at the Redeven projection boundary before
-summary, detail, and typed current responses reach Flower. Known provider,
-gateway, control, and canonical-authority failures use stable codes and
-localized presentation; raw engine wording stays in internal diagnostics.
+summary, detail, and typed current responses reach Flower. Published Floret
+v5.0.6 supplies the canonical terminal `Failure.Code`; Redeven maps that code
+once and removes the upstream failure payload before serializing Flower data.
+Only historical failures without the typed field use the legacy text
+classifier. Known provider, gateway, control, and canonical-authority failures
+use stable codes and localized presentation; raw engine wording stays in
+internal diagnostics.
 Classification never changes canonical messages, retries an Effect, or creates
 a client recovery lifecycle.
 
