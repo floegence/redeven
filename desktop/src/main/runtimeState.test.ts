@@ -25,6 +25,7 @@ function openableHealthPayload(startedAtUnixMS: number): string {
     ok: true,
     data: {
       status: 'online',
+      pid: 4242,
       password_required: false,
       exposure: loopbackExposure,
       started_at_unix_ms: startedAtUnixMS,
@@ -610,6 +611,69 @@ describe('runtimeState', () => {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());
       });
+    }
+  });
+
+  it('reuses shell validation across replacement private bridge ports only within the same target scope', async () => {
+    const requestCounts = [
+      { health: 0, shell: 0, asset: 0 },
+      { health: 0, shell: 0, asset: 0 },
+    ];
+    const createBridgeServer = (index: number) => http.createServer((request, response) => {
+      const counts = requestCounts[index]!;
+      if (request.url === '/api/local/runtime/health') {
+        counts.health += 1;
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(openableHealthPayload(700));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        counts.shell += 1;
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      if (request.method === 'HEAD' && request.url === '/_redeven_proxy/env/assets/index.js') {
+        counts.asset += 1;
+        response.writeHead(200);
+        response.end();
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+    const firstServer = createBridgeServer(0);
+    const secondServer = createBridgeServer(1);
+    const firstBridgeURL = await listenOnLoopback(firstServer);
+    const secondBridgeURL = await listenOnLoopback(secondServer);
+    const bridgeToken = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+    try {
+      await expect(probeLocalRuntimeBridgeStartup({
+        local_ui_url: firstBridgeURL,
+        local_ui_urls: [firstBridgeURL],
+        local_ui_bridge_url: firstBridgeURL,
+        local_ui_bridge_token: bridgeToken,
+      }, { shellCacheScope: 'ssh:target:scoped-cache-test' })).resolves.toMatchObject({ ok: true });
+      expect(requestCounts[0]).toEqual({ health: 1, shell: 1, asset: 1 });
+
+      await expect(probeLocalRuntimeBridgeStartup({
+        local_ui_url: secondBridgeURL,
+        local_ui_urls: [secondBridgeURL],
+        local_ui_bridge_url: secondBridgeURL,
+        local_ui_bridge_token: bridgeToken,
+      }, { shellCacheScope: 'ssh:target:scoped-cache-test' })).resolves.toMatchObject({ ok: true });
+      expect(requestCounts[1]).toEqual({ health: 1, shell: 0, asset: 0 });
+
+      await expect(probeLocalRuntimeBridgeStartup({
+        local_ui_url: secondBridgeURL,
+        local_ui_urls: [secondBridgeURL],
+        local_ui_bridge_url: secondBridgeURL,
+        local_ui_bridge_token: bridgeToken,
+      }, { shellCacheScope: 'ssh:target:different-cache-test' })).resolves.toMatchObject({ ok: true });
+      expect(requestCounts[1]).toEqual({ health: 2, shell: 1, asset: 1 });
+    } finally {
+      await Promise.all([closeServer(firstServer), closeServer(secondServer)]);
     }
   });
 
