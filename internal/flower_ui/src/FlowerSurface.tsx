@@ -183,6 +183,7 @@ import {
 } from './flowerCompanionPresence';
 import { createDirectoryPickerDataSource } from './filePicker/createDirectoryPickerDataSource';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+import { mergeFlowerContextUsage } from './flowerLiveMapper';
 import { createFlowerScrollTailController } from './flowerScrollTail';
 import { toPickerTreeAbsolutePath, toPickerTreePath } from './filePicker/directoryPickerTree';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
@@ -4086,9 +4087,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         },
       },
     } satisfies FlowerThreadSnapshot;
+    const mergedContextUsage = contextUsage
+      ? mergeFlowerContextUsage(base.context_usage, contextUsage)
+      : base.context_usage;
     const contextualBase = {
       ...base,
-      ...(contextUsage ? { context_usage: contextUsage } : {}),
+      ...(mergedContextUsage ? { context_usage: mergedContextUsage } : {}),
       ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
       ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     };
@@ -4150,11 +4154,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (envelope.kind === 'thread.batch' && envelope.context_usage) {
       const threadID = trimString(envelope.thread_id);
+      const incomingContextUsage = envelope.context_usage;
       const currentView = threadCache().views.get(threadID);
       if (threadID && currentView && !retiredThreadIDs.has(threadID)) {
         setThreadCache((cache) => cache.updateDetailAdjuncts(threadID, (thread) => ({
           ...thread,
-          context_usage: envelope.context_usage,
+          context_usage: mergeFlowerContextUsage(thread.context_usage, incomingContextUsage),
         })));
       }
       return;

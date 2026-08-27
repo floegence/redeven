@@ -215,6 +215,13 @@ export type FlowerContextPressureStatus =
 
 export type FlowerContextUsagePhase = 'projected_request' | 'provider_usage';
 
+export type FlowerThreadTokenUsage = Readonly<{
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}>;
+
 export type FlowerContextUsage = Readonly<{
   run_id?: string;
   step_index?: number;
@@ -229,6 +236,7 @@ export type FlowerContextUsage = Readonly<{
   pressure_status: FlowerContextPressureStatus;
   source?: string;
   updated_at_ms: number;
+  thread_usage?: FlowerThreadTokenUsage;
 }>;
 
 export type FlowerContextCompactionPhase = 'start' | 'complete' | 'failed' | 'cancelled' | 'noop' | 'checkpoint';

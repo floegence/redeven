@@ -10,6 +10,8 @@ import {
   contextUsagePercent,
   formatFullContextTokenCount,
   formatContextTokenCount,
+  formatThreadCacheHitPercent,
+  threadCacheHitRatio,
 } from './flowerContextPresentation';
 
 function usage(overrides: Partial<FlowerContextUsage> = {}): FlowerContextUsage {
@@ -47,12 +49,14 @@ describe('flower context presentation', () => {
       ariaLabel: 'Context',
       percentLabel: '91%',
       usedValue: '182,000 of 200,000',
+      cacheHitLabel: 'Conversation cache hit rate',
+      cacheHitValue: 'Not available',
       thresholdValue: '180,000',
       safeLimitValue: '190,000',
       tone: 'warning',
       ratio: 0.91,
       progressValue: 91,
-      ariaValueText: 'Context: 91%, 182,000 of 200,000',
+      ariaValueText: 'Context: 91%, 182,000 of 200,000, Conversation cache hit rate: Not available',
     });
   });
 
@@ -75,7 +79,7 @@ describe('flower context presentation', () => {
     expect(view.usedValue).toBe('Not available');
     expect(view.statusValue).toBe('Estimated');
     expect(view.statusLabel).toBe('Status');
-    expect(view.ariaValueText).toBe('Context: --%');
+    expect(view.ariaValueText).toBe('Context: --%, Conversation cache hit rate: Not available');
     expect(view.tone).toBe('estimated');
   });
 
@@ -90,7 +94,7 @@ describe('flower context presentation', () => {
     expect(view.ariaLabel).toBe('Last known context');
     expect(view.tooltipTitle).toBe('Last known context');
     expect(view.percentLabel).toBe('90%');
-    expect(view.ariaValueText).toBe('Last known context: 90%, 900 of 1,000');
+    expect(view.ariaValueText).toBe('Last known context: 90%, 900 of 1,000, Conversation cache hit rate: Not available');
   });
 
   it('keeps the circular label compact while localizing tooltip ratio text', () => {
@@ -113,7 +117,38 @@ describe('flower context presentation', () => {
 
     expect(view.percentLabel).toBe('72%');
     expect(view.ratioValue).toBe('72% 已用');
-    expect(view.ariaValueText).toBe('Context: 72% 已用, 72,000 of 100,000');
+    expect(view.ariaValueText).toBe('Context: 72% 已用, 72,000 of 100,000, Conversation cache hit rate: Not available');
+  });
+
+  it('calculates the whole-conversation cache hit rate from disjoint input buckets', () => {
+    const current = usage({
+      thread_usage: {
+        input_tokens: 50,
+        output_tokens: 20,
+        cache_read_tokens: 45,
+        cache_write_tokens: 5,
+      },
+    });
+    const view = buildFlowerComposerContextIndicatorView(current, DEFAULT_FLOWER_SURFACE_COPY);
+
+    expect(threadCacheHitRatio(current)).toBe(0.45);
+    expect(view.cacheHitValue).toBe('45%');
+    expect(view.ariaValueText).toContain('Conversation cache hit rate: 45%');
+  });
+
+  it('formats zero, exact, near-perfect, and unavailable cache hit rates honestly', () => {
+    expect(formatThreadCacheHitPercent(usage({
+      thread_usage: { input_tokens: 100, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 },
+    }), 'Not available')).toBe('0%');
+    expect(formatThreadCacheHitPercent(usage({
+      thread_usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 100, cache_write_tokens: 0 },
+    }), 'Not available')).toBe('100%');
+    expect(formatThreadCacheHitPercent(usage({
+      thread_usage: { input_tokens: 1, output_tokens: 0, cache_read_tokens: 1999, cache_write_tokens: 0 },
+    }), 'Not available')).toBe('99.95%');
+    expect(formatThreadCacheHitPercent(usage({
+      thread_usage: { input_tokens: 0, output_tokens: 10, cache_read_tokens: 0, cache_write_tokens: 0 },
+    }), 'Not available')).toBe('Not available');
   });
 
   it('maps all pressure statuses into stable UI tones', () => {

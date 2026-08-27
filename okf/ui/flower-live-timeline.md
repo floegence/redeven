@@ -43,6 +43,8 @@ valid only after an authoritative empty list response.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. When a selected summary is ahead, Flower issues a fresh detail request instead of reusing an older in-flight request. One recovery request runs per thread, tracks newer summary targets, and uses finite 100/300/900 ms retries for transient failure. Exhaustion preserves cached content and exposes an explicit retry action.
 
+Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied by Floret v5.0.5. A live context frame may omit cumulative totals; the single merge helper then retains the last confirmed totals instead of clearing them. The client never sums stream samples, and a zero input denominator is displayed as unavailable.
+
 Summary runtime state only triggers revalidation. Product settings revisions do not enter that signature and cannot start runtime recovery. Exhausted finite recovery remains stopped until a newer runtime signature or an explicit user reload arrives. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, an active-turn admission failure, or an in-flight Stop request proves that a turn may still be active.
 
 Runtime failures are classified once at the Redeven projection boundary before
@@ -82,6 +84,8 @@ so a provider update cannot flash empty or wait for transcript replacement.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Retained Flower product placement across Activity and Workbench hosts.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Workbench host registration without a second Flower instance.
 - `redeven:internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts` - Single receiver and obsolete-path removal checks.
+- `redeven:internal/flower_ui/src/flowerLiveMapper.ts` - One context adjunct merge rule retains canonical whole-thread usage across partial live frames.
+- `redeven:internal/flower_ui/src/chat/flowerContextPresentation.test.ts` - Covers cache-hit formula, unavailable data, exact 100 percent, and near-perfect rounding.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Terminal loss, stale request, bounded retry, and first-load fixtures.
 - `redeven:internal/flower_ui/src/flowerThreadTitle.ts` - Shared canonical title consumption and legacy first-message derivation.
 - `redeven:internal/ai/flower_live_stream_test.go` - Complete baseline, byte-budget, oversized-frame, terminal-state, and reconnect coverage.

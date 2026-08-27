@@ -29,7 +29,7 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.17.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.17.1 | Floegence first-party dependency. |
-| github.com/floegence/floret/v5 | v5.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v5@v5.0.4 | Detected from LICENSE. |
+| github.com/floegence/floret/v5 | v5.0.5 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v5@v5.0.5 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v3 | v3.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v3@v3.2.0 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin/v3 | v3.0.17 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.17 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |

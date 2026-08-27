@@ -18,6 +18,8 @@ export type FlowerComposerContextIndicatorView = Readonly<{
   usedValue: string;
   ratioLabel: string;
   ratioValue: string;
+  cacheHitLabel: string;
+  cacheHitValue: string;
   thresholdLabel: string;
   thresholdValue: string;
   safeLimitLabel: string;
@@ -72,6 +74,30 @@ function formatCompactContextPercent(percent: number): string {
   return `${Math.max(0, Math.min(100, Math.round(percent)))}%`;
 }
 
+export function threadCacheHitRatio(usage: FlowerContextUsage): number | null {
+  const totals = usage.thread_usage;
+  if (!totals) return null;
+  const input = Number(totals.input_tokens);
+  const cacheRead = Number(totals.cache_read_tokens);
+  const cacheWrite = Number(totals.cache_write_tokens);
+  if (![input, cacheRead, cacheWrite].every((value) => Number.isFinite(value) && value >= 0)) return null;
+  const totalInput = input + cacheRead + cacheWrite;
+  if (totalInput <= 0) return null;
+  return Math.max(0, Math.min(1, cacheRead / totalInput));
+}
+
+export function formatThreadCacheHitPercent(usage: FlowerContextUsage, unavailable: string): string {
+  const ratio = threadCacheHitRatio(usage);
+  if (ratio === null) return unavailable;
+  const percent = ratio * 100;
+  if (percent === 100) return '100%';
+  if (Math.round(percent) < 100) return `${Math.round(percent)}%`;
+  const digits = percent >= 99.9 ? 2 : 1;
+  const factor = 10 ** digits;
+  const bounded = Math.floor((percent + Number.EPSILON) * factor) / factor;
+  return `${bounded.toFixed(digits).replace(/\.0+$/, '')}%`;
+}
+
 export function buildFlowerComposerContextIndicatorView(
   usage: FlowerContextUsage,
   copy: FlowerSurfaceCopy,
@@ -102,9 +128,12 @@ export function buildFlowerComposerContextIndicatorView(
     }
   })();
   const usedValue = used && total ? labels.usage(used, total) : trimString(labels.unavailable) || fallback.unavailable;
+  const unavailable = trimString(labels.unavailable) || fallback.unavailable;
+  const cacheHitLabel = trimString(labels.cacheHitLabel) || fallback.cacheHitLabel;
+  const cacheHitValue = formatThreadCacheHitPercent(usage, unavailable);
   const ariaValueText = progressValue === null
-    ? `${label}: ${unknownPercent}`
-    : `${label}: ${ratioValue}, ${usedValue}`;
+    ? `${label}: ${unknownPercent}, ${cacheHitLabel}: ${cacheHitValue}`
+    : `${label}: ${ratioValue}, ${usedValue}, ${cacheHitLabel}: ${cacheHitValue}`;
   return {
     ariaLabel: label,
     ariaValueText,
@@ -117,6 +146,8 @@ export function buildFlowerComposerContextIndicatorView(
     usedValue,
     ratioLabel: trimString(labels.ratioLabel) || fallback.ratioLabel,
     ratioValue,
+    cacheHitLabel,
+    cacheHitValue,
     thresholdLabel: trimString(labels.thresholdLabel) || fallback.thresholdLabel,
     thresholdValue: threshold,
     safeLimitLabel: trimString(labels.safeLimitLabel) || fallback.safeLimitLabel,

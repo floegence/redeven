@@ -493,6 +493,9 @@ func TestDesktopModelSourceProviderPreservesEmptyToolArguments(t *testing.T) {
 		case "ai.turn.stream":
 			return testDesktopModelSourceResult(t, frame.ID, ModelGatewayResult{
 				FinishReason: "tool_calls",
+				Usage: TurnUsage{
+					InputTokens: 30, OutputTokens: 5, CacheReadTokens: 60, CacheWriteTokens: 10,
+				},
 				ToolCalls: []ToolCall{{
 					ID:   "call_okf_index",
 					Name: "okf.index",
@@ -514,6 +517,9 @@ func TestDesktopModelSourceProviderPreservesEmptyToolArguments(t *testing.T) {
 	}
 	if result.ToolCalls[0].Args == nil {
 		t.Fatal("empty tool arguments became nil after Desktop model-source RPC")
+	}
+	if result.Usage != (TurnUsage{InputTokens: 30, OutputTokens: 5, CacheReadTokens: 60, CacheWriteTokens: 10}) {
+		t.Fatalf("usage=%#v, want cache buckets preserved", result.Usage)
 	}
 	toolCalls, err := floretToolCallsFromFlower(result.ToolCalls)
 	if err != nil {

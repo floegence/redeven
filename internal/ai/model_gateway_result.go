@@ -34,6 +34,9 @@ func (e *modelGatewayContractError) Unwrap() error {
 }
 
 func validateModelGatewayResult(result ModelGatewayResult) error {
+	if err := validateTurnUsage(result.Usage); err != nil {
+		return fmt.Errorf("model gateway result usage is invalid: %w", err)
+	}
 	for index, call := range result.ToolCalls {
 		missing := make([]string, 0, 3)
 		if strings.TrimSpace(call.ID) == "" {

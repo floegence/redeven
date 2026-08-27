@@ -123,6 +123,7 @@ main() {
       internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.test.ts \
       internal/flower_ui/src/threads/FlowerThreadList.test.ts \
       internal/flower_ui/src/flowerTimelineProjection.test.ts \
+      internal/flower_ui/src/flowerLiveMapper.test.ts \
       internal/flower_ui/src/chat/flowerContextPresentation.test.ts \
       internal/flower_ui/src/chat/flowerChatContextModel.test.ts \
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \

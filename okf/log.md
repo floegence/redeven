@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-27
+* **Flower conversation cache metrics**: Adopted published Floret v5.0.5,
+  normalized provider cache-read and cache-write usage across local and Desktop
+  model sources, and added canonical whole-thread cache hit rate to the context
+  tooltip without changing the context-pressure ring or adding client-side
+  accumulation.
 * **Flower compaction qualification**: Added an isolated real-provider test for
   `deepseek-v4-flash` that requires both manual and pre-request automatic
   compaction to commit canonical checkpoints, reduce estimated tokens, and

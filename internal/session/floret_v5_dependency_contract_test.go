@@ -26,7 +26,7 @@ func TestFloretDependencyIsExactPublishedV5(t *testing.T) {
 		t.Fatal(err)
 	}
 	const path = "github.com/floegence/floret/v5"
-	const version = "v5.0.4"
+	const version = "v5.0.5"
 	found := false
 	for _, requirement := range module.Require {
 		if requirement.Mod.Path == path {

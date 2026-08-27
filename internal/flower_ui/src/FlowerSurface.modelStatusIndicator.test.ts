@@ -158,6 +158,10 @@ describe('Flower model status indicator', () => {
     expect(contextIndicator).toContain('aria-valuemin="0"');
     expect(contextIndicator).toContain('aria-valuemax="100"');
     expect(contextIndicator).toContain('aria-valuenow={view().progressValue ?? undefined}');
+    expect(contextIndicator).toContain('onFocus={() => setTooltipOpen(true)}');
+    expect(contextIndicator).toContain('onBlur={() => setTooltipOpen(false)}');
+    expect(contextIndicator).toContain('<span>{view().cacheHitLabel}</span>');
+    expect(contextIndicator).toContain('<strong>{view().cacheHitValue}</strong>');
     expect(tooltipRule).toContain('opacity: 0');
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='warning'] .flower-composer-context-progress");
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='danger'] .flower-composer-context-progress");

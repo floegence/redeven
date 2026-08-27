@@ -3690,6 +3690,7 @@
       "contextIndicatorUnavailable": "No disponible",
       "contextIndicatorUsedLabel": "Usado",
       "contextIndicatorRatioLabel": "Uso",
+      "contextIndicatorCacheHitLabel": "Tasa de aciertos de caché de la conversación",
       "contextIndicatorThresholdLabel": "Umbral de compresión",
       "contextIndicatorSafeLimitLabel": "Límite seguro de solicitud",
       "contextIndicatorStatusLabel": "Estado",

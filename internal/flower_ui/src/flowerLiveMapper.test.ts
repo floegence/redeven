@@ -1,6 +1,96 @@
 import { describe, expect, it } from 'vitest';
 
-import { mapFlowerActivityItem, mapFlowerThread } from './flowerLiveMapper';
+import {
+  mapContextUsage,
+  mapFlowerActivityItem,
+  mapFlowerThread,
+  mergeFlowerContextUsage,
+} from './flowerLiveMapper';
+
+describe('Flower context usage contract', () => {
+  it('maps canonical thread token totals without changing current context usage', () => {
+    expect(mapContextUsage({
+      phase: 'provider_usage',
+      pressure_status: 'stable',
+      input_tokens: 900,
+      context_window_tokens: 1000,
+      used_ratio: 0.9,
+      updated_at_ms: 10,
+      thread_usage: {
+        input_tokens: 50,
+        output_tokens: 20,
+        cache_read_tokens: 45,
+        cache_write_tokens: 5,
+      },
+    })).toMatchObject({
+      input_tokens: 900,
+      used_ratio: 0.9,
+      thread_usage: {
+        input_tokens: 50,
+        output_tokens: 20,
+        cache_read_tokens: 45,
+        cache_write_tokens: 5,
+      },
+    });
+  });
+
+  it('rejects malformed canonical thread token totals', () => {
+    expect(() => mapContextUsage({
+      phase: 'provider_usage',
+      pressure_status: 'stable',
+      updated_at_ms: 10,
+      thread_usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_tokens: -1,
+        cache_write_tokens: 0,
+      },
+    })).toThrow('context_usage.thread_usage.cache_read_tokens must be a non-negative integer');
+  });
+
+  it('keeps the latest confirmed totals when a live adjunct omits them', () => {
+    const previous = mapContextUsage({
+      phase: 'provider_usage',
+      pressure_status: 'stable',
+      input_tokens: 800,
+      updated_at_ms: 10,
+      thread_usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_tokens: 90,
+        cache_write_tokens: 0,
+      },
+    })!;
+    const incoming = mapContextUsage({
+      phase: 'projected_request',
+      pressure_status: 'stable',
+      input_tokens: 950,
+      updated_at_ms: 11,
+    })!;
+
+    expect(mergeFlowerContextUsage(previous, incoming)).toEqual({
+      ...incoming,
+      thread_usage: previous.thread_usage,
+    });
+  });
+
+  it('replaces confirmed totals when a newer canonical snapshot includes them', () => {
+    const previous = mapContextUsage({
+      phase: 'provider_usage',
+      pressure_status: 'stable',
+      updated_at_ms: 10,
+      thread_usage: { input_tokens: 10, output_tokens: 1, cache_read_tokens: 0, cache_write_tokens: 0 },
+    })!;
+    const incoming = mapContextUsage({
+      phase: 'provider_usage',
+      pressure_status: 'stable',
+      updated_at_ms: 11,
+      thread_usage: { input_tokens: 10, output_tokens: 2, cache_read_tokens: 90, cache_write_tokens: 0 },
+    })!;
+
+    expect(mergeFlowerContextUsage(previous, incoming)).toBe(incoming);
+  });
+});
 
 describe('mapFlowerThread title contract', () => {
   it('rejects a non-empty title without a canonical title status', () => {

@@ -39,6 +39,11 @@ func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, cur
 		if err != nil {
 			return flowerCanonicalContextProjection{}, fmt.Errorf("project Floret context usage: %w", err)
 		}
+		threadUsage, err := flowerThreadTokenUsageFromFloret(snapshot.UsageTotals)
+		if err != nil {
+			return flowerCanonicalContextProjection{}, fmt.Errorf("project Floret thread token usage: %w", err)
+		}
+		usage.ThreadUsage = threadUsage
 		projection.Usage = &usage
 	}
 	compactions := make([]FlowerContextCompaction, 0, len(snapshot.Compactions))
@@ -73,6 +78,19 @@ func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, cur
 	projection.Compactions = compactions
 	projection.Decorations = decorations
 	return projection, nil
+}
+
+func flowerThreadTokenUsageFromFloret(totals *flruntime.ThreadTokenUsageTotals) (*FlowerThreadTokenUsage, error) {
+	if totals == nil {
+		return nil, nil
+	}
+	if totals.InputTokens < 0 || totals.OutputTokens < 0 || totals.CacheReadTokens < 0 || totals.CacheWriteTokens < 0 {
+		return nil, errors.New("Floret thread token usage contains a negative count")
+	}
+	return &FlowerThreadTokenUsage{
+		InputTokens: totals.InputTokens, OutputTokens: totals.OutputTokens,
+		CacheReadTokens: totals.CacheReadTokens, CacheWriteTokens: totals.CacheWriteTokens,
+	}, nil
 }
 
 func canonicalCompactionTimelineAnchor(items []flruntime.ThreadItem, turnID identity.TurnID) (FlowerTimelineAnchor, error) {

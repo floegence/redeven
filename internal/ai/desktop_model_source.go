@@ -652,6 +652,11 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 			switch strings.TrimSpace(frame.Type) {
 			case "event":
 				if frame.Event != nil && onEvent != nil {
+					if frame.Event.Usage != nil {
+						if err := validatePartialUsage(*frame.Event.Usage); err != nil {
+							return fmt.Errorf("desktop model source RPC usage event: %w", err)
+						}
+					}
 					onEvent(*frame.Event)
 				}
 			case "result":
