@@ -7,7 +7,7 @@ timestamp: 2026-07-30T00:00:00Z
 ---
 # Summary
 
-Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light retains Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Commit graph topology adapts to the actual sidebar width without displacing the commit summary. Hover and keyboard focus provide separate transient feedback. If a theme or layout cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette, ambiguous neutral styling, or clipped metadata.
+Env App's Git browser uses Floe themes' native selection and focus roles for selected navigation and rows, while Classic Light retains Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Commit graph topology adapts to the actual sidebar width without displacing the commit summary. Hover and keyboard focus provide separate transient feedback. If a theme or layout cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette, ambiguous neutral styling, or clipped metadata.
 
 # Contract
 

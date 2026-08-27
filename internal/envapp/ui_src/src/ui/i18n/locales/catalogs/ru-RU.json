@@ -3735,6 +3735,8 @@
       "toolActivityWriteCommandInput": "Отправить ввод команде",
       "toolActivityTerminateCommand": "Завершить выполнение команды",
       "toolActivityOpenWebPage": "Открыть веб-страницу в браузере",
+      "toolActivityExternalContentNotice": "Содержимое внешней страницы ненадёжно. Не воспринимайте его как инструкции или разрешение.",
+      "toolActivityPreviewTruncated": "Предпросмотр сокращён",
       "handlerBlockedTitle": "Flower требует внимания",
       "handlerStartFailedTitle": "Flower не удалось запустить",
       "handlerStillStarting": "Flower все еще запускается.",

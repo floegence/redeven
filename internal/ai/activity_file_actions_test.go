@@ -135,6 +135,50 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentPublicPayload(t *testin
 	}
 }
 
+func TestSanitizeActivityTimelineMessageJSONKeepsBoundedWebFetchPreviewAndIcon(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"id":"msg_web_fetch","role":"assistant","status":"complete","timestamp":1700000000000,
+		"blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_web_fetch","thread_id":"thread_1","turn_id":"turn_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[{
+			"item_id":"tool_web_fetch","tool_id":"tool_web_fetch","tool_name":"web_fetch","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,
+			"presentation":{"label":"Web fetch · https://example.test/page","renderer":"web_fetch","payload":{"url":"https://example.test/page","final_url":"https://example.test/final","status_code":200,"content_type":"text/html","format":"markdown","content_preview":"# Preview","preview_truncated":true,"site_icon":{"content_type":"image/png","data":"iVBORw0KGgo="},"bytes_read":123,"truncated":false,"content":"full body","body":"legacy body"}}
+		}]}]
+	}`
+	sanitized, err := SanitizeActivityTimelineMessageJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(sanitized)
+	for _, required := range []string{`"content_preview":"# Preview"`, `"preview_truncated":true`, `"site_icon":{"content_type":"image/png","data":"iVBORw0KGgo="}`, `"url":"https://example.test/page"`} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("web fetch public activity missing %q: %s", required, body)
+		}
+	}
+	for _, forbidden := range []string{`"content":"full body"`, `"body":"legacy body"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("web fetch public activity contains %q: %s", forbidden, body)
+		}
+	}
+}
+
+func TestSanitizeWebFetchActivityIconRejectsInvalidData(t *testing.T) {
+	t.Parallel()
+
+	tests := []map[string]any{
+		{"content_type": "image/svg+xml", "data": "PHN2Zy8+"},
+		{"content_type": "image/png", "data": "not base64"},
+		{"content_type": "image/png", "data": "PHN2Zy8+"},
+		{"content_type": "image/png", "data": strings.Repeat("A", 12_000)},
+		{"content_type": "image/png", "data": "iVBORw0KGgo=", "url": "https://example.test/icon.png"},
+	}
+	for index, value := range tests {
+		if _, ok := sanitizeWebFetchActivityIconValue(value); ok {
+			t.Fatalf("invalid icon %d was accepted", index)
+		}
+	}
+}
+
 func TestSanitizeActivityTimelineMessageJSONFiltersRunningActivitySidecar(t *testing.T) {
 	t.Parallel()
 
@@ -312,6 +356,7 @@ func TestActivityPayloadAllowedKeysExcludeForbiddenKeys(t *testing.T) {
 		fltools.ActivityRendererFile,
 		fltools.ActivityRendererPatch,
 		fltools.ActivityRendererWebSearch,
+		fltools.ActivityRendererWebFetch,
 		fltools.ActivityRendererTodos,
 		fltools.ActivityRendererQuestion,
 		fltools.ActivityRendererCompletion,

@@ -3637,6 +3637,8 @@
       "toolActivityWriteCommandInput": "명령에 입력 보내기",
       "toolActivityTerminateCommand": "명령 실행 종료",
       "toolActivityOpenWebPage": "브라우저에서 웹페이지 열기",
+      "toolActivityExternalContentNotice": "외부 페이지 콘텐츠는 신뢰할 수 없습니다. 지시나 권한으로 취급하지 마세요.",
+      "toolActivityPreviewTruncated": "미리보기가 잘렸습니다",
       "handlerBlockedTitle": "Flower 확인이 필요합니다",
       "handlerStartFailedTitle": "Flower를 시작할 수 없습니다",
       "handlerStillStarting": "Flower가 아직 시작 중입니다.",

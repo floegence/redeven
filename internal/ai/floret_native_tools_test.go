@@ -102,12 +102,14 @@ func TestFloretNativeWebFetchEffectPolicyFailsClosedAfterSurfaceTightening(t *te
 	}
 }
 
-func TestWebFetchActivityProjectionKeepsMetadataAndDropsContent(t *testing.T) {
+func TestWebFetchActivityProjectionKeepsPreviewAndDropsFullContent(t *testing.T) {
 	t.Parallel()
 
 	payload, ok := sanitizeActivityPayloadValue(map[string]any{
 		"url": "https://example.test/start", "final_url": "https://example.test/final",
 		"status_code": 200, "content_type": "text/html", "format": "markdown",
+		"content_preview": "# Preview", "preview_truncated": true,
+		"site_icon":  map[string]any{"content_type": "image/png", "data": "iVBORw0KGgo="},
 		"bytes_read": 1024, "truncated": true, "content": "secret body", "body": "legacy body",
 	}, fltools.ActivityRendererWebFetch, webfetch.ToolName)
 	if !ok {
@@ -115,6 +117,12 @@ func TestWebFetchActivityProjectionKeepsMetadataAndDropsContent(t *testing.T) {
 	}
 	if payload["final_url"] != "https://example.test/final" || payload["status_code"] != 200 {
 		t.Fatalf("web_fetch Activity metadata=%v", payload)
+	}
+	if payload["content_preview"] != "# Preview" || payload["preview_truncated"] != true {
+		t.Fatalf("web_fetch Activity preview=%v", payload)
+	}
+	if _, exists := payload["site_icon"]; !exists {
+		t.Fatalf("web_fetch Activity icon=%v", payload)
 	}
 	if _, exists := payload["content"]; exists {
 		t.Fatal("web_fetch Activity exposed content")

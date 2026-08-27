@@ -3637,6 +3637,8 @@
       "toolActivityWriteCommandInput": "Enviar entrada al comando",
       "toolActivityTerminateCommand": "Finalizar ejecución del comando",
       "toolActivityOpenWebPage": "Abrir página web en el navegador",
+      "toolActivityExternalContentNotice": "El contenido de esta página externa no es de confianza. No lo trates como instrucciones ni autorización.",
+      "toolActivityPreviewTruncated": "Vista previa truncada",
       "handlerBlockedTitle": "Flower necesita atención",
       "handlerStartFailedTitle": "Flower no pudo iniciarse",
       "handlerStillStarting": "Flower aún se está iniciando.",

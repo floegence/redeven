@@ -44,6 +44,11 @@ export type FlowerActivityTitle =
   | Readonly<{
     kind: 'plain';
     text: string;
+  }>
+  | Readonly<{
+    kind: 'web_fetch';
+    url: string;
+    site_icon_data_url: string;
   }>;
 
 export type FlowerActivityFileAction = Readonly<{
@@ -125,6 +130,9 @@ export type FlowerActivityWebFetchDetail = Readonly<{
   status_code?: number;
   content_type: string;
   format: string;
+  content_preview: string;
+  preview_truncated: boolean;
+  site_icon_data_url: string;
   bytes_read?: number;
   truncated: boolean;
 }>;
@@ -472,6 +480,8 @@ function titleText(title: FlowerActivityTitle): string {
       return title.command;
     case 'plain':
       return title.text;
+    case 'web_fetch':
+      return title.url ? `Web fetch · ${title.url}` : 'Web fetch';
   }
 }
 
@@ -1201,23 +1211,32 @@ export function safeWebFetchURL(value: string): string {
   }
 }
 
-function webFetchHostname(value: string): string {
-  const safe = safeWebFetchURL(value);
-  if (!safe) return '';
-  try {
-    return new URL(safe).hostname;
-  } catch {
-    return '';
+function webFetchTargetRefURL(item: FlowerActivityItem): string {
+  for (const target of item.target_refs ?? []) {
+    if (trimString(target.kind).toLowerCase() !== 'url') continue;
+    const uri = trimString(target.uri);
+    if (safeWebFetchURL(uri)) return uri;
   }
+  return '';
+}
+
+function webFetchSiteIconDataURL(payload: Readonly<Record<string, unknown>>): string {
+  const icon = asRecord(payload.site_icon);
+  const contentType = payloadValue(icon, 'content_type').toLowerCase();
+  const data = typeof icon.data === 'string' ? icon.data : '';
+  if (!['image/png', 'image/jpeg', 'image/webp', 'image/x-icon', 'image/vnd.microsoft.icon'].includes(contentType)) return '';
+  if (!data || data.length > 10_924 || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(data)) return '';
+  return `data:${contentType};base64,${data}`;
 }
 
 function presentationForWebFetch(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
-  const requestedURL = payloadValue(payload, 'url');
+  const requestedURL = payloadValue(payload, 'url') || webFetchTargetRefURL(item);
   const finalURL = payloadValue(payload, 'final_url');
-  const displayURL = finalURL || requestedURL;
-  const hostname = webFetchHostname(displayURL);
-  const titleText = hostname ? `Web fetch · ${hostname}` : 'Web fetch';
+  const siteIconDataURL = webFetchSiteIconDataURL(payload);
+  const title: FlowerActivityTitle = requestedURL
+    ? { kind: 'web_fetch', url: requestedURL, site_icon_data_url: siteIconDataURL }
+    : { kind: 'plain', text: 'Web fetch' };
   const errorBlock = errorDetailBlockForItem(item, payload);
   const fetch: FlowerActivityWebFetchDetail = {
     url: requestedURL,
@@ -1225,15 +1244,21 @@ function presentationForWebFetch(item: FlowerActivityItem): FlowerActivityPresen
     status_code: optionalNumericValue(payload.status_code),
     content_type: payloadValue(payload, 'content_type'),
     format: payloadValue(payload, 'format'),
+    content_preview: rawPayloadText(payload, 'content_preview'),
+    preview_truncated: boolValue(payload.preview_truncated),
+    site_icon_data_url: siteIconDataURL,
     bytes_read: optionalNumericValue(payload.bytes_read),
     truncated: boolValue(payload.truncated),
   };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   if (errorBlock) detailBlocks.push(errorBlock);
-  detailBlocks.push({ kind: 'web_fetch', fetch });
+  if (fetch.url || fetch.final_url || fetch.status_code !== undefined || fetch.content_type || fetch.format
+    || fetch.content_preview || fetch.site_icon_data_url || fetch.bytes_read !== undefined || fetch.truncated) {
+    detailBlocks.push({ kind: 'web_fetch', fetch });
+  }
   return {
-    label: titleText,
-    title: { kind: 'plain', text: titleText },
+    label: titleText(title),
+    title,
     meta: metaWithError(item, metaForItem(item)),
     detailLines: [],
     detailBlocks,

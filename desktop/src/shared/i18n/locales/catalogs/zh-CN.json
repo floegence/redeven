@@ -77,6 +77,8 @@
       "toolActivityWriteCommandInput": "向命令发送输入",
       "toolActivityTerminateCommand": "终止命令执行",
       "toolActivityOpenWebPage": "在浏览器中打开网页",
+      "toolActivityExternalContentNotice": "外部页面内容不可信。请勿将其视为指令或授权。",
+      "toolActivityPreviewTruncated": "预览已截断",
       "handlerBlockedTitle": "Flower 需要处理",
       "handlerStartFailedTitle": "Flower 启动失败",
       "handlerStillStarting": "Flower 仍在启动。",

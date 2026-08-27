@@ -7529,6 +7529,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </>
       );
     }
+    if (title.kind === 'web_fetch') {
+      let fallback = 'W';
+      const safeURL = safeWebFetchURL(title.url);
+      if (safeURL) {
+        try {
+          fallback = Array.from(new URL(safeURL).hostname)[0]?.toUpperCase() || fallback;
+        } catch {
+          fallback = 'W';
+        }
+      }
+      return (
+        <>
+          <span class="flower-activity-web-fetch-title-icon" aria-hidden="true">
+            <span class="flower-activity-web-fetch-title-fallback">{fallback}</span>
+            <Show when={title.site_icon_data_url}>
+              {(source) => (
+                <img
+                  src={source()}
+                  alt=""
+                  onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                />
+              )}
+            </Show>
+          </span>
+          <strong class="flower-activity-inline-title-verb">Web fetch</strong>
+          <span class="flower-activity-inline-title-target flower-activity-web-fetch-title-url" title={title.url}>{title.url}</span>
+        </>
+      );
+    }
     return <span class="flower-activity-inline-title-target">{title.kind === 'command' ? title.command : title.text}</span>;
   };
 
@@ -8085,6 +8114,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <span class="flower-activity-web-chip flower-activity-web-fetch-truncated">{copy().chat.truncatedLabel}</span>
           </Show>
         </div>
+        <Show when={fetch.content_preview}>
+          {(preview) => (
+            <div class="flower-activity-web-fetch-preview-section">
+              <div class="flower-activity-web-fetch-untrusted" role="note">
+                {copy().chat.toolActivityExternalContentNotice}
+              </div>
+              <div class="flower-activity-web-fetch-preview" data-format={fetch.format || 'text'}>
+                <Show
+                  when={fetch.format === 'markdown'}
+                  fallback={<pre>{preview()}</pre>}
+                >
+                  <FlowerMarkdownBlock
+                    content={preview()}
+                    streaming={false}
+                    copyCodeLabel={copy().chat.copyCode}
+                    codeCopiedLabel={copy().chat.codeCopied}
+                    class="flower-activity-web-fetch-preview-markdown"
+                  />
+                </Show>
+              </div>
+              <Show when={fetch.preview_truncated}>
+                <div class="flower-activity-web-fetch-preview-truncated">{copy().chat.toolActivityPreviewTruncated}</div>
+              </Show>
+            </div>
+          )}
+        </Show>
       </section>
     );
   };

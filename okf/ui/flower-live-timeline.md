@@ -64,7 +64,7 @@ Summary runtime state only triggers revalidation. Product settings revisions do 
 
 Runtime failures are classified once at the Redeven projection boundary before
 summary, detail, and typed current responses reach Flower. Published Floret
-v5.0.8 supplies the canonical terminal `Failure.Code`; Redeven maps that code
+v5.0.9 supplies the canonical terminal `Failure.Code`; Redeven maps that code
 once and removes the upstream failure payload before serializing Flower data.
 Only historical failures without the typed field use the legacy text
 classifier. Known provider, gateway, control, and canonical-authority failures

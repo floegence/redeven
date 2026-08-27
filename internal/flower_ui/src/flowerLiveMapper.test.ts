@@ -204,7 +204,7 @@ describe('mapFlowerActivityItem structured rows contract', () => {
 });
 
 describe('mapFlowerActivityItem web fetch contract', () => {
-  it('preserves the dedicated renderer and bounded metadata payload', () => {
+  it('preserves the dedicated renderer, preview, and passive site icon', () => {
     const mapped = mapFlowerActivityItem({
       item_id: 'activity-web-fetch',
       tool_name: 'web_fetch',
@@ -220,6 +220,9 @@ describe('mapFlowerActivityItem web fetch contract', () => {
           status_code: 200,
           content_type: 'text/html',
           format: 'markdown',
+          content_preview: '# Preview',
+          preview_truncated: true,
+          site_icon: { content_type: 'image/png', data: 'iVBORw0KGgo=' },
           bytes_read: 512,
           truncated: false,
         },
@@ -230,7 +233,28 @@ describe('mapFlowerActivityItem web fetch contract', () => {
     expect(mapped?.payload).toMatchObject({
       final_url: 'https://example.test/final',
       status_code: 200,
+      content_preview: '# Preview',
+      preview_truncated: true,
+      site_icon: { content_type: 'image/png', data: 'iVBORw0KGgo=' },
       bytes_read: 512,
     });
+  });
+
+  it.each([
+    { name: 'unknown payload field', payload: { content: 'full body' }, message: 'is not part of the Web Fetch contract' },
+    { name: 'active icon MIME', payload: { site_icon: { content_type: 'image/svg+xml', data: 'PHN2Zy8+' } }, message: 'content_type is unsupported' },
+    { name: 'malformed Base64', payload: { site_icon: { content_type: 'image/png', data: 'not base64' } }, message: 'must be canonical Base64' },
+    { name: 'spoofed PNG', payload: { site_icon: { content_type: 'image/png', data: 'PHN2Zy8+' } }, message: 'does not match its content type' },
+    { name: 'oversized preview', payload: { content_preview: '界'.repeat(2_001) }, message: 'exceeds 2000 characters' },
+    { name: 'invalid preview flag', payload: { preview_truncated: 'true' }, message: 'must be a boolean' },
+  ])('rejects $name', ({ payload, message }) => {
+    expect(() => mapFlowerActivityItem({
+      item_id: 'activity-web-fetch-invalid',
+      tool_name: 'web_fetch',
+      kind: 'tool',
+      status: 'success',
+      severity: 'quiet',
+      presentation: { renderer: 'web_fetch', payload },
+    })).toThrow(message);
   });
 });

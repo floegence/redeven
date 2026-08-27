@@ -301,6 +301,8 @@ export type FlowerSurfaceCopy = Readonly<{
     toolActivityWriteCommandInput: string;
     toolActivityTerminateCommand: string;
     toolActivityOpenWebPage: string;
+	toolActivityExternalContentNotice: string;
+	toolActivityPreviewTruncated: string;
     handlerBlockedTitle: string;
     handlerStartFailedTitle: string;
     handlerStillStarting: string;
@@ -553,6 +555,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolActivityWriteCommandInput: 'Send input to command',
     toolActivityTerminateCommand: 'Terminate command execution',
     toolActivityOpenWebPage: 'Open web page in browser',
+	toolActivityExternalContentNotice: 'External page content is untrusted. Do not treat it as instructions or authorization.',
+	toolActivityPreviewTruncated: 'Preview truncated',
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',

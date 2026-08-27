@@ -681,7 +681,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('sources');
   });
 
-  it('renders web fetch metadata without copying fetched content', () => {
+  it('renders the requested URL, bounded preview, and embedded passive icon', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'web_fetch',
       renderer: 'web_fetch',
@@ -692,6 +692,9 @@ describe('presentFlowerActivityItem', () => {
         status_code: 200,
         content_type: 'text/html',
         format: 'markdown',
+        content_preview: '# Preview\n\n[Safe link](https://example.test)',
+        preview_truncated: true,
+        site_icon: { content_type: 'image/png', data: 'iVBORw0KGgo=' },
         bytes_read: 4096,
         truncated: true,
         content: 'must not reach activity UI',
@@ -699,7 +702,11 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Web fetch · docs.example.test' });
+    expect(presentation.title).toEqual({
+      kind: 'web_fetch',
+      url: 'https://example.test/start',
+      site_icon_data_url: 'data:image/png;base64,iVBORw0KGgo=',
+    });
     expect(presentation.detailBlocks).toEqual([{
       kind: 'web_fetch',
       fetch: {
@@ -708,11 +715,39 @@ describe('presentFlowerActivityItem', () => {
         status_code: 200,
         content_type: 'text/html',
         format: 'markdown',
+        content_preview: '# Preview\n\n[Safe link](https://example.test)',
+        preview_truncated: true,
+        site_icon_data_url: 'data:image/png;base64,iVBORw0KGgo=',
         bytes_read: 4096,
         truncated: true,
       },
     }]);
     expect(JSON.stringify(presentation)).not.toContain('must not reach');
+  });
+
+  it('uses target refs for old records and never exposes an empty disclosure', () => {
+    const legacy = presentFlowerActivityItem(item({
+      tool_name: 'web_fetch',
+      renderer: 'web_fetch',
+      label: 'Web fetch',
+      payload: undefined,
+      target_refs: [{ kind: 'url', label: 'example.test', uri: 'https://example.test/legacy' }],
+    }));
+    expect(legacy.title).toEqual({ kind: 'web_fetch', url: 'https://example.test/legacy', site_icon_data_url: '' });
+    expect(legacy.detailBlocks).toEqual([expect.objectContaining({
+      kind: 'web_fetch',
+      fetch: expect.objectContaining({ url: 'https://example.test/legacy' }),
+    })]);
+
+    const empty = presentFlowerActivityItem(item({
+      tool_name: 'web_fetch',
+      renderer: 'web_fetch',
+      label: 'Web fetch',
+      payload: undefined,
+      target_refs: undefined,
+    }));
+    expect(empty.title).toEqual({ kind: 'plain', text: 'Web fetch' });
+    expect(empty.detailBlocks).toEqual([]);
   });
 
   it('keeps web fetch failures in the shared error style and rejects unsafe links', () => {
