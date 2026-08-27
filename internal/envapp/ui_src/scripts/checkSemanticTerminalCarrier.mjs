@@ -582,14 +582,118 @@ async function activateSession(panel, sessionID) {
   return runtime;
 }
 
-async function createSession(page, panel) {
+async function beginCreationLoadingContinuityProbe(panel) {
+  await panel.evaluate((root) => {
+    const probe = {
+      indicator: null,
+      message: null,
+      animation: null,
+      indicatorReplaced: false,
+      messageReplaced: false,
+      animationReplaced: false,
+      maxVisibleStatuses: 0,
+      maxVisibleProgressbars: 0,
+      stages: [],
+      observer: null,
+    };
+    const visible = (element) => {
+      if (!(element instanceof globalThis.HTMLElement)) return false;
+      if (element.closest('[hidden]')) return false;
+      const style = globalThis.getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+    };
+    const sample = () => {
+      const transition = [...root.querySelectorAll('[data-terminal-creation-transition]')].find(visible);
+      const curtain = transition?.querySelector('[data-redeven-loading-curtain-stage]');
+      const indicator = curtain?.querySelector('.redeven-loading-curtain__indicator-bar');
+      const message = curtain?.querySelector('.redeven-loading-curtain__message');
+      if (!(curtain instanceof globalThis.HTMLElement)
+        || !(indicator instanceof globalThis.HTMLElement)
+        || !(message instanceof globalThis.HTMLElement)) return;
+      const animation = indicator.getAnimations()[0] ?? null;
+      if (probe.indicator === null) probe.indicator = indicator;
+      else if (probe.indicator !== indicator) probe.indicatorReplaced = true;
+      if (probe.message === null) probe.message = message;
+      else if (probe.message !== message) probe.messageReplaced = true;
+      if (probe.animation === null) probe.animation = animation;
+      else if (animation !== null && probe.animation !== animation) probe.animationReplaced = true;
+      probe.maxVisibleStatuses = Math.max(
+        probe.maxVisibleStatuses,
+        [...transition.querySelectorAll('[role="status"]')].filter(visible).length,
+      );
+      probe.maxVisibleProgressbars = Math.max(
+        probe.maxVisibleProgressbars,
+        [...transition.querySelectorAll('[role="progressbar"]')].filter(visible).length,
+      );
+      const stage = curtain.getAttribute('data-redeven-loading-curtain-stage') ?? '';
+      const latest = probe.stages.at(-1);
+      const animationTimeMs = Number(animation?.currentTime ?? 0);
+      if (!latest || latest.stage !== stage) {
+        probe.stages.push({ stage, message: message.textContent ?? '', animation_time_ms: animationTimeMs });
+      } else {
+        latest.message = message.textContent ?? '';
+        latest.animation_time_ms = Math.max(latest.animation_time_ms, animationTimeMs);
+      }
+    };
+    probe.observer = new globalThis.MutationObserver(sample);
+    probe.observer.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['data-redeven-loading-curtain-stage', 'hidden'],
+      characterData: true,
+    });
+    root.__redevenTerminalCreationLoadingProbe = { probe, sample };
+    sample();
+  });
+}
+
+async function finishCreationLoadingContinuityProbe(panel) {
+  const evidence = await panel.evaluate(async (root) => {
+    await new Promise((resolve) => globalThis.requestAnimationFrame(resolve));
+    const state = root.__redevenTerminalCreationLoadingProbe;
+    if (!state) throw new Error('terminal creation loading probe is unavailable');
+    state.sample();
+    state.probe.observer?.disconnect();
+    delete root.__redevenTerminalCreationLoadingProbe;
+    const stageNames = state.probe.stages.map((stage) => stage.stage);
+    return {
+      stages: state.probe.stages,
+      creating_observed: stageNames.includes('creating'),
+      attaching_observed: stageNames.includes('attaching'),
+      indicator_node_preserved: !state.probe.indicatorReplaced,
+      message_node_preserved: !state.probe.messageReplaced,
+      animation_identity_preserved: !state.probe.animationReplaced,
+      max_visible_statuses: state.probe.maxVisibleStatuses,
+      max_visible_progressbars: state.probe.maxVisibleProgressbars,
+    };
+  });
+  if (!evidence.creating_observed || !evidence.attaching_observed) {
+    throw new Error(`terminal creation loading stages were not both observed: ${JSON.stringify(evidence)}`);
+  }
+  if (!evidence.indicator_node_preserved
+    || !evidence.message_node_preserved
+    || !evidence.animation_identity_preserved) {
+    throw new Error(`terminal creation loading animation restarted: ${JSON.stringify(evidence)}`);
+  }
+  if (evidence.max_visible_statuses !== 1 || evidence.max_visible_progressbars !== 1) {
+    throw new Error(`terminal creation exposed duplicate loading semantics: ${JSON.stringify(evidence)}`);
+  }
+  return evidence;
+}
+
+async function createSession(page, panel, options = {}) {
+  if (options.probeLoadingContinuity) await beginCreationLoadingContinuityProbe(panel);
   const createButton = panel.getByRole('button', { name: 'Create session', exact: true });
   if (await createButton.count()) await createButton.click();
   else await panel.getByRole('button', { name: /^New session in /u }).first().click();
   const { runtime } = await terminalInput(panel, true);
   const sessionID = await runtime.getAttribute('data-terminal-runtime-session');
   if (!sessionID) throw new Error('created terminal has no session identity');
-  return { sessionID, runtime };
+  const loadingContinuity = options.probeLoadingContinuity
+    ? await finishCreationLoadingContinuityProbe(panel)
+    : null;
+  return { sessionID, runtime, loadingContinuity };
 }
 
 async function verifyAtomicClear(page, panel, sessionID, tempDir) {
@@ -973,7 +1077,7 @@ async function seedProductScenario({ context, entryURL, fixtureBytes, tempDir, m
   const { page, problems } = await openEnvPage(context, entryURL);
   try {
     const workbench = await selectSurface(page, 'workbench');
-    const created = await createSession(page, workbench);
+    const created = await createSession(page, workbench, { probeLoadingContinuity: true });
     const sessionID = created.sessionID;
     const activity = await selectSurface(page, 'panel');
     const activityRuntime = await activateSession(activity, sessionID);
@@ -1010,6 +1114,7 @@ async function seedProductScenario({ context, entryURL, fixtureBytes, tempDir, m
     assertPageHealthy(problems);
     return {
       sessionID,
+      creation_loading_continuity: created.loadingContinuity,
       initial_views: initialViews,
       initial_input: path.basename(initialInputMarker),
       clear,

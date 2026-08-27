@@ -341,6 +341,12 @@ type pending_terminal_session = {
   errorMessage?: string;
 };
 
+type terminal_creation_transition = {
+  pendingSessionId: string;
+  sessionId: string;
+  phase: 'creating' | 'attaching';
+};
+
 type resolved_pending_terminal_session = {
   pendingSessionId: string;
   sessionId: string;
@@ -910,10 +916,6 @@ function TerminalLoadingPane(props: {
   );
 }
 
-function TerminalCreatingPane() {
-  return <TerminalLoadingPane dataStage="creating" />;
-}
-
 function matchesPlainPrimaryModShortcut(event: KeyboardEvent, key: string): boolean {
   if (event.altKey || event.shiftKey) return false;
   if (isMacLikePlatform()) {
@@ -1335,6 +1337,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [optimisticTerminalSessions, setOptimisticTerminalSessions] = createSignal<TerminalSessionInfo[]>([]);
   const [optimisticClosingSessionIds, setOptimisticClosingSessionIds] = createSignal<Set<string>>(new Set());
   const [pendingTerminalSessions, setPendingTerminalSessions] = createSignal<pending_terminal_session[]>([]);
+  const [terminalCreationTransitions, setTerminalCreationTransitions] = createSignal<terminal_creation_transition[]>([]);
   const [sessionsHydrated, setSessionsHydrated] = createSignal(terminalCatalog?.hydrated() ?? false);
   const [sessionsLoading, setSessionsLoading] = createSignal(terminalCatalog?.loading() ?? false);
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
@@ -1363,6 +1366,49 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   >({});
   const [sharedGeometryAnnouncement, setSharedGeometryAnnouncement] = createSignal('');
   const announcedGeometryLifecycles = new Set<string>();
+
+  const beginTerminalCreationTransition = (pendingSessionId: string) => {
+    setTerminalCreationTransitions((previous) => (
+      previous.some((transition) => transition.pendingSessionId === pendingSessionId)
+        ? previous
+        : [...previous, { pendingSessionId, sessionId: '', phase: 'creating' }]
+    ));
+  };
+
+  const handoffTerminalCreationTransition = (pendingSessionId: string, sessionId: string) => {
+    setTerminalCreationTransitions((previous) => {
+      let changed = false;
+      const next = previous.map((transition) => {
+        if (transition.pendingSessionId !== pendingSessionId) return transition;
+        if (transition.phase === 'attaching' && transition.sessionId === sessionId) return transition;
+        changed = true;
+        return { ...transition, sessionId, phase: 'attaching' as const };
+      });
+      return changed ? next : previous;
+    });
+  };
+
+  const removeTerminalCreationTransitionByPendingId = (pendingSessionId: string) => {
+    setTerminalCreationTransitions((previous) => {
+      const next = previous.filter((transition) => transition.pendingSessionId !== pendingSessionId);
+      return next.length === previous.length ? previous : next;
+    });
+  };
+
+  const removeTerminalCreationTransitionBySessionId = (sessionId: string) => {
+    setTerminalCreationTransitions((previous) => {
+      const next = previous.filter((transition) => transition.sessionId !== sessionId);
+      return next.length === previous.length ? previous : next;
+    });
+  };
+
+  const terminalCreationTransitionForSession = (sessionId: string) => (
+    terminalCreationTransitions().find((transition) => transition.sessionId === sessionId) ?? null
+  );
+
+  const terminalCreationTransitionIds = createMemo(() => (
+    terminalCreationTransitions().map((transition) => transition.pendingSessionId)
+  ));
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'process')) return false;
@@ -1648,6 +1694,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const activateResolvedPendingSession = (resolved: resolved_pending_terminal_session) => {
+    handoffTerminalCreationTransition(resolved.pendingSessionId, resolved.sessionId);
     markSessionMounted(resolved.sessionId);
     ensureSessionInPlacement(resolved.sessionId);
     selectOptimisticActiveDisplaySessionId(resolved.sessionId);
@@ -1757,6 +1804,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const handleTerminalInteractive = (sessionId: string) => {
+    removeTerminalCreationTransitionBySessionId(sessionId);
     markTerminalPerformance('session-interactive', {
       session_ref: pseudonymousTerminalSessionRef(sessionId),
       variant,
@@ -1854,14 +1902,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const handleRuntimeStatus = (id: string, status: TerminalSessionRuntimeStatus) => {
-    setRuntimeStatusBySession((current) => {
-      if (
-        current[id]?.state === status.state
-        && current[id]?.failureCode === status.failureCode
-        && current[id]?.retryable === status.retryable
-        && current[id]?.diagnosticsQuery === status.diagnosticsQuery
-      ) return current;
-      return { ...current, [id]: status };
+    batch(() => {
+      if (status.state === 'blocking') {
+        removeTerminalCreationTransitionBySessionId(id);
+      }
+      setRuntimeStatusBySession((current) => {
+        if (
+          current[id]?.state === status.state
+          && current[id]?.failureCode === status.failureCode
+          && current[id]?.retryable === status.retryable
+          && current[id]?.diagnosticsQuery === status.diagnosticsQuery
+        ) return current;
+        return { ...current, [id]: status };
+      });
     });
   };
 
@@ -2725,6 +2778,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const handleTerminalSessionGone = (sessionId: string) => {
+    removeTerminalCreationTransitionBySessionId(sessionId);
     transport.forgetSession(sessionId);
     prevAuthoritativeSessionIds.delete(sessionId);
     if (terminalCatalog) {
@@ -2841,6 +2895,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     };
     batch(() => {
       setPendingTerminalSessions((previous) => [...previous, pendingSession]);
+      beginTerminalCreationTransition(pendingSession.id);
       setLocalActivePendingSessionId(pendingSession.id);
       selectOptimisticActiveDisplaySessionId(pendingSession.id);
     });
@@ -2848,35 +2903,46 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return pendingSession;
   };
 
-  const removePendingSession = (pendingSessionId: string) => {
+  const removePendingSession = (
+    pendingSessionId: string,
+    options: Readonly<{ retainCreationTransition?: boolean }> = {},
+  ) => {
     const normalizedPendingSessionId = String(pendingSessionId ?? '').trim();
     if (!normalizedPendingSessionId) return;
-    setPendingTerminalSessions((previous) => previous.filter((session) => session.id !== normalizedPendingSessionId));
-    if (localActivePendingSessionId() === normalizedPendingSessionId) {
-      setLocalActivePendingSessionId(null);
-    }
+    batch(() => {
+      setPendingTerminalSessions((previous) => previous.filter((session) => session.id !== normalizedPendingSessionId));
+      if (!options.retainCreationTransition) {
+        removeTerminalCreationTransitionByPendingId(normalizedPendingSessionId);
+      }
+      if (localActivePendingSessionId() === normalizedPendingSessionId) {
+        setLocalActivePendingSessionId(null);
+      }
+    });
   };
 
   const failPendingSession = (pendingSessionId: string, errorMessage: string) => {
     const normalizedPendingSessionId = String(pendingSessionId ?? '').trim();
     if (!normalizedPendingSessionId) return;
     let updated = false;
-    setPendingTerminalSessions((previous) => {
-      const next = previous.map((session) => {
-        if (session.id !== normalizedPendingSessionId) {
-          return session;
-        }
-        updated = true;
-        return {
-          ...session,
-          status: 'failed' as const,
-          errorMessage: String(errorMessage ?? '').trim() || i18n.t('terminal.sessionCouldNotBeCreated'),
-        };
+    batch(() => {
+      setPendingTerminalSessions((previous) => {
+        const next = previous.map((session) => {
+          if (session.id !== normalizedPendingSessionId) {
+            return session;
+          }
+          updated = true;
+          return {
+            ...session,
+            status: 'failed' as const,
+            errorMessage: String(errorMessage ?? '').trim() || i18n.t('terminal.sessionCouldNotBeCreated'),
+          };
+        });
+        return updated ? next : previous;
       });
-      return updated ? next : previous;
+      if (!updated) return;
+      removeTerminalCreationTransitionByPendingId(normalizedPendingSessionId);
+      setActiveSessionId(normalizedPendingSessionId);
     });
-    if (!updated) return;
-    setActiveSessionId(normalizedPendingSessionId);
   };
 
   const resolvePendingSession = (pendingSessionId: string, sessionId: string) => {
@@ -2896,9 +2962,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       activateSession(normalizedSessionId);
       return;
     }
-    removePendingSession(normalizedPendingSessionId);
-    markSessionMounted(normalizedSessionId);
-    activateSession(normalizedSessionId);
+    batch(() => {
+      handoffTerminalCreationTransition(normalizedPendingSessionId, normalizedSessionId);
+      removePendingSession(normalizedPendingSessionId, { retainCreationTransition: true });
+      markSessionMounted(normalizedSessionId);
+      activateSession(normalizedSessionId);
+    });
   };
 
   const findResolvedSessionForRemovedPendingSession = (pendingSession: pending_terminal_session): string | null => {
@@ -3110,6 +3179,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           removePendingSession(normalizedSessionId);
           return;
         }
+        removeTerminalCreationTransitionBySessionId(normalizedSessionId);
         terminalCatalog?.getCoordinator();
         deleteFence = captureSessionMutationFence();
         if (!sessionMutationFenceIsCurrent(deleteFence)) return;
@@ -3271,8 +3341,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     const ids = new Set(sessions().map((s) => s.id));
+    const pendingIds = new Set(pendingTerminalSessions().map((session) => session.id));
 
     tabActivityTracker.pruneSessions(ids);
+
+    setTerminalCreationTransitions((previous) => {
+      const next = previous.filter((transition) => (
+        pendingIds.has(transition.pendingSessionId)
+        || Boolean(transition.sessionId && ids.has(transition.sessionId))
+      ));
+      return next.length === previous.length ? previous : next;
+    });
 
     setTabVisualStateBySession((prev) => {
       let changed = false;
@@ -5056,6 +5135,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               registerViewport={registerViewport}
                               registerSurfaceElement={registerSurfaceElement}
                               registerActions={registerActions}
+                              initialLoadingCurtainOwnedByParent={() => (
+                                terminalCreationTransitionForSession(sessionId) !== null
+                              )}
                               onRuntimeStatus={handleRuntimeStatus}
                               onGeometryPresentation={handleGeometryPresentation}
                               onSessionGone={handleTerminalSessionGone}
@@ -5109,10 +5191,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                             ...terminalLoadingVars(),
                           }}
                         >
-                          <Show
-                            when={session().status === 'failed'}
-                            fallback={<TerminalCreatingPane />}
-                          >
+                          <Show when={session().status === 'failed'}>
                             <div class="absolute inset-0 flex items-center justify-center p-8">
                               <div class="max-w-sm text-center flex flex-col items-center gap-3">
                                 <PendingTerminalTabStatusIcon status="failed" />
@@ -5150,6 +5229,43 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   </Index>
                 </div>
               </Show>
+
+              <For each={terminalCreationTransitionIds()}>
+                {(pendingSessionId) => {
+                  const transition = createMemo(() => (
+                    terminalCreationTransitions().find((candidate) => (
+                      candidate.pendingSessionId === pendingSessionId
+                    )) ?? null
+                  ));
+                  const active = createMemo(() => {
+                    const current = transition();
+                    if (!current) return false;
+                    const displaySessionId = activeDisplaySessionId();
+                    return current.phase === 'creating'
+                      ? displaySessionId === current.pendingSessionId
+                      : displaySessionId === current.sessionId;
+                  });
+                  const attaching = createMemo(() => transition()?.phase === 'attaching');
+                  const message = createMemo(() => (
+                    attaching() ? i18n.t('terminal.attaching') : i18n.t('terminal.creatingMessage')
+                  ));
+                  return (
+                    <div
+                      class="absolute inset-0 z-[46]"
+                      hidden={!active()}
+                      aria-hidden={active() ? undefined : 'true'}
+                      data-terminal-creation-transition={pendingSessionId}
+                      data-terminal-creation-transition-session={transition()?.sessionId || undefined}
+                    >
+                      <TerminalLoadingPane
+                        message={message()}
+                        progressLabel={message()}
+                        dataStage={attaching() ? 'attaching' : 'creating'}
+                      />
+                    </div>
+                  );
+                }}
+              </For>
 
               <Show when={emptySessionListLoading()}>
                 <TerminalLoadingPane

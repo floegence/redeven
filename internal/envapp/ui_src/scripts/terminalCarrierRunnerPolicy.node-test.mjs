@@ -51,6 +51,10 @@ test('keeps the supported terminal carriers explicit in the exact-main pre-push 
   assert.match(carrierSource, /verifyAtomicClear/u);
   assert.match(carrierSource, /verifyTopResize/u);
   assert.match(carrierSource, /verifyTabSwitchPaintSafety/u);
+  assert.match(carrierSource, /beginCreationLoadingContinuityProbe/u);
+  assert.match(carrierSource, /indicator_node_preserved/u);
+  assert.match(carrierSource, /animation_identity_preserved/u);
+  assert.match(carrierSource, /terminal creation exposed duplicate loading semantics/u);
   assert.match(carrierSource, /switchIndex < 50/u);
   assert.match(carrierSource, /terminal switch exposed a stretched backing/u);
   assert.doesNotMatch(carrierSource, /TerminalCore|GhosttyCheckpoint/u);

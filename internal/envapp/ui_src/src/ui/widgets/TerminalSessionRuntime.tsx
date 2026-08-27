@@ -164,6 +164,7 @@ export type TerminalSessionRuntimeProps = Readonly<{
   registerViewport: (sessionId: string, viewport: SemanticTerminalViewportHandle | null) => void;
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: TerminalSessionRuntimeActions | null) => void;
+  initialLoadingCurtainOwnedByParent?: () => boolean;
   onRuntimeStatus?: (sessionId: string, status: TerminalSessionRuntimeStatus) => void;
   onGeometryPresentation?: (
     sessionId: string,
@@ -1531,7 +1532,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       </div>
 
       <RedevenLoadingCurtain
-        visible={!ready()}
+        visible={!ready() && !(props.initialLoadingCurtainOwnedByParent?.() ?? false)}
         eyebrow={i18n.t('terminal.creatingEyebrow')}
         message={loadingMessage()}
         class="redeven-terminal-loading-curtain"
