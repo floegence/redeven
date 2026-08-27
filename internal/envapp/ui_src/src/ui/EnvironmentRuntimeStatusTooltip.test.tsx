@@ -54,8 +54,6 @@ async function openTooltip(host: HTMLElement): Promise<HTMLElement> {
   vi.advanceTimersByTime(179);
   await flushPromises();
   expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
-  expect(runtimeHarness.ping).not.toHaveBeenCalled();
-  expect(runtimeHarness.monitor).not.toHaveBeenCalled();
   vi.advanceTimersByTime(1);
   await flushPromises();
   vi.advanceTimersByTime(0);
@@ -124,17 +122,30 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
         identity={{ source: 'local_runtime', displayName: 'Local Environment', displayID: 'env_local' }}
         connectionStatus={connectionStatus()}
         connectionLabel={connectionStatus() === 'connected' ? 'Connected' : 'Connecting'}
+        runtimeSnapshot={{
+          serverTimeMs: Date.now(),
+          version: 'v2.4.0',
+          processStartedAtMs: Date.now() - 3_600_000,
+          runtimeService: {
+            runtimeVersion: 'v2.4.1',
+            remoteEnabled: false,
+            compatibility: 'compatible',
+            activeWorkload: { terminalCount: 0, sessionCount: 0, taskCount: 0, portForwardCount: 0 },
+          },
+        }}
+        runtimeSnapshotLoading={false}
         canRead={props.canRead ?? true}
         mobile={props.mobile ?? false}
       />
     ), host);
   }
 
-  it('loads on hover, formats details, refreshes metrics only, and stops after leave', async () => {
+  it('warms the cached metrics before hover, reuses the existing runtime snapshot, and stops polling after leave', async () => {
     const dispose = mount();
     try {
+      await flushPromises();
       expect(runtimeHarness.ping).not.toHaveBeenCalled();
-      expect(runtimeHarness.monitor).not.toHaveBeenCalled();
+      expect(runtimeHarness.monitor).toHaveBeenCalledTimes(1);
 
       const tooltip = await openTooltip(host);
       expect(tooltip).toBeTruthy();
@@ -143,7 +154,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       expect(tooltip.querySelector('[data-runtime-started]')?.textContent).toContain('1 hour ago');
       expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('12.3%');
       expect(tooltip.querySelector('[data-environment-memory]')?.textContent).toBe('8 GB');
-      expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
+      expect(runtimeHarness.ping).not.toHaveBeenCalled();
       expect(runtimeHarness.monitor).toHaveBeenCalledTimes(1);
       expect(tooltip.querySelector('[data-environment-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('1');
       expect(tooltip.querySelector('[data-environment-sparkline="memory"]')?.getAttribute('data-sample-count')).toBe('1');
@@ -155,7 +166,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
 
       vi.advanceTimersByTime(2_000);
       await flushPromises();
-      expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
+      expect(runtimeHarness.ping).not.toHaveBeenCalled();
       expect(runtimeHarness.monitor).toHaveBeenCalledTimes(2);
       expect(tooltip.querySelector('[data-environment-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('2');
       expect(tooltip.querySelector('[data-environment-sparkline="cpu"] .environment-runtime-sparkline-line')?.getAttribute('d')).toContain('L');
@@ -214,7 +225,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     const dispose = mount({ canRead: false });
     try {
       const tooltip = await openTooltip(host);
-      expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
+      expect(runtimeHarness.ping).not.toHaveBeenCalled();
       expect(runtimeHarness.monitor).not.toHaveBeenCalled();
       expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('v2.4.1');
       expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('');
@@ -222,7 +233,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       expect(tooltip.textContent).not.toContain('permission');
       vi.advanceTimersByTime(4_000);
       await flushPromises();
-      expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
+      expect(runtimeHarness.ping).not.toHaveBeenCalled();
       expect(runtimeHarness.monitor).not.toHaveBeenCalled();
     } finally {
       dispose();
@@ -256,25 +267,32 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     }
   });
 
-  it('ignores late responses after the connection changes', async () => {
-    let resolvePing!: (value: unknown) => void;
-    runtimeHarness.ping.mockReturnValue(new Promise((resolve) => { resolvePing = resolve; }));
+  it('ignores late metric responses after the connection changes', async () => {
+    let resolveMetrics!: (value: unknown) => void;
+    runtimeHarness.monitor.mockReturnValue(new Promise((resolve) => { resolveMetrics = resolve; }));
     const dispose = mount();
     try {
       const tooltip = await openTooltip(host);
-      expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('');
-      expect(tooltip.querySelector('[data-runtime-version] [data-loading]')?.getAttribute('data-loading')).toBe('true');
+      expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('v2.4.1');
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('');
+      expect(tooltip.querySelector('[data-environment-cpu] [data-loading]')?.getAttribute('data-loading')).toBe('true');
 
       setProtocolStatus('connecting');
       setConnectionStatus('connecting');
       await flushPromises();
-      resolvePing({ serverTimeMs: Date.now(), version: 'stale-version', processStartedAtMs: Date.now() });
+      resolveMetrics({
+        cpuUsage: 88,
+        memoryUsedBytes: 12 * 1024 * 1024 * 1024,
+        memoryTotalBytes: 16 * 1024 * 1024 * 1024,
+        timestampMs: Date.now(),
+      });
       await flushPromises();
 
       expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('');
       expect(tooltip.querySelector('[data-runtime-version] [data-loading]')?.getAttribute('data-loading')).toBe('false');
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('');
       expect(tooltip.textContent).toContain('Connecting');
-      expect(tooltip.textContent).not.toContain('stale-version');
+      expect(tooltip.textContent).not.toContain('88%');
     } finally {
       dispose();
     }

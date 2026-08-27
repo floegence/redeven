@@ -244,6 +244,14 @@ vi.mock('./protocol/redeven_v1', () => ({
       upgrade: vi.fn(async () => ({ ok: true })),
       restart: vi.fn(async () => ({ ok: true })),
     },
+    monitor: {
+      getSysMonitor: vi.fn(async () => ({
+        cpuUsage: 0,
+        memoryUsedBytes: 0,
+        memoryTotalBytes: 1,
+        timestampMs: Date.now(),
+      })),
+    },
     ai: {
       subscribeThread: vi.fn(async () => undefined),
       sendUserTurn: vi.fn(async () => undefined),

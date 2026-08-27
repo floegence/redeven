@@ -1111,6 +1111,14 @@ vi.mock('./protocol/redeven_v1', () => ({
     sys: {
       ping: vi.fn(async () => undefined),
     },
+    monitor: {
+      getSysMonitor: vi.fn(async () => ({
+        cpuUsage: 0,
+        memoryUsedBytes: 0,
+        memoryTotalBytes: 1,
+        timestampMs: Date.now(),
+      })),
+    },
     terminal: {
       onSessionsChanged: vi.fn(() => () => undefined),
     },

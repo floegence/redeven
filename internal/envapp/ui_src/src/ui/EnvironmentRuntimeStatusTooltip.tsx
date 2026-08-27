@@ -25,6 +25,8 @@ type EnvironmentRuntimeStatusTooltipProps = Readonly<{
   identity: EnvSessionIdentity;
   connectionStatus: EnvironmentRuntimeConnectionStatus;
   connectionLabel?: string;
+  runtimeSnapshot: SysPingResponse | null;
+  runtimeSnapshotLoading: boolean;
   canRead: boolean | null;
   mobile: boolean;
 }>;
@@ -198,15 +200,14 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   const rpc = useRedevenRpc();
   const i18n = useI18n();
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
-  const [ping, setPing] = createSignal<SysPingResponse | null>(null);
   const [metricHistory, setMetricHistory] = createSignal<EnvironmentMetricSample[]>([]);
-  const [pingLoading, setPingLoading] = createSignal(false);
   const [metricsLoading, setMetricsLoading] = createSignal(false);
   const [clock, setClock] = createSignal(Date.now());
   const [connectionGeneration, setConnectionGeneration] = createSignal(0);
 
-  let requestGeneration = 0;
-  let pendingPing: { connection: number; promise: Promise<SysPingResponse> } | null = null;
+  let disposed = false;
+  let warmedConnection = -1;
+  let lastMetricReceivedAtMs = 0;
   let pendingMetrics: { connection: number; promise: Promise<SysMonitorSnapshot> } | null = null;
 
   const connected = () => props.connectionStatus === 'connected' && protocol.status() === 'connected';
@@ -243,12 +244,14 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   });
 
   const runtimeVersion = () => {
-    const snapshot = ping();
+    if (!connected()) return '';
+    const snapshot = props.runtimeSnapshot;
     return snapshot?.runtimeService?.runtimeVersion?.trim() || snapshot?.version?.trim() || '';
   };
 
   const startedAt = () => {
-    const value = Number(ping()?.processStartedAtMs ?? Number.NaN);
+    if (!connected()) return '';
+    const value = Number(props.runtimeSnapshot?.processStartedAtMs ?? Number.NaN);
     if (!Number.isFinite(value) || value <= 0) return '';
     void clock();
     return `${i18n.formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' })} · ${i18n.formatRelativeTime(value)}`;
@@ -266,38 +269,20 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
     return formatMemoryBytes(value, i18n.formatNumber);
   };
 
-  const requestPing = (generation: number, connection: number) => {
-    setPingLoading(true);
-    const activeRequest = pendingPing?.connection === connection
-      ? pendingPing.promise
-      : rpc.sys.ping();
-    pendingPing = { connection, promise: activeRequest };
-    void activeRequest.then((value) => {
-      if (generation !== requestGeneration) return;
-      setPing(value);
-    }).catch(() => undefined).finally(() => {
-      if (pendingPing?.promise === activeRequest) pendingPing = null;
-      if (generation === requestGeneration) setPingLoading(false);
-    });
-  };
-
-  const requestMetrics = (generation: number, connection: number) => {
-    if (props.canRead === false) {
-      setMetricsLoading(false);
-      return;
-    }
-    if (props.canRead === null) {
-      setMetricsLoading(true);
-      return;
-    }
-
+  const requestMetrics = (requestConnection: number) => {
+    if (props.canRead !== true || props.mobile || !connected()) return;
+    if (pendingMetrics?.connection === requestConnection) return;
     setMetricsLoading(true);
-    const activeRequest = pendingMetrics?.connection === connection
-      ? pendingMetrics.promise
-      : rpc.monitor.getSysMonitor();
-    pendingMetrics = { connection, promise: activeRequest };
+    const activeRequest = rpc.monitor.getSysMonitor();
+    pendingMetrics = { connection: requestConnection, promise: activeRequest };
     void activeRequest.then((value) => {
-      if (generation !== requestGeneration) return;
+      if (
+        disposed
+        || requestConnection !== connectionGeneration()
+        || props.canRead !== true
+        || props.mobile
+        || !connected()
+      ) return;
       const cpuPercent = Number(value.cpuUsage);
       const memoryTotalBytes = Number(value.memoryTotalBytes);
       const memoryUsedBytes = Number(value.memoryUsedBytes);
@@ -323,10 +308,16 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
         }
         return [...current, sample].slice(-METRIC_HISTORY_LIMIT);
       });
+      lastMetricReceivedAtMs = Date.now();
     }).catch(() => undefined).finally(() => {
       if (pendingMetrics?.promise === activeRequest) pendingMetrics = null;
-      if (generation === requestGeneration) setMetricsLoading(false);
+      if (!disposed && requestConnection === connectionGeneration()) setMetricsLoading(false);
     });
+  };
+
+  const refreshMetricsIfStale = (requestConnection: number) => {
+    if (Date.now() - lastMetricReceivedAtMs < METRICS_REFRESH_INTERVAL_MS) return;
+    requestMetrics(requestConnection);
   };
 
   createEffect(() => {
@@ -334,41 +325,44 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
     if (currentConnectionKey === previousConnectionKey) return;
     previousConnectionKey = currentConnectionKey;
     setConnectionGeneration((current) => current + 1);
-    pendingPing = null;
+    warmedConnection = -1;
+    lastMetricReceivedAtMs = 0;
     pendingMetrics = null;
-    setPing(null);
     setMetricHistory([]);
-    setPingLoading(false);
     setMetricsLoading(false);
   });
 
   createEffect(() => {
-    const active = tooltipOpen() && !props.mobile && connected();
-    const canRead = props.canRead;
-    const connection = connectionGeneration();
-    const generation = ++requestGeneration;
-    let interval: ReturnType<typeof setInterval> | undefined;
+    const currentConnection = connectionGeneration();
+    const eligible = !props.mobile && connected() && props.canRead === true;
 
-    if (canRead === false) {
-      pendingMetrics = null;
-      setMetricHistory([]);
+    if (!eligible) {
+      if (props.canRead === false || !connected()) {
+        warmedConnection = -1;
+        lastMetricReceivedAtMs = 0;
+        pendingMetrics = null;
+        setMetricHistory([]);
+        setMetricsLoading(false);
+      }
+      return;
     }
+    if (warmedConnection === currentConnection) return;
+    warmedConnection = currentConnection;
+    requestMetrics(currentConnection);
+  });
+
+  createEffect(() => {
+    const active = tooltipOpen() && !props.mobile && connected() && props.canRead === true;
+    const currentConnection = connectionGeneration();
+    let interval: ReturnType<typeof setInterval> | undefined;
 
     if (active) {
       setClock(Date.now());
-      requestPing(generation, connection);
-      requestMetrics(generation, connection);
-      if (canRead !== false) {
-        interval = setInterval(() => {
-          setClock(Date.now());
-          requestMetrics(generation, connection);
-        }, METRICS_REFRESH_INTERVAL_MS);
-      }
-    } else if (!connected()) {
-      setPing(null);
-      setMetricHistory([]);
-      setPingLoading(false);
-      setMetricsLoading(false);
+      refreshMetricsIfStale(currentConnection);
+      interval = setInterval(() => {
+        setClock(Date.now());
+        requestMetrics(currentConnection);
+      }, METRICS_REFRESH_INTERVAL_MS);
     }
     onCleanup(() => {
       if (interval) clearInterval(interval);
@@ -376,8 +370,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   });
 
   onCleanup(() => {
-    requestGeneration += 1;
-    pendingPing = null;
+    disposed = true;
     pendingMetrics = null;
   });
 
@@ -393,7 +386,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
             <span class="environment-runtime-tooltip-version" data-runtime-version>
               <Show
                 when={runtimeVersion()}
-                fallback={<span class="environment-runtime-value-skeleton environment-runtime-version-skeleton" data-loading={pingLoading() ? 'true' : 'false'} aria-hidden="true" />}
+                fallback={<span class="environment-runtime-value-skeleton environment-runtime-version-skeleton" data-loading={props.runtimeSnapshotLoading ? 'true' : 'false'} aria-hidden="true" />}
               >{(version) => version()}</Show>
             </span>
           </div>
@@ -436,7 +429,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
         <span data-runtime-started>
           <Show
             when={startedAt()}
-            fallback={<span class="environment-runtime-value-skeleton environment-runtime-started-skeleton" data-loading={pingLoading() ? 'true' : 'false'} aria-hidden="true" />}
+            fallback={<span class="environment-runtime-value-skeleton environment-runtime-started-skeleton" data-loading={props.runtimeSnapshotLoading ? 'true' : 'false'} aria-hidden="true" />}
           >{(value) => value()}</Show>
         </span>
       </div>
