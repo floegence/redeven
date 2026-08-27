@@ -458,6 +458,19 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "リモート"
     },
+    "runtimeStatus": {
+      "triggerLabel": "{environment} のランタイム詳細",
+      "runtime": "ランタイム",
+      "version": "バージョン",
+      "started": "起動時刻",
+      "cpu": "CPU",
+      "memory": "メモリ",
+      "unavailable": "利用不可",
+      "connectionUnavailable": "詳細を読み込むにはランタイムに接続してください。",
+      "detailsUnavailable": "ランタイムの詳細を一時的に取得できません。",
+      "readPermissionRequired": "使用状況を表示するには読み取り権限が必要です。",
+      "metricsUnavailable": "ランタイムの使用状況を一時的に取得できません。"
+    },
     "flowerCompanion": {
       "openAria": "Flower コンパニオン。{status}",
       "collapse": "Flower を折りたたむ",

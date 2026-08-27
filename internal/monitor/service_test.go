@@ -5,11 +5,17 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"os/exec"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/floegence/redeven/internal/rpcutil"
+	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
+	"github.com/shirou/gopsutil/v4/process"
 )
 
 func Test_normalizeSortBy(t *testing.T) {
@@ -101,6 +107,7 @@ func TestService_StartPublishesCachedSnapshot(t *testing.T) {
 
 	var systemCalls atomic.Int32
 	var processCalls atomic.Int32
+	var runtimeCalls atomic.Int32
 
 	svc := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc.systemRefreshInterval = time.Hour
@@ -115,6 +122,10 @@ func TestService_StartPublishesCachedSnapshot(t *testing.T) {
 		},
 		readNetworkCounters: func(context.Context) (networkCounters, error) {
 			return networkCounters{bytesReceived: 1024, bytesSent: 2048}, nil
+		},
+		readRuntimeMetrics: func(context.Context) (runtimeProcessMetricsResp, error) {
+			runtimeCalls.Add(1)
+			return runtimeProcessMetricsResp{CPUPercent: 12.5, MemoryBytes: 4096, SampledAtMs: 1234}, nil
 		},
 		collectProcessMetrics: func(context.Context) ([]processWithMetrics, error) {
 			processCalls.Add(1)
@@ -147,6 +158,7 @@ func TestService_StartPublishesCachedSnapshot(t *testing.T) {
 
 	systemBefore := systemCalls.Load()
 	processBefore := processCalls.Load()
+	runtimeBefore := runtimeCalls.Load()
 
 	resp := svc.snapshotResponse("memory")
 	if resp.CPUUsage != 37.5 {
@@ -163,6 +175,174 @@ func TestService_StartPublishesCachedSnapshot(t *testing.T) {
 	}
 	if processCalls.Load() != processBefore {
 		t.Fatalf("snapshot response should not recollect process metrics")
+	}
+	if runtimeCalls.Load() != runtimeBefore {
+		t.Fatalf("snapshot response should not recollect runtime process metrics")
+	}
+	runtimeMetrics, ok := svc.runtimeProcessMetricsSnapshot()
+	if !ok {
+		t.Fatal("runtime process metrics unavailable")
+	}
+	if runtimeMetrics.CPUPercent != 12.5 || runtimeMetrics.MemoryBytes != 4096 || runtimeMetrics.SampledAtMs != 1234 {
+		t.Fatalf("runtime process metrics = %+v", runtimeMetrics)
+	}
+}
+
+func TestService_RuntimeProcessMetricsRequiresReadPermissionNotExecute(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.mu.Lock()
+	svc.hasRuntimeMetrics = true
+	svc.runtimeMetricsSnap = runtimeProcessMetricsResp{CPUPercent: 18.75, MemoryBytes: 8192, SampledAtMs: 4567}
+	svc.mu.Unlock()
+
+	router := sessionrpc.NewRouter()
+	svc.Register(router, &session.Meta{CanRead: true, CanExecute: false})
+	resp, err := rpcutil.CallJSON[runtimeProcessMetricsReq, runtimeProcessMetricsResp](
+		context.Background(),
+		router,
+		TypeID_RUNTIME_PROCESS_METRICS,
+		&runtimeProcessMetricsReq{},
+	)
+	if err != nil {
+		t.Fatalf("runtime process metrics RPC error = %v", err)
+	}
+	if resp.CPUPercent != 18.75 || resp.MemoryBytes != 8192 || resp.SampledAtMs != 4567 {
+		t.Fatalf("runtime process metrics RPC = %+v", resp)
+	}
+}
+
+func TestService_RuntimeProcessMetricsRejectsMissingReadPermission(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.mu.Lock()
+	svc.hasRuntimeMetrics = true
+	svc.runtimeMetricsSnap = runtimeProcessMetricsResp{CPUPercent: 1, MemoryBytes: 2, SampledAtMs: 3}
+	svc.mu.Unlock()
+
+	router := sessionrpc.NewRouter()
+	svc.Register(router, &session.Meta{CanRead: false, CanExecute: true})
+	_, err := rpcutil.CallJSON[runtimeProcessMetricsReq, runtimeProcessMetricsResp](
+		context.Background(),
+		router,
+		TypeID_RUNTIME_PROCESS_METRICS,
+		&runtimeProcessMetricsReq{},
+	)
+	rpcErr, ok := err.(*sessionrpc.Error)
+	if !ok || rpcErr.Code != 403 || rpcErr.Message != "read permission denied" {
+		t.Fatalf("runtime process metrics RPC error = %#v, want 403 read permission denied", err)
+	}
+}
+
+func TestService_RuntimeProcessMetricsUnavailableBeforeSample(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	router := sessionrpc.NewRouter()
+	svc.Register(router, &session.Meta{CanRead: true})
+	_, err := rpcutil.CallJSON[runtimeProcessMetricsReq, runtimeProcessMetricsResp](
+		context.Background(),
+		router,
+		TypeID_RUNTIME_PROCESS_METRICS,
+		&runtimeProcessMetricsReq{},
+	)
+	rpcErr, ok := err.(*sessionrpc.Error)
+	if !ok || rpcErr.Code != 503 || rpcErr.Message != "runtime process metrics unavailable" {
+		t.Fatalf("runtime process metrics RPC error = %#v, want 503 unavailable", err)
+	}
+}
+
+func TestService_RuntimeProcessMetricsSamplingFailureIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	failRuntimeMetrics := false
+	svc := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.collectors = monitorCollectors{
+		readCPUUsage:        func(context.Context) (float64, error) { return 0, nil },
+		countCPUCores:       func(context.Context) (int, error) { return 1, nil },
+		readLoadAverage:     func(context.Context) ([]float64, error) { return nil, nil },
+		readNetworkCounters: func(context.Context) (networkCounters, error) { return networkCounters{}, nil },
+		readRuntimeMetrics: func(context.Context) (runtimeProcessMetricsResp, error) {
+			if failRuntimeMetrics {
+				return runtimeProcessMetricsResp{}, errors.New("sample failed")
+			}
+			return runtimeProcessMetricsResp{CPUPercent: 5, MemoryBytes: 4096, SampledAtMs: 1234}, nil
+		},
+	}
+
+	svc.refreshSystemSnapshot(context.Background())
+	if got, ok := svc.runtimeProcessMetricsSnapshot(); !ok || got.CPUPercent != 5 {
+		t.Fatalf("first runtime process metrics = (%+v, %v), want available", got, ok)
+	}
+
+	failRuntimeMetrics = true
+	svc.refreshSystemSnapshot(context.Background())
+	if got, ok := svc.runtimeProcessMetricsSnapshot(); ok {
+		t.Fatalf("runtime process metrics after failed sample = (%+v, %v), want unavailable", got, ok)
+	}
+}
+
+func TestService_SystemMonitorStillRequiresExecutePermission(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.mu.Lock()
+	svc.hasSystem = true
+	svc.systemSnap = monitorSnapshot{data: sysMonitorResp{Platform: "test", Processes: []processInfo{}}}
+	svc.mu.Unlock()
+
+	readOnlyRouter := sessionrpc.NewRouter()
+	svc.Register(readOnlyRouter, &session.Meta{CanRead: true, CanExecute: false})
+	_, err := rpcutil.CallJSON[sysMonitorReq, sysMonitorResp](
+		context.Background(),
+		readOnlyRouter,
+		TypeID_SYS_MONITOR,
+		&sysMonitorReq{},
+	)
+	rpcErr, ok := err.(*sessionrpc.Error)
+	if !ok || rpcErr.Code != 403 || rpcErr.Message != "execute permission denied" {
+		t.Fatalf("system monitor RPC error = %#v, want 403 execute permission denied", err)
+	}
+
+	executeRouter := sessionrpc.NewRouter()
+	svc.Register(executeRouter, &session.Meta{CanExecute: true})
+	if _, err := rpcutil.CallJSON[sysMonitorReq, sysMonitorResp](
+		context.Background(),
+		executeRouter,
+		TypeID_SYS_MONITOR,
+		&sysMonitorReq{},
+	); err != nil {
+		t.Fatalf("system monitor RPC with execute permission error = %v", err)
+	}
+}
+
+func TestReadRuntimeProcessMetricsSamplesExactProcessHandle(t *testing.T) {
+	t.Parallel()
+
+	currentProcess, err := process.NewProcess(int32(os.Getpid()))
+	if err != nil {
+		t.Fatalf("open current process: %v", err)
+	}
+	metrics, err := readRuntimeProcessMetrics(context.Background(), currentProcess)
+	if err != nil {
+		t.Fatalf("read current process metrics: %v", err)
+	}
+	if metrics.CPUPercent < 0 || metrics.MemoryBytes == 0 || metrics.SampledAtMs <= 0 {
+		t.Fatalf("current process metrics = %+v, want non-negative CPU, positive RSS and sample time", metrics)
+	}
+}
+
+func TestNormalizeRuntimeProcessMetricsRejectsInvalidCPU(t *testing.T) {
+	t.Parallel()
+
+	sampledAt := time.UnixMilli(4321)
+	for _, value := range []float64{-1, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		got := normalizeRuntimeProcessMetrics(runtimeProcessMetricsResp{CPUPercent: value}, sampledAt)
+		if got.CPUPercent != 0 || got.SampledAtMs != 4321 {
+			t.Fatalf("normalize CPU %v = %+v, want zero CPU and supplied sample time", value, got)
+		}
 	}
 }
 

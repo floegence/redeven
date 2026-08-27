@@ -15,6 +15,34 @@ describe('Redeven v1 terminal notifications', () => {
     expect(new Set(typeIds).size).toBe(typeIds.length);
   });
 
+  it('calls the read-only Runtime metrics RPC with its dedicated schema', async () => {
+    const call = vi.fn(async (
+      _typeId: number,
+      _payload: unknown,
+      decodeResponse: (payload: unknown) => unknown,
+    ) => decodeResponse({ cpu_percent: 17.5, memory_bytes: 67_108_864, sampled_at_ms: 1234 }));
+    const rpc = createRedevenV1Rpc({ call, onNotify: vi.fn() } as any);
+
+    await expect(rpc.monitor.getRuntimeProcessMetrics()).resolves.toEqual({
+      cpuPercent: 17.5,
+      memoryBytes: 67_108_864,
+      sampledAtMs: 1234,
+    });
+    expect(redevenV1TypeIds.monitor.runtimeProcessMetrics).toBe(3003);
+    expect(call).toHaveBeenCalledWith(3003, {}, expect.any(Function));
+  });
+
+  it('rejects a malformed Runtime metrics response', async () => {
+    const call = vi.fn(async (
+      _typeId: number,
+      _payload: unknown,
+      decodeResponse: (payload: unknown) => unknown,
+    ) => decodeResponse({ cpu_percent: 1, memory_bytes: 2 }));
+    const rpc = createRedevenV1Rpc({ call, onNotify: vi.fn() } as any);
+
+    await expect(rpc.monitor.getRuntimeProcessMetrics()).rejects.toThrow();
+  });
+
   it('keeps terminal metadata notifications on unique consecutive type IDs', () => {
     const notifyHandlers = new Map<number, (payload: unknown) => void>();
     const onNotify = vi.fn((

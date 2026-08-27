@@ -458,6 +458,19 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Удалённая"
     },
+    "runtimeStatus": {
+      "triggerLabel": "Сведения о среде выполнения {environment}",
+      "runtime": "Среда выполнения",
+      "version": "Версия",
+      "started": "Запущена",
+      "cpu": "CPU",
+      "memory": "Память",
+      "unavailable": "Недоступно",
+      "connectionUnavailable": "Подключитесь к среде выполнения, чтобы загрузить сведения.",
+      "detailsUnavailable": "Сведения о среде выполнения временно недоступны.",
+      "readPermissionRequired": "Для просмотра нагрузки требуется разрешение на чтение.",
+      "metricsUnavailable": "Данные о нагрузке среды выполнения временно недоступны."
+    },
     "flowerCompanion": {
       "openAria": "Панель Flower. {status}",
       "collapse": "Свернуть Flower",

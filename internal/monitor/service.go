@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -30,6 +32,11 @@ const (
 	//
 	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
 	TypeID_SYS_MONITOR_KILL_PROCESS uint32 = 3002
+
+	// TypeID_RUNTIME_PROCESS_METRICS provides the current Runtime process CPU and RSS snapshot.
+	//
+	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
+	TypeID_RUNTIME_PROCESS_METRICS uint32 = 3003
 )
 
 const (
@@ -54,11 +61,13 @@ type Service struct {
 
 	startOnce sync.Once
 
-	mu           sync.RWMutex
-	hasSystem    bool
-	systemSnap   monitorSnapshot
-	hasProcesses bool
-	processSnap  processSnapshot
+	mu                 sync.RWMutex
+	hasSystem          bool
+	systemSnap         monitorSnapshot
+	hasRuntimeMetrics  bool
+	runtimeMetricsSnap runtimeProcessMetricsResp
+	hasProcesses       bool
+	processSnap        processSnapshot
 }
 
 func NewService(log *slog.Logger) *Service {
@@ -141,6 +150,17 @@ func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 			PID: req.PID,
 		}, nil
 	})
+
+	accessgate.RegisterTyped[runtimeProcessMetricsReq, runtimeProcessMetricsResp](r, TypeID_RUNTIME_PROCESS_METRICS, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, _ *runtimeProcessMetricsReq) (*runtimeProcessMetricsResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		resp, ok := s.runtimeProcessMetricsSnapshot()
+		if !ok {
+			return nil, &sessionrpc.Error{Code: 503, Message: "runtime process metrics unavailable"}
+		}
+		return &resp, nil
+	})
 }
 
 type sysMonitorReq struct {
@@ -170,6 +190,14 @@ type killProcessReq struct {
 type killProcessResp struct {
 	OK  bool  `json:"ok"`
 	PID int32 `json:"pid"`
+}
+
+type runtimeProcessMetricsReq struct{}
+
+type runtimeProcessMetricsResp struct {
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemoryBytes uint64  `json:"memory_bytes"`
+	SampledAtMs int64   `json:"sampled_at_ms"`
 }
 
 type processInfo struct {
@@ -203,6 +231,7 @@ type monitorCollectors struct {
 	countCPUCores         func(ctx context.Context) (int, error)
 	readLoadAverage       func(ctx context.Context) ([]float64, error)
 	readNetworkCounters   func(ctx context.Context) (networkCounters, error)
+	readRuntimeMetrics    func(ctx context.Context) (runtimeProcessMetricsResp, error)
 	collectProcessMetrics func(ctx context.Context) ([]processWithMetrics, error)
 	killProcess           func(ctx context.Context, pid int32) error
 }
@@ -218,6 +247,7 @@ var (
 )
 
 func defaultMonitorCollectors() monitorCollectors {
+	runtimeProcess, runtimeProcessErr := process.NewProcess(int32(os.Getpid()))
 	return monitorCollectors{
 		readCPUUsage:  readCPUUsage,
 		countCPUCores: func(ctx context.Context) (int, error) { return cpu.CountsWithContext(ctx, true) },
@@ -243,6 +273,12 @@ func defaultMonitorCollectors() monitorCollectors {
 				bytesReceived: ioStats[0].BytesRecv,
 				bytesSent:     ioStats[0].BytesSent,
 			}, nil
+		},
+		readRuntimeMetrics: func(ctx context.Context) (runtimeProcessMetricsResp, error) {
+			if runtimeProcessErr != nil {
+				return runtimeProcessMetricsResp{}, runtimeProcessErr
+			}
+			return readRuntimeProcessMetrics(ctx, runtimeProcess)
 		},
 		collectProcessMetrics: collectProcessMetrics,
 		killProcess:           killProcessByPID,
@@ -279,11 +315,25 @@ func (s *Service) refreshSystemSnapshot(parent context.Context) {
 	ctx, cancel := context.WithTimeout(parent, s.systemRefreshTimeout)
 	defer cancel()
 
+	var runtimeMetrics runtimeProcessMetricsResp
+	runtimeMetricsAvailable := false
+	if s.collectors.readRuntimeMetrics != nil {
+		metrics, err := s.collectors.readRuntimeMetrics(ctx)
+		if err != nil {
+			s.log.Warn("sys_monitor: get runtime process metrics failed", "error", err)
+		} else {
+			runtimeMetrics = normalizeRuntimeProcessMetrics(metrics, time.Now())
+			runtimeMetricsAvailable = true
+		}
+	}
+
 	snap := s.collectSystemSnapshot(ctx)
 
 	s.mu.Lock()
 	s.systemSnap = snap
 	s.hasSystem = true
+	s.runtimeMetricsSnap = runtimeMetrics
+	s.hasRuntimeMetrics = runtimeMetricsAvailable
 	s.mu.Unlock()
 }
 
@@ -395,6 +445,46 @@ func (s *Service) snapshotResponse(sortBy string) sysMonitorResp {
 		}
 	}
 	return buildResponse(snap, sortBy)
+}
+
+func (s *Service) runtimeProcessMetricsSnapshot() (runtimeProcessMetricsResp, bool) {
+	if s == nil {
+		return runtimeProcessMetricsResp{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.runtimeMetricsSnap, s.hasRuntimeMetrics
+}
+
+func readRuntimeProcessMetrics(ctx context.Context, proc *process.Process) (runtimeProcessMetricsResp, error) {
+	if proc == nil {
+		return runtimeProcessMetricsResp{}, errors.New("runtime process unavailable")
+	}
+	cpuPercent, err := proc.PercentWithContext(ctx, 0)
+	if err != nil {
+		return runtimeProcessMetricsResp{}, fmt.Errorf("read runtime cpu: %w", err)
+	}
+	memoryInfo, err := proc.MemoryInfoWithContext(ctx)
+	if err != nil {
+		return runtimeProcessMetricsResp{}, fmt.Errorf("read runtime memory: %w", err)
+	}
+	if memoryInfo == nil {
+		return runtimeProcessMetricsResp{}, errors.New("runtime memory unavailable")
+	}
+	return normalizeRuntimeProcessMetrics(runtimeProcessMetricsResp{
+		CPUPercent:  cpuPercent,
+		MemoryBytes: memoryInfo.RSS,
+	}, time.Now()), nil
+}
+
+func normalizeRuntimeProcessMetrics(metrics runtimeProcessMetricsResp, sampledAt time.Time) runtimeProcessMetricsResp {
+	if math.IsNaN(metrics.CPUPercent) || math.IsInf(metrics.CPUPercent, 0) || metrics.CPUPercent < 0 {
+		metrics.CPUPercent = 0
+	}
+	if metrics.SampledAtMs <= 0 {
+		metrics.SampledAtMs = sampledAt.UnixMilli()
+	}
+	return metrics
 }
 
 func readCPUUsage(ctx context.Context) (float64, error) {

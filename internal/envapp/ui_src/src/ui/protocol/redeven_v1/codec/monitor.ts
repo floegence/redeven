@@ -1,10 +1,12 @@
 import type {
+  wire_runtime_process_metrics_resp,
   wire_sys_monitor_kill_process_req,
   wire_sys_monitor_kill_process_resp,
   wire_sys_monitor_req,
   wire_sys_monitor_resp,
 } from '../wire/monitor';
 import type {
+  RuntimeProcessMetrics,
   SysMonitorKillProcessRequest,
   SysMonitorKillProcessResponse,
   SysMonitorRequest,
@@ -47,5 +49,13 @@ export function fromWireSysMonitorKillProcessResponse(resp: wire_sys_monitor_kil
   return {
     ok: Boolean(resp?.ok),
     pid: Number(resp?.pid ?? 0),
+  };
+}
+
+export function fromWireRuntimeProcessMetricsResponse(resp: wire_runtime_process_metrics_resp): RuntimeProcessMetrics {
+  return {
+    cpuPercent: Math.max(0, Number(resp.cpu_percent)),
+    memoryBytes: Math.max(0, Number(resp.memory_bytes)),
+    sampledAtMs: Math.max(0, Number(resp.sampled_at_ms)),
   };
 }

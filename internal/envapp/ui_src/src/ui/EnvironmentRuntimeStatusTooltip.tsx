@@ -1,0 +1,342 @@
+import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { useProtocol } from '@floegence/floe-webapp-protocol';
+
+import { useI18n } from './i18n';
+import { Tooltip } from './primitives/Tooltip';
+import { useRedevenRpc, type RuntimeProcessMetrics, type SysPingResponse } from './protocol/redeven_v1';
+import { isPermissionDeniedError } from './utils/permission';
+
+export type EnvSessionSource =
+  | 'local_runtime'
+  | 'provider_environment'
+  | 'ssh_environment'
+  | 'external_local_ui'
+  | 'runtime_gateway'
+  | 'region_sandbox';
+
+export type EnvSessionIdentity = Readonly<{
+  source: EnvSessionSource;
+  displayName: string;
+  displayID: string;
+}>;
+
+export type EnvironmentRuntimeConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
+
+type EnvironmentRuntimeStatusTooltipProps = Readonly<{
+  identity: EnvSessionIdentity;
+  connectionStatus: EnvironmentRuntimeConnectionStatus;
+  connectionLabel?: string;
+  canRead: boolean | null;
+  mobile: boolean;
+}>;
+
+type RequestFailure = 'unavailable' | 'permission';
+
+const METRICS_REFRESH_INTERVAL_MS = 2_000;
+
+function sourceAccentClass(source: EnvSessionSource): string {
+  if (source === 'local_runtime') return 'text-primary';
+  if (source === 'ssh_environment') return 'text-info';
+  return 'text-accent';
+}
+
+function sourceBadgeClass(source: EnvSessionSource): string {
+  if (source === 'local_runtime') return 'bg-primary/10 text-primary';
+  if (source === 'ssh_environment') return 'bg-info/10 text-info';
+  return 'bg-accent/10 text-accent';
+}
+
+function statusClass(status: EnvironmentRuntimeConnectionStatus): string {
+  switch (status) {
+    case 'connected': return 'environment-runtime-status-connected';
+    case 'connecting': return 'environment-runtime-status-connecting';
+    case 'error': return 'environment-runtime-status-error';
+    default: return 'environment-runtime-status-disconnected';
+  }
+}
+
+function formatMemoryBytes(
+  bytes: number,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+): string {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${formatNumber(size, { maximumFractionDigits: unitIndex === 0 ? 0 : 1 })} ${units[unitIndex]}`;
+}
+
+function EnvironmentSourceIcon(props: Readonly<{ source: EnvSessionSource }>) {
+  return (
+    <span class={`shrink-0 w-3.5 h-3.5 flex items-center justify-center ${sourceAccentClass(props.source)}`}>
+      {props.source === 'ssh_environment' ? (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      ) : props.source !== 'local_runtime' ? (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      )}
+    </span>
+  );
+}
+
+export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusTooltipProps) {
+  const protocol = useProtocol();
+  const rpc = useRedevenRpc();
+  const i18n = useI18n();
+  const [hovered, setHovered] = createSignal(false);
+  const [focused, setFocused] = createSignal(false);
+  const [ping, setPing] = createSignal<SysPingResponse | null>(null);
+  const [metrics, setMetrics] = createSignal<RuntimeProcessMetrics | null>(null);
+  const [pingFailure, setPingFailure] = createSignal<RequestFailure | null>(null);
+  const [metricsFailure, setMetricsFailure] = createSignal<RequestFailure | null>(null);
+  const [pingLoading, setPingLoading] = createSignal(false);
+  const [metricsLoading, setMetricsLoading] = createSignal(false);
+  const [clock, setClock] = createSignal(Date.now());
+
+  let requestGeneration = 0;
+  let connectionGeneration = 0;
+  let previousProtocolStatus = protocol.status();
+  let pendingPing: { connection: number; promise: Promise<SysPingResponse> } | null = null;
+  let pendingMetrics: { connection: number; promise: Promise<RuntimeProcessMetrics> } | null = null;
+
+  const interactionActive = () => hovered() || focused();
+  const connected = () => props.connectionStatus === 'connected' && protocol.status() === 'connected';
+  const unavailableLabel = () => i18n.t('shell.runtimeStatus.unavailable');
+  const loadingLabel = () => i18n.t('shell.status.loading');
+
+  const sourceLabel = createMemo(() => {
+    switch (props.identity.source) {
+      case 'ssh_environment': return i18n.t('shell.status.envTypeSSH');
+      case 'provider_environment': return i18n.t('shell.status.envTypeProvider');
+      case 'external_local_ui':
+      case 'runtime_gateway':
+      case 'region_sandbox': return i18n.t('shell.status.envTypeRemote');
+      default: return i18n.t('shell.status.envTypeLocal');
+    }
+  });
+
+  const connectionLabel = createMemo(() => {
+    if (props.connectionLabel) return props.connectionLabel;
+    switch (props.connectionStatus) {
+      case 'connected': return i18n.t('shell.framework.connected');
+      case 'connecting': return i18n.t('shell.framework.connecting');
+      case 'error': return i18n.t('shell.framework.error');
+      default: return i18n.t('shell.framework.disconnected');
+    }
+  });
+
+  const runtimeVersion = () => {
+    const snapshot = ping();
+    return snapshot?.runtimeService?.runtimeVersion?.trim() || snapshot?.version?.trim() || '';
+  };
+
+  const startedAt = () => {
+    const value = Number(ping()?.processStartedAtMs ?? Number.NaN);
+    if (!Number.isFinite(value) || value <= 0) return '';
+    void clock();
+    return `${i18n.formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' })} · ${i18n.formatRelativeTime(value)}`;
+  };
+
+  const cpuLabel = () => {
+    const value = metrics()?.cpuPercent;
+    if (typeof value !== 'number') return metricsLoading() ? loadingLabel() : unavailableLabel();
+    return `${i18n.formatNumber(value, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
+  };
+
+  const memoryLabel = () => {
+    const value = metrics()?.memoryBytes;
+    if (typeof value !== 'number') return metricsLoading() ? loadingLabel() : unavailableLabel();
+    return formatMemoryBytes(value, i18n.formatNumber);
+  };
+
+  const requestPing = (generation: number, connection: number) => {
+    setPingLoading(true);
+    setPingFailure(null);
+    const activeRequest = pendingPing?.connection === connection
+      ? pendingPing.promise
+      : rpc.sys.ping();
+    pendingPing = { connection, promise: activeRequest };
+    void activeRequest.then((value) => {
+      if (generation !== requestGeneration) return;
+      setPing(value);
+      setPingFailure(null);
+    }).catch(() => {
+      if (generation !== requestGeneration) return;
+      setPingFailure('unavailable');
+    }).finally(() => {
+      if (pendingPing?.promise === activeRequest) pendingPing = null;
+      if (generation === requestGeneration) setPingLoading(false);
+    });
+  };
+
+  const requestMetrics = (generation: number, connection: number) => {
+    if (props.canRead === false) {
+      setMetricsLoading(false);
+      setMetricsFailure('permission');
+      return;
+    }
+    if (props.canRead === null) {
+      setMetricsLoading(true);
+      return;
+    }
+
+    setMetricsLoading(true);
+    const activeRequest = pendingMetrics?.connection === connection
+      ? pendingMetrics.promise
+      : rpc.monitor.getRuntimeProcessMetrics();
+    pendingMetrics = { connection, promise: activeRequest };
+    void activeRequest.then((value) => {
+      if (generation !== requestGeneration) return;
+      setMetrics(value);
+      setMetricsFailure(null);
+    }).catch((error: unknown) => {
+      if (generation !== requestGeneration) return;
+      setMetricsFailure(isPermissionDeniedError(error, 'read') ? 'permission' : 'unavailable');
+    }).finally(() => {
+      if (pendingMetrics?.promise === activeRequest) pendingMetrics = null;
+      if (generation === requestGeneration) setMetricsLoading(false);
+    });
+  };
+
+  createEffect(() => {
+    const currentProtocolStatus = protocol.status();
+    if (currentProtocolStatus === previousProtocolStatus) return;
+    previousProtocolStatus = currentProtocolStatus;
+    connectionGeneration += 1;
+    pendingPing = null;
+    pendingMetrics = null;
+    if (currentProtocolStatus !== 'connected') {
+      setPing(null);
+      setMetrics(null);
+      setPingFailure(null);
+      setMetricsFailure(null);
+      setPingLoading(false);
+      setMetricsLoading(false);
+    }
+  });
+
+  createEffect(() => {
+    const active = interactionActive() && !props.mobile && connected();
+    const connection = connectionGeneration;
+    const generation = ++requestGeneration;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    if (active) {
+      setClock(Date.now());
+      requestPing(generation, connection);
+      requestMetrics(generation, connection);
+      interval = setInterval(() => {
+        setClock(Date.now());
+        requestMetrics(generation, connection);
+      }, METRICS_REFRESH_INTERVAL_MS);
+    } else if (!connected()) {
+      setPing(null);
+      setMetrics(null);
+      setPingFailure(null);
+      setMetricsFailure(null);
+      setPingLoading(false);
+      setMetricsLoading(false);
+    }
+    onCleanup(() => {
+      if (interval) clearInterval(interval);
+    });
+  });
+
+  onCleanup(() => {
+    requestGeneration += 1;
+    pendingPing = null;
+    pendingMetrics = null;
+  });
+
+  const tooltipContent = (
+    <div class="environment-runtime-tooltip" data-environment-runtime-tooltip>
+      <div class="environment-runtime-tooltip-header">
+        <div class="min-w-0">
+          <div class="environment-runtime-tooltip-name" title={props.identity.displayName}>{props.identity.displayName}</div>
+          <div class="environment-runtime-tooltip-kicker">{i18n.t('shell.runtimeStatus.runtime')}</div>
+        </div>
+        <div class={`environment-runtime-tooltip-status ${statusClass(props.connectionStatus)}`}>
+          <span class="environment-runtime-tooltip-status-dot" aria-hidden="true" />
+          <span>{connectionLabel()}</span>
+        </div>
+      </div>
+
+      <dl class="environment-runtime-tooltip-details">
+        <div>
+          <dt>{i18n.t('shell.runtimeStatus.version')}</dt>
+          <dd data-runtime-version>{runtimeVersion() || (pingLoading() ? loadingLabel() : unavailableLabel())}</dd>
+        </div>
+        <div>
+          <dt>{i18n.t('shell.runtimeStatus.started')}</dt>
+          <dd data-runtime-started>{startedAt() || (pingLoading() ? loadingLabel() : unavailableLabel())}</dd>
+        </div>
+      </dl>
+
+      <div class="environment-runtime-tooltip-metrics">
+        <div>
+          <span>{i18n.t('shell.runtimeStatus.cpu')}</span>
+          <strong data-runtime-cpu>{cpuLabel()}</strong>
+        </div>
+        <div>
+          <span>{i18n.t('shell.runtimeStatus.memory')}</span>
+          <strong data-runtime-memory>{memoryLabel()}</strong>
+        </div>
+      </div>
+
+      <Show when={!connected()}>
+        <p class="environment-runtime-tooltip-notice">{i18n.t('shell.runtimeStatus.connectionUnavailable')}</p>
+      </Show>
+      <Show when={connected() && pingFailure() === 'unavailable'}>
+        <p class="environment-runtime-tooltip-notice">{i18n.t('shell.runtimeStatus.detailsUnavailable')}</p>
+      </Show>
+      <Show when={connected() && metricsFailure() === 'permission'}>
+        <p class="environment-runtime-tooltip-notice">{i18n.t('shell.runtimeStatus.readPermissionRequired')}</p>
+      </Show>
+      <Show when={connected() && metricsFailure() === 'unavailable'}>
+        <p class="environment-runtime-tooltip-notice">{i18n.t('shell.runtimeStatus.metricsUnavailable')}</p>
+      </Show>
+    </div>
+  );
+
+  return (
+    <Tooltip
+      content={tooltipContent}
+      placement="top"
+      delay={180}
+      disabled={props.mobile}
+      anchorClass="flower-activity-env-runtime-anchor"
+      class="environment-runtime-tooltip-layer"
+    >
+      <div
+        class="flower-activity-env-runtime-trigger"
+        data-environment-runtime-trigger
+        tabindex={props.mobile ? undefined : 0}
+        aria-label={props.mobile ? undefined : i18n.t('shell.runtimeStatus.triggerLabel', { environment: props.identity.displayName })}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocusIn={() => setFocused(true)}
+        onFocusOut={() => setFocused(false)}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div class="flower-activity-env-identity">
+          <EnvironmentSourceIcon source={props.identity.source} />
+          <span class="truncate text-[11px] font-medium text-foreground">{props.identity.displayName}</span>
+          <span class="flower-activity-env-secondary w-px h-3.5 bg-border shrink-0" />
+          <span class="flower-activity-env-secondary truncate text-[11px] text-muted-foreground">
+            {props.identity.displayID || i18n.t('shell.status.missingEnvId')}
+          </span>
+        </div>
+        <span class={`flower-activity-env-type text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-tight shrink-0 whitespace-nowrap ${sourceBadgeClass(props.identity.source)}`}>
+          {sourceLabel()}
+        </span>
+      </div>
+    </Tooltip>
+  );
+}
