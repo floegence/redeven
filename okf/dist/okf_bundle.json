@@ -149,7 +149,7 @@
               "security",
               "session-security"
             ],
-            "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward. Protected read-only Runtime observability requires the effective read grant; system-wide process monitoring and process control continue to require execute.",
+            "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward. System-wide resource and process monitoring, including the environment status tooltip, continues to require execute; process control does not gain a separate or weaker authority path.",
             "section_count": 2
           },
           {
@@ -5139,22 +5139,22 @@
         "title": "Runtime session permission gates",
         "type": "Runtime Contract"
       },
-      "body_length": 3219,
-      "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward. Protected read-only Runtime observability requires the effective read grant; system-wide process monitoring and process control continue to require execute.",
+      "body_length": 3091,
+      "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward. System-wide resource and process monitoring, including the environment status tooltip, continues to require execute; process control does not gain a separate or weaker authority path.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nWhen `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements. The raw execute bit remains available to explicitly modeled operations such as system-wide process monitoring, process termination, or port forwarding, while a general terminal or arbitrary command process derives a separate effective process-launch capability from `write \u0026\u0026 execute`.\n\nThe protected Runtime process metrics RPC is a narrower read-only exception. It requires `CanRead`, returns only the current Runtime process interval CPU percentage, RSS memory, and sample time, and reads the Monitor service's existing two-second cache. The Monitor service samples one persistent handle opened for its own PID; the RPC does not enumerate processes, expose a PID, guess by process name, or create another polling owner. Runtime version and process start time remain owned by `sys.ping` and are not duplicated in the metrics response.",
-          "char_count": 1247
+          "body": "## Mechanism\n\nWhen `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements. The raw execute bit remains available to explicitly modeled operations such as system-wide process monitoring, process termination, or port forwarding, while a general terminal or arbitrary command process derives a separate effective process-launch capability from `write \u0026\u0026 execute`.\n\nThe Monitor service is the single owner of environment CPU, used and total memory, network, and process sampling. Its existing execute-protected system snapshot RPC reads the two-second cache and does not recollect on request. The environment status tooltip reuses that RPC only while hovered or keyboard-focused and retains a short UI-only trend history; it does not create a Runtime-process endpoint, a second sampler, or another canonical metrics owner. Runtime version and process start time remain owned by `sys.ping` and are not duplicated in the monitor snapshot.",
+          "char_count": 1268
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Browser or UI-side permission claims remain non-authoritative. Frontend terminal affordances mirror the write-and-execute rule for usability, but Runtime RPC handlers, Terminal RPC, and AI terminal process dispatch remain the authoritative enforcement points. The Env App requests cached Runtime process metrics only while the environment identity tooltip is hovered or keyboard-focused; this lifecycle does not broaden access and does not replace server enforcement. This concept only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.",
-          "char_count": 596
+          "body": "Browser or UI-side permission claims remain non-authoritative. Frontend terminal and monitoring affordances mirror their effective permission rules for usability, but Runtime RPC handlers, Terminal RPC, and AI terminal process dispatch remain the authoritative enforcement points. Tooltip request lifecycle does not broaden monitor access or replace server enforcement. This concept only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.",
+          "char_count": 498
         }
       ],
       "evidence": [
@@ -5183,15 +5183,15 @@
           "description": "Hosted terminal command dispatch rechecks the process-launch capability before starting a process."
         },
         {
-          "id": "redeven:internal/monitor/service.go:150:monitor registers the cached runtime process metrics endpoint as protected read-only access while retaining execute on system-wide monitoring.",
+          "id": "redeven:internal/monitor/service.go:103:monitor keeps the system snapshot rpc behind execute permission.",
           "source": "redeven:internal/monitor/service.go",
-          "line": 150,
-          "description": "Monitor registers the cached Runtime process metrics endpoint as protected read-only access while retaining execute on system-wide monitoring."
+          "line": 103,
+          "description": "Monitor keeps the system snapshot RPC behind execute permission."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/EnvironmentRuntimeStatusTooltip.tsx:302:env app scopes metrics requests to the active tooltip interaction and preserves partial information on local failures.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/EnvironmentRuntimeStatusTooltip.tsx:314:env app scopes metrics requests to the active tooltip interaction and preserves partial information on local failures.",
           "source": "redeven:internal/envapp/ui_src/src/ui/EnvironmentRuntimeStatusTooltip.tsx",
-          "line": 302,
+          "line": 314,
           "description": "Env App scopes metrics requests to the active tooltip interaction and preserves partial information on local failures."
         }
       ],
@@ -10285,5 +10285,5 @@
       ]
     }
   ],
-  "source_sha256": "e15b6fcec2c04b7c7f9b3e65dbb310f19b051df9046c373614c1fc0c5871e30b"
+  "source_sha256": "b9384bf49586a99db1c1122fdf76739995481f895785ad12bf985dcff986bb09"
 }

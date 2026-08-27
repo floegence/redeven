@@ -13,12 +13,6 @@ export type wire_sys_monitor_kill_process_resp = {
   pid: number;
 };
 
-export type wire_runtime_process_metrics_resp = {
-  cpu_percent: number;
-  memory_bytes: number;
-  sampled_at_ms: number;
-};
-
 export type wire_sys_monitor_process_info = {
   pid: number;
   name: string;
@@ -31,6 +25,8 @@ export type wire_sys_monitor_resp = {
   cpu_usage: number;
   cpu_cores: number;
   load_average?: number[];
+  memory_total_bytes: number;
+  memory_used_bytes: number;
 
   network_bytes_received: number;
   network_bytes_sent: number;

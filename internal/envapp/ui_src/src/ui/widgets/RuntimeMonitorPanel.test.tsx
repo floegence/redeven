@@ -133,6 +133,8 @@ function makeSnapshot(timestampMs: number, processes: Array<Record<string, unkno
     cpuUsage: 12.5,
     cpuCores: 8,
     loadAverage: [1, 0.5, 0.25],
+    memoryTotalBytes: 16 * 1024 * 1024 * 1024,
+    memoryUsedBytes: 8 * 1024 * 1024 * 1024,
     networkBytesReceived: 100,
     networkBytesSent: 200,
     networkSpeedReceived: 10,

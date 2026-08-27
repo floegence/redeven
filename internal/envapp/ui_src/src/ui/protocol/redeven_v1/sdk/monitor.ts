@@ -12,6 +12,8 @@ export type SysMonitorSnapshot = {
   cpuUsage: number;
   cpuCores: number;
   loadAverage?: number[];
+  memoryTotalBytes: number;
+  memoryUsedBytes: number;
 
   networkBytesReceived: number;
   networkBytesSent: number;
@@ -35,10 +37,4 @@ export type SysMonitorKillProcessRequest = {
 export type SysMonitorKillProcessResponse = {
   ok: boolean;
   pid: number;
-};
-
-export type RuntimeProcessMetrics = {
-  cpuPercent: number;
-  memoryBytes: number;
-  sampledAtMs: number;
 };

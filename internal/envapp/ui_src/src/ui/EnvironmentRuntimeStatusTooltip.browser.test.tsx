@@ -11,10 +11,11 @@ const runtimeHarness = vi.hoisted(() => ({
     processStartedAtMs: Date.now() - 7_200_000,
     runtimeService: { runtimeVersion: 'v2.4.1' },
   })),
-  metrics: vi.fn(async () => ({
-    cpuPercent: 8.2,
-    memoryBytes: 96 * 1024 * 1024,
-    sampledAtMs: Date.now(),
+  monitor: vi.fn(async () => ({
+    cpuUsage: 17.9,
+    memoryUsedBytes: 12 * 1024 * 1024 * 1024,
+    memoryTotalBytes: 24 * 1024 * 1024 * 1024,
+    timestampMs: Date.now(),
   })),
 }));
 
@@ -25,7 +26,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 vi.mock('./protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     sys: { ping: runtimeHarness.ping },
-    monitor: { getRuntimeProcessMetrics: runtimeHarness.metrics },
+    monitor: { getSysMonitor: runtimeHarness.monitor },
   }),
 }));
 
@@ -60,7 +61,7 @@ function mountAtBottom(displayName: string) {
       identity={{ source: 'local_runtime', displayName, displayID: 'env_local' }}
       connectionStatus="connected"
       connectionLabel="Connected"
-      canRead={true}
+      canExecute={true}
       mobile={false}
     />
   ), host);
@@ -72,7 +73,7 @@ afterEach(() => {
   document.documentElement.classList.remove('dark', 'light');
   document.documentElement.removeAttribute('data-floe-shell-theme');
   runtimeHarness.ping.mockClear();
-  runtimeHarness.metrics.mockClear();
+  runtimeHarness.monitor.mockClear();
 });
 
 describe('Environment Runtime tooltip browser presentation', () => {
@@ -97,8 +98,8 @@ describe('Environment Runtime tooltip browser presentation', () => {
       expect(tooltipRect.height).toBeLessThanOrEqual(180);
       expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
       expect(tooltip.textContent).toContain('v2.4.1');
-      expect(tooltip.textContent).toContain('96 MB');
-      expect(tooltip.querySelectorAll('[data-runtime-sparkline]')).toHaveLength(2);
+      expect(tooltip.textContent).toContain('12 GB');
+      expect(tooltip.querySelectorAll('[data-environment-sparkline]')).toHaveLength(2);
       expect(tooltip.querySelector('.environment-runtime-tooltip-details')).toBeNull();
       expect(getComputedStyle(tooltip.querySelector<HTMLElement>('.environment-runtime-tooltip-metric')!).borderTopWidth).toBe('0px');
     } finally {

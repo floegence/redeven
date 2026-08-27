@@ -82,7 +82,6 @@ import type {
   GitUnstageWorkspaceResponse,
 } from './sdk/git';
 import type {
-  RuntimeProcessMetrics,
   SysMonitorKillProcessRequest,
   SysMonitorKillProcessResponse,
   SysMonitorRequest,
@@ -168,7 +167,6 @@ import {
   toWireGitUnstageWorkspaceRequest,
 } from './codec/git';
 import {
-  fromWireRuntimeProcessMetricsResponse,
   fromWireSysMonitorKillProcessResponse,
   fromWireSysMonitorResponse,
   toWireSysMonitorKillProcessRequest,
@@ -276,7 +274,6 @@ export type RedevenV1Rpc = {
   monitor: {
     getSysMonitor: (req?: SysMonitorRequest) => Promise<SysMonitorSnapshot>;
     killProcess: (req: SysMonitorKillProcessRequest) => Promise<SysMonitorKillProcessResponse>;
-    getRuntimeProcessMetrics: () => Promise<RuntimeProcessMetrics>;
   };
   sessions: {
     listActiveSessions: () => Promise<SessionsListActiveResponse>;
@@ -642,14 +639,6 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
       killProcess: async (req) => {
         const payload = toWireSysMonitorKillProcessRequest(req);
         const resp = await call(redevenV1TypeIds.monitor.killProcess, payload, decodeWire(redevenWireSchemaNames.fromWireSysMonitorKillProcessResponse, fromWireSysMonitorKillProcessResponse));
-        return resp;
-      },
-      getRuntimeProcessMetrics: async () => {
-        const resp = await call(
-          redevenV1TypeIds.monitor.runtimeProcessMetrics,
-          {},
-          decodeWire(redevenWireSchemaNames.fromWireRuntimeProcessMetricsResponse, fromWireRuntimeProcessMetricsResponse),
-        );
         return resp;
       },
     },

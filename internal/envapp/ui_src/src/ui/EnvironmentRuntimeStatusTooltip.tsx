@@ -3,7 +3,7 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { useI18n } from './i18n';
 import { Tooltip } from './primitives/Tooltip';
-import { useRedevenRpc, type RuntimeProcessMetrics, type SysPingResponse } from './protocol/redeven_v1';
+import { useRedevenRpc, type SysMonitorSnapshot, type SysPingResponse } from './protocol/redeven_v1';
 import { isPermissionDeniedError } from './utils/permission';
 
 export type EnvSessionSource =
@@ -26,11 +26,17 @@ type EnvironmentRuntimeStatusTooltipProps = Readonly<{
   identity: EnvSessionIdentity;
   connectionStatus: EnvironmentRuntimeConnectionStatus;
   connectionLabel?: string;
-  canRead: boolean | null;
+  canExecute: boolean | null;
   mobile: boolean;
 }>;
 
 type RequestFailure = 'unavailable' | 'permission';
+
+type EnvironmentMetricSample = Readonly<{
+  cpuPercent: number;
+  memoryBytes: number;
+  sampledAtMs: number;
+}>;
 
 const METRICS_REFRESH_INTERVAL_MS = 2_000;
 const METRIC_HISTORY_LIMIT = 18;
@@ -125,7 +131,7 @@ function MetricSparkline(props: Readonly<{ values: readonly number[]; tone: 'cpu
       viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
       preserveAspectRatio="none"
       aria-hidden="true"
-      data-runtime-sparkline={props.tone}
+      data-environment-sparkline={props.tone}
       data-sample-count={props.values.length}
     >
       <path class="environment-runtime-sparkline-guide" d={`M0,${SPARKLINE_HEIGHT - 1} L${SPARKLINE_WIDTH},${SPARKLINE_HEIGHT - 1}`} />
@@ -161,7 +167,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   const [hovered, setHovered] = createSignal(false);
   const [focused, setFocused] = createSignal(false);
   const [ping, setPing] = createSignal<SysPingResponse | null>(null);
-  const [metricHistory, setMetricHistory] = createSignal<RuntimeProcessMetrics[]>([]);
+  const [metricHistory, setMetricHistory] = createSignal<EnvironmentMetricSample[]>([]);
   const [pingFailure, setPingFailure] = createSignal<RequestFailure | null>(null);
   const [metricsFailure, setMetricsFailure] = createSignal<RequestFailure | null>(null);
   const [pingLoading, setPingLoading] = createSignal(false);
@@ -172,7 +178,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   let connectionGeneration = 0;
   let previousProtocolStatus = protocol.status();
   let pendingPing: { connection: number; promise: Promise<SysPingResponse> } | null = null;
-  let pendingMetrics: { connection: number; promise: Promise<RuntimeProcessMetrics> } | null = null;
+  let pendingMetrics: { connection: number; promise: Promise<SysMonitorSnapshot> } | null = null;
 
   const interactionActive = () => hovered() || focused();
   const connected = () => props.connectionStatus === 'connected' && protocol.status() === 'connected';
@@ -218,7 +224,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   const cpuLabel = () => {
     const value = metrics()?.cpuPercent;
     if (typeof value !== 'number') return metricsLoading() ? loadingLabel() : unavailableLabel();
-    return `${i18n.formatNumber(value, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
+    return `${i18n.formatNumber(Math.max(0, Math.min(100, value)), { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
   };
 
   const memoryLabel = () => {
@@ -248,12 +254,12 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
   };
 
   const requestMetrics = (generation: number, connection: number) => {
-    if (props.canRead === false) {
+    if (props.canExecute === false) {
       setMetricsLoading(false);
       setMetricsFailure('permission');
       return;
     }
-    if (props.canRead === null) {
+    if (props.canExecute === null) {
       setMetricsLoading(true);
       return;
     }
@@ -261,21 +267,27 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
     setMetricsLoading(true);
     const activeRequest = pendingMetrics?.connection === connection
       ? pendingMetrics.promise
-      : rpc.monitor.getRuntimeProcessMetrics();
+      : rpc.monitor.getSysMonitor();
     pendingMetrics = { connection, promise: activeRequest };
     void activeRequest.then((value) => {
       if (generation !== requestGeneration) return;
+      const memoryTotalBytes = Math.max(0, Number(value.memoryTotalBytes));
+      const sample: EnvironmentMetricSample = {
+        cpuPercent: Math.max(0, Math.min(100, Number(value.cpuUsage))),
+        memoryBytes: Math.min(Math.max(0, Number(value.memoryUsedBytes)), memoryTotalBytes),
+        sampledAtMs: Math.max(0, Number(value.timestampMs)),
+      };
       setMetricHistory((current) => {
         const last = current.at(-1);
-        if (last?.sampledAtMs === value.sampledAtMs) {
-          return [...current.slice(0, -1), value];
+        if (last?.sampledAtMs === sample.sampledAtMs) {
+          return [...current.slice(0, -1), sample];
         }
-        return [...current, value].slice(-METRIC_HISTORY_LIMIT);
+        return [...current, sample].slice(-METRIC_HISTORY_LIMIT);
       });
       setMetricsFailure(null);
     }).catch((error: unknown) => {
       if (generation !== requestGeneration) return;
-      setMetricsFailure(isPermissionDeniedError(error, 'read') ? 'permission' : 'unavailable');
+      setMetricsFailure(isPermissionDeniedError(error, 'execute') ? 'permission' : 'unavailable');
     }).finally(() => {
       if (pendingMetrics?.promise === activeRequest) pendingMetrics = null;
       if (generation === requestGeneration) setMetricsLoading(false);
@@ -356,14 +368,14 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
         <section class="environment-runtime-tooltip-metric">
           <div class="environment-runtime-tooltip-metric-heading">
             <span>{i18n.t('shell.runtimeStatus.cpu')}</span>
-            <strong data-runtime-cpu>{cpuLabel()}</strong>
+            <strong data-environment-cpu>{cpuLabel()}</strong>
           </div>
           <MetricSparkline values={cpuHistory()} tone="cpu" />
         </section>
         <section class="environment-runtime-tooltip-metric">
           <div class="environment-runtime-tooltip-metric-heading">
             <span>{i18n.t('shell.runtimeStatus.memory')}</span>
-            <strong data-runtime-memory>{memoryLabel()}</strong>
+            <strong data-environment-memory>{memoryLabel()}</strong>
           </div>
           <MetricSparkline values={memoryHistory()} tone="memory" />
         </section>
@@ -381,7 +393,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
         <p class="environment-runtime-tooltip-notice">{i18n.t('shell.runtimeStatus.detailsUnavailable')}</p>
       </Show>
       <Show when={connected() && metricsFailure() === 'permission'}>
-        <p class="environment-runtime-tooltip-notice">{i18n.t('shell.runtimeStatus.readPermissionRequired')}</p>
+        <p class="environment-runtime-tooltip-notice">{i18n.t('shell.runtimeStatus.monitorPermissionRequired')}</p>
       </Show>
       <Show when={connected() && metricsFailure() === 'unavailable'}>
         <p class="environment-runtime-tooltip-notice">{i18n.t('shell.runtimeStatus.metricsUnavailable')}</p>

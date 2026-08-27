@@ -459,7 +459,7 @@
       "envTypeRemote": "远程"
     },
     "runtimeStatus": {
-      "triggerLabel": "{environment} 的运行时详情",
+      "triggerLabel": "查看 {environment} 的环境状态",
       "runtime": "运行时",
       "version": "版本",
       "started": "启动时间",
@@ -468,8 +468,8 @@
       "unavailable": "暂不可用",
       "connectionUnavailable": "连接运行时后即可加载详情。",
       "detailsUnavailable": "运行时详情暂不可用。",
-      "readPermissionRequired": "需要读取权限才能查看资源占用。",
-      "metricsUnavailable": "运行时资源占用暂不可用。"
+      "monitorPermissionRequired": "需要执行权限才能查看环境资源占用。",
+      "metricsUnavailable": "环境资源占用暂不可用。"
     },
     "flowerCompanion": {
       "openAria": "Flower 伴随工作区。{status}",
