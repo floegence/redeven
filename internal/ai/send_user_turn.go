@@ -177,6 +177,9 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	} else if found {
 		return finish(existing, nil)
 	}
+	if err := s.requireDesktopModelSourceForSend(ctx, meta, req); err != nil {
+		return finish(SendUserTurnResponse{}, err)
+	}
 	if turnInput, ok, inputErr := immediateTypedTurnInput(req.Input); inputErr != nil {
 		return finish(SendUserTurnResponse{}, inputErr)
 	} else if ok {
@@ -267,6 +270,31 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		response.RunID = ""
 	}
 	return finish(response, nil)
+}
+
+func (s *Service) requireDesktopModelSourceForSend(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) error {
+	modelID := strings.TrimSpace(req.Model)
+	if modelID == "" {
+		settings, err := s.threadSettingsForRead(ctx, meta, req.ThreadID)
+		if err != nil {
+			return err
+		}
+		if settings == nil {
+			return errors.New("thread not found")
+		}
+		modelID = strings.TrimSpace(settings.ModelID)
+	}
+	if !isDesktopModelSourceModelID(modelID) {
+		return nil
+	}
+	allowed, err := s.desktopModelSourceModelAllowed(ctx, modelID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return errors.New("desktop model is not available")
+	}
+	return nil
 }
 
 func queuedInputFor(view flruntime.ThreadView, requestKey string) (flruntime.QueuedInput, bool) {
