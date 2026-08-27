@@ -110,15 +110,21 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 	if err := ctx.Err(); err != nil {
 		return nil, floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
 	}
+	reportFloretStorePhase(progress, FloretStoreStartupVerifying)
 	source := flstorage.SQLite(path)
 	host, err := open(ctx, flruntime.Options{Storage: source})
+	var classified error
 	if err != nil {
-		return nil, classifyFloretStorageOpenError(err)
+		classified = classifyFloretStorageOpenError(err)
+	} else if host == nil {
+		classified = floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage source returned no runtime host"))
 	}
-	if host == nil {
-		return nil, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage source returned no runtime host"))
+	if classified != nil {
+		if logger != nil {
+			logger.Error("ai: Floret runtime open failed", "startup_phase", FloretStoreStartupVerifying, "error_class", floretStoreStartupClassOf(classified))
+		}
+		return nil, classified
 	}
-	reportFloretStorePhase(progress, FloretStoreStartupVerifying)
 	return host, nil
 }
 
@@ -164,6 +170,14 @@ func classifyFloretStorageOpenError(err error) error {
 		return floretStoreStartupError(FloretStoreStartupEnvironmentPermissionError, false, false, err)
 	}
 	return floretStoreStartupError(FloretStoreStartupIOError, false, false, err)
+}
+
+func floretStoreStartupClassOf(err error) FloretStoreStartupClass {
+	var startupErr *FloretStoreStartupError
+	if errors.As(err, &startupErr) {
+		return startupErr.Class
+	}
+	return FloretStoreStartupContractError
 }
 
 func isTemporaryFloretStorageError(err error) bool {

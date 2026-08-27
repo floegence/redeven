@@ -20,7 +20,7 @@ Ordinary tool scheduling follows the model's response boundaries. When one model
 Terminal PTYs retain raw bytes, sequence numbers, and byte totals. A single
 Redeven text projection normalizes invalid UTF-8 before `terminal.exec`,
 `terminal.read`, Activity, and API output; contract truncation then operates on
-Unicode code points. Published Floret v5.0.3 normalizes that display text before
+Unicode code points. Published Floret v5.0.4 normalizes that display text before
 Effect fingerprinting and canonical persistence, and the committed Effect entry
 is the sole result message. Identity, entry-integrity, and artifact checks still
 fail closed, while serialization differences cannot authorize a rerun or create

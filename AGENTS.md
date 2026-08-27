@@ -1012,7 +1012,7 @@ Product handlers perform authorization and DTO mapping, then call typed `View`, 
 
 Flower uses one workspace live transport, a summary/detail-separated bounded thread cache, composer drafts, and a short-lived request-key outbox. Summary updates never mutate detail. Thread selection never owns execution or reconnects transport. Approval, waiting, loading, and commands never disable thread navigation.
 
-Outside temporary Local Fast Debugging, Redeven must use the released v4 module with `GOWORK=off`; local sibling wiring is never a committed integration boundary.
+Outside temporary Local Fast Debugging, Redeven must use the released v5 module with `GOWORK=off`; local sibling wiring is never a committed integration boundary.
 
 ## UI Interaction Affordance
 

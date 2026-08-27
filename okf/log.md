@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-08-27
+* **Floret v5.0.4 startup convergence**: Redeven now reports storage
+  verification before `runtime.Open`, consumes Floret's exact legacy UTF-8 Raw
+  repair, and classifies remaining authority failures only through the public
+  runtime error contract. Startup diagnostics retain phase and class without
+  backend or conversation detail.
+
 ## 2026-08-26
 * **Terminal UTF-8 boundary and Floret v5.0.3 adoption**: Redeven now keeps
   terminal byte accounting inside the PTY owner but normalizes invalid UTF-8 at
