@@ -162,7 +162,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(getComputedStyle(search).cursor).toBe('text');
   });
 
-  it('presents the selected category without fading and honors reduced motion', async () => {
+  it('presents the selected category without moving its layout and honors reduced motion', async () => {
     const host = document.createElement('div');
     host.className = 'mx-auto w-[900px] max-w-full bg-card p-4';
     document.body.appendChild(host);
@@ -194,18 +194,28 @@ describe('ServiceTemplateCatalog browser presentation', () => {
 
     const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
       .find((tab) => tab.textContent?.includes('Container templates'))!;
+    const hostContent = document.querySelector<HTMLElement>('[data-testid="service-template-category-content"]')!;
+    const hostRect = hostContent.getBoundingClientRect();
     await userEvent.click(containerTab);
     const content = document.querySelector<HTMLElement>('[data-testid="service-template-category-content"]')!;
     expect(content.dataset.templateCategory).toBe('container');
-    expect(content.dataset.transitionDirection).toBe('1');
+    expect(content.dataset.transitionActive).toBe('true');
     const categoryAnimation = content.getAnimations().find((animation) => (
       (animation.effect as KeyframeEffect | null)?.target === content
     ));
     expect(categoryAnimation).toBeDefined();
     const keyframes = (categoryAnimation!.effect as KeyframeEffect).getKeyframes();
-    expect(keyframes.some((frame) => String(frame.transform).includes('10px'))).toBe(true);
-    expect(keyframes.every((frame) => frame.opacity === undefined || frame.opacity === '1')).toBe(true);
-    expect(getComputedStyle(content).opacity).toBe('1');
+    expect(keyframes.every((frame) => frame.transform === undefined || frame.transform === 'none')).toBe(true);
+    const opacityKeyframes = keyframes
+      .map((frame) => Number.parseFloat(String(frame.opacity)))
+      .filter((opacity) => Number.isFinite(opacity));
+    expect(opacityKeyframes.length).toBeGreaterThan(0);
+    expect(Math.min(...opacityKeyframes)).toBeGreaterThanOrEqual(0.94);
+    expect(Math.max(...opacityKeyframes)).toBe(1);
+    const containerRect = content.getBoundingClientRect();
+    expect(containerRect.left).toBe(hostRect.left);
+    expect(containerRect.top).toBe(hostRect.top);
+    expect(containerRect.width).toBe(hostRect.width);
 
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
     const hostTab = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
