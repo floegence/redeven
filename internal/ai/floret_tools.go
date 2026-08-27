@@ -103,6 +103,10 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 			continue
 		}
 		def := def
+		if native, ok := buildFloretNativeTool(def, authorizationSnapshot); ok {
+			items = append(items, native)
+			continue
+		}
 		toolDef, err := floretToolDefinitionForSnapshot(def, authorizationSnapshot)
 		if err != nil {
 			return nil, err
@@ -493,8 +497,6 @@ func floretToolResourceKinds(toolName string) []string {
 		return []string{"file"}
 	case "attachment.read":
 		return []string{"attachment"}
-	case "web_fetch":
-		return []string{"web_url"}
 	case "web.search":
 		return []string{"web_query"}
 	case "okf.index", "okf.search", "okf.open":
@@ -510,7 +512,7 @@ func floretToolResourceKinds(toolName string) []string {
 
 func floretToolOpenWorld(def ToolDef) bool {
 	switch strings.TrimSpace(def.Name) {
-	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "web.search", "web_fetch", "use_skill":
+	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "web.search", "use_skill":
 		return true
 	default:
 		return false
@@ -576,10 +578,6 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 	case "find":
 		if root := strings.TrimSpace(anyToString(args["root"])); root != "" {
 			return []fltools.ResourceRef{{Kind: "file", Value: root}}, nil
-		}
-	case "web_fetch":
-		if rawURL := strings.TrimSpace(anyToString(args["url"])); rawURL != "" {
-			return []fltools.ResourceRef{{Kind: "web_url", Value: rawURL}}, nil
 		}
 	case "apply_patch":
 		if patch := strings.TrimSpace(anyToString(args["patch"])); patch != "" {
@@ -700,7 +698,7 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 	switch name {
 	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate":
 		return []fltools.Effect{fltools.EffectShell}
-	case "web.search", "web_fetch":
+	case "web.search":
 		return []fltools.Effect{fltools.EffectNetwork}
 	case "use_skill":
 		return []fltools.Effect{fltools.EffectNetwork}

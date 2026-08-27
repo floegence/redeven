@@ -1,6 +1,10 @@
 # Redeven OKF Update Log
 
 ## 2026-08-27
+* **Floret-native web fetch and v5.0.7 adoption**: Flower now exposes one shared
+  readonly `web_fetch` in every permission mode. Floret owns secure fetching,
+  parsing, output policy, and typed Activity; Redeven keeps current product
+  authorization, prompt routing, and the content-free UI card.
 * **Typed Flower turn failures and Floret v5.0.6 adoption**: Redeven now
   classifies canonical terminal failures from Floret's typed failure code across
   list, detail, current, and live responses. Engine-contract and storage

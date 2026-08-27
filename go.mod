@@ -21,6 +21,8 @@ require (
 )
 
 require (
+	github.com/JohannesKaufmann/dom v0.3.1 // indirect
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
@@ -31,7 +33,7 @@ require (
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
-	github.com/floegence/floret/v5 v5.0.6
+	github.com/floegence/floret/v5 v5.0.7
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/libp2p/go-buffer-pool v0.0.2 // indirect

@@ -76,6 +76,7 @@
       "toolActivityReadCommandOutput": "Afficher la sortie de la commande",
       "toolActivityWriteCommandInput": "Envoyer une entrée à la commande",
       "toolActivityTerminateCommand": "Arrêter l’exécution de la commande",
+      "toolActivityOpenWebPage": "Ouvrir la page web dans le navigateur",
       "handlerBlockedTitle": "Flower requiert votre attention",
       "handlerStartFailedTitle": "Flower n’a pas pu démarrer",
       "handlerStillStarting": "Flower est encore en cours de démarrage.",

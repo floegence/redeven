@@ -55,16 +55,6 @@ func toolSuccessSummary(toolName string) string {
 	}
 }
 
-func (h *builtInToolHandler) Validate(_ context.Context, call ToolCall) error {
-	if h == nil || h.r == nil {
-		return fmt.Errorf("tool handler unavailable")
-	}
-	if strings.TrimSpace(call.Name) == "" {
-		return fmt.Errorf("missing tool name")
-	}
-	return nil
-}
-
 func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	if h == nil || h.r == nil {
 		return ToolResult{}, fmt.Errorf("tool handler unavailable")
@@ -138,10 +128,6 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolRe
 		Truncated: truncated,
 		Error:     outcome.ToolError,
 	}, nil
-}
-
-func (h *builtInToolHandler) HandlePartial(_ context.Context, _ PartialToolCall) error {
-	return nil
 }
 
 func extractStringSlice(v any) []string {
@@ -616,18 +602,6 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
-			Name:             "web_fetch",
-			Description:      "Fetch a public HTTP(S) text page with SSRF protections. Available only in readonly permission.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"url": map[string]any{"type": "string"}, "format": map[string]any{"type": "string", "enum": []string{"markdown", "text"}}, "timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": 120}}, "required": []string{"url"}, "additionalProperties": false}),
-			Mutating:         false,
-			RequiresApproval: false,
-			Visibility:       ToolVisibilityReadonlyExclusive,
-			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyNetwork},
-			Source:           "builtin",
-			Namespace:        "builtin.readonly",
-			Priority:         100,
-		},
-		{
 			Name:             "file.edit",
 			Description:      "Edit a project-scoped text file by replacing an exact old_string with new_string. Use this as the primary deterministic in-place editing tool.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
@@ -794,6 +768,7 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 	}
+	defs = append(defs, floretNativeToolDefinitions()...)
 	for i := range defs {
 		defs[i].Presentation = aitools.MustPresentationSpec(defs[i].Name)
 	}
@@ -856,8 +831,7 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 				continue
 			}
 		}
-		handler := ToolHandler(&builtInToolHandler{r: r, toolName: def.Name})
-		if err := reg.Register(def, handler); err != nil {
+		if err := reg.Register(def); err != nil {
 			return err
 		}
 	}

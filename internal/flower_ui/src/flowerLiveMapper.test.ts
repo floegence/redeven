@@ -202,3 +202,35 @@ describe('mapFlowerActivityItem structured rows contract', () => {
       .toThrow('exceeds 200 rows');
   });
 });
+
+describe('mapFlowerActivityItem web fetch contract', () => {
+  it('preserves the dedicated renderer and bounded metadata payload', () => {
+    const mapped = mapFlowerActivityItem({
+      item_id: 'activity-web-fetch',
+      tool_name: 'web_fetch',
+      kind: 'tool',
+      status: 'success',
+      severity: 'quiet',
+      presentation: {
+        label: 'Fetch web page',
+        renderer: 'web_fetch',
+        payload: {
+          url: 'https://example.test/start',
+          final_url: 'https://example.test/final',
+          status_code: 200,
+          content_type: 'text/html',
+          format: 'markdown',
+          bytes_read: 512,
+          truncated: false,
+        },
+      },
+    });
+
+    expect(mapped?.renderer).toBe('web_fetch');
+    expect(mapped?.payload).toMatchObject({
+      final_url: 'https://example.test/final',
+      status_code: 200,
+      bytes_read: 512,
+    });
+  });
+});

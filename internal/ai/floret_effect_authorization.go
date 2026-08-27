@@ -153,9 +153,12 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 		return errors.New("Floret effect authorization snapshot is stale")
 	}
 	policyRevision := floretEffectPolicyRevision(authorityThreadID, currentSnapshot)
-	releaseAuthorization, err := r.effectAuthorizations.authorize(req, currentSnapshot)
-	if err != nil {
-		return err
+	releaseAuthorization := func() {}
+	if !isFloretNativeTool(req.ToolName) {
+		releaseAuthorization, err = r.effectAuthorizations.authorize(req, currentSnapshot)
+		if err != nil {
+			return err
+		}
 	}
 	executionContext, releaseExecution, err := r.beginExecutionAdmission(ctx)
 	if err != nil {
