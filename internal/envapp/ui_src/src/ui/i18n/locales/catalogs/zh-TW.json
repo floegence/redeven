@@ -461,15 +461,9 @@
     "runtimeStatus": {
       "triggerLabel": "查看 {environment} 的環境狀態",
       "runtime": "運行時",
-      "version": "版本",
       "started": "啟動時間",
       "cpu": "CPU",
-      "memory": "記憶體",
-      "unavailable": "暫時無法使用",
-      "connectionUnavailable": "連線至運行時後即可載入詳細資料。",
-      "detailsUnavailable": "運行時詳細資料暫時無法使用。",
-      "monitorPermissionRequired": "需要執行權限才能查看環境資源使用量。",
-      "metricsUnavailable": "環境資源使用量暫時無法取得。"
+      "memory": "記憶體"
     },
     "flowerCompanion": {
       "openAria": "Flower 對話面板。{status}",
@@ -829,8 +823,8 @@
     }
   },
   "runtimeMonitor": {
-    "permissionTitle": "需要執行權限",
-    "permissionDescription": "此工作階段未授予執行權限，因此監控已停用。",
+    "permissionTitle": "需要讀取權限",
+    "permissionDescription": "此工作階段未授予讀取權限，因此無法查看監控資料。",
     "monitorRequestFailed": "監控請求失敗",
     "cpuUsage": "CPU 使用率",
     "networkTraffic": "網路流量",
@@ -882,6 +876,7 @@
     "askFlower": "詢問Flower",
     "copyName": "複製名稱",
     "copyPid": "複製 PID",
+    "killExecuteRequired": "終止程序需要執行權限。",
     "kill": "殺"
   },
   "flowerChat": {

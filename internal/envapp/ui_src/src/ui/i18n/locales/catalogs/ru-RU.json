@@ -461,15 +461,9 @@
     "runtimeStatus": {
       "triggerLabel": "Состояние окружения {environment}",
       "runtime": "Среда выполнения",
-      "version": "Версия",
       "started": "Запущена",
       "cpu": "CPU",
-      "memory": "Память",
-      "unavailable": "Недоступно",
-      "connectionUnavailable": "Подключитесь к среде выполнения, чтобы загрузить сведения.",
-      "detailsUnavailable": "Сведения о среде выполнения временно недоступны.",
-      "monitorPermissionRequired": "Для просмотра использования ресурсов окружения требуется разрешение на выполнение.",
-      "metricsUnavailable": "Данные об использовании ресурсов окружения временно недоступны."
+      "memory": "Память"
     },
     "flowerCompanion": {
       "openAria": "Панель Flower. {status}",
@@ -845,8 +839,8 @@
     }
   },
   "runtimeMonitor": {
-    "permissionTitle": "Требуется разрешение на выполнение",
-    "permissionDescription": "Monitoring отключен, потому что у этого сеанса нет разрешения на выполнение.",
+    "permissionTitle": "Требуется разрешение на чтение",
+    "permissionDescription": "Данные Monitoring нельзя просмотреть, потому что у этого сеанса нет разрешения на чтение.",
     "monitorRequestFailed": "Запрос Monitoring не выполнен",
     "cpuUsage": "Использование CPU",
     "networkTraffic": "Сетевой трафик",
@@ -898,6 +892,7 @@
     "askFlower": "Спросить Flower",
     "copyName": "Копировать имя",
     "copyPid": "Копировать PID",
+    "killExecuteRequired": "Для завершения процесса требуется разрешение на выполнение.",
     "kill": "Убить"
   },
   "flowerChat": {

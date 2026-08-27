@@ -120,7 +120,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const [sessions, setSessions] = createSignal<ActiveSession[]>([]);
   const [sessionsError, setSessionsError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
-  const [executeDenied, setExecuteDenied] = createSignal(false);
+  const [readDenied, setReadDenied] = createSignal(false);
   const [killingPid, setKillingPid] = createSignal<number | null>(null);
   const [selectedProcessPid, setSelectedProcessPid] = createSignal<number | null>(null);
   const [processContextMenu, setProcessContextMenu] = createSignal<{
@@ -180,8 +180,9 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const isConnected = () => protocol.status() === 'connected' && !!protocol.session?.();
 
   const permissionReady = () => ctx.env.state === 'ready';
+  const canRead = () => Boolean(ctx.env()?.permissions?.can_read);
   const canExecute = () => Boolean(ctx.env()?.permissions?.can_execute);
-  const noExecute = createMemo(() => executeDenied() || (permissionReady() && !canExecute()));
+  const noRead = createMemo(() => readDenied() || (permissionReady() && !canRead()));
 
   const POLL_MS = 2000;
   const CHART_RESET_THRESHOLD_MS = 30_000;
@@ -202,7 +203,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   };
 
   const fetchOnce = async (opts: { silent?: boolean } = {}) => {
-    if (!isConnected() || noExecute()) return;
+    if (!isConnected() || noRead()) return;
     if (fetchInFlight) {
       queuedFetchOpts = {
         silent: Boolean(queuedFetchOpts?.silent ?? true) && Boolean(opts.silent),
@@ -249,8 +250,8 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
           setSampleSeq((v) => v + 1);
         } else {
           const e = monitorRes.reason;
-          if (isPermissionDeniedError(e, 'execute')) {
-            setExecuteDenied(true);
+          if (isPermissionDeniedError(e, 'read')) {
+            setReadDenied(true);
             setError(null);
             setSessionsError(null);
             return;
@@ -287,7 +288,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
 
   const startPolling = () => {
     stopPolling();
-    if (!isConnected() || noExecute()) return;
+    if (!isConnected() || noRead()) return;
 
     untrack(() => void fetchOnce({ silent: false }));
 
@@ -299,7 +300,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   createEffect(() => {
     const connected = isConnected();
     const _sortBy = sortBy();
-    const denied = noExecute();
+    const denied = noRead();
 
     if (!connected || denied) {
       stopPolling();
@@ -312,7 +313,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
 
   createEffect(() => {
     // Avoid "error-looking" UI when a capability is intentionally not granted.
-    if (protocol.status() !== 'connected' || noExecute()) {
+    if (protocol.status() !== 'connected' || noRead()) {
       setLoading(false);
       setError(null);
       setSessionsError(null);
@@ -322,7 +323,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   createEffect(() => {
     // Reset when disconnected so users can reconnect after policy changes.
     if (protocol.status() !== 'connected') {
-      setExecuteDenied(false);
+      setReadDenied(false);
     }
   });
 
@@ -380,6 +381,11 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const handleKillProcess = async () => {
     const menu = processContextMenu();
     if (!menu) return;
+
+    if (!canExecute()) {
+      setProcessContextMenu(null);
+      return;
+    }
 
     const pid = normalizeProcessPid(menu.process.pid);
     if (pid === null) {
@@ -472,6 +478,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
         void handleKillProcess();
       },
       disabled: killingPid() === menu.process.pid,
+      disabledReason: canExecute() ? undefined : i18n.t('runtimeMonitor.killExecuteRequired'),
       destructive: true,
     },
   ];
@@ -547,7 +554,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   return (
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={containerClass()}>
       <Show
-        when={!noExecute()}
+        when={!noRead()}
         fallback={
           <PermissionEmptyState
             variant={props.variant === 'workbench' ? 'workbench' : 'page'}

@@ -101,8 +101,8 @@ func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 	}
 
 	accessgate.RegisterTyped[sysMonitorReq, sysMonitorResp](r, TypeID_SYS_MONITOR, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *sysMonitorReq) (*sysMonitorResp, error) {
-		if meta == nil || !meta.CanExecute {
-			return nil, &sessionrpc.Error{Code: 403, Message: "execute permission denied"}
+		if meta == nil || !meta.CanRead {
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 
 		sortBy := "cpu"

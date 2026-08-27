@@ -54,6 +54,8 @@ async function openTooltip(host: HTMLElement): Promise<HTMLElement> {
   vi.advanceTimersByTime(179);
   await flushPromises();
   expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+  expect(runtimeHarness.ping).not.toHaveBeenCalled();
+  expect(runtimeHarness.monitor).not.toHaveBeenCalled();
   vi.advanceTimersByTime(1);
   await flushPromises();
   vi.advanceTimersByTime(0);
@@ -116,13 +118,13 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     document.body.replaceChildren();
   });
 
-  function mount(props: Readonly<{ canExecute?: boolean | null; mobile?: boolean }> = {}) {
+  function mount(props: Readonly<{ canRead?: boolean | null; mobile?: boolean }> = {}) {
     return render(() => (
       <EnvironmentRuntimeStatusTooltip
         identity={{ source: 'local_runtime', displayName: 'Local Environment', displayID: 'env_local' }}
         connectionStatus={connectionStatus()}
-        connectionLabel="Connected"
-        canExecute={props.canExecute ?? true}
+        connectionLabel={connectionStatus() === 'connected' ? 'Connected' : 'Connecting'}
+        canRead={props.canRead ?? true}
         mobile={props.mobile ?? false}
       />
     ), host);
@@ -191,26 +193,64 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     }
   });
 
-  it('keeps ping details visible when metrics fail and explains the local degradation', async () => {
+  it('keeps ping details visible and uses quiet static skeletons when metrics fail', async () => {
     runtimeHarness.monitor.mockRejectedValue(new Error('system monitor unavailable'));
     const dispose = mount();
     try {
       const tooltip = await openTooltip(host);
       expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('v2.4.1');
-      expect(tooltip.textContent).toContain('Environment usage is temporarily unavailable.');
-      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('Unavailable');
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('');
+      expect(tooltip.querySelector('[data-environment-memory]')?.textContent).toBe('');
+      expect(tooltip.querySelector('[data-environment-cpu] [data-loading]')?.getAttribute('data-loading')).toBe('false');
+      expect(tooltip.querySelector('[data-environment-sparkline="cpu"] [data-loading]')?.getAttribute('data-loading')).toBe('false');
+      expect(tooltip.textContent).not.toContain('Unavailable');
+      expect(tooltip.textContent).not.toContain('temporarily');
     } finally {
       dispose();
     }
   });
 
-  it('does not request environment metrics without execute permission', async () => {
-    const dispose = mount({ canExecute: false });
+  it('does not request environment metrics without read permission', async () => {
+    const dispose = mount({ canRead: false });
     try {
       const tooltip = await openTooltip(host);
       expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
       expect(runtimeHarness.monitor).not.toHaveBeenCalled();
-      expect(tooltip.textContent).toContain('Execute permission is required to view environment usage.');
+      expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('v2.4.1');
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('');
+      expect(tooltip.querySelector('[data-environment-cpu] [data-loading]')?.getAttribute('data-loading')).toBe('false');
+      expect(tooltip.textContent).not.toContain('permission');
+      vi.advanceTimersByTime(4_000);
+      await flushPromises();
+      expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
+      expect(runtimeHarness.monitor).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('retains the last valid environment metrics when a refresh fails', async () => {
+    runtimeHarness.monitor
+      .mockResolvedValueOnce({
+        cpuUsage: 31.25,
+        memoryUsedBytes: 6 * 1024 * 1024 * 1024,
+        memoryTotalBytes: 16 * 1024 * 1024 * 1024,
+        timestampMs: Date.now(),
+      })
+      .mockRejectedValueOnce(new Error('refresh failed'));
+    const dispose = mount();
+    try {
+      const tooltip = await openTooltip(host);
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('31.3%');
+      expect(tooltip.querySelector('[data-environment-memory]')?.textContent).toBe('6 GB');
+
+      vi.advanceTimersByTime(2_000);
+      await flushPromises();
+
+      expect(runtimeHarness.monitor).toHaveBeenCalledTimes(2);
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('31.3%');
+      expect(tooltip.querySelector('[data-environment-memory]')?.textContent).toBe('6 GB');
+      expect(tooltip.querySelector('[data-environment-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('1');
     } finally {
       dispose();
     }
@@ -222,7 +262,8 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     const dispose = mount();
     try {
       const tooltip = await openTooltip(host);
-      expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('Loading...');
+      expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('');
+      expect(tooltip.querySelector('[data-runtime-version] [data-loading]')?.getAttribute('data-loading')).toBe('true');
 
       setProtocolStatus('connecting');
       setConnectionStatus('connecting');
@@ -230,8 +271,9 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       resolvePing({ serverTimeMs: Date.now(), version: 'stale-version', processStartedAtMs: Date.now() });
       await flushPromises();
 
-      expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('Unavailable');
-      expect(tooltip.textContent).toContain('Connect to the Runtime to load details.');
+      expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('');
+      expect(tooltip.querySelector('[data-runtime-version] [data-loading]')?.getAttribute('data-loading')).toBe('false');
+      expect(tooltip.textContent).toContain('Connecting');
       expect(tooltip.textContent).not.toContain('stale-version');
     } finally {
       dispose();

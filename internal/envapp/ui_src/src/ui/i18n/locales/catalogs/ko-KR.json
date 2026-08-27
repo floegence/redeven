@@ -461,15 +461,9 @@
     "runtimeStatus": {
       "triggerLabel": "{environment} 환경 상태",
       "runtime": "런타임",
-      "version": "버전",
       "started": "시작 시간",
       "cpu": "CPU",
-      "memory": "메모리",
-      "unavailable": "사용할 수 없음",
-      "connectionUnavailable": "세부 정보를 불러오려면 런타임에 연결하세요.",
-      "detailsUnavailable": "런타임 세부 정보를 일시적으로 확인할 수 없습니다.",
-      "monitorPermissionRequired": "환경 리소스 사용량을 보려면 실행 권한이 필요합니다.",
-      "metricsUnavailable": "환경 리소스 사용량을 일시적으로 확인할 수 없습니다."
+      "memory": "메모리"
     },
     "flowerCompanion": {
       "openAria": "Flower 보조 작업 영역. {status}",
@@ -829,8 +823,8 @@
     }
   },
   "runtimeMonitor": {
-    "permissionTitle": "실행 권한 필요",
-    "permissionDescription": "이 세션에 실행 권한이 없어 Monitoring이 비활성화되었습니다.",
+    "permissionTitle": "읽기 권한 필요",
+    "permissionDescription": "이 세션에 읽기 권한이 없어 Monitoring 데이터를 볼 수 없습니다.",
     "monitorRequestFailed": "Monitoring 요청 실패",
     "cpuUsage": "CPU 사용량",
     "networkTraffic": "네트워크 트래픽",
@@ -882,6 +876,7 @@
     "askFlower": "Flower",
     "copyName": "이름 복사",
     "copyPid": "PID 복사",
+    "killExecuteRequired": "프로세스를 종료하려면 실행 권한이 필요합니다.",
     "kill": "종료"
   },
   "flowerChat": {

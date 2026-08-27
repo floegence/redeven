@@ -4899,7 +4899,7 @@ export function EnvAppShell() {
               identity={envSessionIdentity()}
               connectionStatus={status()}
               connectionLabel={statusLabel()}
-              canExecute={env.state === 'ready' ? Boolean(env()?.permissions?.can_execute) : null}
+              canRead={env.state === 'ready' ? Boolean(env()?.permissions?.can_read) : null}
               mobile={layout.isMobile()}
             />
           </div>

@@ -32,6 +32,8 @@ describe('Tooltip', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.useFakeTimers();
+    anchorRect = makeRect(240, 48, 80, 32);
+    tooltipRect = makeRect(0, 0, 120, 40);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function mockRect(this: Element) {
       const element = this as HTMLElement;
       if (element.hasAttribute('data-redeven-tooltip-anchor')) return anchorRect;
@@ -206,6 +208,49 @@ describe('Tooltip', () => {
       anchor.dispatchEvent(new MouseEvent('mouseenter'));
       await flushPositioning();
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('reports its actual open state, ignores trigger clicks, and applies a left safe margin', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    anchorRect = makeRect(8, 220, 232, 24);
+    tooltipRect = makeRect(0, 0, 180, 44);
+    const onOpenChange = vi.fn();
+
+    const dispose = render(() => (
+      <Tooltip
+        content="Environment details"
+        placement="top"
+        delay={0}
+        dismissOnTriggerClick={false}
+        viewportMargin={{ left: 56 }}
+        onOpenChange={onOpenChange}
+      >
+        <button type="button">Environment</button>
+      </Tooltip>
+    ), host);
+
+    try {
+      const anchor = host.querySelector('[data-redeven-tooltip-anchor]') as HTMLElement;
+      const trigger = host.querySelector('button') as HTMLButtonElement;
+      anchor.dispatchEvent(new MouseEvent('mouseenter'));
+      await flushPositioning();
+
+      const tooltip = document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
+      expect(tooltip).toBeTruthy();
+      expect(tooltip?.style.left).toBe('56px');
+      expect(onOpenChange).toHaveBeenLastCalledWith(true);
+
+      trigger.click();
+      await Promise.resolve();
+      expect(document.body.querySelector('[role="tooltip"]')).toBe(tooltip);
+
+      anchor.dispatchEvent(new MouseEvent('mouseleave'));
+      await Promise.resolve();
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
     } finally {
       dispose();
     }

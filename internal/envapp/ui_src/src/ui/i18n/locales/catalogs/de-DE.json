@@ -461,15 +461,9 @@
     "runtimeStatus": {
       "triggerLabel": "Umgebungsstatus für {environment}",
       "runtime": "Laufzeit",
-      "version": "Version",
       "started": "Gestartet",
       "cpu": "CPU",
-      "memory": "Arbeitsspeicher",
-      "unavailable": "Nicht verfügbar",
-      "connectionUnavailable": "Stellen Sie eine Verbindung zur Laufzeit her, um Details zu laden.",
-      "detailsUnavailable": "Die Laufzeitdetails sind vorübergehend nicht verfügbar.",
-      "monitorPermissionRequired": "Zum Anzeigen der Ressourcennutzung der Umgebung ist Ausführungsberechtigung erforderlich.",
-      "metricsUnavailable": "Die Ressourcennutzung der Umgebung ist vorübergehend nicht verfügbar."
+      "memory": "Arbeitsspeicher"
     },
     "flowerCompanion": {
       "openAria": "Flower-Begleitbereich. {status}",
@@ -829,8 +823,8 @@
     }
   },
   "runtimeMonitor": {
-    "permissionTitle": "Ausführungsberechtigung erforderlich",
-    "permissionDescription": "Monitoring ist deaktiviert, weil diese Sitzung keine Ausführungsberechtigung hat.",
+    "permissionTitle": "Leseberechtigung erforderlich",
+    "permissionDescription": "Monitoring-Daten können nicht angezeigt werden, weil diese Sitzung keine Leseberechtigung hat.",
     "monitorRequestFailed": "Monitoring-Anfrage fehlgeschlagen",
     "cpuUsage": "CPU-Auslastung",
     "networkTraffic": "Netzwerkverkehr",
@@ -882,6 +876,7 @@
     "askFlower": "Fragen Flower",
     "copyName": "Namen kopieren",
     "copyPid": "PID kopieren",
+    "killExecuteRequired": "Zum Beenden eines Prozesses ist eine Ausführungsberechtigung erforderlich.",
     "kill": "Töten"
   },
   "flowerChat": {
