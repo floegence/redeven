@@ -251,7 +251,23 @@ describe("GitBranchesPanel interactions", () => {
   it("keeps a branch status failure local without retrying indefinitely", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
-    mockListWorkspacePage.mockRejectedValue(new Error("status unavailable"));
+    mockListWorkspacePage
+      .mockRejectedValueOnce(new Error("status unavailable"))
+      .mockResolvedValueOnce({
+        repoRootPath: "/workspace/repo",
+        section: "changes",
+        summary: {
+          stagedCount: 0,
+          unstagedCount: 0,
+          untrackedCount: 0,
+          conflictedCount: 0,
+        },
+        totalCount: 0,
+        offset: 0,
+        nextOffset: 0,
+        hasMore: false,
+        items: [],
+      });
 
     const branch: GitBranchSummary = {
       name: "main",
@@ -259,24 +275,30 @@ describe("GitBranchesPanel interactions", () => {
       kind: "local",
       current: true,
     };
-    const dispose = render(() => (
-      <LayoutProvider>
-        <NotificationProvider>
-          <ProtocolProvider contract={redevenV1Contract}>
-            <GitBranchesPanel
-              repoRootPath="/workspace/repo"
-              selectedBranch={branch}
-              branches={{
-                repoRootPath: "/workspace/repo",
-                currentRef: "main",
-                local: [branch],
-                remote: [],
-              }}
-            />
-          </ProtocolProvider>
-        </NotificationProvider>
-      </LayoutProvider>
-    ), host);
+    let setRefreshToken!: (value: number) => number;
+    const dispose = render(() => {
+      const [refreshToken, updateRefreshToken] = createSignal(0);
+      setRefreshToken = updateRefreshToken;
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                statusRefreshToken={refreshToken()}
+                selectedBranch={branch}
+                branches={{
+                  repoRootPath: "/workspace/repo",
+                  currentRef: "main",
+                  local: [branch],
+                  remote: [],
+                }}
+              />
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
 
     try {
       await flush();
@@ -284,6 +306,16 @@ describe("GitBranchesPanel interactions", () => {
 
       expect(mockListWorkspacePage).toHaveBeenCalledTimes(1);
       expect(host.textContent).toContain("Request failed");
+      expect(host.textContent?.match(/Request failed/g)).toHaveLength(1);
+      expect(host.querySelector('[data-git-branch-status-unavailable="true"]')).toBeNull();
+      expect(host.querySelector('[data-git-branch-status-unavailable-summary="true"]')).toBeNull();
+
+      setRefreshToken(1);
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(host.textContent).not.toContain("Request failed");
+      expect(host.querySelector('[data-git-branch-status-empty-section="changes"]')).toBeTruthy();
     } finally {
       dispose();
     }

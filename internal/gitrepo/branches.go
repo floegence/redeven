@@ -51,8 +51,8 @@ func (s *Service) listBranches(ctx context.Context, repo repoContext) (*listBran
 		RepoRootPath: repo.repoRootReal,
 		CurrentRef:   repo.headRef,
 		Detached:     repo.headRef == "HEAD" || repo.headRef == "",
-		Local:        local,
-		Remote:       remote,
+		Local:        requiredJSONArray(local),
+		Remote:       requiredJSONArray(remote),
 	}, nil
 }
 
@@ -318,8 +318,8 @@ func (s *Service) getBranchCompare(ctx context.Context, repo repoContext, baseRe
 		MergeBase:         mergeBase,
 		TargetAheadCount:  targetAhead,
 		TargetBehindCount: targetBehind,
-		Commits:           commits,
-		Files:             files,
+		Commits:           requiredJSONArray(commits),
+		Files:             requiredJSONArray(files),
 		LinkedWorktree:    linkedWorktree,
 	}, nil
 }

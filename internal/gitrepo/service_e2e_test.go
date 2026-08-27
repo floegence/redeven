@@ -54,6 +54,172 @@ func mustEvalPathE2E(t *testing.T, value string) string {
 	return filepath.Clean(resolved)
 }
 
+func requireJSONArrayField(t *testing.T, payload json.RawMessage, field string) []json.RawMessage {
+	t.Helper()
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &object); err != nil {
+		t.Fatalf("unmarshal JSON object: %v", err)
+	}
+	raw, ok := object[field]
+	if !ok {
+		t.Fatalf("response omitted required array field %q: %s", field, payload)
+	}
+	if string(raw) == "null" {
+		t.Fatalf("response encoded required array field %q as null: %s", field, payload)
+	}
+	var values []json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil {
+		t.Fatalf("response field %q is not an array: %v", field, err)
+	}
+	return values
+}
+
+func requireJSONFieldAbsent(t *testing.T, payload json.RawMessage, field string) {
+	t.Helper()
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &object); err != nil {
+		t.Fatalf("unmarshal JSON object: %v", err)
+	}
+	if _, ok := object[field]; ok {
+		t.Fatalf("response included undeclared field %q: %s", field, payload)
+	}
+}
+
+func TestE2E_GitRepoRPC_CleanResponsesPreserveRequiredCollections(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	client := newGitRepoRPCClient(NewService(fixture.Root), &session.Meta{CanRead: true, CanWrite: true})
+	currentBranch := runGitFixture(t, fixture.Root, "branch", "--show-current")
+
+	tests := []struct {
+		name       string
+		typeID     uint32
+		request    any
+		emptyArray []string
+		absent     []string
+	}{
+		{
+			name:   "legacy workspace",
+			typeID: TypeID_GIT_LIST_WORKSPACE,
+			request: listWorkspaceChangesReq{
+				RepoRootPath: fixture.Root,
+			},
+			emptyArray: []string{"staged", "unstaged", "untracked", "conflicted"},
+			absent:     []string{"workspace_revision"},
+		},
+		{
+			name:   "workspace page",
+			typeID: TypeID_GIT_LIST_WORKSPACE_PAGE,
+			request: listWorkspacePageReq{
+				RepoRootPath: fixture.Root,
+				Section:      "changes",
+			},
+			emptyArray: []string{"items"},
+		},
+		{
+			name:   "workspace path statuses",
+			typeID: TypeID_GIT_LIST_PATH_STATUSES,
+			request: listWorkspacePathStatusesReq{
+				RepoRootPath: fixture.Root,
+				Paths:        []string{"src/main.txt"},
+			},
+			emptyArray: []string{"items"},
+		},
+		{
+			name:   "stashes",
+			typeID: TypeID_GIT_LIST_STASHES,
+			request: listStashesReq{
+				RepoRootPath: fixture.Root,
+			},
+			emptyArray: []string{"stashes"},
+		},
+		{
+			name:   "branches",
+			typeID: TypeID_GIT_LIST_BRANCHES,
+			request: listBranchesReq{
+				RepoRootPath: fixture.Root,
+			},
+			emptyArray: []string{"remote"},
+		},
+		{
+			name:   "branch compare",
+			typeID: TypeID_GIT_GET_BRANCH_DIFF,
+			request: getBranchCompareReq{
+				RepoRootPath: fixture.Root,
+				BaseRef:      currentBranch,
+				TargetRef:    currentBranch,
+			},
+			emptyArray: []string{"commits", "files"},
+		},
+		{
+			name:   "merge preview",
+			typeID: TypeID_GIT_PREVIEW_MERGE,
+			request: previewMergeBranchReq{
+				RepoRootPath: fixture.Root,
+				Name:         currentBranch,
+				FullName:     "refs/heads/" + currentBranch,
+				Kind:         "local",
+			},
+			emptyArray: []string{"files"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload, rpcErr, err := client.Call(context.Background(), test.typeID, mustMarshalJSON(t, test.request))
+			if err != nil {
+				t.Fatalf("RPC call: %v", err)
+			}
+			if rpcErr != nil {
+				t.Fatalf("RPC error: %+v", rpcErr)
+			}
+			for _, field := range test.emptyArray {
+				if values := requireJSONArrayField(t, payload, field); len(values) != 0 {
+					t.Fatalf("response field %q has %d entries, want 0: %s", field, len(values), payload)
+				}
+			}
+			for _, field := range test.absent {
+				requireJSONFieldAbsent(t, payload, field)
+			}
+		})
+	}
+}
+
+func TestE2E_GitRepoRPC_UnbornRepositoryPreservesEmptyCommitAndBranchArrays(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	runGitFixture(t, repoRoot, "init")
+	client := newGitRepoRPCClient(NewService(repoRoot), &session.Meta{CanRead: true})
+
+	commitPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_COMMITS, mustMarshalJSON(t, listCommitsReq{
+		RepoRootPath: repoRoot,
+	}))
+	if err != nil {
+		t.Fatalf("list commits RPC call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list commits RPC error: %+v", rpcErr)
+	}
+	if commits := requireJSONArrayField(t, commitPayload, "commits"); len(commits) != 0 {
+		t.Fatalf("commits has %d entries, want 0: %s", len(commits), commitPayload)
+	}
+
+	branchPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_BRANCHES, mustMarshalJSON(t, listBranchesReq{
+		RepoRootPath: repoRoot,
+	}))
+	if err != nil {
+		t.Fatalf("list branches RPC call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list branches RPC error: %+v", rpcErr)
+	}
+	for _, field := range []string{"local", "remote"} {
+		if branches := requireJSONArrayField(t, branchPayload, field); len(branches) != 0 {
+			t.Fatalf("%s has %d entries, want 0: %s", field, len(branches), branchPayload)
+		}
+	}
+}
+
 func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

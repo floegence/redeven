@@ -70,4 +70,28 @@ describe('validateRedevenWireValue', () => {
       legacyFrame: {},
     })).toThrow(/legacyFrame is not allowed/u);
   });
+
+  it('requires explicit arrays for empty Git workspace responses', () => {
+    const workspacePage = {
+      repo_root_path: '/workspace/repo',
+      summary: {},
+      items: [],
+    };
+    expect(validateRedevenWireValue('wire_git_list_workspace_page_resp', workspacePage)).toEqual(workspacePage);
+    expect(() => validateRedevenWireValue('wire_git_list_workspace_page_resp', {
+      repo_root_path: '/workspace/repo',
+      summary: {},
+    })).toThrow(/items is required/u);
+
+    const pathStatuses = {
+      repo_root_path: '/workspace/repo',
+      workspace_revision: 'revision-1',
+      items: [],
+    };
+    expect(validateRedevenWireValue('wire_git_list_workspace_path_statuses_resp', pathStatuses)).toEqual(pathStatuses);
+    expect(() => validateRedevenWireValue('wire_git_list_workspace_path_statuses_resp', {
+      repo_root_path: '/workspace/repo',
+      workspace_revision: 'revision-1',
+    })).toThrow(/items is required/u);
+  });
 });
