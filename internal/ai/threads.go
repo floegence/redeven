@@ -88,7 +88,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	return view, nil
 }
 
-func (s *Service) threadSettingsView(ctx context.Context, th *threadstore.ThreadSettings) (ThreadView, error) {
+func (s *Service) threadSettingsView(_ context.Context, th *threadstore.ThreadSettings) (ThreadView, error) {
 	if th == nil {
 		return ThreadView{}, errors.New("thread settings are missing")
 	}
@@ -100,26 +100,21 @@ func (s *Service) threadSettingsView(ctx context.Context, th *threadstore.Thread
 	if err != nil {
 		return ThreadView{}, err
 	}
-	capability, _, _, err := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
-	if err != nil {
-		return ThreadView{}, err
-	}
 	reasoningSelection, err := parseStoredReasoningSelection(th.ReasoningSelectionJSON)
 	if err != nil {
 		return ThreadView{}, err
 	}
-	if err := config.ValidateAIReasoningSelection(capability, reasoningSelection); err != nil {
-		return ThreadView{}, reasoningSelectionError(strings.TrimSpace(th.ModelID), err)
-	}
 	return ThreadView{
-		ThreadID:            strings.TrimSpace(th.ThreadID),
-		ModelID:             strings.TrimSpace(th.ModelID),
-		PermissionType:      permissionTypeString(permissionType),
-		WorkingDir:          workingDir,
-		RunStatus:           string(RunStateIdle),
-		RunUpdatedAtUnixMs:  th.SettingsUpdatedAtUnixMs,
-		ReasoningSelection:  reasoningSelection,
-		ReasoningCapability: capability,
+		ThreadID:           strings.TrimSpace(th.ThreadID),
+		ModelID:            strings.TrimSpace(th.ModelID),
+		PermissionType:     permissionTypeString(permissionType),
+		WorkingDir:         workingDir,
+		RunStatus:          string(RunStateIdle),
+		RunUpdatedAtUnixMs: th.SettingsUpdatedAtUnixMs,
+		ReasoningSelection: reasoningSelection,
+		// Model capability is live catalog state. Read projections preserve the
+		// stored selection and let the current model catalog decorate it in UI.
+		ReasoningCapability: config.AIReasoningCapability{},
 		PinnedAtUnixMs:      th.PinnedAtUnixMs,
 		SettingsRevision:    th.SettingsUpdatedAtUnixMs,
 		CreatedAtUnixMs:     th.SettingsCreatedAtUnixMs,
