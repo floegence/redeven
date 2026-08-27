@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from 'solid-js';
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, FileText, Folder, History, Terminal } from '@floegence/floe-webapp-core/icons';
 import type { GitCommitSummary } from '../protocol/redeven_v1';
@@ -27,6 +27,16 @@ export type CommitGraphRow = {
 const LANE_WIDTH = 16;
 const GRAPH_PADDING_X = 10;
 const NODE_RADIUS = 4.25;
+const NODE_HALO_RADIUS = NODE_RADIUS + 2.25;
+const PRIMARY_STROKE_WIDTH = 1.95;
+const SECONDARY_STROKE_WIDTH = 1.65;
+const RAIL_STROKE_WIDTH = 1;
+const NODE_STROKE_WIDTH = 1.2;
+const FALLBACK_CONTAINER_WIDTH = 180;
+const COMMIT_SUMMARY_MIN_WIDTH = 128;
+const GRAPH_MAX_WIDTH_SHARE = 0.45;
+const MIN_GRAPH_WIDTH = LANE_WIDTH + GRAPH_PADDING_X * 2;
+const MIN_GEOMETRY_DENSITY = 0.3;
 const ROW_HEIGHT = 34;
 const SUBJECT_ROW_HEIGHT = 14;
 const META_ROW_HEIGHT = 10;
@@ -58,12 +68,56 @@ const LANE_FILL_COLORS = [
   'var(--redeven-categorical-8)',
 ];
 
-function laneX(index: number): number {
-  return GRAPH_PADDING_X + index * LANE_WIDTH + LANE_WIDTH / 2;
+export type CommitGraphGeometry = Readonly<{
+  width: number;
+  laneWidth: number;
+  paddingX: number;
+  nodeRadius: number;
+  nodeHaloRadius: number;
+  primaryStrokeWidth: number;
+  secondaryStrokeWidth: number;
+  railStrokeWidth: number;
+  nodeStrokeWidth: number;
+}>;
+
+function naturalGraphWidth(columns: number): number {
+  return Math.max(columns, 1) * LANE_WIDTH + GRAPH_PADDING_X * 2;
 }
 
-function graphWidth(columns: number): number {
-  return Math.max(columns, 1) * LANE_WIDTH + GRAPH_PADDING_X * 2;
+export function resolveCommitGraphGeometry(columns: number, containerWidth: number): CommitGraphGeometry {
+  const normalizedColumns = Math.max(1, Math.floor(Number.isFinite(columns) ? columns : 1));
+  const normalizedContainerWidth = Number.isFinite(containerWidth) && containerWidth > 0
+    ? containerWidth
+    : FALLBACK_CONTAINER_WIDTH;
+  const naturalWidth = naturalGraphWidth(normalizedColumns);
+  const graphBudget = Math.max(
+    MIN_GRAPH_WIDTH,
+    Math.min(
+      normalizedContainerWidth * GRAPH_MAX_WIDTH_SHARE,
+      Math.max(MIN_GRAPH_WIDTH, normalizedContainerWidth - COMMIT_SUMMARY_MIN_WIDTH),
+    ),
+  );
+  const width = Math.min(naturalWidth, graphBudget);
+  const compressionRatio = Math.min(1, width / naturalWidth);
+  const paddingX = Math.max(4, GRAPH_PADDING_X * compressionRatio);
+  const laneWidth = (width - paddingX * 2) / normalizedColumns;
+  const density = Math.max(MIN_GEOMETRY_DENSITY, Math.min(1, laneWidth / LANE_WIDTH));
+
+  return {
+    width,
+    laneWidth,
+    paddingX,
+    nodeRadius: NODE_RADIUS * density,
+    nodeHaloRadius: NODE_HALO_RADIUS * density,
+    primaryStrokeWidth: Math.max(1, PRIMARY_STROKE_WIDTH * density),
+    secondaryStrokeWidth: Math.max(0.9, SECONDARY_STROKE_WIDTH * density),
+    railStrokeWidth: Math.max(0.75, RAIL_STROKE_WIDTH * density),
+    nodeStrokeWidth: Math.max(0.75, NODE_STROKE_WIDTH * density),
+  };
+}
+
+function laneX(index: number, geometry: CommitGraphGeometry): number {
+  return geometry.paddingX + index * geometry.laneWidth + geometry.laneWidth / 2;
 }
 
 function graphHeight(rowCount: number): number {
@@ -109,9 +163,15 @@ function laneFillColor(index: number): string {
   return LANE_FILL_COLORS[index % LANE_FILL_COLORS.length] ?? LANE_FILL_COLORS[0]!;
 }
 
-function transitionPath(fromLane: number, toLane: number, fromY: number, toY: number): string {
-  const fromX = laneX(fromLane);
-  const toX = laneX(toLane);
+function transitionPath(
+  fromLane: number,
+  toLane: number,
+  fromY: number,
+  toY: number,
+  geometry: CommitGraphGeometry,
+): string {
+  const fromX = laneX(fromLane, geometry);
+  const toX = laneX(toLane, geometry);
   if (fromLane === toLane) {
     return `M ${fromX} ${fromY} L ${toX} ${toY}`;
   }
@@ -208,6 +268,8 @@ export interface GitCommitGraphProps {
 
 export function GitCommitGraph(props: GitCommitGraphProps) {
   const i18n = useI18n();
+  let containerElement: HTMLDivElement | undefined;
+  const [containerWidth, setContainerWidth] = createSignal(FALLBACK_CONTAINER_WIDTH);
   type CommitContextTarget = Readonly<{ commit: GitCommitSummary; repoRootPath: string }>;
   const contextMenu = createGitEntityContextMenuController<CommitContextTarget>({
     snapshotTarget: (target) => ({
@@ -218,7 +280,8 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
   const rows = createMemo(() => buildCommitGraphRows(props.commits ?? []));
   const rowCount = createMemo(() => rows().length);
   const columns = createMemo(() => rows()[0]?.columns ?? 1);
-  const width = createMemo(() => graphWidth(columns()));
+  const geometry = createMemo(() => resolveCommitGraphGeometry(columns(), containerWidth()));
+  const width = createMemo(() => geometry().width);
   const height = createMemo(() => graphHeight(rowCount()));
   const railStyle = createMemo(() => ({
     height: `${height()}px`,
@@ -237,6 +300,19 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
     gap: `${ROW_GAP}px`,
   };
   const repoRootPath = () => exactGitPath(props.repoRootPath);
+
+  const syncContainerWidth = () => {
+    const nextWidth = containerElement?.clientWidth ?? 0;
+    if (nextWidth > 0) setContainerWidth(nextWidth);
+  };
+
+  onMount(() => {
+    syncContainerWidth();
+    if (typeof ResizeObserver === 'undefined' || !containerElement) return;
+    const observer = new ResizeObserver(syncContainerWidth);
+    observer.observe(containerElement);
+    onCleanup(() => observer.disconnect());
+  });
   const contextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
     const { commit } = target;
     const items: GitContextMenuActionItem[] = [];
@@ -300,7 +376,11 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
   };
 
   return (
-    <div class={cn('overflow-hidden rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass(), props.class)}>
+    <div
+      ref={containerElement}
+      data-commit-graph
+      class={cn('min-w-0 overflow-hidden rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass(), props.class)}
+    >
       <div class="relative">
         <svg
           data-commit-graph-rails
@@ -314,12 +394,12 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
           <For each={Array.from({ length: columns() }, (_, index) => index)}>
             {(laneIndex) => (
               <line
-                x1={laneX(laneIndex)}
+                x1={laneX(laneIndex, geometry())}
                 y1="0"
-                x2={laneX(laneIndex)}
+                x2={laneX(laneIndex, geometry())}
                 y2={height()}
                 stroke="var(--redeven-stroke-divider)"
-                stroke-width="1"
+                stroke-width={geometry().railStrokeWidth}
                 stroke-dasharray="2 4"
               />
             )}
@@ -331,6 +411,10 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
             {(row, rowIndex) => {
               const selected = () => props.selectedCommitHash === row.commit.hash;
               const mergeLabel = () => (row.parents.length > 1 ? `Merge x${row.parents.length}` : '');
+              const subject = () => row.commit.subject || i18n.t('uiCopy.git.noSubject');
+              const author = () => row.commit.authorName || i18n.t('uiCopy.git.unknownAuthor');
+              const relativeTime = () => formatRelativeTime(row.commit.authorTimeMs);
+              const metadataTitle = () => [author(), relativeTime(), mergeLabel()].filter(Boolean).join(' · ');
               return (
                 <button
                   type="button"
@@ -345,7 +429,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                   onContextMenu={(event) => openContextMenu(event, row.commit)}
                   onKeyDown={(event) => openKeyboardContextMenu(event, row.commit)}
                 >
-                  <div style={graphCellStyle} class="relative z-20" aria-hidden="true">
+                  <div data-commit-graph-cell style={graphCellStyle} class="relative z-20 min-w-0 overflow-hidden" aria-hidden="true">
                     {/* Keep dynamic graph drawing inside the row box so it cannot drift from row layout. */}
                     <svg
                       data-commit-graph-segment={row.commit.hash}
@@ -355,11 +439,12 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                       viewBox={`0 0 ${width()} ${ROW_HEIGHT}`}
                       aria-hidden="true"
                     >
-                      <CommitRowSegment row={row} rowIndex={rowIndex()} rowCount={rowCount()} selected={selected()} />
+                      <CommitRowSegment row={row} rowIndex={rowIndex()} rowCount={rowCount()} selected={selected()} geometry={geometry()} />
                     </svg>
                   </div>
 
                   <div
+                    data-commit-graph-summary
                     style={rowContentStyle}
                     class={cn(
                       'relative z-20 grid min-w-0 px-3 transition-colors duration-150',
@@ -367,16 +452,18 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                       rowIndex() === rowCount() - 1 ? '' : cn('border-b', redevenDividerRoleClass()),
                     )}
                   >
-                    <div class="flex items-center gap-2 leading-none">
+                    <div class="flex min-w-0 items-center gap-2 overflow-hidden leading-none">
                       <span
                         data-commit-graph-subject={row.commit.hash}
                         class={cn('min-w-0 flex-1 truncate text-[11px] font-medium', selected() ? 'text-sidebar-accent-foreground' : 'text-foreground')}
+                        title={subject()}
                       >
-                        {row.commit.subject || i18n.t('uiCopy.git.noSubject')}
+                        {subject()}
                       </span>
                       <span
+                        data-commit-graph-hash
                         class={cn(
-                          'rounded px-1.5 py-0.5 font-mono text-[9px]',
+                          'shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px]',
                           selected()
                             ? 'bg-background/18 text-sidebar-accent-foreground/82'
                             : 'bg-muted/[0.26] text-muted-foreground',
@@ -387,23 +474,18 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                     </div>
                     <div
                       class={cn(
-                        'flex flex-wrap items-center gap-1 text-[9px] leading-none',
+                        'flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden text-[9px] leading-none',
                         selected() ? 'text-sidebar-accent-foreground/72' : 'text-muted-foreground',
                       )}
+                      title={metadataTitle()}
                     >
-                      <span class="truncate">{row.commit.authorName || i18n.t('uiCopy.git.unknownAuthor')}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{formatRelativeTime(row.commit.authorTimeMs)}</span>
+                      <span data-commit-graph-author class="min-w-0 flex-1 truncate">{author()}</span>
+                      <span class="shrink-0" aria-hidden="true">·</span>
+                      <span data-commit-graph-time class="shrink-0">{relativeTime()}</span>
                       <Show when={Boolean(mergeLabel())}>
                         <>
-                          <span aria-hidden="true">·</span>
-                          <span class={selected() ? 'text-sidebar-accent-foreground/86' : 'text-[var(--redeven-categorical-6)]'}>{mergeLabel()}</span>
-                        </>
-                      </Show>
-                      <Show when={selected()}>
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span class="text-sidebar-accent-foreground">{i18n.t('flowerProviderDialog.selectedCapability')}</span>
+                          <span class="shrink-0" aria-hidden="true">·</span>
+                          <span class={cn('shrink-0', selected() ? 'text-sidebar-accent-foreground/86' : 'text-[var(--redeven-categorical-6)]')}>{mergeLabel()}</span>
                         </>
                       </Show>
                     </div>
@@ -419,9 +501,15 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
   );
 }
 
-function CommitRowSegment(props: { row: CommitGraphRow; rowIndex: number; rowCount: number; selected: boolean }) {
+function CommitRowSegment(props: {
+  row: CommitGraphRow;
+  rowIndex: number;
+  rowCount: number;
+  selected: boolean;
+  geometry: CommitGraphGeometry;
+}) {
   const lane = () => props.row.lane;
-  const currentX = () => laneX(lane());
+  const currentX = () => laneX(lane(), props.geometry);
   const currentColor = () => laneStrokeColor(props.row.nodeColorIndex);
   const lineTop = () => rowSegmentTop(props.rowIndex);
   const lineBottom = () => rowSegmentBottom(props.rowIndex, props.rowCount);
@@ -435,10 +523,10 @@ function CommitRowSegment(props: { row: CommitGraphRow; rowIndex: number; rowCou
           if (afterIndex >= 0) {
             return (
               <path
-                d={transitionPath(beforeIndex(), afterIndex, lineTop(), lineBottom())}
+                d={transitionPath(beforeIndex(), afterIndex, lineTop(), lineBottom(), props.geometry)}
                 fill="none"
                 stroke={laneStrokeColor(laneState.colorIndex)}
-                stroke-width="1.65"
+                stroke-width={props.geometry.secondaryStrokeWidth}
                 stroke-linecap="round"
                 stroke-linejoin="round"
               />
@@ -446,10 +534,10 @@ function CommitRowSegment(props: { row: CommitGraphRow; rowIndex: number; rowCou
           }
           return (
             <path
-              d={`M ${laneX(beforeIndex())} ${lineTop()} L ${laneX(beforeIndex())} ${NODE_CENTER_Y}`}
+              d={`M ${laneX(beforeIndex(), props.geometry)} ${lineTop()} L ${laneX(beforeIndex(), props.geometry)} ${NODE_CENTER_Y}`}
               fill="none"
               stroke={laneStrokeColor(laneState.colorIndex)}
-              stroke-width="1.65"
+              stroke-width={props.geometry.secondaryStrokeWidth}
               stroke-linecap="round"
             />
           );
@@ -460,7 +548,7 @@ function CommitRowSegment(props: { row: CommitGraphRow; rowIndex: number; rowCou
         d={`M ${currentX()} ${lineTop()} L ${currentX()} ${NODE_CENTER_Y}`}
         fill="none"
         stroke={currentColor()}
-        stroke-width="1.85"
+        stroke-width={props.geometry.primaryStrokeWidth}
         stroke-linecap="round"
       />
 
@@ -472,10 +560,10 @@ function CommitRowSegment(props: { row: CommitGraphRow; rowIndex: number; rowCou
           const colorIndex = index() === 0 ? props.row.nodeColorIndex : (laneState?.colorIndex ?? props.row.nodeColorIndex);
           return (
             <path
-              d={transitionPath(lane(), parentLane, NODE_CENTER_Y, lineBottom())}
+              d={transitionPath(lane(), parentLane, NODE_CENTER_Y, lineBottom(), props.geometry)}
               fill="none"
               stroke={laneStrokeColor(colorIndex)}
-              stroke-width={index() === 0 ? '1.95' : '1.65'}
+              stroke-width={index() === 0 ? props.geometry.primaryStrokeWidth : props.geometry.secondaryStrokeWidth}
               stroke-linecap="round"
               stroke-linejoin="round"
             />
@@ -490,10 +578,10 @@ function CommitRowSegment(props: { row: CommitGraphRow; rowIndex: number; rowCou
           if (props.row.parents.includes(laneState.hash)) return null;
           return (
             <path
-              d={`M ${laneX(afterIndex())} ${NODE_CENTER_Y} L ${laneX(afterIndex())} ${lineBottom()}`}
+              d={`M ${laneX(afterIndex(), props.geometry)} ${NODE_CENTER_Y} L ${laneX(afterIndex(), props.geometry)} ${lineBottom()}`}
               fill="none"
               stroke={laneStrokeColor(laneState.colorIndex)}
-              stroke-width="1.65"
+              stroke-width={props.geometry.secondaryStrokeWidth}
               stroke-linecap="round"
             />
           );
@@ -502,20 +590,20 @@ function CommitRowSegment(props: { row: CommitGraphRow; rowIndex: number; rowCou
 
       <circle
         data-commit-graph-node={props.row.commit.hash}
-        r={NODE_RADIUS + 2.25}
+        r={props.geometry.nodeHaloRadius}
         cx={currentX()}
         cy={NODE_CENTER_Y}
         fill={props.selected ? 'var(--background)' : 'color-mix(in srgb, var(--background) 90%, transparent)'}
         stroke={props.selected ? 'color-mix(in srgb, var(--primary) 35%, transparent)' : 'var(--background)'}
-        stroke-width="1.2"
+        stroke-width={props.geometry.nodeStrokeWidth}
       />
       <circle
-        r={NODE_RADIUS}
+        r={props.geometry.nodeRadius}
         cx={currentX()}
         cy={NODE_CENTER_Y}
         fill={laneFillColor(props.row.nodeColorIndex)}
         stroke="var(--background)"
-        stroke-width="1.2"
+        stroke-width={props.geometry.nodeStrokeWidth}
       />
     </>
   );
