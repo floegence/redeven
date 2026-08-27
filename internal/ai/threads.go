@@ -173,11 +173,10 @@ func (s *Service) threadViewFromSummary(ctx context.Context, th *threadstore.Thr
 		view.RunStatus = string(RunStateCanceled)
 	case *summary.LastOutcome == flruntime.TurnOutcomeInterrupted:
 		view.RunStatus = string(RunStateFailed)
-		view.RunErrorCode = "floret_turn_interrupted"
-		view.RunError = strings.TrimSpace(summary.Error)
+		view.RunErrorCode, view.RunError = projectFloretTurnFailure(summary.Failure, summary.Error, "floret_turn_interrupted")
 	default:
 		view.RunStatus = string(RunStateFailed)
-		view.RunErrorCode, view.RunError = projectRunFailure(summary.Error, "floret_turn_failed")
+		view.RunErrorCode, view.RunError = projectFloretTurnFailure(summary.Failure, summary.Error, "floret_turn_failed")
 	}
 	if summary.Activity == flruntime.ThreadActivityActive {
 		view.ActiveRunID = strings.TrimSpace(summary.TurnID.String())
@@ -280,9 +279,10 @@ func threadViewRunState(current flruntime.ThreadView) (string, string, string) {
 	case *current.LastOutcome == flruntime.TurnOutcomeCancelled:
 		return string(RunStateCanceled), "", ""
 	case *current.LastOutcome == flruntime.TurnOutcomeInterrupted:
-		return string(RunStateFailed), "floret_turn_interrupted", strings.TrimSpace(current.Error)
+		code, message := projectFloretTurnFailure(current.Failure, current.Error, "floret_turn_interrupted")
+		return string(RunStateFailed), code, message
 	default:
-		code, message := projectRunFailure(current.Error, "floret_turn_failed")
+		code, message := projectFloretTurnFailure(current.Failure, current.Error, "floret_turn_failed")
 		return string(RunStateFailed), code, message
 	}
 }
@@ -613,7 +613,7 @@ func applyThreadRuntimeSummary(view *ThreadView, current flruntime.ThreadView) {
 		view.RunStatus = string(RunStateSuccess)
 	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeFailed:
 		view.RunStatus = string(RunStateFailed)
-		view.RunErrorCode, view.RunError = projectRunFailure(current.Error, "floret_turn_failed")
+		view.RunErrorCode, view.RunError = projectFloretTurnFailure(current.Failure, current.Error, "floret_turn_failed")
 	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeCancelled:
 		view.RunStatus = string(RunStateCanceled)
 	}

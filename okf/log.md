@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-27
+* **Typed Flower turn failures and Floret v5.0.6 adoption**: Redeven now
+  classifies canonical terminal failures from Floret's typed failure code across
+  list, detail, current, and live responses. Engine-contract and storage
+  details remain internal, while historical entries without the typed field
+  retain one bounded legacy classification path.
 * **Flower conversation cache metrics**: Adopted published Floret v5.0.5,
   normalized provider cache-read and cache-write usage across local and Desktop
   model sources, and added canonical whole-thread cache hit rate to the context
