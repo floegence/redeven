@@ -86,14 +86,19 @@ type ManagedOperation struct {
 }
 
 type ManagedServicePatch struct {
-	DesiredState        *string
-	ObservedState       *string
-	RuntimeIdentity     *string
-	RuntimePort         *int
-	ArtifactReference   *string
-	RuntimeManifestJSON *string
-	LastErrorCode       *string
-	LastErrorMessage    *string
+	TemplateRevision       *int64
+	TemplateSnapshotJSON   *string
+	TemplateSnapshotSHA256 *string
+	ConfigurationJSON      *string
+	Version                *string
+	DesiredState           *string
+	ObservedState          *string
+	RuntimeIdentity        *string
+	RuntimePort            *int
+	ArtifactReference      *string
+	RuntimeManifestJSON    *string
+	LastErrorCode          *string
+	LastErrorMessage       *string
 }
 
 func (r *Registry) ListManagedTemplates(ctx context.Context) ([]ManagedTemplate, error) {
@@ -356,6 +361,21 @@ func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, p
 	}
 	sets, args := []string{}, []any{}
 	add := func(column string, value any) { sets = append(sets, column+" = ?"); args = append(args, value) }
+	if patch.TemplateRevision != nil {
+		add("template_revision", *patch.TemplateRevision)
+	}
+	if patch.TemplateSnapshotJSON != nil {
+		add("template_snapshot_json", strings.TrimSpace(*patch.TemplateSnapshotJSON))
+	}
+	if patch.TemplateSnapshotSHA256 != nil {
+		add("template_snapshot_sha256", strings.TrimSpace(*patch.TemplateSnapshotSHA256))
+	}
+	if patch.ConfigurationJSON != nil {
+		add("configuration_json", strings.TrimSpace(*patch.ConfigurationJSON))
+	}
+	if patch.Version != nil {
+		add("version", strings.TrimSpace(*patch.Version))
+	}
 	if patch.DesiredState != nil {
 		add("desired_state", strings.TrimSpace(*patch.DesiredState))
 	}

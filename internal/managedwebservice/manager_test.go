@@ -87,7 +87,7 @@ func TestCatalogMakesReleaseLockedHostRuntimeAvailableWithoutOnlineCatalog(t *te
 	}
 	templates, err := manager.Catalog(context.Background())
 	hostTemplate := templateByID(templates, DeepSeekHarnessHostTemplateID)
-	if err != nil || len(templates) != 2 || hostTemplate == nil || !hostTemplate.Available || hostTemplate.ReasonCode != "" {
+	if err != nil || len(templates) != 4 || hostTemplate == nil || !hostTemplate.Available || hostTemplate.ReasonCode != "" {
 		t.Fatalf("release-locked host availability = %+v, err=%v", templates, err)
 	}
 	if !hostTemplate.Duplicateable || hostTemplate.Spec == nil || hostTemplate.Spec.Host == nil || hostTemplate.Spec.Host.RuntimeBundle != deepSeekRuntimeBundleID {

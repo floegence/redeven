@@ -2784,6 +2784,39 @@ export const enUS = defineDictionary({
       builtIn: 'Built-in',
       redevenBuiltIn: 'Redeven built-in',
       custom: 'Custom',
+      templates: {
+        deepSeekHarnessHost: {
+          name: 'DeepSeek Harness',
+          description: 'Run DeepSeek Harness directly in the current Environment.',
+        },
+        deepSeekHarnessContainer: {
+          name: 'DeepSeek Harness',
+          description: 'Run the reviewed community DeepSeek Harness image in Docker.',
+        },
+        linuxserverWebtopUbuntuKDE: {
+          name: 'LinuxServer Webtop · Ubuntu KDE',
+          description: 'Run a persistent Ubuntu KDE desktop inside an isolated container.',
+        },
+        linuxserverWebtopDebianXFCE: {
+          name: 'LinuxServer Webtop · Debian XFCE',
+          description: 'Run a persistent Debian XFCE desktop inside an isolated container.',
+        },
+      },
+      notices: {
+        apiCredentials: {
+          title: 'Keep API credentials inside the service',
+          description: 'Configure API keys inside DeepSeek Harness after it opens. Redeven does not receive, copy, or log those keys.',
+        },
+        communityImage: {
+          title: 'Community Docker image',
+          description: 'This reviewed image is maintained by the community and is not an official DeepSeek distribution. Redeven pulls only its approved digest.',
+        },
+        interactiveDesktopRoot: {
+          title: 'Container root access and outbound network',
+          description: 'Anyone who can open this desktop can gain root access inside its container. The container can also connect to external networks. Only share this service with trusted users.',
+        },
+      },
+      noticeAcceptance: 'I understand and accept this risk for this deployment.',
       deepSeekHarnessName: 'DeepSeek Harness',
       deepSeekHarnessHostDescription: 'Run DeepSeek Harness directly in the current Environment.',
       deepSeekHarnessContainerDescription: 'Run the reviewed community DeepSeek Harness image in Docker.',
@@ -2877,6 +2910,15 @@ export const enUS = defineDictionary({
       stop: 'Stop',
       restart: 'Restart',
       retryInstall: 'Retry install',
+      updateAvailable: 'Update available',
+      update: 'Update',
+      updateTitle: 'Update managed service',
+      updateVersionChange: 'Update from {current} to {target}',
+      updateKeepsData: 'Your service data is retained',
+      updateKeepsDataDescription: 'Redeven reuses the existing workspace and managed configuration volume. If the new service fails its health check, Redeven restores the previous image.',
+      updateComplete: 'Managed service updated',
+      updateCompleteMessage: 'The service now uses the reviewed template revision.',
+      updateFailed: 'Managed service update failed',
       logs: 'View logs',
       operationStreamFailed: 'The operation progress stream is unavailable.',
       operationTimedOut: 'The managed service operation did not finish in time. Check its status and try again.',
@@ -2909,6 +2951,7 @@ export const enUS = defineDictionary({
         healthCheck: 'Checking service health',
         stopping: 'Stopping',
         uninstalling: 'Uninstalling',
+        updatePreparing: 'Preparing update',
         completed: 'Completed',
         cancelled: 'Cancelled',
         interrupted: 'Interrupted',

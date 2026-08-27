@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +45,7 @@ type Manager struct {
 	host          deploymentDriver
 	container     deploymentDriver
 	compose       deploymentDriver
+	healthCheck   func(context.Context, *pfregistry.ManagedService) error
 
 	requestMu    sync.Mutex
 	mu           sync.Mutex
@@ -148,35 +148,9 @@ func (m *Manager) Close() error {
 }
 
 func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
-	nativeAvailable := (runtime.GOOS == "linux" || runtime.GOOS == "darwin") && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
-	nativeReasonCode, nativeReason := "", ""
-	if !nativeAvailable {
-		nativeReasonCode, nativeReason = "PLATFORM_UNSUPPORTED", "Direct installation supports Linux and macOS on x64 or arm64."
-	}
-	dockerAvailable, dockerReasonCode, dockerReason := m.dockerAvailability(ctx)
-	dockerArtifact, dockerArtifactAvailable := auditedDockerArtifact("linux-" + runtime.GOARCH)
-	if dockerAvailable && (!dockerArtifactAvailable || dockerArtifact.Image != auditedDockerImage || !dockerDigestPattern.MatchString(strings.TrimSpace(dockerArtifact.Digest))) {
-		dockerAvailable, dockerReasonCode, dockerReason = false, "DOCKER_PLATFORM_UNSUPPORTED", "The reviewed DeepSeek Harness image does not include this CPU architecture."
-	}
-	if nativeAvailable {
-		artifact, ok := auditedNativeArtifact(currentPlatformKey())
-		if !ok || validateNativeArtifact(artifact, m.downloads.packageHTTPClient(), defaultNodePackageOrigin) != nil {
-			nativeAvailable, nativeReasonCode, nativeReason = false, "NATIVE_RUNTIME_UNAVAILABLE", "This Redeven release does not include a usable host runtime for the Environment platform."
-		}
-	}
-	workspaceRoots := m.workspaceRoots()
-	defaultWorkspacePath, err := m.prepareDefaultWorkspace(DeepSeekHarnessTemplateID)
+	items, err := m.builtInCatalog(ctx)
 	if err != nil {
 		return nil, err
-	}
-	hostSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: `exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"`, RuntimeBundle: deepSeekRuntimeBundleID}}
-	containerSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: auditedDockerImage, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {Type: "workspace", Target: "/workspace"}, {Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512}}
-	if dockerArtifactAvailable {
-		containerSpec.Container.Image = dockerArtifact.Image + "@" + dockerArtifact.Digest
-	}
-	items := []Template{
-		{TemplateID: DeepSeekHarnessHostTemplateID, Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", Source: "builtin", Deployment: DeploymentNative, Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(hostSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentNative, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: workspaceRoots, Spec: &hostSpec},
-		{TemplateID: DeepSeekHarnessContainerTemplateID, Name: "DeepSeek Harness · Container", Description: "Run the reviewed community DeepSeek Harness image in Docker.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Source: "builtin", Deployment: DeploymentDocker, ContainerMode: "single", Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(containerSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentDocker, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: workspaceRoots, Spec: &containerSpec},
 	}
 	if m.registry != nil {
 		custom, err := m.registry.ListManagedTemplates(ctx)
@@ -239,10 +213,7 @@ func (m *Manager) defaultWorkspacePath(serviceFamilyID string) (string, error) {
 	if selectedRoot == "" {
 		return "", serviceError("WORKSPACE_UNAVAILABLE", "The Environment does not expose a writable root for managed-service workspaces.", 409, false, nil)
 	}
-	directoryName := serviceFamilyID
-	if serviceFamilyID == DeepSeekHarnessTemplateID {
-		directoryName = "DeepSeek Harness"
-	}
+	directoryName := builtInFamilyDirectoryName(serviceFamilyID)
 	return filepath.Join(selectedRoot, "Redeven Workspaces", "Managed Services", directoryName), nil
 }
 
@@ -302,17 +273,22 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			return nil, err
 		}
 		name, description := m.serviceDisplayMetadata(ctx, service)
-		out = append(out, ServiceView{ManagedService: service, Name: name, Description: description, ActiveOperation: active})
+		view := ServiceView{ManagedService: service, Name: name, Description: description, ActiveOperation: active}
+		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
+			view.BrandIcon, view.LocalizationKey = definition.BrandIcon, definition.LocalizationKey
+			if service.TemplateSource == "builtin" && Deployment(service.Deployment) == DeploymentContainer && definition.Revision > service.TemplateRevision {
+				view.UpdateAvailable, view.TargetRevision, view.TargetVersion = true, definition.Revision, definition.Version
+				view.UpdateNotices = append([]TemplateNotice(nil), definition.Notices...)
+			}
+		}
+		out = append(out, view)
 	}
 	return out, nil
 }
 
 func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry.ManagedService) (string, string) {
-	switch service.TemplateID {
-	case DeepSeekHarnessTemplateID, DeepSeekHarnessHostTemplateID:
-		return "DeepSeek Harness · Host", "Run DeepSeek Harness directly in the current Environment."
-	case DeepSeekHarnessContainerTemplateID:
-		return "DeepSeek Harness · Container", "Run the reviewed community DeepSeek Harness image in Docker."
+	if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
+		return definition.Name, definition.Description
 	}
 	if record, err := m.registry.GetManagedTemplate(ctx, service.TemplateID); err == nil && record != nil {
 		return record.Name, record.Description
@@ -327,7 +303,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	m.requestMu.Lock()
 	defer m.requestMu.Unlock()
 	parameterJSON, _ := json.Marshal(req.Parameters)
-	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), string(parameterJSON))
+	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
+	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), string(parameterJSON), string(noticeJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -358,6 +335,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if !template.Available {
 		return nil, serviceError(template.ReasonCode, template.Reason, 409, true, nil)
 	}
+	if err := validateAcceptedNotices(*template, req.AcceptedNoticeRevisions); err != nil {
+		return nil, err
+	}
 	existingServices, err := m.registry.ListManagedServices(ctx)
 	if err != nil {
 		return nil, err
@@ -382,7 +362,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 			return nil, serviceError(code, reason, 409, true, nil)
 		}
 	}
-	configuration, secretValues, err := resolveTemplateInputs(*template.Spec, req.Parameters)
+	configuration, secretValues, err := resolveTemplateInputs(*template.Spec, req.Parameters, req.AcceptedNoticeRevisions)
 	if err != nil {
 		return nil, err
 	}
@@ -424,7 +404,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		_ = os.Remove(m.serviceSecretPath(serviceID))
 		return nil, err
 	}
-	m.launch(service, op, false)
+	m.launch(service, op, operationInputs{})
 	return &CreateResult{Service: service, Operation: op}, nil
 }
 
@@ -434,7 +414,8 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	}
 	m.requestMu.Lock()
 	defer m.requestMu.Unlock()
-	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData))
+	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
+	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), string(noticeJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -451,12 +432,24 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
 	switch req.Action {
-	case ActionStart, ActionStop, ActionRestart, ActionRetryInstall, ActionUninstall:
+	case ActionStart, ActionStop, ActionRestart, ActionRetryInstall, ActionUpdate, ActionUninstall:
 	default:
 		return nil, serviceError("ACTION_INVALID", "The managed Web Service action is invalid.", 400, false, nil)
 	}
 	if req.DeleteData && req.Action != ActionUninstall {
 		return nil, serviceError("REQUEST_INVALID", "delete_data is valid only for uninstall.", 400, false, nil)
+	}
+	if req.Action == ActionUpdate {
+		target, err := m.serviceUpdateTarget(ctx, *service)
+		if err != nil {
+			return nil, err
+		}
+		if target == nil {
+			return nil, serviceError("UPDATE_NOT_AVAILABLE", "No newer reviewed template revision is available for this service.", 409, false, nil)
+		}
+		if err := validateAcceptedNotices(*target, req.AcceptedNoticeRevisions); err != nil {
+			return nil, err
+		}
 	}
 	m.mu.Lock()
 	active, err := m.registry.HasActiveManagedOperation(ctx, service.ServiceID)
@@ -469,7 +462,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 			if err = m.registry.CreateManagedOperation(ctx, op); err == nil {
 				m.mu.Unlock()
-				m.launch(*service, op, req.DeleteData)
+				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions)})
 				return &op, nil
 			}
 		}
@@ -488,10 +481,18 @@ func initialStage(action OperationAction) string {
 	if action == ActionStop {
 		return "stopping"
 	}
+	if action == ActionUpdate {
+		return "update_preparing"
+	}
 	return "environment_check"
 }
 
-func (m *Manager) launch(service pfregistry.ManagedService, op pfregistry.ManagedOperation, deleteData bool) {
+type operationInputs struct {
+	DeleteData              bool
+	AcceptedNoticeRevisions map[string]int64
+}
+
+func (m *Manager) launch(service pfregistry.ManagedService, op pfregistry.ManagedOperation, inputs operationInputs) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.mu.Lock()
 	if m.closed {
@@ -502,10 +503,10 @@ func (m *Manager) launch(service pfregistry.ManagedService, op pfregistry.Manage
 	m.workers.Add(1)
 	m.cancelByOp[op.OperationID] = cancel
 	m.mu.Unlock()
-	go m.run(ctx, service, op, deleteData)
+	go m.run(ctx, service, op, inputs)
 }
 
-func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op pfregistry.ManagedOperation, deleteData bool) {
+func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op pfregistry.ManagedOperation, inputs operationInputs) {
 	defer m.workers.Done()
 	defer func() { m.mu.Lock(); delete(m.cancelByOp, op.OperationID); m.mu.Unlock() }()
 	op.State = "running"
@@ -527,10 +528,21 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 		if err = m.runStop(ctx, &service, &op, driver); err == nil {
 			err = m.runStart(ctx, &service, &op, driver)
 		}
+	case ActionUpdate:
+		updateDriver, ok := driver.(containerUpdateDriver)
+		if !ok {
+			err = serviceError("UPDATE_UNSUPPORTED", "This managed Web Service deployment cannot be updated in place.", 409, false, nil)
+		} else {
+			err = m.runUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, updateDriver)
+		}
 	case ActionUninstall:
-		err = m.runUninstall(ctx, &service, &op, driver, deleteData)
+		err = m.runUninstall(ctx, &service, &op, driver, inputs.DeleteData)
 	}
 	if err != nil {
+		if OperationAction(op.Action) == ActionUpdate {
+			m.finishUpdateFailure(&service, &op, err)
+			return
+		}
 		if errors.Is(err, context.Canceled) {
 			op.State = "cancelled"
 			op.Stage = "cancelled"
@@ -695,12 +707,51 @@ func (m *Manager) cleanupCancelledOperation(service *pfregistry.ManagedService, 
 	}
 }
 
+func (m *Manager) finishUpdateFailure(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, err error) {
+	cause, rollbackErr := err, error(nil)
+	var updateErr *updateExecutionError
+	if errors.As(err, &updateErr) {
+		cause, rollbackErr = updateErr.Cause, updateErr.RollbackErr
+	}
+	if errors.Is(cause, context.Canceled) {
+		op.State, op.Stage, op.ErrorCode, op.ErrorMessage = "cancelled", "cancelled", "OPERATION_CANCELLED", "The update was cancelled and the previous runtime was restored."
+	} else {
+		op.State, op.Stage = "failed", "failed"
+		op.ErrorCode, op.ErrorMessage, _, _ = ErrorDetails(cause)
+	}
+	if rollbackErr != nil {
+		op.State, op.Stage = "failed", "failed"
+		op.ErrorCode, op.ErrorMessage = "UPDATE_ROLLBACK_FAILED", "The update failed and Redeven could not restore the previous verified runtime."
+		desired, observed := "stopped", "error"
+		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
+		m.log.Error("roll back managed Web Service update", "service_id", service.ServiceID, "error", rollbackErr)
+	}
+	op.FinishedAtUnixMs = time.Now().UnixMilli()
+	m.saveAndPublish(op)
+}
+
 func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService, operation pfregistry.ManagedOperation) {
 	driver := m.driver(Deployment(service.Deployment))
 	if driver == nil {
 		code, message := "DEPLOYMENT_INVALID", "The interrupted managed Web Service has an invalid deployment type."
 		desired, observed := "stopped", "error"
 		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+		return
+	}
+	if OperationAction(operation.Action) == ActionUpdate {
+		updateDriver, ok := driver.(containerUpdateDriver)
+		if !ok {
+			code, message := "UPDATE_UNSUPPORTED", "The interrupted update deployment cannot be recovered."
+			desired, observed := "stopped", "error"
+			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+			return
+		}
+		if err := m.recoverInterruptedContainerUpdate(service, &operation, updateDriver); err != nil {
+			code, message := "UPDATE_RECOVERY_FAILED", "The interrupted update could not restore or finalize a verified runtime."
+			desired, observed := "stopped", "error"
+			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+			m.log.Error("recover interrupted managed Web Service update", "service_id", service.ServiceID, "error", err)
+		}
 		return
 	}
 	var err error
@@ -894,6 +945,9 @@ func reserveLoopbackPort() (int, error) {
 	return listener.Addr().(*net.TCPAddr).Port, nil
 }
 func (m *Manager) waitHealthy(ctx context.Context, service *pfregistry.ManagedService) error {
+	if m.healthCheck != nil {
+		return m.healthCheck(ctx, service)
+	}
 	endpoint := WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 45}
 	if spec, err := templateSpecFromService(service); err == nil {
 		endpoint = spec.Endpoint

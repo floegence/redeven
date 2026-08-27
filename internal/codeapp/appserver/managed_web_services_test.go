@@ -52,6 +52,29 @@ func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T)
 	}
 }
 
+func TestManagedWebServiceRoutesCarryNoticeRevisionsForInstallAndUpdate(t *testing.T) {
+	t.Parallel()
+	backend := &managedBackendStub{}
+	channelID := "ch_managed_notices"
+	server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
+
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"linuxserver-webtop-ubuntu-kde","deployment":"container","workspace_path":"/workspace","accepted_notice_revisions":{"interactive-desktop-root-and-network":1}}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response := httptest.NewRecorder()
+	server.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusAccepted || backend.lastCreate.AcceptedNoticeRevisions["interactive-desktop-root-and-network"] != 1 {
+		t.Fatalf("install notice request=%+v status=%d body=%s", backend.lastCreate, response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/operations", strings.NewReader(`{"request_id":"request-update","action":"update","accepted_notice_revisions":{"interactive-desktop-root-and-network":2}}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	server.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusAccepted || backend.lastOperate.Action != managedwebservice.ActionUpdate || backend.lastOperate.AcceptedNoticeRevisions["interactive-desktop-root-and-network"] != 2 {
+		t.Fatalf("update notice request=%+v status=%d body=%s", backend.lastOperate, response.Code, response.Body.String())
+	}
+}
+
 func TestManagedOperationEventsBeginWithSnapshotAndFinishAtTerminalState(t *testing.T) {
 	t.Parallel()
 	backend := &managedBackendStub{subscribeOperation: pfregistry.ManagedOperation{OperationID: "mop_one", ServiceID: "mws_one", State: "succeeded", Stage: "completed", ProgressCurrent: 7, ProgressTotal: 7}}
@@ -118,6 +141,7 @@ type managedBackendStub struct {
 	createCalls        int
 	operateCalls       int
 	lastCreate         managedwebservice.CreateRequest
+	lastOperate        managedwebservice.OperationRequest
 	duplicateCalls     int
 	lastDuplicate      managedwebservice.TemplateDuplicateRequest
 	subscribeOperation pfregistry.ManagedOperation
@@ -160,6 +184,7 @@ func (b *managedBackendStub) Create(_ context.Context, request managedwebservice
 }
 func (b *managedBackendStub) Operate(_ context.Context, serviceID string, request managedwebservice.OperationRequest) (*pfregistry.ManagedOperation, error) {
 	b.operateCalls++
+	b.lastOperate = request
 	return &pfregistry.ManagedOperation{OperationID: "mop_operation", ServiceID: serviceID, Action: string(request.Action), State: "pending"}, nil
 }
 func (b *managedBackendStub) Cancel(context.Context, string) (*pfregistry.ManagedOperation, error) {

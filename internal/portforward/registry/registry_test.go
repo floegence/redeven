@@ -509,6 +509,42 @@ func TestRegistry_CreateManagedServiceWithOperationRollsBackTogether(t *testing.
 	}
 }
 
+func TestUpdateManagedServiceCommitsTemplateAndRuntimeIdentityTogether(t *testing.T) {
+	t.Parallel()
+	r, err := Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	service := ManagedService{
+		ServiceID: "mws_update", TemplateID: "template", TemplateSource: "builtin", TemplateRevision: 1,
+		TemplateSnapshotJSON: `{"revision":1}`, TemplateSnapshotSHA256: "old-hash", ServiceFamilyID: "family",
+		Deployment: "container", WorkspacePath: t.TempDir(), ConfigurationJSON: `{}`, Version: "1",
+		DesiredState: "running", ObservedState: "running", ForwardID: "pf_update", RuntimeIdentity: "old-container",
+		RuntimeManifestJSON: `{}`, RuntimePort: 43123, ArtifactReference: "image@sha256:old",
+	}
+	if err := r.CreateManagedService(context.Background(), service, Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:43123"}); err != nil {
+		t.Fatal(err)
+	}
+	revision := int64(2)
+	snapshot, hash, configuration, version := `{"revision":2}`, "new-hash", `{"accepted_notice_revisions":{"risk":2}}`, "2"
+	runtimeID, artifact, manifest := "new-container", "image@sha256:new", `{}`
+	if err := r.UpdateManagedService(context.Background(), service.ServiceID, ManagedServicePatch{
+		TemplateRevision: &revision, TemplateSnapshotJSON: &snapshot, TemplateSnapshotSHA256: &hash,
+		ConfigurationJSON: &configuration, Version: &version, RuntimeIdentity: &runtimeID,
+		ArtifactReference: &artifact, RuntimeManifestJSON: &manifest,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := r.GetManagedService(context.Background(), service.ServiceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TemplateRevision != revision || got.TemplateSnapshotJSON != snapshot || got.TemplateSnapshotSHA256 != hash || got.ConfigurationJSON != configuration || got.Version != version || got.RuntimeIdentity != runtimeID || got.ArtifactReference != artifact || got.RuntimeManifestJSON != manifest {
+		t.Fatalf("updated managed service = %+v", got)
+	}
+}
+
 func registryV1TestSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           registrySchemaKind,

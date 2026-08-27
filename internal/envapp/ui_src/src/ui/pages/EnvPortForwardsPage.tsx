@@ -40,7 +40,7 @@ import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
-import { useI18n, type I18nHelpers } from '../i18n';
+import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
@@ -103,10 +103,25 @@ type ManagedService = Readonly<{
   runtime_port: number;
   last_error_code?: string;
   last_error_message?: string;
+  brand_icon?: ManagedBrandIcon;
+  localization_key?: string;
+  update_available: boolean;
+  target_revision?: number;
+  target_version?: string;
+  update_notices?: ReadonlyArray<ManagedTemplateNotice>;
   active_operation?: ManagedOperation;
 }>;
 
 type ManagedDeployment = 'native' | 'docker' | 'host' | 'container' | 'compose';
+type ManagedBrandIcon = 'deepseek-harness' | 'interactive-desktop';
+type ManagedTemplateNotice = Readonly<{
+  id: string;
+  revision: number;
+  severity: 'info' | 'warning';
+  title_key: string;
+  description_key: string;
+  acknowledgement_required: boolean;
+}>;
 
 type ManagedTemplateSpec = Readonly<{
   schema_version: 1;
@@ -114,7 +129,7 @@ type ManagedTemplateSpec = Readonly<{
   endpoint: Readonly<{ scheme: 'http' | 'https'; container_port?: number; fixed_host_port?: number; path?: string; health_path?: string; startup_timeout_sec?: number }>;
   parameters?: ReadonlyArray<Readonly<{ name: string; label: string; description?: string; type: 'text' | 'number' | 'boolean' | 'secret' | 'path'; required?: boolean; default?: string }>>;
   host?: Readonly<{ install_script?: string; start_script: string; stop_script?: string; uninstall_script?: string; artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>; runtime_bundle?: string }>;
-  container?: Readonly<{ image: string; entrypoint?: ReadonlyArray<string>; command?: ReadonlyArray<string>; environment?: Readonly<Record<string, string>>; mounts?: ReadonlyArray<Readonly<{ type: 'workspace' | 'bind' | 'volume' | 'tmpfs'; source?: string; target: string; read_only?: boolean }>>; user?: string; read_only_root: boolean; memory_bytes?: number; cpus?: number; pids_limit?: number }>;
+  container?: Readonly<{ image: string; entrypoint?: ReadonlyArray<string>; command?: ReadonlyArray<string>; environment?: Readonly<Record<string, string>>; mounts?: ReadonlyArray<Readonly<{ type: 'workspace' | 'bind' | 'volume' | 'tmpfs'; source?: string; target: string; read_only?: boolean }>>; user?: string; read_only_root: boolean; memory_bytes?: number; cpus?: number; pids_limit?: number; runtime_profile?: 'restricted' | 'interactive_desktop' }>;
   compose?: Readonly<{ yaml: string; main_service: string }>;
 }>;
 
@@ -128,6 +143,9 @@ type ManagedCatalogTemplate = Readonly<{
   data_location: string;
   source_url: string;
   docker_source_url: string;
+  brand_icon?: ManagedBrandIcon;
+  localization_key?: string;
+  notices?: ReadonlyArray<ManagedTemplateNotice>;
   source: 'builtin' | 'custom';
   deployment: ManagedDeployment;
   container_mode?: 'single' | 'compose';
@@ -571,6 +589,7 @@ function managedStageLabel(stage: string, i18n: WebServicesI18n): string {
     case 'health_check': return i18n.t('webServices.managed.stages.healthCheck');
     case 'stopping': return i18n.t('webServices.managed.stages.stopping');
     case 'uninstalling': return i18n.t('webServices.managed.stages.uninstalling');
+    case 'update_preparing': return i18n.t('webServices.managed.stages.updatePreparing');
     case 'cancelled': return i18n.t('webServices.managed.stages.cancelled');
     case 'interrupted': return i18n.t('webServices.managed.stages.interrupted');
     case 'failed': return i18n.t('webServices.managed.stages.failed');
@@ -594,36 +613,96 @@ function managedTemplateKind(template: ManagedCatalogTemplate): ServiceTemplateK
 }
 
 function managedTemplateLocalizedIdentity(template: ManagedCatalogTemplate, i18n: WebServicesI18n): Readonly<{ name: string; description: string }> {
-  if (template.source !== 'builtin') return { name: template.name, description: template.description };
-  switch (template.template_id) {
-    case 'deepseek-harness-host':
-      return {
-        name: i18n.t('webServices.managed.deepSeekHarnessName'),
-        description: i18n.t('webServices.managed.deepSeekHarnessHostDescription'),
-      };
-    case 'deepseek-harness-container':
-      return {
-        name: i18n.t('webServices.managed.deepSeekHarnessName'),
-        description: i18n.t('webServices.managed.deepSeekHarnessContainerDescription'),
-      };
-    default:
-      return { name: template.name, description: template.description };
-  }
+  if (!template.localization_key) return { name: template.name, description: template.description };
+  return {
+    name: localizedManagedCopy(i18n, `webServices.managed.templates.${template.localization_key}.name`, template.name),
+    description: localizedManagedCopy(i18n, `webServices.managed.templates.${template.localization_key}.description`, template.description),
+  };
 }
 
-function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onLogs: () => void; onUninstall: () => void }) {
+function managedServiceLocalizedIdentity(service: ManagedService, i18n: WebServicesI18n): Readonly<{ name: string; description: string }> {
+  if (!service.localization_key) return { name: service.name || service.template_id, description: service.description ?? '' };
+  return {
+    name: localizedManagedCopy(i18n, `webServices.managed.templates.${service.localization_key}.name`, service.name || service.template_id),
+    description: localizedManagedCopy(i18n, `webServices.managed.templates.${service.localization_key}.description`, service.description ?? ''),
+  };
+}
+
+function localizedManagedCopy(i18n: WebServicesI18n, key: string, fallback: string): string {
+  const translated = i18n.t(key as EnvAppTranslationKey);
+  return translated === key ? fallback : translated;
+}
+
+function managedNoticeCopy(notice: ManagedTemplateNotice, i18n: WebServicesI18n): Readonly<{ title: string; description: string }> {
+  return {
+    title: localizedManagedCopy(i18n, notice.title_key, notice.title_key),
+    description: localizedManagedCopy(i18n, notice.description_key, notice.description_key),
+  };
+}
+
+function acceptedNoticeRevisions(notices: readonly ManagedTemplateNotice[] | undefined, accepted: Readonly<Record<string, boolean>>): Record<string, number> {
+  return Object.fromEntries((notices ?? []).filter((notice) => accepted[notice.id]).map((notice) => [notice.id, notice.revision]));
+}
+
+function requiredNoticesAccepted(notices: readonly ManagedTemplateNotice[] | undefined, accepted: Readonly<Record<string, boolean>>): boolean {
+  return (notices ?? []).every((notice) => !notice.acknowledgement_required || accepted[notice.id]);
+}
+
+function ManagedTemplateNotices(props: {
+  notices: readonly ManagedTemplateNotice[];
+  accepted: Readonly<Record<string, boolean>>;
+  disabled: boolean;
+  onAcceptedChange: (noticeID: string, accepted: boolean) => void;
+}) {
   const i18n = useI18n();
+  return (
+    <div class="space-y-2" data-testid="managed-template-notices">
+      <For each={props.notices}>{(notice) => {
+        const copy = () => managedNoticeCopy(notice, i18n);
+        return (
+          <div class={cn('rounded-lg border p-3 text-xs', notice.severity === 'warning' ? 'border-warning/30 bg-warning/[0.07]' : 'border-border bg-muted/25')} data-notice-id={notice.id}>
+            <div class="flex items-start gap-2.5">
+              <span class={cn('mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md', notice.severity === 'warning' ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary')} aria-hidden="true">
+                <Show when={notice.severity === 'warning'} fallback={<ShieldCheck class="h-3.5 w-3.5" />}><AlertTriangle class="h-3.5 w-3.5" /></Show>
+              </span>
+              <div class="min-w-0 flex-1">
+                <div class="font-medium text-foreground">{copy().title}</div>
+                <p class="mt-1 leading-5 text-muted-foreground">{copy().description}</p>
+                <Show when={notice.acknowledgement_required}>
+                  <div class="mt-3 border-t border-warning/20 pt-3">
+                    <Checkbox
+                      checked={Boolean(props.accepted[notice.id])}
+                      onChange={(checked) => props.onAcceptedChange(notice.id, Boolean(checked))}
+                      label={i18n.t('webServices.managed.noticeAcceptance')}
+                      size="sm"
+                      disabled={props.disabled}
+                    />
+                  </div>
+                </Show>
+              </div>
+            </div>
+          </div>
+        );
+      }}</For>
+    </div>
+  );
+}
+
+function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+  const i18n = useI18n();
+  const identity = () => managedServiceLocalizedIdentity(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
   const failed = () => props.service.observed_state === 'error';
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
   return (
     <Card class={cn('border transition-colors', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card">
-      <CardHeader class="pb-2"><div class="flex items-start justify-between gap-2"><div class="min-w-0"><CardTitle class="text-sm truncate">{props.service.name || props.service.template_id}</CardTitle><CardDescription class="text-xs mt-0.5">{props.service.version ? `v${props.service.version} · ` : ''}{managedDeploymentLabel(props.service.deployment, i18n)}</CardDescription></div><Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag></div></CardHeader>
+      <CardHeader class="pb-2"><div class="flex items-start justify-between gap-2"><div class="min-w-0"><CardTitle class="text-sm truncate">{identity().name}</CardTitle><CardDescription class="text-xs mt-0.5">{props.service.version ? `v${props.service.version} · ` : ''}{managedDeploymentLabel(props.service.deployment, i18n)}</CardDescription></div><div class="flex shrink-0 flex-col items-end gap-1"><Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag><Show when={props.service.update_available}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.updateAvailable')}</Tag></Show></div></div></CardHeader>
       <CardContent class="pt-0 pb-2"><div class="space-y-1 text-[11px]"><div class="flex justify-between gap-3"><span class="text-muted-foreground">{i18n.t('webServices.managed.workspace')}</span><span class="font-mono truncate" title={props.service.workspace_path}>{props.service.workspace_path}</span></div><Show when={props.service.last_error_code}><p class="text-destructive">{i18n.t('webServices.managed.stages.failed')}</p></Show></div></CardContent>
       <CardFooter class={cn('pt-2 flex flex-wrap items-center gap-2 border-t', redevenDividerRoleClass())}>
         <Button size="sm" variant="default" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="w-3.5 h-3.5 mr-1" />{i18n.t('webServices.actions.open')}</Button>
         <Button size="sm" variant="outline" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="w-3.5 h-3.5 mr-1" /> : <Play class="w-3.5 h-3.5 mr-1" />}><Stop class="w-3.5 h-3.5 mr-1" /></Show>{primaryLabel()}</Button>
+        <Show when={props.service.update_available}><Button size="sm" variant="outline" onClick={props.onUpdate} disabled={props.busy || !props.canManage}><Refresh class="mr-1 h-3.5 w-3.5" />{i18n.t('webServices.managed.update')}</Button></Show>
         <Button size="sm" variant="ghost" onClick={() => props.onAction('restart')} disabled={props.busy || !props.canManage || !running()} title={i18n.t('webServices.managed.restart')}><Refresh class="w-3.5 h-3.5" /></Button>
         <Button size="sm" variant="ghost" onClick={props.onLogs} disabled={props.busy} title={i18n.t('webServices.managed.logs')}><FileText class="w-3.5 h-3.5" /></Button>
         <Button size="sm" variant="ghost" onClick={props.onUninstall} disabled={props.busy || !props.canManage} title={i18n.t('webServices.managed.uninstall')}><Trash class="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" /></Button>
@@ -891,12 +970,15 @@ export function EnvPortForwardsPage() {
   const [templateCategory, setTemplateCategory] = createSignal<ServiceTemplateCategory>('host');
   const [templateSearch, setTemplateSearch] = createSignal('');
   const [selectedTemplateID, setSelectedTemplateID] = createSignal<string | null>(null);
+  const [installNoticeAcceptances, setInstallNoticeAcceptances] = createSignal<Record<string, boolean>>({});
   const [templateDraft, setTemplateDraft] = createSignal<TemplateEditorDraft | null>(null);
   const [templateSaving, setTemplateSaving] = createSignal(false);
   const [templateDuplicate, setTemplateDuplicate] = createSignal<ManagedCatalogTemplate | null>(null);
   const [templateDuplicateName, setTemplateDuplicateName] = createSignal('');
   const [templateDelete, setTemplateDelete] = createSignal<ManagedCatalogTemplate | null>(null);
   const [managedLogs, setManagedLogs] = createSignal<string[] | null>(null);
+  const [managedUpdate, setManagedUpdate] = createSignal<ManagedService | null>(null);
+  const [updateNoticeAcceptances, setUpdateNoticeAcceptances] = createSignal<Record<string, boolean>>({});
   let managedStreamAbort: AbortController | null = null;
   let resumedOperationID: string | null = null;
 
@@ -999,18 +1081,19 @@ export function EnvPortForwardsPage() {
 
   const installManaged = async () => {
     const template = selectedTemplate();
-    if (!template || !template.available || managedState().some((service) => service.service_family_id === template.service_family_id) || !canManageManagedService()) return;
+    if (!template || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.service_family_id === template.service_family_id) || !canManageManagedService()) return;
     setManagedBusy(true);
     setManagedOperation(null);
     const useDesktopWindow = desktopShellWebServiceWindowOpenAvailable();
     const reservedWindow = useDesktopWindow ? null : window.open('about:blank', `redeven_managed_${template.template_id}`);
     try {
-      const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim() }) });
+      const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()) }) });
       setManagedOperation(result.operation);
       const operation = await waitManagedOperation(result.operation.operation_id);
       if (operation.state !== 'succeeded') throw new Error(operation.error_message || i18n.t('webServices.notifications.failedToAddTitle'));
       setTemplateDrawerView('catalog');
       setSelectedTemplateID(null);
+      setInstallNoticeAcceptances({});
       setTemplateDrawerOpen(false);
       await loadManaged(true);
       bumpRefresh();
@@ -1037,18 +1120,29 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  const managedAction = async (serviceID: string, action: 'start' | 'stop' | 'restart' | 'retry_install') => {
+  const managedAction = async (serviceID: string, action: 'start' | 'stop' | 'restart' | 'retry_install' | 'update', noticeRevisions: Readonly<Record<string, number>> = {}) => {
     if (!canManageManagedService()) return;
     setManagedBusy(true);
     setManagedOperation(null);
     try {
-      const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action }) });
+      const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions }) });
       setManagedOperation(result);
       const operation = await waitManagedOperation(result.operation_id);
       if (operation.state !== 'succeeded') throw new Error(operation.error_message || i18n.t('webServices.notifications.failedToOpenTitle'));
       await loadManaged(false);
-    } catch (error) { notify.error(i18n.t('webServices.notifications.failedToOpenTitle'), error instanceof Error ? error.message : String(error)); }
+      if (action === 'update') {
+        setManagedUpdate(null);
+        setUpdateNoticeAcceptances({});
+        notify.success(i18n.t('webServices.managed.updateComplete'), i18n.t('webServices.managed.updateCompleteMessage'));
+      }
+    } catch (error) { notify.error(action === 'update' ? i18n.t('webServices.managed.updateFailed') : i18n.t('webServices.notifications.failedToOpenTitle'), error instanceof Error ? error.message : String(error)); }
     finally { setManagedBusy(false); setManagedOperation(null); }
+  };
+
+  const updateManagedService = () => {
+    const service = managedUpdate();
+    if (!service || !service.update_available || !requiredNoticesAccepted(service.update_notices, updateNoticeAcceptances())) return;
+    void managedAction(service.service_id, 'update', acceptedNoticeRevisions(service.update_notices, updateNoticeAcceptances()));
   };
 
   const openManaged = async (service: ManagedService) => {
@@ -1113,17 +1207,13 @@ export function EnvPortForwardsPage() {
   const templateInstalled = (template: ManagedCatalogTemplate) => managedState().some((service) => service.service_family_id === template.service_family_id);
   const templatePresentation = (template: ManagedCatalogTemplate): ServiceTemplatePresentation => {
     const identity = managedTemplateLocalizedIdentity(template, i18n);
-    const deepSeekHarnessTemplate = template.template_id === 'deepseek-harness-host'
-      || template.template_id === 'deepseek-harness-container'
-      || template.derived_from_template_id === 'deepseek-harness-host'
-      || template.derived_from_template_id === 'deepseek-harness-container';
     return {
       id: template.template_id,
       name: identity.name,
       description: identity.description,
       source: template.source,
       kind: managedTemplateKind(template),
-      brandIcon: deepSeekHarnessTemplate ? 'deepseek-harness' : undefined,
+      brandIcon: template.brand_icon,
       deploymentLabel: managedDeploymentLabel(template.deployment, i18n),
       version: template.version,
       developerPreview: template.developer_preview,
@@ -1165,6 +1255,7 @@ export function EnvPortForwardsPage() {
     setTemplateDrawerView('catalog');
     setSelectedTemplateID(null);
     setTemplateDraft(null);
+    setInstallNoticeAcceptances({});
     setTemplateDrawerOpen(true);
   };
 
@@ -1172,6 +1263,7 @@ export function EnvPortForwardsPage() {
     if (!template.available || templateInstalled(template)) return;
     setSelectedTemplateID(template.template_id);
     setWorkspacePath(template.default_workspace_path);
+    setInstallNoticeAcceptances({});
     setTemplateDrawerView('install');
   };
 
@@ -1713,7 +1805,7 @@ export function EnvPortForwardsPage() {
                 }>
                   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="unified-web-services-grid">
                     <For each={filteredManagedServices()}>{(service) => (
-                      <ManagedServiceCard service={service} busy={managedBusy()} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
+                      <ManagedServiceCard service={service} busy={managedBusy()} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
                     )}</For>
                     <For each={filteredForwards()}>{(f) => (
                       <PortForwardCard forward={f} busy={busyID() === f.forward_id} busyText={busyID() === f.forward_id ? busyText() : undefined} onOpen={() => void doOpen(f)} onDelete={() => setDeleteID(f.forward_id)} />
@@ -1740,16 +1832,16 @@ export function EnvPortForwardsPage() {
       <EnvAppDrawer
         open={templateDrawerOpen()}
         class="service-template-explorer-drawer"
-        onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) setTemplateDrawerOpen(open); }}
+        onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) { setTemplateDrawerOpen(open); if (!open) setInstallNoticeAcceptances({}); } }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
         footer={templateDrawerView() === 'catalog' ? undefined : (
           <div class="flex w-full items-center justify-between gap-2">
-            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); }} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setInstallNoticeAcceptances({}); }} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             <div class="ml-auto flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => setTemplateDrawerOpen(false)} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
-                <Show when={managedBusy()} fallback={<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={!canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available}>{i18n.t('webServices.managed.installStart')}</Button>}>
+                <Show when={managedBusy()} fallback={<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={!canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{i18n.t('webServices.managed.installStart')}</Button>}>
                   <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation()} disabled={!managedOperation() || managedOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
                 </Show>
               </Show>
@@ -1854,9 +1946,15 @@ export function EnvPortForwardsPage() {
                   <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.dataLocation')}</dt><dd class="mt-1 text-foreground">{i18n.t('webServices.managed.managedPrivateData')}</dd></div>
                 </dl>
               </section>
-              <Show when={template.docker_source_url}><div class="rounded-md border border-warning/25 bg-warning/[0.06] p-3 text-xs"><div class="font-medium">{i18n.t('webServices.managed.communityImage')}</div><p class="mt-1 text-muted-foreground">{i18n.t('webServices.managed.communityImageNote')}</p></div></Show>
+              <Show when={(template.notices?.length ?? 0) > 0}>
+                <ManagedTemplateNotices
+                  notices={template.notices ?? []}
+                  accepted={installNoticeAcceptances()}
+                  disabled={managedBusy()}
+                  onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
+                />
+              </Show>
               <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
-              <Show when={template.source === 'builtin'}><p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.apiKeyNote')}</p></Show>
               <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
             </div>
           )}</Show>
@@ -1961,6 +2059,47 @@ export function EnvPortForwardsPage() {
       <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-sm">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
 
       <Dialog open={managedLogs() !== null} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
+
+      <Dialog
+        open={managedUpdate() !== null}
+        onOpenChange={(open) => { if (!open && !managedBusy()) { setManagedUpdate(null); setUpdateNoticeAcceptances({}); } }}
+        title={i18n.t('webServices.managed.updateTitle')}
+        footer={(
+          <div class="flex w-full justify-end gap-2">
+            <Show when={managedBusy()} fallback={<>
+              <Button size="sm" variant="outline" onClick={() => { setManagedUpdate(null); setUpdateNoticeAcceptances({}); }}>{i18n.t('webServices.actions.cancel')}</Button>
+              <Button size="sm" variant="default" onClick={updateManagedService} disabled={!requiredNoticesAccepted(managedUpdate()?.update_notices, updateNoticeAcceptances())}>{i18n.t('webServices.managed.update')}</Button>
+            </>}>
+              <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation()} disabled={!managedOperation() || managedOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+            </Show>
+          </div>
+        )}
+      >
+        <Show when={managedUpdate()} keyed>{(service) => {
+          const identity = () => managedServiceLocalizedIdentity(service, i18n);
+          return (
+            <div class="space-y-4" data-testid="managed-service-update-dialog">
+              <div>
+                <h3 class="text-sm font-semibold text-foreground">{identity().name}</h3>
+                <p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.updateVersionChange', { current: service.version, target: service.target_version ?? service.version })}</p>
+              </div>
+              <div class="rounded-lg border bg-muted/25 p-3 text-xs">
+                <div class="font-medium text-foreground">{i18n.t('webServices.managed.updateKeepsData')}</div>
+                <p class="mt-1 leading-5 text-muted-foreground">{i18n.t('webServices.managed.updateKeepsDataDescription')}</p>
+              </div>
+              <Show when={(service.update_notices?.length ?? 0) > 0}>
+                <ManagedTemplateNotices
+                  notices={service.update_notices ?? []}
+                  accepted={updateNoticeAcceptances()}
+                  disabled={managedBusy()}
+                  onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
+                />
+              </Show>
+              <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
+            </div>
+          );
+        }}</Show>
+      </Dialog>
 
       <Dialog
         open={managedUninstall() !== null && !managedDeleteConfirm()}

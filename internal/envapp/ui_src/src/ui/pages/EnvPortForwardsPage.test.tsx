@@ -72,6 +72,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   CheckCircle: (props: any) => <span class={props.class} data-testid="check-circle-icon" />,
   ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
   Cpu: (props: any) => <span class={props.class} data-testid="cpu-icon" />,
+  LayoutDashboard: (props: any) => <span class={props.class} data-testid="interactive-desktop-icon" />,
   Layers: (props: any) => <span class={props.class} data-testid="layers-icon" />,
   MoreHorizontal: (props: any) => <span class={props.class} data-testid="more-horizontal-icon" />,
   Package: (props: any) => <span class={props.class} data-testid="package-icon" />,
@@ -600,7 +601,7 @@ describe('EnvPortForwardsPage', () => {
 
   it('disables Docker deployment when the runtime reports it unavailable', async () => {
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
-      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }, { template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Container', description: 'Container deployment', source: 'builtin', deployment: 'docker', revision: 1, duplicateable: true, editable: false, available: false, reason_code: 'DOCKER_UNAVAILABLE', version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'docker', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }, { template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Container', description: 'Container deployment', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessContainer', source: 'builtin', deployment: 'docker', revision: 1, duplicateable: true, editable: false, available: false, reason_code: 'DOCKER_UNAVAILABLE', version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'docker', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
       throw new Error(`Unexpected local API call: ${url}`);
@@ -623,7 +624,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('presents the catalog as grouped service identities without a catalog footer', async () => {
-    const template = { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
+    const template = { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
@@ -693,9 +694,125 @@ describe('EnvPortForwardsPage', () => {
     expect(workspace?.dataset.path).toBe(template.default_workspace_path);
   });
 
+  it('presents both Webtop templates and requires the declared risk acknowledgement before install', async () => {
+    const notice = {
+      id: 'interactive-desktop-root-and-network',
+      revision: 1,
+      severity: 'warning',
+      title_key: 'webServices.managed.notices.interactiveDesktopRoot.title',
+      description_key: 'webServices.managed.notices.interactiveDesktopRoot.description',
+      acknowledgement_required: true,
+    };
+    const templates = [
+      {
+        template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'Unlocalized Ubuntu desktop', description: 'Unlocalized Ubuntu description',
+        brand_icon: 'interactive-desktop', localization_key: 'linuxserverWebtopUbuntuKDE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
+        version: '654ea8e3-ls177', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
+        default_workspace_path: '/Users/demo/Redeven Workspaces/Managed Services/LinuxServer Webtop - Ubuntu KDE', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+      },
+      {
+        template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'linuxserver-webtop-debian-xfce', name: 'Unlocalized Debian desktop', description: 'Unlocalized Debian description',
+        brand_icon: 'interactive-desktop', localization_key: 'linuxserverWebtopDebianXFCE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
+        version: '7c4ebdc9-ls209', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
+        default_workspace_path: '/Users/demo/Redeven Workspaces/Managed Services/LinuxServer Webtop - Debian XFCE', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+      },
+    ];
+    let createBody: Record<string, any> | null = null;
+    let installed = false;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates };
+      if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') return { services: installed ? [{ service_id: 'mws-webtop', service_family_id: templates[0].service_family_id, forward_id: 'managed-webtop' }] : [] };
+      if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'POST') {
+        createBody = JSON.parse(String(init.body));
+        installed = true;
+        return {
+          service: { service_id: 'mws-webtop', template_id: templates[0].template_id, service_family_id: templates[0].service_family_id, deployment: 'container', workspace_path: templates[0].default_workspace_path, version: templates[0].version, desired_state: 'running', observed_state: 'installing', forward_id: 'managed-webtop', runtime_port: 32100 },
+          operation: { operation_id: 'mop-webtop-install', service_id: 'mws-webtop', state: 'pending', stage: 'environment_check', progress_current: 0, progress_total: 7 },
+        };
+      }
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-install', service_id: 'mws-webtop', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+    vi.spyOn(window, 'open').mockReturnValue(null);
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
+    await flushPage();
+
+    expect(host.querySelectorAll('[data-brand-icon="interactive-desktop"], [data-template-brand="interactive-desktop"]')).not.toHaveLength(0);
+    expect(host.querySelector('[data-template-id="linuxserver-webtop-ubuntu-kde"]')?.textContent).toContain('LinuxServer Webtop · Ubuntu KDE');
+    expect(host.querySelector('[data-template-id="linuxserver-webtop-debian-xfce"]')?.textContent).toContain('LinuxServer Webtop · Debian XFCE');
+    host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
+    await flushPage();
+
+    expect(host.textContent).toContain('Container root access and outbound network');
+    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Install, start and open');
+    expect(install?.disabled).toBe(true);
+    host.querySelector<HTMLInputElement>('[data-testid="managed-template-notices"] input[type="checkbox"]')?.click();
+    await flushPage();
+    expect(install?.disabled).toBe(false);
+    install?.click();
+
+    await waitForAssertion(() => expect(createBody).toMatchObject({
+      template_id: 'linuxserver-webtop-ubuntu-kde',
+      workspace_path: templates[0].default_workspace_path,
+      accepted_notice_revisions: { 'interactive-desktop-root-and-network': 1 },
+    }));
+  });
+
+  it('uses the same managed operation chain for Webtop updates and sends the notice revision', async () => {
+    const updateNotice = {
+      id: 'interactive-desktop-root-and-network', revision: 2, severity: 'warning',
+      title_key: 'webServices.managed.notices.interactiveDesktopRoot.title', description_key: 'webServices.managed.notices.interactiveDesktopRoot.description', acknowledgement_required: true,
+    };
+    const service = {
+      service_id: 'mws-webtop', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde',
+      name: 'Unlocalized Webtop', description: 'Unlocalized description', localization_key: 'linuxserverWebtopUbuntuKDE', brand_icon: 'interactive-desktop', deployment: 'container',
+      workspace_path: '/Users/demo/Redeven Workspaces/Managed Services/LinuxServer Webtop - Ubuntu KDE', version: '654ea8e3-ls176', target_version: '654ea8e3-ls177', target_revision: 2,
+      update_available: true, update_notices: [updateNotice], desired_state: 'running', observed_state: 'running', forward_id: 'managed-webtop', runtime_port: 32100,
+    };
+    let operationBody: Record<string, any> | null = null;
+    let updated = false;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ ...service, update_available: !updated, version: updated ? service.target_version : service.version }] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-webtop/operations' && init?.method === 'POST') {
+        operationBody = JSON.parse(String(init.body));
+        updated = true;
+        return { operation_id: 'mop-webtop-update', service_id: 'mws-webtop', state: 'pending', stage: 'update_preparing', progress_current: 0, progress_total: 7 };
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-update', service_id: 'mws-webtop', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.textContent).toContain('Update available'));
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-card"] button')).find((button) => button.textContent?.trim() === 'Update')?.click();
+    await flushPage();
+
+    expect(host.querySelector('[data-testid="managed-service-update-dialog"]')?.textContent).toContain('Update from 654ea8e3-ls176 to 654ea8e3-ls177');
+    const update = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Update' && button.disabled);
+    expect(update).toBeTruthy();
+    host.querySelector<HTMLInputElement>('[data-testid="managed-service-update-dialog"] input[type="checkbox"]')?.click();
+    await flushPage();
+    expect(update?.disabled).toBe(false);
+    update?.click();
+
+    await waitForAssertion(() => expect(operationBody).toMatchObject({
+      action: 'update',
+      accepted_notice_revisions: { 'interactive-desktop-root-and-network': 2 },
+    }));
+    await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service updated', expect.any(String)));
+  });
+
   it('searches the catalog using localized built-in identity copy', async () => {
     const templates = [
-      { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'Unlocalized host name', description: 'Unlocalized host description', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [] },
+      { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'Unlocalized host name', description: 'Unlocalized host description', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [] },
       { template_id: 'custom-host', service_family_id: 'custom-host', name: 'Workspace dashboard', description: 'Internal status view', source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, version: '1', developer_preview: false, deployments: [{ deployment: 'host', available: true }], workspace_roots: [] },
     ];
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -719,7 +836,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('duplicates a built-in service template as an independent custom template', async () => {
-    const source = { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
+    const source = { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
     let duplicateBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [source] };

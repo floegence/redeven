@@ -1,0 +1,386 @@
+package managedwebservice
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
+)
+
+const containerUpdateJournalKind = "redeven.managed_container_update.v1"
+
+const (
+	updatePhasePreparing      = "preparing"
+	updatePhaseArtifactReady  = "artifact_ready"
+	updatePhaseOldStopped     = "old_stopped"
+	updatePhaseOldRemoved     = "old_removed"
+	updatePhaseTargetCreating = "target_creating"
+	updatePhaseTargetCreated  = "target_created"
+	updatePhaseTargetVerified = "target_verified"
+)
+
+type containerUpdateRelease struct {
+	TemplateRevision       int64  `json:"template_revision"`
+	TemplateSnapshotJSON   string `json:"template_snapshot_json"`
+	TemplateSnapshotSHA256 string `json:"template_snapshot_sha256"`
+	ConfigurationJSON      string `json:"configuration_json"`
+	Version                string `json:"version"`
+	DesiredState           string `json:"desired_state"`
+	ObservedState          string `json:"observed_state"`
+	RuntimeIdentity        string `json:"runtime_identity,omitempty"`
+	ArtifactReference      string `json:"artifact_reference,omitempty"`
+}
+
+type containerUpdateJournal struct {
+	Kind   string                 `json:"kind"`
+	Phase  string                 `json:"phase"`
+	Old    containerUpdateRelease `json:"old"`
+	Target containerUpdateRelease `json:"target"`
+}
+
+type containerUpdateDriver interface {
+	deploymentDriver
+	PrepareUpdateArtifact(context.Context, TemplateSpec) (string, error)
+	CreateRuntime(context.Context, *pfregistry.ManagedService, TemplateSpec, string) (string, error)
+	RemoveRuntime(context.Context, *pfregistry.ManagedService) error
+	VerifyRuntime(context.Context, *pfregistry.ManagedService, TemplateSpec) error
+	FindRuntime(context.Context, string) (string, error)
+}
+
+type updateExecutionError struct {
+	Cause       error
+	RollbackErr error
+}
+
+func (e *updateExecutionError) Error() string {
+	if e == nil || e.Cause == nil {
+		return "managed Web Service update failed"
+	}
+	return e.Cause.Error()
+}
+
+func (e *updateExecutionError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+func (m *Manager) serviceUpdateTarget(ctx context.Context, service pfregistry.ManagedService) (*Template, error) {
+	if service.TemplateSource != "builtin" || Deployment(service.Deployment) != DeploymentContainer {
+		return nil, nil
+	}
+	target, err := m.Template(ctx, service.TemplateID)
+	if err != nil {
+		return nil, err
+	}
+	if target.Source != "builtin" || target.Deployment != DeploymentContainer || target.ServiceFamilyID != service.ServiceFamilyID || target.Revision <= service.TemplateRevision {
+		return nil, nil
+	}
+	if !target.Available {
+		return nil, serviceError(target.ReasonCode, target.Reason, 409, true, nil)
+	}
+	return target, nil
+}
+
+func (m *Manager) runUpdate(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, accepted map[string]int64, driver containerUpdateDriver) (runErr error) {
+	target, err := m.serviceUpdateTarget(ctx, *service)
+	if err != nil {
+		return err
+	}
+	if target == nil || target.Spec == nil || target.Spec.Container == nil {
+		return serviceError("UPDATE_NOT_AVAILABLE", "No newer reviewed template revision is available for this service.", 409, false, nil)
+	}
+	if err := validateAcceptedNotices(*target, accepted); err != nil {
+		return err
+	}
+	targetConfiguration, err := configurationWithAcceptedNotices(service.ConfigurationJSON, accepted)
+	if err != nil {
+		return err
+	}
+	targetSnapshotJSON, targetSnapshotHash, err := canonicalTemplateSpec(*target.Spec)
+	if err != nil {
+		return err
+	}
+	journal := containerUpdateJournal{
+		Kind:  containerUpdateJournalKind,
+		Phase: updatePhasePreparing,
+		Old: containerUpdateRelease{
+			TemplateRevision: service.TemplateRevision, TemplateSnapshotJSON: service.TemplateSnapshotJSON,
+			TemplateSnapshotSHA256: service.TemplateSnapshotSHA256, ConfigurationJSON: service.ConfigurationJSON,
+			Version: service.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
+			RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference,
+		},
+		Target: containerUpdateRelease{
+			TemplateRevision: target.Revision, TemplateSnapshotJSON: targetSnapshotJSON, TemplateSnapshotSHA256: targetSnapshotHash,
+			ConfigurationJSON: targetConfiguration, Version: target.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
+		},
+	}
+	if (journal.Old.DesiredState != "running" || journal.Old.ObservedState != "running") && (journal.Old.DesiredState != "stopped" || journal.Old.ObservedState != "stopped") {
+		return serviceError("UPDATE_STATE_INVALID", "Stop or fully start the service before updating it.", 409, false, nil)
+	}
+	journalPersisted := false
+	committed := false
+	defer func() {
+		if runErr == nil || committed || !journalPersisted {
+			return
+		}
+		rollbackErr := m.rollbackContainerUpdate(context.Background(), service, journal, driver)
+		runErr = &updateExecutionError{Cause: runErr, RollbackErr: rollbackErr}
+	}()
+
+	m.progress(op, "update_preparing", 1)
+	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
+		return err
+	}
+	journalPersisted = true
+
+	m.progress(op, "pulling", 2)
+	artifact, err := driver.PrepareUpdateArtifact(ctx, *target.Spec)
+	if err != nil {
+		return err
+	}
+	journal.Target.ArtifactReference = artifact
+	journal.Phase = updatePhaseArtifactReady
+	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	m.progress(op, "stopping", 3)
+	if err := driver.Stop(ctx, service); err != nil {
+		return err
+	}
+	journal.Phase = updatePhaseOldStopped
+	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
+		return err
+	}
+	if err := driver.RemoveRuntime(ctx, service); err != nil {
+		return err
+	}
+	journal.Phase = updatePhaseOldRemoved
+	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
+		return err
+	}
+
+	targetService := serviceFromUpdateRelease(*service, journal.Target)
+	journal.Phase = updatePhaseTargetCreating
+	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
+		return err
+	}
+	m.progress(op, "installing", 4)
+	runtimeID, err := driver.CreateRuntime(ctx, &targetService, *target.Spec, artifact)
+	if err != nil {
+		return err
+	}
+	targetService.RuntimeIdentity = runtimeID
+	journal.Target.RuntimeIdentity = runtimeID
+	journal.Phase = updatePhaseTargetCreated
+	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
+		return err
+	}
+
+	m.progress(op, "starting", 5)
+	if _, err := driver.Start(ctx, &targetService); err != nil {
+		return err
+	}
+	m.progress(op, "health_check", 6)
+	if err := m.waitHealthy(ctx, &targetService); err != nil {
+		return serviceError("HEALTH_CHECK_FAILED", "The updated managed Web Service did not become healthy on its loopback port.", 502, true, err)
+	}
+	if journal.Old.DesiredState == "stopped" {
+		if err := driver.Stop(ctx, &targetService); err != nil {
+			return err
+		}
+	}
+	journal.Phase = updatePhaseTargetVerified
+	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
+		return err
+	}
+	if err := m.commitContainerUpdate(ctx, service, journal.Target); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+func configurationWithAcceptedNotices(raw string, accepted map[string]int64) (string, error) {
+	configuration := serviceConfiguration{}
+	if strings.TrimSpace(raw) != "" && strings.TrimSpace(raw) != "{}" {
+		if err := decodeStrictJSON([]byte(raw), &configuration); err != nil {
+			return "", serviceError("SERVICE_CONFIGURATION_INVALID", "The saved managed-service configuration is invalid.", 409, false, err)
+		}
+	}
+	configuration.AcceptedNoticeRevisions = cloneNoticeRevisions(accepted)
+	encoded, err := json.Marshal(configuration)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func (m *Manager) writeContainerUpdateJournal(ctx context.Context, serviceID string, journal containerUpdateJournal) error {
+	encoded, err := json.Marshal(journal)
+	if err != nil {
+		return err
+	}
+	value := string(encoded)
+	return m.registry.UpdateManagedService(ctx, serviceID, pfregistry.ManagedServicePatch{RuntimeManifestJSON: &value})
+}
+
+func decodeContainerUpdateJournal(raw string) (containerUpdateJournal, error) {
+	journal := containerUpdateJournal{}
+	if err := decodeStrictJSON([]byte(raw), &journal); err != nil {
+		return journal, err
+	}
+	if journal.Kind != containerUpdateJournalKind || journal.Phase == "" || journal.Old.TemplateSnapshotJSON == "" || journal.Target.TemplateSnapshotJSON == "" {
+		return journal, errors.New("invalid managed container update journal")
+	}
+	return journal, nil
+}
+
+func serviceFromUpdateRelease(base pfregistry.ManagedService, release containerUpdateRelease) pfregistry.ManagedService {
+	base.TemplateRevision = release.TemplateRevision
+	base.TemplateSnapshotJSON = release.TemplateSnapshotJSON
+	base.TemplateSnapshotSHA256 = release.TemplateSnapshotSHA256
+	base.ConfigurationJSON = release.ConfigurationJSON
+	base.Version = release.Version
+	base.DesiredState = release.DesiredState
+	base.ObservedState = release.ObservedState
+	base.RuntimeIdentity = release.RuntimeIdentity
+	base.ArtifactReference = release.ArtifactReference
+	return base
+}
+
+func (m *Manager) commitContainerUpdate(ctx context.Context, service *pfregistry.ManagedService, release containerUpdateRelease) error {
+	emptyManifest, blank := "{}", ""
+	patch := pfregistry.ManagedServicePatch{
+		TemplateRevision: &release.TemplateRevision, TemplateSnapshotJSON: &release.TemplateSnapshotJSON,
+		TemplateSnapshotSHA256: &release.TemplateSnapshotSHA256, ConfigurationJSON: &release.ConfigurationJSON,
+		Version: &release.Version, DesiredState: &release.DesiredState, ObservedState: &release.ObservedState,
+		RuntimeIdentity: &release.RuntimeIdentity, ArtifactReference: &release.ArtifactReference,
+		RuntimeManifestJSON: &emptyManifest, LastErrorCode: &blank, LastErrorMessage: &blank,
+	}
+	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, patch); err != nil {
+		return err
+	}
+	*service = serviceFromUpdateRelease(*service, release)
+	service.RuntimeManifestJSON = emptyManifest
+	service.LastErrorCode, service.LastErrorMessage = "", ""
+	return nil
+}
+
+func (m *Manager) rollbackContainerUpdate(ctx context.Context, service *pfregistry.ManagedService, journal containerUpdateJournal, driver containerUpdateDriver) error {
+	target := serviceFromUpdateRelease(*service, journal.Target)
+	if target.RuntimeIdentity == "" && phaseAtLeast(journal.Phase, updatePhaseTargetCreating) {
+		identity, err := driver.FindRuntime(ctx, service.ServiceID)
+		if err != nil {
+			return err
+		}
+		target.RuntimeIdentity = identity
+	}
+	if target.RuntimeIdentity != "" {
+		targetSpec, err := templateSpecFromService(&target)
+		if err != nil {
+			return err
+		}
+		if err := driver.VerifyRuntime(ctx, &target, targetSpec); err != nil {
+			return err
+		}
+		if err := driver.RemoveRuntime(ctx, &target); err != nil {
+			return err
+		}
+	}
+
+	old := serviceFromUpdateRelease(*service, journal.Old)
+	oldSpec, err := templateSpecFromService(&old)
+	if err != nil {
+		return err
+	}
+	oldExists := false
+	if old.RuntimeIdentity != "" {
+		if err := driver.VerifyRuntime(ctx, &old, oldSpec); err == nil {
+			oldExists = true
+		} else if code, _, _, _ := ErrorDetails(err); code != "CONTAINER_IDENTITY_MISSING" {
+			return err
+		}
+	}
+	if !oldExists {
+		if old.ArtifactReference == "" {
+			return errors.New("the previous container artifact is unavailable")
+		}
+		old.RuntimeIdentity = ""
+		runtimeID, err := driver.CreateRuntime(ctx, &old, oldSpec, old.ArtifactReference)
+		if err != nil {
+			return err
+		}
+		old.RuntimeIdentity = runtimeID
+		journal.Old.RuntimeIdentity = runtimeID
+	}
+	if journal.Old.DesiredState == "running" {
+		if _, err := driver.Start(ctx, &old); err != nil {
+			return err
+		}
+		if err := m.waitHealthy(ctx, &old); err != nil {
+			return err
+		}
+	} else if err := driver.Stop(ctx, &old); err != nil {
+		return err
+	}
+	journal.Old.RuntimeIdentity = old.RuntimeIdentity
+	return m.commitContainerUpdate(ctx, service, journal.Old)
+}
+
+func phaseAtLeast(actual, expected string) bool {
+	order := map[string]int{
+		updatePhasePreparing: 1, updatePhaseArtifactReady: 2, updatePhaseOldStopped: 3, updatePhaseOldRemoved: 4,
+		updatePhaseTargetCreating: 5, updatePhaseTargetCreated: 6, updatePhaseTargetVerified: 7,
+	}
+	return order[actual] >= order[expected]
+}
+
+func (m *Manager) recoverInterruptedContainerUpdate(service *pfregistry.ManagedService, operation *pfregistry.ManagedOperation, driver containerUpdateDriver) error {
+	journal, err := decodeContainerUpdateJournal(service.RuntimeManifestJSON)
+	if err != nil {
+		return serviceError("UPDATE_JOURNAL_INVALID", "The interrupted update journal is invalid; Redeven will not guess which runtime is authoritative.", 409, false, err)
+	}
+	if journal.Phase == updatePhaseTargetVerified {
+		target := serviceFromUpdateRelease(*service, journal.Target)
+		if target.RuntimeIdentity == "" {
+			target.RuntimeIdentity, err = driver.FindRuntime(context.Background(), service.ServiceID)
+			if err != nil {
+				return err
+			}
+		}
+		spec, specErr := templateSpecFromService(&target)
+		if specErr == nil {
+			specErr = driver.VerifyRuntime(context.Background(), &target, spec)
+		}
+		if specErr == nil {
+			if journal.Old.DesiredState == "running" {
+				_, specErr = driver.Start(context.Background(), &target)
+			} else {
+				specErr = driver.Stop(context.Background(), &target)
+			}
+		}
+		if specErr == nil {
+			journal.Target.RuntimeIdentity = target.RuntimeIdentity
+			if err := m.commitContainerUpdate(context.Background(), service, journal.Target); err != nil {
+				return err
+			}
+			operation.State, operation.Stage = "succeeded", "completed"
+			operation.ProgressCurrent = operation.ProgressTotal
+			return m.registry.UpdateManagedOperation(context.Background(), *operation)
+		}
+		m.log.Warn("finalize verified interrupted managed Web Service update", "service_id", service.ServiceID, "error", specErr)
+	}
+	if err := m.rollbackContainerUpdate(context.Background(), service, journal, driver); err != nil {
+		return fmt.Errorf("rollback interrupted update: %w", err)
+	}
+	return nil
+}

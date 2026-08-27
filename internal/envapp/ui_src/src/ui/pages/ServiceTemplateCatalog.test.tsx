@@ -20,6 +20,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     CheckCircle: Icon,
     ChevronDown: Icon,
     Cpu: Icon,
+    LayoutDashboard: Icon,
     Layers: Icon,
     MoreHorizontal: Icon,
     Package: Icon,

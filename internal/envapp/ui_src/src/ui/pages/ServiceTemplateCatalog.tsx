@@ -5,6 +5,7 @@ import {
   CheckCircle,
   ChevronDown,
   Cpu,
+  LayoutDashboard,
   Layers,
   MoreHorizontal,
   Package,
@@ -25,7 +26,7 @@ export type ServiceTemplatePresentation = Readonly<{
   description: string;
   source: 'builtin' | 'custom';
   kind: ServiceTemplateKind;
-  brandIcon?: 'deepseek-harness';
+  brandIcon?: 'deepseek-harness' | 'interactive-desktop';
   deploymentLabel: string;
   version?: string;
   developerPreview: boolean;
@@ -55,9 +56,15 @@ export type ServiceTemplateCatalogProps = Readonly<{
 
 function TemplateKindIcon(props: { kind: ServiceTemplateKind; brandIcon?: ServiceTemplatePresentation['brandIcon']; class?: string }): JSX.Element {
   if (props.brandIcon === 'deepseek-harness') return <DeepSeekHarnessLogo class={props.class} />;
+  if (props.brandIcon === 'interactive-desktop') return <LayoutDashboard class={props.class} aria-hidden="true" />;
   if (props.kind === 'host') return <Cpu class={props.class} aria-hidden="true" />;
   if (props.kind === 'compose') return <Layers class={props.class} aria-hidden="true" />;
   return <Package class={props.class} aria-hidden="true" />;
+}
+
+function templateIconClass(brandIcon: ServiceTemplatePresentation['brandIcon'], compact = false): string {
+  if (brandIcon === 'deepseek-harness') return compact ? 'h-auto w-6' : 'h-auto w-7';
+  return compact ? 'h-5 w-5' : 'h-6 w-6';
 }
 
 export function ServiceTemplateIdentity(props: {
@@ -73,7 +80,7 @@ export function ServiceTemplateIdentity(props: {
         data-template-kind={props.template.kind}
         data-template-brand={props.template.brandIcon}
       >
-        <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={props.template.brandIcon ? 'h-auto w-7' : 'h-5 w-5'} />
+        <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={templateIconClass(props.template.brandIcon)} />
       </div>
       <div class="min-w-0 flex-1 pt-0.5">
         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -171,7 +178,7 @@ export function ServiceTemplateTile(props: {
           data-template-kind={props.template.kind}
           data-template-brand={props.template.brandIcon}
         >
-          <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={props.template.brandIcon ? 'h-auto w-6' : 'h-5 w-5'} />
+          <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={templateIconClass(props.template.brandIcon, true)} />
         </div>
         <div class="min-w-0 flex-1 pt-0.5">
           <span class="service-template-tile__source block truncate text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
