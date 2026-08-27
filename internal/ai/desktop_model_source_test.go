@@ -3,12 +3,16 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +22,103 @@ import (
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/gorilla/websocket"
 )
+
+func TestDesktopModelSourceConnectionErrorRetryability(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+		if !desktopModelSourceConnectionErrorRetryable(&desktopModelSourceHTTPError{StatusCode: status}) {
+			t.Fatalf("HTTP %d should be retryable", status)
+		}
+	}
+	for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound} {
+		if desktopModelSourceConnectionErrorRetryable(&desktopModelSourceHTTPError{StatusCode: status}) {
+			t.Fatalf("HTTP %d should fail immediately", status)
+		}
+	}
+	if desktopModelSourceConnectionErrorRetryable(fmt.Errorf("%w: mismatched version", errDesktopModelSourceProtocol)) {
+		t.Fatal("protocol errors must fail immediately")
+	}
+}
+
+func TestRunDesktopModelSourceConnectorRetriesInitialTemporaryFailure(t *testing.T) {
+	var connectAttempts atomic.Int32
+	connected := make(chan struct{}, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/desktop-model-source/connect":
+			if connectAttempts.Add(1) == 1 {
+				http.Error(w, `{"ok":false}`, http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/v2/desktop-model-source/rpc":
+			if r.Header.Get("X-Redeven-Desktop-Model-Source-Protocol") != DesktopModelSourceProtocolVersion {
+				http.Error(w, "missing protocol", http.StatusBadRequest)
+				return
+			}
+			ws, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			connected <- struct{}{}
+			defer ws.Close()
+			for {
+				if _, _, err := ws.ReadMessage(); err != nil {
+					return
+				}
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- RunDesktopModelSourceConnector(ctx, DesktopModelSourceConnectorOptions{
+			ConfigPath:            filepath.Join(tempDir, "missing-config.yaml"),
+			SecretsPath:           filepath.Join(tempDir, "secrets.json"),
+			RuntimeControlBaseURL: server.URL + "/",
+			RuntimeControlToken:   "runtime-token",
+			SessionID:             "desktop-session-retry",
+			ExpiresAtUnixMS:       time.Now().Add(time.Hour).UnixMilli(),
+			StartupReportFile:     filepath.Join(tempDir, "startup.json"),
+		})
+	}()
+	select {
+	case <-connected:
+	case <-time.After(3 * time.Second):
+		cancel()
+		t.Fatal("connector did not retry the initial temporary failure")
+	}
+	if connectAttempts.Load() != 2 {
+		t.Fatalf("connect attempts = %d, want 2", connectAttempts.Load())
+	}
+	reportPath := filepath.Join(tempDir, "startup.json")
+	reportDeadline := time.Now().Add(time.Second)
+	for {
+		if _, err := os.Stat(reportPath); err == nil {
+			break
+		} else if time.Now().After(reportDeadline) {
+			t.Fatalf("startup report was not written after retry: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("connector exit error = %v, want context cancellation", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("connector did not stop after cancellation")
+	}
+}
 
 func TestDesktopModelSourceModelSnapshotFiltersMissingKeysAndUsesOpaqueIDs(t *testing.T) {
 	t.Parallel()

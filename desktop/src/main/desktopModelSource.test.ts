@@ -62,14 +62,15 @@ describe('desktopModelSource', () => {
         token: 'runtime-token',
       },
       tempRoot,
-      startupTimeoutMs: 5_000,
       stopTimeoutMs: 2_000,
     });
 
     expect(modelSource.sessionID).toMatch(/^dms_[a-f0-9]+$/u);
-    expect(modelSource.configured).toBe(true);
-    expect(modelSource.modelCount).toBe(1);
-    expect(modelSource.missingKeyProviderIDs).toEqual(['anthropic']);
+    await expect(modelSource.ready).resolves.toMatchObject({
+      configured: true,
+      modelCount: 1,
+      missingKeyProviderIDs: ['anthropic'],
+    });
     await expect(fs.readFile(argsPath, 'utf8')).resolves.toContain('desktop-model-source');
 
     await expect(modelSource.stop()).resolves.toBeUndefined();
@@ -96,7 +97,7 @@ describe('desktopModelSource', () => {
     await fs.chmod(scriptPath, 0o755);
     const controller = new AbortController();
 
-    const startup = startDesktopModelSource({
+    const modelSource = await startDesktopModelSource({
       executablePath: scriptPath,
       stateRoot,
       runtimeControl: {
@@ -105,15 +106,54 @@ describe('desktopModelSource', () => {
         token: 'runtime-token',
       },
       tempRoot,
-      startupTimeoutMs: 5_000,
       stopTimeoutMs: 1_000,
       signal: controller.signal,
     });
 
     await expect(waitForFileText(startedPath)).resolves.toBe('started');
     controller.abort();
-    await expect(startup).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(modelSource.ready).rejects.toMatchObject({ name: 'AbortError' });
     await expect(waitForFileText(markerPath)).resolves.toBe('terminated');
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
+
+  it('returns the process handle immediately and allows readiness after eight seconds', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-model-source-slow-ready-test-'));
+    const scriptPath = path.join(tempRoot, 'delayed-model-source.cjs');
+    await fs.writeFile(
+      scriptPath,
+      [
+        '#!/usr/bin/env node',
+        "const fs = require('node:fs');",
+        "const path = require('node:path');",
+        'const args = process.argv.slice(2);',
+        "const reportPath = args[args.indexOf('--startup-report-file') + 1];",
+        "const sessionID = args[args.indexOf('--session-id') + 1];",
+        'setTimeout(() => {',
+        '  fs.mkdirSync(path.dirname(reportPath), { recursive: true });',
+        "  fs.writeFileSync(reportPath, JSON.stringify({ status: 'connected', session_id: sessionID, pid: process.pid, configured: true, model_count: 1 }) + '\\n');",
+        '}, 8_100);',
+        'setInterval(() => {}, 1000);',
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.chmod(scriptPath, 0o755);
+
+    const startedAt = Date.now();
+    const modelSource = await startDesktopModelSource({
+      executablePath: scriptPath,
+      stateRoot: path.join(tempRoot, 'state'),
+      runtimeControl: {
+        protocol_version: 'redeven-runtime-control-v2',
+        base_url: 'http://127.0.0.1:41234/__redeven_runtime_control/',
+        token: 'runtime-token',
+      },
+      tempRoot,
+      stopTimeoutMs: 1_000,
+    });
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    await expect(modelSource.ready).resolves.toMatchObject({ configured: true, modelCount: 1 });
+    await modelSource.stop();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }, 12_000);
 });

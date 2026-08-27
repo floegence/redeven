@@ -36,6 +36,38 @@ const (
 	defaultDesktopModelSourceRPCTimeout = 30 * time.Second
 )
 
+var errDesktopModelSourceProtocol = errors.New("desktop model source protocol error")
+
+var desktopModelSourceReconnectBackoff = [...]time.Duration{
+	time.Second,
+	2 * time.Second,
+	5 * time.Second,
+	10 * time.Second,
+	30 * time.Second,
+}
+
+type desktopModelSourceHTTPError struct {
+	StatusCode int
+	Cause      error
+}
+
+func (e *desktopModelSourceHTTPError) Error() string {
+	if e == nil {
+		return "desktop model source HTTP connection failed"
+	}
+	if e.Cause != nil {
+		return e.Cause.Error()
+	}
+	return fmt.Sprintf("runtime-control returned HTTP %d", e.StatusCode)
+}
+
+func (e *desktopModelSourceHTTPError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
 type DesktopModelSourceSession struct {
 	SessionID       string
 	Source          string
@@ -822,6 +854,7 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 	header.Set("Authorization", "Bearer "+token)
 	header.Set("X-Redeven-Desktop-Model-Source-Protocol", DesktopModelSourceProtocolVersion)
 	reported := false
+	attempt := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -829,29 +862,45 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 		if session.ExpiresAtUnixMS > 0 && time.Now().UnixMilli() >= session.ExpiresAtUnixMS {
 			return errors.New("desktop model source session expired")
 		}
-		if err := postDesktopModelSourceConnect(ctx, httpClient, runtimeControlURL, token, session); err != nil {
-			return err
-		}
-		ws, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL.String(), header)
-		if err != nil {
-			return err
-		}
-		if !reported {
-			if err := executor.writeStartupReport(opts.StartupReportFile); err != nil {
-				_ = ws.Close()
-				return err
+		err := postDesktopModelSourceConnect(ctx, httpClient, runtimeControlURL, token, session)
+		var ws *websocket.Conn
+		if err == nil {
+			var response *http.Response
+			ws, response, err = websocket.DefaultDialer.DialContext(ctx, wsURL.String(), header)
+			if response != nil && response.Body != nil {
+				_ = response.Body.Close()
 			}
-			reported = true
+			if err != nil && response != nil {
+				err = &desktopModelSourceHTTPError{StatusCode: response.StatusCode, Cause: err}
+			}
 		}
-		err = executor.serve(ctx, ws)
-		_ = ws.Close()
-		if err == nil || errors.Is(err, context.Canceled) || ctx.Err() != nil {
+		if err == nil {
+			attempt = 0
+			if !reported {
+				if reportErr := executor.writeStartupReport(opts.StartupReportFile); reportErr != nil {
+					_ = ws.Close()
+					return reportErr
+				}
+				reported = true
+			}
+			err = executor.serve(ctx, ws)
+			_ = ws.Close()
+			if err == nil && ctx.Err() == nil {
+				err = errors.New("desktop model source disconnected")
+			}
+		}
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !desktopModelSourceConnectionErrorRetryable(err) {
 			return err
 		}
 		if opts.Logger != nil {
-			opts.Logger.Warn("desktop model source disconnected; reconnecting", "error", err)
+			opts.Logger.Warn("desktop model source connection unavailable; reconnecting", "error", err)
 		}
-		timer := time.NewTimer(time.Second)
+		delay := desktopModelSourceReconnectBackoff[min(attempt, len(desktopModelSourceReconnectBackoff)-1)]
+		attempt++
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -859,6 +908,34 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 		case <-timer.C:
 		}
 	}
+}
+
+func desktopModelSourceConnectionErrorRetryable(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, errDesktopModelSourceProtocol) {
+		return false
+	}
+	var httpErr *desktopModelSourceHTTPError
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode == http.StatusRequestTimeout ||
+			httpErr.StatusCode == http.StatusTooEarly ||
+			httpErr.StatusCode == http.StatusTooManyRequests ||
+			httpErr.StatusCode >= http.StatusInternalServerError
+	}
+	var closeErr *websocket.CloseError
+	if errors.As(err, &closeErr) {
+		switch closeErr.Code {
+		case websocket.CloseProtocolError,
+			websocket.CloseUnsupportedData,
+			websocket.CloseInvalidFramePayloadData,
+			websocket.ClosePolicyViolation,
+			websocket.CloseMessageTooBig,
+			websocket.CloseMandatoryExtension:
+			return false
+		default:
+			return true
+		}
+	}
+	return true
 }
 
 type desktopModelSourceExecutor struct {
@@ -875,6 +952,20 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 	if ws == nil {
 		return errors.New("missing desktop model source websocket")
 	}
+	stopWatch := make(chan struct{})
+	defer close(stopWatch)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = ws.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+				time.Now().Add(time.Second),
+			)
+			_ = ws.Close()
+		case <-stopWatch:
+		}
+	}()
 	var writeMu sync.Mutex
 	var activeMu sync.Mutex
 	active := map[string]context.CancelFunc{}
@@ -898,11 +989,8 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 	}
 
 	for {
-		select {
-		case <-ctx.Done():
-			_ = ws.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
-			return ctx.Err()
-		default:
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		var frame DesktopModelSourceRPCFrame
 		if err := ws.ReadJSON(&frame); err != nil {
@@ -910,7 +998,7 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 		}
 		frame.ProtocolVersion = strings.TrimSpace(frame.ProtocolVersion)
 		if frame.ProtocolVersion != "" && frame.ProtocolVersion != DesktopModelSourceProtocolVersion {
-			continue
+			return fmt.Errorf("%w: unsupported version %q", errDesktopModelSourceProtocol, frame.ProtocolVersion)
 		}
 		frame.ID = strings.TrimSpace(frame.ID)
 		frame.Type = strings.TrimSpace(frame.Type)
@@ -1345,10 +1433,13 @@ func postDesktopModelSourceConnect(ctx context.Context, client *http.Client, bas
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&envelope)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !envelope.OK {
+		var cause error
 		if envelope.Error != nil {
-			return envelope.Error
+			cause = envelope.Error
+		} else {
+			cause = fmt.Errorf("runtime-control returned HTTP %d", resp.StatusCode)
 		}
-		return fmt.Errorf("runtime-control returned HTTP %d", resp.StatusCode)
+		return &desktopModelSourceHTTPError{StatusCode: resp.StatusCode, Cause: cause}
 	}
 	return nil
 }

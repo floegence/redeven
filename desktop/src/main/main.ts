@@ -725,11 +725,9 @@ type DesktopSessionRecord = {
   app_ready_state: DesktopSessionAppReadyPayload['state'] | '';
   app_ready_timings?: DesktopSessionAppReadyPayload['timings'];
   env_app_ready: boolean;
-  desktop_model_source_settled: boolean;
   open_started_at_unix_ms: number;
   window_created_at_unix_ms: number;
   document_loaded_at_unix_ms?: number;
-  desktop_model_source_settled_at_unix_ms?: number;
   initial_load_failure_message: string;
   closing: boolean;
 };
@@ -1198,12 +1196,20 @@ async function startDesktopModelSourceForStartup(args: Readonly<{
         if (text) console.log(`[redeven:model-source:${stream}] ${text}`);
       },
     });
-    if (modelSource.modelCount <= 0) {
-      const missing = modelSource.missingKeyProviderIDs.length > 0
-        ? ` Missing provider keys: ${modelSource.missingKeyProviderIDs.join(', ')}.`
-        : '';
-      console.warn(`[redeven:model-source] Connected to ${args.label}, but no usable Desktop models are available.${missing}`);
-    }
+    void modelSource.ready.then((readiness) => {
+      if (readiness.modelCount <= 0) {
+        const missing = readiness.missingKeyProviderIDs.length > 0
+          ? ` Missing provider keys: ${readiness.missingKeyProviderIDs.join(', ')}.`
+          : '';
+        console.warn(`[redeven:model-source] Connected to ${args.label}, but no usable Desktop models are available.${missing}`);
+      }
+    }).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[redeven:model-source] Desktop model source stopped before connecting to ${args.label}: ${message}`);
+    });
     return modelSource;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -1213,26 +1219,6 @@ async function startDesktopModelSourceForStartup(args: Readonly<{
     console.warn(`[redeven:model-source] Desktop model source unavailable for ${args.label}: ${message}`);
     return null;
   }
-}
-
-async function refreshStartupReportFromLocalUI(
-  startup: StartupReport,
-): Promise<StartupReport> {
-  const result = await probeLocalRuntimeBridgeHealth(startup, {
-    timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
-  });
-  if (!result.ok) {
-    return startup;
-  }
-  const refreshed = result.value;
-  return {
-    ...startup,
-    password_required: refreshed.password_required,
-    exposure: refreshed.exposure ?? startup.exposure,
-    started_at_unix_ms: refreshed.started_at_unix_ms ?? startup.started_at_unix_ms,
-    runtime_service: refreshed.runtime_service ?? startup.runtime_service,
-    runtime_control: startup.runtime_control,
-  };
 }
 
 function localEnvironmentRuntimeRoot(environment: DesktopLocalEnvironmentState): string {
@@ -1523,12 +1509,8 @@ async function openRuntimePlacementBridgeForReadyRecord(
     startup: nextRecord.startup,
     signal,
   });
-  const startup = desktopModelSource
-    ? await refreshStartupReportFromLocalUI(nextRecord.startup)
-    : nextRecord.startup;
   const record = {
     ...nextRecord,
-    startup,
     desktop_model_source: desktopModelSource,
   };
   return trackRuntimePlacementBridgeRecord(
@@ -8526,7 +8508,7 @@ function resolveSessionInitialLoadSuccess(
 }
 
 function resolveSessionInitialLoadWhenReady(sessionRecord: DesktopSessionRecord): void {
-  if (!sessionRecord.env_app_ready || !sessionRecord.desktop_model_source_settled) {
+  if (!sessionRecord.env_app_ready) {
     return;
   }
   resolveSessionInitialLoadSuccess(sessionRecord, {
@@ -8634,19 +8616,6 @@ function markSessionAppReady(
   resolveSessionInitialLoadWhenReady(sessionRecord);
 }
 
-function markSessionDesktopModelSourceSettled(sessionRecord: DesktopSessionRecord): void {
-  if (sessionRecord.lifecycle !== 'opening' || sessionRecord.desktop_model_source_settled) {
-    return;
-  }
-  sessionRecord.desktop_model_source_settled = true;
-  sessionRecord.desktop_model_source_settled_at_unix_ms = Date.now();
-  void sessionRecord.diagnostics.recordLifecycle(
-    'session_desktop_model_source_settled',
-    'Desktop model source startup settled.',
-  );
-  resolveSessionInitialLoadWhenReady(sessionRecord);
-}
-
 async function failOpeningSession(
   sessionRecord: DesktopSessionRecord,
   failure: string | Error,
@@ -8711,7 +8680,6 @@ function recordEnvironmentOpenTiming(
       ...(detail.desktop_model_source_duration_ms !== undefined ? { desktop_model_source_duration_ms: detail.desktop_model_source_duration_ms } : {}),
       window_created_ms: elapsedSince(startedAt, sessionRecord.window_created_at_unix_ms),
       document_loaded_ms: elapsedSince(startedAt, sessionRecord.document_loaded_at_unix_ms),
-      desktop_model_source_settled_ms: elapsedSince(startedAt, sessionRecord.desktop_model_source_settled_at_unix_ms),
       app_ready_state: sessionRecord.app_ready_state,
       ...rendererTimings,
       launcher_phases: operation?.open_timing?.completed_phases.map((phase) => ({
@@ -8819,7 +8787,6 @@ async function createSessionRecord(
     runtimeHandle?: DesktopSessionRuntimeHandle | null;
     attached?: boolean;
     stealAppFocus?: boolean;
-    desktopModelSourceSettled?: boolean;
     openStartedAtUnixMS?: number;
     runtimeLifecycleGenerationIdentityKeys?: readonly string[];
     runtimeLifecycleGenerationSnapshot?: string;
@@ -8955,10 +8922,8 @@ async function createSessionRecord(
     reject_initial_load: initialLoad.reject,
     app_ready_state: '',
     env_app_ready: false,
-    desktop_model_source_settled: options.desktopModelSourceSettled !== false,
     open_started_at_unix_ms: options.openStartedAtUnixMS ?? Date.now(),
     window_created_at_unix_ms: Date.now(),
-    ...(options.desktopModelSourceSettled !== false ? { desktop_model_source_settled_at_unix_ms: Date.now() } : {}),
     initial_load_failure_message: '',
     closing: false,
   };
@@ -13652,10 +13617,6 @@ async function openRuntimePlacementBridgeFromLauncher(
         });
     const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
     const preferences = await loadDesktopPreferencesCached();
-    const desktopModelSourceState: {
-      current: ManagedDesktopModelSource | null;
-    } = { current: null };
-    let desktopModelSourceTask: Promise<void> | null = null;
     let bridgeSession: RuntimePlacementBridgeSession | null = null;
     let sessionRecord: DesktopSessionRecord | null = null;
     let record = existingBridge;
@@ -14138,28 +14099,26 @@ async function openRuntimePlacementBridgeFromLauncher(
           detail: 'Desktop is preparing local model access while the Env App window loads.',
         });
         const modelSourceRecord = record;
-        desktopModelSourceTask = (async () => {
-          const desktopModelSourceStartedAtUnixMS = Date.now();
-          desktopModelSourceState.current = await startDesktopModelSourceForStartup({
-            label: modelSourceRecord.label,
-            startup: modelSourceRecord.startup,
-            signal,
-          });
-          const updatedRecord = runtimePlacementBridgeRegistry.updateIfCurrent(
-            modelSourceRecord.session.placement_target_id,
-            modelSourceRecord.session,
-            (current) => ({
-              ...current,
-              desktop_model_source: desktopModelSourceState.current,
-            }),
-          );
-          if (!updatedRecord) {
-            await desktopModelSourceState.current?.stop().catch(() => undefined);
-            return;
-          }
+        const desktopModelSourceStartedAtUnixMS = Date.now();
+        const desktopModelSource = await startDesktopModelSourceForStartup({
+          label: modelSourceRecord.label,
+          startup: modelSourceRecord.startup,
+          signal,
+        });
+        const updatedRecord = runtimePlacementBridgeRegistry.updateIfCurrent(
+          modelSourceRecord.session.placement_target_id,
+          modelSourceRecord.session,
+          (current) => ({
+            ...current,
+            desktop_model_source: desktopModelSource,
+          }),
+        );
+        if (!updatedRecord) {
+          await desktopModelSource?.stop().catch(() => undefined);
+        } else {
           record = updatedRecord;
           desktopModelSourceDurationMS = Date.now() - desktopModelSourceStartedAtUnixMS;
-        })();
+        }
       }
       updateOpenConnectionOperation(operationKey, {
         hostAccess: record.session.host_access,
@@ -14185,17 +14144,11 @@ async function openRuntimePlacementBridgeFromLauncher(
       sessionRecord = await createSessionRecord(openTarget, record.startup, {
         runtimeHandle: record.runtime_handle,
         stealAppFocus: true,
-        desktopModelSourceSettled: desktopModelSourceTask === null,
         openStartedAtUnixMS,
         transportRecovery: record.session,
       });
       if (!runtimePlacementBridgeRegistry.attachSession(targetID, record.session, sessionRecord.session_key)) {
         throw new Error('Runtime Placement Bridge ended before Desktop attached the Env App session.');
-      }
-      if (desktopModelSourceTask) {
-        await desktopModelSourceTask;
-        sessionRecord.startup = record.startup;
-        markSessionDesktopModelSourceSettled(sessionRecord);
       }
       console.info('[redeven:desktop-session] waiting for session readiness', {
         session_key: sessionRecord.session_key,
@@ -14214,7 +14167,6 @@ async function openRuntimePlacementBridgeFromLauncher(
         target: label,
         error: error instanceof Error ? compact(error.message) : compact(error),
       });
-      await desktopModelSourceState.current?.stop().catch(() => undefined);
       if (bridgeSession) {
         const tracked = runtimePlacementBridgeRegistry.get(bridgeSession.placement_target_id);
         if (tracked?.session === bridgeSession) {
