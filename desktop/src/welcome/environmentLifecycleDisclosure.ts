@@ -10,12 +10,13 @@ import type {
 import {
   environmentMatchesRuntimeLifecycleProgress,
   runtimeLifecycleOperationForActionProgress,
+  selectedSnapshotReinstallTargetProgressForEnvironment,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
 
 export type EnvironmentLifecycleDisclosureIntent = Extract<
   EnvironmentActionIntent,
-  'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'update_runtime' | 'refresh_runtime'
+  'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'update_runtime' | 'refresh_runtime' | 'reinstall_target'
 >;
 
 export type EnvironmentLifecycleDisclosureVisibility = 'open' | 'user_closed';
@@ -31,6 +32,7 @@ export type EnvironmentLifecycleDisclosureState = Readonly<{
   visibility: EnvironmentLifecycleDisclosureVisibility;
   started_at_unix_ms: number;
   operation_key: string;
+  operation_binding: 'exact' | 'next_reinstall';
   last_progress?: DesktopLauncherActionProgress;
 }> | null;
 
@@ -45,7 +47,12 @@ export function environmentActionStartsLifecycleDisclosure(
     || action.intent === 'stop_runtime'
     || action.intent === 'restart_runtime'
     || action.intent === 'update_runtime'
-    || action.intent === 'refresh_runtime';
+    || action.intent === 'refresh_runtime'
+    || (
+      action.intent === 'reinstall_target'
+      && !action.operation_key
+      && !action.preflight_id
+    );
 }
 
 export function isEnvironmentLifecycleDisclosureIntent(
@@ -55,7 +62,8 @@ export function isEnvironmentLifecycleDisclosureIntent(
     || intent === 'stop_runtime'
     || intent === 'restart_runtime'
     || intent === 'update_runtime'
-    || intent === 'refresh_runtime';
+    || intent === 'refresh_runtime'
+    || intent === 'reinstall_target';
 }
 
 export function lifecycleDisclosureIntentForActionKind(
@@ -72,6 +80,8 @@ export function lifecycleDisclosureIntentForActionKind(
       return 'update_runtime';
     case 'refresh_environment_runtime':
       return 'refresh_runtime';
+    case 'reinstall_target':
+      return 'reinstall_target';
     default:
       return null;
   }
@@ -87,6 +97,8 @@ function lifecycleActionKindForIntent(intent: EnvironmentLifecycleDisclosureInte
       return 'update_environment_runtime';
     case 'refresh_runtime':
       return 'refresh_environment_runtime';
+    case 'reinstall_target':
+      return 'preview_reinstall_target';
     default:
       return 'start_environment_runtime';
   }
@@ -95,6 +107,9 @@ function lifecycleActionKindForIntent(intent: EnvironmentLifecycleDisclosureInte
 function lifecycleDisclosureIntentForProgress(
   progress: DesktopLauncherActionProgress | null | undefined,
 ): EnvironmentLifecycleDisclosureIntent | null {
+  if (progress?.action === 'reinstall_target') {
+    return 'reinstall_target';
+  }
   switch (runtimeLifecycleOperationForActionProgress(progress)) {
     case 'start':
       return 'start_runtime';
@@ -123,6 +138,52 @@ export function beginEnvironmentLifecycleDisclosure(
     visibility: 'open',
     started_at_unix_ms: attempt.started_at_unix_ms,
     operation_key: attempt.operation_key,
+    operation_binding: intent === 'reinstall_target' ? 'next_reinstall' : 'exact',
+  };
+}
+
+export function abandonEnvironmentLifecycleDisclosureAttempt(
+  state: EnvironmentLifecycleDisclosureState,
+  environmentID: string,
+  attempt: EnvironmentLifecycleAttempt,
+): EnvironmentLifecycleDisclosureState {
+  if (
+    !state
+    || state.environment_id !== environmentID
+    || state.operation_key !== attempt.operation_key
+    || state.started_at_unix_ms !== attempt.started_at_unix_ms
+    || state.last_progress
+  ) {
+    return state;
+  }
+  return null;
+}
+
+export function bindEnvironmentLifecycleDisclosureOperation(
+  state: EnvironmentLifecycleDisclosureState,
+  environmentID: string,
+  attempt: EnvironmentLifecycleAttempt,
+  operation: EnvironmentLifecycleAttempt,
+): EnvironmentLifecycleDisclosureState {
+  const operationKey = compact(operation.operation_key);
+  const startedAtUnixMS = Number(operation.started_at_unix_ms);
+  if (
+    !state
+    || state.environment_id !== environmentID
+    || state.operation_key !== attempt.operation_key
+    || state.started_at_unix_ms !== attempt.started_at_unix_ms
+    || state.operation_binding !== 'next_reinstall'
+    || operationKey === ''
+    || !Number.isFinite(startedAtUnixMS)
+    || startedAtUnixMS <= 0
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    operation_key: operationKey,
+    started_at_unix_ms: Math.floor(startedAtUnixMS),
+    operation_binding: 'exact',
   };
 }
 
@@ -188,12 +249,55 @@ function progressBelongsToDisclosure(
 ): progress is DesktopLauncherActionProgress {
   if (
     !progress
+    || state.operation_binding !== 'exact'
     || lifecycleDisclosureIntentForProgress(progress) !== state.intent
   ) {
     return false;
   }
   return compact(progress.operation_key) === state.operation_key
     && progressStartedAt(progress) === state.started_at_unix_ms;
+}
+
+function nextReinstallProgressForDisclosure(
+  environment: DesktopEnvironmentEntry,
+  progressItems: readonly DesktopLauncherActionProgress[],
+  state: Exclude<EnvironmentLifecycleDisclosureState, null>,
+): DesktopLauncherActionProgress | null {
+  if (state.intent !== 'reinstall_target' || state.operation_binding !== 'next_reinstall') {
+    return null;
+  }
+  return [...progressItems]
+    .filter((progress) => (
+      progress.action === 'reinstall_target'
+      && progressStartedAt(progress) >= state.started_at_unix_ms
+      && selectedSnapshotReinstallTargetProgressForEnvironment(environment, [progress]) === progress
+    ))
+    .sort((left, right) => (
+      progressStartedAt(left) - progressStartedAt(right)
+      || String(left.operation_key ?? '').localeCompare(String(right.operation_key ?? ''))
+    ))[0] ?? null;
+}
+
+export function focusEnvironmentLifecycleDisclosure(
+  state: EnvironmentLifecycleDisclosureState,
+  environmentID: string,
+  progress: DesktopLauncherActionProgress,
+): EnvironmentLifecycleDisclosureState {
+  const intent = lifecycleDisclosureIntentForProgress(progress);
+  const startedAtUnixMS = progressStartedAt(progress);
+  const operationKey = compact(progress.operation_key);
+  if (!intent || startedAtUnixMS <= 0 || operationKey === '') {
+    return state;
+  }
+  return {
+    environment_id: environmentID,
+    intent,
+    visibility: 'open',
+    started_at_unix_ms: startedAtUnixMS,
+    operation_key: operationKey,
+    operation_binding: 'exact',
+    last_progress: progress,
+  };
 }
 
 export function reconcileEnvironmentLifecycleDisclosure(
@@ -208,13 +312,22 @@ export function reconcileEnvironmentLifecycleDisclosure(
   if (!environment) {
     return null;
   }
-  const progress = progressItems.find((candidate) => (
-      progressBelongsToDisclosure(candidate, state)
-      && environmentMatchesRuntimeLifecycleProgress(environment, candidate)
-    )) ?? null;
+  const progress = state.operation_binding === 'next_reinstall'
+    ? nextReinstallProgressForDisclosure(environment, progressItems, state)
+    : progressItems.find((candidate) => (
+        progressBelongsToDisclosure(candidate, state)
+        && (
+          state.intent === 'reinstall_target'
+            ? selectedSnapshotReinstallTargetProgressForEnvironment(environment, [candidate]) === candidate
+            : environmentMatchesRuntimeLifecycleProgress(environment, candidate)
+        )
+      )) ?? null;
   if (progress) {
     return {
       ...state,
+      started_at_unix_ms: progressStartedAt(progress),
+      operation_key: compact(progress.operation_key),
+      operation_binding: 'exact',
       last_progress: progress,
     };
   }

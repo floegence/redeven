@@ -1768,7 +1768,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}');
     expect(appSrc).toContain('openConnectionProgress={visibleOpenConnectionProgress()}');
     expect(appSrc).toContain('visibleEnvironmentLifecycleProgress({');
-    expect(appSrc).toContain('selectedProgress: runtimeLifecycleProgress(),');
+    expect(appSrc).toContain('selectedProgress: reinstallTargetProgress() ?? runtimeLifecycleProgress(),');
     expect(appSrc).toContain('disclosure: props.lifecycleDisclosure,');
     expect(appSrc).toContain('busyState: props.busyState,');
     expect(appSrc).not.toContain('const disclosureRuntimeLifecycleProgress = createMemo');
@@ -2532,17 +2532,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('owner_evidence');
   });
 
-  it('focuses the exact reinstall operation after preview instead of relying on card refresh timing', () => {
+  it('routes reinstall preview and external focus through the shared progress disclosure', () => {
     const appSrc = readWelcomeSource();
-    expect(appSrc).toContain('function focusEnvironmentOperationProgress(');
-    expect(appSrc).toContain('result.operation_started_at_unix_ms');
-    expect(appSrc).toContain("result.outcome !== 'previewed_reinstall_target'");
-    expect(appSrc).toContain("result.outcome !== 'reinstall_target_in_progress'");
+    expect(appSrc).not.toContain('function focusEnvironmentOperationProgress(');
+    expect(appSrc).toContain('bindOperation?.({');
+    expect(appSrc).toContain('started_at_unix_ms: result.operation_started_at_unix_ms');
+    expect(appSrc).toContain('environmentActionStartsLifecycleDisclosure(action)');
+    expect(appSrc).toContain('focusEnvironmentLifecycleDisclosure(current, environment.id, progress)');
     expect(appSrc).toContain('progressForEnvironmentFocusRequest(environment, props.actionProgress, request)');
+    expect(appSrc).toContain('props.abandonLifecycleDisclosure(lifecycleAttempt);');
     expect(appSrc).toContain('function clearOperationProgressFocus(operationKey: string)');
     expect(appSrc).toContain('clearOperationProgressFocus(operationKey);');
     expect(appSrc).toContain("if (action.intent !== 'reinstall_target')");
-    expect(appSrc).not.toContain('Keep the shared timeline visible while direct SSH/container');
   });
 
   it('localizes structured local Runtime target details', () => {
