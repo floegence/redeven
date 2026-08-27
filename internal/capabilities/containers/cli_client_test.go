@@ -424,6 +424,21 @@ func TestCommandFailureClassificationReturnsOnlyStableDomainErrors(t *testing.T)
 	}
 }
 
+func TestCommandFailureClassificationRedactsOrangeDockerSocketPermissionError(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte("permission denied while trying to connect to the docker API at unix:///var/run/docker.sock")
+	err := classifyCommandFailure([]string{"version", "--format", "{{json .}}"}, errors.New("exit status 1"), raw)
+	if !errors.Is(err, ErrPermissionDenied) || err.Error() != ErrPermissionDenied.Error() {
+		t.Fatalf("classifyCommandFailure() = %v, want only ErrPermissionDenied", err)
+	}
+	for _, forbidden := range []string{"docker.sock", "/var/run", "version", "--format"} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("classified error leaked %q: %v", forbidden, err)
+		}
+	}
+}
+
 func TestExecRunnerDiscardsSensitiveStderr(t *testing.T) {
 	t.Parallel()
 

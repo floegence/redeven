@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,20 @@ func TestContainersCapabilityTargetProjectionOwnsCanonicalFields(t *testing.T) {
 	}
 }
 
+func TestContainersCapabilityTargetProjectionRejectsObsoleteVersions(t *testing.T) {
+	t.Parallel()
+	adapter := newTestContainersCapabilityAdapter(&capabilityEngineClient{})
+	for _, version := range []string{"1.0.0", "2.0.0"} {
+		_, err := adapter.ProjectTarget(context.Background(), capability.TargetResolutionRequest{
+			CapabilityID: containersCapabilityID, CapabilityVersion: version,
+			TargetMethod: string(containers.MethodStatus), TargetInput: map[string]any{"engine": "docker"},
+		})
+		if err == nil {
+			t.Fatalf("ProjectTarget(%s) accepted an obsolete capability version", version)
+		}
+	}
+}
+
 func TestContainersCapabilitySyncResponsesMatchSignedContract(t *testing.T) {
 	client := &capabilityEngineClient{
 		status: containers.EngineStatus{Engine: containers.EngineDocker, Available: true, Version: "27.1.0"},
@@ -67,7 +82,7 @@ func TestContainersCapabilitySyncResponsesMatchSignedContract(t *testing.T) {
 	adapter := newTestContainersCapabilityAdapter(client)
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{
-			CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodList),
+			CapabilityVersion: containersCapabilityVersion, TargetMethod: string(containers.MethodList),
 		}},
 		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "all": true},
 	})
@@ -82,7 +97,7 @@ func TestContainersCapabilitySyncResponsesMatchSignedContract(t *testing.T) {
 
 	preflight, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{
-			CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodStartPreflight),
+			CapabilityVersion: containersCapabilityVersion, TargetMethod: string(containers.MethodStartPreflight),
 		}},
 		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "container_id": "container_1"},
 	})
@@ -104,7 +119,7 @@ func TestContainersVolumeCreatePreflightMatchesSignedV4Contract(t *testing.T) {
 	})
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{
-			CapabilityVersion: containersCapabilityV4Version,
+			CapabilityVersion: containersCapabilityVersion,
 			TargetMethod:      string(containers.MethodVolumesCreatePreflight),
 		}},
 		Arguments: map[string]any{
@@ -136,7 +151,7 @@ func TestContainersVolumeCreatePreflightMatchesSignedV4Contract(t *testing.T) {
 	}
 }
 
-func TestContainersCapabilityProjectsGroupingOnlyForV4(t *testing.T) {
+func TestContainersCapabilityProjectsCurrentGroupingFields(t *testing.T) {
 	t.Parallel()
 	item := containers.ContainerSummary{
 		ContainerID: "container_1",
@@ -146,13 +161,9 @@ func TestContainersCapabilityProjectsGroupingOnlyForV4(t *testing.T) {
 		GroupID:     "project_1",
 		GroupName:   "application",
 	}
-	legacy := projectContainerSummaryForBinding(capability.ExecutionBinding{CapabilityVersion: containersCapabilityV3Version}, item)
-	if _, exists := legacy["group_kind"]; exists {
-		t.Fatalf("v3 projection leaked v4 grouping fields: %#v", legacy)
-	}
-	v4 := projectContainerSummaryForBinding(capability.ExecutionBinding{CapabilityVersion: containersCapabilityV4Version}, item)
-	if v4["group_kind"] != "compose_project" || v4["group_id"] != "project_1" || v4["group_name"] != "application" {
-		t.Fatalf("v4 projection = %#v", v4)
+	projected := projectContainerSummary(item)
+	if projected["group_kind"] != "compose_project" || projected["group_id"] != "project_1" || projected["group_name"] != "application" {
+		t.Fatalf("current projection = %#v", projected)
 	}
 }
 
@@ -170,7 +181,7 @@ func TestContainersCapabilityReturnsPublishedBusinessError(t *testing.T) {
 	}
 }
 
-func TestContainerBusinessErrorClassifiesEngineAvailabilityFailures(t *testing.T) {
+func TestContainerCapabilityBusinessErrorClassifiesEngineAvailabilityFailures(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -178,22 +189,41 @@ func TestContainerBusinessErrorClassifiesEngineAvailabilityFailures(t *testing.T
 		cause error
 		code  string
 	}{
-		{name: "CLI unavailable", cause: containers.ErrCLIUnavailable, code: "CONTAINER_ENGINE_UNAVAILABLE"},
-		{name: "backend unreachable", cause: containers.ErrBackendUnreachable, code: "CONTAINER_ENGINE_UNAVAILABLE"},
-		{name: "engine timeout", cause: containers.ErrEngineTimeout, code: "CONTAINER_OPERATION_FAILED"},
-		{name: "deadline timeout", cause: context.DeadlineExceeded, code: "CONTAINER_OPERATION_FAILED"},
+		{name: "CLI unavailable", cause: containers.ErrCLIUnavailable, code: "CONTAINER_CLI_UNAVAILABLE"},
+		{name: "daemon stopped", cause: containers.ErrDaemonStopped, code: "CONTAINER_DAEMON_STOPPED"},
+		{name: "backend unreachable", cause: containers.ErrBackendUnreachable, code: "CONTAINER_ENGINE_UNREACHABLE"},
+		{name: "permission denied", cause: containers.ErrPermissionDenied, code: "CONTAINER_PERMISSION_DENIED"},
+		{name: "engine timeout", cause: containers.ErrEngineTimeout, code: "CONTAINER_OPERATION_TIMEOUT"},
+		{name: "deadline timeout", cause: context.DeadlineExceeded, code: "CONTAINER_OPERATION_TIMEOUT"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var businessError *capability.BusinessError
-			if err := containerBusinessError(tt.cause); !errors.As(err, &businessError) || businessError.Code != tt.code {
-				t.Fatalf("containerBusinessError() = %#v, want code %q", err, tt.code)
+			if err := containerCapabilityBusinessError(tt.cause); !errors.As(err, &businessError) || businessError.Code != tt.code {
+				t.Fatalf("containerCapabilityBusinessError() = %#v, want code %q", err, tt.code)
 			}
 			if len(businessError.Details) != 0 {
 				t.Fatalf("business error details = %#v, want redacted empty details", businessError.Details)
 			}
 		})
+	}
+}
+
+func TestContainerCapabilityBusinessErrorRedactsOrangeDockerSocketFailure(t *testing.T) {
+	t.Parallel()
+
+	cause := fmt.Errorf("%w: permission denied while trying to connect to the docker API at unix:///var/run/docker.sock", containers.ErrPermissionDenied)
+	err := containerCapabilityBusinessError(cause)
+	var businessError *capability.BusinessError
+	if !errors.As(err, &businessError) || businessError.Code != "CONTAINER_PERMISSION_DENIED" ||
+		businessError.Message != "Permission to access the container engine was denied" || len(businessError.Details) != 0 {
+		t.Fatalf("containerCapabilityBusinessError() = %#v, err=%v", businessError, err)
+	}
+	for _, forbidden := range []string{"docker.sock", "/var/run", "unix://", "permission denied while trying to connect"} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("business error leaked %q: %v", forbidden, err)
+		}
 	}
 }
 
@@ -207,13 +237,15 @@ func TestContainerBusinessErrorsConformToVerifiedSignedContract(t *testing.T) {
 	}
 	for _, cause := range []error{
 		containers.ErrCLIUnavailable,
+		containers.ErrDaemonStopped,
 		containers.ErrBackendUnreachable,
+		containers.ErrPermissionDenied,
 		containers.ErrEngineTimeout,
 		context.DeadlineExceeded,
 	} {
 		var businessError *capability.BusinessError
-		if err := containerBusinessError(cause); !errors.As(err, &businessError) {
-			t.Fatalf("containerBusinessError(%v) = %v, want capability.BusinessError", cause, err)
+		if err := containerCapabilityBusinessError(cause); !errors.As(err, &businessError) {
+			t.Fatalf("containerCapabilityBusinessError(%v) = %v, want capability.BusinessError", cause, err)
 		}
 		declared, ok := published[businessError.Code]
 		if !ok {
@@ -236,7 +268,7 @@ func TestContainersCapabilityReturnsEveryPublishedResourceError(t *testing.T) {
 		t.Fatalf("not-found business error = %#v, err=%v", notFound, err)
 	}
 
-	logsError := containerBusinessError(containers.ErrLogsUnavailable)
+	logsError := containerCapabilityBusinessError(containers.ErrLogsUnavailable)
 	var unavailable *capability.BusinessError
 	if !errors.As(logsError, &unavailable) || unavailable.Code != "CONTAINER_LOGS_UNAVAILABLE" || len(unavailable.Details) != 0 {
 		t.Fatalf("logs business error = %#v, err=%v", unavailable, logsError)
@@ -248,7 +280,7 @@ func TestContainersCapabilityOperationUsesHostOwnedSink(t *testing.T) {
 	sink := newTestOperationSink("operation_1")
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
-			ExecutionBinding: capability.ExecutionBinding{CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodStart)},
+			ExecutionBinding: capability.ExecutionBinding{CapabilityVersion: containersCapabilityVersion, TargetMethod: string(containers.MethodStart)},
 			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "container_id": "container_1"},
@@ -364,7 +396,7 @@ func TestContainersCapabilitySubscriptionAppendsDirectlyToHostStream(t *testing.
 	sink := newTestOperationSink("execution_logs")
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
-			ExecutionBinding: capability.ExecutionBinding{CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodLogsTail)},
+			ExecutionBinding: capability.ExecutionBinding{CapabilityVersion: containersCapabilityVersion, TargetMethod: string(containers.MethodLogsTail)},
 			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "container_id": "container_1", "tail_lines": 50},

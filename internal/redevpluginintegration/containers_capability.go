@@ -17,14 +17,11 @@ import (
 )
 
 const (
-	containersCapabilityID        = "redeven.capability.container_resources"
-	containersCapabilityV2Version = "1.0.0"
-	containersCapabilityV3Version = "2.0.0"
-	containersCapabilityV4Version = "3.0.0"
-	containersCapabilityVersion   = containersCapabilityV4Version
-	containerTaskCanceledReason   = "container operation canceled"
-	containerTerminalFailure      = "container capability terminal state failed"
-	containerTerminalTimeout      = 2 * time.Second
+	containersCapabilityID      = "redeven.capability.container_resources"
+	containersCapabilityVersion = "3.0.0"
+	containerTaskCanceledReason = "container operation canceled"
+	containerTerminalFailure    = "container capability terminal state failed"
+	containerTerminalTimeout    = 2 * time.Second
 )
 
 var errContainerTaskCanceled = errors.New(containerTaskCanceledReason)
@@ -98,7 +95,7 @@ func (a *containersCapabilityAdapter) Close() error {
 
 func (a *containersCapabilityAdapter) ProjectTarget(_ context.Context, req capability.TargetResolutionRequest) (capability.TargetDescriptor, error) {
 	if a == nil || a.containers == nil || req.CapabilityID != containersCapabilityID ||
-		(req.CapabilityVersion != containersCapabilityV2Version && req.CapabilityVersion != containersCapabilityV3Version && req.CapabilityVersion != containersCapabilityV4Version) {
+		req.CapabilityVersion != containersCapabilityVersion {
 		return capability.TargetDescriptor{}, errors.New("containers capability target is invalid")
 	}
 	kind, err := containerTargetKind(req.TargetMethod)
@@ -160,13 +157,13 @@ func (a *containersCapabilityAdapter) Invoke(ctx context.Context, req capability
 	}
 	switch containers.Method(req.Execution.TargetMethod) {
 	case containers.MethodStatus:
-		return a.status(ctx, req.Execution.ExecutionBinding, req.Arguments)
+		return a.status(ctx, req.Arguments)
 	case containers.MethodList:
-		return a.list(ctx, req.Execution.ExecutionBinding, req.Arguments)
+		return a.list(ctx, req.Arguments)
 	case containers.MethodInspect:
-		return a.inspect(ctx, req.Execution.ExecutionBinding, req.Arguments)
+		return a.inspect(ctx, req.Arguments)
 	case containers.MethodStartPreflight:
-		return a.startPreflight(ctx, req.Execution.ExecutionBinding, req.Arguments)
+		return a.startPreflight(ctx, req.Arguments)
 	case containers.MethodEndpointsList, containers.MethodEndpointsStatus,
 		containers.MethodComposeProjectsList, containers.MethodComposeProjectsInspect,
 		containers.MethodComposeProjectsPreflight, containers.MethodPodsList,
@@ -232,18 +229,18 @@ func (a *containersCapabilityAdapter) CancelExecution(_ context.Context, req cap
 	return nil
 }
 
-func (a *containersCapabilityAdapter) status(ctx context.Context, binding capability.ExecutionBinding, arguments map[string]any) (capability.Result, error) {
+func (a *containersCapabilityAdapter) status(ctx context.Context, arguments map[string]any) (capability.Result, error) {
 	var input engineArguments
 	if err := decodeCapabilityArguments(arguments, &input); err != nil {
 		return capability.Result{}, err
 	}
 	bound, _, err := a.containers.BindEndpoint(ctx, input.Engine, input.EndpointID)
 	if err != nil {
-		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
+		return capability.Result{}, containerCapabilityBusinessError(err)
 	}
 	result, err := a.containers.Status(bound, containers.StatusRequest{Engine: input.Engine, EndpointID: input.EndpointID})
 	if err != nil {
-		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
+		return capability.Result{}, containerCapabilityBusinessError(err)
 	}
 	data := map[string]any{
 		"engine":    string(result.Engine),
@@ -258,22 +255,22 @@ func (a *containersCapabilityAdapter) status(ctx context.Context, binding capabi
 	return capability.Result{Data: data}, nil
 }
 
-func (a *containersCapabilityAdapter) list(ctx context.Context, binding capability.ExecutionBinding, arguments map[string]any) (capability.Result, error) {
+func (a *containersCapabilityAdapter) list(ctx context.Context, arguments map[string]any) (capability.Result, error) {
 	var input listArguments
 	if err := decodeCapabilityArguments(arguments, &input); err != nil {
 		return capability.Result{}, err
 	}
 	bound, _, err := a.containers.BindEndpoint(ctx, input.Engine, input.EndpointID)
 	if err != nil {
-		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
+		return capability.Result{}, containerCapabilityBusinessError(err)
 	}
 	result, err := a.containers.List(bound, containers.ContainerListRequest{Engine: input.Engine, EndpointID: input.EndpointID, All: input.All})
 	if err != nil {
-		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
+		return capability.Result{}, containerCapabilityBusinessError(err)
 	}
 	items := make([]any, len(result.Containers))
 	for index, item := range result.Containers {
-		items[index] = projectContainerSummaryForBinding(binding, item)
+		items[index] = projectContainerSummary(item)
 	}
 	data := map[string]any{
 		"engine":     string(result.Engine),
@@ -285,14 +282,14 @@ func (a *containersCapabilityAdapter) list(ctx context.Context, binding capabili
 	return capability.Result{Data: data}, nil
 }
 
-func (a *containersCapabilityAdapter) inspect(ctx context.Context, binding capability.ExecutionBinding, arguments map[string]any) (capability.Result, error) {
+func (a *containersCapabilityAdapter) inspect(ctx context.Context, arguments map[string]any) (capability.Result, error) {
 	var input containerArguments
 	if err := decodeCapabilityArguments(arguments, &input); err != nil {
 		return capability.Result{}, err
 	}
 	bound, _, err := a.containers.BindEndpoint(ctx, input.Engine, input.EndpointID)
 	if err != nil {
-		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
+		return capability.Result{}, containerCapabilityBusinessError(err)
 	}
 	result, err := a.containers.Inspect(bound, containers.ContainerInspectRequest{
 		Engine:      input.Engine,
@@ -300,11 +297,11 @@ func (a *containersCapabilityAdapter) inspect(ctx context.Context, binding capab
 		ContainerID: input.ContainerID,
 	})
 	if err != nil {
-		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
+		return capability.Result{}, containerCapabilityBusinessError(err)
 	}
 	data := map[string]any{
 		"engine":    string(result.Engine),
-		"container": projectContainerInspectForBinding(binding, result.Container),
+		"container": projectContainerInspect(result.Container),
 	}
 	if input.EndpointID != "" {
 		data["endpoint_id"] = input.EndpointID
@@ -312,14 +309,14 @@ func (a *containersCapabilityAdapter) inspect(ctx context.Context, binding capab
 	return capability.Result{Data: data}, nil
 }
 
-func (a *containersCapabilityAdapter) startPreflight(ctx context.Context, binding capability.ExecutionBinding, arguments map[string]any) (capability.Result, error) {
+func (a *containersCapabilityAdapter) startPreflight(ctx context.Context, arguments map[string]any) (capability.Result, error) {
 	var input containerArguments
 	if err := decodeCapabilityArguments(arguments, &input); err != nil {
 		return capability.Result{}, err
 	}
 	bound, _, err := a.containers.BindEndpoint(ctx, input.Engine, input.EndpointID)
 	if err != nil {
-		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
+		return capability.Result{}, containerCapabilityBusinessError(err)
 	}
 	plan, err := a.containers.StartPreflight(bound, containers.ContainerStartRequest{
 		Engine:      input.Engine,
@@ -327,7 +324,7 @@ func (a *containersCapabilityAdapter) startPreflight(ctx context.Context, bindin
 		ContainerID: input.ContainerID,
 	})
 	if err != nil {
-		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
+		return capability.Result{}, containerCapabilityBusinessError(err)
 	}
 	return capability.Result{Data: projectStartPreflight(plan)}, nil
 }
@@ -557,7 +554,7 @@ func (a *containersCapabilityAdapter) runOperationTask(ctx context.Context, bind
 		a.recordTerminalResult(binding, sink.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
+	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerMutationBusinessError(err)))
 }
 
 func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding capability.ExecutionBinding, sink capability.ExecutionSink, input logArguments) {
@@ -605,7 +602,7 @@ func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding ca
 		a.recordTerminalResult(binding, sink.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
+	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerMutationBusinessError(err)))
 }
 
 func (a *containersCapabilityAdapter) runStatsTask(ctx context.Context, binding capability.ExecutionBinding, sink capability.ExecutionSink, input statsWatchArguments) {
@@ -647,7 +644,7 @@ func (a *containersCapabilityAdapter) runStatsTask(ctx context.Context, binding 
 		a.recordTerminalResult(binding, sink.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
+	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerMutationBusinessError(err)))
 }
 
 func (a *containersCapabilityAdapter) recordTerminalResult(binding capability.ExecutionBinding, err error) {
@@ -817,16 +814,6 @@ func projectContainerSummary(item containers.ContainerSummary) map[string]any {
 	return data
 }
 
-func projectContainerSummaryForBinding(binding capability.ExecutionBinding, item containers.ContainerSummary) map[string]any {
-	data := projectContainerSummary(item)
-	if binding.CapabilityVersion != containersCapabilityV4Version {
-		delete(data, "group_kind")
-		delete(data, "group_id")
-		delete(data, "group_name")
-	}
-	return data
-}
-
 func projectContainerInspect(item containers.ContainerInspect) map[string]any {
 	data := map[string]any{
 		"container_id": item.ContainerID,
@@ -864,16 +851,6 @@ func projectContainerInspect(item containers.ContainerInspect) map[string]any {
 	}
 	if item.GroupName != "" {
 		data["group_name"] = item.GroupName
-	}
-	return data
-}
-
-func projectContainerInspectForBinding(binding capability.ExecutionBinding, item containers.ContainerInspect) map[string]any {
-	data := projectContainerInspect(item)
-	if binding.CapabilityVersion != containersCapabilityV4Version {
-		delete(data, "group_kind")
-		delete(data, "group_id")
-		delete(data, "group_name")
 	}
 	return data
 }
@@ -1025,16 +1002,34 @@ func projectStartPreflight(plan containers.StartPreflightPlan) map[string]any {
 	return data
 }
 
-func containerBusinessError(cause error) error {
+func containerCapabilityBusinessError(cause error) error {
 	code := "CONTAINER_OPERATION_FAILED"
 	message := "The container operation failed"
 	var details map[string]any
-	if errors.Is(cause, containers.ErrEngineUnavailable) || errors.Is(cause, containers.ErrCLIUnavailable) || errors.Is(cause, containers.ErrBackendUnreachable) {
+	if errors.Is(cause, containers.ErrCLIUnavailable) {
+		code = "CONTAINER_CLI_UNAVAILABLE"
+		message = "The selected container engine CLI is not installed"
+	} else if errors.Is(cause, containers.ErrBackendUnreachable) {
+		code = "CONTAINER_ENGINE_UNREACHABLE"
+		message = "The selected container engine service is unreachable"
+	} else if errors.Is(cause, containers.ErrDaemonStopped) {
+		code = "CONTAINER_DAEMON_STOPPED"
+		message = "The selected container engine service is not running"
+	} else if errors.Is(cause, containers.ErrPermissionDenied) {
+		code = "CONTAINER_PERMISSION_DENIED"
+		message = "Permission to access the container engine was denied"
+	} else if errors.Is(cause, containers.ErrEngineUnavailable) {
 		code = "CONTAINER_ENGINE_UNAVAILABLE"
 		message = "The selected container engine is unavailable"
 	} else if errors.Is(cause, containers.ErrEngineTimeout) || errors.Is(cause, context.DeadlineExceeded) {
-		code = "CONTAINER_OPERATION_FAILED"
-		message = "The container operation failed"
+		code = "CONTAINER_OPERATION_TIMEOUT"
+		message = "The container engine operation timed out"
+	} else if errors.Is(cause, containers.ErrReferenceStateIncomplete) {
+		code = "CONTAINER_REFERENCE_STATE_INCOMPLETE"
+		message = "Container reference state is incomplete"
+	} else if errors.Is(cause, containers.ErrEndpointNotFound) {
+		code = "CONTAINER_ENDPOINT_NOT_FOUND"
+		message = "The selected container engine endpoint is unavailable"
 	} else if errors.Is(cause, containers.ErrContainerNotFound) {
 		code = "CONTAINER_NOT_FOUND"
 		message = "The requested container does not exist"

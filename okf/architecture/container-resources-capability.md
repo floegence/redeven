@@ -10,7 +10,7 @@ timestamp: 2026-07-29T00:00:00Z
 Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk
 projection; ReDevPlugin owns plugin identity, grants, confirmations, Executions,
 Events, quotas, revocation, and audit. Production consumes signed
-Containers `4.4.9`, `redeven.container_resources.v4@4.0.0`, and
+Containers `4.4.10`, `redeven.container_resources.v4@4.0.0`, and
 `redeven.capability.container_resources@3.0.0` through the latest-only market
 and immutable GitHub Release transport. The Host registers the v4 contract as a
 Redeven-versioned known contract generated from one canonical source; there is
@@ -108,6 +108,14 @@ cancellation or output overflow, and parses only the minimal supported JSON or
 NDJSON shapes. It does not inspect localized stderr to invent typed resource
 identity errors.
 
+The Host operating system owns engine access. Redeven maps CLI availability,
+daemon state, connectivity, permission, and timeout failures into one current
+v4 business-error path, but it never changes socket permissions, adds users to
+system groups, invokes a privileged wrapper, or silently switches engines. An
+administrator must grant the Redeven runtime user access; after group membership
+changes, the environment must be fully reconnected before the runtime refreshes
+resources.
+
 ## ReDevPlugin bridge
 
 The Redeven integration bridge strictly decodes contract-declared inputs,
@@ -121,7 +129,7 @@ lifecycle authority, audit store, or token issuer.
 
 The v4 bridge and generated client are exercised against the source contract.
 Production registers the generated known v4 contract and separately admits the
-verified Containers `4.4.9` package selected by the production market snapshot.
+verified Containers `4.4.10` package selected by the production market snapshot.
 Development follows the same published market and release path; Redeven does
 not build, embed, or trust an ephemeral Containers package. Missing or altered
 delivery evidence fails startup rather than falling back to another contract.
@@ -151,6 +159,8 @@ actions are disabled when inventory is stale, partial, or unavailable.
   quota, audit, revocation, installation, and runtime lifecycle.
 - Redeven owns Docker and Podman discovery, explicit argv, business DTOs,
   preflight risk projection, resource reconciliation, and product UI.
+- The Host administrator owns engine access policy. Neither Redeven nor a plugin
+  automatically elevates operating-system privileges or weakens socket access.
 - The canonical Redeven capability contract is wire authority; the generated
   Host projection must remain exact, and there is no second published schema.
 - Official plugin packages come only from the authorized package signing flow.
