@@ -2,7 +2,7 @@ import '../../index.css';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 
@@ -41,6 +41,10 @@ async function settle(): Promise<void> {
 describe('ServiceTemplateCatalog browser presentation', () => {
   let dispose: (() => void) | undefined;
 
+  beforeEach(async () => {
+    await page.viewport(1280, 720);
+  });
+
   afterEach(async () => {
     dispose?.();
     dispose = undefined;
@@ -74,15 +78,18 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     ), host);
   }
 
-  it('uses a gallery and adjacent detail pane with a clear keyboard selection path', async () => {
+  it('uses aligned master-detail columns and lets a single template fill the gallery', async () => {
     await page.viewport(1280, 720);
     mount();
 
-    const catalog = document.querySelector<HTMLElement>('[data-testid="service-template-catalog"]')!;
+    const gallery = document.querySelector<HTMLElement>('[data-testid="service-template-gallery"]')!;
     const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
     const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
-    expect(card.getBoundingClientRect().width / catalog.getBoundingClientRect().width).toBeLessThan(0.5);
-    expect(details.getBoundingClientRect().left).toBeGreaterThan(card.getBoundingClientRect().right);
+    expect(card.getBoundingClientRect().width / gallery.getBoundingClientRect().width).toBeGreaterThan(0.95);
+    expect(details.getBoundingClientRect().width / gallery.getBoundingClientRect().width).toBeGreaterThan(0.72);
+    expect(details.getBoundingClientRect().width / gallery.getBoundingClientRect().width).toBeLessThan(0.9);
+    expect(details.getBoundingClientRect().top).toBeCloseTo(gallery.getBoundingClientRect().top, 0);
+    expect(details.getBoundingClientRect().left).toBeGreaterThan(gallery.getBoundingClientRect().right);
     expect(card.getAttribute('aria-selected')).toBe('true');
 
     await userEvent.tab();
@@ -90,7 +97,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect((document.activeElement as HTMLElement).className).toContain('focus-visible');
   });
 
-  it('resolves the card surface through both light and dark theme tokens', () => {
+  it('keeps the catalog and details flat while preserving a themed interactive tile', () => {
     document.documentElement.classList.add('light');
     mount();
     const catalogSurface = document.querySelector<HTMLElement>('.service-template-catalog__canvas')!;
@@ -99,13 +106,21 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const lightBackground = getComputedStyle(card).backgroundColor;
     const lightCatalogBackground = getComputedStyle(catalogSurface).backgroundColor;
     const lightDetailsBackground = getComputedStyle(details).backgroundColor;
+    const catalogStyle = getComputedStyle(catalogSurface);
+    const detailsStyle = getComputedStyle(details);
 
     document.documentElement.classList.replace('light', 'dark');
     const darkBackground = getComputedStyle(card).backgroundColor;
 
     expect(lightBackground).not.toBe('rgba(0, 0, 0, 0)');
     expect(lightBackground).not.toBe(lightCatalogBackground);
-    expect(lightDetailsBackground).not.toBe(lightCatalogBackground);
+    expect(lightCatalogBackground).toBe('rgba(0, 0, 0, 0)');
+    expect(lightDetailsBackground).toBe(lightCatalogBackground);
+    expect(catalogStyle.boxShadow).toBe('none');
+    expect(detailsStyle.borderTopWidth).toBe('0px');
+    expect(detailsStyle.borderRightWidth).toBe('0px');
+    expect(detailsStyle.borderBottomWidth).toBe('0px');
+    expect(detailsStyle.borderLeftWidth).toBe('1px');
     expect(darkBackground).not.toBe('rgba(0, 0, 0, 0)');
     expect(darkBackground).not.toBe(lightBackground);
   });
@@ -120,6 +135,8 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const more = document.querySelector<HTMLElement>('[data-testid="service-template-more"]')!;
     expect(getComputedStyle(layout).gridTemplateColumns.split(' ')).toHaveLength(1);
     expect(details.getBoundingClientRect().top).toBeGreaterThan(document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!.getBoundingClientRect().bottom);
+    expect(getComputedStyle(details).borderLeftWidth).toBe('0px');
+    expect(getComputedStyle(details).borderTopWidth).toBe('1px');
     expect(deploy.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     expect(more.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   });
