@@ -43,6 +43,11 @@ export type wire_sys_ping_resp = {
       reason_code?: string;
       message?: string;
     };
+    ai_readiness?: {
+      state?: string;
+      reason_code?: string;
+      issue_count?: number;
+    };
     active_workload?: {
       terminal_count?: number;
       session_count?: number;
@@ -57,6 +62,12 @@ export type wire_sys_ping_resp = {
         message?: string;
       };
       provider_link?: {
+        supported?: boolean;
+        bind_method?: string;
+        reason_code?: string;
+        message?: string;
+      };
+      runtime_gateway?: {
         supported?: boolean;
         bind_method?: string;
         reason_code?: string;

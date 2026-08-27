@@ -12,7 +12,7 @@ import type {
 } from '../sdk/monitor';
 
 export function toWireSysMonitorRequest(req: SysMonitorRequest): wire_sys_monitor_req {
-  return { sort_by: req.sortBy };
+  return req.sortBy ? { sort_by: req.sortBy } : {};
 }
 
 export function fromWireSysMonitorResponse(resp: wire_sys_monitor_resp): SysMonitorSnapshot {

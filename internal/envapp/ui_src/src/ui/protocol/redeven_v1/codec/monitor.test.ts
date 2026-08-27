@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { fromWireSysMonitorResponse } from './monitor';
+import { fromWireSysMonitorResponse, toWireSysMonitorRequest } from './monitor';
 
 describe('System monitor codec', () => {
+  it('omits the optional sort field when the caller uses the default order', () => {
+    const request = toWireSysMonitorRequest({});
+
+    expect(Object.keys(request)).toEqual([]);
+  });
+
   it('maps whole-environment CPU and memory fields', () => {
     expect(fromWireSysMonitorResponse({
       cpu_usage: 17.5,

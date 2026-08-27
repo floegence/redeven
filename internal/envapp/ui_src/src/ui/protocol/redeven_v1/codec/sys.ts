@@ -1,5 +1,7 @@
 import type {
+  RuntimeServiceAIReadiness,
   RuntimeServiceBindingState,
+  RuntimeServiceCapability,
   RuntimeServiceCompatibility,
   RuntimeServiceOpenReadiness,
   RuntimeServiceProviderLinkBinding,
@@ -105,6 +107,44 @@ function fromWireRuntimeServiceOpenReadiness(value: unknown): RuntimeServiceOpen
   };
 }
 
+function fromWireRuntimeServiceAIReadiness(value: unknown): RuntimeServiceAIReadiness {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const state = String(record.state ?? '').trim();
+  const reasonCode = String(record.reason_code ?? '').trim();
+  const issueCount = normalizeCount(record.issue_count);
+  switch (state) {
+    case 'ready':
+      return { state: 'ready', issueCount: 0 };
+    case 'degraded':
+      if (reasonCode === 'host_thread_settings_missing' && issueCount > 0) {
+        return { state: 'degraded', reasonCode, issueCount };
+      }
+      break;
+    case 'unavailable':
+    case 'inspecting':
+    case 'migrating':
+    case 'verifying':
+      return { state, issueCount: 0 };
+    case 'blocked':
+      if (reasonCode) return { state: 'blocked', reasonCode, issueCount: 0 };
+      break;
+  }
+  return { state: 'unavailable', issueCount: 0 };
+}
+
+function fromWireRuntimeServiceCapability(value: unknown): RuntimeServiceCapability {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const supported = record.supported === true;
+  return {
+    supported,
+    bindMethod: supported
+      ? (String(record.bind_method ?? '').trim() || 'runtime_control_v2')
+      : undefined,
+    reasonCode: String(record.reason_code ?? '').trim() || undefined,
+    message: String(record.message ?? '').trim() || undefined,
+  };
+}
+
 function fromWireRuntimeServiceProviderLinkBinding(
   value: wire_sys_ping_resp['runtime_service'] extends infer RuntimeService
     ? RuntimeService extends { bindings?: infer Bindings }
@@ -137,10 +177,11 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
   if (!resp) return undefined;
   const workload = resp.active_workload ?? {};
   const capabilities = resp.capabilities ?? {};
-  const desktopModelSourceCapability = capabilities.desktop_model_source ?? {};
+  const desktopModelSourceCapability = fromWireRuntimeServiceCapability(capabilities.desktop_model_source);
   const desktopModelSourceSupported = desktopModelSourceCapability.supported === true;
-  const providerLinkCapability = capabilities.provider_link ?? {};
+  const providerLinkCapability = fromWireRuntimeServiceCapability(capabilities.provider_link);
   const providerLinkSupported = providerLinkCapability.supported === true;
+  const runtimeGatewayCapability = fromWireRuntimeServiceCapability(capabilities.runtime_gateway);
   const bindings = resp.bindings ?? {};
   const desktopModelSourceBinding = bindings.desktop_model_source ?? {};
   const providerLinkBinding = bindings.provider_link ?? {};
@@ -158,6 +199,7 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
     minimumRuntimeVersion: resp.minimum_runtime_version ? String(resp.minimum_runtime_version) : undefined,
     compatibilityReviewId: resp.compatibility_review_id ? String(resp.compatibility_review_id) : undefined,
     openReadiness: fromWireRuntimeServiceOpenReadiness(resp.open_readiness),
+    aiReadiness: fromWireRuntimeServiceAIReadiness(resp.ai_readiness),
     activeWorkload: {
       terminalCount: normalizeCount(workload.terminal_count),
       sessionCount: normalizeCount(workload.session_count),
@@ -165,22 +207,9 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
       portForwardCount: normalizeCount(workload.port_forward_count),
     },
     capabilities: {
-      desktopModelSource: {
-        supported: desktopModelSourceSupported,
-        bindMethod: desktopModelSourceSupported
-          ? (String(desktopModelSourceCapability.bind_method ?? '').trim() || 'runtime_control_v2')
-          : undefined,
-        reasonCode: String(desktopModelSourceCapability.reason_code ?? '').trim() || undefined,
-        message: String(desktopModelSourceCapability.message ?? '').trim() || undefined,
-      },
-      providerLink: {
-        supported: providerLinkSupported,
-        bindMethod: providerLinkSupported
-          ? (String(providerLinkCapability.bind_method ?? '').trim() || 'runtime_control_v2')
-          : undefined,
-        reasonCode: String(providerLinkCapability.reason_code ?? '').trim() || undefined,
-        message: String(providerLinkCapability.message ?? '').trim() || undefined,
-      },
+      desktopModelSource: desktopModelSourceCapability,
+      providerLink: providerLinkCapability,
+      runtimeGateway: runtimeGatewayCapability,
     },
     bindings: {
       desktopModelSource: {

@@ -25,6 +25,11 @@ describe('sys codec', () => {
           reason_code: 'env_app_app_server_starting',
           message: 'Env App app server is starting.',
         },
+        ai_readiness: {
+          state: 'degraded',
+          reason_code: 'host_thread_settings_missing',
+          issue_count: 2,
+        },
         active_workload: {
           terminal_count: 3,
           session_count: 2,
@@ -37,6 +42,10 @@ describe('sys codec', () => {
             bind_method: 'runtime_control_v2',
           },
           provider_link: {
+            supported: true,
+            bind_method: 'runtime_control_v2',
+          },
+          runtime_gateway: {
             supported: true,
             bind_method: 'runtime_control_v2',
           },
@@ -83,6 +92,11 @@ describe('sys codec', () => {
           reasonCode: 'env_app_app_server_starting',
           message: 'Env App app server is starting.',
         },
+        aiReadiness: {
+          state: 'degraded',
+          reasonCode: 'host_thread_settings_missing',
+          issueCount: 2,
+        },
         activeWorkload: {
           terminalCount: 3,
           sessionCount: 2,
@@ -95,6 +109,10 @@ describe('sys codec', () => {
             bindMethod: 'runtime_control_v2',
           },
           providerLink: {
+            supported: true,
+            bindMethod: 'runtime_control_v2',
+          },
+          runtimeGateway: {
             supported: true,
             bindMethod: 'runtime_control_v2',
           },
@@ -149,6 +167,10 @@ describe('sys codec', () => {
       minimumRuntimeVersion: undefined,
       compatibilityReviewId: undefined,
       openReadiness: undefined,
+      aiReadiness: {
+        state: 'unavailable',
+        issueCount: 0,
+      },
       activeWorkload: {
         terminalCount: 0,
         sessionCount: 2,
@@ -163,6 +185,12 @@ describe('sys codec', () => {
           message: undefined,
         },
         providerLink: {
+          supported: false,
+          bindMethod: undefined,
+          reasonCode: undefined,
+          message: undefined,
+        },
+        runtimeGateway: {
           supported: false,
           bindMethod: undefined,
           reasonCode: undefined,
