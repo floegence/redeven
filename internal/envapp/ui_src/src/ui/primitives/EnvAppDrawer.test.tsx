@@ -68,4 +68,12 @@ describe('EnvAppDrawer', () => {
     expect(rule).toContain('--floe-floating-enter-scale: 1');
     expect(rule).toContain('--floe-floating-exit-scale: 1');
   });
+
+  it('keeps the full drawer overlay outside Desktop drag regions', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/redeven.css'), 'utf8');
+    const overlayRule = css.match(/\[data-floe-dialog-overlay-root\]:has\(\.env-app-drawer-panel\)\s*\{(?<body>[\s\S]*?)\n\}/u)?.groups?.body ?? '';
+    const interactionRule = css.match(/\[data-floe-dialog-overlay-root\]:has\(\.env-app-drawer-panel\) > :not\(\[data-floe-dialog-backdrop\]\)\s*\{(?<body>[\s\S]*?)\n\}/u)?.groups?.body ?? '';
+    expect(overlayRule).toContain('app-region: no-drag');
+    expect(interactionRule).toContain('pointer-events: none');
+  });
 });

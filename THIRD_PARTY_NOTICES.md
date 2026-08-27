@@ -12,7 +12,7 @@ Redeven can install the following software only after an authorized user explici
 
 | Component | Fixed version | License | Source | Distribution note |
 | --- | --- | --- | --- | --- |
-| DeepSeek Harness (`@deepseek-ai/dsh`) | 0.1.1-rc.2 | MIT | https://github.com/deepseek-ai/deepseek-harness | Developer Preview software installed on demand from the release-locked npm dependency graph. Installed packages retain their upstream licenses and notices. |
+| DeepSeek Harness (`@deepseek-ai/dsh`) | 0.1.1-rc.2 | MIT | https://github.com/deepseek-ai/deepseek-harness | Developer Preview software installed on demand from the release-locked npm dependency graph. The Env App template catalog adapts the official fish mark from upstream `FishLogo.tsx`; installed packages retain their upstream licenses and notices. |
 | Node.js | 24.19.0 | MIT | https://github.com/nodejs/node | Official platform runtime downloaded on demand by host deployment using the URL, byte size, and SHA-256 pinned in the Redeven release. The distribution retains its bundled license and dependency notices. |
 | DeepSeek Harness Docker (Community) | 0.1.1-rc.2 | MIT | https://github.com/runzhliu/deepseek-harness-docker | Community packaging, not an official DeepSeek distribution. Redeven permits only the reviewed source revision and signed OCI digest. The image retains its own operating-system and package notices. |
 

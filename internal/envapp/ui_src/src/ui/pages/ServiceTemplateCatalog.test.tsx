@@ -41,6 +41,7 @@ const builtIn: ServiceTemplatePresentation = {
   description: 'Run DeepSeek Harness directly in the current Environment.',
   source: 'builtin',
   kind: 'host',
+  brandIcon: 'deepseek-harness',
   deploymentLabel: 'Host',
   version: '0.1.1-rc.2',
   developerPreview: true,
@@ -111,6 +112,7 @@ describe('ServiceTemplateCatalog', () => {
 
     expect(host.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(2);
     expect(host.querySelectorAll('[data-testid="service-template-card"]')).toHaveLength(2);
+    expect(host.querySelector('[data-testid="deepseek-harness-logo"]')).toBeTruthy();
     expect(host.querySelector('.grid')).toBeNull();
     expect(host.textContent).toContain('Built-in templates');
     expect(host.textContent).toContain('Custom templates');

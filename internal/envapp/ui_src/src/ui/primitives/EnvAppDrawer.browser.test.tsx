@@ -11,6 +11,9 @@ async function settle(): Promise<void> {
   await Promise.resolve();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  // The drawer's reviewed entrance lasts 240 ms; geometry is authoritative only
+  // after that horizontal presence transition completes.
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
 }
 
 describe('EnvAppDrawer browser geometry', () => {
