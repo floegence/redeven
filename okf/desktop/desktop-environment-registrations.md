@@ -1,13 +1,13 @@
 ---
 type: Desktop Contract
 title: Desktop Environment registration ownership
-description: Single registration owners, one-time SSH migration, serialized persistence, and generation-safe removal.
-tags: [desktop, environments, persistence, ssh, runtime, launcher]
+description: Single registration owners, versioned connection records, serialized persistence, and generation-safe removal.
+tags: [desktop, environments, persistence, ssh, wsl, runtime, launcher]
 timestamp: 2026-08-23T00:00:00Z
 ---
 # Summary
 
-Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; SSH host and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.
+Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; WSL, SSH host, and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.
 
 # Contract
 
@@ -15,9 +15,11 @@ Every actionable card carries an explicit `EnvironmentRegistrationRef`. Create, 
 
 Preferences mutations form one serialized queue. Each mutation reads the latest committed value and writes only its owner fields. Long-running Open, probe, and lifecycle work may update health, operation, or `last_used_at` only while the registration still exists. Removal advances the Launcher subject generation before background cleanup, so results from an earlier generation cannot reintroduce a card. Pinning and use-time updates never upsert a missing registration.
 
+Connection records are explicitly versioned. Desktop reads existing v1 Local, URL, and SSH records without eagerly rewriting or deleting them; new WSL records require v2 and preserve the exact distribution name plus confirmed Linux user. `default_flower_runtime_target_id` references one registered Runtime Target. The first WSL registration fills an empty default, explicit selection replaces it, and deleting that target clears the reference in the same preference mutation.
+
 # Boundaries
 
-Desktop owns registration metadata, persistence, and presentation. Runtime, Gateway, and remote targets retain ownership of remote data, lifecycle authority, and access policy; removing or changing a Desktop registration never mutates those upstream resources.
+Desktop owns registration metadata, persistence, and presentation. Runtime, Gateway, WSL, and remote targets retain ownership of external data, lifecycle authority, and access policy; removing or changing a Desktop registration never deletes those resources. WSL-specific discovery and lifecycle behavior is owned by [Desktop WSL runtime operations](desktop-wsl-runtime-operations.md).
 
 # Legacy SSH migration
 

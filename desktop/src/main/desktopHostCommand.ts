@@ -1,7 +1,7 @@
 import fsSync from 'node:fs';
 import path from 'node:path';
 
-export type DesktopHostCommandName = 'docker' | 'podman' | 'ssh';
+export type DesktopHostCommandName = 'docker' | 'podman' | 'ssh' | 'wsl';
 
 export type DesktopHostCommandResolutionSource =
   | 'absolute_input'
@@ -31,22 +31,26 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function unique(values: readonly string[]): readonly string[] {
+function unique(values: readonly string[], caseInsensitive = false): readonly string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const value of values) {
     const clean = compact(value);
-    if (clean === '' || seen.has(clean)) {
+    const key = caseInsensitive ? clean.toLowerCase() : clean;
+    if (clean === '' || seen.has(key)) {
       continue;
     }
-    seen.add(clean);
+    seen.add(key);
     out.push(clean);
   }
   return out;
 }
 
-function splitPathEnv(value: string | undefined): readonly string[] {
-  return unique(String(value ?? '').split(path.delimiter));
+function splitPathEnv(value: string | undefined, platform: NodeJS.Platform): readonly string[] {
+  return unique(
+    String(value ?? '').split(platform === 'win32' ? path.win32.delimiter : path.posix.delimiter),
+    platform === 'win32',
+  );
 }
 
 function commandDisplayName(commandName: string): string {
@@ -57,6 +61,9 @@ function commandDisplayName(commandName: string): string {
       return 'Podman CLI';
     case 'ssh':
       return 'SSH client';
+    case 'wsl':
+    case 'wsl.exe':
+      return 'Windows Subsystem for Linux';
     default:
       return compact(commandName) || 'Host command';
   }
@@ -71,6 +78,9 @@ export function desktopHostCommandNotFoundMessage(commandName: string): string {
       return 'Podman CLI was not found. Install Podman Desktop or make podman available to Redeven Desktop, then refresh and try again.';
     case 'ssh':
       return 'SSH client was not found. Install OpenSSH or make ssh available to Redeven Desktop, then try again.';
+    case 'wsl':
+    case 'wsl.exe':
+      return 'WSL was not found. Enable Windows Subsystem for Linux, finish setting up a WSL 2 distribution, then try again.';
     default:
       return `${commandDisplayName(clean)} was not found. Install it or make it available to Redeven Desktop, then try again.`;
   }
@@ -78,7 +88,15 @@ export function desktopHostCommandNotFoundMessage(commandName: string): string {
 
 export function desktopDefaultCommandSearchPaths(
   platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
 ): readonly string[] {
+  if (platform === 'win32') {
+    const windowsRoot = compact(env.SystemRoot ?? env.WINDIR);
+    return windowsRoot === '' ? [] : unique([
+      path.win32.join(windowsRoot, 'System32'),
+      path.win32.join(windowsRoot, 'Sysnative'),
+    ], true);
+  }
   if (platform !== 'darwin') {
     return [];
   }
@@ -93,12 +111,12 @@ export function desktopDefaultCommandSearchPaths(
 export function desktopHostCommandSearchPaths(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
-  defaultSearchPaths: readonly string[] = desktopDefaultCommandSearchPaths(platform),
+  defaultSearchPaths: readonly string[] = desktopDefaultCommandSearchPaths(platform, env),
 ): readonly string[] {
   return unique([
-    ...splitPathEnv(env.PATH),
+    ...splitPathEnv(env.PATH, platform),
     ...defaultSearchPaths,
-  ]);
+  ], platform === 'win32');
 }
 
 export function desktopHostCommandEnvironment(
@@ -107,7 +125,9 @@ export function desktopHostCommandEnvironment(
 ): NodeJS.ProcessEnv {
   return {
     ...env,
-    PATH: desktopHostCommandSearchPaths(env, platform).join(path.delimiter),
+    PATH: desktopHostCommandSearchPaths(env, platform).join(
+      platform === 'win32' ? path.win32.delimiter : path.posix.delimiter,
+    ),
   };
 }
 
@@ -115,17 +135,26 @@ function commandHasPathSeparator(commandName: string): boolean {
   return commandName.includes('/') || commandName.includes('\\');
 }
 
-function isExecutableFile(filePath: string): boolean {
+function isExecutableFile(filePath: string, platform: NodeJS.Platform): boolean {
   try {
     const stat = fsSync.statSync(filePath);
     if (!stat.isFile()) {
       return false;
     }
-    fsSync.accessSync(filePath, fsSync.constants.X_OK);
+    if (platform !== 'win32') {
+      fsSync.accessSync(filePath, fsSync.constants.X_OK);
+    }
     return true;
   } catch {
     return false;
   }
+}
+
+function commandCandidates(commandName: string, platform: NodeJS.Platform): readonly string[] {
+  if (platform !== 'win32' || path.win32.extname(commandName) !== '') {
+    return [commandName];
+  }
+  return [`${commandName}.exe`, `${commandName}.com`];
 }
 
 export function resolveDesktopHostCommand(
@@ -141,33 +170,41 @@ export function resolveDesktopHostCommand(
     throw new Error('Host command name must be non-empty.');
   }
 
-  if (path.isAbsolute(clean) || commandHasPathSeparator(clean)) {
-    const searchedPath = compact(path.dirname(clean));
-    if (isExecutableFile(clean)) {
-      return {
-        command: clean,
-        source: path.isAbsolute(clean) ? 'absolute_input' : 'relative_input',
-        searched_paths: searchedPath ? [searchedPath] : [],
-      };
-    }
-    throw new DesktopHostCommandNotFoundError(path.basename(clean), searchedPath ? [searchedPath] : []);
-  }
-
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
-  const processPaths = splitPathEnv(env.PATH);
-  const searchPaths = desktopHostCommandSearchPaths(env, platform, options.defaultSearchPaths);
-  const processPathSet = new Set(processPaths);
-  for (const searchPath of searchPaths) {
-    const candidate = path.join(searchPath, clean);
-    if (!isExecutableFile(candidate)) {
-      continue;
+  const pathAPI = platform === 'win32' ? path.win32 : path.posix;
+
+  if (pathAPI.isAbsolute(clean) || commandHasPathSeparator(clean)) {
+    const searchedPath = compact(pathAPI.dirname(clean));
+    for (const candidate of commandCandidates(clean, platform)) {
+      if (isExecutableFile(candidate, platform)) {
+        return {
+          command: candidate,
+          source: pathAPI.isAbsolute(clean) ? 'absolute_input' : 'relative_input',
+          searched_paths: searchedPath ? [searchedPath] : [],
+        };
+      }
     }
-    return {
-      command: candidate,
-      source: processPathSet.has(searchPath) ? 'process_path' : 'desktop_default_path',
-      searched_paths: searchPaths,
-    };
+    throw new DesktopHostCommandNotFoundError(pathAPI.basename(clean), searchedPath ? [searchedPath] : []);
+  }
+
+  const processPaths = splitPathEnv(env.PATH, platform);
+  const searchPaths = desktopHostCommandSearchPaths(env, platform, options.defaultSearchPaths);
+  const processPathSet = new Set(processPaths.map((value) => platform === 'win32' ? value.toLowerCase() : value));
+  for (const searchPath of searchPaths) {
+    for (const commandCandidate of commandCandidates(clean, platform)) {
+      const candidate = pathAPI.join(searchPath, commandCandidate);
+      if (!isExecutableFile(candidate, platform)) {
+        continue;
+      }
+      return {
+        command: candidate,
+        source: processPathSet.has(platform === 'win32' ? searchPath.toLowerCase() : searchPath)
+          ? 'process_path'
+          : 'desktop_default_path',
+        searched_paths: searchPaths,
+      };
+    }
   }
 
   throw new DesktopHostCommandNotFoundError(clean, searchPaths);

@@ -314,6 +314,75 @@ function localRuntimePresence(
 }
 
 describe('desktopWelcomeState', () => {
+  it('exposes WSL environments without native Local or container runtime targets on Windows', () => {
+    const localContainerID = 'local:container:docker:local-dev:63ce185e';
+    const wslHostAccess = {
+      kind: 'wsl_host' as const,
+      distribution_name: 'Ubuntu-24.04',
+      linux_user: 'alice',
+    };
+    const wslPlacement = {
+      kind: 'host_process' as const,
+      runtime_root: 'remote_default',
+      runtime_state_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload' as const,
+      release_base_url: '',
+    };
+    const wslID = desktopRuntimeTargetID(wslHostAccess, wslPlacement);
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_runtime_targets: [
+          {
+            schema_version: 1,
+            id: localContainerID,
+            label: 'Local container',
+            host_access: { kind: 'local_host' },
+            placement: {
+              kind: 'container_process',
+              container_engine: 'docker',
+              container_id: 'local-dev-id',
+              container_ref: 'local-dev',
+              container_label: 'local-dev',
+              runtime_root: '/root/.redeven',
+              bridge_strategy: 'exec_stream',
+            },
+            pinned: false,
+            created_at_ms: 10,
+            updated_at_ms: 10,
+            last_used_at_ms: 10,
+          },
+          {
+            schema_version: 2,
+            id: wslID,
+            label: 'Ubuntu 24.04',
+            host_access: wslHostAccess,
+            placement: wslPlacement,
+            pinned: false,
+            created_at_ms: 20,
+            updated_at_ms: 20,
+            last_used_at_ms: 20,
+          },
+        ],
+      }),
+      platformCapabilities: {
+        platform: 'windows',
+        native_local_environment: false,
+        native_host_runtime: false,
+        native_container_runtime: false,
+        wsl_environment: true,
+        desktop_auto_update: 'unsupported',
+      },
+    });
+
+    expect(snapshot.environments.some((entry) => entry.kind === 'local_environment')).toBe(false);
+    expect(snapshot.environments.some((entry) => entry.id === localContainerID)).toBe(false);
+    expect(snapshot.environments).toContainEqual(expect.objectContaining({
+      id: wslID,
+      kind: 'wsl_environment',
+      managed_runtime_host_access: wslHostAccess,
+    }));
+  });
+
   it('keeps direct host and container targets out of Gateway sources', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),

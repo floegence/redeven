@@ -76,7 +76,7 @@ export type ReinstallTargetPreview = Readonly<{
   operation_key: string;
   environment_id: string;
   label: string;
-  target_kind: 'local_host' | 'ssh_host' | 'local_container' | 'ssh_container';
+  target_kind: 'local_host' | 'wsl_host' | 'ssh_host' | 'local_container' | 'ssh_container';
   host_label: string;
   container_id?: string;
   container_engine?: string;
@@ -229,10 +229,7 @@ function isRemoteDefaultRootAlias(value: string): boolean {
 function descriptorPlacementForFingerprint(
   descriptor: ReinstallTargetDescriptor,
 ): DesktopRuntimePlacement {
-  if (
-    descriptor.host_access.kind === 'ssh_host'
-    && isRemoteDefaultRootAlias(descriptor.placement.runtime_root)
-  ) {
+  if (descriptor.host_access.kind !== 'local_host' && isRemoteDefaultRootAlias(descriptor.placement.runtime_root)) {
     return {
       ...descriptor.placement,
       runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
@@ -258,7 +255,9 @@ export function reinstallTargetDescriptorFingerprint(descriptor: ReinstallTarget
     : '';
   const identity = descriptor.host_access.kind === 'ssh_host'
     ? ['ssh', desktopSSHAuthority(descriptor.host_access.ssh)]
-    : ['local'];
+    : descriptor.host_access.kind === 'wsl_host'
+      ? ['wsl', descriptor.host_access.distribution_name, descriptor.host_access.linux_user]
+      : ['local'];
   identity.push(placement.kind, compact(root));
   if (placement.kind === 'container_process') {
     identity.push(placement.container_engine, placement.container_id);
@@ -282,7 +281,9 @@ function reinstallPhysicalTargetFingerprint(
 function reinstallTargetAuthorityKey(descriptor: ReinstallTargetDescriptor): string {
   const host = descriptor.host_access.kind === 'ssh_host'
     ? `ssh:${desktopSSHAuthority(descriptor.host_access.ssh)}`
-    : 'local';
+    : descriptor.host_access.kind === 'wsl_host'
+      ? `wsl:${descriptor.host_access.distribution_name}:${descriptor.host_access.linux_user}`
+      : 'local';
   return descriptor.placement.kind === 'container_process'
     ? `${host}:container:${descriptor.placement.container_engine}:${descriptor.placement.container_id}`
     : `${host}:host`;
@@ -292,12 +293,17 @@ function targetKind(descriptor: ReinstallTargetDescriptor): ReinstallTargetPrevi
   if (descriptor.host_access.kind === 'local_host') {
     return descriptor.placement.kind === 'container_process' ? 'local_container' : 'local_host';
   }
+  if (descriptor.host_access.kind === 'wsl_host') {
+    return 'wsl_host';
+  }
   return descriptor.placement.kind === 'container_process' ? 'ssh_container' : 'ssh_host';
 }
 
 function hostLabel(descriptor: ReinstallTargetDescriptor): string {
   return descriptor.host_access.kind === 'ssh_host'
     ? descriptor.host_access.ssh.ssh_destination
+    : descriptor.host_access.kind === 'wsl_host'
+      ? `WSL 2 · ${descriptor.host_access.distribution_name} · ${descriptor.host_access.linux_user}`
     : 'local_device';
 }
 

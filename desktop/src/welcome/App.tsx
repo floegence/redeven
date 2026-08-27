@@ -381,11 +381,21 @@ import {
   type DesktopSettingsBridge,
 } from './flower/localEnvironmentFlowerSurfaceAdapter';
 import { createDesktopFlowerSurfaceCopy } from './flower/desktopFlowerSurfaceCopy';
+import type {
+  DesktopWSLActionResponse,
+  DesktopWSLDiscoverySnapshot,
+  DesktopWSLDistribution,
+  DesktopWSLRegisterRequest,
+  DesktopWSLSetDefaultRequest,
+} from '../shared/desktopWSL';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
   getSSHConfigHosts?: () => Promise<readonly DesktopSSHConfigHost[]>;
   listRuntimeContainers?: (request: DesktopRuntimeContainerListRequest) => Promise<DesktopRuntimeContainerListResponse>;
+  refreshWSL?: () => Promise<DesktopWSLDiscoverySnapshot>;
+  registerWSL?: (request: DesktopWSLRegisterRequest) => Promise<DesktopWSLActionResponse>;
+  setDefaultWSL?: (request: DesktopWSLSetDefaultRequest) => Promise<DesktopWSLActionResponse>;
   performAction: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>;
   subscribeActionProgress?: (listener: (progress: DesktopLauncherActionProgress) => void) => (() => void);
   subscribeSnapshot: (listener: (snapshot: DesktopWelcomeSnapshot) => void) => (() => void);
@@ -2677,26 +2687,30 @@ function DesktopCommandRegistrar(props: Readonly<{
         icon: Globe,
         execute: () => props.showConnectEnvironment(),
       },
-      {
-        id: 'redeven.desktop.openLocalEnvironment',
-        title: props.i18n.t('commandPalette.openEnvironmentTitle'),
-        description: props.i18n.t('commandPalette.openEnvironmentDescription'),
-        category: props.i18n.t('commandPalette.categories.desktop'),
-        keybind: 'mod+enter',
-        icon: Globe,
-        execute: () => {
-          void props.openLocalEnvironment();
-        },
-      },
-      {
-        id: 'redeven.desktop.openLocalEnvironmentSettings',
-        title: props.i18n.t('commandPalette.environmentSettingsTitle'),
-        description: props.i18n.t('commandPalette.environmentSettingsDescription'),
-        category: props.i18n.t('commandPalette.categories.desktop'),
-        keybind: 'mod+,',
-        icon: Settings,
-        execute: () => props.openSettingsSurface(),
-      },
+      ...(snapshot.platform_capabilities.native_local_environment
+        ? [
+            {
+              id: 'redeven.desktop.openLocalEnvironment',
+              title: props.i18n.t('commandPalette.openEnvironmentTitle'),
+              description: props.i18n.t('commandPalette.openEnvironmentDescription'),
+              category: props.i18n.t('commandPalette.categories.desktop'),
+              keybind: 'mod+enter',
+              icon: Globe,
+              execute: () => {
+                void props.openLocalEnvironment();
+              },
+            },
+            {
+              id: 'redeven.desktop.openLocalEnvironmentSettings',
+              title: props.i18n.t('commandPalette.environmentSettingsTitle'),
+              description: props.i18n.t('commandPalette.environmentSettingsDescription'),
+              category: props.i18n.t('commandPalette.categories.desktop'),
+              keybind: 'mod+,',
+              icon: Settings,
+              execute: () => props.openSettingsSurface(),
+            },
+          ]
+        : []),
       {
         id: 'redeven.desktop.focusEnvironmentURL',
         title: props.i18n.t('commandPalette.connectAnotherEnvironmentTitle'),
@@ -3321,6 +3335,36 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return acceptedSnapshot;
     });
     return acceptedSnapshot;
+  }
+
+  async function refreshWSLDiscovery(): Promise<DesktopWSLDiscoverySnapshot> {
+    const refresh = props.runtime.launcher.refreshWSL;
+    if (!refresh) {
+      throw new Error(i18n().t('environmentCenter.wslUnavailable'));
+    }
+    const discovery = await refresh();
+    await refreshSnapshot();
+    return discovery;
+  }
+
+  async function registerWSLDistribution(request: DesktopWSLRegisterRequest): Promise<DesktopWSLActionResponse> {
+    const register = props.runtime.launcher.registerWSL;
+    if (!register) {
+      return { ok: false, message: i18n().t('environmentCenter.wslUnavailable') };
+    }
+    const response = await register(request);
+    await refreshSnapshot();
+    return response;
+  }
+
+  async function setDefaultWSLEnvironment(request: DesktopWSLSetDefaultRequest): Promise<DesktopWSLActionResponse> {
+    const setDefault = props.runtime.launcher.setDefaultWSL;
+    if (!setDefault) {
+      return { ok: false, message: i18n().t('environmentCenter.wslUnavailable') };
+    }
+    const response = await setDefault(request);
+    await refreshSnapshot();
+    return response;
   }
 
   async function refreshSSHConfigHosts(): Promise<void> {
@@ -6019,6 +6063,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const hadBackgroundOperation = deleteTargetOperation() !== null;
     const registrationRef = target.registration_ref;
+    const removedDefaultWSLEnvironment = target.kind === 'wsl_environment'
+      && registrationRef?.kind === 'runtime_target'
+      && snapshot().default_flower_runtime_target_id === target.id;
     setBusyState({
       action: 'delete_environment',
       environment_id: target.id,
@@ -6045,6 +6092,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(
         registrationRef.kind === 'gateway_environment'
           ? i18n().t('environmentCenter.gatewayEnvironmentRemoved')
+          : removedDefaultWSLEnvironment
+            ? i18n().t('environmentCenter.wslDefaultRemoved')
           : hadBackgroundOperation
             ? i18n().t('environmentCenter.environmentRemovedCleanup')
             : i18n().t('environmentCenter.environmentRemoved'),
@@ -6381,6 +6430,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               }}
               openCreateControlPlaneDialog={openCreateControlPlaneDialog}
               refreshAllEnvironmentRuntimes={refreshAllEnvironmentRuntimes}
+              refreshWSLDiscovery={refreshWSLDiscovery}
+              registerWSLDistribution={registerWSLDistribution}
+              setDefaultWSLEnvironment={setDefaultWSLEnvironment}
               openRemoteEnvironment={openRemoteEnvironment}
               openSSHEnvironment={openSSHEnvironment}
               openEnvironment={openEnvironment}
@@ -6526,6 +6578,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
       <ConnectionDialog
         i18n={i18n()}
+        nativeContainerRuntime={snapshot().platform_capabilities.native_container_runtime}
         state={connectionDialogState()}
         sshConfigHosts={sshConfigHosts()}
         sshConfigHostsLoading={sshConfigHostsLoading()}
@@ -6886,6 +6939,221 @@ function DesktopActionToastViewport(props: Readonly<{
   );
 }
 
+function wslVersionRepairCommand(distribution: DesktopWSLDistribution): string {
+  const escapedName = distribution.distribution_name.replace(/'/gu, "''");
+  return `wsl.exe --set-version '${escapedName}' 2`;
+}
+
+function WSLDiscoveryPanel(props: Readonly<{
+  i18n: DesktopI18n;
+  snapshot: DesktopWelcomeSnapshot;
+  refresh: () => Promise<DesktopWSLDiscoverySnapshot>;
+  register: (request: DesktopWSLRegisterRequest) => Promise<DesktopWSLActionResponse>;
+  setDefault: (request: DesktopWSLSetDefaultRequest) => Promise<DesktopWSLActionResponse>;
+}>) {
+  const [busyKey, setBusyKey] = createSignal('');
+  const [message, setMessage] = createSignal('');
+  const [messageTone, setMessageTone] = createSignal<'neutral' | 'error'>('neutral');
+  const discovery = createMemo(() => props.snapshot.wsl_discovery);
+  const missingRegisteredEnvironments = createMemo(() => {
+    const snapshot = discovery();
+    if (snapshot?.availability !== 'ready') return [];
+    const discoveredNames = new Set(snapshot.distributions.map((distribution) => distribution.distribution_name));
+    return props.snapshot.environments.filter((environment) => (
+      environment.kind === 'wsl_environment'
+      && environment.managed_runtime_host_access?.kind === 'wsl_host'
+      && !discoveredNames.has(environment.managed_runtime_host_access.distribution_name)
+    ));
+  });
+  const registeredEnvironment = (distributionName: string): DesktopEnvironmentEntry | undefined => (
+    props.snapshot.environments.find((environment) => (
+      environment.kind === 'wsl_environment'
+      && environment.managed_runtime_host_access?.kind === 'wsl_host'
+      && environment.managed_runtime_host_access.distribution_name === distributionName
+    ))
+  );
+  const run = async (key: string, action: () => Promise<DesktopWSLActionResponse | DesktopWSLDiscoverySnapshot>) => {
+    setBusyKey(key);
+    setMessage('');
+    try {
+      const result = await action();
+      if ('ok' in result) {
+        setMessage(result.message_key
+          ? props.i18n.t(result.message_key, result.message_params)
+          : result.message);
+        setMessageTone(result.ok ? 'neutral' : 'error');
+      }
+    } catch (error) {
+      setMessage(getErrorMessage(error));
+      setMessageTone('error');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  return (
+    <section class="rounded-lg border border-border/70 bg-card/70 p-4 shadow-sm">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <h2 class="text-sm font-semibold text-foreground">{props.i18n.t('environmentCenter.wslDiscoveredTitle')}</h2>
+            <Tag variant="neutral" tone="soft" size="sm">WSL 2</Tag>
+          </div>
+          <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('environmentCenter.wslDiscoveredDescription')}</p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busyKey() !== ''}
+          onClick={() => void run('refresh', async () => props.refresh())}
+        >
+          <Refresh class={cn('mr-1 h-3.5 w-3.5', busyKey() === 'refresh' && 'animate-spin')} />
+          {props.i18n.t('environmentCenter.wslRefresh')}
+        </Button>
+      </div>
+
+      <Show when={message() !== ''}>
+        <div class={cn(
+          'mt-3 rounded-md border px-3 py-2 text-xs leading-5',
+          messageTone() === 'error'
+            ? 'border-destructive/25 bg-destructive/10 text-destructive'
+            : 'border-border/70 bg-muted/25 text-muted-foreground',
+        )}>
+          {message()}
+        </div>
+      </Show>
+
+      <Show when={discovery()?.availability === 'wsl_missing'}>
+        <div class="mt-3 rounded-md border border-amber-500/25 bg-amber-500/10 p-3">
+          <div class="text-sm font-medium text-foreground">{props.i18n.t('environmentCenter.wslMissingTitle')}</div>
+          <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('environmentCenter.wslMissingDescription')}</div>
+          <code class="mt-2 block rounded bg-background/80 px-2.5 py-2 text-xs text-foreground">wsl.exe --install</code>
+        </div>
+      </Show>
+      <Show when={discovery()?.availability === 'no_distributions'}>
+        <div class="mt-3 rounded-md border border-border/70 bg-muted/20 p-3 text-xs leading-5 text-muted-foreground">
+          {props.i18n.t('environmentCenter.wslNoDistributions')}
+        </div>
+      </Show>
+      <Show when={discovery()?.availability === 'failed'}>
+        <div class="mt-3 rounded-md border border-destructive/25 bg-destructive/10 p-3 text-xs leading-5 text-destructive">
+          <div>{props.i18n.t('environmentCenter.wslDiscoveryFailed')}</div>
+          <Show when={discovery()?.message}>
+            {(detail) => <code class="mt-2 block whitespace-pre-wrap text-[11px]">{detail()}</code>}
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={missingRegisteredEnvironments().length > 0}>
+        <div class="mt-3 space-y-2">
+          <For each={missingRegisteredEnvironments()}>
+            {(environment) => (
+              <div class="rounded-md border border-amber-500/25 bg-amber-500/10 p-3">
+                <div class="text-sm font-medium text-foreground">{environment.label}</div>
+                <div class="mt-1 text-xs leading-5 text-muted-foreground">
+                  {props.i18n.t('environmentCenter.wslDistributionMissing', {
+                    distribution: environment.managed_runtime_host_access?.kind === 'wsl_host'
+                      ? environment.managed_runtime_host_access.distribution_name
+                      : environment.label,
+                  })}
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={(discovery()?.distributions.length ?? 0) > 0}>
+        <div class="mt-3 grid gap-2 lg:grid-cols-2">
+          <For each={discovery()?.distributions ?? []}>
+            {(distribution) => {
+              const registered = createMemo(() => registeredEnvironment(distribution.distribution_name));
+              const targetID = createMemo(() => registered()?.id ?? '');
+              const isDefault = createMemo(() => (
+                targetID() !== '' && props.snapshot.default_flower_runtime_target_id === targetID()
+              ));
+              const actionKey = createMemo(() => `register:${distribution.distribution_name}`);
+              const defaultKey = createMemo(() => `default:${distribution.distribution_name}`);
+              return (
+                <div class="rounded-md border border-border/70 bg-background/70 p-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="truncate text-sm font-semibold text-foreground">{distribution.distribution_name}</div>
+                      <div class="mt-1 flex flex-wrap items-center gap-1.5">
+                        <Tag variant={distribution.state === 'running' ? 'success' : 'neutral'} tone="soft" size="sm">
+                          {distribution.state === 'running'
+                            ? props.i18n.t('environmentCenter.wslRunning')
+                            : props.i18n.t('environmentCenter.wslStopped')}
+                        </Tag>
+                        <Show when={registered()}>
+                          <Tag variant="primary" tone="soft" size="sm">{props.i18n.t('environmentCenter.wslRegistered')}</Tag>
+                        </Show>
+                        <Show when={isDefault()}>
+                          <Tag variant="success" tone="soft" size="sm">{props.i18n.t('environmentCenter.wslDefaultFlower')}</Tag>
+                        </Show>
+                      </div>
+                    </div>
+                    <Show
+                      when={distribution.registration_status === 'eligible'}
+                      fallback={<Tag variant="warning" tone="soft" size="sm">{distribution.wsl_version === 1 ? 'WSL 1' : '?'}</Tag>}
+                    >
+                      <Tag variant="neutral" tone="soft" size="sm">WSL 2</Tag>
+                    </Show>
+                  </div>
+
+                  <Show when={distribution.registration_status !== 'eligible'}>
+                    <div class="mt-3 text-xs leading-5 text-muted-foreground">
+                      {distribution.registration_status === 'wsl1_unsupported'
+                        ? props.i18n.t('environmentCenter.wsl1Unsupported')
+                        : props.i18n.t('environmentCenter.wslVersionUnknown')}
+                    </div>
+                    <code class="mt-2 block overflow-x-auto rounded bg-muted/40 px-2.5 py-2 text-xs text-foreground">
+                      {wslVersionRepairCommand(distribution)}
+                    </code>
+                  </Show>
+
+                  <Show when={distribution.registration_status === 'eligible'}>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      <Show
+                        when={registered()}
+                        fallback={(
+                          <Button
+                            size="sm"
+                            variant="default"
+                            disabled={busyKey() !== ''}
+                            onClick={() => void run(actionKey(), () => props.register({
+                              distribution_name: distribution.distribution_name,
+                            }))}
+                          >
+                            {busyKey() === actionKey()
+                              ? props.i18n.t('environmentCenter.wslRegistering')
+                              : props.i18n.t('environmentCenter.wslRegister')}
+                          </Button>
+                        )}
+                      >
+                        <Show when={!isDefault()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busyKey() !== ''}
+                            onClick={() => void run(defaultKey(), () => props.setDefault({ runtime_target_id: targetID() }))}
+                          >
+                            {props.i18n.t('environmentCenter.wslSetDefaultFlower')}
+                          </Button>
+                        </Show>
+                      </Show>
+                    </div>
+                  </Show>
+                </div>
+              );
+            }}
+          </For>
+        </div>
+      </Show>
+    </section>
+  );
+}
+
 function ConnectEnvironmentSurface(props: Readonly<{
   i18n: DesktopI18n;
   snapshot: DesktopWelcomeSnapshot;
@@ -6914,6 +7182,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openCreateGatewayEnvironment: (gateway: DesktopGatewaySource) => void;
   openCreateControlPlaneDialog: (message?: string) => void;
   refreshAllEnvironmentRuntimes: () => Promise<void>;
+  refreshWSLDiscovery: () => Promise<DesktopWSLDiscoverySnapshot>;
+  registerWSLDistribution: (request: DesktopWSLRegisterRequest) => Promise<DesktopWSLActionResponse>;
+  setDefaultWSLEnvironment: (request: DesktopWSLSetDefaultRequest) => Promise<DesktopWSLActionResponse>;
   openRemoteEnvironment: (
     targetURL: string,
     errorTarget?: 'connect' | 'dialog',
@@ -7269,8 +7540,18 @@ function ConnectEnvironmentSurface(props: Readonly<{
 
           <div class="space-y-3">
             <Show when={props.activeTab === 'environments'}>
-              <EnvironmentCardsPanel
-                i18n={props.i18n}
+              <>
+                <Show when={props.snapshot.platform_capabilities.wsl_environment}>
+                  <WSLDiscoveryPanel
+                    i18n={props.i18n}
+                    snapshot={props.snapshot}
+                    refresh={props.refreshWSLDiscovery}
+                    register={props.registerWSLDistribution}
+                    setDefault={props.setDefaultWSLEnvironment}
+                  />
+                </Show>
+                <EnvironmentCardsPanel
+                  i18n={props.i18n}
                 entries={props.libraryEntries}
                 showQuickAddCards={showQuickAddCards()}
                 visibleCardCount={visibleEnvironmentCardCount()}
@@ -7293,8 +7574,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 deleteEnvironment={props.deleteEnvironment}
                 cancelOperation={props.cancelOperation}
                 dismissOperation={props.dismissOperation}
-                copyOperationDiagnostics={props.copyOperationDiagnostics}
-              />
+                  copyOperationDiagnostics={props.copyOperationDiagnostics}
+                />
+              </>
             </Show>
             <Show when={props.activeTab === 'control_planes'}>
               <ControlPlanesPanel
@@ -8345,6 +8627,8 @@ function localizedProgressLocation(i18n: DesktopI18n, location: string): string 
       return i18n.t('progress.local');
     case 'local_container':
       return i18n.t('progress.localContainer');
+    case 'wsl_host':
+      return 'WSL 2';
     case 'ssh_host':
       return i18n.t('progress.sshHost');
     case 'ssh_container':
@@ -14245,6 +14529,7 @@ function GatewayProfileSourcePicker(props: Readonly<{
 }
 function ConnectionDialog(props: Readonly<{
   i18n: DesktopI18n;
+  nativeContainerRuntime: boolean;
   state: ConnectionDialogState;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
   sshConfigHostsLoading: boolean;
@@ -14386,7 +14671,9 @@ function ConnectionDialog(props: Readonly<{
               options={[
                 { value: 'external_local_ui', label: props.i18n.t('connectionDialog.redevenUrl') },
                 { value: 'ssh_environment', label: props.i18n.t('connectionDialog.sshHost') },
-                { value: 'local_container_runtime', label: props.i18n.t('connectionDialog.localContainer') },
+                ...(props.nativeContainerRuntime
+                  ? [{ value: 'local_container_runtime', label: props.i18n.t('connectionDialog.localContainer') }]
+                  : []),
                 { value: 'ssh_container_runtime', label: props.i18n.t('connectionDialog.sshContainer') },
                 { value: 'gateway_url_profile', label: props.i18n.t('connectionDialog.throughGateway') },
               ]}

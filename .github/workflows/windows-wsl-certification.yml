@@ -1,0 +1,218 @@
+name: Windows WSL Certification
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  linux-runtime:
+    name: Build exact-main Linux Runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      runtime_release_tag: ${{ steps.version.outputs.runtime_release_tag }}
+      desktop_version: ${{ steps.version.outputs.desktop_version }}
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Require exact origin main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          test "$(git rev-parse HEAD)" = "$(git rev-parse refs/remotes/origin/main)"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Define internal certification version
+        id: version
+        run: |
+          set -euo pipefail
+          desktop_version="0.0.0-wsl-cert.${GITHUB_RUN_NUMBER}"
+          echo "desktop_version=${desktop_version}" >> "${GITHUB_OUTPUT}"
+          echo "runtime_release_tag=v${desktop_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@874852de93c66509b01dc7cd80f7a5385182d017
+
+      - name: Build Linux Runtime archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_RELEASE_TAG: ${{ steps.version.outputs.runtime_release_tag }}
+        run: |
+          set -euo pipefail
+          ./scripts/build_assets.sh
+          mkdir -p dist
+          build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          commit="${GITHUB_SHA::12}"
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+            -tags floeterm_native \
+            -trimpath \
+            -ldflags "-s -w -X main.Version=${RUNTIME_RELEASE_TAG} -X main.Commit=${commit} -X main.BuildTime=${build_time}" \
+            -o dist/redeven \
+            ./cmd/redeven
+          ./scripts/stage_redevplugin_release_artifacts.sh \
+            --dest-dir dist/redevplugin-release \
+            --redeven-goos linux \
+            --redeven-goarch amd64 \
+            --runtime-out dist/redevplugin-runtime \
+            --profile release
+          cp LICENSE THIRD_PARTY_NOTICES.md dist/
+          tar -C dist -czf dist/redeven_linux_amd64.tar.gz \
+            redeven \
+            redevplugin-runtime \
+            REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
+            REDEVPLUGIN_RUNTIME.spdx.json \
+            redevplugin-runtime.provenance.json \
+            redevplugin-runtime.sig \
+            redevplugin-runtime.pem \
+            .redevplugin-release-artifacts-verified.json \
+            LICENSE \
+            THIRD_PARTY_NOTICES.md
+
+      - name: Upload Linux Runtime archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-wsl-linux-runtime
+          path: dist/redeven_linux_amd64.tar.gz
+          if-no-files-found: error
+
+  certify:
+    name: Certify Windows 11 x64 and WSL 2
+    needs: linux-runtime
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Require exact origin main
+        shell: pwsh
+        run: |
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          $head = (git rev-parse HEAD).Trim()
+          $main = (git rev-parse refs/remotes/origin/main).Trim()
+          if ($head -ne $main -or $head -ne $env:GITHUB_SHA) {
+            throw 'Windows WSL certification must run on exact origin/main.'
+          }
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Download Linux Runtime archive
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-wsl-linux-runtime
+          path: dist/windows-wsl-runtime
+
+      - name: Install Desktop dependencies
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+
+      - name: Run Desktop source tests
+        working-directory: desktop
+        run: npm test
+
+      - name: Prepare two temporary WSL 2 distributions
+        id: wsl
+        shell: pwsh
+        run: |
+          $names = @(wsl.exe --list --quiet) | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ }
+          if ($names.Count -eq 0) {
+            throw 'windows-2025 did not provide an initialized WSL distribution.'
+          }
+          $source = $names[0]
+          $suffix = "$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $distributionA = "RedevenCertA-$suffix"
+          $distributionB = "RedevenCertB-$suffix"
+          $exportPath = Join-Path $env:RUNNER_TEMP "redeven-wsl-rootfs-$suffix.tar"
+          $rootA = Join-Path $env:RUNNER_TEMP $distributionA
+          $rootB = Join-Path $env:RUNNER_TEMP $distributionB
+          wsl.exe --set-version $source 2
+          if ($LASTEXITCODE -ne 0) { throw 'Could not confirm the source distribution as WSL 2.' }
+          wsl.exe --export $source $exportPath
+          if ($LASTEXITCODE -ne 0) { throw 'Could not export the source WSL distribution.' }
+          wsl.exe --import $distributionA $rootA $exportPath --version 2
+          if ($LASTEXITCODE -ne 0) { throw 'Could not import the first certification distribution.' }
+          wsl.exe --import $distributionB $rootB $exportPath --version 2
+          if ($LASTEXITCODE -ne 0) { throw 'Could not import the second certification distribution.' }
+          wsl.exe --distribution $distributionA --user root --exec sh -c 'true'
+          wsl.exe --distribution $distributionB --user root --exec sh -c 'true'
+          "REDEVEN_WSL_CERT_DISTRIBUTION_A=$distributionA" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "REDEVEN_WSL_CERT_DISTRIBUTION_B=$distributionB" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Certify real WSL lifecycle and private Bridge
+        working-directory: desktop
+        env:
+          REDEVEN_WSL_CERT_RUNTIME_ARCHIVE: ${{ github.workspace }}\dist\windows-wsl-runtime\redeven_linux_amd64.tar.gz
+          REDEVEN_WSL_CERT_RUNTIME_RELEASE_TAG: ${{ needs.linux-runtime.outputs.runtime_release_tag }}
+        run: npx vitest run src/main/windowsWSLCertification.test.ts
+
+      - name: Build internal per-user NSIS package
+        working-directory: desktop
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          npm_config_script_shell: C:\Program Files\Git\bin\bash.exe
+          REDEVEN_DESKTOP_BUNDLE_GOOS: windows
+          REDEVEN_DESKTOP_BUNDLE_GOARCH: amd64
+          REDEVEN_DESKTOP_RUNTIME_TARBALL: ${{ github.workspace }}\dist\windows-wsl-runtime\redeven_linux_amd64.tar.gz
+          REDEVEN_DESKTOP_VERSION: ${{ needs.linux-runtime.outputs.desktop_version }}
+        run: |
+          set -euo pipefail
+          runtime_tarball="$(cygpath -u "$REDEVEN_DESKTOP_RUNTIME_TARBALL")"
+          export REDEVEN_DESKTOP_RUNTIME_TARBALL="$runtime_tarball"
+          npm run package -- --win nsis --x64
+
+      - name: Verify Windows package boundary
+        shell: pwsh
+        run: |
+          $resources = Join-Path $env:GITHUB_WORKSPACE 'desktop\release\win-unpacked\resources'
+          $archive = Join-Path $resources 'bin\redeven_linux_amd64.tar.gz'
+          $nativeRuntime = Join-Path $resources 'bin\redeven.exe'
+          if (-not (Test-Path $archive -PathType Leaf)) { throw 'Packaged Linux Runtime archive is missing.' }
+          if (Test-Path $nativeRuntime) { throw 'Windows package must not contain redeven.exe.' }
+          $installer = Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'desktop\release') -Filter 'Redeven-Desktop-Internal-*-win-x64.exe'
+          if ($installer.Count -ne 1) { throw 'Expected exactly one internal NSIS installer.' }
+
+      - name: Upload internal NSIS package
+        uses: actions/upload-artifact@v6
+        with:
+          name: Redeven-Desktop-internal-windows-x64
+          path: desktop/release/Redeven-Desktop-Internal-*-win-x64.exe
+          if-no-files-found: error
+
+      - name: Remove temporary certification distributions
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($name in @($env:REDEVEN_WSL_CERT_DISTRIBUTION_A, $env:REDEVEN_WSL_CERT_DISTRIBUTION_B)) {
+            if ($name) { wsl.exe --unregister $name | Out-Null }
+          }

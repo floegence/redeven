@@ -891,6 +891,16 @@ describe('ReinstallTargetCoordinator', () => {
       placement: { kind: 'host_process', runtime_root: 'remote_default' },
       affected_environment_ids: ['ssh'],
     }, {
+      ...descriptor('/home/alice/.redeven'),
+      environment_id: 'wsl',
+      host_access: {
+        kind: 'wsl_host',
+        distribution_name: 'Ubuntu-24.04',
+        linux_user: 'alice',
+      },
+      placement: { kind: 'host_process', runtime_root: 'remote_default' },
+      affected_environment_ids: ['wsl'],
+    }, {
       ...descriptor('/srv/redeven-container'),
       environment_id: 'local-container',
       host_access: { kind: 'local_host' },
@@ -970,7 +980,7 @@ describe('ReinstallTargetCoordinator', () => {
       },
     });
 
-    const expectedKinds = ['local_host', 'ssh_host', 'local_container', 'ssh_container'] as const;
+    const expectedKinds = ['local_host', 'ssh_host', 'wsl_host', 'local_container', 'ssh_container'] as const;
     let variantIndex = 0;
     for (const target of variants) {
       const preview = await coordinator.preview({

@@ -15,6 +15,7 @@ import {
 import {
   spawnLocalRuntimeHostCommand,
   spawnSSHRuntimeHostCommand,
+  spawnWSLRuntimeHostCommand,
   type RuntimeHostStreamingCommand,
 } from './runtimeHostAccess';
 import {
@@ -321,6 +322,9 @@ async function spawnBridgeCommand(
       credentialScope: args.ssh_credential_scope ?? '',
       signal,
     });
+  }
+  if (args.host_access.kind === 'wsl_host') {
+    return spawnWSLRuntimeHostCommand(args.host_access, plan.command, { signal });
   }
   return spawnLocalRuntimeHostCommand(plan.command, { signal });
 }
@@ -677,8 +681,8 @@ function freezeRecoverySnapshot(
 export async function startRuntimePlacementBridgeSession(
   args: StartRuntimePlacementBridgeSessionArgs,
 ): Promise<RuntimePlacementBridgeSession> {
-  // IMPORTANT: Runtime Placement Bridge sessions are the only SSH host and
-  // container Env App transport. Do not add published-port, host-network,
+  // IMPORTANT: Runtime Placement Bridge sessions are the only WSL host, SSH
+  // host, and container Env App transport. Do not add published-port, host-network,
   // provider-card, or public Local UI fallback paths around this bridge.
   const sessionController = new AbortController();
   const abortSession = () => {
@@ -1136,8 +1140,12 @@ export async function startRuntimePlacementBridgeSession(
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
     runtime_handle: {
-      runtime_kind: args.host_access.kind === 'ssh_host' ? 'ssh' : 'local_environment',
-      launch_mode: 'spawned',
+      runtime_kind: args.host_access.kind === 'ssh_host'
+        ? 'ssh'
+        : args.host_access.kind === 'wsl_host'
+          ? 'wsl'
+          : 'local_environment',
+      launch_mode: args.host_access.kind === 'wsl_host' ? 'wsl' : 'spawned',
       stop,
     },
     closed: closedPromise,

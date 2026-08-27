@@ -25,6 +25,8 @@ import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
 import type { DesktopComponentTaskProgress } from './desktopComponentTaskProgress';
+import type { DesktopPlatformCapabilities } from './desktopPlatformCapabilities';
+import type { DesktopWSLDiscoverySnapshot } from './desktopWSL';
 import type {
   DesktopEnvironmentSource,
   DesktopGatewayConnectionKind,
@@ -58,12 +60,12 @@ export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher
 export const DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL = 'redeven-desktop:launcher-snapshot-updated';
 export const DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL = 'redeven-desktop:launcher-action-progress';
 
-export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
+export type DesktopTargetKind = 'local_environment' | 'wsl_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
 export type DesktopLauncherSurface = 'connect_environment' | 'environment_settings' | 'flower';
 export type DesktopLauncherProgressSurface = 'open' | 'runtime_lifecycle' | 'reinstall' | 'gateway';
-export type DesktopEnvironmentEntryKind = 'local_environment' | 'provider_environment' | 'gateway_environment' | 'external_local_ui' | 'ssh_environment';
+export type DesktopEnvironmentEntryKind = 'local_environment' | 'wsl_environment' | 'provider_environment' | 'gateway_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | 'Gateway' | 'Resolve' | '';
 export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'gateway' | 'saved';
 export type DesktopEnvironmentOpenAction = 'open' | 'opening' | 'focus';
@@ -450,6 +452,9 @@ export type DesktopWelcomeSnapshot = Readonly<{
   snapshot_revision?: number;
   snapshot_generation?: number;
   flower_settings_focus_revision?: number;
+  platform_capabilities: DesktopPlatformCapabilities;
+  wsl_discovery: DesktopWSLDiscoverySnapshot | null;
+  default_flower_runtime_target_id: DesktopRuntimeTargetID | null;
   surface: DesktopLauncherSurface;
   entry_reason: DesktopWelcomeEntryReason;
   close_action: DesktopLauncherCloseAction;
@@ -892,7 +897,7 @@ export type DesktopReinstallTargetPreview = Readonly<{
   operation_key: string;
   environment_id: string;
   label: string;
-  target_kind: 'local_host' | 'ssh_host' | 'local_container' | 'ssh_container';
+  target_kind: 'local_host' | 'wsl_host' | 'ssh_host' | 'local_container' | 'ssh_container';
   host_label: string;
   container_id?: string;
   container_engine?: string;

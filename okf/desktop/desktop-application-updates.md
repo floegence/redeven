@@ -1,8 +1,8 @@
 ---
 type: Desktop Contract
 title: Desktop application updates
-description: One user-facing update coordinator for signed macOS Sparkle feeds and Linux DEB/RPM packages.
-tags: [desktop, updates, sparkle, linux, security, release]
+description: Signed macOS and Linux application updates with an explicitly unsupported internal Windows channel.
+tags: [desktop, updates, sparkle, linux, windows, security, release]
 timestamp: 2026-08-25T00:00:00Z
 ---
 # Summary
@@ -13,6 +13,8 @@ and compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed
 architecture-specific appcast. Packaged Linux uses `electron-updater` metadata
 for the matching DEB or RPM package. Development, unsupported, and incorrectly
 placed macOS builds fail closed and provide a manual recovery path.
+Windows internal NSIS builds report updates as unsupported and contain no
+production feed.
 
 # Contract
 
@@ -47,6 +49,10 @@ Provider and Gateway processes are outside this cleanup boundary. A cleanup or
 identity verification failure prevents the installer call, restores the
 Launcher, and reports an actionable error.
 
+On Windows, the interlock closes Desktop windows, Sessions, and WSL Bridge child
+processes but never probes or stops a WSL Runtime. Desktop replacement and
+uninstall leave every distribution's Runtime installation and data unchanged.
+
 macOS updates are enabled only when the app bundle is inside `/Applications`.
 The blocked state offers Finder reveal and the Applications folder action. The
 first release that contains Sparkle remains a manual install; later signed DMG
@@ -66,6 +72,11 @@ notarized/stapled DMGs. Prerelease tags produce no Sparkle feed. The release
 collector requires the exact stable inventory, and appcasts, notes, Linux
 metadata, and installers are included in `SHA256SUMS`, the Cosign signature,
 remote readback, and byte-level comparison.
+
+Formal release collection rejects Windows directories and assets until
+Authenticode signing, NSIS update metadata, signing receipts, and signed update
+certification are enabled together. The manual exact-main Windows workflow may
+publish only an Actions artifact whose filename marks it as internal.
 
 # Boundaries
 

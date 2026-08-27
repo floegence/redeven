@@ -41,6 +41,8 @@ export function desktopSessionContextSnapshotFromTarget(
     target_route: 'remote_desktop',
     session_source: target.kind === 'ssh_environment'
       ? 'ssh_environment'
+      : target.kind === 'wsl_environment'
+        ? 'wsl_environment'
       : target.kind === 'gateway_environment'
         ? 'runtime_gateway'
         : 'external_local_ui',

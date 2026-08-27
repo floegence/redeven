@@ -36,6 +36,7 @@ import {
   rememberProviderEnvironmentUse,
   saveDesktopPreferences,
   setLocalEnvironmentPinned,
+  setDefaultFlowerRuntimeTarget,
   setProviderEnvironmentPinned,
   setSavedEnvironmentPinned,
   setSavedRuntimeTargetPinned,
@@ -1074,6 +1075,40 @@ describe('desktopPreferences', () => {
       host_access: { kind: 'local_host' },
       placement,
     })).toBe(deleted);
+  });
+
+  it('selects the first WSL target for Flower and clears an explicitly deleted default atomically', () => {
+    const placement = {
+      kind: 'host_process' as const,
+      runtime_root: 'remote_default',
+      runtime_state_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload' as const,
+      release_base_url: 'https://github.com/floegence/redeven/releases',
+    };
+    const first = upsertSavedRuntimeTarget(defaultDesktopPreferences(), {
+      label: 'Ubuntu',
+      host_access: { kind: 'wsl_host', distribution_name: 'Ubuntu', linux_user: 'alice' },
+      placement,
+    });
+    const firstID = first.saved_runtime_targets[0]!.id;
+    expect(first.default_flower_runtime_target_id).toBe(firstID);
+
+    const second = upsertSavedRuntimeTarget(first, {
+      label: 'Debian',
+      host_access: { kind: 'wsl_host', distribution_name: 'Debian', linux_user: 'bob' },
+      placement,
+    });
+    const secondID = second.saved_runtime_targets.find((target) => (
+      target.host_access.kind === 'wsl_host' && target.host_access.distribution_name === 'Debian'
+    ))!.id;
+    expect(second.default_flower_runtime_target_id).toBe(firstID);
+
+    const selected = setDefaultFlowerRuntimeTarget(second, secondID);
+    expect(selected.default_flower_runtime_target_id).toBe(secondID);
+    expect(deleteSavedRuntimeTarget(selected, secondID)).toMatchObject({
+      default_flower_runtime_target_id: null,
+      saved_runtime_targets: [expect.objectContaining({ id: firstID })],
+    });
   });
 
   it('keeps, replaces, and clears saved SSH runtime target passwords by target identity', () => {

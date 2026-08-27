@@ -98,6 +98,30 @@ function sshRemoteCommandWithEnv(argv: readonly string[], env: NodeJS.ProcessEnv
   return `${sshRemoteEnvPrefix(env)}${sshRemoteCommand(argv)}`;
 }
 
+function wslGuestCommand(
+  hostAccess: Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'wsl_host' }>>,
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv | undefined,
+): readonly string[] {
+  const command = argv.map((part) => compact(part));
+  if (command.length === 0 || command.some((part) => part === '')) {
+    throw new Error('Runtime host command argv must be non-empty.');
+  }
+  const guestEnvironment = Object.entries(env ?? {})
+    .map(([key, value]) => [compact(key), value == null ? '' : String(value)] as const)
+    .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(key))
+    .map(([key, value]) => `${key}=${value}`);
+  return [
+    '--distribution',
+    hostAccess.distribution_name,
+    '--user',
+    hostAccess.linux_user,
+    '--exec',
+    ...(guestEnvironment.length > 0 ? ['env', ...guestEnvironment] : []),
+    ...command,
+  ];
+}
+
 function commandFailureDiagnostics(args: Readonly<{
   command: string;
   reason: string;
@@ -396,6 +420,46 @@ export function createLocalRuntimeHostExecutor(): RuntimeHostAccessExecutor {
   };
 }
 
+export function createWSLRuntimeHostExecutor(
+  hostAccess: Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'wsl_host' }>>,
+  options: Readonly<{
+    wslBinary?: string;
+  }> = {},
+): RuntimeHostAccessExecutor {
+  const wslBinary = compact(options.wslBinary) || 'wsl';
+  const targetLabel = `${hostAccess.distribution_name} (${hostAccess.linux_user})`;
+  const failureContext: RuntimeHostFailureContext = {
+    title: 'WSL Host Command Failed',
+    summary: `WSL command in "${targetLabel}" failed.`,
+    detail: 'Desktop could not run the requested Runtime management command in this WSL distribution.',
+    recoveryHint: 'Open the distribution once to finish Linux user setup, confirm it uses WSL 2, then retry.',
+    targetLabel,
+  };
+  return {
+    host_access: hostAccess,
+    run: async (argv, commandOptions = {}) => spawnCommand(
+      wslBinary,
+      wslGuestCommand(hostAccess, argv, commandOptions.env),
+      {
+        ...commandOptions,
+        env: undefined,
+        timeout_ms: commandOptions.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+      },
+      failureContext,
+    ),
+    stream: async (argv, commandOptions = {}) => spawnStreamingCommand(
+      wslBinary,
+      wslGuestCommand(hostAccess, argv, commandOptions.env),
+      {
+        ...commandOptions,
+        env: undefined,
+      },
+      failureContext,
+    ),
+    release: async () => undefined,
+  };
+}
+
 export function spawnLocalRuntimeHostCommand(
   argv: readonly string[],
   options: RuntimeHostCommandOptions = {},
@@ -410,6 +474,19 @@ export function spawnLocalRuntimeHostCommand(
     detail: 'The local streaming command did not complete successfully.',
     targetLabel: 'Local Host',
   });
+}
+
+export async function spawnWSLRuntimeHostCommand(
+  hostAccess: Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'wsl_host' }>>,
+  argv: readonly string[],
+  options: RuntimeHostCommandOptions = {},
+): Promise<RuntimeHostStreamingCommand> {
+  const executor = createWSLRuntimeHostExecutor(hostAccess);
+  const stream = executor.stream;
+  if (!stream) {
+    throw new Error('WSL Runtime host streaming is unavailable.');
+  }
+  return stream(argv, options);
 }
 
 export function createSSHRuntimeHostExecutor(

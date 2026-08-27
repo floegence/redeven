@@ -23,6 +23,15 @@ import {
   type DesktopRuntimeContainerListRequest,
   type DesktopRuntimeContainerListResponse,
 } from '../shared/desktopContainerRuntime';
+import {
+  DESKTOP_WSL_REFRESH_CHANNEL,
+  DESKTOP_WSL_REGISTER_CHANNEL,
+  DESKTOP_WSL_SET_DEFAULT_CHANNEL,
+  type DesktopWSLActionResponse,
+  type DesktopWSLDiscoverySnapshot,
+  type DesktopWSLRegisterRequest,
+  type DesktopWSLSetDefaultRequest,
+} from '../shared/desktopWSL';
 
 export function bootstrapDesktopLauncherBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopLauncher', {
@@ -36,6 +45,13 @@ export function bootstrapDesktopLauncherBridge(): void {
       normalizeDesktopRuntimeContainerListResponse(
         await ipcRenderer.invoke(DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL, request),
       )
+    ),
+    refreshWSL: (): Promise<DesktopWSLDiscoverySnapshot> => ipcRenderer.invoke(DESKTOP_WSL_REFRESH_CHANNEL),
+    registerWSL: (request: DesktopWSLRegisterRequest): Promise<DesktopWSLActionResponse> => (
+      ipcRenderer.invoke(DESKTOP_WSL_REGISTER_CHANNEL, request)
+    ),
+    setDefaultWSL: (request: DesktopWSLSetDefaultRequest): Promise<DesktopWSLActionResponse> => (
+      ipcRenderer.invoke(DESKTOP_WSL_SET_DEFAULT_CHANNEL, request)
     ),
     performAction: (request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> =>
       ipcRenderer.invoke(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, request),

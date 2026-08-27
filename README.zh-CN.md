@@ -71,9 +71,11 @@ Redeven 是一个单文件二进制程序，可将您的电脑和服务器汇集
 
 ### Desktop 应用
 
-1. 从 [GitHub Releases](https://github.com/floegence/redeven/releases) 下载 Redeven Desktop。
-2. 打开应用并选择环境：本地、Provider、SSH 主机或已保存的 URL。
+1. 从 [GitHub Releases](https://github.com/floegence/redeven/releases) 下载 Redeven Desktop。公开发布目前提供 macOS 和 Linux 安装包。在启用代码签名和签名更新验证前，Windows 11 x64 仅提供内部 WSL 认证构建。
+2. 打开应用。在 macOS 或 Linux 上，可选择本地、Provider、SSH 主机或已保存的 URL；在 Windows 上，请在环境中心注册一个已初始化的 WSL 2 发行版。Desktop 不提供原生本地环境、Windows 运行时或本机容器运行时。
 3. 开始工作，工作区会自动在浏览器中打开。
+
+每个已注册的发行版都是独立的 WSL 环境。Desktop 会将匹配的 Linux x64 运行时传输到该发行版用户的 `~/.redeven`；它不会安装或管理 WSL，不使用 `/mnt/c`，也不依赖 `systemd`。退出、更新或卸载 Desktop 不会停止 WSL 运行时或删除其数据。如需停止，请使用对应环境的“停止”操作。
 
 对于远程计算机：Desktop 可以通过 SSH 自动安装匹配的 Redeven 版本，并在您选择后，将该托管 SSH 运行时明确连接到 provider 环境。无需在远程主机上手动设置。
 

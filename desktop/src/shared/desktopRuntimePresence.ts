@@ -29,7 +29,7 @@ export type DesktopRuntimeControlStatus =
 export type DesktopRuntimePresence = Readonly<{
   target_id: DesktopProviderRuntimeLinkTargetID;
   placement_target_id: DesktopRuntimeTargetID;
-  kind: 'local_environment' | 'ssh_environment';
+  kind: 'local_environment' | 'wsl_environment' | 'ssh_environment';
   environment_id: string;
   label: string;
   runtime_key: string;
@@ -71,7 +71,7 @@ export function desktopRuntimeControlStatusMissing(
   };
 }
 
-// IMPORTANT: Runtime Presence is the sole renderer-facing source of Local/SSH
+// IMPORTANT: Runtime Presence is the sole renderer-facing source of Local/WSL/SSH
 // runtime management capability. Do not derive runtime-control availability
 // from open window sessions or provider route status.
 export function defaultRuntimeControlStatusForRunningState(running: boolean): DesktopRuntimeControlStatus {

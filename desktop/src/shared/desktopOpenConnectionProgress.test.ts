@@ -10,6 +10,11 @@ import {
 describe('desktopOpenConnectionProgress', () => {
   it('resolves Open connection locations from host access and placement', () => {
     const localHost = { kind: 'local_host' as const };
+    const wslHost = {
+      kind: 'wsl_host' as const,
+      distribution_name: 'Ubuntu-24.04',
+      linux_user: 'alice',
+    };
     const sshHost = {
       kind: 'ssh_host' as const,
       ssh: {
@@ -31,11 +36,13 @@ describe('desktopOpenConnectionProgress', () => {
 
     expect(desktopOpenConnectionLocation(localHost, hostPlacement)).toBe('local_host');
     expect(desktopOpenConnectionLocation(localHost, containerPlacement)).toBe('local_container');
+    expect(desktopOpenConnectionLocation(wslHost, hostPlacement)).toBe('wsl_host');
     expect(desktopOpenConnectionLocation(sshHost, hostPlacement)).toBe('ssh_host');
     expect(desktopOpenConnectionLocation(sshHost, containerPlacement)).toBe('ssh_container');
   });
 
   it('uses the placement bridge phases for SSH and container opens', () => {
+    expect(openConnectionPhaseSequence('wsl_host')).toEqual(openConnectionPhaseSequence('ssh_host'));
     expect(openConnectionPhaseSequence('ssh_host')).toEqual([
       'checking_runtime_record',
       'ensuring_runtime_ready',

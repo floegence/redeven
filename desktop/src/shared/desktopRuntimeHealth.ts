@@ -58,6 +58,7 @@ export type DesktopRuntimeHealthSource =
   | 'local_runtime_probe'
   | 'provider_batch_probe'
   | 'external_local_ui_probe'
+  | 'wsl_runtime_probe'
   | 'ssh_runtime_probe'
   | 'gateway_service_probe';
 

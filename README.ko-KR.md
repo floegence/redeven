@@ -71,9 +71,11 @@ Redeven은 컴퓨터와 서버를 하나의 브라우저 탭으로 가져오는 
 
 ### Desktop 앱
 
-1. [GitHub Releases](https://github.com/floegence/redeven/releases)에서 Redeven Desktop을 다운로드합니다.
-2. 앱을 열고 로컬, Provider, SSH 호스트 또는 저장된 URL 중에서 환경을 선택합니다.
+1. [GitHub Releases](https://github.com/floegence/redeven/releases)에서 Redeven Desktop을 다운로드합니다. 공개 릴리스는 현재 macOS 및 Linux 설치 프로그램을 제공합니다. 코드 서명과 서명된 업데이트 검증이 활성화되기 전까지 Windows 11 x64는 내부 WSL 인증 빌드로만 제공됩니다.
+2. 앱을 엽니다. macOS 또는 Linux에서는 로컬, Provider, SSH 호스트 또는 저장된 URL을 선택할 수 있습니다. Windows에서는 환경 센터에서 초기화된 WSL 2 배포판을 등록하세요. Desktop은 네이티브 로컬 환경, Windows 런타임 또는 로컬 컨테이너 런타임을 제공하지 않습니다.
 3. 작업을 시작하면 작업 공간이 브라우저에서 자동으로 열립니다.
+
+등록된 각 배포판은 별도의 WSL 환경입니다. Desktop은 일치하는 Linux x64 런타임을 배포판 사용자의 `~/.redeven`으로 전송하며 WSL을 설치하거나 관리하지 않고, `/mnt/c`를 사용하거나 `systemd`에 의존하지 않습니다. Desktop을 종료, 업데이트 또는 제거해도 WSL 런타임이 중지되거나 데이터가 삭제되지 않습니다. 중지하려면 해당 환경의 중지 작업을 사용하세요.
 
 원격 컴퓨터의 경우 Desktop이 SSH를 통해 일치하는 Redeven 릴리스를 자동 설치할 수 있습니다. 이후 사용자가 선택하면 해당 관리형 SSH 런타임을 provider 환경에 명시적으로 연결합니다. 원격 호스트에서 수동으로 설정할 필요가 없습니다.
 

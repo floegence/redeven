@@ -14,6 +14,8 @@ Published dependency evidence, generated assets, localized public docs, UI
 behavior, Desktop/runtime bundles, Go tests, lint, and OKF must all agree. A
 missing, stale, unsigned, optional, or target-mismatched ReDevPlugin artifact
 fails release packaging.
+Windows is an internal certification target only; the formal release inventory
+fails closed if any Windows asset appears.
 
 # Contract
 
@@ -102,6 +104,15 @@ environment error. Tests and gates never sign Electron, use developer signing
 identities, or mutate `node_modules` to change the host trust decision. These
 test-runtime rules do not change Dev Desktop launch or shutdown behavior.
 
+The manual `Windows WSL Certification` workflow is outside ordinary push and
+pull-request CI and requires exact `origin/main`. An Ubuntu job builds the
+matching Linux amd64 Runtime archive from that commit. A `windows-2025` job runs
+Desktop tests, creates two temporary WSL 2 distributions, verifies isolated
+install, Start, private Bridge, external distribution shutdown, explicit retry,
+Update, and exact Stop behavior, then builds an unsigned per-user internal NSIS
+artifact. Workflow cleanup may unregister only its temporary test
+distributions; product code never performs that system operation.
+
 ## Documentation and generated assets
 
 `README.md` is canonical. Every supported localized README must preserve
@@ -176,6 +187,10 @@ links, devices, privileged modes, sparse/PAX metadata, malformed trailers,
 trailing data, and oversized payloads. Darwin receipts carry explicit null
 runtime evidence.
 
+Windows assembly is a separate `managed_wsl_archive` policy: it admits one
+verified `redeven_linux_amd64.tar.gz`, binds version, commit, size, and digest,
+and rejects `redeven.exe`. It does not enter the formal release matrix.
+
 Host startup takes the expected runtime digest from this product release marker;
 it must not hash the field binary and accept that value as its own trust anchor.
 
@@ -185,6 +200,10 @@ two DMGs, six target-bound receipts, and byte-identical shared metadata. Each
 source is opened once with `O_NOFOLLOW`, hashed and copied through the same
 descriptor, checked for inode or metadata changes, fsynced, and linked without
 replacement. A failed collection removes partial outputs.
+
+Any Windows artifact directory is rejected with the signing and signed-update
+certification prerequisite rather than being treated as an optional fifth
+target.
 
 The final job runs the consumption gate in release-only mode, signs checksums,
 publishes `safe_extract_tar.py`, verifies the complete draft asset set by name,

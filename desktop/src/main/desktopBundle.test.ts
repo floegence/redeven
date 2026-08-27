@@ -8,6 +8,18 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { loadDesktopBundle } from './desktopBundle';
 
 const roots: string[] = [];
+const managedWSLArchiveFiles = [
+  '.redevplugin-release-artifacts-verified.json',
+  'LICENSE',
+  'REDEVPLUGIN_RUNTIME.spdx.json',
+  'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+  'THIRD_PARTY_NOTICES.md',
+  'redeven',
+  'redevplugin-runtime',
+  'redevplugin-runtime.pem',
+  'redevplugin-runtime.provenance.json',
+  'redevplugin-runtime.sig',
+].sort((left, right) => left.localeCompare(right));
 
 function sha256(value: Buffer): string {
   return createHash('sha256').update(value).digest('hex');
@@ -38,17 +50,55 @@ function bundleFixture(overrides: Record<string, unknown> = {}) {
     executable: true,
   }];
   const manifest = {
-    schema_version: 3,
+    schema_version: 4,
     version: 'v1.2.3',
     commit: 'abc123',
     platform: 'linux',
     architecture: 'amd64',
     provenance: 'packaged_bundle',
+    distribution_kind: 'bundled_host_runtime',
+    managed_wsl_runtime: null,
     runtime_files: runtimeFiles,
     runtime_files_sha256: suiteSHA256(runtimeFiles),
     ...overrides,
   };
   fs.writeFileSync(path.join(root, 'desktop-bundle-manifest.json'), `${JSON.stringify(manifest)}\n`);
+  return root;
+}
+
+function windowsBundleFixture(attestationOverrides: Record<string, unknown> = {}): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-desktop-wsl-bundle-'));
+  roots.push(root);
+  const archive = Buffer.from('verified-linux-amd64-runtime-archive');
+  fs.writeFileSync(path.join(root, 'redeven_linux_amd64.tar.gz'), archive);
+  const runtimeFiles = [{
+    path: 'redeven_linux_amd64.tar.gz',
+    sha256: sha256(archive),
+    size_bytes: archive.length,
+    executable: false,
+  }];
+  fs.writeFileSync(path.join(root, 'desktop-bundle-manifest.json'), `${JSON.stringify({
+    schema_version: 4,
+    version: 'v1.2.3',
+    commit: 'abc123',
+    platform: 'windows',
+    architecture: 'amd64',
+    provenance: 'packaged_bundle',
+    distribution_kind: 'managed_wsl_archive',
+    managed_wsl_runtime: {
+      archive_path: 'redeven_linux_amd64.tar.gz',
+      archive_sha256: runtimeFiles[0]!.sha256,
+      archive_size_bytes: runtimeFiles[0]!.size_bytes,
+      platform: 'linux',
+      architecture: 'amd64',
+      version: 'v1.2.3',
+      commit: 'abc123',
+      archive_files: managedWSLArchiveFiles,
+      ...attestationOverrides,
+    },
+    runtime_files: runtimeFiles,
+    runtime_files_sha256: suiteSHA256(runtimeFiles),
+  })}\n`);
   return root;
 }
 
@@ -151,5 +201,37 @@ describe('Desktop precompiled bundle', () => {
       expectedPlatform: 'linux',
       expectedArchitecture: 'amd64',
     })).rejects.toThrow('unsupported shape');
+  });
+
+  it('validates a Windows bundle containing only the managed Linux x64 archive', async () => {
+    const root = windowsBundleFixture();
+
+    await expect(loadDesktopBundle({
+      root,
+      expectedPlatform: 'windows',
+      expectedArchitecture: 'amd64',
+      expectedVersion: 'v1.2.3',
+    })).resolves.toMatchObject({
+      distribution_kind: 'managed_wsl_archive',
+      managed_wsl_runtime: {
+        platform: 'linux',
+        architecture: 'amd64',
+        version: 'v1.2.3',
+        commit: 'abc123',
+        archive_files: managedWSLArchiveFiles,
+      },
+      managed_wsl_archive_path: path.join(root, 'redeven_linux_amd64.tar.gz'),
+      runtime_files: [{ executable: false }],
+    });
+  });
+
+  it('rejects a Windows bundle whose managed WSL target attestation was changed', async () => {
+    const root = windowsBundleFixture({ architecture: 'arm64' });
+
+    await expect(loadDesktopBundle({
+      root,
+      expectedPlatform: 'windows',
+      expectedArchitecture: 'amd64',
+    })).rejects.toThrow('attestation');
   });
 });

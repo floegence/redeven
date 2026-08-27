@@ -1,7 +1,7 @@
 import type { ManagedRuntime } from './runtimeProcess';
 
-export type DesktopSessionRuntimeKind = 'local_environment' | 'ssh';
-export type DesktopSessionRuntimeLaunchMode = 'spawned' | 'attached';
+export type DesktopSessionRuntimeKind = 'local_environment' | 'wsl' | 'ssh';
+export type DesktopSessionRuntimeLaunchMode = 'spawned' | 'attached' | 'wsl';
 
 export type DesktopSessionRuntimeHandle = Readonly<{
   runtime_kind: DesktopSessionRuntimeKind;

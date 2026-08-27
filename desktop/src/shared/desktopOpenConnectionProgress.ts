@@ -6,6 +6,7 @@ import type {
 export type DesktopOpenConnectionLocation =
   | 'local_host'
   | 'local_container'
+  | 'wsl_host'
   | 'ssh_host'
   | 'ssh_container'
   | 'external_local_ui'
@@ -115,6 +116,7 @@ const EXTERNAL_LOCAL_UI_OPEN_PHASES: readonly DesktopOpenConnectionPhase[] = [
 const OPEN_CONNECTION_PHASES_BY_LOCATION: Record<DesktopOpenConnectionLocation, readonly DesktopOpenConnectionPhase[]> = {
   local_host: LOCAL_HOST_OPEN_PHASES,
   local_container: CONTAINER_OPEN_PHASES,
+  wsl_host: SSH_HOST_OPEN_PHASES,
   ssh_host: SSH_HOST_OPEN_PHASES,
   ssh_container: SSH_CONTAINER_OPEN_PHASES,
   external_local_ui: EXTERNAL_LOCAL_UI_OPEN_PHASES,
@@ -158,7 +160,11 @@ export function desktopOpenConnectionLocation(
   if (placement.kind === 'container_process') {
     return hostAccess.kind === 'ssh_host' ? 'ssh_container' : 'local_container';
   }
-  return hostAccess.kind === 'ssh_host' ? 'ssh_host' : 'local_host';
+  return hostAccess.kind === 'ssh_host'
+    ? 'ssh_host'
+    : hostAccess.kind === 'wsl_host'
+      ? 'wsl_host'
+      : 'local_host';
 }
 
 export function openConnectionPhaseSequence(

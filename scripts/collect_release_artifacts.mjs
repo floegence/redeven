@@ -104,6 +104,10 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
     `desktop-${target.goos}-${target.goarch}`,
   ]).concat(stableRelease ? ['desktop-sparkle'] : []).sort(compareStrings);
   const actualArtifactDirectories = readdirSync(downloadsDir).sort(compareStrings);
+  const windowsArtifacts = actualArtifactDirectories.filter((name) => /(?:^|[-_])windows(?:[-_]|$)|(?:^|[-_])win(?:32|64|[-_]|$)/iu.test(name));
+  if (windowsArtifacts.length > 0) {
+    fail(`formal Windows release assets are disabled until Authenticode signing and signed update certification are enabled; got=${JSON.stringify(windowsArtifacts)}`);
+  }
   if (JSON.stringify(actualArtifactDirectories) !== JSON.stringify(expectedArtifactDirectories)) {
     fail(`downloaded artifact directory inventory mismatch; got=${JSON.stringify(actualArtifactDirectories)} want=${JSON.stringify(expectedArtifactDirectories)}`);
   }

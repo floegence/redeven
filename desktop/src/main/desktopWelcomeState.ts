@@ -96,6 +96,11 @@ import {
 } from '../shared/desktopRuntimePlacement';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import { aggregateDesktopEnvironmentEntries } from './environmentAggregator';
+import {
+  resolveDesktopPlatformCapabilities,
+  type DesktopPlatformCapabilities,
+} from '../shared/desktopPlatformCapabilities';
+import type { DesktopWSLDiscoverySnapshot } from '../shared/desktopWSL';
 
 export {
   desktopProviderRuntimeLinkTargetID,
@@ -117,6 +122,8 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   issue?: DesktopWelcomeIssue | null;
   selectedEnvironmentID?: string;
   flowerSettingsFocusRevision?: number;
+  platformCapabilities?: DesktopPlatformCapabilities;
+  wslDiscovery?: DesktopWSLDiscoverySnapshot | null;
 }>;
 
 function diagnosticsLines(lines: readonly string[]): string {
@@ -536,7 +543,11 @@ function openSessionByURL(
 function providerRuntimeLinkKindForHostAccess(
   hostAccess: DesktopRuntimeHostAccess,
 ): DesktopProviderRuntimeLinkTargetKind {
-  return hostAccess.kind === 'ssh_host' ? 'ssh_environment' : 'local_environment';
+  return hostAccess.kind === 'ssh_host'
+    ? 'ssh_environment'
+    : hostAccess.kind === 'wsl_host'
+      ? 'wsl_environment'
+      : 'local_environment';
 }
 
 function openSessionByRuntimeTarget(
@@ -1531,8 +1542,11 @@ function buildEnvironmentEntries(
   savedExternalRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   savedRuntimeTargetHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopRuntimePresence>>,
+  platformCapabilities: DesktopPlatformCapabilities,
 ): readonly DesktopEnvironmentEntry[] {
-  const localLocalEnvironments = [preferences.local_environment];
+  const localLocalEnvironments = platformCapabilities.native_local_environment
+    ? [preferences.local_environment]
+    : [];
   const localRuntimeTargetID = desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id);
   const localPresence = managedRuntimePresenceByTargetID[localRuntimeTargetID];
   const localRuntimeTarget = buildProviderRuntimeLinkTarget({
@@ -1546,7 +1560,10 @@ function buildEnvironmentEntries(
     runtimeControlStatus: localPresence?.runtime_control_status,
     runtimeService: preferredRuntimeService(localEnvironmentRuntimeService(preferences.local_environment), undefined, localPresence),
   });
-  const savedRuntimeLinkTargets = preferences.saved_runtime_targets.map((target) => {
+  const visibleSavedRuntimeTargets = preferences.saved_runtime_targets.filter((target) => (
+    platformCapabilities.native_host_runtime || target.host_access.kind !== 'local_host'
+  ));
+  const savedRuntimeLinkTargets = visibleSavedRuntimeTargets.map((target) => {
     const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
     const runtimeTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
     const presence = managedRuntimePresenceByTargetID[runtimeTargetID];
@@ -1562,7 +1579,10 @@ function buildEnvironmentEntries(
       runtimeService: preferredRuntimeService(undefined, undefined, presence),
     });
   });
-  const runtimeLinkTargets = [localRuntimeTarget, ...savedRuntimeLinkTargets];
+  const runtimeLinkTargets = [
+    ...(platformCapabilities.native_local_environment ? [localRuntimeTarget] : []),
+    ...savedRuntimeLinkTargets,
+  ];
   const providerEnvironmentCandidatesForTarget = (
     runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
   ): readonly DesktopProviderEnvironmentCandidate[] => providerEnvironmentCandidatesForSnapshot(
@@ -1647,7 +1667,7 @@ function buildEnvironmentEntries(
       savedExternalRuntimeHealth[environment.id],
     ));
   }
-  for (const target of preferences.saved_runtime_targets) {
+  for (const target of visibleSavedRuntimeTargets) {
     const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
     const runtimeTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
     entries.push(buildSavedRuntimeTargetEntry(
@@ -1713,6 +1733,9 @@ function buildSavedEnvironmentEntry(
 }
 
 function runtimeTargetSecondaryText(target: DesktopSavedRuntimeTarget): string {
+  if (target.host_access.kind === 'wsl_host') {
+    return `WSL 2 · ${target.host_access.distribution_name} · ${target.host_access.linux_user}`;
+  }
   if (target.host_access.kind === 'ssh_host') {
     const ssh = target.host_access.ssh;
     const authority = ssh.ssh_port === null ? ssh.ssh_destination : `${ssh.ssh_destination}:${ssh.ssh_port}`;
@@ -1751,21 +1774,26 @@ function buildSavedRuntimeTargetEntry(
   presence: DesktopRuntimePresence | undefined,
   providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
 ): DesktopEnvironmentEntry {
+  const probeSource = target.host_access.kind === 'ssh_host'
+    ? 'ssh_runtime_probe'
+    : target.host_access.kind === 'wsl_host'
+      ? 'wsl_runtime_probe'
+      : 'local_runtime_probe';
   const isOpen = sessionIsOpen(openSession);
   const isOpening = sessionIsOpening(openSession);
   const sessionRuntimeHealth = (isOpen || isOpening)
     ? onlineRuntimeHealth(
-      target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe',
+      probeSource,
       openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '',
       openSession?.startup?.runtime_service,
     )
     : undefined;
   const runtimeHealth = runtimeHealthFromPresence(
-    target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe',
+    probeSource,
     presence,
     sessionRuntimeHealth
     ?? cachedRuntimeHealth
-    ?? unknownRuntimeHealth(target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe'),
+    ?? unknownRuntimeHealth(probeSource),
   );
   const startedAtUnixMS = runtimeStartedAtUnixMS(
     presence?.started_at_unix_ms,
@@ -1873,6 +1901,7 @@ export function buildDesktopWelcomeSnapshot(
   args: BuildDesktopWelcomeSnapshotArgs,
 ): DesktopWelcomeSnapshot {
   const preferences = args.preferences;
+  const platformCapabilities = args.platformCapabilities ?? resolveDesktopPlatformCapabilities(process.platform);
   const controlPlanes = args.controlPlanes ?? fallbackControlPlaneSummaries(
     preferences.control_planes,
     preferences.provider_environments,
@@ -1892,6 +1921,7 @@ export function buildDesktopWelcomeSnapshot(
     args.savedExternalRuntimeHealth ?? {},
     args.savedRuntimeTargetHealth ?? {},
     args.managedRuntimePresenceByTargetID ?? {},
+    platformCapabilities,
   );
   // Only explicit URL records are Standalone Gateways. Direct host/container
   // targets belong to Environment storage and must never reach either the
@@ -1954,6 +1984,9 @@ export function buildDesktopWelcomeSnapshot(
 
   return {
     surface,
+    platform_capabilities: platformCapabilities,
+    wsl_discovery: args.wslDiscovery ?? null,
+    default_flower_runtime_target_id: preferences.default_flower_runtime_target_id,
     flower_settings_focus_revision: Math.max(0, Math.floor(Number(args.flowerSettingsFocusRevision ?? 0))),
     entry_reason: args.entryReason ?? 'app_launch',
     close_action: openSessions.length > 0 ? 'close_launcher' : 'quit',

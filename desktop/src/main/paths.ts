@@ -36,9 +36,39 @@ function bundledRuntimeBundleDirName(platform: NodeJS.Platform = process.platfor
     case 'darwin':
     case 'linux':
       return `${platform}-${goarch}`;
+    case 'win32':
+      if (goarch !== 'amd64') {
+        throw new Error(`Unsupported desktop runtime platform: ${platform}/${goarch}`);
+      }
+      return `windows-${goarch}`;
     default:
       throw new Error(`Unsupported desktop runtime platform: ${platform}`);
   }
+}
+
+export function resolveDesktopBundleRoot(args: ResolveBundledRuntimePathArgs): string {
+  if (args.isPackaged) {
+    return path.join(args.resourcesPath, 'bin');
+  }
+  const existsSync = args.existsSync ?? fs.existsSync;
+  const developmentBundleRoot = String(args.developmentBundleRoot ?? '').trim();
+  if (developmentBundleRoot !== '') {
+    if (!path.isAbsolute(developmentBundleRoot)) {
+      throw new Error('Development desktop bundle root must be absolute.');
+    }
+    if (!existsSync(path.join(developmentBundleRoot, 'desktop-bundle-manifest.json'))) {
+      throw new Error('Development desktop bundle snapshot is missing its manifest.');
+    }
+    return developmentBundleRoot;
+  }
+  const bundleDirName = bundledRuntimeBundleDirName(args.platform ?? process.platform, args.arch ?? process.arch);
+  for (const root of [args.appPath, path.resolve(args.appPath, '..'), process.cwd()]) {
+    const candidate = path.resolve(root, '.bundle', bundleDirName);
+    if (existsSync(path.join(candidate, 'desktop-bundle-manifest.json'))) {
+      return candidate;
+    }
+  }
+  throw new Error('Unable to locate the Desktop bundle. Run `npm run start` or `npm run package` from the desktop workspace first.');
 }
 
 export function resolveBundledRuntimePath(args: ResolveBundledRuntimePathArgs): string {

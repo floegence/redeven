@@ -68,7 +68,7 @@ function normalizedTargetRoot(
     || normalized === '/var/root/.redeven'
     || /^\/(?:home|Users)\/[^/]+\/\.redeven$/u.test(normalized);
   if (
-    (hostAccess.kind === 'ssh_host' || placement.kind === 'container_process')
+    (hostAccess.kind !== 'local_host' || placement.kind === 'container_process')
     && (
       normalized === 'remote_default'
       || normalized === '~/.redeven'
@@ -98,6 +98,18 @@ export function runtimeLifecycleTargetKey(
       'container_process',
       required(placement.container_engine, 'Container engine'),
       required(placement.container_id, 'Container identity'),
+      runtimeRoot,
+    ]);
+  }
+  if (hostAccess.kind === 'wsl_host') {
+    if (placement.kind !== 'host_process') {
+      throw new Error('WSL runtime targets do not support container placement.');
+    }
+    return targetKey([
+      'wsl_host',
+      required(hostAccess.distribution_name, 'WSL distribution'),
+      required(hostAccess.linux_user, 'WSL Linux user'),
+      'host_process',
       runtimeRoot,
     ]);
   }

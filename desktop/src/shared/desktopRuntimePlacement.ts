@@ -13,6 +13,11 @@ export type DesktopRuntimeHostAccess =
       kind: 'local_host';
     }>
   | Readonly<{
+      kind: 'wsl_host';
+      distribution_name: string;
+      linux_user: string;
+    }>
+  | Readonly<{
       kind: 'ssh_host';
       ssh: DesktopSSHHostAccessDetails;
     }>;
@@ -38,7 +43,7 @@ export type DesktopRuntimePlacement =
       bridge_strategy: 'exec_stream';
     }>;
 
-export type DesktopRuntimeTargetID = `local:${string}` | `ssh:${string}`;
+export type DesktopRuntimeTargetID = `local:${string}` | `wsl:${string}` | `ssh:${string}`;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -106,7 +111,14 @@ export function normalizeDesktopRuntimeHostAccess(value: unknown): DesktopRuntim
       }),
     };
   }
-  throw new Error('Runtime host access must be local_host or ssh_host.');
+  if (kind === 'wsl_host') {
+    return {
+      kind: 'wsl_host',
+      distribution_name: normalizeTokenComponent(record.distribution_name, 'WSL distribution name'),
+      linux_user: normalizeTokenComponent(record.linux_user, 'WSL Linux user'),
+    };
+  }
+  throw new Error('Runtime host access must be local_host, wsl_host, or ssh_host.');
 }
 
 export function normalizeDesktopRuntimePlacement(value: unknown): DesktopRuntimePlacement {
@@ -182,6 +194,12 @@ export function desktopRuntimeTargetID(
     }
     return `local:host:${encoded(compact(fallbackLocalID) || 'local')}`;
   }
+  if (hostAccess.kind === 'wsl_host') {
+    if (placement.kind !== 'host_process') {
+      throw new Error('WSL Runtime targets support host_process placement only.');
+    }
+    return `wsl:host:${encoded(hostAccess.distribution_name)}:${encoded(hostAccess.linux_user)}:${hashRuntimeRoot(desktopRuntimePlacementStateRoot(placement))}`;
+  }
   const sshAuthority = normalizedSSHAuthority(hostAccess.ssh);
   if (placement.kind === 'container_process') {
     return `ssh:container:${encoded(sshAuthority)}:${encoded(placement.container_engine)}:${encoded(desktopRuntimeContainerReference(placement))}:${hashRuntimeRoot(desktopRuntimePlacementStateRoot(placement))}`;
@@ -193,6 +211,9 @@ export function desktopRuntimeTargetAutoStatusDetectionConfigurable(
   hostAccess: DesktopRuntimeHostAccess,
   placement: DesktopRuntimePlacement,
 ): boolean {
+  if (hostAccess.kind === 'wsl_host') {
+    return false;
+  }
   return !(hostAccess.kind === 'local_host' && placement.kind === 'container_process');
 }
 
@@ -201,6 +222,11 @@ export function desktopRuntimeTargetAutoStatusDetectionEnabled(
   placement: DesktopRuntimePlacement,
   configured: unknown,
 ): boolean {
+  if (hostAccess.kind === 'wsl_host') {
+    // WSL discovery decides whether the distribution is already running before
+    // Desktop probes it. A saved preference must never wake a stopped distro.
+    return true;
+  }
   if (!desktopRuntimeTargetAutoStatusDetectionConfigurable(hostAccess, placement)) {
     return true;
   }

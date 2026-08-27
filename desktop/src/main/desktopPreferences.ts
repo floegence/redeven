@@ -77,7 +77,7 @@ export type DesktopSavedEnvironment = Readonly<{
 }>;
 
 export type DesktopSavedRuntimeTarget = Readonly<{
-  schema_version: 1;
+  schema_version: 1 | 2;
   id: DesktopRuntimeTargetID;
   label: string;
   host_access: DesktopRuntimeHostAccess;
@@ -103,6 +103,7 @@ export type DesktopPreferences = Readonly<{
   provider_environments: readonly DesktopProviderEnvironmentRecord[];
   saved_environments: readonly DesktopSavedEnvironment[];
   saved_runtime_targets: readonly DesktopSavedRuntimeTarget[];
+  default_flower_runtime_target_id: DesktopRuntimeTargetID | null;
   control_plane_refresh_tokens: Readonly<Record<string, string>>;
   control_planes: readonly DesktopSavedControlPlane[];
 }>;
@@ -265,6 +266,7 @@ type DesktopControlPlaneFile = Readonly<{
 
 type DesktopPreferencesFile = Readonly<{
   version?: number;
+  default_flower_runtime_target_id?: unknown;
 }>;
 
 type DesktopControlPlaneSecretFile = Readonly<{
@@ -378,6 +380,7 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     provider_environments: [],
     saved_environments: [],
     saved_runtime_targets: [],
+    default_flower_runtime_target_id: null,
     control_plane_refresh_tokens: {},
     control_planes: [],
   };
@@ -632,6 +635,9 @@ function defaultSavedRuntimeTargetLabel(
     const prefix = hostAccess.kind === 'ssh_host' ? 'SSH Container' : 'Local Container';
     return `${prefix}: ${placement.container_label || placement.container_id}`;
   }
+  if (hostAccess.kind === 'wsl_host') {
+    return hostAccess.distribution_name;
+  }
   return hostAccess.kind === 'ssh_host' ? defaultSavedSSHEnvironmentLabel(hostAccess.ssh) : defaultDesktopLocalEnvironmentLabel();
 }
 
@@ -647,11 +653,15 @@ function normalizeSavedRuntimeTargetCandidate(
     };
   }
   const candidate = value as DesktopConnectionCatalogFile;
+  const schemaVersion = candidate.schema_version === 2 ? 2 : 1;
   let hostAccess: DesktopRuntimeHostAccess;
   let placement: DesktopRuntimePlacement;
   try {
     hostAccess = normalizeDesktopRuntimeHostAccess(candidate.host_access);
     placement = normalizeDesktopRuntimePlacement(candidate.placement);
+    if (hostAccess.kind === 'wsl_host' && schemaVersion !== 2) {
+      throw new Error('WSL runtime targets require connection schema v2.');
+    }
   } catch {
     return {
       target: null,
@@ -669,7 +679,7 @@ function normalizeSavedRuntimeTargetCandidate(
     && ((candidate as { ssh_password_configured?: unknown }).ssh_password_configured === true || compact(sshPassword) !== '');
   return {
     target: {
-      schema_version: 1,
+      schema_version: schemaVersion,
       id: computedID,
       label: compact(candidate.label) || defaultSavedRuntimeTargetLabel(hostAccess, placement),
       host_access: hostAccess,
@@ -1464,7 +1474,7 @@ export function upsertSavedRuntimeTarget(
     && (compact(inputPassword) !== '' || (existingSameIdentity && existing?.ssh_password_configured === true));
   const now = Date.now();
   const nextTarget: DesktopSavedRuntimeTarget = {
-    schema_version: 1,
+    schema_version: 2,
     id: targetID,
     label: compact(input.label) || existing?.label || defaultSavedRuntimeTargetLabel(hostAccess, placement),
     host_access: hostAccess,
@@ -1490,6 +1500,8 @@ export function upsertSavedRuntimeTarget(
         && (requestedID === '' || target.id !== requestedID)
       )),
     ]).slice(0, MAX_SAVED_RUNTIME_TARGETS),
+    default_flower_runtime_target_id: preferences.default_flower_runtime_target_id
+      ?? (hostAccess.kind === 'wsl_host' ? targetID : null),
   };
 }
 
@@ -1667,6 +1679,29 @@ export function deleteSavedRuntimeTarget(
   return {
     ...preferences,
     saved_runtime_targets: preferences.saved_runtime_targets.filter((target) => target.id !== cleanEnvironmentID),
+    default_flower_runtime_target_id: preferences.default_flower_runtime_target_id === cleanEnvironmentID
+      ? null
+      : preferences.default_flower_runtime_target_id,
+  };
+}
+
+export function setDefaultFlowerRuntimeTarget(
+  preferences: DesktopPreferences,
+  targetID: DesktopRuntimeTargetID | null,
+): DesktopPreferences {
+  if (targetID === null) {
+    return {
+      ...preferences,
+      default_flower_runtime_target_id: null,
+    };
+  }
+  const normalizedID = compact(targetID) as DesktopRuntimeTargetID;
+  if (!preferences.saved_runtime_targets.some((target) => target.id === normalizedID)) {
+    throw new Error('The default Flower Runtime target must be a registered environment.');
+  }
+  return {
+    ...preferences,
+    default_flower_runtime_target_id: normalizedID,
   };
 }
 
@@ -2083,7 +2118,7 @@ function serializeSavedEnvironmentCatalog(environment: DesktopSavedEnvironment):
 
 function serializeSavedRuntimeTargetCatalog(target: DesktopSavedRuntimeTarget): DesktopConnectionCatalogFile {
   return {
-    schema_version: 1,
+    schema_version: target.schema_version,
     record_kind: 'connection',
     kind: 'runtime_target',
     id: target.id,
@@ -2150,6 +2185,7 @@ function serializeProviderEnvironmentCatalog(
 }
 
 export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, codec: DesktopSecretCodec): Promise<DesktopPreferences> {
+  const preferencesFile = await readJSONFile<DesktopPreferencesFile>(paths.preferencesFile);
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
   const catalogPaths = defaultDesktopCatalogPaths(paths.stateRoot);
   const migrationJournalPath = path.join(paths.stateRoot, 'maintenance', 'environment-registration-migration.json');
@@ -2215,8 +2251,16 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     provider_environments: providerEnvironments,
     saved_environments: savedEnvironments,
     saved_runtime_targets: normalizeSavedRuntimeTargets(registrationMigration.saved_runtime_targets),
+    default_flower_runtime_target_id: null,
     control_plane_refresh_tokens: Object.fromEntries(controlPlaneRefreshTokensByKey),
     control_planes: controlPlanes,
+  };
+  const savedDefaultTargetID = compact(preferencesFile?.default_flower_runtime_target_id) as DesktopRuntimeTargetID;
+  const preferencesWithDefault: DesktopPreferences = {
+    ...nextPreferences,
+    default_flower_runtime_target_id: nextPreferences.saved_runtime_targets.some((target) => target.id === savedDefaultTargetID)
+      ? savedDefaultTargetID
+      : null,
   };
   if (registrationMigration.changed) {
     await fs.mkdir(path.dirname(migrationJournalPath), { recursive: true, mode: 0o700 });
@@ -2234,9 +2278,9 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     const temporaryJournalPath = `${migrationJournalPath}.${process.pid}.${Date.now()}.tmp`;
     await fs.writeFile(temporaryJournalPath, `${JSON.stringify(nextMigrationJournal, null, 2)}\n`, { mode: 0o600 });
     await fs.rename(temporaryJournalPath, migrationJournalPath);
-    await saveDesktopPreferences(paths, nextPreferences, codec);
+    await saveDesktopPreferences(paths, preferencesWithDefault, codec);
     await fs.rm(migrationJournalPath, { force: true });
-    return nextPreferences;
+    return preferencesWithDefault;
   }
   await fs.rm(migrationJournalPath, { force: true });
   if (
@@ -2248,9 +2292,9 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
       || savedRuntimeTargetResult.didCanonicalize
     )
   ) {
-    await saveDesktopPreferences(paths, nextPreferences, codec);
+    await saveDesktopPreferences(paths, preferencesWithDefault, codec);
   }
-  return nextPreferences;
+  return preferencesWithDefault;
 }
 
 export async function saveDesktopPreferences(
@@ -2271,7 +2315,12 @@ export async function saveDesktopPreferences(
       .filter(([targetID, secret]) => targetID !== '' && secret),
   );
   const preferencesFile: DesktopPreferencesFile = {
-    version: 13,
+    version: 14,
+    default_flower_runtime_target_id: savedRuntimeTargets.some((target) => (
+      target.id === preferences.default_flower_runtime_target_id
+    ))
+      ? preferences.default_flower_runtime_target_id
+      : null,
   };
   const secretsFile: DesktopSecretsFile = {
     version: 4,

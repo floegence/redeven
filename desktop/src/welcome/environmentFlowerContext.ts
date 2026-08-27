@@ -18,7 +18,7 @@ type EnvironmentFlowerContextExecutionContext = Readonly<{
   current_target_id?: string;
   source_env_public_id?: string;
   runtime_hint: 'auto';
-  session_source: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui' | 'runtime_gateway';
+  session_source: 'local_runtime' | 'provider_environment' | 'wsl_environment' | 'ssh_environment' | 'external_local_ui' | 'runtime_gateway';
 }>;
 
 type EnvironmentFlowerContextItem = Readonly<{
@@ -76,6 +76,8 @@ function environmentSessionSource(environment: DesktopEnvironmentEntry): Environ
       return 'provider_environment';
     case 'ssh_environment':
       return 'ssh_environment';
+    case 'wsl_environment':
+      return 'wsl_environment';
     case 'gateway_environment':
       return 'runtime_gateway';
     case 'external_local_ui':
