@@ -158,6 +158,7 @@
       "contextIndicatorUnavailable": "暫無資料",
       "contextIndicatorUsedLabel": "已用",
       "contextIndicatorRatioLabel": "使用比例",
+      "contextIndicatorCacheHitLabel": "對話快取命中率",
       "contextIndicatorThresholdLabel": "壓縮閾值",
       "contextIndicatorSafeLimitLabel": "請求安全上限",
       "contextIndicatorStatusLabel": "狀態",

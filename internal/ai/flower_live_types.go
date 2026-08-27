@@ -123,19 +123,27 @@ type FlowerSafeTarget struct {
 }
 
 type FlowerContextUsage struct {
-	RunID                  string  `json:"run_id,omitempty"`
-	StepIndex              int     `json:"step_index,omitempty"`
-	Phase                  string  `json:"phase"`
-	InputTokens            int64   `json:"input_tokens,omitempty"`
-	ContextWindowTokens    int64   `json:"context_window_tokens,omitempty"`
-	ThresholdTokens        int64   `json:"threshold_tokens,omitempty"`
-	RequestSafeLimitTokens int64   `json:"request_safe_limit_tokens,omitempty"`
-	OutputHeadroomTokens   int64   `json:"output_headroom_tokens,omitempty"`
-	UsedRatio              float64 `json:"used_ratio,omitempty"`
-	ThresholdRatio         float64 `json:"threshold_ratio,omitempty"`
-	PressureStatus         string  `json:"pressure_status"`
-	Source                 string  `json:"source,omitempty"`
-	UpdatedAtMs            int64   `json:"updated_at_ms"`
+	RunID                  string                  `json:"run_id,omitempty"`
+	StepIndex              int                     `json:"step_index,omitempty"`
+	Phase                  string                  `json:"phase"`
+	InputTokens            int64                   `json:"input_tokens,omitempty"`
+	ContextWindowTokens    int64                   `json:"context_window_tokens,omitempty"`
+	ThresholdTokens        int64                   `json:"threshold_tokens,omitempty"`
+	RequestSafeLimitTokens int64                   `json:"request_safe_limit_tokens,omitempty"`
+	OutputHeadroomTokens   int64                   `json:"output_headroom_tokens,omitempty"`
+	UsedRatio              float64                 `json:"used_ratio,omitempty"`
+	ThresholdRatio         float64                 `json:"threshold_ratio,omitempty"`
+	PressureStatus         string                  `json:"pressure_status"`
+	Source                 string                  `json:"source,omitempty"`
+	UpdatedAtMs            int64                   `json:"updated_at_ms"`
+	ThreadUsage            *FlowerThreadTokenUsage `json:"thread_usage,omitempty"`
+}
+
+type FlowerThreadTokenUsage struct {
+	InputTokens      int64 `json:"input_tokens"`
+	OutputTokens     int64 `json:"output_tokens"`
+	CacheReadTokens  int64 `json:"cache_read_tokens"`
+	CacheWriteTokens int64 `json:"cache_write_tokens"`
 }
 
 type FlowerContextCompaction struct {

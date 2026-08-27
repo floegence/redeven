@@ -245,6 +245,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         unavailable: t(i18n, k('chat.contextIndicatorUnavailable')),
         usedLabel: t(i18n, k('chat.contextIndicatorUsedLabel')),
         ratioLabel: t(i18n, k('chat.contextIndicatorRatioLabel')),
+        cacheHitLabel: t(i18n, k('chat.contextIndicatorCacheHitLabel')),
         thresholdLabel: t(i18n, k('chat.contextIndicatorThresholdLabel')),
         safeLimitLabel: t(i18n, k('chat.contextIndicatorSafeLimitLabel')),
         statusLabel: t(i18n, k('chat.contextIndicatorStatusLabel')),

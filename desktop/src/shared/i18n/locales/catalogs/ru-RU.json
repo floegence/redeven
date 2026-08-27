@@ -160,6 +160,7 @@
       "contextIndicatorUnavailable": "Недоступно",
       "contextIndicatorUsedLabel": "Использовано",
       "contextIndicatorRatioLabel": "Использование",
+      "contextIndicatorCacheHitLabel": "Доля попаданий в кэш диалога",
       "contextIndicatorThresholdLabel": "Порог сжатия",
       "contextIndicatorSafeLimitLabel": "Безопасный лимит запроса",
       "contextIndicatorStatusLabel": "Статус",

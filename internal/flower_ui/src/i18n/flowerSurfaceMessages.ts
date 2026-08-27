@@ -153,6 +153,7 @@ export const flowerSurfaceEnUS = {
     contextIndicatorUnavailable: 'Not available',
     contextIndicatorUsedLabel: 'Used',
     contextIndicatorRatioLabel: 'Usage',
+    contextIndicatorCacheHitLabel: 'Conversation cache hit rate',
     contextIndicatorThresholdLabel: 'Compaction threshold',
     contextIndicatorSafeLimitLabel: 'Request safe limit',
     contextIndicatorStatusLabel: 'Status',

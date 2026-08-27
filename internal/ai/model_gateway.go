@@ -463,11 +463,11 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	if gotCompleted {
 		result.FinishReason = mapOpenAIStatus(completed.Status)
 		result.Sources = extractOpenAIURLSources(completed)
-		result.Usage = TurnUsage{
-			InputTokens:     completed.Usage.InputTokens,
-			OutputTokens:    completed.Usage.OutputTokens,
-			ReasoningTokens: completed.Usage.OutputTokensDetails.ReasoningTokens,
+		usage, usageErr := turnUsageFromOpenAIResponse(completed.Usage)
+		if usageErr != nil {
+			return ModelGatewayResult{}, fmt.Errorf("normalize OpenAI response usage: %w", usageErr)
 		}
+		result.Usage = usage
 		if rid := strings.TrimSpace(completed.ID); rid != "" {
 			result.RawProviderDiag["response_id"] = rid
 			result.ProviderState = &ModelGatewayState{
@@ -561,7 +561,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	if result.FinishReason == "unknown" && result.Text != "" {
 		result.FinishReason = "stop"
 	}
-	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens, ReasoningTokens: result.Usage.ReasoningTokens}})
+	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
 	return result, nil
 }
@@ -727,11 +727,11 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 			result.RawProviderDiag["response_id"] = rid
 		}
 		if chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 || chunk.Usage.CompletionTokensDetails.ReasoningTokens > 0 {
-			result.Usage = TurnUsage{
-				InputTokens:     chunk.Usage.PromptTokens,
-				OutputTokens:    chunk.Usage.CompletionTokens,
-				ReasoningTokens: chunk.Usage.CompletionTokensDetails.ReasoningTokens,
+			usage, usageErr := turnUsageFromOpenAICompletion(chunk.Usage)
+			if usageErr != nil {
+				return ModelGatewayResult{}, fmt.Errorf("normalize OpenAI chat usage: %w", usageErr)
 			}
+			result.Usage = usage
 		}
 		for _, choice := range chunk.Choices {
 			if finish := mapOpenAIChatFinishReason(choice.FinishReason); finish != "unknown" {
@@ -797,11 +797,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	if result.Text == "" && result.Reasoning == "" && len(result.ToolCalls) == 0 {
 		return ModelGatewayResult{}, errors.New("missing streamed response")
 	}
-	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{
-		InputTokens:     result.Usage.InputTokens,
-		OutputTokens:    result.Usage.OutputTokens,
-		ReasoningTokens: result.Usage.ReasoningTokens,
-	}})
+	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
 	return result, nil
 }
@@ -983,11 +979,11 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			result.RawProviderDiag["response_id"] = rid
 		}
 		if chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 || chunk.Usage.CompletionTokensDetails.ReasoningTokens > 0 {
-			result.Usage = TurnUsage{
-				InputTokens:     chunk.Usage.PromptTokens,
-				OutputTokens:    chunk.Usage.CompletionTokens,
-				ReasoningTokens: chunk.Usage.CompletionTokensDetails.ReasoningTokens,
+			usage, usageErr := turnUsageFromOpenAICompletion(chunk.Usage)
+			if usageErr != nil {
+				return ModelGatewayResult{}, fmt.Errorf("normalize Moonshot chat usage: %w", usageErr)
 			}
+			result.Usage = usage
 		}
 		for _, choice := range chunk.Choices {
 			if finish := mapOpenAIChatFinishReason(choice.FinishReason); finish != "unknown" {
@@ -1061,11 +1057,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	if result.Text == "" && result.Reasoning == "" && len(result.ToolCalls) == 0 {
 		return ModelGatewayResult{}, errors.New("missing streamed response")
 	}
-	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{
-		InputTokens:     result.Usage.InputTokens,
-		OutputTokens:    result.Usage.OutputTokens,
-		ReasoningTokens: result.Usage.ReasoningTokens,
-	}})
+	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
 	return result, nil
 }
@@ -1126,14 +1118,14 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
+	usage, err := turnUsageFromOpenAICompletion(completion.Usage)
+	if err != nil {
+		return ModelGatewayResult{}, fmt.Errorf("normalize Moonshot completion usage: %w", err)
+	}
 	result := ModelGatewayResult{
 		FinishReason:    "unknown",
 		RawProviderDiag: map[string]any{"response_id": strings.TrimSpace(completion.ID)},
-		Usage: TurnUsage{
-			InputTokens:     completion.Usage.PromptTokens,
-			OutputTokens:    completion.Usage.CompletionTokens,
-			ReasoningTokens: completion.Usage.CompletionTokensDetails.ReasoningTokens,
-		},
+		Usage:           usage,
 	}
 	if len(completion.Choices) == 0 {
 		return ModelGatewayResult{}, errors.New("missing completion choices")
@@ -1997,13 +1989,14 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 		return ModelGatewayResult{}, err
 	}
 
+	usage, err := turnUsageFromAnthropic(msg.Usage)
+	if err != nil {
+		return ModelGatewayResult{}, fmt.Errorf("normalize Anthropic usage: %w", err)
+	}
 	result := ModelGatewayResult{
-		FinishReason: mapAnthropicStopReason(msg.StopReason),
-		Text:         strings.TrimSpace(textBuf.String()),
-		Usage: TurnUsage{
-			InputTokens:  msg.Usage.InputTokens,
-			OutputTokens: msg.Usage.OutputTokens,
-		},
+		FinishReason:    mapAnthropicStopReason(msg.StopReason),
+		Text:            strings.TrimSpace(textBuf.String()),
+		Usage:           usage,
 		RawProviderDiag: map[string]any{"message_id": strings.TrimSpace(msg.ID)},
 	}
 
@@ -2062,7 +2055,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 	if len(result.ToolCalls) > 0 {
 		result.FinishReason = "tool_calls"
 	}
-	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens, ReasoningTokens: result.Usage.ReasoningTokens}})
+	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
 	return result, nil
 }

@@ -3690,6 +3690,7 @@
       "contextIndicatorUnavailable": "사용할 수 없음",
       "contextIndicatorUsedLabel": "사용량",
       "contextIndicatorRatioLabel": "사용 비율",
+      "contextIndicatorCacheHitLabel": "대화 캐시 적중률",
       "contextIndicatorThresholdLabel": "압축 임계값",
       "contextIndicatorSafeLimitLabel": "요청 안전 한도",
       "contextIndicatorStatusLabel": "상태",

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -49,12 +50,45 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 			ContextPressure: config.ContextPressure{ContextWindowTokens: 1000},
 			UsedRatio:       0.5, Status: observation.ContextStatusStable,
 		},
+		UsageTotals: &flruntime.ThreadTokenUsageTotals{
+			InputTokens: 120, OutputTokens: 30, CacheReadTokens: 75, CacheWriteTokens: 5,
+		},
 	}, flruntime.ThreadView{ThreadID: "thread-context"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if projection.Usage == nil || projection.Usage.InputTokens != 500 || projection.Usage.ContextWindowTokens != 1000 || projection.Usage.UpdatedAtMs != observedAt.UnixMilli() {
 		t.Fatalf("usage=%#v", projection.Usage)
+	}
+	if projection.Usage.ThreadUsage == nil || *projection.Usage.ThreadUsage != (FlowerThreadTokenUsage{
+		InputTokens: 120, OutputTokens: 30, CacheReadTokens: 75, CacheWriteTokens: 5,
+	}) {
+		t.Fatalf("thread usage=%#v", projection.Usage.ThreadUsage)
+	}
+}
+
+func TestFlowerThreadContextProjectionRejectsNegativeCanonicalUsageTotals(t *testing.T) {
+	_, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{
+		Usage: &observation.ContextStatus{
+			RunID: "run-context", ThreadID: "thread-context", TurnID: "turn-context",
+			Phase: observation.ContextPhaseProviderUsage, ObservedAt: time.Now(),
+			ContextPressure: config.ContextPressure{ContextWindowTokens: 1000}, Status: observation.ContextStatusStable,
+		},
+		UsageTotals: &flruntime.ThreadTokenUsageTotals{CacheReadTokens: -1},
+	}, flruntime.ThreadView{ThreadID: "thread-context"})
+	if err == nil {
+		t.Fatal("negative canonical usage totals must fail closed")
+	}
+}
+
+func TestFlowerThreadTokenUsageJSONKeepsZeroBuckets(t *testing.T) {
+	raw, err := json.Marshal(FlowerThreadTokenUsage{InputTokens: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"input_tokens":100,"output_tokens":0,"cache_read_tokens":0,"cache_write_tokens":0}`
+	if string(raw) != want {
+		t.Fatalf("usage JSON=%s, want %s", raw, want)
 	}
 }
 

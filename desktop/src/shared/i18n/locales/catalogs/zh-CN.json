@@ -160,6 +160,7 @@
       "contextIndicatorUnavailable": "暂无数据",
       "contextIndicatorUsedLabel": "已用",
       "contextIndicatorRatioLabel": "使用比例",
+      "contextIndicatorCacheHitLabel": "对话缓存命中率",
       "contextIndicatorThresholdLabel": "压缩阈值",
       "contextIndicatorSafeLimitLabel": "请求安全上限",
       "contextIndicatorStatusLabel": "状态",

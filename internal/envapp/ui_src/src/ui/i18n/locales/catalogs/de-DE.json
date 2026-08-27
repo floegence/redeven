@@ -3690,6 +3690,7 @@
       "contextIndicatorUnavailable": "Nicht verfügbar",
       "contextIndicatorUsedLabel": "Genutzt",
       "contextIndicatorRatioLabel": "Auslastung",
+      "contextIndicatorCacheHitLabel": "Cache-Trefferrate der Unterhaltung",
       "contextIndicatorThresholdLabel": "Komprimierungsschwelle",
       "contextIndicatorSafeLimitLabel": "Sicheres Anfrage-Limit",
       "contextIndicatorStatusLabel": "Zustand",

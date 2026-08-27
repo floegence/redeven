@@ -387,6 +387,7 @@ export type FlowerSurfaceCopy = Readonly<{
       unavailable: string;
       usedLabel: string;
       ratioLabel: string;
+      cacheHitLabel: string;
       thresholdLabel: string;
       safeLimitLabel: string;
       statusLabel: string;
@@ -637,6 +638,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       unavailable: 'Not available',
       usedLabel: 'Used',
       ratioLabel: 'Usage',
+      cacheHitLabel: 'Conversation cache hit rate',
       thresholdLabel: 'Compaction threshold',
       safeLimitLabel: 'Request safe limit',
       statusLabel: 'Status',

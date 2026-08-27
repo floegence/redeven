@@ -262,7 +262,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: toolCalls})
 		}
 		usage := floretUsageFromFlower(result.Usage)
-		if usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 {
+		if usage.Available {
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventUsage, Usage: usage})
 		}
 		responseState, err := flowerProviderStateToFloret(result.ProviderState)
@@ -624,9 +624,11 @@ func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, e
 
 func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
 	out := flprovider.Usage{
-		InputTokens:     usage.InputTokens,
-		OutputTokens:    usage.OutputTokens,
-		ReasoningTokens: usage.ReasoningTokens,
+		InputTokens:      usage.InputTokens,
+		OutputTokens:     usage.OutputTokens,
+		ReasoningTokens:  usage.ReasoningTokens,
+		CacheReadTokens:  usage.CacheReadTokens,
+		CacheWriteTokens: usage.CacheWriteTokens,
 	}
 	return normalizeFloretUsage(out)
 }

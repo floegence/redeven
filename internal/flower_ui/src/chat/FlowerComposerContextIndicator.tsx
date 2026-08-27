@@ -62,6 +62,10 @@ export function FlowerComposerContextIndicator(props: {
           <span>{view().ratioLabel}</span>
           <strong>{view().ratioValue}</strong>
         </div>
+        <div class="flower-composer-context-tooltip-row">
+          <span>{view().cacheHitLabel}</span>
+          <strong>{view().cacheHitValue}</strong>
+        </div>
         <Show when={view().thresholdValue}>
           {(threshold) => (
             <div class="flower-composer-context-tooltip-row">

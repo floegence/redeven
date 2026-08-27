@@ -229,6 +229,13 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   const outputHeadroomTokens = optionalInteger(record.output_headroom_tokens);
   const usedRatio = clampRatio(record.used_ratio);
   const thresholdRatio = clampRatio(record.threshold_ratio);
+  const threadUsageRecord = plainRecordValue(record.thread_usage);
+  const threadUsage = threadUsageRecord ? {
+    input_tokens: nonNegativeInteger(threadUsageRecord.input_tokens, 'context_usage.thread_usage.input_tokens'),
+    output_tokens: nonNegativeInteger(threadUsageRecord.output_tokens, 'context_usage.thread_usage.output_tokens'),
+    cache_read_tokens: nonNegativeInteger(threadUsageRecord.cache_read_tokens, 'context_usage.thread_usage.cache_read_tokens'),
+    cache_write_tokens: nonNegativeInteger(threadUsageRecord.cache_write_tokens, 'context_usage.thread_usage.cache_write_tokens'),
+  } : undefined;
   return {
     ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
     ...(stepIndex ? { step_index: stepIndex } : {}),
@@ -243,6 +250,18 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
     pressure_status: pressureStatus,
     ...(trim(record.source) ? { source: trim(record.source) } : {}),
     updated_at_ms: updatedAt,
+    ...(threadUsage ? { thread_usage: threadUsage } : {}),
+  };
+}
+
+export function mergeFlowerContextUsage(
+  previous: FlowerContextUsage | undefined,
+  incoming: FlowerContextUsage,
+): FlowerContextUsage {
+  if (incoming.thread_usage || !previous?.thread_usage) return incoming;
+  return {
+    ...incoming,
+    thread_usage: previous.thread_usage,
   };
 }
 

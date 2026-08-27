@@ -158,6 +158,7 @@
       "contextIndicatorUnavailable": "利用不可",
       "contextIndicatorUsedLabel": "使用中",
       "contextIndicatorRatioLabel": "使用率",
+      "contextIndicatorCacheHitLabel": "会話キャッシュヒット率",
       "contextIndicatorThresholdLabel": "圧縮しきい値",
       "contextIndicatorSafeLimitLabel": "リクエスト安全上限",
       "contextIndicatorStatusLabel": "状態",
