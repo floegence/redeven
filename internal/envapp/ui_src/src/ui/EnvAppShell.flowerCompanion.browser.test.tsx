@@ -481,7 +481,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
     const filePreview = useContext(FilePreviewContextMock);
     const fileBrowser = useContext(FileBrowserSurfaceContextMock);
     const [flowerHost, setFlowerHost] = createSignal<HTMLElement | null>(null);
-    createEffect(() => env.setFlowerWorkbenchHost?.(flowerHost(), env.viewMode?.() === 'workbench'));
+    createEffect(() => env.setFlowerWorkbenchHost?.(flowerHost(), true));
     onCleanup(() => env.setFlowerWorkbenchHost?.(flowerHost(), false));
     return (
       <div>
@@ -1423,6 +1423,41 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(workbenchHost.contains(fixture.product)).toBe(false);
     expect(fixture.product.isConnected).toBe(true);
     expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
+    expect(envAIPageMountSequence).toBe(1);
+  });
+
+  it('mounts Flower directly into Workbench before Activity has rendered', async () => {
+    desktopViewMode = 'workbench';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => (
+      <FloeConfigProvider config={{ layout: { mobileQuery: '(max-width: 0px)' } }}>
+        <LayoutProvider>
+          <CommandProvider>
+            <EnvAppShell />
+          </CommandProvider>
+        </LayoutProvider>
+      </FloeConfigProvider>
+    ), host);
+    disposers.push(dispose);
+    await flushAsync();
+    await flushAsync();
+
+    await vi.waitFor(() => {
+      const workbenchHost = document.querySelector('[data-testid="workbench-flower-host"]');
+      const product = document.querySelector('#redeven-activity-flower-product');
+      expect(workbenchHost).toBeInstanceOf(HTMLElement);
+      expect(product).toBeInstanceOf(HTMLElement);
+      expect(workbenchHost?.contains(product)).toBe(true);
+    }, { timeout: 1_000 });
+
+    const product = document.querySelector('#redeven-activity-flower-product');
+    expect(product?.getAttribute('data-presentation')).toBe('workbench');
+    expect(product?.getAttribute('aria-hidden')).toBeNull();
+    expect(product?.hasAttribute('inert')).toBe(false);
+    expect(document.querySelectorAll('[data-testid="env-ai-page"]')).toHaveLength(1);
     expect(envAIPageMountSequence).toBe(1);
   });
 

@@ -66,9 +66,10 @@ describe('redevenWorkbenchWidgets source contract', () => {
     expect(source).toContain('{...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}');
   });
 
-  it('gives Flower local wheel routing and derives engagement from the selected widget lifecycle', () => {
+  it('gives Flower local wheel routing and keeps foreground residency independent of selection', () => {
     expect(source).toContain('{...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}');
-    expect(source).toContain("const engaged = () => Boolean(available() && props.selected && props.lifecycle !== 'cold' && !props.filtered);");
-    expect(source).toContain('env.setFlowerWorkbenchHost?.(host(), engaged())');
+    expect(source).toContain('const foreground = () => Boolean(available() && !props.filtered);');
+    expect(source).toContain('env.setFlowerWorkbenchHost?.(target, true)');
+    expect(source).not.toContain('props.selected && props.lifecycle');
   });
 });

@@ -991,7 +991,6 @@ export function EnvAppShell() {
   const [activityFlowerCompanionPhase, setActivityFlowerCompanionPhase] = createSignal<BottomBarCompanionPhase>('collapsed');
   const [activityFlowerFullPageHost, setActivityFlowerFullPageHost] = createSignal<HTMLElement | null>(null);
   const [flowerWorkbenchHost, setFlowerWorkbenchHostElement] = createSignal<HTMLElement | null>(null);
-  const [flowerWorkbenchActive, setFlowerWorkbenchActive] = createSignal(false);
   const [flowerProductMountHost, setFlowerProductMountHost] = createSignal<HTMLElement | null>(null);
   const [flowerProductMountContainer, setFlowerProductMountContainer] = createSignal<HTMLDivElement | null>(null);
   const [activityFlowerMobileRailStyle, setActivityFlowerMobileRailStyle] = createSignal<Record<string, string>>({});
@@ -1002,15 +1001,13 @@ export function EnvAppShell() {
     if (canUseFlower()) setFlowerProductMountRequested(true);
   });
   let flowerProductPanelRef: HTMLDivElement | undefined;
-  const setFlowerWorkbenchHost = (host: HTMLElement | null, active: boolean) => {
-    if (active && host?.isConnected) {
+  const setFlowerWorkbenchHost = (host: HTMLElement | null, foreground: boolean) => {
+    if (foreground && host?.isConnected) {
       setFlowerWorkbenchHostElement(host);
-      setFlowerWorkbenchActive(true);
       return;
     }
     if (!host || flowerWorkbenchHost() === host) {
-      setFlowerWorkbenchActive(false);
-      if (!host || !host.isConnected) setFlowerWorkbenchHostElement(null);
+      setFlowerWorkbenchHostElement(null);
     }
   };
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
@@ -2213,7 +2210,7 @@ export function EnvAppShell() {
       : activityFlowerPresentation()
   ));
   const flowerProductPlacement = createMemo<'collapsed' | 'expanded' | 'full_page' | 'workbench'>(() => (
-    viewMode() === 'workbench' && flowerWorkbenchActive() && flowerWorkbenchHost()?.isConnected
+    viewMode() === 'workbench' && flowerWorkbenchHost()?.isConnected
       ? 'workbench'
       : activityFlowerPlacement()
   ));
@@ -4810,73 +4807,74 @@ export function EnvAppShell() {
   );
 
   const renderActivityFlowerCompanion = () => (
-    <>
-      <BottomBarCompanion
-        retained={flowerProductMountRequested()}
-        visible={activityFlowerCompanionVisible()}
-        open={activityFlowerPlacement() === 'expanded'}
-        anchor={activityFlowerAnchor()}
-        mount={activityFlowerOverlayHost()}
-        id="redeven-activity-flower-companion"
-        label={i18n.t('shell.nav.flower')}
-        class="flower-activity-companion"
-        contentHostRef={setActivityFlowerCompanionContentHost}
-        isOwnedInteraction={activityFlowerInteractionOwned}
-        onDismiss={dismissActivityFlowerCompanion}
-        onPhaseChange={setActivityFlowerCompanionPhase}
-      />
-      <Show when={flowerProductMountRequested() && flowerProductMountHost()}>
-        <Portal
-          mount={flowerProductMountHost()!}
-          ref={(element) => {
-            element.classList.add('flower-activity-product-portal');
-            setFlowerProductMountContainer(element);
-          }}
+    <BottomBarCompanion
+      retained={flowerProductMountRequested()}
+      visible={activityFlowerCompanionVisible()}
+      open={activityFlowerPlacement() === 'expanded'}
+      anchor={activityFlowerAnchor()}
+      mount={activityFlowerOverlayHost()}
+      id="redeven-activity-flower-companion"
+      label={i18n.t('shell.nav.flower')}
+      class="flower-activity-companion"
+      contentHostRef={setActivityFlowerCompanionContentHost}
+      isOwnedInteraction={activityFlowerInteractionOwned}
+      onDismiss={dismissActivityFlowerCompanion}
+      onPhaseChange={setActivityFlowerCompanionPhase}
+    />
+  );
+
+  const renderFlowerProduct = () => (
+    <Show when={flowerProductMountRequested() && flowerProductMountHost()}>
+      <Portal
+        mount={flowerProductMountHost()!}
+        ref={(element) => {
+          element.classList.add('flower-activity-product-portal');
+          setFlowerProductMountContainer(element);
+        }}
+      >
+        <div
+          ref={flowerProductPanelRef}
+          id="redeven-activity-flower-product"
+          class="flower-activity-product-root"
+          classList={{ 'flower-activity-product-root-full-page': flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' }}
+          data-floe-dialog-surface-host="true"
+          data-presentation={flowerProductPlacement()}
+          aria-hidden={!flowerSurfaceVisible() ? 'true' : undefined}
+          inert={!flowerSurfaceVisible()}
         >
-          <div
-            ref={flowerProductPanelRef}
-            id="redeven-activity-flower-product"
-            class="flower-activity-product-root"
-            classList={{ 'flower-activity-product-root-full-page': flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' }}
-            data-floe-dialog-surface-host="true"
-            data-presentation={flowerProductPlacement()}
-            aria-hidden={!flowerSurfaceVisible() ? 'true' : undefined}
-            inert={!flowerSurfaceVisible()}
-          >
-            <EnvAIPage
-              draftCoordinator={flowerDraftCoordinator}
-              presentation={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' ? 'full' : 'companion'}
-              engaged={flowerSurfaceEngaged()}
-              transcriptVisible={flowerSurfaceEngaged()}
-              companionPresenceOwner={!accessGateVisible()}
-              companionOpen={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' || activityFlowerCompanionDetailVisible()}
-              companionRegionID="redeven-activity-flower-companion"
-              companionSummary={{
-                visualText: activityFlowerPresentedSummary().visualText,
-                accessibleText: activityFlowerPresentedSummary().accessibleText,
-                priorityStatus: activityFlowerPresentedSummary().presentationStatus,
-                progressKind: activityFlowerPresentedSummary().progressKind,
-                progressIdentity: activityFlowerPresentedSummary().progressIdentity,
-                ephemeralKind: activityFlowerPresentedSummary().ephemeralKind,
-                running: activityFlowerPresentedSummary().presentationStatus === 'running',
-              }}
-              companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}
-              focusRequestScope={flowerProductPlacement() === 'workbench' ? 'workbench' : 'activity'}
-              focusThreadRequest={flowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
-              focusComposerRequest={flowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
-              onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
-              onCompanionOpenRequest={() => openActivityFlowerCompanion()}
-              companionCopy={activityFlowerCompanionCopy()}
-              headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
-              onPresenceChange={handleActivityFlowerPresenceChange}
-              settingsReturnSurfaceId={flowerProductPlacement() === 'workbench'
-                ? 'ai'
-                : lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
-            />
-          </div>
-        </Portal>
-      </Show>
-    </>
+          <EnvAIPage
+            draftCoordinator={flowerDraftCoordinator}
+            presentation={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' ? 'full' : 'companion'}
+            engaged={flowerSurfaceEngaged()}
+            transcriptVisible={flowerSurfaceEngaged()}
+            companionPresenceOwner={!accessGateVisible()}
+            companionOpen={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' || activityFlowerCompanionDetailVisible()}
+            companionRegionID="redeven-activity-flower-companion"
+            companionSummary={{
+              visualText: activityFlowerPresentedSummary().visualText,
+              accessibleText: activityFlowerPresentedSummary().accessibleText,
+              priorityStatus: activityFlowerPresentedSummary().presentationStatus,
+              progressKind: activityFlowerPresentedSummary().progressKind,
+              progressIdentity: activityFlowerPresentedSummary().progressIdentity,
+              ephemeralKind: activityFlowerPresentedSummary().ephemeralKind,
+              running: activityFlowerPresentedSummary().presentationStatus === 'running',
+            }}
+            companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}
+            focusRequestScope={flowerProductPlacement() === 'workbench' ? 'workbench' : 'activity'}
+            focusThreadRequest={flowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
+            focusComposerRequest={flowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
+            onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
+            onCompanionOpenRequest={() => openActivityFlowerCompanion()}
+            companionCopy={activityFlowerCompanionCopy()}
+            headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
+            onPresenceChange={handleActivityFlowerPresenceChange}
+            settingsReturnSurfaceId={flowerProductPlacement() === 'workbench'
+              ? 'ai'
+              : lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
+          />
+        </div>
+      </Portal>
+    </Show>
   );
 
   const renderActivityFlowerAnchor = () => (
@@ -5120,6 +5118,7 @@ export function EnvAppShell() {
         inert={mobilePluginModalOpen()}
         aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
       />
+      {renderFlowerProduct()}
       <For each={activityPluginWindows()}>
         {(window, index) => (
           <ActivityPluginSurfaceWindow

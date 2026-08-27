@@ -8,7 +8,7 @@ quality_exception: Cross-surface UI contract spanning Activity placement, shared
 ---
 # Summary
 
-After access first becomes ready, Env App owns one stable `EnvAIPage` and `FlowerSurface`. The published `BottomBarCompanion` provides a centered collapsed field and a bounded detail surface that grows upward without changing body geometry. The dedicated Activity Bar page and selected Workbench Flower widget are placements of that same product tree. Placement changes hosts, presentation, visibility, and engagement; it never creates a second Flower surface or changes Floret authority. Floret owns thread lifecycle state, while Redeven owns product placement, read acknowledgement, and ephemeral UI state.
+After access first becomes ready, Env App owns one stable `EnvAIPage` and `FlowerSurface`. The published `BottomBarCompanion` provides a centered collapsed field and a bounded detail surface that grows upward without changing body geometry. The dedicated Activity Bar page and an available, unfiltered Workbench Flower widget are placements of that same product tree. Workbench selection controls canvas input and focus only; clearing selection never revokes Flower placement or engagement. Placement changes hosts, presentation, visibility, and engagement; it never creates a second Flower surface or changes Floret authority. Floret owns thread lifecycle state, while Redeven owns product placement, read acknowledgement, and ephemeral UI state.
 
 # Contract
 
@@ -24,7 +24,7 @@ The companion is absent while password access is checking, locked, or resuming. 
 
 ## Stable Flower placement
 
-Redeven owns one stable product Portal around exactly one `EnvAIPage`. Its requested target is the connected companion content host, dedicated Activity full-page host, or selected Workbench Flower host. The Workbench widget contributes only that host; it never constructs an adapter or Flower surface. Target replacement is atomic: if the requested host is unavailable, the product tree remains in its previous connected host hidden, inert, and disengaged. Neither the shell Portal nor the product Portal uses an implicit body mount.
+Redeven owns one stable product Portal around exactly one `EnvAIPage`. That owner mounts outside the Activity and Workbench mode views, so starting directly in a persisted Workbench mode does not depend on Activity rendering first. Its requested target is the connected companion content host, dedicated Activity full-page host, or available and unfiltered Workbench Flower host. The Workbench widget contributes only that host; it never constructs an adapter or Flower surface. While that widget remains available and unfiltered in Workbench, its host stays foreground and engaged even when a background pointer gesture clears selection or its canvas lifecycle becomes cold. Permission loss, filtering, or host disposal withdraws the host. Target replacement is atomic: if the requested host is unavailable, the product tree remains in its previous connected host hidden, inert, and disengaged. Neither the shell Portal nor the product Portal uses an implicit body mount.
 
 The ordinary Flower composer textarea is literally the collapsed Bottom Bar field and the expanded detail composer. Expansion and collapse do not clone, replace, crossfade, or copy its value, selection, focus, or composition state. Focusing or typing in the collapsed textarea requests expansion while that same node remains mounted. The old quick-entry input, quick draft, IME bridge, composer handoff request, and manual frame resolver do not exist.
 
@@ -70,9 +70,9 @@ Every Activity `markThreadRead` call requires Activity foreground, document visi
 
 # Boundaries
 
-The Workbench Flower widget retains its existing window, canvas, and focus contracts while contributing only a placement host for the Env App-owned Flower product. Host movement adds no persistent transcript cache, lifecycle endpoint, alternate command path, or second live reducer. Related Flower dialogs and previews may continue using their established floating primitives; only the Bottom Bar companion shell is forbidden from doing so.
+The Workbench Flower widget retains its existing window, canvas, and focus contracts while contributing only a placement host for the Env App-owned Flower product. Selection, z-order, and canvas lifecycle do not own product residency. Host movement adds no persistent transcript cache, lifecycle endpoint, alternate command path, or second live reducer. Related Flower dialogs and previews may continue using their established floating primitives; only the Bottom Bar companion shell is forbidden from doing so.
 
-The companion never auto-expands for completion, failure, approval, or user input. Presence communicates progress without stealing focus. Selecting Flower from the Activity Bar enters the dedicated page; the Bottom Bar and ordinary Activity Ask Flower handoff enter the bounded companion detail surface. Selecting the Workbench Flower widget moves the retained product tree into that widget without starting a second list load or live stream.
+The companion never auto-expands for completion, failure, approval, or user input. Presence communicates progress without stealing focus. Selecting Flower from the Activity Bar enters the dedicated page; the Bottom Bar and ordinary Activity Ask Flower handoff enter the bounded companion detail surface. Showing an available, unfiltered Workbench Flower widget moves the retained product tree into that widget without starting a second list load or live stream, and later canvas deselection does not move it away.
 
 # Evidence
 

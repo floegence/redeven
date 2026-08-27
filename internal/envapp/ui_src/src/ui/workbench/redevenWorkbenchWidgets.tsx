@@ -256,8 +256,28 @@ function FlowerWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const i18n = useI18n();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
   const [host, setHost] = createSignal<HTMLElement | null>(null);
-  const engaged = () => Boolean(available() && props.selected && props.lifecycle !== 'cold' && !props.filtered);
-  createEffect(() => env.setFlowerWorkbenchHost?.(host(), engaged()));
+  const foreground = () => Boolean(available() && !props.filtered);
+  createEffect(() => {
+    const target = host();
+    if (!target || !foreground()) {
+      env.setFlowerWorkbenchHost?.(target, false);
+      return;
+    }
+
+    let canceled = false;
+    const register = () => {
+      if (!canceled && host() === target && foreground()) {
+        env.setFlowerWorkbenchHost?.(target, true);
+      }
+    };
+    // Projected widgets are constructed before their work layer is connected.
+    // Register on the next task so EnvAppShell observes the final connected host.
+    const handle = window.setTimeout(register, 0);
+    onCleanup(() => {
+      canceled = true;
+      window.clearTimeout(handle);
+    });
+  });
   onCleanup(() => env.setFlowerWorkbenchHost?.(host(), false));
 
   return (
