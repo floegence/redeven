@@ -458,6 +458,9 @@ func classifyCommandFailure(args []string, cause error, stderr ...[]byte) error 
 			return ErrBackendUnreachable
 		}
 	}
+	if len(args) > 0 && args[0] == "inspect" && (strings.Contains(detail, "no such object:") || strings.Contains(detail, "no such container:")) {
+		return ErrContainerNotFound
+	}
 	if len(args) > 0 && args[0] == "logs" {
 		return ErrLogsUnavailable
 	}
@@ -496,18 +499,19 @@ type inspectState struct {
 }
 
 type inspectHostConfig struct {
-	Privileged     bool                   `json:"Privileged"`
-	NetworkMode    string                 `json:"NetworkMode"`
-	PIDMode        string                 `json:"PidMode"`
-	IPCMode        string                 `json:"IpcMode"`
-	RestartPolicy  inspectRestartPolicy   `json:"RestartPolicy"`
-	CapAdd         []string               `json:"CapAdd"`
-	CapDrop        []string               `json:"CapDrop"`
-	Devices        []inspectDeviceMapping `json:"Devices"`
-	ReadonlyRootfs bool                   `json:"ReadonlyRootfs"`
-	SecurityOpt    []string               `json:"SecurityOpt"`
-	PidsLimit      int                    `json:"PidsLimit"`
-	ShmSize        int64                  `json:"ShmSize"`
+	Privileged     bool                            `json:"Privileged"`
+	NetworkMode    string                          `json:"NetworkMode"`
+	PIDMode        string                          `json:"PidMode"`
+	IPCMode        string                          `json:"IpcMode"`
+	RestartPolicy  inspectRestartPolicy            `json:"RestartPolicy"`
+	CapAdd         []string                        `json:"CapAdd"`
+	CapDrop        []string                        `json:"CapDrop"`
+	Devices        []inspectDeviceMapping          `json:"Devices"`
+	ReadonlyRootfs bool                            `json:"ReadonlyRootfs"`
+	SecurityOpt    []string                        `json:"SecurityOpt"`
+	PidsLimit      int                             `json:"PidsLimit"`
+	ShmSize        int64                           `json:"ShmSize"`
+	PortBindings   map[string][]inspectPortBinding `json:"PortBindings"`
 }
 
 type inspectRestartPolicy struct {
@@ -581,7 +585,7 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 			ShmSizeBytes:  doc.HostConfig.ShmSize,
 			User:          strings.TrimSpace(doc.Config.User),
 		},
-		Ports:     inspectPortSummaries(doc.NetworkSettings.Ports),
+		Ports:     inspectPublishedPortSummaries(doc.NetworkSettings.Ports, doc.HostConfig.PortBindings),
 		GroupKind: containerGroup(engine, doc.Config.Labels, "", "").Kind,
 		GroupID:   containerGroup(engine, doc.Config.Labels, "", "").ID,
 		GroupName: containerGroup(engine, doc.Config.Labels, "", "").Name,
@@ -1001,6 +1005,16 @@ func inspectPortSummaries(ports map[string][]inspectPortBinding) []PortSummary {
 		}
 	}
 	return out
+}
+
+func inspectPublishedPortSummaries(active, configured map[string][]inspectPortBinding) []PortSummary {
+	activePorts := inspectPortSummaries(active)
+	for _, port := range activePorts {
+		if port.HostPort > 0 {
+			return activePorts
+		}
+	}
+	return inspectPortSummaries(configured)
 }
 
 func parsePortKey(key string) (int, string) {

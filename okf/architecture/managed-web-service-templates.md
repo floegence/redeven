@@ -9,7 +9,7 @@ timestamp: 2026-08-27T00:00:00Z
 
 - Authority: Redeven owns the Environment-local catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.
 - Outcome: one right-side drawer supports browsing, editing, duplication, and safe deployment of host and container definitions.
-- Invariants: built-ins are immutable, custom definitions are revisioned, duplication creates a new family, every family has a dedicated default workspace, and deployments use immutable snapshots.
+- Invariants: built-ins are immutable, custom definitions are revisioned, duplication creates a new family, every family has a dedicated default workspace, deployments use immutable snapshots, and required safety notices are versioned and enforced by the Runtime.
 - Failure boundary: malformed, unsafe, unavailable, or conflicting definitions fail before lifecycle work; an installed definition cannot be deleted.
 
 # Contract
@@ -18,11 +18,13 @@ timestamp: 2026-08-27T00:00:00Z
 
 The Web Services header provides one **Service templates** action. It opens a large right-side drawer and replaces the separate one-click-deployment strip. The catalog uses one sticky toolbar for a low-contrast category switcher with counts, search, and a permission-aware create menu. Host and container definitions are distinct categories; built-in and custom definitions are separate groups inside each category. Managed and manually registered services remain in one responsive main grid.
 
-The catalog is a primary-detail explorer. Compact two-column tiles on a recessed gallery surface provide identity, a two-line description, deployment metadata, and a concise state; the selected tile uses a clear focus/selection treatment. Its adjacent elevated detail pane owns the full description, version, exact availability reason, primary deploy action, and the labeled duplicate/edit/delete menu. This single action owner keeps interactive controls out of selectable tiles and makes keyboard arrow navigation deterministic. Host and container category changes keep one stable content stage and present the next surface with one low-amplitude opacity settle from near-full visibility. Content position and size never animate, there is no blank intermediate frame, and reduced-motion preferences remove the settle. At narrow widths the detail pane moves below the single-column gallery and action targets remain at least 44 px high.
+Compact two-column tiles on a recessed gallery surface provide identity, a two-line description, deployment metadata, and a concise state; the selected tile uses a clear focus/selection treatment. Its adjacent elevated detail pane owns the full description, version, exact availability reason, primary deploy action, and the labeled duplicate/edit/delete menu. This single action owner keeps interactive controls out of selectable tiles and makes keyboard arrow navigation deterministic. Host and container category changes keep one stable content stage and present the next surface with one low-amplitude opacity settle from near-full visibility. Content position and size never animate, there is no blank intermediate frame, and reduced-motion preferences remove the settle. At narrow widths the detail pane moves below the single-column gallery and action targets remain at least 44 px high.
 
 A reviewed built-in uses its official upstream application mark when an attributable asset is available; other definitions fall back to a neutral host, container, or Compose kind icon. Unavailable definitions remain fully readable; installed definitions use a success state. Catalog menus and child dialogs stay above the drawer and preserve their actions. The catalog has no redundant footer or cancel action and closes through the drawer close action, Escape, or a click on the backdrop outside the drawer. Deployment and editor views keep their fixed operation footer, and the deployment view reuses the selected service identity before workspace, deployment, data, and operation information. Interactive controls use pointer or disabled cursors while text-entry fields retain the text cursor.
 
-Each template exposes one explicit `default_workspace_path`. Redeven prepares a writable directory under `Redeven Workspaces/Managed Services`; the built-in host and container variants share the `DeepSeek Harness` family directory. The deployment surface selects this dedicated directory and never infers a default from the first filesystem root. Users change it through the Environment directory picker, can restore the recommended directory, and see whether the selected service receives the isolated default or a broader custom path. The whole home directory is therefore never an accidental default, while an intentional custom writable workspace remains supported.
+Built-in identity, brand, notices, runtime profile, and immutable artifacts come from one Runtime-owned definition registry; Renderer code never branches on template identifiers. Required notice revisions are enforced by the Runtime, not by a checkbox alone.
+
+Each template exposes one explicit `default_workspace_path`. Redeven prepares a writable directory under `Redeven Workspaces/Managed Services`; the built-in host and container variants share the `DeepSeek Harness` family directory, while the Ubuntu KDE and Debian XFCE Webtop templates use separate family directories so both can be installed together. The deployment surface selects this dedicated directory and never infers a default from the first filesystem root. Users change it through the Environment directory picker, can restore the recommended directory, and see whether the selected service receives the isolated default or a broader custom path. The whole home directory is therefore never an accidental default, while an intentional custom writable workspace remains supported.
 
 Container cards remain discoverable but disabled when Docker is unavailable, the Environment is itself in a container, workspace mounting is unavailable, or Docker Compose is missing. The card explains the exact reason. DeepSeek Harness is represented by separate reviewed host and community-container cards; the latter links its source and is never described as an official DeepSeek image.
 
@@ -40,6 +42,8 @@ Host scripts are trusted executable user content and therefore require execute a
 
 Every custom edit increments its revision. Duplicate creates an editable custom template at revision 1, records source template and revision, and assigns a new service-family identity. It copies no instance, operation, data, runtime identity, configuration, or secret. Original and duplicate can therefore be installed together. A built-in can be duplicated only when its release-locked runtime bundle or exact image digest is present; an incomplete release manifest never creates a broken copy.
 
+The optional container `runtime_profile` defaults to the strict restricted policy. The `interactive_desktop` profile is reserved for the audited [LinuxServer Webtop](linuxserver-webtop.md) built-ins; custom definitions cannot select it.
+
 An installed service retains its canonical definition and SHA-256. Editing its source affects only a future deployment. Deleting a definition is blocked while that definition owns an installed service.
 
 ## Persistence and API
@@ -55,6 +59,8 @@ Template routes are:
 
 Reads require Web Service read permission; mutations require read, write, and execute. Bodies are strict and bounded. Create and duplicate requests use opaque request identities and fingerprints so matching retries return the original definition and conflicting reuse fails. Audit events record only bounded name, identifier, kind, revision, and action—not definitions or script contents.
 
+Catalog responses include declarative `brand_icon` and `notices`. Install requests include `accepted_notice_revisions`; service views expose the target revision/version and `update_available` only when the Runtime-owned built-in definition is newer than the installed immutable snapshot. These are compatible local API additions and require no registry migration or snapshot rewrite.
+
 # Boundaries
 
 Template presentation and defaults do not expand the Environment filesystem scope, grant a service access to the whole home directory, or make a custom path safe by implication. A custom workspace remains an explicit user choice and must pass the same writable-root validation as every deployment. Templates do not manage application credentials, public listeners, arbitrary container privileges, or cross-Environment scheduling.
@@ -62,6 +68,7 @@ Template presentation and defaults do not expand the Environment filesystem scop
 # Evidence
 
 - `redeven:internal/managedwebservice/templates.go` - Validates definitions, revisions, hashes, duplicate lineage, independent families, parameters, and availability.
+- `redeven:internal/managedwebservice/builtin_templates.go` - Owns the single built-in definition registry, pinned Webtop artifacts, declarative brands and notices, workspace families, and reserved runtime profile.
 - `redeven:internal/managedwebservice/types.go` - Defines public template, endpoint, host, container, Compose, and duplicate contracts.
 - `redeven:internal/managedwebservice/manager.go` - Prepares one explicit dedicated default workspace per service family and keeps writable filesystem roots as user-selectable scope only.
 - `redeven:internal/portforward/registry/managed.go` - Persists templates, request fingerprints, lineage, revisions, and in-use deletion protection.
@@ -74,5 +81,6 @@ Template presentation and defaults do not expand the Environment filesystem scop
 - `redeven:internal/managedwebservice/templates_test.go` - Covers independent duplication, immutable hash identity, and Compose host-escape rejection.
 - `redeven:internal/codeapp/appserver/managed_web_services_test.go` - Covers template route authority and duplicate API behavior.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx` - Covers discovery, container unavailability, duplication, unified cards, and uninstall interaction.
+- `redeven:internal/managedwebservice/webtop_test.go` - Covers Webtop identity, ordering, independent families, immutable digests, notices, runtime policy, and custom-profile rejection.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx` - Covers grouping, selection, keyboard movement, counts, state presentation, permissions, search, and selected-template actions.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.browser.test.tsx` - Verifies gallery/detail geometry, theme surface contrast, narrow layouts, floating menu and duplicate-dialog layering, create actions, and outside-click dismissal in Chromium.

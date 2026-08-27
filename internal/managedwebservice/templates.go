@@ -162,6 +162,9 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 	if source.Spec == nil {
 		return nil, serviceError("TEMPLATE_UNAVAILABLE", "This template cannot be duplicated until its exact deployment definition is available.", 409, true, nil)
 	}
+	if !source.Duplicateable {
+		return nil, serviceError("TEMPLATE_DUPLICATION_UNAVAILABLE", "This built-in template cannot be duplicated because its runtime safety contract is managed by Redeven.", 409, false, nil)
+	}
 	spec := *source.Spec
 	spec.Kind = duplicateKind(source.Deployment, spec.Kind)
 	if source.Source == "builtin" && !completeBuiltInDuplicateSpec(spec) {
@@ -291,6 +294,9 @@ func validateTemplateWriteRequest(req TemplateWriteRequest) error {
 	if len(req.Description) > 1000 || len(req.Version) > 80 {
 		return serviceError("TEMPLATE_METADATA_INVALID", "Template description or version is too long.", 400, false, nil)
 	}
+	if req.Spec.Container != nil && req.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
+		return serviceError("TEMPLATE_RUNTIME_PROFILE_RESERVED", "The interactive desktop runtime profile is reserved for reviewed Redeven templates.", 400, false, nil)
+	}
 	return validateTemplateSpec(req.Spec)
 }
 
@@ -359,6 +365,15 @@ func validateTemplateSpec(spec TemplateSpec) error {
 				strings.Contains(strings.ToLower(mount.Target), "docker.sock") || strings.Contains(strings.ToLower(mount.Source), "docker.sock") {
 				return serviceError("TEMPLATE_MOUNT_REJECTED", "Container mounts must use absolute targets and cannot expose the container engine socket.", 400, false, nil)
 			}
+		}
+		switch spec.Container.RuntimeProfile {
+		case "", ContainerRuntimeProfileRestricted:
+		case ContainerRuntimeProfileInteractiveDesktop:
+			if spec.Container.ReadOnlyRoot || spec.Container.PIDsLimit != 2048 || strings.TrimSpace(spec.Container.User) != "" || len(spec.Container.Entrypoint) != 0 || !strings.Contains(spec.Container.Image, "@sha256:") {
+				return serviceError("TEMPLATE_RUNTIME_PROFILE_INVALID", "Interactive desktop templates must use the reviewed writable-root, root-entrypoint, digest-pinned runtime contract.", 400, false, nil)
+			}
+		default:
+			return serviceError("TEMPLATE_RUNTIME_PROFILE_INVALID", "The container runtime profile is not supported.", 400, false, nil)
 		}
 	case DeploymentCompose:
 		if spec.Compose == nil || !composeServicePattern.MatchString(spec.Compose.MainService) || spec.Endpoint.ContainerPort < 1 || spec.Endpoint.ContainerPort > 65535 {
@@ -518,12 +533,8 @@ func templateRegistryError(err error) error {
 }
 
 func isBuiltInTemplateID(templateID string) bool {
-	switch strings.TrimSpace(templateID) {
-	case DeepSeekHarnessHostTemplateID, DeepSeekHarnessContainerTemplateID:
-		return true
-	default:
-		return false
-	}
+	_, ok := builtInTemplateDefinitionByID(templateID)
+	return ok
 }
 
 func sortTemplates(items []Template) {
@@ -531,15 +542,19 @@ func sortTemplates(items []Template) {
 		if items[i].Source != items[j].Source {
 			return items[i].Source == "builtin"
 		}
+		if items[i].Source == "builtin" && items[i].SortOrder != items[j].SortOrder {
+			return items[i].SortOrder < items[j].SortOrder
+		}
 		return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name)
 	})
 }
 
 type serviceConfiguration struct {
-	Parameters map[string]string `json:"parameters,omitempty"`
+	Parameters              map[string]string `json:"parameters,omitempty"`
+	AcceptedNoticeRevisions map[string]int64  `json:"accepted_notice_revisions,omitempty"`
 }
 
-func resolveTemplateInputs(spec TemplateSpec, supplied map[string]string) (serviceConfiguration, map[string]string, error) {
+func resolveTemplateInputs(spec TemplateSpec, supplied map[string]string, acceptedNotices map[string]int64) (serviceConfiguration, map[string]string, error) {
 	definitions := make(map[string]TemplateParameter, len(spec.Parameters))
 	for _, parameter := range spec.Parameters {
 		definitions[parameter.Name] = parameter
@@ -573,7 +588,38 @@ func resolveTemplateInputs(spec TemplateSpec, supplied map[string]string) (servi
 			plain[parameter.Name] = value
 		}
 	}
-	return serviceConfiguration{Parameters: plain}, secrets, nil
+	return serviceConfiguration{Parameters: plain, AcceptedNoticeRevisions: cloneNoticeRevisions(acceptedNotices)}, secrets, nil
+}
+
+func validateAcceptedNotices(template Template, accepted map[string]int64) error {
+	known := make(map[string]TemplateNotice, len(template.Notices))
+	for _, notice := range template.Notices {
+		known[notice.ID] = notice
+		value, present := accepted[notice.ID]
+		if notice.AcknowledgementRequired && !present {
+			return serviceError("NOTICE_ACKNOWLEDGEMENT_REQUIRED", "Accept the current safety notice before installing or updating this service.", 409, false, nil)
+		}
+		if present && value != notice.Revision {
+			return serviceError("NOTICE_ACKNOWLEDGEMENT_STALE", "The accepted safety notice revision does not match the current template.", 409, false, nil)
+		}
+	}
+	for id := range accepted {
+		if _, ok := known[id]; !ok {
+			return serviceError("NOTICE_ACKNOWLEDGEMENT_UNKNOWN", "The request contains an unknown safety notice acknowledgement.", 400, false, nil)
+		}
+	}
+	return nil
+}
+
+func cloneNoticeRevisions(values map[string]int64) map[string]int64 {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]int64, len(values))
+	for id, revision := range values {
+		cloned[id] = revision
+	}
+	return cloned
 }
 
 func (m *Manager) serviceSecretPath(serviceID string) string {

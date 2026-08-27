@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/floegence/redeven/internal/capabilities/containers"
@@ -48,50 +51,111 @@ func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregist
 	}
 
 	progress("pulling", 2)
-	pulled, err := d.adapter.PullImage(ctx, containers.ImagePullRequest{Engine: containers.EngineDocker, ImageRef: spec.Container.Image})
-	if err != nil || !pulled.Completed {
-		return "", "", serviceError("IMAGE_PULL_FAILED", "The template image could not be pulled.", 503, true, err)
-	}
-	pinnedImage, err := pinnedImageReference(spec.Container.Image, pulled.Image.Digest)
+	pinnedImage, err := d.PrepareUpdateArtifact(ctx, spec)
 	if err != nil {
 		return "", "", err
 	}
 	progress("verifying", 3)
-	mounts, err := d.containerMounts(ctx, service, spec.Container.Mounts)
+	progress("installing", 4)
+	runtimeID, err := d.CreateRuntime(ctx, service, spec, pinnedImage)
 	if err != nil {
 		return "", "", err
+	}
+	return runtimeID, pinnedImage, nil
+}
+
+func (d *containerTemplateDriver) PrepareUpdateArtifact(ctx context.Context, spec TemplateSpec) (string, error) {
+	if d.adapter == nil || spec.Container == nil {
+		return "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
+	}
+	pulled, err := d.adapter.PullImage(ctx, containers.ImagePullRequest{Engine: containers.EngineDocker, ImageRef: spec.Container.Image})
+	if err != nil || !pulled.Completed {
+		return "", serviceError("IMAGE_PULL_FAILED", "The template image could not be pulled.", 503, true, err)
+	}
+	pinnedImage, err := pinnedImageReference(spec.Container.Image, pulled.Image.Digest)
+	if err != nil {
+		return "", err
+	}
+	if expected := imageReferenceDigest(spec.Container.Image); expected != "" {
+		if !pulled.Image.DigestPinned || expected != pulled.Image.Digest {
+			return "", serviceError("IMAGE_DIGEST_MISMATCH", "Docker returned an image digest that does not match the reviewed template.", 502, false, nil)
+		}
+	}
+	return pinnedImage, nil
+}
+
+func imageReferenceDigest(reference string) string {
+	_, digest, ok := strings.Cut(strings.TrimSpace(reference), "@")
+	if ok && dockerDigestPattern.MatchString(digest) {
+		return digest
+	}
+	return ""
+}
+
+func (d *containerTemplateDriver) CreateRuntime(ctx context.Context, service *pfregistry.ManagedService, spec TemplateSpec, pinnedImage string) (string, error) {
+	if d.adapter == nil || spec.Container == nil {
+		return "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
+	}
+	mounts, err := d.containerMounts(ctx, service, spec.Container.Mounts, true)
+	if err != nil {
+		return "", err
 	}
 	parameters, err := d.manager.serviceParameters(service)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	environment, err := renderedContainerEnvironment(spec.Container.Environment, parameters)
+	environment, err := renderedContainerEnvironment(spec.Container.Environment, parameters, spec.Container.RuntimeProfile)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	request := containers.ContainerCreateRequest{
-		Engine: containers.EngineDocker, Name: customContainerName(service.ServiceID), Image: pinnedImage,
-		Command: append([]string(nil), spec.Container.Command...), Env: environment,
-		Labels: map[string]string{managedServiceLabel: service.ServiceID}, RestartPolicy: "no", NetworkMode: "bridge",
-		Ports:  []containers.ContainerPortPublish{{ContainerPort: spec.Endpoint.ContainerPort, HostPort: service.RuntimePort, HostIP: "127.0.0.1", Protocol: "tcp"}},
-		Mounts: mounts, CPUCount: spec.Container.CPUs, MemoryBytes: spec.Container.MemoryBytes,
-		CapDrop: []string{"ALL"}, ReadOnlyRoot: true, SecurityOpts: []string{"no-new-privileges:true"},
-		PIDsLimit: effectivePIDsLimit(spec.Container.PIDsLimit), User: strings.TrimSpace(spec.Container.User),
-	}
-	if len(spec.Container.Entrypoint) == 1 {
-		request.Entrypoint = spec.Container.Entrypoint[0]
-	}
-	progress("installing", 4)
+	request := containerCreateRequest(service, spec, pinnedImage, mounts, environment)
 	created, err := d.adapter.Create(ctx, request)
 	if err != nil || !created.Completed || strings.TrimSpace(created.ContainerID) == "" {
-		return "", "", serviceError("CONTAINER_CREATE_FAILED", "The hardened template container could not be created.", 502, true, err)
+		return "", serviceError("CONTAINER_CREATE_FAILED", "The managed template container could not be created.", 502, true, err)
 	}
 	service.RuntimeIdentity, service.ArtifactReference = created.ContainerID, pinnedImage
 	if err := d.verifyExactContainer(ctx, service, spec); err != nil {
 		_ = d.removeExactContainer(context.Background(), service)
-		return "", "", err
+		return "", err
 	}
-	return created.ContainerID, pinnedImage, nil
+	return created.ContainerID, nil
+}
+
+func (d *containerTemplateDriver) RemoveRuntime(ctx context.Context, service *pfregistry.ManagedService) error {
+	return d.removeExactContainer(ctx, service)
+}
+
+func (d *containerTemplateDriver) VerifyRuntime(ctx context.Context, service *pfregistry.ManagedService, spec TemplateSpec) error {
+	return d.verifyExactContainer(ctx, service, spec)
+}
+
+func (d *containerTemplateDriver) FindRuntime(ctx context.Context, serviceID string) (string, error) {
+	if d.adapter == nil {
+		return "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
+	}
+	listed, err := d.adapter.List(ctx, containers.ContainerListRequest{Engine: containers.EngineDocker, All: true})
+	if err != nil {
+		return "", err
+	}
+	name := customContainerName(serviceID)
+	identity := ""
+	for _, candidate := range listed.Containers {
+		if candidate.Name != name {
+			continue
+		}
+		matches, err := d.adapter.ContainerMatchesLabel(ctx, containers.ContainerLabelMatchRequest{Engine: containers.EngineDocker, ContainerID: candidate.ContainerID, Key: managedServiceLabel, Value: serviceID})
+		if err != nil {
+			return "", err
+		}
+		if !matches {
+			continue
+		}
+		if identity != "" {
+			return "", serviceError("CONTAINER_IDENTITY_AMBIGUOUS", "More than one container claims the managed service identity.", 409, false, nil)
+		}
+		identity = candidate.ContainerID
+	}
+	return identity, nil
 }
 
 func pinnedImageReference(reference, digest string) (string, error) {
@@ -109,7 +173,20 @@ func pinnedImageReference(reference, digest string) (string, error) {
 	return reference + "@" + digest, nil
 }
 
-func renderedContainerEnvironment(values map[string]string, parameters map[string]string) ([]string, error) {
+func renderedContainerEnvironment(values map[string]string, parameters map[string]string, runtimeProfile string) ([]string, error) {
+	replacements := make(map[string]string, len(parameters)+3)
+	for name, value := range parameters {
+		replacements[name] = value
+	}
+	if runtimeProfile == ContainerRuntimeProfileInteractiveDesktop {
+		system, err := runtimeContainerVariables()
+		if err != nil {
+			return nil, err
+		}
+		for name, value := range system {
+			replacements[name] = value
+		}
+	}
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
@@ -118,7 +195,7 @@ func renderedContainerEnvironment(values map[string]string, parameters map[strin
 	out := make([]string, 0, len(keys))
 	for _, key := range keys {
 		value := values[key]
-		for parameter, replacement := range parameters {
+		for parameter, replacement := range replacements {
 			value = strings.ReplaceAll(value, "${"+parameter+"}", replacement)
 		}
 		if strings.Contains(value, "${") {
@@ -127,6 +204,48 @@ func renderedContainerEnvironment(values map[string]string, parameters map[strin
 		out = append(out, key+"="+value)
 	}
 	return out, nil
+}
+
+func runtimeContainerVariables() (map[string]string, error) {
+	current, err := user.Current()
+	if err != nil {
+		return nil, serviceError("RUNTIME_USER_IDENTITY_UNAVAILABLE", "Redeven could not determine the Runtime user identity for the container.", 409, false, err)
+	}
+	for _, value := range []string{current.Uid, current.Gid} {
+		if _, err := strconv.ParseUint(value, 10, 32); err != nil {
+			return nil, serviceError("RUNTIME_USER_IDENTITY_UNAVAILABLE", "Redeven could not determine a numeric Runtime user identity for the container.", 409, false, err)
+		}
+	}
+	timezone := strings.TrimSpace(os.Getenv("TZ"))
+	if timezone == "" || strings.ContainsAny(timezone, "\x00\r\n") {
+		timezone = "Etc/UTC"
+	}
+	return map[string]string{"REDEVEN_RUNTIME_UID": current.Uid, "REDEVEN_RUNTIME_GID": current.Gid, "REDEVEN_RUNTIME_TIMEZONE": timezone}, nil
+}
+
+func containerCreateRequest(service *pfregistry.ManagedService, spec TemplateSpec, pinnedImage string, mounts []containers.ContainerMount, environment []string) containers.ContainerCreateRequest {
+	request := containers.ContainerCreateRequest{
+		Engine: containers.EngineDocker, Name: customContainerName(service.ServiceID), Image: pinnedImage,
+		Command: append([]string(nil), spec.Container.Command...), Env: append([]string(nil), environment...),
+		Labels: map[string]string{managedServiceLabel: service.ServiceID}, RestartPolicy: "no", NetworkMode: "bridge",
+		Ports:  []containers.ContainerPortPublish{{ContainerPort: spec.Endpoint.ContainerPort, HostPort: service.RuntimePort, HostIP: "127.0.0.1", Protocol: "tcp"}},
+		Mounts: append([]containers.ContainerMount(nil), mounts...), CPUCount: spec.Container.CPUs, MemoryBytes: spec.Container.MemoryBytes,
+		PIDsLimit: effectivePIDsLimit(spec.Container.PIDsLimit),
+	}
+	if len(spec.Container.Entrypoint) == 1 {
+		request.Entrypoint = spec.Container.Entrypoint[0]
+	}
+	if spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
+		request.ReadOnlyRoot = false
+		request.ShmSizeBytes = 1024 * 1024 * 1024
+		request.PIDsLimit = 2048
+		return request
+	}
+	request.CapDrop = []string{"ALL"}
+	request.ReadOnlyRoot = true
+	request.SecurityOpts = []string{"no-new-privileges:true"}
+	request.User = strings.TrimSpace(spec.Container.User)
+	return request
 }
 
 func effectivePIDsLimit(value int64) int {
@@ -164,7 +283,7 @@ func (d *containerTemplateDriver) markerPath(service *pfregistry.ManagedService)
 	return filepath.Join(d.manager.stateDir, "families", service.ServiceFamilyID, "container-volumes.json")
 }
 
-func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *pfregistry.ManagedService, specs []ContainerMountSpec) ([]containers.ContainerMount, error) {
+func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *pfregistry.ManagedService, specs []ContainerMountSpec, createVolumes bool) ([]containers.ContainerMount, error) {
 	marker, err := d.loadVolumeSet(service)
 	if err != nil {
 		return nil, err
@@ -195,7 +314,7 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 				if err != nil || inspected.CreatedAtUnixMs != identity.CreatedAtUnixMs {
 					return nil, serviceError("DATA_IDENTITY_MISMATCH", "A retained template data volume is missing or has changed identity.", 409, false, err)
 				}
-			} else {
+			} else if createVolumes {
 				created, err := d.adapter.CreateVolume(ctx, containers.VolumeCreateRequest{Engine: containers.EngineDocker, Name: name})
 				if err != nil {
 					return nil, serviceError("DATA_VOLUME_CREATE_FAILED", "A template data volume could not be created.", 502, true, err)
@@ -213,6 +332,8 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 				marker.Volumes = append(marker.Volumes, identity)
 				volumeByName[name] = identity
 				changed = true
+			} else {
+				return nil, serviceError("DATA_IDENTITY_MISSING", "A retained template data volume identity is missing.", 409, false, nil)
 			}
 			result = append(result, containers.ContainerMount{Type: containers.MountTypeVolume, Source: name, Target: mount.Target, ReadOnly: mount.ReadOnly})
 		default:
@@ -276,13 +397,73 @@ func (d *containerTemplateDriver) verifyExactContainer(ctx context.Context, serv
 		return serviceError("CONTAINER_IDENTITY_MISMATCH", "The exact managed template container identity or image has changed.", 409, false, labelErr)
 	}
 	runtime := container.Runtime
-	if runtime.Privileged || !runtime.ReadOnlyRoot || runtime.PIDsLimit != effectivePIDsLimit(spec.Container.PIDsLimit) || !slices.Contains(runtime.CapDrop, "ALL") || !slices.Contains(runtime.SecurityOpts, "no-new-privileges:true") {
+	if !containerRuntimeMatchesProfile(runtime, spec.Container.RuntimeProfile, effectivePIDsLimit(spec.Container.PIDsLimit)) {
 		return serviceError("CONTAINER_HARDENING_MISMATCH", "The managed template container no longer matches Redeven's hardened runtime policy.", 409, false, nil)
+	}
+	expectedMounts, err := d.containerMounts(ctx, service, spec.Container.Mounts, false)
+	if err != nil {
+		return err
+	}
+	if len(container.Devices) != 0 || len(container.Mounts) != len(expectedMounts) {
+		return serviceError("CONTAINER_CAPABILITY_MISMATCH", "The managed template container exposes an unreviewed device or mount.", 409, false, nil)
+	}
+	for _, expected := range expectedMounts {
+		found := false
+		for _, actual := range container.Mounts {
+			if actual.Target == expected.Target && mountSourceMatches(expected, actual) && actual.ReadOnly == expected.ReadOnly && actual.Type == expected.Type && !actual.ContainerSocket {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return serviceError("CONTAINER_MOUNT_MISMATCH", "The managed template container no longer matches its reviewed mount contract.", 409, false, nil)
+		}
 	}
 	if len(container.Ports) != 1 || container.Ports[0].Port != spec.Endpoint.ContainerPort || container.Ports[0].HostPort != service.RuntimePort || container.Ports[0].HostIP != "127.0.0.1" {
 		return serviceError("CONTAINER_NETWORK_MISMATCH", "The managed template container must publish exactly one Web port on 127.0.0.1.", 409, false, nil)
 	}
 	return nil
+}
+
+func mountSourceMatches(expected containers.ContainerMount, actual containers.MountSummary) bool {
+	return mountSourceMatchesForHost(expected, actual, runtime.GOOS)
+}
+
+func mountSourceMatchesForHost(expected containers.ContainerMount, actual containers.MountSummary, hostOS string) bool {
+	if expected.Type != containers.MountTypeBind || hostOS != "darwin" {
+		return actual.Source == expected.Source
+	}
+	expectedSource := filepath.Clean(expected.Source)
+	if resolved, err := filepath.EvalSymlinks(expectedSource); err == nil {
+		expectedSource = resolved
+	}
+	actualSource := filepath.Clean(actual.Source)
+	return actualSource == expectedSource || actualSource == filepath.Join("/host_mnt", expectedSource)
+}
+
+func containerRuntimeMatchesProfile(runtime containers.RuntimeSummary, profile string, pidsLimit int) bool {
+	if runtime.Privileged || runtime.NetworkMode != "bridge" || !privateNamespaceMode(runtime.PIDMode) || !privateNamespaceMode(runtime.IPCMode) || len(runtime.CapAdd) != 0 || len(runtime.Devices) != 0 {
+		return false
+	}
+	if profile == ContainerRuntimeProfileInteractiveDesktop {
+		for _, option := range runtime.SecurityOpts {
+			lower := strings.ToLower(strings.TrimSpace(option))
+			if strings.Contains(lower, "seccomp=unconfined") || strings.Contains(lower, "apparmor=unconfined") {
+				return false
+			}
+		}
+		return !runtime.ReadOnlyRoot && runtime.PIDsLimit == 2048 && runtime.ShmSizeBytes == 1024*1024*1024 && strings.TrimSpace(runtime.User) == "" && len(runtime.CapDrop) == 0
+	}
+	return runtime.ReadOnlyRoot && runtime.PIDsLimit == pidsLimit && slices.Contains(runtime.CapDrop, "ALL") && slices.Contains(runtime.SecurityOpts, "no-new-privileges:true")
+}
+
+func privateNamespaceMode(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "private":
+		return true
+	default:
+		return false
+	}
 }
 
 func (d *containerTemplateDriver) Start(ctx context.Context, service *pfregistry.ManagedService) (string, error) {

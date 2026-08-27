@@ -12,6 +12,16 @@ const (
 	DeepSeekHarnessHostTemplateID      = "deepseek-harness-host"
 	DeepSeekHarnessContainerTemplateID = "deepseek-harness-container"
 	DeepSeekHarnessVersion             = "0.1.1-rc.2"
+	WebtopUbuntuKDETemplateID          = "linuxserver-webtop-ubuntu-kde"
+	WebtopDebianXFCETemplateID         = "linuxserver-webtop-debian-xfce"
+)
+
+const (
+	BrandIconDeepSeekHarness    = "deepseek-harness"
+	BrandIconInteractiveDesktop = "interactive-desktop"
+
+	ContainerRuntimeProfileRestricted         = "restricted"
+	ContainerRuntimeProfileInteractiveDesktop = "interactive_desktop"
 )
 
 type Deployment string
@@ -32,8 +42,18 @@ const (
 	ActionStop         OperationAction = "stop"
 	ActionRestart      OperationAction = "restart"
 	ActionRetryInstall OperationAction = "retry_install"
+	ActionUpdate       OperationAction = "update"
 	ActionUninstall    OperationAction = "uninstall"
 )
+
+type TemplateNotice struct {
+	ID                      string `json:"id"`
+	Revision                int64  `json:"revision"`
+	Severity                string `json:"severity"`
+	TitleKey                string `json:"title_key"`
+	DescriptionKey          string `json:"description_key"`
+	AcknowledgementRequired bool   `json:"acknowledgement_required"`
+}
 
 type DeploymentAvailability struct {
 	Deployment Deployment `json:"deployment"`
@@ -58,6 +78,9 @@ type Template struct {
 	DataLocation          string                   `json:"data_location"`
 	SourceURL             string                   `json:"source_url"`
 	DockerSourceURL       string                   `json:"docker_source_url"`
+	BrandIcon             string                   `json:"brand_icon,omitempty"`
+	LocalizationKey       string                   `json:"localization_key,omitempty"`
+	Notices               []TemplateNotice         `json:"notices,omitempty"`
 	Deployments           []DeploymentAvailability `json:"deployments"`
 	DefaultWorkspacePath  string                   `json:"default_workspace_path"`
 	WorkspaceRoots        []WorkspaceRoot          `json:"workspace_roots"`
@@ -74,6 +97,7 @@ type Template struct {
 	ReasonCode            string                   `json:"reason_code,omitempty"`
 	Reason                string                   `json:"reason,omitempty"`
 	Spec                  *TemplateSpec            `json:"spec,omitempty"`
+	SortOrder             int                      `json:"-"`
 }
 
 type TemplateParameter struct {
@@ -119,16 +143,17 @@ type ContainerMountSpec struct {
 }
 
 type ContainerTemplateSpec struct {
-	Image        string               `json:"image"`
-	Entrypoint   []string             `json:"entrypoint,omitempty"`
-	Command      []string             `json:"command,omitempty"`
-	Environment  map[string]string    `json:"environment,omitempty"`
-	Mounts       []ContainerMountSpec `json:"mounts,omitempty"`
-	User         string               `json:"user,omitempty"`
-	ReadOnlyRoot bool                 `json:"read_only_root"`
-	MemoryBytes  int64                `json:"memory_bytes,omitempty"`
-	CPUs         float64              `json:"cpus,omitempty"`
-	PIDsLimit    int64                `json:"pids_limit,omitempty"`
+	Image          string               `json:"image"`
+	Entrypoint     []string             `json:"entrypoint,omitempty"`
+	Command        []string             `json:"command,omitempty"`
+	Environment    map[string]string    `json:"environment,omitempty"`
+	Mounts         []ContainerMountSpec `json:"mounts,omitempty"`
+	User           string               `json:"user,omitempty"`
+	ReadOnlyRoot   bool                 `json:"read_only_root"`
+	MemoryBytes    int64                `json:"memory_bytes,omitempty"`
+	CPUs           float64              `json:"cpus,omitempty"`
+	PIDsLimit      int64                `json:"pids_limit,omitempty"`
+	RuntimeProfile string               `json:"runtime_profile,omitempty"`
 }
 
 type ComposeTemplateSpec struct {
@@ -147,11 +172,12 @@ type TemplateSpec struct {
 }
 
 type CreateRequest struct {
-	RequestID     string            `json:"request_id"`
-	TemplateID    string            `json:"template_id"`
-	Deployment    Deployment        `json:"deployment"`
-	WorkspacePath string            `json:"workspace_path"`
-	Parameters    map[string]string `json:"parameters,omitempty"`
+	RequestID               string            `json:"request_id"`
+	TemplateID              string            `json:"template_id"`
+	Deployment              Deployment        `json:"deployment"`
+	WorkspacePath           string            `json:"workspace_path"`
+	Parameters              map[string]string `json:"parameters,omitempty"`
+	AcceptedNoticeRevisions map[string]int64  `json:"accepted_notice_revisions,omitempty"`
 }
 
 type TemplateWriteRequest struct {
@@ -168,9 +194,10 @@ type TemplateDuplicateRequest struct {
 }
 
 type OperationRequest struct {
-	RequestID  string          `json:"request_id"`
-	Action     OperationAction `json:"action"`
-	DeleteData bool            `json:"delete_data,omitempty"`
+	RequestID               string           `json:"request_id"`
+	Action                  OperationAction  `json:"action"`
+	DeleteData              bool             `json:"delete_data,omitempty"`
+	AcceptedNoticeRevisions map[string]int64 `json:"accepted_notice_revisions,omitempty"`
 }
 
 type CreateResult struct {
@@ -182,6 +209,12 @@ type ServiceView struct {
 	pfregistry.ManagedService
 	Name            string                       `json:"name"`
 	Description     string                       `json:"description,omitempty"`
+	BrandIcon       string                       `json:"brand_icon,omitempty"`
+	LocalizationKey string                       `json:"localization_key,omitempty"`
+	UpdateAvailable bool                         `json:"update_available"`
+	TargetRevision  int64                        `json:"target_revision,omitempty"`
+	TargetVersion   string                       `json:"target_version,omitempty"`
+	UpdateNotices   []TemplateNotice             `json:"update_notices,omitempty"`
 	ActiveOperation *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
 }
 

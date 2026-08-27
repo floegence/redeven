@@ -48,6 +48,7 @@ const npmLicenseOverrides = new Map([
 
 const npmCoordinateLicenseOverrides = new Map([
 	['@noble/hashes@2.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['react@19.2.8', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@babel/helper-plugin-utils@7.29.7', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@babel/plugin-syntax-jsx@7.29.7', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@humanfs/core@0.19.2', { license: 'Apache-2.0', note: 'License verified from the exact registry package manifest.' }],
@@ -719,6 +720,8 @@ Redeven can install the following software only after an authorized user explici
 | DeepSeek Harness (\`@deepseek-ai/dsh\`) | 0.1.1-rc.2 | MIT | https://github.com/deepseek-ai/deepseek-harness | Developer Preview software installed on demand from the release-locked npm dependency graph. Installed packages retain their upstream licenses and notices. |
 | Node.js | 24.19.0 | MIT | https://github.com/nodejs/node | Official platform runtime downloaded on demand by host deployment using the URL, byte size, and SHA-256 pinned in the Redeven release. The distribution retains its bundled license and dependency notices. |
 | DeepSeek Harness Docker (Community) | 0.1.1-rc.2 | MIT | https://github.com/runzhliu/deepseek-harness-docker | Community packaging, not an official DeepSeek distribution. Redeven permits only the reviewed source revision and signed OCI digest. The image retains its own operating-system and package notices. |
+| LinuxServer Webtop · Ubuntu KDE | 654ea8e3-ls177 | GPL-3.0-only | https://github.com/linuxserver/docker-webtop | Official LinuxServer.io image installed on demand for an explicitly authorized deployment. Redeven pins each supported architecture digest and does not redistribute the image; the image retains its own operating-system, application, and package notices. |
+| LinuxServer Webtop · Debian XFCE | 7c4ebdc9-ls209 | GPL-3.0-only | https://github.com/linuxserver/docker-webtop | Official LinuxServer.io image installed on demand for an explicitly authorized deployment. Redeven pins each supported architecture digest and does not redistribute the image; the image retains its own operating-system, application, and package notices. |
 
 The host dependency lock, Node.js archives, and OCI image identities enter a signed Redeven release only after their source version, license inventory, architecture, integrity, and runtime behavior have passed review. Redeven never resolves a mutable \`latest\` tag for these deployments.
 

@@ -217,6 +217,24 @@ func TestCLIClientInspectParsesRuntimeInputs(t *testing.T) {
 	}
 }
 
+func TestCLIClientInspectKeepsConfiguredPortsForStoppedContainer(t *testing.T) {
+	t.Parallel()
+	raw := `[{
+		"Id":"container_stopped","Name":"/desktop","Config":{"Image":"example.invalid/desktop@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+		"State":{"Status":"exited","Running":false},
+		"HostConfig":{"NetworkMode":"bridge","PortBindings":{"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"43123"}]}},
+		"NetworkSettings":{"Ports":{}}
+	}]`
+	container, err := parseContainerInspect(EngineDocker, []byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []PortSummary{{Protocol: "tcp", HostIP: "127.0.0.1", HostPort: 43123, Port: 3000}}
+	if !reflect.DeepEqual(container.Ports, want) {
+		t.Fatalf("stopped container ports = %+v, want %+v", container.Ports, want)
+	}
+}
+
 func TestCLIClientActionsBuildSafeArgv(t *testing.T) {
 	t.Parallel()
 
@@ -417,6 +435,10 @@ func TestCommandFailureClassificationReturnsOnlyStableDomainErrors(t *testing.T)
 	inspect := classifyCommandFailure([]string{"inspect", "container_404"}, errors.New("exit status 1"))
 	if errors.Is(inspect, ErrContainerNotFound) || inspect.Error() != "container command failed: exit status 1" {
 		t.Fatalf("inspect classification = %v", inspect)
+	}
+	missing := classifyCommandFailure([]string{"inspect", "container_404"}, errors.New("exit status 1"), []byte("Error: No such object: container_404"))
+	if !errors.Is(missing, ErrContainerNotFound) {
+		t.Fatalf("missing inspect classification = %v", missing)
 	}
 	logs := classifyCommandFailure([]string{"logs", "container_1"}, errors.New("exit status 1"))
 	if !errors.Is(logs, ErrLogsUnavailable) || strings.Contains(logs.Error(), "secret") {
