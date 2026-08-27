@@ -80,6 +80,90 @@ function completedTerminalThread() {
 }
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('renders cumulative thinking before the provider turn completes', async () => {
+    const threadID = 'thread-progressive-thinking';
+    const turnID = 'turn-progressive-thinking';
+    const runningThread = thread({
+      thread_id: threadID,
+      title: 'Progressive thinking',
+      status: 'running',
+      active_run_id: turnID,
+      messages: [{
+        id: 'user:progressive-thinking', turn_id: turnID, role: 'user', content: 'Explain the workspace',
+        status: 'complete', created_at_ms: 1,
+      }],
+    });
+    const stream = controlledWorkspaceStream([{
+      schema_version: 1,
+      kind: 'ready',
+      summaries: [runningThread],
+    }]);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 1)),
+      connectLiveStream: stream.connect,
+    });
+
+    await waitFor(() => runtime.querySelector(`[data-thread-id="${threadID}"] button`) !== null);
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-flower-message-id="user:progressive-thinking"]') !== null);
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID,
+        view_version: 2,
+        activity: 'active',
+        turn_id: turnID,
+        items: [
+          { id: 'user:progressive-thinking', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, ordinal: 2, kind: 'thinking', text: 'Inspecting files', live: true },
+        ],
+      },
+    });
+    await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting files') === true);
+    expect(runtime.textContent).not.toContain('Final workspace explanation');
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID,
+        view_version: 3,
+        activity: 'active',
+        turn_id: turnID,
+        items: [
+          { id: 'user:progressive-thinking', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration', live: true },
+        ],
+      },
+    });
+    await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('and configuration') === true);
+    expect(runtime.textContent).not.toContain('Final workspace explanation');
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID,
+        view_version: 4,
+        activity: 'idle',
+        turn_id: turnID,
+        last_outcome: 'completed',
+        items: [
+          { id: 'user:progressive-thinking', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration' },
+          { id: 'assistant:progressive-thinking', turn_id: turnID, ordinal: 3, kind: 'assistant', text: 'Final workspace explanation' },
+        ],
+      },
+    });
+    await waitFor(() => runtime.textContent?.includes('Final workspace explanation') === true);
+  });
+
   it('shows list loading state until an authoritative empty response arrives', async () => {
     const listResponse = deferred<ReturnType<typeof thread>[]>();
     const runtime = renderSurfaceWithAdapter({

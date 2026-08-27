@@ -23,6 +23,21 @@ A valid current view independently confirms any outbox entry with the same canon
 
 `LiveTransport` owns the single connection and a process-local `connectionEpoch`. The epoch only invalidates callbacks from the prior connection; it is not stored in `ThreadCache` and never orders detail content. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.
 
+Redeven owns one visual publication boundary for Floret current views. The first
+non-empty live thinking view publishes immediately. Later text-only growth keeps
+only the highest `view_version` and publishes at most once every 50 ms, giving
+the browser a stable paint opportunity without rebuilding text deltas. Item,
+tool, interaction, activity, failure, and terminal transitions bypass that
+cadence and publish immediately. The final current is always a complete Floret
+view; Flower never accumulates reasoning text or restores the retired block
+delta protocol.
+
+Canonical Thread ownership is immutable product routing metadata. The runtime
+view pump resolves `thread_id -> endpoint_id` once and reuses that binding for
+later current views instead of querying SQLite for every provider token. The
+binding contains no lifecycle, message, permission, model, or settings state and
+is removed with the Thread or Service.
+
 The server never silently drops an authoritative frame. An initial baseline
 paginates the complete workspace summary inventory and includes current views
 for active and waiting threads, even when the inventory exceeds one catalog
@@ -82,6 +97,8 @@ so a provider update cannot flash empty or wait for transcript replacement.
 # Evidence
 
 - `redeven:internal/ai/flower_live_stream.go` - Workspace baseline and current-state stream.
+- `redeven:internal/ai/flower_runtime_current_publisher.go` - Single current-view cadence and structural-boundary publisher.
+- `redeven:internal/ai/flower_runtime_current_publisher_test.go` - Deterministic progressive thinking, terminal flush, stale-version, and immutable-routing coverage.
 - `redeven:internal/flower_ui/src/liveTransport.ts` - Single connection and epoch fencing.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation and bounded view cache.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.

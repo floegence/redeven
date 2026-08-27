@@ -133,6 +133,8 @@ type Service struct {
 	flowerLiveSubscribers           map[uint64]*flowerLiveSubscriber
 	flowerLiveQueuedBytes           int
 	flowerLiveMetrics               flowerLiveMetrics
+	flowerRuntimeCurrentPublisher   *flowerRuntimeCurrentPublisher
+	flowerRuntimeEndpointByThread   map[string]string
 
 	uploadsDir string
 	threadsDB  *threadstore.Store
@@ -296,6 +298,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		workloadLeases:                  make(map[string]*aiWorkloadLease),
 		flowerLiveSubscribersByEndpoint: make(map[string]int),
 		flowerLiveSubscribers:           make(map[uint64]*flowerLiveSubscriber),
+		flowerRuntimeEndpointByThread:   make(map[string]string),
 		uploadsDir:                      uploadsDir,
 		threadsDB:                       ts,
 		closeFloret:                     floretBootstrap.close,
@@ -310,6 +313,12 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		lifecycleCtx:                    lifecycleCtx,
 		lifecycleCancel:                 lifecycleCancel,
 	}
+	svc.flowerRuntimeCurrentPublisher = newFlowerRuntimeCurrentPublisher(
+		flowerRuntimeCurrentPublishInterval,
+		systemFlowerRuntimePublishClock{},
+		svc.broadcastFlowerRuntimeCurrent,
+	)
+	svc.flowerRuntimeCurrentPublisher.metrics = &svc.flowerLiveMetrics
 	svc.terminalProcesses = newTerminalProcessManager()
 	svc.terminalProcesses.SetWorkloadAdmission(opts.WorkloadAdmission)
 	if svc.skillManager != nil {
@@ -339,6 +348,9 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 func closeServiceBeforeMaintenance(s *Service) {
 	if s == nil {
 		return
+	}
+	if s.flowerRuntimeCurrentPublisher != nil {
+		s.flowerRuntimeCurrentPublisher.Close()
 	}
 	if s.terminalProcesses != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
@@ -380,7 +392,7 @@ func (s *Service) startFlowerRuntimeViewPump() {
 			}
 			s.reconcileAIWorkloadLeases(threadID, current)
 			lookupCtx, cancel := context.WithTimeout(s.lifecycleCtx, s.persistTimeout())
-			settings, lookupErr := s.threadsDB.GetThreadSettingsByCanonicalThreadID(lookupCtx, threadID)
+			endpointID, lookupErr := s.resolveFlowerRuntimeEndpoint(lookupCtx, threadID)
 			cancel()
 			if lookupErr != nil {
 				if s.log != nil && !errors.Is(lookupErr, context.Canceled) {
@@ -388,10 +400,10 @@ func (s *Service) startFlowerRuntimeViewPump() {
 				}
 				continue
 			}
-			if settings == nil {
+			if endpointID == "" {
 				continue
 			}
-			s.publishFlowerRuntimeCurrent(strings.TrimSpace(settings.EndpointID), current)
+			s.publishFlowerRuntimeCurrent(endpointID, current)
 		}
 	}()
 }
@@ -412,11 +424,15 @@ func (s *Service) Close() error {
 	maintenanceStopCh := s.maintenanceStopCh
 	maintenanceDoneCh := s.maintenanceDoneCh
 	lifecycleCancel := s.lifecycleCancel
+	currentPublisher := s.flowerRuntimeCurrentPublisher
 	s.maintenanceStopCh = nil
 	s.maintenanceDoneCh = nil
 	s.mu.Unlock()
 	if lifecycleCancel != nil {
 		lifecycleCancel()
+	}
+	if currentPublisher != nil {
+		currentPublisher.Close()
 	}
 	s.releaseAllAIWorkloadLeases()
 
