@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const runtimeHarness = vi.hoisted(() => ({
   status: (() => 'connected') as () => string,
   ping: vi.fn(),
-  metrics: vi.fn(),
+  monitor: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
@@ -17,7 +17,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 vi.mock('./protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     sys: { ping: runtimeHarness.ping },
-    monitor: { getRuntimeProcessMetrics: runtimeHarness.metrics },
+    monitor: { getSysMonitor: runtimeHarness.monitor },
   }),
 }));
 
@@ -81,13 +81,14 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       runtimeService: { runtimeVersion: 'v2.4.1' },
     });
     let metricSample = 0;
-    runtimeHarness.metrics.mockReset().mockImplementation(async () => {
+    runtimeHarness.monitor.mockReset().mockImplementation(async () => {
       const sample = metricSample;
       metricSample += 1;
       return {
-        cpuPercent: 12.34 + sample,
-        memoryBytes: (128 + sample) * 1024 * 1024,
-        sampledAtMs: Date.now() + sample,
+        cpuUsage: 12.34 + sample,
+        memoryUsedBytes: (8 + sample) * 1024 * 1024 * 1024,
+        memoryTotalBytes: 16 * 1024 * 1024 * 1024,
+        timestampMs: Date.now() + sample,
       };
     });
 
@@ -115,13 +116,13 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     document.body.replaceChildren();
   });
 
-  function mount(props: Readonly<{ canRead?: boolean | null; mobile?: boolean }> = {}) {
+  function mount(props: Readonly<{ canExecute?: boolean | null; mobile?: boolean }> = {}) {
     return render(() => (
       <EnvironmentRuntimeStatusTooltip
         identity={{ source: 'local_runtime', displayName: 'Local Environment', displayID: 'env_local' }}
         connectionStatus={connectionStatus()}
         connectionLabel="Connected"
-        canRead={props.canRead ?? true}
+        canExecute={props.canExecute ?? true}
         mobile={props.mobile ?? false}
       />
     ), host);
@@ -131,19 +132,19 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     const dispose = mount();
     try {
       expect(runtimeHarness.ping).not.toHaveBeenCalled();
-      expect(runtimeHarness.metrics).not.toHaveBeenCalled();
+      expect(runtimeHarness.monitor).not.toHaveBeenCalled();
 
       const tooltip = await openTooltip(host);
       expect(tooltip).toBeTruthy();
       expect(tooltip.getAttribute('data-placement')).toBe('top');
       expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('v2.4.1');
       expect(tooltip.querySelector('[data-runtime-started]')?.textContent).toContain('1 hour ago');
-      expect(tooltip.querySelector('[data-runtime-cpu]')?.textContent).toBe('12.3%');
-      expect(tooltip.querySelector('[data-runtime-memory]')?.textContent).toBe('128 MB');
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('12.3%');
+      expect(tooltip.querySelector('[data-environment-memory]')?.textContent).toBe('8 GB');
       expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
-      expect(runtimeHarness.metrics).toHaveBeenCalledTimes(1);
-      expect(tooltip.querySelector('[data-runtime-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('1');
-      expect(tooltip.querySelector('[data-runtime-sparkline="memory"]')?.getAttribute('data-sample-count')).toBe('1');
+      expect(runtimeHarness.monitor).toHaveBeenCalledTimes(1);
+      expect(tooltip.querySelector('[data-environment-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('1');
+      expect(tooltip.querySelector('[data-environment-sparkline="memory"]')?.getAttribute('data-sample-count')).toBe('1');
 
       const trigger = host.querySelector<HTMLElement>('[data-environment-runtime-trigger]')!;
       trigger.click();
@@ -153,16 +154,16 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       vi.advanceTimersByTime(2_000);
       await flushPromises();
       expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
-      expect(runtimeHarness.metrics).toHaveBeenCalledTimes(2);
-      expect(tooltip.querySelector('[data-runtime-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('2');
-      expect(tooltip.querySelector('[data-runtime-sparkline="cpu"] .environment-runtime-sparkline-line')?.getAttribute('d')).toContain('L');
+      expect(runtimeHarness.monitor).toHaveBeenCalledTimes(2);
+      expect(tooltip.querySelector('[data-environment-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('2');
+      expect(tooltip.querySelector('[data-environment-sparkline="cpu"] .environment-runtime-sparkline-line')?.getAttribute('d')).toContain('L');
 
       const anchor = host.querySelector<HTMLElement>('[data-redeven-tooltip-anchor]')!;
       trigger.dispatchEvent(new MouseEvent('mouseleave'));
       anchor.dispatchEvent(new MouseEvent('mouseleave'));
       vi.advanceTimersByTime(4_000);
       await flushPromises();
-      expect(runtimeHarness.metrics).toHaveBeenCalledTimes(2);
+      expect(runtimeHarness.monitor).toHaveBeenCalledTimes(2);
       expect(trigger.getAttribute('role')).toBeNull();
     } finally {
       dispose();
@@ -178,38 +179,38 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       vi.advanceTimersByTime(180);
       await flushPromises();
       expect(document.body.querySelector('[role="tooltip"]')).toBeTruthy();
-      expect(runtimeHarness.metrics).toHaveBeenCalledTimes(1);
+      expect(runtimeHarness.monitor).toHaveBeenCalledTimes(1);
 
       trigger.blur();
       await flushPromises();
       vi.advanceTimersByTime(4_000);
       await flushPromises();
-      expect(runtimeHarness.metrics).toHaveBeenCalledTimes(1);
+      expect(runtimeHarness.monitor).toHaveBeenCalledTimes(1);
     } finally {
       dispose();
     }
   });
 
   it('keeps ping details visible when metrics fail and explains the local degradation', async () => {
-    runtimeHarness.metrics.mockRejectedValue(new Error('runtime process metrics unavailable'));
+    runtimeHarness.monitor.mockRejectedValue(new Error('system monitor unavailable'));
     const dispose = mount();
     try {
       const tooltip = await openTooltip(host);
       expect(tooltip.querySelector('[data-runtime-version]')?.textContent).toBe('v2.4.1');
-      expect(tooltip.textContent).toContain('Runtime usage is temporarily unavailable.');
-      expect(tooltip.querySelector('[data-runtime-cpu]')?.textContent).toBe('Unavailable');
+      expect(tooltip.textContent).toContain('Environment usage is temporarily unavailable.');
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('Unavailable');
     } finally {
       dispose();
     }
   });
 
-  it('does not request metrics without read permission', async () => {
-    const dispose = mount({ canRead: false });
+  it('does not request environment metrics without execute permission', async () => {
+    const dispose = mount({ canExecute: false });
     try {
       const tooltip = await openTooltip(host);
       expect(runtimeHarness.ping).toHaveBeenCalledTimes(1);
-      expect(runtimeHarness.metrics).not.toHaveBeenCalled();
-      expect(tooltip.textContent).toContain('Read permission is required to view usage.');
+      expect(runtimeHarness.monitor).not.toHaveBeenCalled();
+      expect(tooltip.textContent).toContain('Execute permission is required to view environment usage.');
     } finally {
       dispose();
     }
@@ -250,7 +251,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       vi.advanceTimersByTime(4_000);
       await flushPromises();
       expect(runtimeHarness.ping).not.toHaveBeenCalled();
-      expect(runtimeHarness.metrics).not.toHaveBeenCalled();
+      expect(runtimeHarness.monitor).not.toHaveBeenCalled();
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
     } finally {
       dispose();

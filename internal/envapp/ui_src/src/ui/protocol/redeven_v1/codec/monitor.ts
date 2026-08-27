@@ -1,12 +1,10 @@
 import type {
-  wire_runtime_process_metrics_resp,
   wire_sys_monitor_kill_process_req,
   wire_sys_monitor_kill_process_resp,
   wire_sys_monitor_req,
   wire_sys_monitor_resp,
 } from '../wire/monitor';
 import type {
-  RuntimeProcessMetrics,
   SysMonitorKillProcessRequest,
   SysMonitorKillProcessResponse,
   SysMonitorRequest,
@@ -23,6 +21,8 @@ export function fromWireSysMonitorResponse(resp: wire_sys_monitor_resp): SysMoni
     cpuUsage: Number(resp?.cpu_usage ?? 0),
     cpuCores: Number(resp?.cpu_cores ?? 0),
     loadAverage: Array.isArray(resp?.load_average) ? resp.load_average.map((n) => Number(n)) : undefined,
+    memoryTotalBytes: Math.max(0, Number(resp?.memory_total_bytes ?? 0)),
+    memoryUsedBytes: Math.max(0, Number(resp?.memory_used_bytes ?? 0)),
     networkBytesReceived: Number(resp?.network_bytes_received ?? 0),
     networkBytesSent: Number(resp?.network_bytes_sent ?? 0),
     networkSpeedReceived: Number(resp?.network_speed_received ?? 0),
@@ -49,13 +49,5 @@ export function fromWireSysMonitorKillProcessResponse(resp: wire_sys_monitor_kil
   return {
     ok: Boolean(resp?.ok),
     pid: Number(resp?.pid ?? 0),
-  };
-}
-
-export function fromWireRuntimeProcessMetricsResponse(resp: wire_runtime_process_metrics_resp): RuntimeProcessMetrics {
-  return {
-    cpuPercent: Math.max(0, Number(resp.cpu_percent)),
-    memoryBytes: Math.max(0, Number(resp.memory_bytes)),
-    sampledAtMs: Math.max(0, Number(resp.sampled_at_ms)),
   };
 }

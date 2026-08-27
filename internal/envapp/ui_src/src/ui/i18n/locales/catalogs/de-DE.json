@@ -459,7 +459,7 @@
       "envTypeRemote": "Entfernt"
     },
     "runtimeStatus": {
-      "triggerLabel": "Laufzeitdetails für {environment}",
+      "triggerLabel": "Umgebungsstatus für {environment}",
       "runtime": "Laufzeit",
       "version": "Version",
       "started": "Gestartet",
@@ -468,8 +468,8 @@
       "unavailable": "Nicht verfügbar",
       "connectionUnavailable": "Stellen Sie eine Verbindung zur Laufzeit her, um Details zu laden.",
       "detailsUnavailable": "Die Laufzeitdetails sind vorübergehend nicht verfügbar.",
-      "readPermissionRequired": "Zum Anzeigen der Auslastung ist Leseberechtigung erforderlich.",
-      "metricsUnavailable": "Die Laufzeitauslastung ist vorübergehend nicht verfügbar."
+      "monitorPermissionRequired": "Zum Anzeigen der Ressourcennutzung der Umgebung ist Ausführungsberechtigung erforderlich.",
+      "metricsUnavailable": "Die Ressourcennutzung der Umgebung ist vorübergehend nicht verfügbar."
     },
     "flowerCompanion": {
       "openAria": "Flower-Begleitbereich. {status}",

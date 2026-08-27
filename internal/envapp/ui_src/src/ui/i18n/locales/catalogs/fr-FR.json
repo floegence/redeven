@@ -459,7 +459,7 @@
       "envTypeRemote": "Distant"
     },
     "runtimeStatus": {
-      "triggerLabel": "Détails de l’environnement d’exécution pour {environment}",
+      "triggerLabel": "État de l’environnement {environment}",
       "runtime": "Environnement d’exécution",
       "version": "Version",
       "started": "Démarré",
@@ -468,8 +468,8 @@
       "unavailable": "Indisponible",
       "connectionUnavailable": "Connectez-vous à l’environnement d’exécution pour charger les détails.",
       "detailsUnavailable": "Les détails de l’environnement d’exécution sont temporairement indisponibles.",
-      "readPermissionRequired": "L’autorisation de lecture est requise pour afficher l’utilisation.",
-      "metricsUnavailable": "L’utilisation de l’environnement d’exécution est temporairement indisponible."
+      "monitorPermissionRequired": "L’autorisation d’exécution est requise pour afficher l’utilisation des ressources de l’environnement.",
+      "metricsUnavailable": "L’utilisation des ressources de l’environnement est temporairement indisponible."
     },
     "flowerCompanion": {
       "openAria": "Volet Flower. {status}",

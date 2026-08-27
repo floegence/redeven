@@ -1,29 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
-import { fromWireRuntimeProcessMetricsResponse } from './monitor';
+import { fromWireSysMonitorResponse } from './monitor';
 
-describe('Runtime process metrics codec', () => {
-  it('maps the wire fields without changing multicore CPU values', () => {
-    expect(fromWireRuntimeProcessMetricsResponse({
-      cpu_percent: 142.25,
-      memory_bytes: 268_435_456,
-      sampled_at_ms: 9876,
-    })).toEqual({
-      cpuPercent: 142.25,
-      memoryBytes: 268_435_456,
-      sampledAtMs: 9876,
-    });
-  });
-
-  it('keeps decoded usage values non-negative', () => {
-    expect(fromWireRuntimeProcessMetricsResponse({
-      cpu_percent: -1,
-      memory_bytes: -2,
-      sampled_at_ms: -3,
-    })).toEqual({
-      cpuPercent: 0,
-      memoryBytes: 0,
-      sampledAtMs: 0,
+describe('System monitor codec', () => {
+  it('maps whole-environment CPU and memory fields', () => {
+    expect(fromWireSysMonitorResponse({
+      cpu_usage: 17.5,
+      cpu_cores: 8,
+      memory_total_bytes: 17_179_869_184,
+      memory_used_bytes: 9_663_676_416,
+      network_bytes_received: 1,
+      network_bytes_sent: 2,
+      network_speed_received: 3,
+      network_speed_sent: 4,
+      platform: 'linux',
+      processes: [],
+      timestamp_ms: 9876,
+    })).toMatchObject({
+      cpuUsage: 17.5,
+      cpuCores: 8,
+      memoryTotalBytes: 17_179_869_184,
+      memoryUsedBytes: 9_663_676_416,
+      timestampMs: 9876,
     });
   });
 });

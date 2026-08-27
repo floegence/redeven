@@ -3562,25 +3562,6 @@ export const redevenWireSchemas = {
       "pid"
     ]
   },
-  "wire_runtime_process_metrics_resp": {
-    "kind": "object",
-    "properties": {
-      "cpu_percent": {
-        "kind": "number"
-      },
-      "memory_bytes": {
-        "kind": "number"
-      },
-      "sampled_at_ms": {
-        "kind": "number"
-      }
-    },
-    "required": [
-      "cpu_percent",
-      "memory_bytes",
-      "sampled_at_ms"
-    ]
-  },
   "wire_sys_monitor_resp": {
     "kind": "object",
     "properties": {
@@ -3595,6 +3576,12 @@ export const redevenWireSchemas = {
         "item": {
           "kind": "number"
         }
+      },
+      "memory_total_bytes": {
+        "kind": "number"
+      },
+      "memory_used_bytes": {
+        "kind": "number"
       },
       "network_bytes_received": {
         "kind": "number"
@@ -3648,6 +3635,8 @@ export const redevenWireSchemas = {
     "required": [
       "cpu_cores",
       "cpu_usage",
+      "memory_total_bytes",
+      "memory_used_bytes",
       "network_bytes_received",
       "network_bytes_sent",
       "network_speed_received",
@@ -5511,7 +5500,6 @@ export const redevenWireSchemaNames = {
   "fromWireGitMergeBranchResponse": "wire_git_merge_branch_resp",
   "fromWireSysMonitorResponse": "wire_sys_monitor_resp",
   "fromWireSysMonitorKillProcessResponse": "wire_sys_monitor_kill_process_resp",
-  "fromWireRuntimeProcessMetricsResponse": "wire_runtime_process_metrics_resp",
   "fromWireSessionsListActiveResponse": "wire_sessions_list_active_resp",
   "fromWireSysPingResponse": "wire_sys_ping_resp",
   "fromWireSysUpgradeResponse": "wire_sys_upgrade_resp",

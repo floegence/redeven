@@ -15,32 +15,34 @@ describe('Redeven v1 terminal notifications', () => {
     expect(new Set(typeIds).size).toBe(typeIds.length);
   });
 
-  it('calls the read-only Runtime metrics RPC with its dedicated schema', async () => {
+  it('decodes whole-environment memory from the existing system monitor RPC', async () => {
     const call = vi.fn(async (
       _typeId: number,
       _payload: unknown,
       decodeResponse: (payload: unknown) => unknown,
-    ) => decodeResponse({ cpu_percent: 17.5, memory_bytes: 67_108_864, sampled_at_ms: 1234 }));
+    ) => decodeResponse({
+      cpu_usage: 17.5,
+      cpu_cores: 8,
+      memory_total_bytes: 17_179_869_184,
+      memory_used_bytes: 9_663_676_416,
+      network_bytes_received: 1,
+      network_bytes_sent: 2,
+      network_speed_received: 3,
+      network_speed_sent: 4,
+      platform: 'linux',
+      processes: [],
+      timestamp_ms: 1234,
+    }));
     const rpc = createRedevenV1Rpc({ call, onNotify: vi.fn() } as any);
 
-    await expect(rpc.monitor.getRuntimeProcessMetrics()).resolves.toEqual({
-      cpuPercent: 17.5,
-      memoryBytes: 67_108_864,
-      sampledAtMs: 1234,
+    await expect(rpc.monitor.getSysMonitor()).resolves.toMatchObject({
+      cpuUsage: 17.5,
+      memoryTotalBytes: 17_179_869_184,
+      memoryUsedBytes: 9_663_676_416,
+      timestampMs: 1234,
     });
-    expect(redevenV1TypeIds.monitor.runtimeProcessMetrics).toBe(3003);
-    expect(call).toHaveBeenCalledWith(3003, {}, expect.any(Function));
-  });
-
-  it('rejects a malformed Runtime metrics response', async () => {
-    const call = vi.fn(async (
-      _typeId: number,
-      _payload: unknown,
-      decodeResponse: (payload: unknown) => unknown,
-    ) => decodeResponse({ cpu_percent: 1, memory_bytes: 2 }));
-    const rpc = createRedevenV1Rpc({ call, onNotify: vi.fn() } as any);
-
-    await expect(rpc.monitor.getRuntimeProcessMetrics()).rejects.toThrow();
+    expect(redevenV1TypeIds.monitor.sysMonitor).toBe(3001);
+    expect(call).toHaveBeenCalledWith(3001, {}, expect.any(Function));
   });
 
   it('keeps terminal metadata notifications on unique consecutive type IDs', () => {

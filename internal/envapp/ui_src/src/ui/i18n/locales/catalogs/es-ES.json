@@ -459,7 +459,7 @@
       "envTypeRemote": "Remoto"
     },
     "runtimeStatus": {
-      "triggerLabel": "Detalles del tiempo de ejecución de {environment}",
+      "triggerLabel": "Estado del entorno {environment}",
       "runtime": "Tiempo de ejecución",
       "version": "Versión",
       "started": "Inicio",
@@ -468,8 +468,8 @@
       "unavailable": "No disponible",
       "connectionUnavailable": "Conéctate al tiempo de ejecución para cargar los detalles.",
       "detailsUnavailable": "Los detalles del tiempo de ejecución no están disponibles temporalmente.",
-      "readPermissionRequired": "Se requiere permiso de lectura para ver el uso.",
-      "metricsUnavailable": "El uso del tiempo de ejecución no está disponible temporalmente."
+      "monitorPermissionRequired": "Se requiere permiso de ejecución para ver el uso de recursos del entorno.",
+      "metricsUnavailable": "El uso de recursos del entorno no está disponible temporalmente."
     },
     "flowerCompanion": {
       "openAria": "Panel complementario de Flower. {status}",

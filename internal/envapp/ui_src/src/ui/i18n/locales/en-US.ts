@@ -1222,7 +1222,7 @@ export const enUS = defineDictionary({
       envTypeRemote: 'Remote',
     },
     runtimeStatus: {
-      triggerLabel: 'Runtime details for {environment}',
+      triggerLabel: 'Environment status for {environment}',
       runtime: 'Runtime',
       version: 'Version',
       started: 'Started',
@@ -1231,8 +1231,8 @@ export const enUS = defineDictionary({
       unavailable: 'Unavailable',
       connectionUnavailable: 'Connect to the Runtime to load details.',
       detailsUnavailable: 'Runtime details are temporarily unavailable.',
-      readPermissionRequired: 'Read permission is required to view usage.',
-      metricsUnavailable: 'Runtime usage is temporarily unavailable.',
+      monitorPermissionRequired: 'Execute permission is required to view environment usage.',
+      metricsUnavailable: 'Environment usage is temporarily unavailable.',
     },
     flowerCompanion: {
       openAria: 'Flower companion. {status}',
