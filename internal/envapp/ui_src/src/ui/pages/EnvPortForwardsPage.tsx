@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ExternalLink, Globe, Plus, RefreshIcon, Save, Search, Trash, Play, Stop, Refresh, FileText, Copy, Pencil } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ExternalLink, Globe, Plus, RefreshIcon, Save, Search, Trash, Play, Stop, Refresh, FileText } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -41,6 +41,13 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
+import {
+  ServiceTemplateCatalog,
+  ServiceTemplateIdentity,
+  type ServiceTemplateCategory,
+  type ServiceTemplateKind,
+  type ServiceTemplatePresentation,
+} from './ServiceTemplateCatalog';
 import {
   desktopShellWebServiceWindowOpenAvailable,
   openWebServiceWindowInDesktopShell,
@@ -135,7 +142,6 @@ type ManagedCatalogTemplate = Readonly<{
 
 type ManagedOperation = Readonly<{ operation_id: string; service_id: string; state: string; stage: string; progress_current: number; progress_total: number; error_message?: string }>;
 type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
-type TemplateCategory = 'host' | 'container';
 type TemplateDrawerView = 'catalog' | 'install' | 'editor';
 type TemplateEditorDraft = {
   templateID?: string;
@@ -576,6 +582,30 @@ function managedDeploymentLabel(deployment: ManagedDeployment, i18n: WebServices
   }
 }
 
+function managedTemplateKind(template: ManagedCatalogTemplate): ServiceTemplateKind {
+  if (template.deployment === 'native' || template.deployment === 'host') return 'host';
+  if (template.deployment === 'compose' || template.container_mode === 'compose') return 'compose';
+  return 'container';
+}
+
+function managedTemplateLocalizedIdentity(template: ManagedCatalogTemplate, i18n: WebServicesI18n): Readonly<{ name: string; description: string }> {
+  if (template.source !== 'builtin') return { name: template.name, description: template.description };
+  switch (template.template_id) {
+    case 'deepseek-harness-host':
+      return {
+        name: i18n.t('webServices.managed.deepSeekHarnessName'),
+        description: i18n.t('webServices.managed.deepSeekHarnessHostDescription'),
+      };
+    case 'deepseek-harness-container':
+      return {
+        name: i18n.t('webServices.managed.deepSeekHarnessName'),
+        description: i18n.t('webServices.managed.deepSeekHarnessContainerDescription'),
+      };
+    default:
+      return { name: template.name, description: template.description };
+  }
+}
+
 function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const running = () => props.service.observed_state === 'running';
@@ -850,7 +880,7 @@ export function EnvPortForwardsPage() {
   const [workspacePath, setWorkspacePath] = createSignal('');
   const [templateDrawerOpen, setTemplateDrawerOpen] = createSignal(false);
   const [templateDrawerView, setTemplateDrawerView] = createSignal<TemplateDrawerView>('catalog');
-  const [templateCategory, setTemplateCategory] = createSignal<TemplateCategory>('host');
+  const [templateCategory, setTemplateCategory] = createSignal<ServiceTemplateCategory>('host');
   const [templateSearch, setTemplateSearch] = createSignal('');
   const [selectedTemplateID, setSelectedTemplateID] = createSignal<string | null>(null);
   const [templateDraft, setTemplateDraft] = createSignal<TemplateEditorDraft | null>(null);
@@ -1053,15 +1083,46 @@ export function EnvPortForwardsPage() {
   };
 
   const templateInstalled = (template: ManagedCatalogTemplate) => managedState().some((service) => service.service_family_id === template.service_family_id);
+  const templatePresentation = (template: ManagedCatalogTemplate): ServiceTemplatePresentation => {
+    const identity = managedTemplateLocalizedIdentity(template, i18n);
+    return {
+      id: template.template_id,
+      name: identity.name,
+      description: identity.description,
+      source: template.source,
+      kind: managedTemplateKind(template),
+      deploymentLabel: managedDeploymentLabel(template.deployment, i18n),
+      version: template.version,
+      developerPreview: template.developer_preview,
+      available: template.available,
+      availabilityReason: templateUnavailableReason(template),
+      installed: templateInstalled(template),
+      duplicateable: template.duplicateable,
+      editable: template.editable,
+    };
+  };
+  const templatePresentations = createMemo(() => managedTemplates().map(templatePresentation));
+  const templateCounts = createMemo(() => templatePresentations().reduce(
+    (counts, template) => {
+      counts[template.kind === 'host' ? 'host' : 'container'] += 1;
+      return counts;
+    },
+    { host: 0, container: 0 },
+  ));
   const filteredTemplates = createMemo(() => {
     const query = templateSearch().trim().toLowerCase();
-    return managedTemplates().filter((template) => {
-      const isHost = template.deployment === 'native' || template.deployment === 'host';
+    return templatePresentations().filter((template) => {
+      const isHost = template.kind === 'host';
       if ((templateCategory() === 'host') !== isHost) return false;
       if (!query) return true;
-      return `${template.name}\n${template.description}\n${template.version}`.toLowerCase().includes(query);
+      return `${template.name}\n${template.description}\n${template.version ?? ''}\n${template.deploymentLabel}`.toLowerCase().includes(query);
     });
   });
+  const selectedTemplatePresentation = createMemo(() => {
+    const template = selectedTemplate();
+    return template ? templatePresentation(template) : null;
+  });
+  const templateByID = (templateID: string) => managedTemplates().find((template) => template.template_id === templateID);
 
   const openTemplateCatalog = () => {
     setTemplateDrawerView('catalog');
@@ -1080,6 +1141,12 @@ export function EnvPortForwardsPage() {
   const beginTemplateCreate = (kind: 'host' | 'container' | 'compose') => {
     setTemplateDraft(emptyTemplateDraft(kind));
     setTemplateDrawerView('editor');
+  };
+
+  const beginTemplateDuplicate = (template: ManagedCatalogTemplate) => {
+    const identity = managedTemplateLocalizedIdentity(template, i18n);
+    setTemplateDuplicate(template);
+    setTemplateDuplicateName(i18n.t('webServices.managed.copyName', { name: identity.name }));
   };
 
   const beginTemplateEdit = (template: ManagedCatalogTemplate) => {
@@ -1638,11 +1705,9 @@ export function EnvPortForwardsPage() {
         onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) setTemplateDrawerOpen(open); }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
-        footer={
+        footer={templateDrawerView() === 'catalog' ? undefined : (
           <div class="flex w-full items-center justify-between gap-2">
-            <Show when={templateDrawerView() !== 'catalog'} fallback={<span />}>
-              <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); }} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
-            </Show>
+            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); }} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             <div class="ml-auto flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => setTemplateDrawerOpen(false)} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
@@ -1655,52 +1720,51 @@ export function EnvPortForwardsPage() {
               </Show>
             </div>
           </div>
-        }
+        )}
       >
         <div class="min-h-0 space-y-4 p-1" data-testid="service-template-drawer">
           <Show when={templateDrawerView() === 'catalog'}>
-            <div class="sticky top-0 z-10 -mx-1 space-y-3 bg-card px-1 pb-2">
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="inline-flex rounded-md border bg-muted/30 p-1">
-                  <Button size="sm" variant={templateCategory() === 'host' ? 'default' : 'ghost'} onClick={() => setTemplateCategory('host')}>{i18n.t('webServices.managed.hostTemplates')}</Button>
-                  <Button size="sm" variant={templateCategory() === 'container' ? 'default' : 'ghost'} onClick={() => setTemplateCategory('container')}>{i18n.t('webServices.managed.containerTemplates')}</Button>
-                </div>
-                <div class="flex items-center gap-2">
-                  <Show when={templateCategory() === 'host'} fallback={<><Button size="sm" variant="outline" onClick={() => beginTemplateCreate('container')} disabled={!canManageManagedService()}><Plus class="mr-1 h-3.5 w-3.5" />{i18n.t('webServices.managed.newContainerTemplate')}</Button><Button size="sm" variant="outline" onClick={() => beginTemplateCreate('compose')} disabled={!canManageManagedService()}><Plus class="mr-1 h-3.5 w-3.5" />{i18n.t('webServices.managed.newComposeTemplate')}</Button></>}>
-                    <Button size="sm" variant="outline" onClick={() => beginTemplateCreate('host')} disabled={!canManageManagedService()}><Plus class="mr-1 h-3.5 w-3.5" />{i18n.t('webServices.managed.newHostTemplate')}</Button>
-                  </Show>
-                </div>
-              </div>
-              <div class="relative"><Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={templateSearch()} onInput={(event) => setTemplateSearch(event.currentTarget.value)} placeholder={i18n.t('webServices.managed.searchTemplates')} class="pl-8" /></div>
-            </div>
-            <Show when={filteredTemplates().length > 0} fallback={<div class="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noTemplates')}</div>}>
-              <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <For each={filteredTemplates()}>{(template) => (
-                  <Card class={cn('border transition-colors', !template.available && 'opacity-70', redevenSurfaceRoleClass('panelInteractive'))} data-template-id={template.template_id}>
-                    <CardHeader class="pb-2">
-                      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><CardTitle class="truncate text-sm">{template.name}</CardTitle><CardDescription class="mt-1 line-clamp-2 text-xs">{template.description}</CardDescription></div><Tag variant={template.source === 'builtin' ? 'info' : 'neutral'} tone="soft" size="sm">{template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}</Tag></div>
-                    </CardHeader>
-                    <CardContent class="space-y-2 pb-2 pt-0 text-xs">
-                      <div class="flex flex-wrap gap-1.5"><Tag variant="neutral" tone="soft" size="sm">{managedDeploymentLabel(template.deployment, i18n)}</Tag><Show when={template.version}><Tag variant="neutral" tone="soft" size="sm">v{template.version}</Tag></Show><Show when={template.developer_preview}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag></Show></div>
-                      <Show when={!template.available}><div class="flex items-start gap-2 rounded-md border border-warning/25 bg-warning/[0.06] p-2 text-warning"><AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{templateUnavailableReason(template)}</span></div></Show>
-                      <Show when={templateInstalled(template)}><p class="text-muted-foreground">{i18n.t('webServices.managed.templateInstalled')}</p></Show>
-                    </CardContent>
-                    <CardFooter class={cn('flex flex-wrap items-center gap-1 border-t pt-2', redevenDividerRoleClass())}>
-                      <Button size="sm" variant="default" onClick={() => beginTemplateInstall(template)} disabled={!template.available || templateInstalled(template) || !canManageManagedService()}>{templateInstalled(template) ? i18n.t('webServices.managed.installed') : i18n.t('webServices.managed.deploy')}</Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setTemplateDuplicate(template); setTemplateDuplicateName(i18n.t('webServices.managed.copyName', { name: template.name })); }} disabled={!template.duplicateable || !canManageManagedService()} title={i18n.t('webServices.managed.duplicate')}><Copy class="h-3.5 w-3.5" /></Button>
-                      <Show when={template.editable}><Button size="sm" variant="ghost" onClick={() => beginTemplateEdit(template)} disabled={!canManageManagedService()} title={i18n.t('webServices.managed.editTemplate')}><Pencil class="h-3.5 w-3.5" /></Button><Button size="sm" variant="ghost" onClick={() => setTemplateDelete(template)} disabled={templateInstalled(template) || !canManageManagedService()} title={i18n.t('webServices.managed.deleteTemplate')}><Trash class="h-3.5 w-3.5" /></Button></Show>
-                    </CardFooter>
-                  </Card>
-                )}</For>
-              </div>
-            </Show>
+            <ServiceTemplateCatalog
+              category={templateCategory()}
+              query={templateSearch()}
+              hostCount={templateCounts().host}
+              containerCount={templateCounts().container}
+              templates={filteredTemplates()}
+              loading={managedLoading()}
+              canManage={canManageManagedService()}
+              onCategoryChange={setTemplateCategory}
+              onQueryChange={setTemplateSearch}
+              onCreate={beginTemplateCreate}
+              onDeploy={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }}
+              onDuplicate={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateDuplicate(template); }}
+              onEdit={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateEdit(template); }}
+              onDelete={(templateID) => { const template = templateByID(templateID); if (template) setTemplateDelete(template); }}
+            />
           </Show>
 
           <Show when={templateDrawerView() === 'install' && selectedTemplate()} keyed>{(template) => (
             <div class="space-y-5">
-              <div class="rounded-lg border bg-muted/20 p-4"><div class="flex items-center gap-2"><h3 class="text-base font-semibold">{template.name}</h3><Tag variant={template.source === 'builtin' ? 'info' : 'neutral'} tone="soft" size="sm">{template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}</Tag></div><p class="mt-1 text-sm text-muted-foreground">{template.description}</p></div>
-              <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.workspace')}</label><Input value={workspacePath()} onInput={(event) => setWorkspacePath(event.currentTarget.value)} disabled={managedBusy()} class="w-full font-mono" placeholder={i18n.t('webServices.managed.workspacePlaceholder')} /><div class="mt-2 flex flex-wrap gap-1.5"><For each={template.workspace_roots ?? []}>{(root) => <Button size="sm" variant="ghost" onClick={() => setWorkspacePath(root.path)} disabled={managedBusy()} title={root.path}>{root.label || root.path}</Button>}</For></div></div>
-              <div class="grid gap-2 rounded-md border p-3 text-xs text-muted-foreground sm:grid-cols-2"><div><span class="text-foreground">{i18n.t('webServices.managed.currentEnvironment')}:</span> {ctx.env()?.name || ctx.env_id()}</div><div><span class="text-foreground">{i18n.t('webServices.managed.deployment')}:</span> {managedDeploymentLabel(template.deployment, i18n)}</div><div><span class="text-foreground">{i18n.t('webServices.managed.version')}:</span> {template.version || i18n.t('webServices.managed.customVersion')}</div><div><span class="text-foreground">{i18n.t('webServices.managed.dataLocation')}:</span> {i18n.t('webServices.managed.managedPrivateData')}</div></div>
+              <Show when={selectedTemplatePresentation()} keyed>{(presentation) => (
+                <div class="service-template-install-identity rounded-xl border p-4">
+                  <ServiceTemplateIdentity template={presentation} />
+                </div>
+              )}</Show>
+              <section class="service-template-install-section border-t pt-4">
+                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.workspaceSection')}</h3>
+                <p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.workspaceSectionDescription')}</p>
+                <label class="mb-1 mt-3 block text-xs font-medium">{i18n.t('webServices.managed.workspace')}</label>
+                <Input value={workspacePath()} onInput={(event) => setWorkspacePath(event.currentTarget.value)} disabled={managedBusy()} class="w-full font-mono" placeholder={i18n.t('webServices.managed.workspacePlaceholder')} />
+                <div class="mt-2 flex flex-wrap gap-1.5"><For each={template.workspace_roots ?? []}>{(root) => <Button size="sm" variant="ghost" onClick={() => setWorkspacePath(root.path)} disabled={managedBusy()} title={root.path}>{root.label || root.path}</Button>}</For></div>
+              </section>
+              <section class="service-template-install-section border-t pt-4">
+                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.deploymentInformation')}</h3>
+                <dl class="mt-3 grid gap-x-5 gap-y-3 text-xs sm:grid-cols-2">
+                  <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.currentEnvironment')}</dt><dd class="mt-1 font-medium text-foreground">{ctx.env()?.name || ctx.env_id()}</dd></div>
+                  <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.deployment')}</dt><dd class="mt-1 font-medium text-foreground">{managedDeploymentLabel(template.deployment, i18n)}</dd></div>
+                  <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.version')}</dt><dd class="mt-1 font-mono text-foreground">{template.version || i18n.t('webServices.managed.customVersion')}</dd></div>
+                  <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.dataLocation')}</dt><dd class="mt-1 text-foreground">{i18n.t('webServices.managed.managedPrivateData')}</dd></div>
+                </dl>
+              </section>
               <Show when={template.docker_source_url}><div class="rounded-md border border-warning/25 bg-warning/[0.06] p-3 text-xs"><div class="font-medium">{i18n.t('webServices.managed.communityImage')}</div><p class="mt-1 text-muted-foreground">{i18n.t('webServices.managed.communityImageNote')}</p></div></Show>
               <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
               <Show when={template.source === 'builtin'}><p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.apiKeyNote')}</p></Show>

@@ -2,6 +2,7 @@
 @import '@floegence/floe-webapp-core/tailwind';
 @import './styles/redeven.css';
 @import './ui/plugins/plugin-motion.css';
+@import './ui/pages/service-template-center.css';
 @import './ui/activity-flower-shell.css';
 
 @source './**/*.{ts,tsx,html}';

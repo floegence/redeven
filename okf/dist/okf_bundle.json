@@ -4346,15 +4346,15 @@
         "title": "Managed Web Service Templates",
         "type": "Product Contract"
       },
-      "body_length": 6105,
+      "body_length": 7476,
       "summary": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.\n- Outcome: users open one right-side Service templates drawer, browse host or container cards, create custom definitions, duplicate any complete definition, and deploy into the current Environment without crowding the Web Services page.\n- Invariants: built-ins are immutable; custom templates are explicit and revisioned; duplication copies definition only into a new family; container cards stay visible with a concrete disabled reason; deployed services use snapshots rather than live definitions.\n- Failure boundary: malformed, incomplete, unsafe, unavailable, or conflicting definitions are rejected before lifecycle work. A template with an installed service cannot be deleted.",
       "sections": [
         {
           "id": "interaction-contract",
           "title": "Interaction contract",
           "level": 1,
-          "body": "The Web Services header provides one **Service templates** action. It opens a large right-side drawer with search and **Host templates** / **Container templates** categories. This replaces the separate one-click-deployment strip. Managed and manually registered services remain in one responsive main grid.\n\nContainer cards remain discoverable but disabled when Docker is unavailable, the Environment is itself in a container, workspace mounting is unavailable, or Docker Compose is missing. The card explains the exact reason. DeepSeek Harness is represented by separate reviewed host and community-container cards; the latter links its source and is never described as an official DeepSeek image.\n\nUsers with read permission can inspect templates. Users with Web Service read, write, and execute permission can create, edit, duplicate, delete, or deploy custom templates. The drawer editor provides metadata, endpoint/health paths, host lifecycle scripts, guided single-container fields, and Compose YAML. User-visible copy is localized in every published locale.",
-          "char_count": 1065
+          "body": "The Web Services header provides one **Service templates** action. It opens a large right-side drawer and replaces the separate one-click-deployment strip. The catalog uses one sticky toolbar for category counts, search, and a permission-aware create menu. Host and container definitions are distinct categories; built-in and custom definitions are separate groups inside each category. Managed and manually registered services remain in one responsive main grid.\n\nCatalog cards are full-width service identities rather than generic form cards. Each uses a neutral kind icon, localized name and description, one metadata line, one explicit availability state, one primary deployment action, and a labeled overflow menu for duplicate, edit, and delete. Unavailable definitions remain fully readable and state the exact disabled reason; installed definitions use a success state. The catalog has no redundant footer or cancel action and closes through the drawer close action or Escape. Deployment and editor views keep their fixed operation footer, and the deployment view reuses the selected service identity before workspace, deployment, data, and operation information.\n\nContainer cards remain discoverable but disabled when Docker is unavailable, the Environment is itself in a container, workspace mounting is unavailable, or Docker Compose is missing. The card explains the exact reason. DeepSeek Harness is represented by separate reviewed host and community-container cards; the latter links its source and is never described as an official DeepSeek image.\n\nUsers with read permission can inspect templates. Users with Web Service read, write, and execute permission can create, edit, duplicate, delete, or deploy custom templates. The drawer editor provides metadata, endpoint/health paths, host lifecycle scripts, guided single-container fields, and Compose YAML. User-visible copy is localized in every published locale.",
+          "char_count": 1930
         },
         {
           "id": "definition-and-duplication-contract",
@@ -4393,9 +4393,19 @@
           "description": "Routes template APIs and applies permissions, body limits, stable errors, and bounded audit details."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:0:presents the drawer, categories, disabled reasons, custom editors, duplication, deployment, and unified service grid.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:0:owns template data, deployment and editor state, and the unified service grid.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx",
-          "description": "Presents the drawer, categories, disabled reasons, custom editors, duplication, deployment, and unified service grid."
+          "description": "Owns template data, deployment and editor state, and the unified service grid."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx:0:presents the catalog toolbar, grouping, service identities, availability states, and card actions.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx",
+          "description": "Presents the catalog toolbar, grouping, service identities, availability states, and card actions."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/service-template-center.css:0:defines token-based responsive card surfaces, focus-compatible controls, subtle pointer motion, and reduced-motion behavior.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/service-template-center.css",
+          "description": "Defines token-based responsive card surfaces, focus-compatible controls, subtle pointer motion, and reduced-motion behavior."
         },
         {
           "id": "redeven:internal/managedwebservice/templates_test.go:0:covers independent duplication, immutable hash identity, and compose host-escape rejection.",
@@ -4411,6 +4421,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx:0:covers discovery, container unavailability, duplication, unified cards, and uninstall interaction.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx",
           "description": "Covers discovery, container unavailability, duplication, unified cards, and uninstall interaction."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx:0:covers grouping, counts, state presentation, permissions, search, and card actions.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx",
+          "description": "Covers grouping, counts, state presentation, permissions, search, and card actions."
         }
       ],
       "snippet": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.",
@@ -10222,5 +10237,5 @@
       ]
     }
   ],
-  "source_sha256": "2efe61a1689e83e883db82716c43703ae83fb4d290f990f06b81036dbf869c1e"
+  "source_sha256": "3ceb9c2b4a6dabaa3f7bab19d2fa1e87e71a4657570aa7a6bdf20922121510f1"
 }
