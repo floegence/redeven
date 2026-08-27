@@ -60,6 +60,8 @@ function firstCheckStep(location: DesktopRuntimeLifecycleLocation): DesktopRunti
       return 'checking_existing_runtime';
     case 'local_container':
       return 'checking_container';
+    case 'wsl_host':
+      return 'checking_host';
     case 'ssh_host':
       return 'checking_host';
     case 'ssh_container':
@@ -82,6 +84,8 @@ function planningStepIDs(
       return ['checking_existing_runtime'];
     case 'local_container':
       return LOCAL_CONTAINER_PLANNING_STEPS;
+    case 'wsl_host':
+      return HOST_PLANNING_STEPS;
     case 'ssh_host':
       return HOST_PLANNING_STEPS;
     case 'ssh_container':

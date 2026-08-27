@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
+  createWSLRuntimeHostExecutor,
 } from './runtimeHostAccess';
 import { DesktopOperationFailureError } from './desktopOperationFailure';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
@@ -57,6 +58,40 @@ describe('runtimeHostAccess', () => {
         ssh_port: 2222,
       },
     });
+  });
+
+  it('passes WSL identity and guest commands as argv without shell interpolation', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-wsl-host-test-'));
+    const outputPath = path.join(tempDir, 'argv.txt');
+    const wslPath = path.join(tempDir, 'wsl-test');
+    await fs.writeFile(wslPath, [
+      '#!/bin/sh',
+      `printf '%s\\n' "$@" > '${outputPath}'`,
+    ].join('\n'), { mode: 0o755 });
+    const executor = createWSLRuntimeHostExecutor({
+      kind: 'wsl_host',
+      distribution_name: 'Ubuntu 24.04; echo unsafe',
+      linux_user: 'dev user',
+    }, { wslBinary: wslPath });
+
+    await executor.run(['redeven', 'desktop-bridge'], {
+      env: {
+        REDEVEN_TEST_CONTEXT: 'value with spaces',
+        'BAD-NAME': 'ignored',
+      },
+    });
+
+    expect((await fs.readFile(outputPath, 'utf8')).trim().split('\n')).toEqual([
+      '--distribution',
+      'Ubuntu 24.04; echo unsafe',
+      '--user',
+      'dev user',
+      '--exec',
+      'env',
+      'REDEVEN_TEST_CONTEXT=value with spaces',
+      'redeven',
+      'desktop-bridge',
+    ]);
   });
 
   it('surfaces missing local host commands as structured command-not-found errors', async () => {

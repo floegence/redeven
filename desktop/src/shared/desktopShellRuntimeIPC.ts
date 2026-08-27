@@ -28,7 +28,7 @@ export type DesktopShellRuntimeMaintenanceMethod =
   | 'host_device_handoff'
   | 'manual';
 
-export type DesktopShellRuntimeMaintenanceRuntimeKind = 'local_environment' | 'ssh' | 'external' | 'unknown';
+export type DesktopShellRuntimeMaintenanceRuntimeKind = 'local_environment' | 'wsl' | 'ssh' | 'external' | 'unknown';
 export type DesktopShellRuntimeMaintenanceUpgradePolicy = 'self_upgrade' | 'desktop_release' | 'manual';
 
 export type DesktopShellRuntimeDirectOperationCapability = Readonly<{
@@ -180,6 +180,7 @@ function normalizeRuntimeKind(value: unknown): DesktopShellRuntimeMaintenanceRun
   const runtimeKind = compact(value);
   switch (runtimeKind) {
     case 'local_environment':
+    case 'wsl':
     case 'ssh':
     case 'external':
     case 'unknown':

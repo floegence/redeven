@@ -19,6 +19,7 @@ export type DesktopRuntimeOperationAvailability =
 
 export type DesktopRuntimeOperationMethod =
   | 'local_host'
+  | 'wsl_host'
   | 'ssh_host'
   | 'local_container_exec'
   | 'ssh_container_exec'

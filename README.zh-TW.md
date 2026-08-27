@@ -71,9 +71,11 @@ Redeven 是單一二進位檔，可將您的電腦與伺服器集中到一個瀏
 
 ### Desktop 應用程式
 
-1. 從 [GitHub Releases](https://github.com/floegence/redeven/releases) 下載 Redeven Desktop。
-2. 開啟應用程式並選擇環境：本機、Provider、SSH 主機或已儲存的 URL。
+1. 從 [GitHub Releases](https://github.com/floegence/redeven/releases) 下載 Redeven Desktop。公開發佈目前提供 macOS 與 Linux 安裝程式。在啟用程式碼簽署與已簽署更新驗證前，Windows 11 x64 僅提供內部 WSL 認證組建。
+2. 開啟應用程式。在 macOS 或 Linux 上，可選擇本機、Provider、SSH 主機或已儲存的 URL；在 Windows 上，請在環境中心註冊一個已初始化的 WSL 2 發行版。Desktop 不提供原生本機環境、Windows 執行環境或本機容器執行環境。
 3. 開始工作，工作區會自動在瀏覽器中開啟。
+
+每個已註冊的發行版都是獨立的 WSL 環境。Desktop 會將相符的 Linux x64 執行環境傳輸到該發行版使用者的 `~/.redeven`；它不會安裝或管理 WSL、不使用 `/mnt/c`，也不依賴 `systemd`。結束、更新或解除安裝 Desktop 不會停止 WSL 執行環境或刪除其資料。如需停止，請使用對應環境的「停止」操作。
 
 對於遠端電腦：Desktop 可以透過 SSH 自動安裝相符的 Redeven 版本，並在您選擇後，將該受管理的 SSH 執行階段明確連線至 provider 環境。遠端主機不需要手動設定。
 

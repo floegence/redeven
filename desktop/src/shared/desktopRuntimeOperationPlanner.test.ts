@@ -53,6 +53,24 @@ describe('desktopRuntimeOperationPlanner', () => {
     expect(plans.update).toMatchObject({ availability: 'available', method: 'ssh_host' });
   });
 
+  it('uses the WSL transport method for a managed WSL host Runtime', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: {
+        kind: 'wsl_host',
+        distribution_name: 'Ubuntu-24.04',
+        linux_user: 'alice',
+      },
+      placement: { kind: 'host_process', runtime_root: 'remote_default' },
+      running: false,
+      openable: false,
+    });
+
+    expect(plans.open).toMatchObject({ availability: 'blocked', method: 'wsl_host' });
+    expect(plans.start).toMatchObject({ availability: 'available', method: 'wsl_host' });
+    expect(plans.update).toMatchObject({ availability: 'available', method: 'wsl_host' });
+  });
+
   it('does not expose lifecycle actions when the connection cannot host a supervisor', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'external_local_ui',

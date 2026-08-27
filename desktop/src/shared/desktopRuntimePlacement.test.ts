@@ -11,8 +11,17 @@ import {
 } from './desktopRuntimePlacement';
 
 describe('desktopRuntimePlacement', () => {
-  it('normalizes local and SSH host access separately from placement', () => {
+  it('normalizes local, WSL, and SSH host access separately from placement', () => {
     expect(normalizeDesktopRuntimeHostAccess({ kind: 'local_host' })).toEqual({ kind: 'local_host' });
+    expect(normalizeDesktopRuntimeHostAccess({
+      kind: 'wsl_host',
+      distribution_name: ' Ubuntu 24.04 ',
+      linux_user: ' dev ',
+    })).toEqual({
+      kind: 'wsl_host',
+      distribution_name: 'Ubuntu 24.04',
+      linux_user: 'dev',
+    });
     expect(normalizeDesktopRuntimeHostAccess({
       kind: 'ssh_host',
       ssh: {
@@ -76,6 +85,11 @@ describe('desktopRuntimePlacement', () => {
         auth_mode: 'key_agent',
       },
     });
+    const wslHost = normalizeDesktopRuntimeHostAccess({
+      kind: 'wsl_host',
+      distribution_name: 'Ubuntu 24.04',
+      linux_user: 'dev',
+    });
     const container = normalizeDesktopRuntimePlacement({
       kind: 'container_process',
       container_engine: 'podman',
@@ -86,8 +100,11 @@ describe('desktopRuntimePlacement', () => {
     });
 
     expect(desktopRuntimeTargetID(localHost, { kind: 'host_process', runtime_root: '' }, 'local')).toBe('local:host:local');
+    expect(desktopRuntimeTargetID(wslHost, { kind: 'host_process', runtime_root: 'remote_default' }))
+      .toMatch(/^wsl:host:Ubuntu%2024\.04:dev:/u);
     expect(desktopRuntimeTargetID(localHost, container)).toMatch(/^local:container:podman:dev-container:/u);
     expect(desktopRuntimeTargetID(sshHost, container)).toMatch(/^ssh:container:root%40gzcom:podman:dev-container:/u);
+    expect(() => desktopRuntimeTargetID(wslHost, container)).toThrow('host_process');
   });
 
   it('uses runtime state roots for target identity without changing install roots', () => {
@@ -127,6 +144,11 @@ describe('desktopRuntimePlacement', () => {
         auth_mode: 'key_agent',
       },
     });
+    const wslHost = normalizeDesktopRuntimeHostAccess({
+      kind: 'wsl_host',
+      distribution_name: 'Ubuntu',
+      linux_user: 'dev',
+    });
     const localProcess = normalizeDesktopRuntimePlacement({ kind: 'host_process' });
     const container = normalizeDesktopRuntimePlacement({
       kind: 'container_process',
@@ -141,6 +163,21 @@ describe('desktopRuntimePlacement', () => {
     expect(desktopRuntimeTargetAutoStatusDetectionEnabled(sshHost, container, false)).toBe(false);
     expect(desktopRuntimeTargetAutoStatusDetectionConfigurable(localHost, localProcess)).toBe(true);
     expect(desktopRuntimeTargetAutoStatusDetectionEnabled(localHost, localProcess, false)).toBe(false);
+    expect(desktopRuntimeTargetAutoStatusDetectionConfigurable(wslHost, localProcess)).toBe(false);
+    expect(desktopRuntimeTargetAutoStatusDetectionEnabled(wslHost, localProcess, false)).toBe(true);
+  });
+
+  it('rejects incomplete or multiline WSL identity', () => {
+    expect(() => normalizeDesktopRuntimeHostAccess({
+      kind: 'wsl_host',
+      distribution_name: '',
+      linux_user: 'dev',
+    })).toThrow('WSL distribution name');
+    expect(() => normalizeDesktopRuntimeHostAccess({
+      kind: 'wsl_host',
+      distribution_name: 'Ubuntu\nDebian',
+      linux_user: 'dev',
+    })).toThrow('single line');
   });
 
   it('keeps container target ids stable when concrete container ids change', () => {

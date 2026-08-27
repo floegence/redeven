@@ -71,9 +71,11 @@ Two paths to get started: Desktop (recommended for most users) or CLI.
 
 ### Desktop App
 
-1. Download Redeven Desktop from [GitHub Releases](https://github.com/floegence/redeven/releases).
-2. Open the app. Choose your environment: Local, Provider, SSH Host, or a saved URL.
+1. Download Redeven Desktop from [GitHub Releases](https://github.com/floegence/redeven/releases). Public releases currently provide macOS and Linux installers. Windows 11 x64 remains an internal WSL certification build until code signing and signed update verification are enabled.
+2. Open the app. On macOS or Linux, choose Local, Provider, SSH Host, or a saved URL. On Windows, register an initialized WSL 2 distribution in the Environment Center; Desktop provides no native Local Environment, Windows Runtime, or local container Runtime.
 3. Start working — the workspace opens in your browser automatically.
+
+Each registered distribution is a separate WSL Environment. Desktop transfers its matching Linux x64 Runtime to the distribution user's `~/.redeven`; it does not install or manage WSL, use `/mnt/c`, or require `systemd`. Quitting, updating, or uninstalling Desktop does not stop the WSL Runtime or delete its data. Use Stop on that Environment when you want to stop it.
 
 For remote machines: Desktop can auto-install the matching Redeven release over SSH, then explicitly connect that managed SSH runtime to a provider Environment when you choose to. No manual setup on the remote host.
 

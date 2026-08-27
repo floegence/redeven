@@ -7,6 +7,7 @@ import type { DesktopComponentTaskProgress } from './desktopComponentTaskProgres
 export type DesktopRuntimeLifecycleLocation =
   | 'local_host'
   | 'local_container'
+  | 'wsl_host'
   | 'ssh_host'
   | 'ssh_container';
 
@@ -221,7 +222,11 @@ export function desktopRuntimeLifecycleLocation(
   if (placement.kind === 'container_process') {
     return hostAccess.kind === 'ssh_host' ? 'ssh_container' : 'local_container';
   }
-  return hostAccess.kind === 'ssh_host' ? 'ssh_host' : 'local_host';
+  return hostAccess.kind === 'ssh_host'
+    ? 'ssh_host'
+    : hostAccess.kind === 'wsl_host'
+      ? 'wsl_host'
+      : 'local_host';
 }
 
 export function runtimeLifecycleProgress(

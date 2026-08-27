@@ -172,6 +172,20 @@ test('rejects unexpected artifact directories and tampered receipts', () => {
   }
 });
 
+test('rejects formal Windows assets until signing and update certification are enabled', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-release-collector-'));
+  try {
+    const downloads = createFixture(root);
+    mkdirSync(path.join(downloads, 'desktop-windows-amd64'));
+    assert.throws(
+      () => collect(downloads, path.join(root, 'windows-output'), 'v1.2.3'),
+      /formal Windows release assets are disabled until Authenticode signing and signed update certification are enabled/u,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('rejects a source path replacement after its no-follow descriptor is opened', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-release-collector-'));
   try {

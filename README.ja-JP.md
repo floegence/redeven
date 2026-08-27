@@ -71,9 +71,11 @@ Redeven は、コンピューターとサーバーを 1 つのブラウザータ
 
 ### Desktop アプリ
 
-1. [GitHub Releases](https://github.com/floegence/redeven/releases) から Redeven Desktop をダウンロードします。
-2. アプリを開き、ローカル、Provider、SSH ホスト、または保存済み URL から環境を選択します。
+1. [GitHub Releases](https://github.com/floegence/redeven/releases) から Redeven Desktop をダウンロードします。公開リリースでは現在、macOS と Linux のインストーラーを提供しています。コード署名と署名済み更新の検証が有効になるまで、Windows 11 x64 は内部 WSL 認証ビルドのみです。
+2. アプリを開きます。macOS または Linux では、ローカル、Provider、SSH ホスト、または保存済み URL を選択できます。Windows では、環境センターで初期化済みの WSL 2 ディストリビューションを登録します。Desktop はネイティブのローカル環境、Windows ランタイム、ローカルコンテナーのランタイムを提供しません。
 3. 作業を開始します。ワークスペースはブラウザーで自動的に開きます。
+
+登録した各ディストリビューションは、個別の WSL 環境です。Desktop は対応する Linux x64 ランタイムをディストリビューション利用者の `~/.redeven` に転送します。WSL のインストールや管理、`/mnt/c` の使用、`systemd` への依存は行いません。Desktop を終了、更新、またはアンインストールしても、WSL ランタイムの停止やデータ削除は行われません。停止する場合は、該当する環境の停止操作を使用してください。
 
 リモートマシンでは、Desktop が SSH 経由で対応する Redeven リリースを自動インストールできます。必要に応じて、その管理対象 SSH ランタイムを provider 環境へ明示的に接続できます。リモートホストで手動設定を行う必要はありません。
 

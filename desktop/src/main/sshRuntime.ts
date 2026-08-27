@@ -883,7 +883,7 @@ export function buildManagedSSHReportReadScript(): string {
   ].join('\n');
 }
 
-function buildManagedSSHRuntimeStatusScript(): string {
+export function buildManagedSSHRuntimeStatusScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
@@ -896,7 +896,7 @@ function buildManagedSSHRuntimeStatusScript(): string {
   ].join('\n');
 }
 
-function buildManagedSSHRuntimeProcessCommandScript(): string {
+export function buildManagedSSHRuntimeProcessCommandScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),

@@ -1,13 +1,13 @@
 ---
 type: Desktop Contract
 title: Desktop runtime process lifecycle
-description: One Desktop-owned direct Runtime lifecycle for Local, SSH, and container targets.
-tags: [desktop, runtime, lifecycle, coordination, process, inventory]
+description: One Desktop-owned direct Runtime lifecycle for Local, WSL, SSH, and container targets.
+tags: [desktop, runtime, lifecycle, coordination, process, inventory, wsl]
 timestamp: 2026-08-24T00:00:00Z
 ---
 # Summary
 
-Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLifecycleCoordinator` and execute through the saved direct channel. Gateway and Provider are access-only; Runtime does not expose a second external lifecycle protocol. A direct-channel or filesystem failure can end an operation, while old Runtime, Gateway, data, or process state cannot create another owner or fallback path.
+Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, WSL-host, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLifecycleCoordinator` and execute through the saved direct channel. Gateway and Provider are access-only; Runtime does not expose a second external lifecycle protocol. A direct-channel or filesystem failure can end an operation, while old Runtime, Gateway, data, or process state cannot create another owner or fallback path.
 
 # Contract
 
@@ -21,7 +21,7 @@ Every direct command receives the coordinator cancellation signal and a bounded 
 
 ## Direct execution
 
-Lifecycle execution is selected only from the saved Local, SSH, or container placement. Each operation creates its Launcher Operation before probing or opening transport, then performs only the steps needed by its intent:
+Lifecycle execution is selected only from the saved Local, WSL, SSH, or container placement. Each operation creates its Launcher Operation before probing or opening transport, then performs only the steps needed by its intent:
 
 - Start is idempotent when one verified Runtime is already healthy.
 - Stop is idempotent when inventory is empty and verifies the stopped result.
@@ -39,6 +39,8 @@ The Runtime package contains `redeven` and required Runtime companions only. Run
 Desktop uses the current `redeven` binary as the temporary process tool for exact inventory and best-effort stop. Update and Reinstall extract it from the same already verified Runtime archive that will be installed; they do not build, download, cache, or display a second maintenance component. Start, Stop, and Restart use the installed managed `redeven` and do not prepare a package for inventory. The tool returns typed before/after inventory; it is not resident, stores no lifecycle state, and provides no network API or lock protocol.
 
 Process discovery performs only inventory work. Package build, dependency download, archive preparation, upload, or extraction must appear in the single Runtime-package progress phase and cannot be hidden under process discovery. Preserve Reinstall and Update fail before target replacement when exact inventory or stop cannot be completed. Wipe Reinstall records a process-tool failure and continues only against the user-confirmed exact root. Desktop stops only processes tied to that Runtime root and target namespace; it never scans broadly or prunes a host/container.
+
+WSL-host process behavior uses the same managed-Linux scripts as SSH-host behavior through a different executor. Stop signals only the exact Linux inventory and never terminates the distribution. Desktop exit and Desktop update retire Bridges but do not enter Runtime Stop for WSL targets.
 
 ## Capability and presentation
 
@@ -58,5 +60,6 @@ Runtime owns business services, active sessions, and graceful cleanup after a no
 - `redeven:desktop/src/main/runtimePackageCache.ts:1` - One verified Runtime archive and extraction of its `redeven` process tool.
 - `redeven:desktop/src/main/runtimeProcess.ts:1` - Local Runtime inventory and exact stop operations.
 - `redeven:desktop/src/main/sshRuntime.ts:1` - Direct SSH Runtime execution and one-operation helper session.
+- `redeven:desktop/src/main/managedLinuxRuntime.ts:1` - Shared SSH/WSL managed-Linux package, process, start, and verification contract.
 - `redeven:desktop/src/main/runtimePlacementManager.ts:1` - Direct container Runtime execution.
 - `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Direct-operation versus access-only Environment boundary.

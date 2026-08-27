@@ -87,6 +87,7 @@ import {
   setProviderEnvironmentPinned,
   setSavedEnvironmentPinned,
   setSavedRuntimeTargetPinned,
+  setDefaultFlowerRuntimeTarget,
   updateLocalEnvironmentSettings,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
@@ -98,12 +99,17 @@ import {
   type DesktopSavedRuntimeTarget,
 } from './desktopPreferences';
 import {
+  discoverDesktopWSLDistributions,
+  probeDesktopWSLDistribution,
+} from './desktopWSL';
+import {
   buildLocalEnvironmentDesktopTarget,
   buildManagedLocalRuntimeDesktopTarget,
   desktopSessionKeyFromRuntimeTargetID,
   buildExternalLocalUIDesktopTarget,
   buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
+  buildWSLDesktopTarget,
   desktopSessionTargetsReferToSameEnvironment,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
@@ -234,7 +240,7 @@ import {
   type DesktopSessionTransport,
 } from './desktopSessionTransport';
 import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress, webServiceBrowserDisplayURL } from './navigation';
-import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
+import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
 import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
 import { isWebServiceBrowserDevToolsShortcut } from './webServiceBrowserShortcuts';
@@ -279,7 +285,13 @@ import { parseLaunchReport } from './launchReport';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
+  createWSLRuntimeHostExecutor,
 } from './runtimeHostAccess';
+import {
+  openManagedLinuxRuntimeProcessSession,
+  probeManagedLinuxRuntime,
+  probeManagedLinuxRuntimeStatus,
+} from './managedLinuxRuntime';
 import {
   DefaultDesktopSSHTransportManager,
   DesktopSSHRemoteCommandError,
@@ -631,6 +643,16 @@ import {
   type DesktopRuntimeTargetID,
 } from '../shared/desktopRuntimePlacement';
 import {
+  resolveDesktopPlatformCapabilities,
+} from '../shared/desktopPlatformCapabilities';
+import {
+  DESKTOP_WSL_REFRESH_CHANNEL,
+  DESKTOP_WSL_REGISTER_CHANNEL,
+  DESKTOP_WSL_SET_DEFAULT_CHANNEL,
+  type DesktopWSLActionResponse,
+  type DesktopWSLDiscoverySnapshot,
+} from '../shared/desktopWSL';
+import {
   desktopOpenConnectionLocation,
   openConnectionProgress,
   type DesktopOpenConnectionLocation,
@@ -787,6 +809,11 @@ type LocalEnvironmentRuntimeRecord = Readonly<{
   runtime_handle: DesktopSessionRuntimeHandle;
 }>;
 
+type RuntimeFlowerTarget = Readonly<{
+  record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord;
+  local_environment: DesktopLocalEnvironmentState | null;
+}>;
+
 type SSHRuntimeReadyRecord = Readonly<{
   runtime_key: `ssh:${string}`;
   environment_id: string;
@@ -910,6 +937,8 @@ let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' | 'update_i
 let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopPreferencesLoadPromise: Promise<DesktopPreferences> | null = null;
 let desktopPreferencesMutationTail: Promise<void> = Promise.resolve();
+const desktopPlatformCapabilities = resolveDesktopPlatformCapabilities(process.platform);
+let desktopWSLDiscoverySnapshot: DesktopWSLDiscoverySnapshot | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
 let gatewayStoreCache: GatewayStore | null = null;
 let gatewayLifecycleManagerCache: GatewayLifecycleManager | null = null;
@@ -1092,7 +1121,7 @@ type RuntimeFlowerAttachmentOperation = {
 
 const runtimeFlowerAttachmentOperations = new Map<string, RuntimeFlowerAttachmentOperation>();
 
-function runtimeFlowerBaseURL(record: LocalEnvironmentRuntimeRecord): string {
+function runtimeFlowerBaseURL(record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord): string {
   return requireLocalUIBridgeURL(record.startup);
 }
 
@@ -1138,17 +1167,17 @@ function resolveDesktopBundleVersion(): string {
 }
 
 function desktopBundleTarget(): Readonly<{
-  platform: 'darwin' | 'linux';
+  platform: 'darwin' | 'linux' | 'windows';
   architecture: 'amd64' | 'arm64';
 }> {
-  if (process.platform !== 'darwin' && process.platform !== 'linux') {
+  if (process.platform !== 'darwin' && process.platform !== 'linux' && process.platform !== 'win32') {
     throw new Error(`Desktop bundle platform ${process.platform} is unsupported.`);
   }
   if (process.arch !== 'x64' && process.arch !== 'arm64') {
     throw new Error(`Desktop bundle architecture ${process.arch} is unsupported.`);
   }
   return {
-    platform: process.platform,
+    platform: process.platform === 'win32' ? 'windows' : process.platform,
     architecture: process.arch === 'x64' ? 'amd64' : 'arm64',
   };
 }
@@ -1159,7 +1188,12 @@ async function loadDesktopBundleForStartup(): Promise<DesktopBundle> {
   }
   const target = desktopBundleTarget();
   desktopBundleCache = await loadDesktopBundle({
-    root: path.dirname(bundledRuntimeExecutablePath()),
+    root: resolveDesktopBundleRoot({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appPath: app.getAppPath(),
+      developmentBundleRoot: process.env.REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT,
+    }),
     expectedPlatform: target.platform,
     expectedArchitecture: target.architecture,
     expectedVersion: resolveDesktopBundleVersion(),
@@ -1406,8 +1440,12 @@ function runtimeMatchesProvider(
 
 function providerRuntimeLinkKindForHostAccess(
   hostAccess: DesktopRuntimeHostAccess,
-): 'local_environment' | 'ssh_environment' {
-  return hostAccess.kind === 'ssh_host' ? 'ssh_environment' : 'local_environment';
+): 'local_environment' | 'wsl_environment' | 'ssh_environment' {
+  return hostAccess.kind === 'ssh_host'
+    ? 'ssh_environment'
+    : hostAccess.kind === 'wsl_host'
+      ? 'wsl_environment'
+      : 'local_environment';
 }
 
 function providerRuntimeLinkTargetIDForRuntimeTarget(
@@ -1532,18 +1570,27 @@ type ProviderRuntimeLinkTargetRecord = Readonly<
       label: string;
       record: RuntimePlacementBridgeRecord;
     }
+  | {
+      kind: 'wsl_environment';
+      id: DesktopProviderRuntimeLinkTargetID;
+      label: string;
+      record: RuntimePlacementBridgeRecord;
+    }
 >;
 
 async function resolveProviderRuntimeLinkTarget(
   preferences: DesktopPreferences,
   runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
 ): Promise<ProviderRuntimeLinkTargetRecord | null> {
-  // IMPORTANT: Provider-link operations must resolve the exact Local/SSH runtime
+  // IMPORTANT: Provider-link operations must resolve the exact Local/WSL/SSH runtime
   // target selected by the user. Do not search for "any eligible" runtime here;
   // implicit selection would let provider-card flows affect device-managed work.
   const kind = desktopProviderRuntimeLinkTargetKindFromID(runtimeTargetID);
   const runtimeKey = desktopProviderRuntimeLinkTargetRuntimeKey(runtimeTargetID);
   if (kind === 'local_environment') {
+    if (!desktopPlatformCapabilities.native_host_runtime) {
+      return null;
+    }
     if (runtimeKey !== preferences.local_environment.id) {
       const runtimeTargetKey = runtimeKey as DesktopRuntimeTargetID;
       await refreshWelcomeRuntimeHealthForEnvironment(runtimeKey);
@@ -1576,10 +1623,11 @@ async function resolveProviderRuntimeLinkTarget(
   await refreshWelcomeRuntimeHealthForEnvironment(runtimeKey);
   const bridgeRecord = runtimePlacementBridgeRegistry.get(runtimeKey as DesktopRuntimeTargetID);
   const readyRecord = runtimePlacementReadyByTargetID.get(runtimeKey as DesktopRuntimeTargetID) ?? null;
-  const resolvedBridgeRecord = bridgeRecord ?? (readyRecord?.host_access.kind === 'ssh_host'
+  const expectedHostKind = kind === 'wsl_environment' ? 'wsl_host' : 'ssh_host';
+  const resolvedBridgeRecord = bridgeRecord ?? (readyRecord?.host_access.kind === expectedHostKind
     ? await openRuntimePlacementBridgeForReadyRecord(readyRecord)
     : null);
-  if (resolvedBridgeRecord && resolvedBridgeRecord.target_id === runtimeTargetID && resolvedBridgeRecord.session.host_access.kind === 'ssh_host') {
+  if (resolvedBridgeRecord && resolvedBridgeRecord.target_id === runtimeTargetID && resolvedBridgeRecord.session.host_access.kind === expectedHostKind) {
     return {
       kind,
       id: runtimeTargetID,
@@ -1669,7 +1717,9 @@ async function providerEnvironmentOccupyingRuntime(
     return null;
   }
   const records: ProviderRuntimeLinkTargetRecord[] = [];
-  const localRuntimeRecord = await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment);
+  const localRuntimeRecord = desktopPlatformCapabilities.native_host_runtime
+    ? await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)
+    : null;
   if (localRuntimeRecord) {
     records.push({
       kind: 'local_environment',
@@ -1685,7 +1735,7 @@ async function providerEnvironmentOccupyingRuntime(
     }
     const record = observation.record;
     records.push({
-      kind: record.session.host_access.kind === 'ssh_host' ? 'ssh_environment' : 'local_environment',
+      kind: providerRuntimeLinkKindForHostAccess(record.session.host_access),
       id: record.target_id,
       label: record.label,
       record,
@@ -2007,12 +2057,16 @@ function runtimeHostExecutor(
   credentialScope: string,
   sshPassword?: string,
 ) {
-  return hostAccess.kind === 'ssh_host'
-    ? createSSHRuntimeHostExecutor(desktopSSHTransportManager, hostAccess.ssh, {
+  if (hostAccess.kind === 'ssh_host') {
+    return createSSHRuntimeHostExecutor(desktopSSHTransportManager, hostAccess.ssh, {
         credentialScope,
         sshPassword,
-      })
-    : createLocalRuntimeHostExecutor();
+      });
+  }
+  if (hostAccess.kind === 'wsl_host') {
+    return createWSLRuntimeHostExecutor(hostAccess);
+  }
+  return createLocalRuntimeHostExecutor();
 }
 
 function runtimeContainerResolver(
@@ -2342,6 +2396,89 @@ async function inspectRuntimePlacementTargetState(
       binary_path: details.runtime_root,
       runtime_target_available: status.status !== 'failed',
     };
+  }
+  if (target.placement.kind === 'host_process' && target.hostAccess.kind === 'wsl_host') {
+    const executor = createWSLRuntimeHostExecutor(target.hostAccess);
+    try {
+      const status = await probeManagedLinuxRuntimeStatus({
+        executor,
+        runtime_root: target.placement.runtime_root,
+        runtime_state_root: desktopRuntimePlacementStateRoot(target.placement),
+        runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+        signal: target.signal,
+      });
+      if (status.status === 'ready') {
+        const runtimeService = status.startup.runtime_service;
+        const maintenance = runtimePlacementMaintenanceForRuntimeService(target.targetID, runtimeService);
+        const readyRecord: RuntimePlacementReadyRecord = {
+          runtime_key: target.targetID,
+          environment_id: target.environmentID,
+          label: target.label,
+          target_id: providerRuntimeLinkTargetIDForRuntimeTarget(target.hostAccess, target.targetID),
+          host_access: target.hostAccess,
+          placement: target.placement,
+          runtime_pid: status.startup.pid,
+          runtime_started_at_unix_ms: status.startup.started_at_unix_ms,
+          runtime_service: runtimeService,
+        };
+        runtimePlacementReadyByTargetID.set(target.targetID, readyRecord);
+        return {
+          running: true,
+          startup: status.startup,
+          local_ui_url: '',
+          open_connection_required: true,
+          runtime_service: runtimeService,
+          runtime_control_status: desktopRuntimeControlStatusMissing(
+            'forward_unavailable',
+            'Open this WSL Environment to prepare the private Desktop Bridge.',
+          ),
+          maintenance,
+          placement: target.placement,
+          binary_path: target.placement.runtime_root,
+          ready_record: readyRecord,
+          runtime_target_available: true,
+        };
+      }
+      runtimePlacementReadyByTargetID.delete(target.targetID);
+      if (status.status === 'blocked') {
+        const classification = classifyDesktopRuntimeBlockedLaunchReport(status.report, {
+          target_runtime_version: resolveSSHRuntimeReleaseTag(),
+        });
+        if (classification.kind !== 'stopped' && classification.kind !== 'unverified') {
+          runtimePlacementMaintenanceByTargetID.set(target.targetID, classification.maintenance);
+          return {
+            running: classification.kind === 'restart_required',
+            local_ui_url: '',
+            runtime_control_status: desktopRuntimeControlStatusMissing('not_reported', classification.maintenance.message),
+            maintenance: classification.maintenance,
+            placement: target.placement,
+            runtime_target_available: true,
+          };
+        }
+        return {
+          running: false,
+          local_ui_url: '',
+          runtime_control_status: desktopRuntimeControlStatusMissing(
+            classification.kind === 'stopped' ? 'not_started' : 'unverified',
+            classification.message,
+          ),
+          placement: target.placement,
+          runtime_target_available: true,
+        };
+      }
+      return {
+        running: false,
+        local_ui_url: '',
+        runtime_control_status: desktopRuntimeControlStatusMissing(
+          status.status === 'failed' ? 'unverified' : 'not_started',
+          status.message,
+        ),
+        placement: target.placement,
+        runtime_target_available: status.status !== 'failed',
+      };
+    } finally {
+      await executor.release();
+    }
   }
   if (target.placement.kind !== 'container_process') {
     return {
@@ -3175,13 +3312,13 @@ function gatewayLifecycleManager(): GatewayLifecycleManager {
 
 function directReinstallTargetDescriptors(preferences: DesktopPreferences): readonly ReinstallTargetDescriptor[] {
   const descriptors: ReinstallTargetDescriptor[] = [
-    {
-      environment_id: preferences.local_environment.id,
-      label: preferences.local_environment.label,
-      host_access: { kind: 'local_host' },
-      placement: localHostRuntimeLifecyclePlacement(preferences.local_environment),
-      affected_environment_ids: [preferences.local_environment.id],
-    },
+    ...(desktopPlatformCapabilities.native_local_environment ? [{
+        environment_id: preferences.local_environment.id,
+        label: preferences.local_environment.label,
+        host_access: { kind: 'local_host' as const },
+        placement: localHostRuntimeLifecyclePlacement(preferences.local_environment),
+        affected_environment_ids: [preferences.local_environment.id],
+      }] : []),
     ...preferences.saved_runtime_targets.map((target): ReinstallTargetDescriptor => ({
       environment_id: target.id,
       label: target.label,
@@ -3337,17 +3474,30 @@ async function prepareFreshReinstallRuntimePackage(
   };
   onProgress?.([initial]);
   const report = (progress: ReinstallRuntimePackageProgress) => onProgress?.([progress]);
-  const asset = await prepareDesktopRuntimeUploadAsset({
-    runtimeReleaseTag: releaseTag,
-    releaseBaseURL,
-    assetCacheRoot: desktopRuntimePackageCacheRoot(),
-    packageKind: 'runtime',
-    sourceRuntimeRoot,
-    platform,
-    fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
-    signal,
-  });
-  const archiveSHA256 = asset.cacheEntry?.sha256 ?? crypto.createHash('sha256').update(asset.archiveData).digest('hex');
+  let archiveData: Buffer;
+  let cacheEntry: Awaited<ReturnType<typeof prepareDesktopRuntimeUploadAsset>>['cacheEntry'] | undefined;
+  if (descriptor.host_access.kind === 'wsl_host') {
+    const archivePath = compact(requireDesktopBundle().managed_wsl_archive_path);
+    if (archivePath === '') {
+      throw new Error('The verified embedded Linux x64 Runtime archive is unavailable.');
+    }
+    archiveData = await fs.readFile(archivePath);
+    cacheEntry = undefined;
+  } else {
+    const asset = await prepareDesktopRuntimeUploadAsset({
+      runtimeReleaseTag: releaseTag,
+      releaseBaseURL,
+      assetCacheRoot: desktopRuntimePackageCacheRoot(),
+      packageKind: 'runtime',
+      sourceRuntimeRoot,
+      platform,
+      fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
+      signal,
+    });
+    archiveData = asset.archiveData;
+    cacheEntry = asset.cacheEntry;
+  }
+  const archiveSHA256 = cacheEntry?.sha256 ?? crypto.createHash('sha256').update(archiveData).digest('hex');
   const prepared = await prepareReinstallRuntimePackage({
       executor,
       placement: descriptor.placement,
@@ -3359,16 +3509,16 @@ async function prepareFreshReinstallRuntimePackage(
       architecture: platform.goarch,
       strategy,
       archive_sha256: archiveSHA256,
-      archive_size_bytes: asset.archiveData.byteLength,
+      archive_size_bytes: archiveData.byteLength,
       ...(strategy === 'remote_install'
-        ? { remote_url: buildDesktopSSHReleaseAssetURL(releaseBaseURL, releaseTag, asset.cacheEntry!.key.package_name) }
-        : { archive: asset.archiveData }),
+        ? { remote_url: buildDesktopSSHReleaseAssetURL(releaseBaseURL, releaseTag, cacheEntry!.key.package_name) }
+        : { archive: archiveData }),
       signal,
       on_progress: report,
     });
   return {
     ...prepared,
-    process_helper_archive: runtimeProcessHelperArchiveFromRuntimePackage(asset.archiveData),
+    process_helper_archive: runtimeProcessHelperArchiveFromRuntimePackage(archiveData),
   };
 }
 
@@ -3521,7 +3671,9 @@ function reinstallTargetCoordinator(): ReinstallTargetCoordinator {
         ...(preparedPackage?.process_helper_archive
           ? { helper_archive: preparedPackage.process_helper_archive }
           : { helper_executable: `${targetRoot.replace(/\/$/u, '')}/runtime/managed/bin/redeven` }),
-        local_helper_executable: bundledRuntimeExecutablePath(),
+        ...(descriptor.host_access.kind === 'local_host' && descriptor.placement.kind === 'host_process'
+          ? { local_helper_executable: bundledRuntimeExecutablePath() }
+          : {}),
         signal,
       }),
       mark_in_progress: (descriptor, preflightID) => writeReinstallTargetRequiredMarker(descriptor, {
@@ -3667,6 +3819,13 @@ async function prepareDesktopForUpdateInstallation(): Promise<void> {
   quitPhase = 'update_installing';
   desktopUpdatePreparationTask = (async () => {
     await shutdownDesktopWindowsAndSessions();
+    if (!desktopPlatformCapabilities.native_host_runtime) {
+      // Windows Desktop owns only the Session and Bridge processes. WSL Runtime
+      // processes remain running until the user stops the registered Environment.
+      localEnvironmentRuntimeRecord = null;
+      runtimeFlowerAccessCookies.clear();
+      return;
+    }
     const preferences = await loadDesktopPreferencesCached();
     const environment = preferences.local_environment;
     const inventory = await inspectLocalManagedRuntimeProcesses({
@@ -3787,7 +3946,7 @@ function appMenuActions() {
     openAdvancedSettings: () => {
       void openAdvancedSettingsWindow().catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        dialog.showErrorBox('Redeven Desktop failed to open Local Environment Settings', message || 'Unknown settings error.');
+        dialog.showErrorBox('Redeven Desktop failed to open Environment Settings', message || 'Unknown settings error.');
       });
     },
     checkForUpdates: () => {
@@ -3868,7 +4027,7 @@ function syncOpenSessionTargetsWithPreferences(preferences: DesktopPreferences):
       };
       continue;
     }
-    if (session.target.kind !== 'ssh_environment') {
+    if (session.target.kind !== 'ssh_environment' && session.target.kind !== 'wsl_environment') {
       continue;
     }
     const savedLabel = savedRuntimeTargetLabelByID.get(session.target.environment_id);
@@ -4339,7 +4498,11 @@ async function probeSavedExternalRuntimeHealth(
 }
 
 function runtimeTargetProbeSource(target: DesktopSavedRuntimeTarget): DesktopRuntimeHealth['source'] {
-  return target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe';
+  return target.host_access.kind === 'ssh_host'
+    ? 'ssh_runtime_probe'
+    : target.host_access.kind === 'wsl_host'
+      ? 'wsl_runtime_probe'
+      : 'local_runtime_probe';
 }
 
 function runtimeTargetOfflineReasonCode(
@@ -4483,16 +4646,19 @@ function buildWelcomeRuntimeHealthTargets(
   preferences: DesktopPreferences,
   openSessions: readonly DesktopSessionSummary[],
 ): readonly DesktopWelcomeRuntimeHealthTarget[] {
+  const localTargets: readonly DesktopWelcomeRuntimeHealthTarget[] = desktopPlatformCapabilities.native_local_environment
+    ? [{
+        key: `local:${preferences.local_environment.id}`,
+        environment_id: preferences.local_environment.id,
+        slot: 'local_environment' as const,
+        presence_target_id: desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id),
+        auto_refresh_enabled: true,
+        checking_health: checkingRuntimeHealth('local_runtime_probe', 'not_started', 'Checking Local Runtime status.'),
+        probe: () => probeLocalEnvironmentRuntimeHealth(preferences, openSessions),
+      }]
+    : [];
   return [
-    {
-      key: `local:${preferences.local_environment.id}`,
-      environment_id: preferences.local_environment.id,
-      slot: 'local_environment' as const,
-      presence_target_id: desktopProviderRuntimeLinkTargetID('local_environment', preferences.local_environment.id),
-      auto_refresh_enabled: true,
-      checking_health: checkingRuntimeHealth('local_runtime_probe', 'not_started', 'Checking Local Runtime status.'),
-      probe: () => probeLocalEnvironmentRuntimeHealth(preferences, openSessions),
-    },
+    ...localTargets,
     ...preferences.saved_environments.map((environment) => ({
       key: `external:${environment.id}`,
       environment_id: environment.id,
@@ -4501,37 +4667,45 @@ function buildWelcomeRuntimeHealthTargets(
       checking_health: checkingRuntimeHealth('external_local_ui_probe', 'unverified', 'Checking saved Environment status.'),
       probe: () => probeSavedExternalRuntimeHealth(environment),
     })),
-    ...preferences.saved_runtime_targets.map((target) => {
-      const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
-      const presenceTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
-      return {
-        key: `runtime-target:${target.id}`,
-        probe_coordinator_key: welcomeRuntimeProbeCoordinatorKey(target.host_access, target.placement, target.id),
-        environment_id: target.id,
-        slot: 'runtime_target' as const,
-        presence_target_id: presenceTargetID,
-        auto_refresh_enabled: desktopRuntimeTargetAutoStatusDetectionEnabled(
-          target.host_access,
-          target.placement,
-          target.auto_runtime_probe_enabled,
-        ),
-        checking_health: checkingRuntimeHealth(
-          runtimeTargetProbeSource(target),
-          'not_started',
-          'Checking Runtime status.',
-        ),
-        probe: () => probeSavedRuntimeTargetHealth(target),
-        project_shared_result: (result: DesktopWelcomeRuntimeHealthProbeResult) => projectWelcomeRuntimeProbeResult(result, {
-          target_id: presenceTargetID,
-          placement_target_id: target.id,
+    ...preferences.saved_runtime_targets
+      .filter((target) => desktopPlatformCapabilities.native_host_runtime || target.host_access.kind !== 'local_host')
+      .map((target) => {
+        const hostAccess = target.host_access;
+        const targetKind = providerRuntimeLinkKindForHostAccess(hostAccess);
+        const presenceTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
+        return {
+          key: `runtime-target:${target.id}`,
+          probe_coordinator_key: welcomeRuntimeProbeCoordinatorKey(hostAccess, target.placement, target.id),
           environment_id: target.id,
-          label: target.label,
-          runtime_key: target.id,
-          host_access: target.host_access,
-          placement: target.placement,
-        }),
-      };
-    }),
+          slot: 'runtime_target' as const,
+          presence_target_id: presenceTargetID,
+          auto_refresh_enabled: hostAccess.kind === 'wsl_host'
+            ? desktopWSLDiscoverySnapshot?.distributions.some((distribution) => (
+                distribution.distribution_name === hostAccess.distribution_name
+                && distribution.state === 'running'
+              )) === true
+            : desktopRuntimeTargetAutoStatusDetectionEnabled(
+                hostAccess,
+                target.placement,
+                target.auto_runtime_probe_enabled,
+              ),
+          checking_health: checkingRuntimeHealth(
+            runtimeTargetProbeSource(target),
+            'not_started',
+            'Checking Runtime status.',
+          ),
+          probe: () => probeSavedRuntimeTargetHealth(target),
+          project_shared_result: (result: DesktopWelcomeRuntimeHealthProbeResult) => projectWelcomeRuntimeProbeResult(result, {
+            target_id: presenceTargetID,
+            placement_target_id: target.id,
+            environment_id: target.id,
+            label: target.label,
+            runtime_key: target.id,
+            host_access: hostAccess,
+            placement: target.placement,
+          }),
+        };
+      }),
   ];
 }
 
@@ -4780,6 +4954,8 @@ async function buildCurrentDesktopWelcomeSnapshot(
     issue: overrides.issue ?? state.issue,
     selectedEnvironmentID: state.selectedEnvironmentID,
     flowerSettingsFocusRevision: state.flowerSettingsFocusRevision,
+    platformCapabilities: desktopPlatformCapabilities,
+    wslDiscovery: desktopWSLDiscoverySnapshot,
   });
   return {
     ...snapshot,
@@ -7393,6 +7569,8 @@ function runtimeLifecycleScopeMatchesLauncherOpen(
           return environmentID === compact(scope.target.environment_id);
         case 'ssh_environment':
           return targetID === scope.target.session_key;
+        case 'wsl_environment':
+          return targetID === scope.target.session_key;
         case 'gateway_environment': {
           const gatewayTargetID = `gateway:${encodeURIComponent(scope.target.gateway_id)}:env:${encodeURIComponent(scope.target.gateway_env_id)}`;
           return targetID === gatewayTargetID || targetID.startsWith(`${gatewayTargetID}:session:`);
@@ -9159,7 +9337,7 @@ async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {})
 }
 
 async function autoStartLocalRuntimeOnDesktopLaunch(loadedPreferences?: DesktopPreferences): Promise<void> {
-  if (!desktopAutoStartRuntimeEnabled()) {
+  if (!desktopPlatformCapabilities.native_local_environment || !desktopAutoStartRuntimeEnabled()) {
     return;
   }
   try {
@@ -9290,6 +9468,13 @@ function preferredEnvironmentID(preferences: DesktopPreferences): string {
 }
 
 async function openAdvancedSettingsWindow(): Promise<void> {
+  if (!desktopPlatformCapabilities.native_local_environment) {
+    await openDesktopWelcomeWindow({
+      surface: 'connect_environment',
+      stealAppFocus: true,
+    });
+    return;
+  }
   const preferences = await loadDesktopPreferencesCached();
   await openDesktopWelcomeWindow({
     surface: 'environment_settings',
@@ -9543,14 +9728,58 @@ function runtimeFlowerMethod(rawMethod: unknown): RuntimeFlowerRequest['method']
   }
 }
 
-function assertRuntimeFlowerRecordOpenable(record: LocalEnvironmentRuntimeRecord): void {
+function assertRuntimeFlowerRecordOpenable(
+  record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord,
+): void {
   if (!runtimeServiceIsOpenable(record.startup.runtime_service)) {
-    throw new Error(runtimeServiceOpenReadinessLabel(record.startup.runtime_service) || 'Local Environment is not ready to open Flower.');
+    throw new Error(runtimeServiceOpenReadinessLabel(record.startup.runtime_service) || 'The selected Environment is not ready to open Flower.');
   }
 }
 
-async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecord> {
+async function ensureWSLRuntimeFlowerTarget(
+  preferences: DesktopPreferences,
+): Promise<RuntimeFlowerTarget> {
+  const targetID = preferences.default_flower_runtime_target_id;
+  if (!targetID) {
+    throw new Error('Choose a default WSL Environment before opening Flower.');
+  }
+  const target = preferences.saved_runtime_targets.find((candidate) => candidate.id === targetID);
+  if (!target || target.host_access.kind !== 'wsl_host') {
+    throw new Error('The default WSL Environment is no longer registered. Choose another Environment.');
+  }
+  let bridgeRecord = runtimePlacementBridgeRegistry.get(target.id);
+  if (!bridgeRecord) {
+    const lifecycleResult = await startEnvironmentRuntimeFromLauncher({
+      kind: 'start_environment_runtime',
+      environment_id: target.id,
+      runtime_target_id: target.id,
+      placement_target_id: target.id,
+      label: target.label,
+      host_access: target.host_access,
+      placement: target.placement,
+    });
+    if (!lifecycleResult.ok) {
+      throw new Error(lifecycleResult.message);
+    }
+    await refreshWelcomeRuntimeHealthForEnvironment(target.id);
+    const readyRecord = runtimePlacementReadyByTargetID.get(target.id);
+    if (!readyRecord || readyRecord.host_access.kind !== 'wsl_host') {
+      throw new Error(`${target.label} did not become ready for Flower.`);
+    }
+    bridgeRecord = await openRuntimePlacementBridgeForReadyRecord(readyRecord);
+  }
+  assertRuntimeFlowerRecordOpenable(bridgeRecord);
+  return {
+    record: bridgeRecord,
+    local_environment: null,
+  };
+}
+
+async function ensureRuntimeFlowerRecord(): Promise<RuntimeFlowerTarget> {
   const preferences = await loadDesktopPreferencesCached();
+  if (desktopPlatformCapabilities.wsl_environment) {
+    return ensureWSLRuntimeFlowerTarget(preferences);
+  }
   const environment = preferences.local_environment;
   const attached = await attachLocalEnvironmentRuntime(environment);
   if (attached) {
@@ -9565,7 +9794,10 @@ async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecor
       throw new Error(runtimePlan.message || 'Local Runtime is not ready to open Flower.');
     }
     assertRuntimeFlowerRecordOpenable(attached);
-    return attached;
+    return {
+      record: attached,
+      local_environment: environment,
+    };
   }
   throw new Error('The local environment is not running. Initialize it before starting it from Desktop.');
 }
@@ -9596,10 +9828,13 @@ function runtimeFlowerEnvelopeError(parsed: unknown, status: number): RuntimeFlo
 }
 
 async function unlockRuntimeFlowerAccess(
-  record: LocalEnvironmentRuntimeRecord,
-  environment: DesktopLocalEnvironmentState,
+  record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord,
+  environment: DesktopLocalEnvironmentState | null,
 ): Promise<string> {
   const baseURL = runtimeFlowerBaseURL(record);
+  if (!environment) {
+    throw new Error('The selected WSL Environment requires access configuration that Desktop cannot unlock.');
+  }
   const access = localEnvironmentAccess(environment);
   if (!access.local_ui_password_configured || !compact(access.local_ui_password)) {
     throw new Error('Local Environment requires the configured Local UI password before Flower can open.');
@@ -9627,8 +9862,8 @@ async function unlockRuntimeFlowerAccess(
 }
 
 async function runtimeFlowerAccessHeaders(
-  record: LocalEnvironmentRuntimeRecord,
-  environment: DesktopLocalEnvironmentState,
+  record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord,
+  environment: DesktopLocalEnvironmentState | null,
 ): Promise<Record<string, string>> {
   if (record.startup.password_required !== true) {
     return {};
@@ -9646,10 +9881,10 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (!runtimeFlowerMethodAllowed(path, method)) {
     throw new Error('Flower runtime request method is not allowed for this path.');
   }
-  const preferences = await loadDesktopPreferencesCached();
-  const record = await ensureRuntimeFlowerRecord();
+  const flowerTarget = await ensureRuntimeFlowerRecord();
+  const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));
-  const environment = preferences.local_environment;
+  const environment = flowerTarget.local_environment;
   const stagingCapability = compact(request.staging_capability);
   const stagingScopeID = compact(request.staging_scope_id);
   const requestPathname = new URL(path, 'http://runtime-flower.local').pathname;
@@ -9798,10 +10033,10 @@ async function startRuntimeFlowerStream(
     return { ok: false, error: runtimeFlowerError('runtime_flower_stream_limit', 'Too many Flower streams are active.', 429, 10_000) };
   }
 
-  const preferences = await loadDesktopPreferencesCached();
-  const record = await ensureRuntimeFlowerRecord();
+  const flowerTarget = await ensureRuntimeFlowerRecord();
+  const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));
-  const environment = preferences.local_environment;
+  const environment = flowerTarget.local_environment;
   const operation: RuntimeFlowerStreamOperation = {
     key,
     streamID: request.stream_id,
@@ -9878,11 +10113,11 @@ async function startRuntimeFlowerStream(
 }
 
 async function fetchRuntimeFlowerAttachmentPreview(request: RuntimeFlowerAttachmentPreviewRequest): Promise<RuntimeFlowerHTTPResponse> {
-  const preferences = await loadDesktopPreferencesCached();
-  const record = await ensureRuntimeFlowerRecord();
+  const flowerTarget = await ensureRuntimeFlowerRecord();
+  const record = flowerTarget.record;
   const requestPath = runtimeFlowerPath(`/_redeven_proxy/api/ai/uploads/${encodeURIComponent(request.attachment_id)}`);
   const url = new URL(requestPath, runtimeFlowerBaseURL(record));
-  const environment = preferences.local_environment;
+  const environment = flowerTarget.local_environment;
   const stagingHeaders = {
     'Upload-Staging-Scope-ID': request.staging_scope_id,
     'Upload-Staging-Capability': request.staging_capability,
@@ -9975,10 +10210,10 @@ async function prepareRuntimeFlowerAttachmentUpload(
       message: 'A Flower attachment upload with this operation id is already active.',
     };
   }
-	const preferences = await loadDesktopPreferencesCached();
-	const record = await ensureRuntimeFlowerRecord();
+	const flowerTarget = await ensureRuntimeFlowerRecord();
+	const record = flowerTarget.record;
 	const accessCacheKey = runtimeFlowerBaseURL(record);
-	const accessHeaders = await runtimeFlowerAccessHeaders(record, preferences.local_environment);
+	const accessHeaders = await runtimeFlowerAccessHeaders(record, flowerTarget.local_environment);
   const boundary = `redeven-${crypto.randomBytes(18).toString('hex')}`;
   const preamble = Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="source"\r\n\r\n${input.source}\r\n` +
@@ -10255,6 +10490,7 @@ function runtimeLifecycleInitialPhase(
       return 'checking_existing_runtime';
     case 'local_container':
       return 'checking_container';
+    case 'wsl_host':
     case 'ssh_host':
     case 'ssh_container':
       return 'checking_host';
@@ -13490,7 +13726,11 @@ async function openRuntimePlacementBridgeFromLauncher(
   }
   const lifecycleHostAccess = runtimeHostAccessFromRequest(request);
   const lifecyclePlacement = runtimePlacementFromRequest(request);
-  if (lifecyclePlacement.kind !== 'container_process' && lifecycleHostAccess.kind !== 'ssh_host') {
+  if (
+    lifecyclePlacement.kind !== 'container_process'
+    && lifecycleHostAccess.kind !== 'ssh_host'
+    && lifecycleHostAccess.kind !== 'wsl_host'
+  ) {
     return null;
   }
   const targetID = runtimeTargetIDFromRequest(request);
@@ -13570,16 +13810,19 @@ async function openRuntimePlacementBridgeFromLauncher(
     }
     runtimeProbeDurationMS = Date.now() - runtimeProbeStartedAtUnixMS;
     const existingBridge = runtimePlacementBridgeRegistry.get(targetID);
-    const target = (readyRecord?.host_access ?? existingBridge?.session.host_access ?? hostAccess).kind === 'ssh_host'
+    const effectiveHostAccess = readyRecord?.host_access ?? existingBridge?.session.host_access ?? hostAccess;
+    const target = effectiveHostAccess.kind === 'ssh_host'
       ? buildSSHDesktopTarget(sshDetailsFromRuntimePlacement(
-          (readyRecord?.host_access ?? existingBridge?.session.host_access ?? hostAccess) as Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'ssh_host' }>>,
+          effectiveHostAccess,
           readyRecord?.placement ?? existingBridge?.session.placement ?? placement,
         ), {
           environmentID,
           label,
           sessionKeyOverride: desktopSessionKeyFromRuntimeTargetID(targetID) as `ssh:${string}`,
         })
-      : buildManagedLocalRuntimeDesktopTarget(environmentID, label);
+      : effectiveHostAccess.kind === 'wsl_host'
+        ? buildWSLDesktopTarget(effectiveHostAccess, targetID, label)
+        : buildManagedLocalRuntimeDesktopTarget(environmentID, label);
     const operationKey = `${targetID}:open`;
     const checkingOpenPresentation = {
       status: 'running' as const,
@@ -14140,6 +14383,8 @@ async function openRuntimePlacementBridgeFromLauncher(
             label: record.label,
             sessionKeyOverride: desktopSessionKeyFromRuntimeTargetID(targetID) as `ssh:${string}`,
           })
+        : record.session.host_access.kind === 'wsl_host'
+          ? buildWSLDesktopTarget(record.session.host_access, targetID, record.label)
         : target;
       sessionRecord = await createSessionRecord(openTarget, record.startup, {
         runtimeHandle: record.runtime_handle,
@@ -14547,6 +14792,77 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
             runtime_service: ready.startup?.runtime_service,
           });
         }
+      } else if (input.host_access.kind === 'wsl_host') {
+        const executor = createWSLRuntimeHostExecutor(input.host_access);
+        try {
+          if (input.operation === 'stop') {
+            await closeOwnedSessions();
+            const probe = await probeManagedLinuxRuntime(
+              executor,
+              input.placement.runtime_root,
+              resolveSSHRuntimeReleaseTag(),
+              lifecycleSignal,
+            );
+            if (probe.status === 'missing_binary') {
+              markDirectRuntimeAlreadyStopped({
+                operationKey: input.operation_key,
+                owner,
+                hostAccess: input.host_access,
+                placement: input.placement,
+                targetID,
+                targetLabel: input.label,
+                updateProgress,
+              }, 'No Redeven Runtime is installed in this WSL Environment.');
+            } else {
+              const processSession = openManagedLinuxRuntimeProcessSession({
+                executor,
+                runtime_root: input.placement.runtime_root,
+                runtime_state_root: desktopRuntimePlacementStateRoot(input.placement),
+                signal: lifecycleSignal,
+              });
+              await executeDirectRuntimeStop({
+                operationKey: input.operation_key,
+                owner,
+                hostAccess: input.host_access,
+                placement: input.placement,
+                targetID,
+                targetLabel: input.label,
+                updateProgress,
+                inspect: processSession.inspect,
+                stop: processSession.stop,
+              });
+            }
+            runtimePlacementReadyByTargetID.delete(targetID);
+          } else {
+            const ready = await ensureRuntimePlacementReady({
+              host_access: input.host_access,
+              placement: input.placement,
+              runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+              release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+              source_runtime_root: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined,
+              managed_runtime_archive_path: requireDesktopBundle().managed_wsl_archive_path,
+              asset_cache_root: desktopRuntimePackageCacheRoot(),
+              force_runtime_update: input.operation === 'update',
+              runtime_process_intent: input.operation,
+              signal: lifecycleSignal,
+              before_runtime_replacement: closeOwnedSessions,
+              on_progress: reportContainerProgress,
+            });
+            runtimePlacementReadyByTargetID.set(targetID, {
+              runtime_key: targetID,
+              environment_id: input.environment_id,
+              label: input.label,
+              target_id: providerRuntimeLinkTargetIDForRuntimeTarget(input.host_access, targetID),
+              host_access: input.host_access,
+              placement: ready.placement,
+              runtime_pid: ready.startup?.pid,
+              runtime_started_at_unix_ms: ready.startup?.started_at_unix_ms,
+              runtime_service: ready.startup?.runtime_service,
+            });
+          }
+        } finally {
+          await executor.release();
+        }
       } else {
         if (input.host_access.kind !== 'ssh_host') {
           throw new Error('The registered Runtime target has an unsupported host access mode.');
@@ -14827,7 +15143,9 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       subject_id: targetID,
       environment_id: environmentID,
       environment_label: label,
-      phase: hostAccess.kind === 'ssh_host' ? 'checking_host' : 'checking_existing_runtime',
+      phase: hostAccess.kind === 'ssh_host' || hostAccess.kind === 'wsl_host'
+        ? 'checking_host'
+        : 'checking_existing_runtime',
       title: requestedOperation === 'stop' ? 'Stopping Runtime' : requestedOperation === 'update_runtime' ? 'Updating Runtime' : requestedOperation === 'restart' ? 'Restarting Runtime' : 'Starting Runtime',
       title_key: runtimeLifecycleTitleKey(requestedOperation === 'update_runtime' ? 'update_runtime' : requestedOperation),
       detail: 'Desktop is checking the registered direct Runtime target.',
@@ -15301,6 +15619,14 @@ async function refreshEnvironmentRuntimeFromLauncher(
           if (runtimeService) {
             await syncLinkedProviderRuntimeHealthFromService(runtimeService).catch(() => undefined);
           }
+        } else if (hostAccess.kind === 'wsl_host') {
+          const bridgeObservation = await observeRuntimePlacementBridgeRecord(targetID);
+          const runtimeRecord = bridgeObservation.kind === 'absent' ? null : bridgeObservation.record;
+          const readyRecord = runtimePlacementReadyByTargetID.get(targetID) ?? null;
+          const runtimeService = runtimeRecord?.startup.runtime_service ?? readyRecord?.runtime_service;
+          if (runtimeService) {
+            await syncLinkedProviderRuntimeHealthFromService(runtimeService).catch(() => undefined);
+          }
         } else {
           const sshDetails = sshDetailsFromRuntimeTargetRequest(request);
           if (sshDetails) {
@@ -15322,7 +15648,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
             if (runtimeService) {
               await syncLinkedProviderRuntimeHealthFromService(runtimeService).catch(() => undefined);
             }
-          } else if (localEnvironment?.local_hosting) {
+          } else if (desktopPlatformCapabilities.native_host_runtime && localEnvironment?.local_hosting) {
             const runtimeRecord = await verifyCurrentLocalEnvironmentRuntimeRecord(localEnvironment)
               ?? await attachLocalEnvironmentRuntime(localEnvironment);
             if (runtimeRecord?.startup.runtime_service) {
@@ -15887,6 +16213,133 @@ async function upsertSavedEnvironmentFromWelcome(
   });
 }
 
+async function refreshDesktopWSLDiscovery(): Promise<DesktopWSLDiscoverySnapshot> {
+  if (!desktopPlatformCapabilities.wsl_environment) {
+    desktopWSLDiscoverySnapshot = {
+      availability: 'failed',
+      distributions: [],
+      message: 'WSL Environment is available only in Redeven Desktop for Windows.',
+    };
+    return desktopWSLDiscoverySnapshot;
+  }
+  desktopWSLDiscoverySnapshot = await discoverDesktopWSLDistributions();
+  broadcastDesktopWelcomeSnapshots();
+  return desktopWSLDiscoverySnapshot;
+}
+
+async function registerDesktopWSLDistribution(distributionName: string): Promise<DesktopWSLActionResponse> {
+  if (!desktopPlatformCapabilities.wsl_environment) {
+    return {
+      ok: false,
+      message: 'WSL Environment is not supported on this Desktop platform.',
+      message_key: 'environmentCenter.wslUnavailable',
+    };
+  }
+  const name = compact(distributionName);
+  const discovery = await refreshDesktopWSLDiscovery();
+  const distribution = discovery.distributions.find((candidate) => candidate.distribution_name === name);
+  if (!distribution) {
+    return {
+      ok: false,
+      message: 'This WSL distribution is no longer registered with Windows. Refresh and try again.',
+      message_key: 'environmentCenter.wslDistributionMissing',
+      message_params: { distribution: name },
+    };
+  }
+  if (distribution.registration_status !== 'eligible') {
+    return {
+      ok: false,
+      message: distribution.registration_status === 'wsl1_unsupported'
+        ? 'Redeven requires this distribution to use WSL 2.'
+        : 'Redeven could not confirm that this distribution uses WSL 2.',
+      message_key: distribution.registration_status === 'wsl1_unsupported'
+        ? 'environmentCenter.wsl1Unsupported'
+        : 'environmentCenter.wslVersionUnknown',
+    };
+  }
+  try {
+    const probe = await probeDesktopWSLDistribution(name);
+    if (probe.missing_commands.length > 0) {
+      return {
+        ok: false,
+        message: `Install the required Linux commands and retry: ${probe.missing_commands.join(', ')}`,
+        message_key: 'environmentCenter.wslMissingCommands',
+        message_params: { commands: probe.missing_commands.join(', ') },
+      };
+    }
+    const hostAccess: Extract<DesktopRuntimeHostAccess, { kind: 'wsl_host' }> = {
+      kind: 'wsl_host',
+      distribution_name: probe.distribution_name,
+      linux_user: probe.linux_user,
+    };
+    const placement: Extract<DesktopRuntimePlacement, { kind: 'host_process' }> = {
+      kind: 'host_process',
+      runtime_root: 'remote_default',
+      runtime_state_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+    };
+    const targetID = desktopRuntimeTargetID(hostAccess, placement);
+    await mutateDesktopPreferences((current) => upsertSavedRuntimeTarget(current, {
+      id: targetID,
+      label: probe.distribution_name,
+      host_access: hostAccess,
+      placement,
+      auto_runtime_probe_enabled: true,
+      last_used_at_ms: Date.now(),
+    }));
+    broadcastDesktopWelcomeSnapshots();
+    return {
+      ok: true,
+      message: `${probe.distribution_name} is registered as a WSL Environment.`,
+      message_key: 'environmentCenter.wslRegisteredMessage',
+      message_params: { distribution: probe.distribution_name },
+      runtime_target_id: targetID,
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      message: detail,
+      message_key: 'environmentCenter.wslRegistrationFailed',
+      message_params: { detail },
+    };
+  }
+}
+
+async function setDefaultDesktopWSLTarget(runtimeTargetID: unknown): Promise<DesktopWSLActionResponse> {
+  const targetID = runtimeTargetID === null ? null : compact(runtimeTargetID) as DesktopRuntimeTargetID;
+  try {
+    await mutateDesktopPreferences((current) => {
+      if (targetID !== null) {
+        const target = current.saved_runtime_targets.find((candidate) => candidate.id === targetID);
+        if (target?.host_access.kind !== 'wsl_host') {
+          throw new Error('Choose a registered WSL Environment as the default Flower Runtime.');
+        }
+      }
+      return setDefaultFlowerRuntimeTarget(current, targetID);
+    });
+    broadcastDesktopWelcomeSnapshots();
+    return {
+      ok: true,
+      message: targetID === null
+        ? 'The default Flower Runtime was cleared.'
+        : 'The default WSL Environment was updated.',
+      message_key: targetID === null
+        ? 'environmentCenter.wslDefaultCleared'
+        : 'environmentCenter.wslDefaultUpdated',
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      message: detail,
+      message_key: 'environmentCenter.wslRegistrationFailed',
+      message_params: { detail },
+    };
+  }
+}
+
 async function saveLocalEnvironmentSettingsFromWelcome(
   draft: DesktopSettingsDraft,
 ): Promise<DesktopLocalEnvironmentState> {
@@ -16051,6 +16504,9 @@ async function upsertEnvironmentRegistrationFromWelcome(
   }
   case 'runtime_target': {
     const runtimeTarget = registration as Extract<DesktopEnvironmentRegistrationUpsert, { registration_ref: { kind: 'runtime_target' } }>;
+    if (!desktopPlatformCapabilities.native_host_runtime && runtimeTarget.host_access.kind === 'local_host') {
+      throw new Error('Windows Desktop does not provide a native Local Runtime target. Register a WSL Environment instead.');
+    }
     await upsertSavedRuntimeTargetFromWelcome(runtimeTarget);
     return launcherActionSuccess('saved_environment');
   }
@@ -16090,6 +16546,12 @@ async function listRuntimeContainersFromLauncher(
     return {
       ok: false,
       message: 'Choose a valid host and container engine first.',
+    };
+  }
+  if (!desktopPlatformCapabilities.native_container_runtime && normalized.host_access.kind === 'local_host') {
+    return {
+      ok: false,
+      message: 'Windows Desktop does not provide local container Runtime targets.',
     };
   }
   try {
@@ -16185,6 +16647,23 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         stealAppFocus: true,
       });
     case 'open_flower':
+      if (desktopPlatformCapabilities.wsl_environment) {
+        try {
+          await ensureRuntimeFlowerRecord();
+        } catch (error) {
+          await openUtilityWindow('launcher', {
+            surface: 'connect_environment',
+            issue: null,
+            stealAppFocus: true,
+          });
+          return launcherActionFailure(
+            'runtime_not_ready',
+            'global',
+            error instanceof Error ? error.message : String(error),
+            { shouldRefreshSnapshot: true },
+          );
+        }
+      }
       return openUtilityWindow('launcher', {
         surface: 'flower',
         issue: null,
@@ -17028,6 +17507,15 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SSH_CONFIG_HOSTS_CHANNEL, async () => (
     loadDesktopSSHConfigHosts()
   ));
+  ipcMain.handle(DESKTOP_WSL_REFRESH_CHANNEL, async (): Promise<DesktopWSLDiscoverySnapshot> => (
+    refreshDesktopWSLDiscovery()
+  ));
+  ipcMain.handle(DESKTOP_WSL_REGISTER_CHANNEL, async (_event, request): Promise<DesktopWSLActionResponse> => (
+    registerDesktopWSLDistribution(compact((request as { distribution_name?: unknown } | null)?.distribution_name))
+  ));
+  ipcMain.handle(DESKTOP_WSL_SET_DEFAULT_CHANNEL, async (_event, request): Promise<DesktopWSLActionResponse> => (
+    setDefaultDesktopWSLTarget((request as { runtime_target_id?: unknown } | null)?.runtime_target_id ?? null)
+  ));
   ipcMain.handle(DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL, async (_event, request): Promise<DesktopRuntimeContainerListResponse> => (
     listRuntimeContainersFromLauncher(request)
   ));
@@ -17296,10 +17784,10 @@ if (!app.requestSingleInstanceLock()) {
           issue: {
             scope: 'startup',
             code: 'desktop_bundle_invalid',
-            title: 'Local Environment startup failed',
-            title_key: 'issue.startupFailedTitle',
+            title: 'Redeven Desktop startup failed',
+            title_key: 'issue.desktopStartupFailedTitle',
             message: 'Redeven could not prepare this environment. Repair or reinstall the application, then restart Desktop.',
-            message_key: 'environmentOpenFlow.initializationFailedDetail',
+            message_key: 'issue.desktopBundleInvalidMessage',
             diagnostics_copy: `status: blocked\ncode: desktop_bundle_invalid\nmessage: ${message}`,
             target_url: '',
           },
@@ -17308,6 +17796,9 @@ if (!app.requestSingleInstanceLock()) {
         return;
       }
       const startupPreferences = await loadDesktopPreferencesCached();
+      if (desktopPlatformCapabilities.wsl_environment) {
+        await refreshDesktopWSLDiscovery();
+      }
       await reinstallTargetCoordinator().discardUnstartedJournals();
       const localRuntimeAutoStart = autoStartLocalRuntimeOnDesktopLaunch(startupPreferences);
       if (pendingDesktopDeepLinks.length > 0) {

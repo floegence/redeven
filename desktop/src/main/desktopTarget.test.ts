@@ -12,6 +12,7 @@ import {
   externalLocalUIDesktopSessionKey,
   gatewayDesktopSessionKey,
   sshDesktopSessionKey,
+  wslDesktopSessionKey,
 } from './desktopTarget';
 import {
   testLocalEnvironment,
@@ -129,6 +130,13 @@ describe('desktopTarget', () => {
       release_base_url: 'https://mirror.example.invalid/releases',
       connect_timeout_seconds: 10,
     });
+  });
+
+  it('uses the exact WSL Runtime target identity as its Session key', () => {
+    const targetID = 'wsl:host:Ubuntu-24.04:dev:12345678' as const;
+
+    expect(wslDesktopSessionKey(targetID)).toBe(targetID);
+    expect(() => wslDesktopSessionKey('local:host:local')).toThrow('WSL Runtime target ID');
   });
 
   it('builds Gateway targets with open-session scoped session keys', () => {

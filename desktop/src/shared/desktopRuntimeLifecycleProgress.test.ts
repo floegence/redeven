@@ -8,6 +8,11 @@ import {
 describe('desktopRuntimeLifecycleProgress', () => {
   it('resolves startup locations from host access and placement', () => {
     const localHost = { kind: 'local_host' as const };
+    const wslHost = {
+      kind: 'wsl_host' as const,
+      distribution_name: 'Ubuntu-24.04',
+      linux_user: 'alice',
+    };
     const sshHost = {
       kind: 'ssh_host' as const,
       ssh: {
@@ -29,6 +34,7 @@ describe('desktopRuntimeLifecycleProgress', () => {
 
     expect(desktopRuntimeLifecycleLocation(localHost, hostPlacement)).toBe('local_host');
     expect(desktopRuntimeLifecycleLocation(localHost, containerPlacement)).toBe('local_container');
+    expect(desktopRuntimeLifecycleLocation(wslHost, hostPlacement)).toBe('wsl_host');
     expect(desktopRuntimeLifecycleLocation(sshHost, hostPlacement)).toBe('ssh_host');
     expect(desktopRuntimeLifecycleLocation(sshHost, containerPlacement)).toBe('ssh_container');
   });

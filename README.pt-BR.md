@@ -71,9 +71,11 @@ Há dois caminhos para começar: Desktop, recomendado para a maioria dos usuári
 
 ### Aplicativo Desktop
 
-1. Baixe o Redeven Desktop em [GitHub Releases](https://github.com/floegence/redeven/releases).
-2. Abra o aplicativo e escolha seu ambiente: local, Provider, host SSH ou uma URL salva.
+1. Baixe o Redeven Desktop em [GitHub Releases](https://github.com/floegence/redeven/releases). As versões públicas oferecem atualmente instaladores para macOS e Linux. O Windows 11 x64 permanece como uma compilação interna de certificação WSL até que a assinatura de código e a verificação de atualizações assinadas sejam ativadas.
+2. Abra o aplicativo. No macOS ou Linux, escolha um ambiente local, Provider, host SSH ou uma URL salva. No Windows, registre uma distribuição WSL 2 inicializada na central de ambientes. O Desktop não fornece ambiente local nativo, ambiente de execução do Windows nem ambiente de execução de contêiner local.
 3. Comece a trabalhar: a área de trabalho será aberta automaticamente no navegador.
+
+Cada distribuição registrada é um ambiente WSL separado. O Desktop transfere o ambiente de execução Linux x64 correspondente para `~/.redeven` do usuário da distribuição. Ele não instala nem gerencia o WSL, não usa `/mnt/c` e não depende de `systemd`. Fechar, atualizar ou desinstalar o Desktop não interrompe o ambiente de execução WSL nem exclui seus dados. Use a ação Parar desse ambiente quando quiser interrompê-lo.
 
 Para máquinas remotas, o Desktop pode instalar automaticamente a versão correspondente do Redeven via SSH e, quando você escolher, conectar explicitamente esse ambiente de execução SSH gerenciado a um ambiente de provider. Não é necessário fazer configuração manual no host remoto.
 

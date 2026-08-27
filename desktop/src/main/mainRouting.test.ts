@@ -111,6 +111,12 @@ describe('main routing', () => {
     expect(mainSrc).toContain(
       'prepare_process_session: async (descriptor, targetRoot, executor, _platform, preparedPackage, signal) => openReinstallTargetProcessSession',
     );
+    const prepareFreshStart = mainSrc.indexOf('async function prepareFreshReinstallRuntimePackage(');
+    const prepareFreshEnd = mainSrc.indexOf('async function installFreshReinstallRuntime(', prepareFreshStart);
+    const prepareFreshSrc = mainSrc.slice(prepareFreshStart, prepareFreshEnd);
+    expect(prepareFreshSrc).toContain("if (descriptor.host_access.kind === 'wsl_host')");
+    expect(prepareFreshSrc).toContain('requireDesktopBundle().managed_wsl_archive_path');
+    expect(prepareFreshSrc).toContain('archiveData = await fs.readFile(archivePath)');
     const freshInstallStart = mainSrc.indexOf('async function installFreshReinstallRuntime(');
     const freshInstallEnd = mainSrc.indexOf('async function startFreshReinstallRuntime(', freshInstallStart);
     const freshInstallSrc = mainSrc.slice(freshInstallStart, freshInstallEnd);
@@ -709,6 +715,7 @@ describe('main routing', () => {
     expect(providerEnd).toBeGreaterThan(providerStart);
     const providerSrc = mainSrc.slice(providerStart, providerEnd);
     expect(providerSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(runtimeKey)');
+    expect(providerSrc).toContain('if (!desktopPlatformCapabilities.native_host_runtime)');
     expect(providerSrc).toContain('await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)');
     expect(providerSrc).not.toContain('const record = currentLocalEnvironmentRuntimeRecord(preferences.local_environment)');
 
@@ -718,10 +725,26 @@ describe('main routing', () => {
     expect(providerOccupancyEnd).toBeGreaterThan(providerOccupancyStart);
     const providerOccupancySrc = mainSrc.slice(providerOccupancyStart, providerOccupancyEnd);
     expect(providerOccupancySrc).toContain('preferences: DesktopPreferences');
+    expect(providerOccupancySrc).toContain('desktopPlatformCapabilities.native_host_runtime');
+    expect(providerOccupancySrc).toContain('providerRuntimeLinkKindForHostAccess(record.session.host_access)');
     expect(providerOccupancySrc).toContain('await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)');
     expect(providerOccupancySrc).toContain('await observeRuntimePlacementBridgeRecord(targetID)');
     expect(providerOccupancySrc).not.toContain('if (localEnvironmentRuntimeRecord)');
     expect(providerOccupancySrc).not.toContain('runtimePlacementBridgeByTargetID');
+
+    const healthTargetsStart = mainSrc.indexOf('function buildWelcomeRuntimeHealthTargets(');
+    const healthTargetsEnd = mainSrc.indexOf('function scheduleWelcomeRuntimeHealthRefresh(', healthTargetsStart);
+    const healthTargetsSrc = mainSrc.slice(healthTargetsStart, healthTargetsEnd);
+    expect(healthTargetsSrc).toContain("target.host_access.kind !== 'local_host'");
+    expect(healthTargetsSrc).toContain("hostAccess.kind === 'wsl_host'");
+    expect(healthTargetsSrc).toContain("distribution.state === 'running'");
+
+    const refreshStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
+    const refreshEnd = mainSrc.indexOf('async function connectEnvironmentRuntimeFromLauncher(', refreshStart);
+    const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
+    expect(refreshSrc).toContain("} else if (hostAccess.kind === 'wsl_host') {");
+    expect(refreshSrc).toContain('runtimePlacementReadyByTargetID.get(targetID)');
+    expect(refreshSrc).toContain('desktopPlatformCapabilities.native_host_runtime && localEnvironment?.local_hosting');
 
     const localRecordVerifyStart = mainSrc.indexOf('async function verifyLocalEnvironmentRuntimeRecord(');
     const localRecordVerifyEnd = mainSrc.indexOf('function providerRuntimeHealthMap(', localRecordVerifyStart);
@@ -913,6 +936,23 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('provider-backed Local Environment profile');
   });
 
+  it('prepares Windows Desktop updates without accessing or stopping a WSL Runtime', () => {
+    const mainSrc = readMainSource();
+    const prepareStart = mainSrc.indexOf('async function prepareDesktopForUpdateInstallation()');
+    const prepareEnd = mainSrc.indexOf('function createDesktopUpdateAdapter()', prepareStart);
+    expect(prepareStart).toBeGreaterThanOrEqual(0);
+    expect(prepareEnd).toBeGreaterThan(prepareStart);
+    const prepareSrc = mainSrc.slice(prepareStart, prepareEnd);
+    const windowsBoundary = prepareSrc.indexOf('if (!desktopPlatformCapabilities.native_host_runtime)');
+    expect(windowsBoundary).toBeGreaterThanOrEqual(0);
+    expect(prepareSrc.indexOf('bundledRuntimeExecutablePath()')).toBeGreaterThan(windowsBoundary);
+    const windowsSrc = prepareSrc.slice(windowsBoundary, prepareSrc.indexOf('const preferences =', windowsBoundary));
+    expect(windowsSrc).toContain('runtimeFlowerAccessCookies.clear();');
+    expect(windowsSrc).not.toContain('inspectLocalManagedRuntimeProcesses');
+    expect(windowsSrc).not.toContain('stopLocalManagedRuntimeProcesses');
+    expect(windowsSrc).not.toContain('createWSLRuntimeHostExecutor');
+  });
+
   it('uses fresh provider health and SSH runtime-affecting settings for launcher routing', () => {
     const mainSrc = readMainSource();
     const routeSnapshotStart = mainSrc.indexOf('function controlPlaneRouteSnapshot(');
@@ -983,7 +1023,7 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).not.toContain('await runtimeLifecycleCoordinator.waitForReadyMutation(lifecycleTargetKey)');
     expect(bridgeOpenSrc).toContain('launcherActionFailureFromRuntimeLifecycleError(error');
     expect(bridgeOpenSrc).toContain("title: 'Checking runtime status'");
-    expect(bridgeOpenSrc.indexOf("if (lifecyclePlacement.kind !== 'container_process' && lifecycleHostAccess.kind !== 'ssh_host')")).toBeLessThan(
+    expect(bridgeOpenSrc.indexOf("&& lifecycleHostAccess.kind !== 'wsl_host'")).toBeLessThan(
       bridgeOpenSrc.indexOf('runtimeLifecycleTargetKey(lifecycleHostAccess, lifecyclePlacement)'),
     );
     expect(mainSrc).toContain('function savedRuntimePlacementReadyRecord(');
@@ -1227,7 +1267,7 @@ describe('main routing', () => {
     expect(openSrc).not.toContain('resolveProviderRuntimeLinkTarget');
   });
 
-  it('routes Welcome Flower through the Local Environment runtime API only', () => {
+  it('routes Welcome Flower through one selected Runtime API without provider-session shortcuts', () => {
     const mainSrc = readMainSource();
 
     const routeStart = mainSrc.indexOf('const runtimeFlowerNoQuery');
@@ -1310,7 +1350,8 @@ describe('main routing', () => {
     expect(requestStart).toBeGreaterThanOrEqual(0);
     expect(requestEnd).toBeGreaterThan(requestStart);
     const requestSrc = mainSrc.slice(requestStart, requestEnd);
-    expect(requestSrc).toContain('const record = await ensureRuntimeFlowerRecord();');
+    expect(requestSrc).toContain('const flowerTarget = await ensureRuntimeFlowerRecord();');
+    expect(requestSrc).toContain('const record = flowerTarget.record;');
     expect(requestSrc).toContain('const url = new URL(path, runtimeFlowerBaseURL(record));');
     expect(requestSrc).toContain('runtimeFlowerMethodAllowed(path, method)');
     expect(requestSrc).toContain('let accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));');
@@ -1378,6 +1419,8 @@ describe('main routing', () => {
     expect(ensureStart).toBeGreaterThanOrEqual(0);
     expect(ensureEnd).toBeGreaterThan(ensureStart);
     const ensureSrc = mainSrc.slice(ensureStart, ensureEnd);
+    expect(ensureSrc).toContain('if (desktopPlatformCapabilities.wsl_environment)');
+    expect(ensureSrc).toContain('return ensureWSLRuntimeFlowerTarget(preferences);');
     expect(ensureSrc).toContain('buildDesktopLocalRuntimeOpenPlan(');
     expect(ensureSrc).toContain('if (runtimePlan.requires_restart)');
     expect(ensureSrc).toContain('assertRuntimeFlowerRecordOpenable(attached);');
@@ -1449,7 +1492,7 @@ describe('main routing', () => {
 
   it('marks provider environment management boundaries as important source constraints', () => {
     const mainSrc = readMainSource();
-    expect(mainSrc).toContain('IMPORTANT: Provider-link operations must resolve the exact Local/SSH runtime');
+    expect(mainSrc).toContain('IMPORTANT: Provider-link operations must resolve the exact Local/WSL/SSH runtime');
     expect(mainSrc).toContain('IMPORTANT: Provider Environment Open is remote-only provider tunnel access.');
     expect(mainSrc).toContain('desktopProviderEnvironmentOpenRoute()');
   });

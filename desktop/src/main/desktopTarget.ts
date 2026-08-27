@@ -15,11 +15,11 @@ import {
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
-import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
+import type { DesktopRuntimeHostAccess, DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
-export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
+export type DesktopTargetKind = 'local_environment' | 'wsl_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
 export type DesktopLocalEnvironmentStateSessionRoute = 'local_host' | 'remote_desktop';
-export type DesktopSessionKey = `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` | `url:${string}` | `ssh:${string}` | `gateway:${string}:env:${string}:session:${string}`;
+export type DesktopSessionKey = `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` | `url:${string}` | `wsl:${string}` | `ssh:${string}` | `gateway:${string}:env:${string}:session:${string}`;
 export type DesktopSessionLifecycle = 'opening' | 'open' | 'closing';
 
 export type LocalEnvironmentDesktopTarget = Readonly<{
@@ -58,6 +58,15 @@ export type SSHDesktopTarget = Readonly<{
   connect_timeout_seconds?: number | null;
 }>;
 
+export type WSLDesktopTarget = Readonly<{
+  kind: 'wsl_environment';
+  session_key: `wsl:${string}`;
+  environment_id: DesktopRuntimeTargetID;
+  label: string;
+  distribution_name: string;
+  linux_user: string;
+}>;
+
 export type GatewayDesktopTarget = Readonly<{
   kind: 'gateway_environment';
   session_key: `gateway:${string}:env:${string}:session:${string}`;
@@ -69,7 +78,7 @@ export type GatewayDesktopTarget = Readonly<{
   gateway_session_id: string;
 }>;
 
-export type DesktopSessionTarget = LocalEnvironmentDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget | GatewayDesktopTarget;
+export type DesktopSessionTarget = LocalEnvironmentDesktopTarget | WSLDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget | GatewayDesktopTarget;
 
 export type DesktopSessionSummary = Readonly<{
   session_key: DesktopSessionKey;
@@ -105,6 +114,9 @@ export function desktopSessionTargetsReferToSameEnvironment(
       || normalizeLocalUIBaseURL(left.external_local_ui_url) === normalizeLocalUIBaseURL(right.external_local_ui_url);
   }
   if (left.kind === 'ssh_environment' && right.kind === 'ssh_environment') {
+    return left.session_key === right.session_key;
+  }
+  if (left.kind === 'wsl_environment' && right.kind === 'wsl_environment') {
     return left.session_key === right.session_key;
   }
   if (left.kind === 'gateway_environment' && right.kind === 'gateway_environment') {
@@ -167,6 +179,13 @@ export function externalLocalUIDesktopSessionKey(rawURL: string): DesktopSession
 
 export function sshDesktopSessionKey(rawDetails: DesktopSSHEnvironmentDetails): `ssh:${string}` {
   return buildSSHEnvironmentID(rawDetails);
+}
+
+export function wslDesktopSessionKey(targetID: DesktopRuntimeTargetID): `wsl:${string}` {
+  if (!targetID.startsWith('wsl:')) {
+    throw new Error('WSL Runtime target ID is required.');
+  }
+  return targetID as `wsl:${string}`;
 }
 
 export function gatewayDesktopSessionKey(
@@ -314,6 +333,21 @@ export function buildSSHDesktopTarget(
   };
 }
 
+export function buildWSLDesktopTarget(
+  hostAccess: Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'wsl_host' }>>,
+  targetID: DesktopRuntimeTargetID,
+  label: string,
+): WSLDesktopTarget {
+  return {
+    kind: 'wsl_environment',
+    session_key: wslDesktopSessionKey(targetID),
+    environment_id: targetID,
+    label: compact(label) || hostAccess.distribution_name,
+    distribution_name: hostAccess.distribution_name,
+    linux_user: hostAccess.linux_user,
+  };
+}
+
 export function buildGatewayDesktopTarget(input: Readonly<{
   gatewayID: string;
   gatewayLabel?: string;
@@ -344,10 +378,12 @@ export function desktopSessionKeyFromRuntimeTargetID(
   runtimeTargetID: DesktopRuntimeTargetID,
 ): DesktopSessionKey {
   const clean = compact(runtimeTargetID);
-  if (!clean.startsWith('local:') && !clean.startsWith('ssh:')) {
+  if (!clean.startsWith('local:') && !clean.startsWith('wsl:') && !clean.startsWith('ssh:')) {
     throw new Error('Runtime target ID is required.');
   }
   return clean.startsWith('ssh:')
     ? clean as `ssh:${string}`
+    : clean.startsWith('wsl:')
+      ? wslDesktopSessionKey(clean as DesktopRuntimeTargetID)
     : localEnvironmentDesktopSessionKey(clean, 'local_host');
 }

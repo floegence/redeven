@@ -40,6 +40,7 @@ import { type StartupReport } from './startup';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
+  createWSLRuntimeHostExecutor,
   type RuntimeHostAccessExecutor,
 } from './runtimeHostAccess';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
@@ -53,6 +54,7 @@ import {
   runtimeProcessHelperArchiveFromRuntimePackage,
   runtimeReleaseFetchPolicy,
 } from './runtimePackageCache';
+import { ensureManagedLinuxRuntimeReady } from './managedLinuxRuntime';
 
 export type RuntimePlacementProgressPhase =
   | 'checking_host'
@@ -110,6 +112,7 @@ export type EnsureRuntimePlacementReadyArgs = Readonly<{
   runtime_release_tag: string;
   release_base_url: string;
   source_runtime_root?: string;
+  managed_runtime_archive_path?: string;
   asset_cache_root: string;
   force_runtime_update?: boolean;
   runtime_process_intent?: 'start' | 'restart' | 'update';
@@ -295,8 +298,11 @@ function emitProgress(
 }
 
 function runtimeHostExecutor(args: EnsureRuntimePlacementReadyArgs): RuntimeHostAccessExecutor {
-  if (args.host_access.kind !== 'ssh_host') {
+  if (args.host_access.kind === 'local_host') {
     return createLocalRuntimeHostExecutor();
+  }
+  if (args.host_access.kind === 'wsl_host') {
+    return createWSLRuntimeHostExecutor(args.host_access);
   }
   if (!args.ssh_transport_manager) {
     throw new Error('SSH runtime placement requires the Desktop SSH transport manager.');
@@ -438,6 +444,35 @@ export async function ensureRuntimePlacementReady(
 ): Promise<ReadyRuntimePlacement> {
   const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtime_release_tag);
   if (args.placement.kind !== 'container_process') {
+    if (args.host_access.kind === 'wsl_host') {
+      const executor = createWSLRuntimeHostExecutor(args.host_access);
+      try {
+        const ready = await ensureManagedLinuxRuntimeReady({
+          executor,
+          runtime_root: args.placement.runtime_root,
+          runtime_state_root: desktopRuntimePlacementStateRoot(args.placement),
+          runtime_release_tag: runtimeReleaseTag,
+          release_base_url: args.release_base_url,
+          asset_cache_root: args.asset_cache_root,
+          source_runtime_root: args.source_runtime_root,
+          managed_runtime_archive_path: args.managed_runtime_archive_path,
+          runtime_process_intent: args.runtime_process_intent ?? (args.force_runtime_update ? 'update' : 'start'),
+          signal: args.signal,
+          timeout_ms: args.timeout_ms,
+          before_runtime_replacement: args.before_runtime_replacement,
+          on_progress: args.on_progress,
+        });
+        return {
+          host_access: args.host_access,
+          placement: args.placement,
+          runtime_binary_path: ready.runtime_binary_path,
+          probe: ready.probe,
+          startup: ready.startup,
+        };
+      } finally {
+        await executor.release();
+      }
+    }
     return {
       host_access: args.host_access,
       placement: args.placement,

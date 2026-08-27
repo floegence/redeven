@@ -85,7 +85,7 @@ validate_target() {
   local goos="$1"
   local goarch="$2"
   case "${goos}/${goarch}" in
-    darwin/amd64|darwin/arm64|linux/amd64|linux/arm64)
+    darwin/amd64|darwin/arm64|linux/amd64|linux/arm64|windows/amd64)
       ;;
     *)
       ui_pkg_die "unsupported desktop bundle target: ${goos}/${goarch}"
@@ -122,6 +122,27 @@ assert_go_binary_target() {
   actual_goarch=$(awk '$1 == "build" && $2 ~ /^GOARCH=/ { sub(/^GOARCH=/, "", $2); print $2 }' <<<"$metadata")
   if [[ "$actual_goos/$actual_goarch" != "$expected_goos/$expected_goarch" ]]; then
     ui_pkg_die "$label binary target $actual_goos/$actual_goarch does not match requested target $expected_goos/$expected_goarch"
+  fi
+}
+
+assert_go_binary_build_identity() {
+  local binary_path="$1"
+  local expected_version="$2"
+  local expected_commit="$3"
+  local label="$4"
+  local metadata normalized_version
+
+  metadata=$(go version -m "$binary_path") || ui_pkg_die "$label is not a verifiable Go binary: $binary_path"
+  normalized_version="$expected_version"
+  case "$normalized_version" in
+    v*) ;;
+    *) normalized_version="v$normalized_version" ;;
+  esac
+  if [[ "$metadata" != *"-X main.Version=$normalized_version"* ]]; then
+    ui_pkg_die "$label build metadata does not match version $normalized_version"
+  fi
+  if [[ "$metadata" != *"-X main.Commit=$expected_commit"* ]]; then
+    ui_pkg_die "$label build metadata does not match commit $expected_commit"
   fi
 }
 
@@ -175,8 +196,9 @@ const { lstatSync, readdirSync } = require("node:fs");
 const { join } = require("node:path");
 const expected = [
   "desktop-bundle-manifest.json",
-  "redeven",
 ];
+if (process.env.BUNDLE_GOOS === "windows") expected.push("redeven_linux_amd64.tar.gz");
+else expected.push("redeven");
 if (process.env.BUNDLE_GOOS === "linux") expected.push(
   ".redevplugin-release-artifacts-verified.json",
   "REDEVPLUGIN_RUNTIME.spdx.json",
@@ -239,7 +261,9 @@ function descriptor(name, executable) {
   };
 }
 
-const runtimeFiles = platform === "linux"
+const runtimeFiles = platform === "windows"
+  ? [["redeven_linux_amd64.tar.gz", false]]
+  : platform === "linux"
   ? [
       ["redeven", true],
       ["redevplugin-runtime", true],
@@ -252,6 +276,19 @@ const runtimeFiles = platform === "linux"
     ]
   : [["redeven", true]];
 const runtimeSuite = runtimeFiles.map(([name, executable]) => descriptor(name, executable));
+const managedWSLArchive = platform === "windows" ? runtimeSuite[0] : null;
+const managedWSLArchiveFiles = [
+  ".redevplugin-release-artifacts-verified.json",
+  "LICENSE",
+  "REDEVPLUGIN_RUNTIME.spdx.json",
+  "REDEVPLUGIN_THIRD_PARTY_NOTICES.md",
+  "THIRD_PARTY_NOTICES.md",
+  "redeven",
+  "redevplugin-runtime",
+  "redevplugin-runtime.pem",
+  "redevplugin-runtime.provenance.json",
+  "redevplugin-runtime.sig",
+].sort((left, right) => left.localeCompare(right));
 const suiteIdentity = {
   schema_version: 1,
   files: runtimeSuite.map((artifact) => ({
@@ -262,12 +299,23 @@ const suiteIdentity = {
   })).sort((left, right) => left.name.localeCompare(right.name)),
 };
 const manifest = {
-  schema_version: 3,
+  schema_version: 4,
   version: version.startsWith("v") ? version : `v${version}`,
   commit,
   platform,
   architecture,
   provenance,
+  distribution_kind: platform === "windows" ? "managed_wsl_archive" : "bundled_host_runtime",
+  managed_wsl_runtime: managedWSLArchive ? {
+    archive_path: managedWSLArchive.path,
+    archive_sha256: managedWSLArchive.sha256,
+    archive_size_bytes: managedWSLArchive.size_bytes,
+    platform: "linux",
+    architecture: "amd64",
+    version: version.startsWith("v") ? version : `v${version}`,
+    commit,
+    archive_files: managedWSLArchiveFiles,
+  } : null,
   runtime_files: runtimeSuite,
   runtime_files_sha256: `sha256:${createHash("sha256").update(JSON.stringify(suiteIdentity)).digest("hex")}`,
 };
@@ -353,6 +401,9 @@ main() {
   goos="$(resolve_target_goos "$tarball_path")"
   goarch="$(resolve_target_goarch "$tarball_path")"
   binary_name="$(resolve_binary_name "$goos")"
+  if [ "$goos" = "windows" ]; then
+    binary_name="redeven_linux_amd64.tar.gz"
+  fi
 	if [ -n "${REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR:-}" ]; then
 		case "$REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR" in
 			/*) ;;
@@ -377,7 +428,19 @@ main() {
   working_bundle_path="$working_bundle/$binary_name"
   trap 'rm -rf "$staging_parent"' EXIT
 
-  if [ -n "$tarball_path" ]; then
+  if [ "$goos" = "windows" ]; then
+    if [ -z "$tarball_path" ]; then
+      ui_pkg_die "REDEVEN_DESKTOP_RUNTIME_TARBALL must point to redeven_linux_amd64.tar.gz for a Windows Desktop bundle"
+    fi
+    from_archive=1
+    assert_tarball_target "$tarball_path" linux amd64 "Redeven managed WSL runtime archive"
+    inspection_bundle="$staging_parent/managed-wsl-inspection"
+    bundle_from_tarball "$tarball_path" "$inspection_bundle" linux
+    assert_go_binary_target "$inspection_bundle/redeven" linux amd64 "Redeven managed WSL runtime"
+    assert_go_binary_build_identity "$inspection_bundle/redeven" "$bundle_version" "$bundle_commit" "Redeven managed WSL runtime"
+    mkdir -p "$working_bundle"
+    cp "$tarball_path" "$working_bundle_path"
+  elif [ -n "$tarball_path" ]; then
     from_archive=1
     assert_tarball_target "$tarball_path" "$goos" "$goarch" "Redeven runtime archive"
     bundle_from_tarball "$tarball_path" "$working_bundle" "$goos"
@@ -393,14 +456,18 @@ main() {
   if [ ! -f "$working_bundle_path" ]; then
     ui_pkg_die "desktop bundled runtime not found after preparation: $working_bundle_path"
   fi
-  assert_go_binary_target "$working_bundle_path" "$goos" "$goarch" "Redeven runtime"
-  "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
-    --scan-root "$working_bundle" \
-    --runtime-target "${goos}/${goarch}"
+  if [ "$goos" != "windows" ]; then
+    assert_go_binary_target "$working_bundle_path" "$goos" "$goarch" "Redeven runtime"
+    "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
+      --scan-root "$working_bundle" \
+      --runtime-target "${goos}/${goarch}"
+  fi
   write_bundle_manifest "$working_bundle" "$goos" "$goarch" "$bundle_version" "$bundle_commit"
   assert_bundle_inventory "$working_bundle" "$from_archive" "$goos"
 
-  chmod +x "$working_bundle_path"
+  if [ "$goos" != "windows" ]; then
+    chmod +x "$working_bundle_path"
+  fi
   "$SCRIPT_DIR/safe_extract_tar.py" --replace-dir "$working_bundle" --dest "$bundle_dir"
   rm -rf "$staging_parent"
   trap - EXIT

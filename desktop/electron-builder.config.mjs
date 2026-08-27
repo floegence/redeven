@@ -38,9 +38,8 @@ function validateSparklePublicKey(value) {
 }
 
 function resolveTargetGoos(platform = process.platform) {
-  if (platform === 'darwin' || platform === 'linux') {
-    return platform;
-  }
+  if (platform === 'darwin' || platform === 'linux') return platform;
+  if (platform === 'win32') return 'windows';
   throw new Error(`Unsupported desktop packaging platform: ${platform}`);
 }
 
@@ -71,9 +70,9 @@ function bundledBinaryCandidate(name) {
   return candidate;
 }
 
-function resolveBundledRuntimeBinary() {
+function resolveBundledRuntimeArtifact() {
   const goos = resolveTargetGoos();
-  return bundledBinaryCandidate(goos === 'windows' ? 'redeven.exe' : 'redeven');
+  return bundledBinaryCandidate(goos === 'windows' ? 'redeven_linux_amd64.tar.gz' : 'redeven');
 }
 
 function loadReleaseArtifactHelpers() {
@@ -88,7 +87,7 @@ function loadReleaseArtifactHelpers() {
   }
 }
 
-const bundledRuntimeBinary = resolveBundledRuntimeBinary();
+const bundledRuntimeArtifact = resolveBundledRuntimeArtifact();
 const bundledDesktopManifest = bundledBinaryCandidate('desktop-bundle-manifest.json');
 const bundledReDevPluginResources = resolveTargetGoos() === 'linux'
   ? [
@@ -161,11 +160,13 @@ export default {
     const resourcesDir = goos === 'darwin'
       ? path.join(context.appOutDir, 'Redeven Desktop.app', 'Contents', 'Resources')
       : path.join(context.appOutDir, 'resources');
-    execFileSync(
-      path.join(repoRoot, 'scripts', 'check_redevplugin_consumption_gate.sh'),
-      ['--scan-root', path.join(resourcesDir, 'bin'), '--runtime-target', `${goos}/${goarch}`],
-      { stdio: 'inherit' },
-    );
+    if (goos !== 'windows') {
+      execFileSync(
+        path.join(repoRoot, 'scripts', 'check_redevplugin_consumption_gate.sh'),
+        ['--scan-root', path.join(resourcesDir, 'bin'), '--runtime-target', `${goos}/${goarch}`],
+        { stdio: 'inherit' },
+      );
+    }
   },
   asar: true,
   npmRebuild: false,
@@ -179,8 +180,8 @@ export default {
   ],
   extraResources: [
     {
-      from: bundledRuntimeBinary,
-      to: 'bin/redeven',
+      from: bundledRuntimeArtifact,
+      to: resolveTargetGoos() === 'windows' ? 'bin/redeven_linux_amd64.tar.gz' : 'bin/redeven',
     },
     {
       from: bundledDesktopManifest,
@@ -225,6 +226,20 @@ export default {
     description: 'Public Electron desktop shell that bundles the matching redeven runtime.',
     icon: path.join(buildResourcesDir, 'icon.png'),
     target: ['deb', 'rpm'],
+  },
+  win: {
+    target: [{ target: 'nsis', arch: ['x64'] }],
+    artifactName: 'Redeven-Desktop-Internal-${version}-win-${arch}.${ext}',
+    icon: path.join(buildResourcesDir, 'icon.png'),
+  },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowElevation: false,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    deleteAppDataOnUninstall: false,
   },
   deb: {
     packageName: 'redeven-desktop',

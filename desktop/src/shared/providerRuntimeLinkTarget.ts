@@ -6,9 +6,9 @@ import type {
 } from './runtimeService';
 import type { DesktopRuntimeControlStatus } from './desktopRuntimePresence';
 
-export type DesktopProviderRuntimeLinkTargetKind = 'local_environment' | 'ssh_environment';
+export type DesktopProviderRuntimeLinkTargetKind = 'local_environment' | 'wsl_environment' | 'ssh_environment';
 
-export type DesktopProviderRuntimeLinkTargetID = `local:${string}` | `ssh:${string}`;
+export type DesktopProviderRuntimeLinkTargetID = `local:${string}` | `wsl:${string}` | `ssh:${string}`;
 
 export type DesktopProviderEnvironmentOccupancyState =
   | 'available'
@@ -74,7 +74,12 @@ export function desktopProviderRuntimeLinkTargetID(
   if (cleanRuntimeKey === '') {
     throw new Error('Runtime target key is required.');
   }
-  return `${kind === 'ssh_environment' ? 'ssh' : 'local'}:${cleanRuntimeKey}`;
+  const prefix = kind === 'ssh_environment'
+    ? 'ssh'
+    : kind === 'wsl_environment'
+      ? 'wsl'
+      : 'local';
+  return `${prefix}:${cleanRuntimeKey}`;
 }
 
 export function normalizeDesktopProviderRuntimeLinkTargetID(
@@ -87,17 +92,24 @@ export function normalizeDesktopProviderRuntimeLinkTargetID(
   if (cleanValue.startsWith('ssh:') && cleanValue.length > 'ssh:'.length) {
     return cleanValue as DesktopProviderRuntimeLinkTargetID;
   }
+  if (cleanValue.startsWith('wsl:') && cleanValue.length > 'wsl:'.length) {
+    return cleanValue as DesktopProviderRuntimeLinkTargetID;
+  }
   return null;
 }
 
 export function desktopProviderRuntimeLinkTargetKindFromID(
   value: DesktopProviderRuntimeLinkTargetID,
 ): DesktopProviderRuntimeLinkTargetKind {
-  return value.startsWith('ssh:') ? 'ssh_environment' : 'local_environment';
+  return value.startsWith('ssh:')
+    ? 'ssh_environment'
+    : value.startsWith('wsl:')
+      ? 'wsl_environment'
+      : 'local_environment';
 }
 
 export function desktopProviderRuntimeLinkTargetRuntimeKey(
   value: DesktopProviderRuntimeLinkTargetID,
 ): string {
-  return value.replace(/^(local|ssh):/u, '');
+  return value.replace(/^(local|wsl|ssh):/u, '');
 }
