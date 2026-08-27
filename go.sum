@@ -12,8 +12,8 @@ github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkp
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/ebitengine/purego v0.9.1 h1:a/k2f2HQU3Pi399RPW1MOaZyhKJL9w/xFpKAg4q1s0A=
 github.com/ebitengine/purego v0.9.1/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
-github.com/floegence/floeterm/terminal-go v0.17.1 h1:OmfTgsmLqDY62xRwN2DYJt2oMA7E3eugjXu+sYEg3wY=
-github.com/floegence/floeterm/terminal-go v0.17.1/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=
+github.com/floegence/floeterm/terminal-go v0.18.0 h1:uvW7nY/OTk8tolGlYahQDHyJ7D9I6MSi1+oYfE4P4D8=
+github.com/floegence/floeterm/terminal-go v0.18.0/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=
 github.com/floegence/floret/v5 v5.0.5 h1:lSpP7ieGUjAvE1MLEMXWDgUAJ1zCh5sBjAMr/TPkdiE=
 github.com/floegence/floret/v5 v5.0.5/go.mod h1:P9sciq1UrwVwCgIEZXd2lNbvbR6z8P5ZgTM8dcRsshg=
 github.com/floegence/flowersec/flowersec-go/v3 v3.2.0 h1:yYq3py7WeoQwwRCqI1KWG5/UpP9XyRgFhGCCFW9i4sE=

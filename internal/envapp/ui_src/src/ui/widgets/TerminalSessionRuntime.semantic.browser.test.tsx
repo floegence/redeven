@@ -145,9 +145,17 @@ function harness(options: Readonly<{
   const [active, setActive] = createSignal(true);
   let geometryGeneration = 1;
   let latestWidth = 80;
-  const sendInput = vi.fn(async () => undefined);
+  const sendInput = vi.fn(async (_sessionId: string, _data: string) => undefined);
   const sendInputIntent = vi.fn(async (_sessionId: string, _intent: TerminalKeyInputIntent) => undefined);
   const sendPaste = vi.fn(async (_sessionId: string, _data: string) => undefined);
+  const interactInput = vi.fn(async (_sessionId: string, _cols: number, _rows: number, _data: string) => undefined);
+  const interactInputIntent = vi.fn(async (
+    _sessionId: string,
+    _cols: number,
+    _rows: number,
+    _intent: TerminalKeyInputIntent,
+  ) => undefined);
+  const interactPaste = vi.fn(async (_sessionId: string, _cols: number, _rows: number, _data: string) => undefined);
   const semanticHistory = vi.fn(async (_sessionId: string, request: SemanticHistoryRequest) => {
     const totalRows = 64;
     const screenStartOffset = 40;
@@ -231,6 +239,9 @@ function harness(options: Readonly<{
     sendInput,
     sendInputIntent,
     sendPaste,
+    interactInput,
+    interactInputIntent,
+    interactPaste,
     semanticHistory,
     clearSemanticContent: async () => ({ presentationSequence: 3, contentEpoch: 2 }),
     forgetSession: vi.fn(),
@@ -325,6 +336,9 @@ function harness(options: Readonly<{
     sendInput,
     sendInputIntent,
     sendPaste,
+    interactInput,
+    interactInputIntent,
+    interactPaste,
     setViewActive,
     setActive,
     setFontSize,
@@ -337,6 +351,19 @@ function harness(options: Readonly<{
 async function waitForHistoryAttachment(runtime: ReturnType<typeof harness>): Promise<void> {
   await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')
     ?.getAttribute('data-terminal-controller-epoch')).toBe('1'));
+}
+
+function orderedIntentCalls(runtime: ReturnType<typeof harness>): TerminalKeyInputIntent[] {
+  return [
+    ...runtime.sendInputIntent.mock.calls.map((call, index) => ({
+      order: runtime.sendInputIntent.mock.invocationCallOrder[index] ?? Number.MAX_SAFE_INTEGER,
+      intent: call[1],
+    })),
+    ...runtime.interactInputIntent.mock.calls.map((call, index) => ({
+      order: runtime.interactInputIntent.mock.invocationCallOrder[index] ?? Number.MAX_SAFE_INTEGER,
+      intent: call[3],
+    })),
+  ].sort((left, right) => left.order - right.order).map((call) => call.intent);
 }
 
 async function waitForPaint(): Promise<void> {
@@ -431,10 +458,10 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       bubbles: true,
       cancelable: true,
     }));
-    await vi.waitFor(() => expect(runtime.sendInputIntent).toHaveBeenCalledTimes(2));
-    expect(runtime.sendInputIntent.mock.calls).toEqual([
-      [SESSION.id, expect.objectContaining({ kind: 'key', code: 'Enter', action: 'press' })],
-      [SESSION.id, expect.objectContaining({ kind: 'key', code: 'Enter', action: 'release' })],
+    await vi.waitFor(() => expect(orderedIntentCalls(runtime)).toHaveLength(2));
+    expect(orderedIntentCalls(runtime)).toEqual([
+      expect.objectContaining({ kind: 'key', code: 'Enter', action: 'press' }),
+      expect.objectContaining({ kind: 'key', code: 'Enter', action: 'release' }),
     ]);
     expect(runtime.sendInput).not.toHaveBeenCalled();
 
@@ -448,9 +475,14 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       cancelable: true,
     }));
     input.dispatchEvent(new CompositionEvent('compositionend', { data: '中', bubbles: true }));
-    expect(runtime.sendInput).toHaveBeenCalledOnce();
-    expect(runtime.sendInput).toHaveBeenCalledWith(SESSION.id, '中');
-    expect(runtime.sendInputIntent).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(
+      runtime.sendInput.mock.calls.length + runtime.interactInput.mock.calls.length,
+    ).toBe(1));
+    expect([
+      ...runtime.sendInput.mock.calls.map((call) => call[1]),
+      ...runtime.interactInput.mock.calls.map((call) => call[3]),
+    ]).toEqual(['中']);
+    expect(orderedIntentCalls(runtime)).toHaveLength(2);
   });
 
   it('routes native copy and paste events through the renderer and semantic paste owner', async () => {
@@ -619,7 +651,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.getViewport()?.getSelectionText()).toContain('click-target');
   });
 
-  it('atomically activates an observer with its measured geometry before user input', async () => {
+  it('sends observer input with measured geometry without waiting for activation settlement', async () => {
     const runtime = harness({ controller: false });
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'observer'));
@@ -663,7 +695,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     }));
 
     await vi.waitFor(() => expect(runtime.activate).toHaveBeenCalledOnce());
-    expect(document.activeElement).not.toBe(input);
+    expect(document.activeElement).toBe(input);
     expect(runtime.activate).toHaveBeenCalledWith(
       SESSION.id,
       expect.any(Number),
@@ -681,16 +713,41 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       data: 'y',
       bubbles: true,
     }));
-    await Promise.resolve();
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      code: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    }));
+    const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => 'paste' } });
+    input.dispatchEvent(paste);
+    await vi.waitFor(() => expect(runtime.interactInput).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(runtime.interactInputIntent).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(runtime.interactPaste).toHaveBeenCalledOnce());
+    expect(runtime.interactInput.mock.calls).toEqual([
+      [SESSION.id, expect.any(Number), expect.any(Number), 'x'],
+      [SESSION.id, expect.any(Number), expect.any(Number), 'y'],
+    ]);
+    expect(runtime.interactInputIntent).toHaveBeenCalledWith(
+      SESSION.id,
+      expect.any(Number),
+      expect.any(Number),
+      expect.objectContaining({ kind: 'key', code: 'Enter', action: 'press' }),
+    );
+    expect(runtime.interactPaste).toHaveBeenCalledWith(
+      SESSION.id,
+      expect.any(Number),
+      expect.any(Number),
+      'paste',
+    );
     expect(runtime.sendInput).not.toHaveBeenCalled();
+    expect(runtime.sendInputIntent).not.toHaveBeenCalled();
+    expect(runtime.sendPaste).not.toHaveBeenCalled();
 
     settleActivation();
-    await vi.waitFor(() => expect(runtime.sendInput).toHaveBeenCalledTimes(2));
-    expect(runtime.sendInput.mock.calls).toEqual([
-      [SESSION.id, 'x'],
-      [SESSION.id, 'y'],
-    ]);
-    expect(document.activeElement).toBe(input);
+    await vi.waitFor(() => expect(runtime.root.querySelector<HTMLElement>('[data-terminal-runtime-session]')
+      ?.dataset.terminalIsController).toBe('true'));
     const runtimeElement = runtime.root.querySelector<HTMLElement>('[data-terminal-runtime-session]')!;
     expect(runtimeElement.dataset.terminalControllerEpoch).toBe('2');
     expect(runtimeElement.dataset.terminalIsController).toBe('true');
@@ -716,7 +773,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.activate).toHaveBeenCalledWith(SESSION.id, expectedCols, expectedRows);
   });
 
-  it('activates a selected view before exposing its input bridge as focused', async () => {
+  it('focuses a selected view immediately while explicit activation settles', async () => {
     const runtime = harness({ controller: false, autoFocus: true });
     mounted.push(runtime);
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
@@ -745,11 +802,10 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
     runtime.emitPresentation(presentation(1, 'selected-observer'));
     await vi.waitFor(() => expect(runtime.activate).toHaveBeenCalledOnce());
-    expect(document.activeElement).not.toBe(input);
+    expect(document.activeElement).toBe(input);
 
     settleActivation();
-    await vi.waitFor(() => expect(document.activeElement).toBe(input));
-    expect(runtimeElement.dataset.terminalIsController).toBe('true');
+    await vi.waitFor(() => expect(runtimeElement.dataset.terminalIsController).toBe('true'));
   });
 
   it('shares one in-flight attachment across concurrent activation requests', async () => {
@@ -774,11 +830,11 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.activate).toHaveBeenCalledOnce();
   });
 
-  it('fails closed with the activation reason and never writes input after a rejected takeover', async () => {
+  it('fails closed when a geometry-bound interaction is rejected', async () => {
     const runtime = harness({ controller: false });
     mounted.push(runtime);
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
-    runtime.activate.mockRejectedValueOnce(new Error('stale terminal controller epoch'));
+    runtime.interactInput.mockRejectedValueOnce(new Error('terminal interaction rejected'));
 
     const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
     input.value = 'must-not-write';
@@ -788,15 +844,15 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       bubbles: true,
     }));
 
-    await vi.waitFor(() => expect(runtime.activate).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(runtime.interactInput).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(runtime.statuses.at(-1)).toMatchObject({
       state: 'blocking',
-      failureCode: 'terminal_activation_failed',
+      failureCode: 'terminal_input_failed',
       retryable: false,
     }));
     expect(runtime.sendInput).not.toHaveBeenCalled();
     expect(runtime.root.querySelector('[data-terminal-semantic-error="true"]')?.textContent)
-      .toContain('stale terminal controller epoch');
+      .toContain('terminal interaction rejected');
   });
 
   it('routes Ctrl+C to the native intent channel when the terminal has no selection', async () => {
@@ -822,22 +878,22 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       cancelable: true,
     }));
 
-    await vi.waitFor(() => expect(runtime.sendInputIntent).toHaveBeenCalledTimes(2));
-    expect(runtime.sendInputIntent.mock.calls).toEqual([
-      [SESSION.id, expect.objectContaining({
+    await vi.waitFor(() => expect(orderedIntentCalls(runtime)).toHaveLength(2));
+    expect(orderedIntentCalls(runtime)).toEqual([
+      expect.objectContaining({
         kind: 'key',
         code: 'KeyC',
         text: 'c',
         action: 'press',
         modifiers: expect.objectContaining({ control: true }),
-      })],
-      [SESSION.id, expect.objectContaining({
+      }),
+      expect.objectContaining({
         kind: 'key',
         code: 'KeyC',
         text: 'c',
         action: 'release',
         modifiers: expect.objectContaining({ control: true }),
-      })],
+      }),
     ]);
     expect(runtime.sendInput).not.toHaveBeenCalled();
   });
@@ -878,7 +934,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     ] as const;
 
     for (const shortcut of shortcuts) {
-      const before = runtime.sendInputIntent.mock.calls.length;
+      const before = orderedIntentCalls(runtime).length;
       for (const type of ['keydown', 'keyup'] as const) {
         input.dispatchEvent(new KeyboardEvent(type, {
           ...shortcut,
@@ -886,8 +942,8 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
           cancelable: true,
         }));
       }
-      await vi.waitFor(() => expect(runtime.sendInputIntent.mock.calls.length).toBe(before + 2));
-      expect(runtime.sendInputIntent.mock.calls.slice(before).map((call) => call[1])).toEqual([
+      await vi.waitFor(() => expect(orderedIntentCalls(runtime)).toHaveLength(before + 2));
+      expect(orderedIntentCalls(runtime).slice(before)).toEqual([
         expect.objectContaining({ kind: 'key', code: shortcut.code, action: 'press' }),
         expect.objectContaining({ kind: 'key', code: shortcut.code, action: 'release' }),
       ]);
@@ -951,6 +1007,9 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.sendInputIntent).not.toHaveBeenCalled();
     expect(runtime.sendInput).not.toHaveBeenCalled();
     expect(runtime.sendPaste).not.toHaveBeenCalled();
+    expect(runtime.interactInputIntent).not.toHaveBeenCalled();
+    expect(runtime.interactInput).not.toHaveBeenCalled();
+    expect(runtime.interactPaste).not.toHaveBeenCalled();
   });
 
   it('does not reclaim controller ownership when a hidden display mode receives a Presentation', async () => {

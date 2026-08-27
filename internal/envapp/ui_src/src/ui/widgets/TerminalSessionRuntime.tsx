@@ -600,7 +600,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     return activationWork;
   };
 
-  const focusAfterActivation = (requireAutoFocus: boolean) => {
+  const focusAndActivate = (requireAutoFocus: boolean) => {
     const canFocus = () => (
       !disposed
       && props.active()
@@ -609,9 +609,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       && !renderer?.hasSelection()
     );
     if (!canFocus()) return;
-    void activateCurrentView().then(() => {
-      if (canFocus()) inputBridge?.focus({ preventScroll: true });
-    }).catch(() => undefined);
+    inputBridge?.focus({ preventScroll: true });
+    void activateCurrentView().catch(() => undefined);
   };
 
   const clearReconnectTimer = () => {
@@ -640,13 +639,19 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }, delay);
   };
 
-  const dispatchInteraction = (send: () => Promise<void>) => {
+  const dispatchInteraction = (
+    send: () => Promise<void>,
+    interact: (size: GridSize) => Promise<void>,
+  ) => {
     const run = async () => {
       if (!props.connected() || !props.viewActive() || !props.active()) return;
-      await activateCurrentView();
-      if (!props.connected() || !props.viewActive() || !props.active()) return;
+      const requested = measure();
       try {
-        await send();
+        if (isController && sameGrid(appliedSize, requested)) {
+          await send();
+        } else {
+          await interact(requested);
+        }
       } catch (error) {
         if (!disposed) failClosed(error, 'terminal_input_failed');
         throw error;
@@ -666,17 +671,26 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const sendInput = (data: string) => {
     if (!data || !props.connected() || !props.viewActive() || !props.active()) return;
-    dispatchInteraction(() => props.transport.sendInput(sessionId, data));
+    dispatchInteraction(
+      () => props.transport.sendInput(sessionId, data),
+      (size) => props.transport.interactInput(sessionId, size.cols, size.rows, data),
+    );
   };
 
   const sendPaste = (data: string) => {
     if (!data || !props.connected() || !props.viewActive() || !props.active()) return;
-    dispatchInteraction(() => props.transport.sendPaste(sessionId, data));
+    dispatchInteraction(
+      () => props.transport.sendPaste(sessionId, data),
+      (size) => props.transport.interactPaste(sessionId, size.cols, size.rows, data),
+    );
   };
 
   const sendInputIntent = (intent: TerminalKeyInputIntent) => {
     if (!props.connected() || !props.viewActive() || !props.active()) return;
-    dispatchInteraction(() => props.transport.sendInputIntent(sessionId, intent));
+    dispatchInteraction(
+      () => props.transport.sendInputIntent(sessionId, intent),
+      (size) => props.transport.interactInputIntent(sessionId, size.cols, size.rows, intent),
+    );
   };
 
   function publishSearchResult() {
@@ -1026,7 +1040,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     focusIfInteractive: () => {
       if (!props.active() || !props.viewActive()) return 'not_interactive';
       if (renderer?.hasSelection()) return 'selection_active';
-      focusAfterActivation(false);
+      focusAndActivate(false);
       return 'focused';
     },
   };
@@ -1284,7 +1298,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   createEffect(() => {
     if (!props.active() || !props.viewActive() || !props.autoFocus() || !ready()) return;
-    focusAfterActivation(true);
+    focusAndActivate(true);
   });
 
   onCleanup(() => {
@@ -1437,7 +1451,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.preventDefault();
-            focusAfterActivation(false);
+            focusAndActivate(false);
             event.currentTarget.setPointerCapture(event.pointerId);
             renderer?.beginSelection(event.clientX, event.clientY);
           }}
