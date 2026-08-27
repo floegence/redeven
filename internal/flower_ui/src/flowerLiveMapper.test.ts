@@ -74,6 +74,17 @@ describe('Flower context usage contract', () => {
     });
   });
 
+  it('accepts an explicitly empty previous context snapshot', () => {
+    const incoming = mapContextUsage({
+      phase: 'projected_request',
+      pressure_status: 'stable',
+      input_tokens: 950,
+      updated_at_ms: 11,
+    })!;
+
+    expect(mergeFlowerContextUsage(null, incoming)).toBe(incoming);
+  });
+
   it('replaces confirmed totals when a newer canonical snapshot includes them', () => {
     const previous = mapContextUsage({
       phase: 'provider_usage',

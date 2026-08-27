@@ -255,7 +255,7 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
 }
 
 export function mergeFlowerContextUsage(
-  previous: FlowerContextUsage | undefined,
+  previous: FlowerContextUsage | null | undefined,
   incoming: FlowerContextUsage,
 ): FlowerContextUsage {
   if (incoming.thread_usage || !previous?.thread_usage) return incoming;
