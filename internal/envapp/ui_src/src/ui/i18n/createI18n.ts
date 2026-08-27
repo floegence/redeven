@@ -7,7 +7,7 @@ export type I18nHelpers = Readonly<{
   tn: (key: EnvAppTranslationKey, count: number, params?: TranslationParams) => string;
   rich: (key: EnvAppTranslationKey, params?: TranslationParams) => readonly RichTextPart[];
   formatDateTime: (value: Date | number | string, options?: Intl.DateTimeFormatOptions) => string;
-  formatRelativeTime: (value: Date | number | string) => string;
+  formatRelativeTime: (value: Date | number | string, relativeTo?: Date | number | string) => string;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
 }>;
 
@@ -97,9 +97,12 @@ export function createI18nHelpers(
     new Intl.NumberFormat(locale, options).format(value)
   );
 
-  const formatRelativeTime = (value: Date | number | string): string => {
+  const formatRelativeTime = (
+    value: Date | number | string,
+    relativeTo: Date | number | string = Date.now(),
+  ): string => {
     const target = coerceDate(value).getTime();
-    const diffSeconds = Math.round((target - Date.now()) / 1000);
+    const diffSeconds = Math.round((target - coerceDate(relativeTo).getTime()) / 1000);
     const absSeconds = Math.abs(diffSeconds);
     const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
     if (absSeconds < 60) {

@@ -791,6 +791,13 @@ describe('Env App i18n dictionaries', () => {
     }
   });
 
+  it('formats relative time against an explicit reference instant', () => {
+    const en = createI18nHelpers('en-US');
+    const startedAt = Date.parse('2026-08-27T08:00:00.000Z');
+
+    expect(en.formatRelativeTime(startedAt, startedAt + 120_000)).toBe('2 minutes ago');
+  });
+
   it('keeps product chrome translation separate from user and generated content', () => {
     const zhCN = createI18nHelpers('zh-CN');
     const userPrompt = 'Flower should inspect src/main.ts and keep this prompt in English.';

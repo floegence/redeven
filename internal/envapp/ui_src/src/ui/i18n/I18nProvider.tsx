@@ -154,7 +154,7 @@ export function I18nProvider(props: Readonly<{ children: JSX.Element }>) {
     tn: (key, count, params) => helpers().tn(key, count, params),
     rich: (key, params) => helpers().rich(key, params),
     formatDateTime: (value, options) => helpers().formatDateTime(value, options),
-    formatRelativeTime: (value) => helpers().formatRelativeTime(value),
+    formatRelativeTime: (value, relativeTo) => helpers().formatRelativeTime(value, relativeTo),
     formatNumber: (value, options) => helpers().formatNumber(value, options),
     snapshot,
     locale: () => snapshot().resolved_locale,
