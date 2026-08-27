@@ -4899,6 +4899,8 @@ export function EnvAppShell() {
               identity={envSessionIdentity()}
               connectionStatus={status()}
               connectionLabel={statusLabel()}
+              runtimeSnapshot={agentVersionModel.currentPing()}
+              runtimeSnapshotLoading={agentVersionModel.currentPingLoading()}
               canRead={env.state === 'ready' ? Boolean(env()?.permissions?.can_read) : null}
               mobile={layout.isMobile()}
             />

@@ -344,6 +344,14 @@ vi.mock('./protocol/redeven_v1', () => ({
       ping: vi.fn(async () => undefined),
       restart: vi.fn(async () => ({ ok: true })),
     },
+    monitor: {
+      getSysMonitor: vi.fn(async () => ({
+        cpuUsage: 0,
+        memoryUsedBytes: 0,
+        memoryTotalBytes: 1,
+        timestampMs: Date.now(),
+      })),
+    },
     ai: {
       subscribeThread: vi.fn(async () => undefined),
       sendUserTurn: vi.fn(async () => undefined),
@@ -589,6 +597,8 @@ vi.mock('./maintenance/createRuntimeUpdatePromptCoordinator', () => ({
 }));
 vi.mock('./maintenance/createAgentVersionModel', () => ({
   createAgentVersionModel: () => ({
+    currentPing: () => null,
+    currentPingLoading: () => false,
     currentProcessStartedAtMs: () => 0,
     runtimeService: () => undefined,
     currentVersion: () => 'v1.0.0',

@@ -67,6 +67,18 @@ function mountAtBottom(displayName: string) {
       identity={{ source: 'local_runtime', displayName, displayID: 'env_local' }}
       connectionStatus="connected"
       connectionLabel="Connected"
+      runtimeSnapshot={{
+        serverTimeMs: Date.now(),
+        version: 'v2.4.0',
+        processStartedAtMs: Date.now() - 7_200_000,
+        runtimeService: {
+          runtimeVersion: 'v2.4.1',
+          remoteEnabled: false,
+          compatibility: 'compatible',
+          activeWorkload: { terminalCount: 0, sessionCount: 0, taskCount: 0, portForwardCount: 0 },
+        },
+      }}
+      runtimeSnapshotLoading={false}
       canRead={true}
       mobile={false}
     />
