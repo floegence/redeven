@@ -1,4 +1,12 @@
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
+import {
+  connect as connectHTTP2,
+  constants as HTTP2_CONSTANTS,
+  type ClientHttp2Session,
+  type ClientHttp2Stream,
+  type IncomingHttpHeaders,
+} from 'node:http2';
+import { Duplex } from 'node:stream';
 
 import {
   buildRuntimePlacementBridgePlan,
@@ -33,12 +41,18 @@ import type {
 } from '../shared/desktopSessionContextIPC';
 import {
   parseRuntimePlacementBridgeHello,
-  parseRuntimePlacementBridgeStreamError,
-  readRuntimePlacementBridgeFrame,
-  RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES,
+  RUNTIME_PLACEMENT_BRIDGE_AUTHORITY,
+  RUNTIME_PLACEMENT_BRIDGE_ERROR_CODE_HEADER,
+  RUNTIME_PLACEMENT_BRIDGE_HELLO_PATH,
+  RUNTIME_PLACEMENT_BRIDGE_MAX_CONTROL_RESPONSE_BYTES,
+  RUNTIME_PLACEMENT_BRIDGE_MAX_HEADER_BLOCK_BYTES,
+  RUNTIME_PLACEMENT_BRIDGE_MAX_HEADER_PAIRS,
+  RUNTIME_PLACEMENT_BRIDGE_MAX_SESSION_MEMORY_MB,
+  RUNTIME_PLACEMENT_BRIDGE_SESSION_WINDOW_BYTES,
+  RUNTIME_PLACEMENT_BRIDGE_STREAM_WINDOW_BYTES,
   runtimeControlEndpointFromBridgeHello,
-  runtimePlacementBridgeStreamID,
-  writeRuntimePlacementBridgeFrame,
+  runtimePlacementBridgeStreamError,
+  runtimePlacementBridgeSurfaceAuthority,
   type RuntimePlacementBridgeHello,
   type RuntimePlacementBridgeSurface,
 } from './runtimePlacementBridgeProtocol';
@@ -48,6 +62,7 @@ const DEFAULT_BRIDGE_RECOVERY_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000]
 
 type BridgeStreamCallbacks = {
   transport_id: number;
+  request: ClientHttp2Stream;
   onData?: (chunk: Buffer) => void | Promise<void>;
   onClose?: () => void;
   onError?: (error: Error) => void;
@@ -59,9 +74,9 @@ type BridgeStreamCallbacks = {
 type RuntimeBridgeIdentity = Readonly<{
   kind: 'runtime';
   started_at_unix_ms: number;
-	runtime_version: string;
-	runtime_control_protocol_version: string;
-	runtime_control_token: string;
+  runtime_version: string;
+  runtime_control_protocol_version: string;
+  runtime_control_token: string;
 }>;
 
 type GatewayBridgeIdentity = Readonly<{
@@ -77,6 +92,10 @@ type BridgeProcessIdentity = RuntimeBridgeIdentity | GatewayBridgeIdentity;
 type RemoteBridgeTransport = Readonly<{
   id: number;
   command: RuntimeHostStreamingCommand;
+  connection: Duplex;
+  session: ClientHttp2Session;
+  closed: Promise<Error>;
+  markInbound: () => void;
   hello: RuntimePlacementBridgeHello;
   identity: BridgeProcessIdentity | null;
 }>;
@@ -87,6 +106,7 @@ export type RuntimePlacementBridgeStream = Readonly<{
   onClose: (callback: () => void) => void;
   onError: (callback: (error: Error) => void) => void;
   write: (chunk: Buffer) => Promise<void>;
+  closeWrite?: () => Promise<void>;
   close: () => Promise<void>;
 }>;
 
@@ -148,6 +168,13 @@ class RuntimePlacementBridgeRemoteCommandEndedError extends Error {
   }
 }
 
+class RuntimePlacementBridgeHTTP2Error extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'RuntimePlacementBridgeHTTP2Error';
+  }
+}
+
 class RuntimePlacementBridgeRetryNowError extends Error {
   constructor() {
     super('Runtime Placement Bridge retry requested.');
@@ -179,14 +206,14 @@ function runtimeBridgeIdentity(hello: RuntimePlacementBridgeHello): RuntimeBridg
   const startedAtUnixMS = Number(hello.started_at_unix_ms);
   const runtimeVersion = compact(hello.runtime_version);
   const protocolVersion = compact(hello.runtime_control.protocol_version);
-	const token = compact(hello.runtime_control.token);
+  const token = compact(hello.runtime_control.token);
   if (
     !Number.isInteger(startedAtUnixMS)
     || startedAtUnixMS <= 0
     || runtimeVersion === ''
     || !hello.runtime_control.available
     || protocolVersion === ''
-		|| token === ''
+    || token === ''
   ) {
     throw new RuntimePlacementBridgeIdentityChangedError(
       'Runtime Placement Bridge did not report the complete Runtime process identity.',
@@ -303,15 +330,244 @@ async function closeStreamingCommand(command: RuntimeHostStreamingCommand): Prom
   await command.closed.catch(() => undefined);
 }
 
-async function transportClosedReason(command: RuntimeHostStreamingCommand): Promise<Error> {
-  try {
-    await command.closed;
-    return new RuntimePlacementBridgeRemoteCommandEndedError(
-      'Runtime Placement Bridge command ended; the original remote process generation is no longer available.',
+function bridgeTransportTermination(
+  command: RuntimeHostStreamingCommand,
+  session: ClientHttp2Session,
+): Promise<Error> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(error);
+    };
+    session.once('error', (error) => {
+      finish(new RuntimePlacementBridgeHTTP2Error(
+        'Runtime Placement Bridge HTTP/2 session failed.',
+        { cause: error },
+      ));
+    });
+    session.once('goaway', (errorCode) => {
+      finish(new RuntimePlacementBridgeHTTP2Error(
+        `Runtime Placement Bridge HTTP/2 session received GOAWAY (${errorCode}).`,
+      ));
+    });
+    session.once('close', () => {
+      finish(new RuntimePlacementBridgeHTTP2Error(
+        'Runtime Placement Bridge HTTP/2 session closed.',
+      ));
+    });
+    void command.closed.then(
+      () => finish(new RuntimePlacementBridgeRemoteCommandEndedError(
+        'Runtime Placement Bridge command ended; the original remote process generation is no longer available.',
+      )),
+      (error) => finish(normalizeError(error)),
     );
-  } catch (error) {
-    return normalizeError(error);
+  });
+}
+
+function startHTTP2Keepalive(session: ClientHttp2Session): Readonly<{
+  touch: () => void;
+  stop: () => void;
+}> {
+  let stopped = false;
+  let idleTimer: NodeJS.Timeout | null = null;
+  let responseTimer: NodeJS.Timeout | null = null;
+  const schedule = () => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+    }
+    idleTimer = setTimeout(sendPing, 15_000);
+    idleTimer.unref();
+  };
+  const touch = () => {
+    if (!stopped) {
+      schedule();
+    }
+  };
+  const sendPing = () => {
+    idleTimer = null;
+    if (stopped || session.closed || session.destroyed || responseTimer) {
+      return;
+    }
+    responseTimer = setTimeout(() => {
+      responseTimer = null;
+      session.destroy(new RuntimePlacementBridgeHTTP2Error(
+        'Runtime Placement Bridge HTTP/2 PING timed out.',
+      ));
+    }, 10_000);
+    session.ping((error) => {
+      if (responseTimer) {
+        clearTimeout(responseTimer);
+        responseTimer = null;
+      }
+      if (error && !session.destroyed) {
+        session.destroy(new RuntimePlacementBridgeHTTP2Error(
+          'Runtime Placement Bridge HTTP/2 PING failed.',
+          { cause: error },
+        ));
+        return;
+      }
+      touch();
+    });
+  };
+  const stop = () => {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+    if (responseTimer) {
+      clearTimeout(responseTimer);
+      responseTimer = null;
+    }
+  };
+  session.on('remoteSettings', touch);
+  session.on('ping', touch);
+  session.on('goaway', touch);
+  session.once('close', stop);
+  schedule();
+  return { touch, stop };
+}
+
+async function waitForHTTP2Connect(
+  session: ClientHttp2Session,
+  closed: Promise<Error>,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) {
+    throw signal.reason ?? abortError();
   }
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      session.off('connect', onConnect);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const onConnect = () => {
+      cleanup();
+      resolve();
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(signal.reason ?? abortError());
+    };
+    session.once('connect', onConnect);
+    signal.addEventListener('abort', onAbort, { once: true });
+    void closed.then((error) => {
+      cleanup();
+      reject(error);
+    });
+  });
+}
+
+function headerText(headers: IncomingHttpHeaders, name: string): string {
+  const value = headers[name];
+  return compact(Array.isArray(value) ? value[0] : value);
+}
+
+function readHTTP2ControlResponse(
+  session: ClientHttp2Session,
+  headers: Readonly<Record<string, string>>,
+  markInbound?: () => void,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const request = session.request(headers, { endStream: true });
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    let responseHeaders: IncomingHttpHeaders | null = null;
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      fn();
+    };
+    request.on('response', (nextHeaders) => {
+      markInbound?.();
+      responseHeaders = nextHeaders;
+    });
+    request.on('data', (chunk: Buffer | string) => {
+      markInbound?.();
+      const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += value.length;
+      if (bytes > RUNTIME_PLACEMENT_BRIDGE_MAX_CONTROL_RESPONSE_BYTES) {
+        request.close(HTTP2_CONSTANTS.NGHTTP2_CANCEL);
+        settle(() => reject(new RuntimePlacementBridgeHTTP2Error(
+          'Runtime Placement Bridge control response is too large.',
+        )));
+        return;
+      }
+      chunks.push(value);
+    });
+    request.once('error', (error) => {
+      settle(() => reject(new RuntimePlacementBridgeHTTP2Error(
+        'Runtime Placement Bridge control request failed.',
+        { cause: error },
+      )));
+    });
+    request.once('end', () => {
+      settle(() => {
+        const status = Number(responseHeaders?.[':status'] ?? 0);
+        if (status !== 200) {
+          const code = responseHeaders
+            ? headerText(responseHeaders, RUNTIME_PLACEMENT_BRIDGE_ERROR_CODE_HEADER)
+            : '';
+          const streamError = runtimePlacementBridgeStreamError(code);
+          reject(new RuntimePlacementBridgeHTTP2Error(streamError.message));
+          return;
+        }
+        resolve(Buffer.concat(chunks, bytes));
+      });
+    });
+  });
+}
+
+function writeHTTP2Stream(stream: ClientHttp2Stream, chunk: Buffer): Promise<void> {
+  if (chunk.length === 0 || stream.write(chunk)) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      stream.off('drain', onDrain);
+      stream.off('close', onClose);
+      stream.off('error', onError);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new RuntimePlacementBridgeHTTP2Error(
+        'Runtime Placement Bridge HTTP/2 stream closed while writing.',
+      ));
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(new RuntimePlacementBridgeHTTP2Error(
+        'Runtime Placement Bridge HTTP/2 stream failed while writing.',
+        { cause: error },
+      ));
+    };
+    stream.once('drain', onDrain);
+    stream.once('close', onClose);
+    stream.once('error', onError);
+  });
+}
+
+function streamingCommandConnection(command: RuntimeHostStreamingCommand): Duplex {
+  // @types/node does not yet describe the documented readable/writable pair
+  // accepted by Duplex.from(), so keep the cast at this single stdio boundary.
+  return Duplex.from({
+    readable: command.stdout,
+    writable: command.stdin,
+  } as unknown as Duplex);
 }
 
 async function openRemoteBridgeTransport(
@@ -321,12 +577,32 @@ async function openRemoteBridgeTransport(
 ): Promise<RemoteBridgeTransport> {
   const command = await spawnBridgeCommand(args, signal);
   void command.closed.catch(() => undefined);
+  const connection = streamingCommandConnection(command);
+  const session = connectHTTP2(`http://${RUNTIME_PLACEMENT_BRIDGE_AUTHORITY}`, {
+    createConnection: () => connection,
+    maxSessionMemory: RUNTIME_PLACEMENT_BRIDGE_MAX_SESSION_MEMORY_MB,
+    maxHeaderListPairs: RUNTIME_PLACEMENT_BRIDGE_MAX_HEADER_PAIRS,
+    maxSendHeaderBlockLength: RUNTIME_PLACEMENT_BRIDGE_MAX_HEADER_BLOCK_BYTES,
+    settings: {
+      enablePush: false,
+      initialWindowSize: RUNTIME_PLACEMENT_BRIDGE_STREAM_WINDOW_BYTES,
+    },
+  });
+  session.setLocalWindowSize(RUNTIME_PLACEMENT_BRIDGE_SESSION_WINDOW_BYTES);
+  const keepalive = startHTTP2Keepalive(session);
+  const closed = bridgeTransportTermination(command, session);
   try {
-    const firstFrame = await readRuntimePlacementBridgeFrame(command.stdout);
-    if (!firstFrame || firstFrame.header.type !== 'hello') {
-      throw await transportClosedReason(command);
-    }
-    const hello = parseRuntimePlacementBridgeHello(firstFrame.payload);
+    await waitForHTTP2Connect(session, closed, signal);
+    const hello = parseRuntimePlacementBridgeHello(await readHTTP2ControlResponse(
+      session,
+      {
+        ':method': 'GET',
+        ':scheme': 'http',
+        ':authority': RUNTIME_PLACEMENT_BRIDGE_AUTHORITY,
+        ':path': RUNTIME_PLACEMENT_BRIDGE_HELLO_PATH,
+      },
+      keepalive.touch,
+    ));
     if (args.require_local_ui !== false && !hello.local_ui.available) {
       throw new RuntimePlacementBridgeIdentityChangedError(
         'Runtime Placement Bridge reported Local UI unavailable.',
@@ -335,17 +611,27 @@ async function openRemoteBridgeTransport(
     return {
       id,
       command,
+      connection,
+      session,
+      closed,
+      markInbound: keepalive.touch,
       hello,
       identity: bridgeProcessIdentity(args, hello),
     };
   } catch (error) {
+    keepalive.stop();
+    session.destroy();
+    connection.destroy();
     await closeStreamingCommand(command);
     throw error;
   }
 }
 
 function transportFailureIsRecoverable(error: Error): boolean {
-  return error instanceof DesktopSSHTransportInterruptedError
+  return error instanceof RuntimePlacementBridgeHTTP2Error
+    || error instanceof RuntimePlacementBridgeRemoteCommandEndedError
+    || error instanceof DesktopSSHRemoteCommandError
+    || error instanceof DesktopSSHTransportInterruptedError
     || (
       error instanceof DesktopSSHTransportUnavailableError
       && !(error instanceof DesktopSSHTransportAuthenticationError)
@@ -364,6 +650,8 @@ function recoveryFailureFromError(error: Error): DesktopSessionTransportRecovery
     ? 'process_identity_changed'
     : error instanceof RuntimePlacementBridgeRemoteCommandEndedError || error instanceof DesktopSSHRemoteCommandError
       ? 'remote_command_ended'
+      : error instanceof RuntimePlacementBridgeHTTP2Error
+        ? 'transport_interrupted'
       : error instanceof DesktopSSHTransportAuthenticationError
         ? 'authentication_failed'
         : error instanceof DesktopSSHTransportInterruptedError
@@ -444,6 +732,7 @@ export async function startRuntimePlacementBridgeSession(
     streams.clear();
     for (const callbacks of callbacksList) {
       callbacks.error = error;
+      callbacks.request.close(HTTP2_CONSTANTS.NGHTTP2_CANCEL);
       callbacks.onError?.(error);
     }
   };
@@ -457,20 +746,79 @@ export async function startRuntimePlacementBridgeSession(
       if (!transport) {
         throw new Error('Runtime Placement Bridge is unavailable.');
       }
-      const streamID = runtimePlacementBridgeStreamID(surface);
-      const callbacks: BridgeStreamCallbacks = { transport_id: transport.id };
+      const request = transport.session.request({
+        ':method': 'CONNECT',
+        ':authority': runtimePlacementBridgeSurfaceAuthority(surface),
+      }, { endStream: false });
+      const streamID = `${surface}-${randomUUID()}`;
+      const callbacks: BridgeStreamCallbacks = { transport_id: transport.id, request };
       streams.set(streamID, callbacks);
-      const ready = writeRuntimePlacementBridgeFrame(transport.command.stdin, {
-        type: 'stream_open',
-        stream_id: streamID,
-        payload: { surface },
-      }).catch((error: unknown) => {
-        streams.delete(streamID);
-        callbacks.error = normalizeError(error);
-        callbacks.onError?.(callbacks.error);
-        throw error;
+      let readTail = Promise.resolve();
+      let readySettled = false;
+      let resolveReady!: () => void;
+      let rejectReady!: (error: Error) => void;
+      const ready = new Promise<void>((resolve, reject) => {
+        resolveReady = resolve;
+        rejectReady = reject;
       });
       callbacks.ready = ready;
+      const failStream = (error: Error) => {
+        if (!readySettled) {
+          readySettled = true;
+          rejectReady(error);
+        }
+        if (callbacks.closed || callbacks.error) {
+          return;
+        }
+        streams.delete(streamID);
+        callbacks.error = error;
+        callbacks.onError?.(error);
+      };
+      request.once('response', (headers) => {
+        transport.markInbound();
+        const status = Number(headers[':status'] ?? 0);
+        if (status === 200) {
+          readySettled = true;
+          resolveReady();
+          return;
+        }
+        const streamError = runtimePlacementBridgeStreamError(headerText(
+          headers,
+          RUNTIME_PLACEMENT_BRIDGE_ERROR_CODE_HEADER,
+        ));
+        failStream(new RuntimePlacementBridgeHTTP2Error(streamError.message));
+        request.resume();
+      });
+      request.on('data', (chunk: Buffer | string) => {
+        transport.markInbound();
+        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        request.pause();
+        readTail = readTail.then(async () => {
+          await callbacks.onData?.(value);
+        }).catch((error: unknown) => {
+          const normalized = normalizeError(error);
+          failStream(normalized);
+          request.close(HTTP2_CONSTANTS.NGHTTP2_CANCEL);
+        }).finally(() => {
+          if (!request.destroyed && !callbacks.error) {
+            request.resume();
+          }
+        });
+      });
+      request.once('end', () => {
+        transport.markInbound();
+        void readTail.finally(() => {
+          streams.delete(streamID);
+          callbacks.closed = true;
+          callbacks.onClose?.();
+        });
+      });
+      request.once('error', (error) => {
+        failStream(new RuntimePlacementBridgeHTTP2Error(
+          'Runtime Placement Bridge HTTP/2 stream failed.',
+          { cause: error },
+        ));
+      });
       let writeTail: Promise<void> = ready;
       return {
         id: streamID,
@@ -498,35 +846,24 @@ export async function startRuntimePlacementBridgeSession(
             ) {
               throw new Error('Runtime Placement Bridge stream is closed.');
             }
-            if (chunk.length === 0) {
-              await writeRuntimePlacementBridgeFrame(transport.command.stdin, {
-                type: 'stream_data',
-                stream_id: streamID,
-                payload: chunk,
-              });
-              return;
-            }
-            for (let offset = 0; offset < chunk.length; offset += RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES) {
-              await writeRuntimePlacementBridgeFrame(transport.command.stdin, {
-                type: 'stream_data',
-                stream_id: streamID,
-                payload: chunk.subarray(offset, offset + RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES),
-              });
-            }
+            await writeHTTP2Stream(request, chunk);
           });
           writeTail = writeTask.catch(() => undefined);
           return writeTask;
         },
-        close: async () => {
+        closeWrite: async () => {
           await writeTail.catch(() => undefined);
+          if (!request.destroyed && !request.writableEnded) {
+            request.end();
+          }
+        },
+        close: async () => {
           const wasOpen = streams.delete(streamID);
           if (closed || !wasOpen || currentTransport?.id !== transport.id) {
             return;
           }
-          await writeRuntimePlacementBridgeFrame(transport.command.stdin, {
-            type: 'stream_close',
-            stream_id: streamID,
-          });
+          request.close(HTTP2_CONSTANTS.NGHTTP2_CANCEL);
+          await writeTail.catch(() => undefined);
         },
       };
     },
@@ -559,6 +896,8 @@ export async function startRuntimePlacementBridgeSession(
     // The bridge process owns every active proxy stream. Stop it before
     // waiting for proxy teardown so a lingering HTTP connection cannot hold
     // lifecycle completion open indefinitely.
+    transport?.session.destroy();
+    transport?.connection.destroy();
     transport?.command.kill('SIGTERM');
     failActiveStreams(error ?? new Error('Runtime Placement Bridge session is closed.'));
     await Promise.all([
@@ -569,35 +908,8 @@ export async function startRuntimePlacementBridgeSession(
     resolveClosed(failure ? { kind: 'failed', failure } : { kind: 'closed' });
   };
 
-  const runFrameLoop = async (transport: RemoteBridgeTransport): Promise<void> => {
-    let terminalError: Error;
-    try {
-      for (;;) {
-        const frame = await readRuntimePlacementBridgeFrame(transport.command.stdout);
-        if (!frame) {
-          terminalError = await transportClosedReason(transport.command);
-          break;
-        }
-        const callbacks = streams.get(frame.header.stream_id);
-        if (!callbacks || callbacks.transport_id !== transport.id) {
-          continue;
-        }
-        if (frame.header.type === 'stream_data') {
-          await callbacks.onData?.(frame.payload);
-        } else if (frame.header.type === 'stream_close') {
-          streams.delete(frame.header.stream_id);
-          callbacks.closed = true;
-          callbacks.onClose?.();
-        } else if (frame.header.type === 'stream_error') {
-          streams.delete(frame.header.stream_id);
-          const bridgeError = parseRuntimePlacementBridgeStreamError(frame.payload);
-          callbacks.error = new Error(`${bridgeError.code}: ${bridgeError.message}`);
-          callbacks.onError?.(callbacks.error);
-        }
-      }
-    } catch (error) {
-      terminalError = normalizeError(error);
-    }
+  const runTransportLoop = async (transport: RemoteBridgeTransport): Promise<void> => {
+    const terminalError = await transport.closed;
     if (closed || currentTransport?.id !== transport.id) {
       return;
     }
@@ -617,6 +929,8 @@ export async function startRuntimePlacementBridgeSession(
       });
     }
     failActiveStreams(new Error('Runtime Placement Bridge is temporarily unavailable.'));
+    transport.session.destroy();
+    transport.connection.destroy();
     await closeStreamingCommand(transport.command);
     if (sessionController.signal.aborted || args.signal?.aborted) {
       await settleBridgeSession();
@@ -631,7 +945,7 @@ export async function startRuntimePlacementBridgeSession(
 
   const attachTransport = (transport: RemoteBridgeTransport) => {
     currentTransport = transport;
-    void runFrameLoop(transport);
+    void runTransportLoop(transport);
   };
 
   const recover = async (): Promise<void> => {
@@ -695,6 +1009,8 @@ export async function startRuntimePlacementBridgeSession(
           nextTransportID++,
         );
         if (!transport.identity || !bridgeProcessIdentityMatches(expectedIdentity, transport.identity)) {
+          transport.session.destroy();
+          transport.connection.destroy();
           await closeStreamingCommand(transport.command);
           throw new RuntimePlacementBridgeIdentityChangedError(
             'The remote Runtime or Gateway process identity changed while Desktop was reconnecting.',
@@ -714,7 +1030,6 @@ export async function startRuntimePlacementBridgeSession(
         const normalized = normalizeError(error);
         if (
           normalized instanceof RuntimePlacementBridgeIdentityChangedError
-          || normalized instanceof DesktopSSHRemoteCommandError
           || normalized instanceof DesktopSSHTransportAuthenticationError
         ) {
           await settleBridgeSession(normalized);
@@ -770,6 +1085,8 @@ export async function startRuntimePlacementBridgeSession(
       proxy = await startRuntimePlacementLoopbackProxy(bridgeHandle);
     }
   } catch (error) {
+    initialTransport.session.destroy();
+    initialTransport.connection.destroy();
     await closeStreamingCommand(initialTransport.command);
     args.signal?.removeEventListener('abort', abortSession);
     throw error;

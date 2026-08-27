@@ -8,10 +8,6 @@ import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
 } from './runtimeHostAccess';
-import {
-  encodeRuntimePlacementBridgeFrame,
-  readRuntimePlacementBridgeFrame,
-} from './runtimePlacementBridgeProtocol';
 import { DesktopOperationFailureError } from './desktopOperationFailure';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
 
@@ -116,12 +112,8 @@ describe('runtimeHostAccess', () => {
     });
   });
 
-  it('preserves binary stdout for the streaming protocol consumer', async () => {
-    const encoded = encodeRuntimePlacementBridgeFrame({
-      type: 'stream_data',
-      stream_id: 'binary-test',
-      payload: Buffer.alloc(0xae, 0x80),
-    });
+  it('preserves binary stdout for the HTTP/2 transport consumer', async () => {
+    const encoded = Buffer.alloc(0xae, 0x80);
     const command = await createLocalRuntimeHostExecutor().stream?.([
       process.execPath,
       '-e',
@@ -130,15 +122,13 @@ describe('runtimeHostAccess', () => {
     ]);
     expect(command).toBeDefined();
 
-    const frame = await readRuntimePlacementBridgeFrame(command!.stdout);
+    const chunks: Buffer[] = [];
+    for await (const chunk of command!.stdout) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
     await command!.closed;
 
-    expect(frame?.header).toMatchObject({
-      type: 'stream_data',
-      stream_id: 'binary-test',
-      payload_bytes: 0xae,
-    });
-    expect(frame?.payload).toEqual(Buffer.alloc(0xae, 0x80));
+    expect(Buffer.concat(chunks)).toEqual(Buffer.alloc(0xae, 0x80));
   });
 
   it('passes explicit bridge environment variables to the remote SSH command', async () => {

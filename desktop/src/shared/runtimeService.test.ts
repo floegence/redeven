@@ -33,10 +33,10 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the Runtime service v2 compatibility window for v0.11.0', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(9);
-    expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.11.0');
-    expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.11.0');
+  it('publishes the Runtime service v2 compatibility window for v0.12.0', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(10);
+    expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.12.0');
+    expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.12.0');
   });
 
   it('enforces the current compatibility epoch in both directions', () => {

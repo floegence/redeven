@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/runtimemanagement"
+	"golang.org/x/net/http2"
 )
 
 type SurfaceDialer func(context.Context, StreamSurface) (net.Conn, error)
@@ -22,11 +24,6 @@ type Server struct {
 	DialSurface SurfaceDialer
 	Hello       Hello
 	OnShutdown  func()
-
-	readMu    sync.Mutex
-	writeMu   sync.Mutex
-	streamsMu sync.Mutex
-	streams   map[string]net.Conn
 }
 
 // IMPORTANT: The Desktop bridge is a placement transport. It must not become
@@ -35,173 +32,167 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	if s == nil {
 		return errors.New("missing bridge server")
 	}
+	if in == nil || out == nil {
+		return errors.New("missing bridge stdio")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	hello := s.Hello
-	hello.ProtocolVersion = ProtocolVersion
-	if err := s.writeJSONFrame(out, FrameTypeHello, "bridge", hello); err != nil {
-		return err
-	}
-	s.streams = make(map[string]net.Conn)
-	defer s.closeStreams()
-	for {
+	conn := newStdioConn(in, out)
+	defer conn.Close()
+	stopWatch := make(chan struct{})
+	defer close(stopWatch)
+	go func() {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		s.readMu.Lock()
-		header, payload, err := ReadFrame(in)
-		s.readMu.Unlock()
-		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				return nil
-			}
-			return err
-		}
-		switch header.Type {
-		case FrameTypeStreamOpen:
-			s.handleStreamOpen(ctx, out, header.StreamID, payload)
-		case FrameTypeStreamData:
-			s.handleStreamData(out, header.StreamID, payload)
-		case FrameTypeStreamClose:
-			s.closeStream(header.StreamID)
-		case FrameTypeShutdownRuntime:
-			if s.OnShutdown != nil {
-				s.OnShutdown()
-			}
-			return nil
-		case FrameTypePing:
-			if err := s.writeFrame(out, FrameHeader{StreamID: header.StreamID, Type: FrameTypePong}, nil); err != nil {
-				return err
-			}
-		default:
-			if err := s.writeStreamError(out, header.StreamID, "UNSUPPORTED_FRAME", fmt.Sprintf("Unsupported bridge frame type: %s", header.Type)); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func (s *Server) handleStreamOpen(ctx context.Context, out io.Writer, streamID string, payload []byte) {
-	if strings.TrimSpace(streamID) == "" {
-		return
-	}
-	if s.DialSurface == nil {
-		_ = s.writeStreamError(out, streamID, "SURFACE_UNAVAILABLE", "Bridge surface dialer is unavailable.")
-		return
-	}
-	var open StreamOpen
-	if err := json.Unmarshal(payload, &open); err != nil {
-		_ = s.writeStreamError(out, streamID, "INVALID_STREAM_OPEN", "Bridge stream open payload is invalid.")
-		return
-	}
-	conn, err := s.DialSurface(ctx, open.Surface)
-	if err != nil {
-		_ = s.writeStreamError(out, streamID, "SURFACE_DIAL_FAILED", err.Error())
-		return
-	}
-	s.streamsMu.Lock()
-	if existing := s.streams[streamID]; existing != nil {
-		_ = existing.Close()
-	}
-	s.streams[streamID] = conn
-	s.streamsMu.Unlock()
-	go s.copyConnToBridge(out, streamID, conn)
-}
-
-func (s *Server) handleStreamData(out io.Writer, streamID string, payload []byte) {
-	conn := s.streamByID(streamID)
-	if conn == nil {
-		_ = s.writeStreamError(out, streamID, "STREAM_NOT_FOUND", "Bridge stream is not open.")
-		return
-	}
-	if len(payload) == 0 {
-		return
-	}
-	if err := writeAll(conn, payload); err != nil {
-		_ = s.writeStreamError(out, streamID, "STREAM_WRITE_FAILED", err.Error())
-		s.closeStream(streamID)
-	}
-}
-
-func (s *Server) copyConnToBridge(out io.Writer, streamID string, conn net.Conn) {
-	defer s.closeStream(streamID)
-	buf := make([]byte, 32*1024)
-	for {
-		n, err := conn.Read(buf)
-		if n > 0 {
-			if writeErr := s.writeFrame(out, FrameHeader{StreamID: streamID, Type: FrameTypeStreamData}, append([]byte(nil), buf[:n]...)); writeErr != nil {
-				return
-			}
-		}
-		if err != nil {
-			if !errors.Is(err, io.EOF) && !isClosedNetworkError(err) {
-				_ = s.writeStreamError(out, streamID, "STREAM_READ_FAILED", err.Error())
-			}
-			_ = s.writeFrame(out, FrameHeader{StreamID: streamID, Type: FrameTypeStreamClose}, nil)
-			return
-		}
-	}
-}
-
-func (s *Server) streamByID(streamID string) net.Conn {
-	s.streamsMu.Lock()
-	defer s.streamsMu.Unlock()
-	return s.streams[strings.TrimSpace(streamID)]
-}
-
-func (s *Server) closeStream(streamID string) {
-	s.streamsMu.Lock()
-	conn := s.streams[strings.TrimSpace(streamID)]
-	delete(s.streams, strings.TrimSpace(streamID))
-	s.streamsMu.Unlock()
-	if conn != nil {
-		_ = conn.Close()
-	}
-}
-
-func (s *Server) closeStreams() {
-	s.streamsMu.Lock()
-	streams := s.streams
-	s.streams = make(map[string]net.Conn)
-	s.streamsMu.Unlock()
-	for _, conn := range streams {
-		if conn != nil {
 			_ = conn.Close()
+		case <-stopWatch:
 		}
+	}()
+	server := &http2.Server{
+		MaxConcurrentStreams:         MaxConcurrentStreams,
+		MaxDecoderHeaderTableSize:    4 << 10,
+		MaxEncoderHeaderTableSize:    4 << 10,
+		MaxReadFrameSize:             16 << 10,
+		ReadIdleTimeout:              15 * time.Second,
+		PingTimeout:                  10 * time.Second,
+		WriteByteTimeout:             30 * time.Second,
+		MaxUploadBufferPerStream:     StreamReceiveWindowBytes,
+		MaxUploadBufferPerConnection: SessionReceiveWindowBytes,
 	}
-}
-
-func (s *Server) writeJSONFrame(w io.Writer, frameType string, streamID string, value any) error {
-	payload, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	return s.writeFrame(w, FrameHeader{StreamID: streamID, Type: frameType}, payload)
-}
-
-func (s *Server) writeStreamError(w io.Writer, streamID string, code string, message string) error {
-	return s.writeJSONFrame(w, FrameTypeStreamError, streamID, StreamError{
-		Code:    strings.TrimSpace(code),
-		Message: strings.TrimSpace(message),
+	server.ServeConn(conn, &http2.ServeConnOpts{
+		Context: ctx,
+		BaseConfig: &http.Server{
+			MaxHeaderBytes: MaxHeaderListBytes,
+		},
+		Handler: http.HandlerFunc(s.serveHTTP),
 	})
-}
-
-func (s *Server) writeFrame(w io.Writer, header FrameHeader, payload []byte) error {
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-	return WriteFrame(w, header, payload)
-}
-
-func isClosedNetworkError(err error) bool {
-	if err == nil {
-		return false
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "use of closed network connection") || strings.Contains(text, "closed pipe")
+	return nil
 }
+
+func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if r == nil || r.ProtoMajor != 2 {
+		writeBridgeError(w, http.StatusBadRequest, ErrorInvalidRequest)
+		return
+	}
+	switch {
+	case r.Method == http.MethodGet && r.Host == BridgeAuthority && r.URL.Path == HelloPath:
+		hello := s.Hello
+		hello.ProtocolVersion = ProtocolVersion
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(hello)
+	case r.Method == http.MethodPost && r.Host == BridgeAuthority && r.URL.Path == ShutdownRuntimePath:
+		w.WriteHeader(http.StatusNoContent)
+		flushResponse(w)
+		if s.OnShutdown != nil {
+			go s.OnShutdown()
+		}
+	case r.Method == http.MethodConnect:
+		s.serveSurface(w, r)
+	default:
+		writeBridgeError(w, http.StatusNotFound, ErrorInvalidRequest)
+	}
+}
+
+func (s *Server) serveSurface(w http.ResponseWriter, r *http.Request) {
+	surface, ok := SurfaceFromAuthority(r.Host)
+	if !ok || s.DialSurface == nil {
+		writeBridgeError(w, http.StatusNotFound, ErrorSurfaceUnavailable)
+		return
+	}
+	conn, err := s.DialSurface(r.Context(), surface)
+	if err != nil {
+		writeBridgeError(w, http.StatusBadGateway, ErrorSurfaceDialFailed)
+		return
+	}
+	defer conn.Close()
+	w.WriteHeader(http.StatusOK)
+	flushResponse(w)
+	streamDone := make(chan struct{})
+	defer close(streamDone)
+	go func() {
+		select {
+		case <-r.Context().Done():
+			_ = conn.Close()
+		case <-streamDone:
+		}
+	}()
+
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		_, _ = io.Copy(conn, r.Body)
+		if closer, ok := conn.(interface{ CloseWrite() error }); ok {
+			_ = closer.CloseWrite()
+		}
+	}()
+	_, _ = io.Copy(flushingWriter{writer: w}, conn)
+	_ = conn.Close()
+	<-requestDone
+}
+
+func writeBridgeError(w http.ResponseWriter, status int, code string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(ErrorCodeHeader, strings.TrimSpace(code))
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(struct {
+		Code string `json:"code"`
+	}{Code: strings.TrimSpace(code)})
+}
+
+func flushResponse(w http.ResponseWriter) {
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+type flushingWriter struct {
+	writer http.ResponseWriter
+}
+
+func (w flushingWriter) Write(p []byte) (int, error) {
+	n, err := w.writer.Write(p)
+	flushResponse(w.writer)
+	return n, err
+}
+
+type stdioConn struct {
+	reader io.Reader
+	writer io.Writer
+	once   sync.Once
+}
+
+func newStdioConn(reader io.Reader, writer io.Writer) *stdioConn {
+	return &stdioConn{reader: reader, writer: writer}
+}
+
+func (c *stdioConn) Read(p []byte) (int, error)       { return c.reader.Read(p) }
+func (c *stdioConn) Write(p []byte) (int, error)      { return c.writer.Write(p) }
+func (c *stdioConn) LocalAddr() net.Addr              { return stdioAddr("local") }
+func (c *stdioConn) RemoteAddr() net.Addr             { return stdioAddr("remote") }
+func (c *stdioConn) SetDeadline(time.Time) error      { return nil }
+func (c *stdioConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *stdioConn) SetWriteDeadline(time.Time) error { return nil }
+func (c *stdioConn) Close() error {
+	c.once.Do(func() {
+		if closer, ok := c.reader.(io.Closer); ok {
+			_ = closer.Close()
+		}
+		if closer, ok := c.writer.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	})
+	return nil
+}
+
+type stdioAddr string
+
+func (stdioAddr) Network() string  { return "stdio" }
+func (a stdioAddr) String() string { return string(a) }
 
 func NewTrustedBridgeSurfaceDialer(localUIBridgeURL string, runtimeControlURL string) (SurfaceDialer, error) {
 	localUIAddr, err := trustedLoopbackAddrFromURL(localUIBridgeURL)
@@ -264,6 +255,13 @@ type gatewayProtocolHeaderConn struct {
 	token    string
 	injected bool
 	buffer   []byte
+}
+
+func (c *gatewayProtocolHeaderConn) CloseWrite() error {
+	if closer, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return closer.CloseWrite()
+	}
+	return nil
 }
 
 func (c *gatewayProtocolHeaderConn) Write(p []byte) (int, error) {

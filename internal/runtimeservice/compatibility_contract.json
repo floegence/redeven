@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.11.0",
-    "previous_release": "v0.10.0",
-    "reviewed_at": "2026-08-17",
-    "review_id": "runtime-permission-lifecycle-v2",
-    "summary": "Redeven v0.11.0 keeps managed Runtime lifecycle in Desktop's direct Local, SSH, or container coordinator, prepares one verified Runtime archive for Update and Reinstall, and separates Desktop-private loopback access from optional public HTTPS/WSS access at compatibility epoch 9.",
+    "release_version": "v0.12.0",
+    "previous_release": "v0.11.0",
+    "reviewed_at": "2026-08-27",
+    "review_id": "desktop-placement-http2-v1",
+    "summary": "Redeven v0.12.0 replaces the private Desktop placement frame multiplexer with one bounded HTTP/2 session over the existing authenticated stdio exec while preserving Runtime lifecycle ownership and the separate Flowersec private-loopback boundary at compatibility epoch 10.",
     "checked_surfaces": [
       "Redeven consumes published github.com/floegence/floret/v5 v5.0.9 with GOWORK=off and exact module checksums; final provider usage crosses the attempt-scoped event boundary into canonical whole-thread cache token totals without a downstream ledger; Floret-native web_fetch owns secure public-text fetching, parsing, output policy, and typed Activity with a bounded preview and passive site icon while Redeven owns current product authorization and UI; runtime startup atomically converges the exact legacy UTF-8 tool-result Raw representation and preserves public authority-corruption classification, canonical Effect results converge from one committed entry with valid UTF-8 text, bounded journal checkpoints preserve active-turn recovery, published SQLite maintenance reclaims eligible free pages before the single runtime open, root inventory supplies summary-only list projection, cumulative typed Activity preserves terminal call descriptions through results and restart, user Stop atomically records a terminal aborted turn and seals late provider, tool, save-point, and effect-retry work, canonical terminal items replace stream-only text without appending run-level output, stale canonical snapshots cannot replace a newer terminal view, canonical queue and interaction acceptance precedes visible success, unknown effect retries claim the stable source once unless cancellation has already won, delete and shutdown fence active subtrees and effect dispatch, migration v2 through v5 remains atomic and fail-closed, ordered views stay monotonic across live updates and restart, and no replace, go.work, sibling source path, copied contract, internal import, or Floret schema access exists",
       "Floret ThreadService is the only lifecycle boundary for View, Send, Respond, Cancel, Retry, RetryEffect, PromoteQueued, and Subscribe",
@@ -20,13 +20,13 @@
       "Each remote or local accepted session registers the final Flowersec SessionHandlers, RPC, ByteStream, and terminal/live_v1 boundaries directly; outbound terminal notification sinks attach to the established Flowersec RPC peer and detach idempotently when that session ends",
       "Desktop attach and start, CA-free private bridge health, optional public device CA trust, startup reports, sys.ping, Env App maintenance, SSH runtime bootstrap, independent public WSS, terminal history recovery, and consecutive Desktop bridge sessions remain covered by focused transport contracts",
       "Flowersec ConnectionController remains the only reconnect owner; secure-session retry uses Floe Webapp replaceConnection so an old asynchronous close cannot overwrite a new controller generation, while Redeven supplies artifact acquisition, authorization, permissions, product RPC handlers, and post-session business recovery without a second reconnect state machine or alternate carrier path",
-      "Runtime Service protocol_version is redeven-runtime-v2 at compatibility_epoch 9; Desktop verifies Runtime Service, the private bridge, Catalog, Local UI, package identity, and a unique managed process before a direct lifecycle operation succeeds",
+      "Runtime Service protocol_version is redeven-runtime-v2 at compatibility_epoch 10; Desktop verifies Runtime Service, the redeven-desktop-placement-h2/1 private bridge, Catalog, Local UI, package identity, and a unique managed process before a direct lifecycle operation succeeds",
       "Gateway is an optional access component and never prepares, starts, stops, updates, reinstalls, or supervises a managed Runtime"
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 9,
-  "upgrade_from_runtime_epochs": [8],
-  "minimum_desktop_version": "v0.11.0",
-  "minimum_runtime_version": "v0.11.0"
+  "compatibility_epoch": 10,
+  "upgrade_from_runtime_epochs": [9],
+  "minimum_desktop_version": "v0.12.0",
+  "minimum_runtime_version": "v0.12.0"
 }

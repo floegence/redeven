@@ -651,6 +651,7 @@ import {
   type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
 import {
+  RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
   normalizeRuntimeServiceSnapshot,
   runtimeServiceProviderLinkBinding,
   runtimeServiceSupportsProviderLink,
@@ -12671,7 +12672,7 @@ function remoteManagedSessionStartup(remoteSessionURL: string): StartupReport {
     remote_enabled: true,
     runtime_service: {
       protocol_version: 'redeven-runtime-v2',
-      compatibility_epoch: 9,
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       effective_run_mode: 'remote_desktop',
       remote_enabled: true,
       compatibility: 'compatible',

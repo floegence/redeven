@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/floegence/redeven/internal/desktopbridge"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
+	"golang.org/x/net/http2"
 )
 
 func TestDesktopBridgeFailsWhenRuntimeDaemonIsNotRunning(t *testing.T) {
@@ -103,33 +106,39 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	}
 	defer func() { _ = statusServer.Close() }()
 
-	bridgeInputReader, bridgeInputWriter := io.Pipe()
-	defer bridgeInputReader.Close()
-	bridgeOutputReader, bridgeOutputWriter := io.Pipe()
-	defer bridgeOutputReader.Close()
+	clientConn, bridgeConn := net.Pipe()
+	defer clientConn.Close()
+	defer bridgeConn.Close()
 	var stderr bytes.Buffer
 	done := make(chan int, 1)
 	go func() {
 		done <- runCLI(
 			[]string{"desktop-bridge", "--state-root", stateRoot},
-			bridgeInputReader,
-			bridgeOutputWriter,
+			bridgeConn,
+			bridgeConn,
 			&stderr,
 		)
-		_ = bridgeOutputWriter.Close()
 	}()
 
-	header, payload, err := desktopbridge.ReadFrame(bridgeOutputReader)
+	transport := &http2.Transport{}
+	client, err := transport.NewClientConn(clientConn)
 	if err != nil {
-		t.Fatalf("ReadFrame(hello) error = %v", err)
+		t.Fatalf("NewClientConn() error = %v", err)
 	}
-	if header.Type != desktopbridge.FrameTypeHello {
-		t.Fatalf("frame type = %q, want %q", header.Type, desktopbridge.FrameTypeHello)
+	helloResponse, err := client.RoundTrip(&http.Request{
+		Method: http.MethodGet,
+		URL:    &url.URL{Scheme: "http", Host: desktopbridge.BridgeAuthority, Path: desktopbridge.HelloPath},
+		Host:   desktopbridge.BridgeAuthority,
+		Header: make(http.Header),
+	})
+	if err != nil {
+		t.Fatalf("hello request error = %v", err)
 	}
 	var hello desktopbridge.Hello
-	if err := json.Unmarshal(payload, &hello); err != nil {
+	if err := json.NewDecoder(helloResponse.Body).Decode(&hello); err != nil {
 		t.Fatalf("hello payload JSON error = %v", err)
 	}
+	_ = helloResponse.Body.Close()
 	if hello.ProtocolVersion != desktopbridge.ProtocolVersion {
 		t.Fatalf("hello protocol = %q, want %q", hello.ProtocolVersion, desktopbridge.ProtocolVersion)
 	}
@@ -140,30 +149,36 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 		t.Fatal("hello did not preserve private Local UI bridge authorization")
 	}
 
-	openPayload, err := json.Marshal(desktopbridge.StreamOpen{Surface: desktopbridge.StreamSurfaceLocalUI})
+	requestBody, requestWriter := io.Pipe()
+	streamResponse, err := client.RoundTrip(&http.Request{
+		Method: http.MethodConnect,
+		URL:    &url.URL{Scheme: "http", Host: desktopbridge.StreamSurfaceLocalUI.Authority()},
+		Host:   desktopbridge.StreamSurfaceLocalUI.Authority(),
+		Body:   requestBody,
+		Header: make(http.Header),
+	})
 	if err != nil {
-		t.Fatalf("Marshal(stream open) error = %v", err)
-	}
-	if err := desktopbridge.WriteFrame(bridgeInputWriter, desktopbridge.FrameHeader{StreamID: "local-ui-health", Type: desktopbridge.FrameTypeStreamOpen}, openPayload); err != nil {
-		t.Fatalf("WriteFrame(stream open) error = %v", err)
+		t.Fatalf("CONNECT local-ui error = %v", err)
 	}
 	request := "GET /api/local/runtime/health HTTP/1.1\r\nHost: 127.0.0.1:54321\r\nX-Redeven-Desktop-Bridge-Token: " + testLocalUIBridgeToken + "\r\nConnection: close\r\n\r\n"
-	if err := desktopbridge.WriteFrame(bridgeInputWriter, desktopbridge.FrameHeader{StreamID: "local-ui-health", Type: desktopbridge.FrameTypeStreamData}, []byte(request)); err != nil {
-		t.Fatalf("WriteFrame(stream data) error = %v", err)
+	if _, err := requestWriter.Write([]byte(request)); err != nil {
+		t.Fatalf("write stream request error = %v", err)
 	}
-
-	header, payload, err = desktopbridge.ReadFrame(bridgeOutputReader)
+	_ = requestWriter.Close()
+	payload, err := io.ReadAll(streamResponse.Body)
 	if err != nil {
-		t.Fatalf("ReadFrame(stream response) error = %v", err)
+		t.Fatalf("read stream response error = %v", err)
 	}
-	if header.Type != desktopbridge.FrameTypeStreamData || !bytes.Contains(payload, []byte("200 OK")) {
-		t.Fatalf("unexpected stream response: header=%#v payload=%q", header, payload)
+	_ = streamResponse.Body.Close()
+	if !bytes.Contains(payload, []byte("200 OK")) {
+		t.Fatalf("unexpected stream response: payload=%q", payload)
 	}
 	if publicRequests.Load() != 0 {
 		t.Fatalf("desktop-bridge contacted public Local UI %d times", publicRequests.Load())
 	}
 
-	_ = bridgeInputWriter.Close()
+	_ = client.Close()
+	_ = clientConn.Close()
 	var code int
 	select {
 	case code = <-done:

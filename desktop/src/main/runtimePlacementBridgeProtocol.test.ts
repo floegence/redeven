@@ -1,199 +1,75 @@
-import { PassThrough, Writable } from 'node:stream';
-
 import { describe, expect, it } from 'vitest';
 
 import {
-  encodeRuntimePlacementBridgeFrame,
   parseRuntimePlacementBridgeHello,
-  readRuntimePlacementBridgeFrame,
+  RUNTIME_PLACEMENT_BRIDGE_MAX_CONCURRENT_STREAMS,
+  RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION,
+  RUNTIME_PLACEMENT_BRIDGE_SESSION_WINDOW_BYTES,
+  RUNTIME_PLACEMENT_BRIDGE_STREAM_WINDOW_BYTES,
   runtimeControlEndpointFromBridgeHello,
-  writeRuntimePlacementBridgeFrame,
+  runtimePlacementBridgeStreamError,
+  runtimePlacementBridgeSurfaceAuthority,
 } from './runtimePlacementBridgeProtocol';
 
-function nextTurn(): Promise<void> {
-  return new Promise((resolve) => {
-    setImmediate(resolve);
-  });
-}
-
-function waitListenerCounts(stream: PassThrough): Record<string, number> {
-  return {
-    readable: stream.listenerCount('readable'),
-    end: stream.listenerCount('end'),
-    close: stream.listenerCount('close'),
-    error: stream.listenerCount('error'),
-  };
-}
-
-class DeferredWritable extends Writable {
-  private readonly pendingWrites: Array<() => void> = [];
-
-  constructor() {
-    super({ highWaterMark: 1 });
-  }
-
-  _write(_chunk: Buffer, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
-    this.pendingWrites.push(() => callback());
-  }
-
-  flushOne(): void {
-    const complete = this.pendingWrites.shift();
-    complete?.();
-  }
-}
+const validHello = {
+  protocol_version: RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION,
+  runtime_version: 'v0.12.0',
+  started_at_unix_ms: 1778751234567,
+  local_ui: {
+    available: true,
+    base_path: '/',
+    bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  },
+  runtime_control: {
+    available: true,
+    protocol_version: 'redeven-runtime-control-v2',
+    base_url: 'http://127.0.0.1:10001/',
+    token: 'runtime-token',
+  },
+};
 
 describe('runtimePlacementBridgeProtocol', () => {
-  it('round-trips length-prefixed frames with binary payloads', async () => {
-    const stream = new PassThrough();
-    stream.end(encodeRuntimePlacementBridgeFrame({
-      type: 'stream_data',
-      stream_id: 'local-ui-1',
-      payload: Buffer.from([0, 1, 2, 255]),
-    }));
+  it('keeps the private HTTP/2 protocol and resource limits exact', () => {
+    expect(RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION).toBe('redeven-desktop-placement-h2/1');
+    expect(RUNTIME_PLACEMENT_BRIDGE_MAX_CONCURRENT_STREAMS).toBe(64);
+    expect(RUNTIME_PLACEMENT_BRIDGE_STREAM_WINDOW_BYTES).toBe(256 * 1024);
+    expect(RUNTIME_PLACEMENT_BRIDGE_SESSION_WINDOW_BYTES).toBe(16 * 1024 * 1024);
+  });
 
-    await expect(readRuntimePlacementBridgeFrame(stream)).resolves.toEqual({
-      header: {
-        protocol_version: 'redeven-desktop-bridge-v1',
-        stream_id: 'local-ui-1',
-        type: 'stream_data',
-        payload_bytes: 4,
-      },
-      payload: Buffer.from([0, 1, 2, 255]),
+  it('maps each internal surface to one HTTP/2 CONNECT authority', () => {
+    expect(runtimePlacementBridgeSurfaceAuthority('local_ui')).toBe('local-ui');
+    expect(runtimePlacementBridgeSurfaceAuthority('runtime_control')).toBe('runtime-control');
+    expect(runtimePlacementBridgeSurfaceAuthority('gateway_protocol')).toBe('gateway-protocol');
+  });
+
+  it('parses hello and maps runtime control through the local proxy', () => {
+    const hello = parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify(validHello)));
+    expect(hello).toMatchObject(validHello);
+    expect(runtimeControlEndpointFromBridgeHello(hello, 'http://127.0.0.1:43210/')).toEqual({
+      protocol_version: 'redeven-runtime-control-v2',
+      base_url: 'http://127.0.0.1:43210/__redeven_runtime_control/',
+      token: 'runtime-token',
     });
   });
 
-  it('returns null instead of hanging when the bridge closes before a full frame arrives', async () => {
-    const stream = new PassThrough();
-    const readTask = readRuntimePlacementBridgeFrame(stream);
-    stream.write(Buffer.from([0, 0, 0, 24]));
-    stream.end();
-
-    await expect(readTask).resolves.toBeNull();
-  });
-
-  it('does not retain stream wait listeners while reading fragmented frame traffic', async () => {
-    const stream = new PassThrough();
-
-    for (let i = 0; i < 32; i += 1) {
-      const encoded = encodeRuntimePlacementBridgeFrame({
-        type: 'stream_data',
-        stream_id: `local-ui-${i}`,
-        payload: Buffer.from(`chunk-${i}`),
-      });
-      const readTask = readRuntimePlacementBridgeFrame(stream);
-      await nextTurn();
-      stream.write(encoded.subarray(0, 1));
-      await nextTurn();
-      stream.write(encoded.subarray(1, 8));
-      await nextTurn();
-      stream.write(encoded.subarray(8));
-
-      const frame = await readTask;
-      expect(frame?.header.stream_id).toBe(`local-ui-${i}`);
-      expect(frame?.payload.toString('utf8')).toBe(`chunk-${i}`);
-      expect(waitListenerCounts(stream)).toEqual({
-        readable: 0,
-        end: 0,
-        close: 0,
-        error: 0,
-      });
-    }
-  });
-
-  it('cleans writer wait listeners after backpressured frame writes drain', async () => {
-    const stream = new DeferredWritable();
-    const writeTask = writeRuntimePlacementBridgeFrame(stream, {
-      type: 'stream_data',
-      stream_id: 'local-ui-1',
-      payload: Buffer.alloc(2048, 7),
-    });
-
-    await nextTurn();
-    expect(stream.listenerCount('drain')).toBe(1);
-    expect(stream.listenerCount('close')).toBe(1);
-    expect(stream.listenerCount('error')).toBe(1);
-
-    stream.flushOne();
-    await expect(writeTask).resolves.toBeUndefined();
-    expect(stream.listenerCount('drain')).toBe(0);
-    expect(stream.listenerCount('close')).toBe(0);
-    expect(stream.listenerCount('error')).toBe(0);
-  });
-
-  it('builds bridge runtime-control endpoints as service roots with trailing slashes', () => {
-    expect(runtimeControlEndpointFromBridgeHello({
-      protocol_version: 'redeven-desktop-bridge-v1',
-      runtime_version: 'test-runtime',
-      local_ui: {
-        available: true,
-        base_path: '/',
-        bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      },
-      runtime_control: {
-        available: true,
-        protocol_version: 'redeven-runtime-control-v1',
-        token: 'runtime-control-token',
-      },
-    }, 'http://127.0.0.1:41234/')).toEqual({
-      protocol_version: 'redeven-runtime-control-v1',
-      base_url: 'http://127.0.0.1:41234/__redeven_runtime_control/',
-      token: 'runtime-control-token',
-    });
-  });
-
-  it('parses runtime startup time from bridge hello payloads', () => {
-    const hello = parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
-      protocol_version: 'redeven-desktop-bridge-v1',
-      runtime_version: 'test-runtime',
-      started_at_unix_ms: 1778751234567,
-      local_ui: {
-        available: true,
-        base_path: '/',
-        bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      },
-      runtime_control: {
-        available: false,
-      },
-    })));
-
-    expect(hello).toMatchObject({
-      started_at_unix_ms: 1778751234567,
-    });
-  });
-
-  it('drops invalid bridge hello runtime startup times', () => {
-    const hello = parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
-      protocol_version: 'redeven-desktop-bridge-v1',
-      runtime_version: 'test-runtime',
-      started_at_unix_ms: 0,
-      local_ui: {
-        available: true,
-        base_path: '/',
-        bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      },
-      runtime_control: {
-        available: false,
-      },
-    })));
-
-    expect(hello.started_at_unix_ms).toBeUndefined();
-  });
-
-  it.each([
-    ['missing', undefined],
-    ['malformed', 'too-short'],
-  ])('rejects %s private Local UI authorization in bridge hello', (_label, bridgeToken) => {
+  it('rejects an old bridge instead of negotiating or falling back', () => {
     expect(() => parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
+      ...validHello,
       protocol_version: 'redeven-desktop-bridge-v1',
-      runtime_version: 'test-runtime',
-      local_ui: {
-        available: true,
-        base_path: '/',
-        bridge_token: bridgeToken,
-      },
-      runtime_control: {
-        available: false,
-      },
-    })))).toThrow(/valid private Local UI authorization/iu);
+    })))).toThrow('Unsupported Runtime Placement Bridge protocol version');
+  });
+
+  it('rejects Local UI without private authorization', () => {
+    expect(() => parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
+      ...validHello,
+      local_ui: { available: true, base_path: '/' },
+    })))).toThrow('private Local UI authorization');
+  });
+
+  it('returns bounded stable stream errors without remote details', () => {
+    expect(runtimePlacementBridgeStreamError('SURFACE_DIAL_FAILED')).toEqual({
+      code: 'SURFACE_DIAL_FAILED',
+      message: 'Runtime Placement Bridge stream failed (SURFACE_DIAL_FAILED).',
+    });
   });
 });

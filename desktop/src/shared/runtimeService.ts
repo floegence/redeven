@@ -118,9 +118,9 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 9;
-export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.11.0';
-export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.11.0';
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 10;
+export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.12.0';
+export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.12.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
 
 function compact(value: unknown): string {

@@ -287,6 +287,23 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 			t.Fatalf("EnvAppShell.tsx must contain explicit browser transport policy %q", marker)
 		}
 	}
+	envAppRootSource := readRepoFile(t, root, "internal/envapp/ui_src/src/ui/App.tsx")
+	if got := strings.Count(envAppRootSource, "<ProtocolProvider"); got != 1 {
+		t.Fatalf("App.tsx ProtocolProvider mounts = %d, want exactly one Env App session owner", got)
+	}
+	if strings.Contains(envAppSource, "<ProtocolProvider") || strings.Count(envAppSource, "createEnvAppConnectionRuntime({") != 1 {
+		t.Fatal("EnvAppShell.tsx must consume the root protocol provider through one connection runtime")
+	}
+	streamConsumers := map[string]string{
+		"internal/envapp/ui_src/src/ui/services/terminalTransport.ts": "current.openStream(kind, options)",
+		"internal/envapp/ui_src/src/ui/utils/fileStreamReader.ts":     "session.openStream(redevenV1StreamKinds.fs.readFile)",
+	}
+	for path, marker := range streamConsumers {
+		source := readRepoFile(t, root, path)
+		if !strings.Contains(source, marker) {
+			t.Fatalf("%s must open an independent ByteStream on the current Env App session", path)
+		}
+	}
 	connectionRuntimeSource := readRepoFile(t, root, "internal/envapp/ui_src/src/ui/services/connectionRuntime.ts")
 	for _, marker := range []string{
 		"import('@floegence/floe-webapp-boot')",
@@ -763,10 +780,12 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"github.com/floegence/floret/v5 v5.0.9",
-			"runtime-permission-lifecycle-v2",
+			"desktop-placement-http2-v1",
 			"published Flowersec Go and Core v3.2.0 plus Floe Webapp v0.46.2",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
+			"redeven-desktop-placement-h2/1",
+			"\"compatibility_epoch\": 10",
 			"redeven-runtime-v2",
 		},
 	}
