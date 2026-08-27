@@ -3,14 +3,12 @@ type: Runtime Contract
 title: Runtime transport dependencies
 description: Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
 tags: [architecture, dependencies, terminal]
-timestamp: 2026-08-11T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 quality_exception: Cross-domain published dependency contract spanning transport, terminal, and session security.
 ---
 # Summary
 
-Redeven runtime builds control and data sessions on Flowersec v3 artifact, lease, connection-controller, session, RPC, and byte-stream primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager. Floeterm preserves valid user Bash prompt commands as independent syntax units; invalid user scripts remain Bash errors and are not normalized or hidden.
-
-Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
+Redeven runtime builds control and data sessions on the released Flowersec v3 artifact, lease, connection-controller, session, RPC, and byte-stream primitives, while terminal lifecycle is delegated to Floeterm. Each Env App owns one protocol provider and current Flowersec session; RPC and independent live streams share it. Placement HTTP/2 is a separate SSH stdio boundary and does not change Flowersec wire or public SDK contracts.
 
 # Contract
 
@@ -44,6 +42,10 @@ use the same native build contract. Terminal-go's no-tag engine is retained only
 as a fail-closed boundary test and is never a shippable Runtime fallback.
 
 Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The Runtime consumes Flowersec Go v3.2.0 and browser surfaces consume Flowersec Core v3.2.0 through published packages only. The agent delegates retry and connection lifecycle to Flowersec's controllers, structured diagnostics, wait, and connect APIs. It does not parse error text, run a parallel retry loop, or reuse a spent artifact. Explicit external Local UI validates the configured device CA and exact-SAN leaf, serves every public page over HTTPS, and maps each validated HTTPS authority to an independent runtime-assigned WSS listener at `/flowersec/v3/direct`; each actual browser or client must trust the exported public CA. Desktop-private Local UI instead uses the independently versioned `flowersec-private-loopback/1` profile through its dedicated Go and browser APIs. That profile is restricted to same-origin numeric-loopback `ws:`, is admitted only after the Redeven bridge token, and is rejected by ordinary public Go, TypeScript, Rust, and Swift `flowersec/3` decoders. It does not change the public v3 TLS `ca` or `pin` wire contract and is not available to Provider, Gateway, Node, Rust, Swift, tunnel, QUIC, WebTransport, or public URL clients.
+
+Each Env App product tree mounts exactly one `ProtocolProvider`. Its `ConnectionController` is the only owner allowed to replace the current Flowersec session. RPC, terminals, file reads, and other real-time capabilities reuse that session and open separate `ByteStream` instances; terminal traffic remains only `terminal/live_v1`. Switching a Flower thread, Activity or Workbench mode, terminal view, or file consumer cannot reconnect Flowersec. When the session terminates, old streams are not replayed, and no capability may introduce polling, HTTP, RPC, or a second session as fallback. Redeven does not extend Flowersec's Go, TypeScript, Rust, or Swift public Stream APIs.
+
+SSH and container placement use standard HTTP/2 over one private `desktop-bridge` stdio exec outside Flowersec. That placement session multiplexes only `local-ui`, `runtime-control`, and `gateway-protocol` CONNECT streams and relies on SSH for transport authentication and encryption. It creates no Flowersec candidate, artifact, lease, admission path, or E2EE exception. Flowersec production carriers remain WSS, QUIC, and HTTPS exactly as defined by the v3 transport-security contract, with no negotiation, downgrade, or fallback.
 
 Remote data sessions are Flowersec endpoint clients. Redeven constructs the complete business `RPCHandlers` before `Connect`, passes them through `ConnectorOptions`, and registers application streams and `ProxyServer` on Flowersec v3.2.0's role-neutral `StreamHandlers`; the connected session starts exactly one published stream dispatcher. Inbound terminal RPC handlers are registered in that pre-connect plan without a placeholder outbound peer. Only after `Connect` returns does Redeven attach the real session `RPCPeer`, which immediately replays current terminal metadata. `StreamHandlers.Serve` performs its internal session close before returning; Redeven then detaches the peer, invokes the outer idempotent close, and cleans up the plan. Redeven does not use accepted-server `SessionHandlers` for this client role, proxy outbound notifications through a second peer owner, or copy an `AcceptStream` loop. The control-plane `grant_server` message is a notification with exact bounded decoding and an issuer-provided future artifact expiry; it has no request/response fallback. Before any remote data or control artifact can be spent, its Lease callback creates and fsyncs one no-overwrite ledger tombstone keyed only by the artifact's SHA-256 digest. Product channel, generation, sequence, and wrapper labels cannot create a second burn identity for the same opaque artifact. Each tombstone records the signed expiry and a one-hour post-expiry retention boundary; cleanup removes only valid records past that boundary, while malformed records remain fail-closed and a fixed entry cap rejects new spends instead of deleting live authority.
 
@@ -81,12 +83,15 @@ History is requested only by a mounted semantic Runtime when its user scrolls or
 
 # Boundaries
 
-Compatibility depends on these published transport and terminal interfaces staying aligned. Redeven compatibility epoch 8 requires Desktop and Runtime v0.10.0 or newer. Replacing or bypassing them can break liveness teardown, bounded RPC, TLS admission, terminal ownership, Presentation ordering, history generation, controller arbitration, or session lifecycle. History and session diagnostics are observability only; neither Redeven nor Floeterm uses session count to reject creation, close a PTY, or pause a running session.
+Compatibility depends on these published transport and terminal interfaces staying aligned. Redeven compatibility epoch 10 requires Desktop and Runtime v0.12.0 or newer and upgrades from epoch 9 only. Replacing or bypassing them can break placement multiplexing, liveness teardown, bounded RPC, TLS admission, terminal ownership, Presentation ordering, history generation, controller arbitration, or session lifecycle. History and session diagnostics are observability only; neither Redeven nor Floeterm uses session count to reject creation, close a PTY, or pause a running session.
 
 # Evidence
 
 - `redeven:go.mod:8` - Redeven pins floeterm terminal-go in the runtime module.
 - `redeven:internal/agent/agent.go:20` - Agent imports the published Flowersec v3 root package and uses `ConnectionController`, `WaitForSession`, `Connect`, `Session`, `RPCPeer`, and `ByteStream`.
+- `redeven:internal/envapp/ui_src/src/ui/App.tsx:217` - One Env App product tree owns one protocol provider.
+- `redeven:internal/envapp/ui_src/src/ui/services/terminalTransport.ts:68` - Each terminal attachment opens `terminal/live_v1` on the current shared session.
+- `redeven:internal/envapp/ui_src/src/ui/utils/fileStreamReader.ts:72` - File reads open independent streams on that same session.
 - `redeven:internal/agent/agent.go:1149` - Remote data acquisition binds its Lease to the digest-global durable spend ledger before connection.
 - `redeven:internal/sessionrpc/router.go:42` - One minimal RPC registrar binds the same business router to endpoint-client and accepted-server Flowersec facades.
 - `redeven:internal/agent/control_artifact_source.go:35` - Control acquisition selects and burns a sequence-bound persisted pool entry.
@@ -107,7 +112,7 @@ Compatibility depends on these published transport and terminal interfaces stayi
 - `redeven:internal/localui/secure_server.go` - Redeven owns the HTTPS and independent Flowersec WSS listener boundary.
 - `redeven:internal/localui/device_ca.go` - Local UI startup validates the CA identity and creates an ephemeral exact-SAN leaf without claiming client-side trust.
 - `redeven:internal/runtimeproxy/runtimeproxy.go:15` - Redeven declares the three embedding-policy response headers blocked by its product adapter.
-- `redeven:internal/runtimeservice/compatibility_contract.json:2` - Local UI exposure requires compatibility epoch 8 and a matched v0.10.0 Desktop and Runtime pair.
+- `redeven:internal/runtimeservice/compatibility_contract.json:2` - Local UI exposure requires compatibility epoch 10 and a matched v0.12.0 Desktop and Runtime pair.
 - `redeven:internal/terminal/semantic_history_rpc_test.go` - Deterministic fixtures verify viewport requests, continuation chunks, direct targets, lane isolation, generation fencing, and RPC payload budgets.
 - `redeven:internal/envapp/ui_src/scripts/terminalCarrierRunnerPolicy.node-test.mjs:1` - Carrier policy fixes automatic headless ownership, explicit diagnostics, and display-server independence.
 - `redeven:scripts/check_renderer_e2e.sh:1` - The exact-main renderer gate runs the 64 KiB and 448 KiB process carrier classes.
