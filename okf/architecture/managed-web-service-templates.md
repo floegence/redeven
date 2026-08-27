@@ -14,7 +14,9 @@ timestamp: 2026-08-26T00:00:00Z
 
 # Interaction contract
 
-The Web Services header provides one **Service templates** action. It opens a large right-side drawer with search and **Host templates** / **Container templates** categories. This replaces the separate one-click-deployment strip. Managed and manually registered services remain in one responsive main grid.
+The Web Services header provides one **Service templates** action. It opens a large right-side drawer and replaces the separate one-click-deployment strip. The catalog uses one sticky toolbar for category counts, search, and a permission-aware create menu. Host and container definitions are distinct categories; built-in and custom definitions are separate groups inside each category. Managed and manually registered services remain in one responsive main grid.
+
+Catalog cards are full-width service identities rather than generic form cards. Each uses a neutral kind icon, localized name and description, one metadata line, one explicit availability state, one primary deployment action, and a labeled overflow menu for duplicate, edit, and delete. Unavailable definitions remain fully readable and state the exact disabled reason; installed definitions use a success state. The catalog has no redundant footer or cancel action and closes through the drawer close action or Escape. Deployment and editor views keep their fixed operation footer, and the deployment view reuses the selected service identity before workspace, deployment, data, and operation information.
 
 Container cards remain discoverable but disabled when Docker is unavailable, the Environment is itself in a container, workspace mounting is unavailable, or Docker Compose is missing. The card explains the exact reason. DeepSeek Harness is represented by separate reviewed host and community-container cards; the latter links its source and is never described as an official DeepSeek image.
 
@@ -53,7 +55,10 @@ Reads require Web Service read permission; mutations require read, write, and ex
 - `redeven:internal/managedwebservice/types.go` - Defines public template, endpoint, host, container, Compose, and duplicate contracts.
 - `redeven:internal/portforward/registry/managed.go` - Persists templates, request fingerprints, lineage, revisions, and in-use deletion protection.
 - `redeven:internal/codeapp/appserver/managed_web_services.go` - Routes template APIs and applies permissions, body limits, stable errors, and bounded audit details.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Presents the drawer, categories, disabled reasons, custom editors, duplication, deployment, and unified service grid.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Owns template data, deployment and editor state, and the unified service grid.
+- `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx` - Presents the catalog toolbar, grouping, service identities, availability states, and card actions.
+- `redeven:internal/envapp/ui_src/src/ui/pages/service-template-center.css` - Defines token-based responsive card surfaces, focus-compatible controls, subtle pointer motion, and reduced-motion behavior.
 - `redeven:internal/managedwebservice/templates_test.go` - Covers independent duplication, immutable hash identity, and Compose host-escape rejection.
 - `redeven:internal/codeapp/appserver/managed_web_services_test.go` - Covers template route authority and duplicate API behavior.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx` - Covers discovery, container unavailability, duplication, unified cards, and uninstall interaction.
+- `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx` - Covers grouping, counts, state presentation, permissions, search, and card actions.

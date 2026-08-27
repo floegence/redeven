@@ -63,6 +63,12 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   FileText: (props: any) => <span class={props.class} data-testid="file-text-icon" />,
   Copy: (props: any) => <span class={props.class} data-testid="copy-icon" />,
   Pencil: (props: any) => <span class={props.class} data-testid="pencil-icon" />,
+  CheckCircle: (props: any) => <span class={props.class} data-testid="check-circle-icon" />,
+  ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
+  Cpu: (props: any) => <span class={props.class} data-testid="cpu-icon" />,
+  Layers: (props: any) => <span class={props.class} data-testid="layers-icon" />,
+  MoreHorizontal: (props: any) => <span class={props.class} data-testid="more-horizontal-icon" />,
+  Package: (props: any) => <span class={props.class} data-testid="package-icon" />,
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
@@ -104,6 +110,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
+  Dropdown: (props: any) => (
+    <div>
+      {props.trigger}
+      {props.items?.map((item: any) => item.separator ? <hr /> : (
+        <button type="button" title={item.label} disabled={item.disabled} onClick={() => props.onSelect?.(item.id)}>{item.label}</button>
+      ))}
+    </div>
+  ),
   Input: (props: any) => <input value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} disabled={props.disabled} data-testid={props['data-testid']} />,
   Textarea: (props: any) => <textarea value={props.value} onInput={props.onInput} class={props.class} disabled={props.disabled} />,
   Checkbox: (props: any) => <label><input type="checkbox" checked={props.checked} disabled={props.disabled} onChange={(event) => props.onChange?.(event.currentTarget.checked)} />{props.label}</label>,
@@ -578,13 +592,62 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
-    const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Container templates');
+    const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim().startsWith('Container templates'));
     containerTab?.click();
     await flushPage();
     const containerCard = document.querySelector('[data-template-id="deepseek-harness-container"]');
     expect(containerCard).toBeTruthy();
     expect(Array.from(containerCard?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === 'Deploy')?.disabled).toBe(true);
     expect(containerCard?.textContent).toContain('Docker is unavailable');
+    expect(containerCard?.textContent).toContain('Run the reviewed community DeepSeek Harness image in Docker.');
+    expect(containerCard?.className).not.toContain('opacity');
+  });
+
+  it('presents the catalog as grouped service identities without a catalog footer', async () => {
+    const template = { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+
+    const drawer = host.querySelector<HTMLElement>('[data-testid="env-app-drawer-mock"]')!;
+    expect(drawer.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(1);
+    expect(drawer.textContent).toContain('Redeven built-in');
+    expect(drawer.textContent).toContain('Run DeepSeek Harness directly in the current Environment.');
+    expect(drawer.textContent).toContain('Ready to deploy');
+    expect(Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).some((button) => button.textContent?.trim() === 'Cancel')).toBe(false);
+  });
+
+  it('searches the catalog using localized built-in identity copy', async () => {
+    const templates = [
+      { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'Unlocalized host name', description: 'Unlocalized host description', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [] },
+      { template_id: 'custom-host', service_family_id: 'custom-host', name: 'Workspace dashboard', description: 'Internal status view', source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, version: '1', developer_preview: false, deployments: [{ deployment: 'host', available: true }], workspace_roots: [] },
+    ];
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    const search = host.querySelector<HTMLInputElement>('input[aria-label="Search templates"]')!;
+    search.value = 'directly';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await flushPage();
+
+    expect(host.querySelector('[data-template-id="deepseek-harness-host"]')).toBeTruthy();
+    expect(host.querySelector('[data-template-id="custom-host"]')).toBeNull();
   });
 
   it('duplicates a built-in service template as an independent custom template', async () => {
@@ -607,10 +670,10 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     document.querySelector<HTMLButtonElement>('button[title="Duplicate"]')?.click();
     await flushPage();
-    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Duplicate');
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Duplicate' && !button.title);
     confirm?.click();
 
-    await waitForAssertion(() => expect(duplicateBody).toMatchObject({ name: 'DeepSeek Harness · Host copy' }));
+    await waitForAssertion(() => expect(duplicateBody).toMatchObject({ name: 'DeepSeek Harness copy' }));
     expect(String((duplicateBody as Record<string, unknown> | null)?.request_id)).toMatch(/^envapp-/u);
   });
 
