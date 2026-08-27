@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/floegence/redeven/internal/desktopbridge"
 	"github.com/floegence/redeven/internal/runtimemanagement"
+	"golang.org/x/net/http2"
 )
 
 const (
@@ -1091,25 +1093,32 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 	if err := cmd.Start(); err != nil {
 		f.t.Fatalf("start bridge: %v", err)
 	}
+	bridgeConn := &e2eBridgeStdioConn{reader: stdout, writer: stdin}
+	transport := &http2.Transport{}
+	client, err := transport.NewClientConn(bridgeConn)
+	if err != nil {
+		f.t.Fatalf("create bridge HTTP/2 client: %v", err)
+	}
 	defer func() {
-		_ = desktopbridge.WriteFrame(stdin, desktopbridge.FrameHeader{StreamID: "shutdown", Type: desktopbridge.FrameTypeShutdownRuntime}, nil)
-		_ = stdin.Close()
+		response, _ := client.RoundTrip(bridgeHTTP2Request(http.MethodPost, desktopbridge.BridgeAuthority, desktopbridge.ShutdownRuntimePath, nil))
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		_ = client.Close()
+		_ = bridgeConn.Close()
 		cancel()
 		_ = cmd.Wait()
 	}()
 
-	reader := bufio.NewReader(stdout)
-	header, payload, err := desktopbridge.ReadFrame(reader)
+	helloResponse, err := client.RoundTrip(bridgeHTTP2Request(http.MethodGet, desktopbridge.BridgeAuthority, desktopbridge.HelloPath, nil))
 	if err != nil {
 		f.t.Fatalf("read bridge hello: %v; stderr=%s", err, stderr.String())
 	}
-	if header.Type != desktopbridge.FrameTypeHello {
-		f.t.Fatalf("first bridge frame type = %q, want hello", header.Type)
-	}
 	var hello desktopbridge.Hello
-	if err := json.Unmarshal(payload, &hello); err != nil {
+	if err := json.NewDecoder(helloResponse.Body).Decode(&hello); err != nil {
 		f.t.Fatalf("decode bridge hello: %v", err)
 	}
+	_ = helloResponse.Body.Close()
 	if !hello.LocalUI.Available || !hello.RuntimeControl.Available {
 		f.t.Fatalf("bridge hello missing surfaces: %#v", hello)
 	}
@@ -1121,12 +1130,12 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 	if err != nil || localURL.Host == "" {
 		f.t.Fatalf("parse Local UI URL %q: %v", status.LocalUIURL, err)
 	}
-	localBody := bridgeHTTPRequest(f.t, reader, stdin, "local-ui-e2e", desktopbridge.StreamSurfaceLocalUI, "GET /api/local/runtime/health HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
+	localBody := bridgeHTTPRequest(f.t, client, desktopbridge.StreamSurfaceLocalUI, "GET /api/local/runtime/health HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
 	assertContains(f.t, string(localBody), `"status":"online"`)
 	if bytes.Contains(localBody, []byte("desktop_managed")) || bytes.Contains(localBody, []byte("desktop_owner_id")) {
 		f.t.Fatalf("Local UI health exposed removed Desktop ownership fields: %s", string(localBody))
 	}
-	workspaceBody := bridgeHTTPRequest(f.t, reader, stdin, "workspace-e2e", desktopbridge.StreamSurfaceLocalUI, "GET /_redeven_proxy/env/ HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
+	workspaceBody := bridgeHTTPRequest(f.t, client, desktopbridge.StreamSurfaceLocalUI, "GET /_redeven_proxy/env/ HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
 	if !bytes.Contains(bytes.ToLower(workspaceBody), []byte("<html")) {
 		f.t.Fatalf("Workspace did not return HTML through Runtime Local UI: %s", string(workspaceBody))
 	}
@@ -1143,7 +1152,7 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 		controlURL.Host,
 		hello.RuntimeControl.Token,
 	)
-	controlBody := bridgeHTTPRequest(f.t, reader, stdin, "runtime-control-e2e", desktopbridge.StreamSurfaceRuntimeControl, controlRequest)
+	controlBody := bridgeHTTPRequest(f.t, client, desktopbridge.StreamSurfaceRuntimeControl, controlRequest)
 	assertContains(f.t, string(controlBody), `"ok":true`)
 	assertContains(f.t, string(controlBody), `"runtime_service"`)
 
@@ -1153,37 +1162,59 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 	return hello
 }
 
-func bridgeHTTPRequest(t *testing.T, reader *bufio.Reader, writer io.Writer, streamID string, surface desktopbridge.StreamSurface, request string) []byte {
-	t.Helper()
-	payload, err := json.Marshal(desktopbridge.StreamOpen{Surface: surface})
-	if err != nil {
-		t.Fatalf("marshal stream open: %v", err)
+func bridgeHTTP2Request(method, authority, path string, body io.ReadCloser) *http.Request {
+	if body == nil {
+		body = http.NoBody
 	}
-	if err := desktopbridge.WriteFrame(writer, desktopbridge.FrameHeader{StreamID: streamID, Type: desktopbridge.FrameTypeStreamOpen}, payload); err != nil {
-		t.Fatalf("write stream open: %v", err)
-	}
-	if err := desktopbridge.WriteFrame(writer, desktopbridge.FrameHeader{StreamID: streamID, Type: desktopbridge.FrameTypeStreamData}, []byte(request)); err != nil {
-		t.Fatalf("write stream data: %v", err)
-	}
-	var raw bytes.Buffer
-	for {
-		header, payload, err := desktopbridge.ReadFrame(reader)
-		if err != nil {
-			t.Fatalf("read bridge frame: %v", err)
-		}
-		if header.StreamID != streamID {
-			continue
-		}
-		switch header.Type {
-		case desktopbridge.FrameTypeStreamData:
-			raw.Write(payload)
-		case desktopbridge.FrameTypeStreamClose:
-			return httpBody(t, raw.Bytes())
-		case desktopbridge.FrameTypeStreamError:
-			t.Fatalf("bridge stream error: %s", string(payload))
-		}
+	return &http.Request{
+		Method: method,
+		URL:    &url.URL{Scheme: "http", Host: authority, Path: path},
+		Host:   authority,
+		Body:   body,
+		Header: make(http.Header),
 	}
 }
+
+func bridgeHTTPRequest(t *testing.T, client *http2.ClientConn, surface desktopbridge.StreamSurface, request string) []byte {
+	t.Helper()
+	requestReader, requestWriter := io.Pipe()
+	response, err := client.RoundTrip(bridgeHTTP2Request(http.MethodConnect, surface.Authority(), "", requestReader))
+	if err != nil {
+		t.Fatalf("open bridge stream: %v", err)
+	}
+	if _, err := requestWriter.Write([]byte(request)); err != nil {
+		t.Fatalf("write bridge stream: %v", err)
+	}
+	_ = requestWriter.Close()
+	raw, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read bridge stream: %v", err)
+	}
+	_ = response.Body.Close()
+	return httpBody(t, raw)
+}
+
+type e2eBridgeStdioConn struct {
+	reader io.ReadCloser
+	writer io.WriteCloser
+}
+
+func (c *e2eBridgeStdioConn) Read(p []byte) (int, error)       { return c.reader.Read(p) }
+func (c *e2eBridgeStdioConn) Write(p []byte) (int, error)      { return c.writer.Write(p) }
+func (c *e2eBridgeStdioConn) LocalAddr() net.Addr              { return e2eBridgeAddr("local") }
+func (c *e2eBridgeStdioConn) RemoteAddr() net.Addr             { return e2eBridgeAddr("remote") }
+func (c *e2eBridgeStdioConn) SetDeadline(time.Time) error      { return nil }
+func (c *e2eBridgeStdioConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *e2eBridgeStdioConn) SetWriteDeadline(time.Time) error { return nil }
+func (c *e2eBridgeStdioConn) Close() error {
+	_ = c.reader.Close()
+	return c.writer.Close()
+}
+
+type e2eBridgeAddr string
+
+func (e2eBridgeAddr) Network() string  { return "stdio" }
+func (a e2eBridgeAddr) String() string { return string(a) }
 
 func httpBody(t *testing.T, raw []byte) []byte {
 	t.Helper()

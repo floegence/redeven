@@ -78,7 +78,7 @@ function fakeBridgeSession() {
     },
     placement: { kind: 'host_process', runtime_root: '/opt/redeven' },
     hello: {
-      protocol_version: 'redeven-desktop-bridge-v1',
+      protocol_version: 'redeven-desktop-placement-h2/1',
       runtime_version: 'v0.0.0-test',
       local_ui: { available: false, base_path: '/' },
       runtime_control: { available: false },

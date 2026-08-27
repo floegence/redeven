@@ -16,15 +16,15 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 9 {
-		t.Fatalf("CompatibilityEpoch = %d, want Runtime lifecycle fencing contract epoch 9", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 10 {
+		t.Fatalf("CompatibilityEpoch = %d, want placement HTTP/2 contract epoch 10", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 1 || contract.UpgradeFromRuntimeEpochs[0] != 8 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed v0.10 epoch 8 upgrade", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 1 || contract.UpgradeFromRuntimeEpochs[0] != 9 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed v0.11 epoch 9 upgrade", contract.UpgradeFromRuntimeEpochs)
 	}
-	if contract.MinimumDesktopVersion != "v0.11.0" || contract.MinimumRuntimeVersion != "v0.11.0" {
+	if contract.MinimumDesktopVersion != "v0.12.0" || contract.MinimumRuntimeVersion != "v0.12.0" {
 		t.Fatalf(
-			"minimum versions = Desktop %q Runtime %q, want matched v0.11.0 pair",
+			"minimum versions = Desktop %q Runtime %q, want matched v0.12.0 pair",
 			contract.MinimumDesktopVersion,
 			contract.MinimumRuntimeVersion,
 		)

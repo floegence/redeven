@@ -1,55 +1,49 @@
 package desktopbridge
 
-import (
-	"bytes"
-	"strings"
-	"testing"
-)
+import "testing"
 
-func TestFrameCodecRoundTrip(t *testing.T) {
-	var buf bytes.Buffer
-	payload := []byte{0, 1, 2, 255}
-	if err := WriteFrame(&buf, FrameHeader{
-		StreamID: "local-ui-1",
-		Type:     FrameTypeStreamData,
-	}, payload); err != nil {
-		t.Fatalf("WriteFrame error: %v", err)
-	}
+func TestSurfaceAuthorityRoundTrip(t *testing.T) {
+	t.Parallel()
 
-	header, gotPayload, err := ReadFrame(&buf)
-	if err != nil {
-		t.Fatalf("ReadFrame error: %v", err)
-	}
-	if header.ProtocolVersion != ProtocolVersion {
-		t.Fatalf("protocol version=%q, want %q", header.ProtocolVersion, ProtocolVersion)
-	}
-	if header.StreamID != "local-ui-1" {
-		t.Fatalf("stream id=%q, want local-ui-1", header.StreamID)
-	}
-	if header.Type != FrameTypeStreamData {
-		t.Fatalf("frame type=%q, want %q", header.Type, FrameTypeStreamData)
-	}
-	if !bytes.Equal(gotPayload, payload) {
-		t.Fatalf("payload=%v, want %v", gotPayload, payload)
+	for _, surface := range []StreamSurface{
+		StreamSurfaceLocalUI,
+		StreamSurfaceRuntimeControl,
+		StreamSurfaceGatewayProtocol,
+	} {
+		authority := surface.Authority()
+		if authority == "" {
+			t.Fatalf("%q has no authority", surface)
+		}
+		got, ok := SurfaceFromAuthority(authority)
+		if !ok || got != surface {
+			t.Fatalf("SurfaceFromAuthority(%q) = %q, %v; want %q, true", authority, got, ok, surface)
+		}
 	}
 }
 
-func TestFrameCodecRejectsPayloadLengthMismatch(t *testing.T) {
-	var buf bytes.Buffer
-	if err := WriteFrame(&buf, FrameHeader{
-		StreamID: "stream-1",
-		Type:     FrameTypeStreamData,
-	}, []byte("payload")); err != nil {
-		t.Fatalf("WriteFrame error: %v", err)
-	}
+func TestSurfaceFromAuthorityRejectsUnknownOrPaddedValue(t *testing.T) {
+	t.Parallel()
 
-	raw := buf.Bytes()
-	raw[7] = raw[7] + 1
-	_, _, err := ReadFrame(bytes.NewReader(raw))
-	if err == nil {
-		t.Fatal("ReadFrame succeeded for mismatched payload length")
+	for _, authority := range []string{"", "unknown", " local-ui ", "LOCAL-UI"} {
+		if surface, ok := SurfaceFromAuthority(authority); ok {
+			t.Fatalf("SurfaceFromAuthority(%q) = %q, true; want rejection", authority, surface)
+		}
 	}
-	if !strings.Contains(err.Error(), "unexpected EOF") && !strings.Contains(err.Error(), "does not match") {
-		t.Fatalf("unexpected error: %v", err)
+}
+
+func TestPlacementHTTP2ContractLimits(t *testing.T) {
+	t.Parallel()
+
+	if ProtocolVersion != "redeven-desktop-placement-h2/1" {
+		t.Fatalf("ProtocolVersion = %q", ProtocolVersion)
+	}
+	if MaxConcurrentStreams != 64 {
+		t.Fatalf("MaxConcurrentStreams = %d, want 64", MaxConcurrentStreams)
+	}
+	if StreamReceiveWindowBytes != 256<<10 {
+		t.Fatalf("StreamReceiveWindowBytes = %d, want 256 KiB", StreamReceiveWindowBytes)
+	}
+	if SessionReceiveWindowBytes != 16<<20 {
+		t.Fatalf("SessionReceiveWindowBytes = %d, want 16 MiB", SessionReceiveWindowBytes)
 	}
 }

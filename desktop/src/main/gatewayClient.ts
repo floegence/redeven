@@ -558,6 +558,7 @@ function requestGatewayBridgeJSON(
           payload,
         ].join('\r\n');
         await stream!.write(Buffer.from(request, 'utf8'));
+        await stream!.closeWrite?.();
       } catch (error) {
         settle(() => {
           closeStream();

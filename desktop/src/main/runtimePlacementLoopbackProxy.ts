@@ -197,7 +197,7 @@ export async function startRuntimePlacementLoopbackProxy(
   bridge: RuntimePlacementBridgeSessionHandle,
 ): Promise<RuntimePlacementLoopbackProxy> {
   const sockets = new Set<net.Socket>();
-  const server = net.createServer((socket) => {
+  const server = net.createServer({ allowHalfOpen: true }, (socket) => {
     sockets.add(socket);
     let headerBuffer = Buffer.alloc(0);
 
@@ -219,14 +219,30 @@ export async function startRuntimePlacementLoopbackProxy(
       const requestNormalizer = route.prefix ? new PrefixedRequestStreamNormalizer(route.prefix) : null;
       let bridgeWriteQueue = Promise.resolve();
       let closing = false;
+      let socketReadEnded = false;
 
-      const closeBridgeStream = () => {
+      const resetBridgeStream = () => {
         if (closing) {
           return;
         }
         closing = true;
         void bridgeWriteQueue.finally(() => {
           void stream.close();
+        });
+      };
+
+      const finishBridgeRequest = () => {
+        if (closing) {
+          return;
+        }
+        socketReadEnded = true;
+        void bridgeWriteQueue.then(async () => {
+          await stream.closeWrite?.();
+        }).catch((error: unknown) => {
+          if (!socket.destroyed) {
+            socket.destroy(normalizeStreamError(error));
+          }
+          resetBridgeStream();
         });
       };
 
@@ -265,7 +281,7 @@ export async function startRuntimePlacementLoopbackProxy(
           } else {
             socket.destroy(normalizeStreamError(error));
           }
-          closeBridgeStream();
+          resetBridgeStream();
         }
       };
 
@@ -289,9 +305,13 @@ export async function startRuntimePlacementLoopbackProxy(
         }
       });
       socket.on('data', handleSocketData);
-      socket.once('end', closeBridgeStream);
-      socket.once('error', closeBridgeStream);
-      socket.once('close', closeBridgeStream);
+      socket.once('end', finishBridgeRequest);
+      socket.once('error', resetBridgeStream);
+      socket.once('close', () => {
+        if (!socketReadEnded) {
+          resetBridgeStream();
+        }
+      });
       handleSocketData(firstChunk);
     };
 

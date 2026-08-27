@@ -511,8 +511,9 @@ describe('runtimePlacementBridgeSession', () => {
     }
   });
 
-  it('closes the bridge stream when the loopback socket is destroyed', async () => {
+  it('half-closes the bridge request when the loopback socket ends', async () => {
     let closeCount = 0;
+    let closeWriteCount = 0;
     const writes: string[] = [];
     const bridge: RuntimePlacementBridgeSessionHandle = {
       openStream: (surface) => ({
@@ -526,6 +527,9 @@ describe('runtimePlacementBridgeSession', () => {
         close: async () => {
           closeCount += 1;
         },
+        closeWrite: async () => {
+          closeWriteCount += 1;
+        },
       }),
     };
     const proxy = await startRuntimePlacementLoopbackProxy(bridge);
@@ -536,9 +540,10 @@ describe('runtimePlacementBridgeSession', () => {
       socket.write('GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n');
       await waitForValue(() => writes.length, (count) => count === 1);
 
-      socket.destroy();
-      await waitForValue(() => closeCount, (count) => count === 1);
-      expect(closeCount).toBe(1);
+      socket.end();
+      await waitForValue(() => closeWriteCount, (count) => count === 1);
+      expect(closeWriteCount).toBe(1);
+      expect(closeCount).toBe(0);
     } finally {
       socket.destroy();
       await proxy.close();
