@@ -7,6 +7,7 @@
 [data-floe-dialog-panel].env-app-drawer-panel {
   position: fixed;
   app-region: no-drag;
+  pointer-events: auto;
   user-select: auto;
   left: auto;
   top: var(--redeven-desktop-titlebar-height, 0px);
@@ -27,6 +28,14 @@
   --floe-floating-enter-scale: 1;
   --floe-floating-exit-scale: 1;
   --floe-floating-origin: right center;
+}
+
+[data-floe-dialog-overlay-root]:has(.env-app-drawer-panel) {
+  app-region: no-drag;
+}
+
+[data-floe-dialog-overlay-root]:has(.env-app-drawer-panel) > :not([data-floe-dialog-backdrop]) {
+  pointer-events: none;
 }
 
 @media (max-width: 639px) {

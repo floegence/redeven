@@ -1,13 +1,16 @@
 import '../../index.css';
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
+import { Dialog } from '@floegence/floe-webapp-core/ui';
 
 import {
   ServiceTemplateCatalog,
   type ServiceTemplatePresentation,
 } from './ServiceTemplateCatalog';
+import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 
 const mediaCommands = commands as unknown as Readonly<{
   emulateMediaPreferences: (preferences: Readonly<{ reducedMotion?: null | 'reduce' | 'no-preference' }>) => Promise<void>;
@@ -19,6 +22,7 @@ const template: ServiceTemplatePresentation = {
   description: 'Run DeepSeek Harness directly in the current Environment.',
   source: 'builtin',
   kind: 'host',
+  brandIcon: 'deepseek-harness',
   deploymentLabel: 'Host',
   version: '0.1.1-rc.2',
   developerPreview: true,
@@ -27,6 +31,12 @@ const template: ServiceTemplatePresentation = {
   duplicateable: true,
   editable: false,
 };
+
+async function settle(): Promise<void> {
+  await Promise.resolve();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
 
 describe('ServiceTemplateCatalog browser presentation', () => {
   let dispose: (() => void) | undefined;
@@ -80,13 +90,16 @@ describe('ServiceTemplateCatalog browser presentation', () => {
   it('resolves the card surface through both light and dark theme tokens', () => {
     document.documentElement.classList.add('light');
     mount();
+    const catalogSurface = document.querySelector<HTMLElement>('[data-testid="service-template-catalog"]')!.parentElement!;
     const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
     const lightBackground = getComputedStyle(card).backgroundColor;
+    const lightCatalogBackground = getComputedStyle(catalogSurface).backgroundColor;
 
     document.documentElement.classList.replace('light', 'dark');
     const darkBackground = getComputedStyle(card).backgroundColor;
 
     expect(lightBackground).not.toBe('rgba(0, 0, 0, 0)');
+    expect(lightBackground).not.toBe(lightCatalogBackground);
     expect(darkBackground).not.toBe('rgba(0, 0, 0, 0)');
     expect(darkBackground).not.toBe(lightBackground);
   });
@@ -111,5 +124,93 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const icon = document.querySelector<HTMLElement>('.service-template-identity__icon')!;
     expect(getComputedStyle(card).transitionDuration).toBe('0s');
     expect(getComputedStyle(icon).transitionDuration).toBe('0s');
+  });
+
+  it('keeps catalog menus above the drawer and closes from the outside backdrop', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [open, setOpen] = createSignal(true);
+    const [action, setAction] = createSignal('');
+    dispose = render(() => (
+      <>
+        <EnvAppDrawer
+          open={open()}
+          onOpenChange={setOpen}
+          title="Service templates"
+          description="Deploy a service in the current Environment."
+        >
+          <ServiceTemplateCatalog
+            category="host"
+            query=""
+            hostCount={1}
+            containerCount={0}
+            templates={[template]}
+            loading={false}
+            canManage
+            onCategoryChange={() => undefined}
+            onQueryChange={() => undefined}
+            onCreate={(kind) => setAction(`create:${kind}`)}
+            onDeploy={() => undefined}
+            onDuplicate={() => setAction('duplicate')}
+            onEdit={() => undefined}
+            onDelete={() => undefined}
+          />
+        </EnvAppDrawer>
+        <Dialog
+          open={action() === 'duplicate'}
+          onOpenChange={(nextOpen) => { if (!nextOpen) setAction(''); }}
+          title="Duplicate service template"
+        >
+          <p>Choose a name for the copy.</p>
+        </Dialog>
+      </>
+    ), host);
+    await settle();
+
+    await userEvent.click(document.querySelector<HTMLElement>('[data-testid="service-template-more"]')!);
+    await settle();
+    const duplicate = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Duplicate'))!;
+    const duplicateRect = duplicate.getBoundingClientRect();
+    const duplicateTopLayer = document.elementFromPoint(
+      duplicateRect.left + duplicateRect.width / 2,
+      duplicateRect.top + duplicateRect.height / 2,
+    );
+    expect(duplicate.contains(duplicateTopLayer) || duplicate === duplicateTopLayer).toBe(true);
+    await userEvent.click(duplicate);
+    await settle();
+    expect(action()).toBe('duplicate');
+    const nestedDialog = Array.from(document.querySelectorAll<HTMLElement>('[data-floe-dialog-panel]'))
+      .find((dialog) => dialog.textContent?.includes('Duplicate service template'))!;
+    const nestedRect = nestedDialog.getBoundingClientRect();
+    const nestedTopLayer = document.elementFromPoint(
+      nestedRect.left + nestedRect.width / 2,
+      nestedRect.top + nestedRect.height / 2,
+    );
+    expect(nestedDialog.contains(nestedTopLayer) || nestedDialog === nestedTopLayer).toBe(true);
+    setAction('');
+    await settle();
+
+    await userEvent.click(document.querySelector<HTMLElement>('[data-testid="service-template-create-menu"]')!);
+    await settle();
+    const createHost = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('New host template'))!;
+    const createRect = createHost.getBoundingClientRect();
+    const createTopLayer = document.elementFromPoint(
+      createRect.left + createRect.width / 2,
+      createRect.top + createRect.height / 2,
+    );
+    expect(createHost.contains(createTopLayer) || createHost === createTopLayer).toBe(true);
+    await userEvent.click(createHost);
+    await settle();
+    expect(action()).toBe('create:host');
+
+    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    const panelRect = panel.getBoundingClientRect();
+    const outsideTarget = document.elementFromPoint(Math.max(1, panelRect.left / 2), window.innerHeight / 2) as HTMLElement | null;
+    expect(outsideTarget?.hasAttribute('data-floe-dialog-backdrop')).toBe(true);
+    outsideTarget!.click();
+    await settle();
+    expect(open()).toBe(false);
   });
 });

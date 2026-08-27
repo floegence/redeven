@@ -1085,12 +1085,17 @@ export function EnvPortForwardsPage() {
   const templateInstalled = (template: ManagedCatalogTemplate) => managedState().some((service) => service.service_family_id === template.service_family_id);
   const templatePresentation = (template: ManagedCatalogTemplate): ServiceTemplatePresentation => {
     const identity = managedTemplateLocalizedIdentity(template, i18n);
+    const deepSeekHarnessTemplate = template.template_id === 'deepseek-harness-host'
+      || template.template_id === 'deepseek-harness-container'
+      || template.derived_from_template_id === 'deepseek-harness-host'
+      || template.derived_from_template_id === 'deepseek-harness-container';
     return {
       id: template.template_id,
       name: identity.name,
       description: identity.description,
       source: template.source,
       kind: managedTemplateKind(template),
+      brandIcon: deepSeekHarnessTemplate ? 'deepseek-harness' : undefined,
       deploymentLabel: managedDeploymentLabel(template.deployment, i18n),
       version: template.version,
       developerPreview: template.developer_preview,

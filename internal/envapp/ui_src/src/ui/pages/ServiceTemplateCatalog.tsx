@@ -14,6 +14,7 @@ import {
 import { Button, Dropdown, Input, Tag, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
+import { DeepSeekHarnessLogo } from '../icons/DeepSeekHarnessLogo';
 import {
   redevenSegmentedItemClass,
   redevenSurfaceRoleClass,
@@ -28,6 +29,7 @@ export type ServiceTemplatePresentation = Readonly<{
   description: string;
   source: 'builtin' | 'custom';
   kind: ServiceTemplateKind;
+  brandIcon?: 'deepseek-harness';
   deploymentLabel: string;
   version?: string;
   developerPreview: boolean;
@@ -55,7 +57,8 @@ export type ServiceTemplateCatalogProps = Readonly<{
   onDelete: (templateID: string) => void;
 }>;
 
-function TemplateKindIcon(props: { kind: ServiceTemplateKind; class?: string }): JSX.Element {
+function TemplateKindIcon(props: { kind: ServiceTemplateKind; brandIcon?: ServiceTemplatePresentation['brandIcon']; class?: string }): JSX.Element {
+  if (props.brandIcon === 'deepseek-harness') return <DeepSeekHarnessLogo class={props.class} />;
   if (props.kind === 'host') return <Cpu class={props.class} aria-hidden="true" />;
   if (props.kind === 'compose') return <Layers class={props.class} aria-hidden="true" />;
   return <Package class={props.class} aria-hidden="true" />;
@@ -69,8 +72,12 @@ export function ServiceTemplateIdentity(props: {
 
   return (
     <div class={cn('service-template-identity flex min-w-0 items-start gap-3.5', props.compact && 'service-template-identity--compact')}>
-      <div class="service-template-identity__icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border" data-template-kind={props.template.kind}>
-        <TemplateKindIcon kind={props.template.kind} class="h-5 w-5" />
+      <div
+        class={cn('service-template-identity__icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border', props.template.brandIcon && 'service-template-identity__icon--brand')}
+        data-template-kind={props.template.kind}
+        data-template-brand={props.template.brandIcon}
+      >
+        <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={props.template.brandIcon ? 'h-auto w-7' : 'h-5 w-5'} />
       </div>
       <div class="min-w-0 flex-1 pt-0.5">
         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">

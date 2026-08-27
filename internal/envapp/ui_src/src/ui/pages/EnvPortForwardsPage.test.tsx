@@ -621,8 +621,17 @@ describe('EnvPortForwardsPage', () => {
     expect(drawer.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(1);
     expect(drawer.textContent).toContain('Redeven built-in');
     expect(drawer.textContent).toContain('Run DeepSeek Harness directly in the current Environment.');
+    expect(drawer.querySelector('[data-testid="deepseek-harness-logo"]')).toBeTruthy();
     expect(drawer.textContent).toContain('Ready to deploy');
     expect(Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).some((button) => button.textContent?.trim() === 'Cancel')).toBe(false);
+
+    const newHostTemplate = Array.from(drawer.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'New host template');
+    newHostTemplate?.click();
+    await flushPage();
+    expect(drawer.querySelector('h2')?.textContent).toBe('New service template');
+    expect(drawer.textContent).toContain('Install script');
+    expect(drawer.textContent).toContain('Save template');
   });
 
   it('searches the catalog using localized built-in identity copy', async () => {

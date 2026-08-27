@@ -24,7 +24,11 @@ export function EnvAppDrawer(props: EnvAppDrawerProps): JSX.Element {
         data-redeven-desktop-titlebar-no-drag="true"
         class="pointer-events-none absolute inset-0"
       />
-      <div class={cn('relative z-[1] min-h-0', props.bodyClass)}>
+      <div
+        data-floe-dialog-surface-host="true"
+        data-floe-surface-portal-layer="true"
+        class={cn('relative z-[1] min-h-0', props.bodyClass)}
+      >
         {props.children}
       </div>
     </FloeDialog>
