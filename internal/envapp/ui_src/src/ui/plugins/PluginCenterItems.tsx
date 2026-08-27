@@ -53,7 +53,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   const primaryAction = () => actions().primaryAction;
   const commandPending = () => props.commandPendingType !== undefined;
   const pendingLabel = () => props.commandPendingType
-      ? pluginPendingCommandLabel(props.commandPendingType, i18n)
+      ? pluginPendingCommandLabel(props.commandPendingType, i18n, props.installOperation?.observation)
       : i18n.t('uiCopy.plugin.installOperation.starting');
   const runtimeRecovery = () => props.runtimeRecovery;
   const primaryLabel = () => {

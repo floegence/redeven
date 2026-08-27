@@ -259,6 +259,16 @@ export function createPluginLifecycleAPI(
   const retryRecovery = (pluginInstanceID: string, options: PluginRequestOptions = {}) => (
     client.retryRecovery(pluginInstanceID, options)
   );
+  const grantPermission = (
+    command: Extract<PluginManagementCommand, { type: 'grant_permission' }>,
+    options: PluginRequestOptions = {},
+  ) => client.grantPermission({
+    plugin_instance_id: command.pluginInstanceID,
+    permission_id: command.permissionID,
+    expected_policy_revision: command.expectedPolicyRevision,
+    expected_management_revision: command.expectedManagementRevision,
+    expected_revoke_epoch: command.expectedRevokeEpoch,
+  }, options);
 
   const execute = async (
     command: Exclude<PluginManagementCommand, { type: 'install' }>,
@@ -294,13 +304,7 @@ export function createPluginLifecycleAPI(
         }, options);
       }
       case 'grant_permission':
-        return client.grantPermission({
-          plugin_instance_id: command.pluginInstanceID,
-          permission_id: command.permissionID,
-          expected_policy_revision: command.expectedPolicyRevision,
-          expected_management_revision: command.expectedManagementRevision,
-          expected_revoke_epoch: command.expectedRevokeEpoch,
-        }, options);
+        return grantPermission(command, options);
       case 'revoke_permission':
         return client.revokePermission({
           plugin_instance_id: command.pluginInstanceID,
@@ -330,6 +334,7 @@ export function createPluginLifecycleAPI(
     deleteIncompatibleRetainedData,
     recoverEnabled,
     retryRecovery,
+    grantPermission,
     execute,
   });
 }

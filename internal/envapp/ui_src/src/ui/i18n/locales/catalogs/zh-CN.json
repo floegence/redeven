@@ -4218,9 +4218,8 @@
           "enable": "正在启用..."
         },
         "starting": "正在准备安装...",
-        "authorizing": "正在授予安装时选择的权限...",
+        "finalizing": "正在完成安装...",
         "activationFailed": "插件已安装并启用，但权限设置尚未完成。请重试设置。",
-        "refreshing": "安装已完成，正在刷新插件中心...",
         "reconnecting": "连接已中断，正在重新连接到同一安装任务...",
         "refreshFailed": "插件已安装，但插件中心无法刷新最新清单。",
         "retryRefresh": "刷新清单",

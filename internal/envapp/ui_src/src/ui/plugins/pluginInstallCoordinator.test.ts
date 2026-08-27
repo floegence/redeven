@@ -2,7 +2,12 @@ import type { PluginEvent, PluginExecution } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createPluginInstallCoordinator } from './pluginInstallCoordinator';
+import {
+  ApprovedInstallInventoryRefreshError,
+  completeApprovedOfficialInstall,
+} from './pluginApprovedInstallSetup';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
+import type { PluginInventoryItem, PluginInventoryProjection } from './pluginTypes';
 
 const pluginInstanceID = 'plugini_redeven_official_containers';
 const pluginID = 'com.redeven.official.containers';
@@ -59,6 +64,48 @@ function terminalEvent(input: Readonly<{
       },
     },
   };
+}
+
+function approvalInventory(granted: boolean): PluginInventoryProjection {
+  const lifecycleState: PluginInventoryItem['lifecycleState'] = granted ? 'enabled' : 'needs_attention';
+  return { items: [{
+    inventoryKey: `instance:${pluginInstanceID}`,
+    pluginID,
+    pluginInstanceID,
+    displayName: 'Containers',
+    description: 'Containers',
+    iconFallback: 'generic',
+    category: 'other',
+    searchKeywords: [],
+    publisher: 'Redeven Official',
+    version: '4.4.9',
+    managementRevision: 7,
+    lifecycleState,
+    trustBadge: 'official',
+    pinned: false,
+    defaultLaunchTarget: granted ? {
+      pluginID,
+      pluginInstanceID,
+      surfaceID: 'containers.dashboard',
+      expectedManagementRevision: 11,
+      preferredPlacement: 'activity',
+    } : undefined,
+    authorization: {
+      grants: [],
+      permissions: ['read', 'execute', 'logs', 'admin'].map((suffix) => ({
+        permissionID: `containers.${suffix}`,
+        group: suffix === 'read' ? 'read' as const : 'execute' as const,
+        requiredToOpen: true,
+        methods: [],
+        granted,
+        deniedByGrant: false,
+        blockedByPolicy: false,
+        grantBlockedByPolicy: false,
+        blockedToOpen: false,
+      })),
+      revisions: { policyRevision: 1, managementRevision: 7, revokeEpoch: 3 },
+    },
+  }] };
 }
 
 function harness(overrides: Record<string, unknown> = {}) {
@@ -121,6 +168,44 @@ describe('plugin install execution coordinator', () => {
     expect(h.refreshInventory).toHaveBeenCalledOnce();
     expect(h.completeApprovedInstall).toHaveBeenCalledWith(pluginInstanceID, { items: [] }, expect.any(AbortSignal));
     expect(h.coordinator.projections()).toEqual([]);
+  });
+
+  it('grants four permissions with no more than two complete inventory refreshes', async () => {
+    const h = harness();
+    const refreshInventory = vi.fn()
+      .mockResolvedValueOnce(approvalInventory(false))
+      .mockResolvedValueOnce(approvalInventory(true));
+    const grantPermission = vi.fn(async () => {
+      const index = grantPermission.mock.calls.length - 1;
+      return {
+        permission: {},
+        revisions: {
+          policy_revision: index + 2,
+          management_revision: index + 8,
+          revoke_epoch: index + 4,
+        },
+      };
+    });
+    const coordinator = createPluginInstallCoordinator({
+      lifecycle: h.lifecycle as never,
+      refreshInventory,
+      completeApprovedInstall: (candidate, inventory, signal) => completeApprovedOfficialInstall({
+        pluginInstanceID: candidate,
+        lifecycle: { grantPermission } as never,
+        refreshInventory,
+        inventory,
+        signal,
+      }),
+      createRequestID: () => 'request-1',
+      resolvePluginID: () => pluginID,
+    });
+
+    await coordinator.start(installCommand);
+    await flushUntil(() => coordinator.projections().length === 0);
+
+    expect(grantPermission).toHaveBeenCalledTimes(4);
+    expect(refreshInventory).toHaveBeenCalledTimes(2);
+    expect(h.installOfficialRelease).toHaveBeenCalledOnce();
   });
 
   it('does not start a competing watcher when start and resume overlap', async () => {
@@ -379,6 +464,39 @@ describe('plugin install execution coordinator', () => {
     await flushUntil(() => h.completeApprovedInstall.mock.calls.length === 1);
 
     expect(h.installOfficialRelease).not.toHaveBeenCalled();
+    expect(h.refreshInventory).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses one finalizing observation for inventory refresh and approved setup', async () => {
+    let releaseSetup: (() => void) | undefined;
+    const setupGate = new Promise<void>((resolve) => { releaseSetup = resolve; });
+    const h = harness();
+    h.completeApprovedInstall.mockImplementation(async () => {
+      await setupGate;
+      return undefined;
+    });
+
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => h.coordinator.projections()[0]?.observation === 'finalizing');
+
+    expect(h.refreshInventory).toHaveBeenCalledOnce();
+    expect(h.completeApprovedInstall).toHaveBeenCalledOnce();
+    releaseSetup?.();
+    await flushUntil(() => h.coordinator.projections().length === 0);
+  });
+
+  it('classifies the final inventory refresh failure without restarting installation', async () => {
+    const h = harness();
+    h.completeApprovedInstall.mockRejectedValueOnce(new ApprovedInstallInventoryRefreshError());
+
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => h.coordinator.projections()[0]?.observation === 'refresh_failed');
+
+    expect(h.installOfficialRelease).toHaveBeenCalledOnce();
+    expect(h.coordinator.projections()[0]?.failure?.recovery).toBe('refresh_inventory');
+    await h.coordinator.retry(pluginInstanceID);
+    await flushUntil(() => h.coordinator.projections().length === 0);
+    expect(h.installOfficialRelease).toHaveBeenCalledOnce();
     expect(h.refreshInventory).toHaveBeenCalledTimes(2);
   });
 

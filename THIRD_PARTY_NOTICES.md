@@ -31,7 +31,7 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | github.com/floegence/floeterm/terminal-go | v0.17.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.17.1 | Floegence first-party dependency. |
 | github.com/floegence/floret/v5 | v5.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v5@v5.0.4 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v3 | v3.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v3@v3.2.0 | Floegence first-party dependency. |
-| github.com/floegence/redevplugin/v3 | v3.0.16 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.16 | Floegence first-party dependency. |
+| github.com/floegence/redevplugin/v3 | v3.0.17 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.17 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
@@ -188,8 +188,8 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | @floegence/flowersec-node-native-linux-arm64-gnu | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/3.2.0 |  |
 | @floegence/flowersec-node-native-linux-x64-gnu | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/3.2.0 |  |
 | @floegence/flowersec-node-native | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/3.2.0 |  |
-| @floegence/redevplugin-contracts | 3.0.16 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.16 |  |
-| @floegence/redevplugin-ui | 3.0.16 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.16 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/redevplugin-contracts | 3.0.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.17 |  |
+| @floegence/redevplugin-ui | 3.0.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.17 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
 | @humanfs/core | 0.19.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fcore/v/0.19.1 |  |

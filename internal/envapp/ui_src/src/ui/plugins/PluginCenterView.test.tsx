@@ -1530,6 +1530,34 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).not.toBeNull();
   });
 
+  it('uses one finalizing label and locks only the target plugin', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        installOperations={[{
+          pluginID: containersPlugin.pluginID,
+          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          observation: 'finalizing',
+          progress: [],
+        }]}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const target = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!;
+    const other = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:database"]')!;
+    expect(target.textContent).toContain('Finalizing installation...');
+    expect(target.disabled).toBe(true);
+    expect(other.disabled).toBe(false);
+    expect(mount.querySelector<HTMLInputElement>('[data-plugin-center-search]')!.disabled).toBe(false);
+  });
+
   it('shows authoritative byte progress only on the target plugin while browsing remains available', () => {
     const mount = document.createElement('div');
     document.body.append(mount);

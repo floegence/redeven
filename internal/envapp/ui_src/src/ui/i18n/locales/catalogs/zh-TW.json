@@ -4218,9 +4218,8 @@
           "enable": "正在啟用..."
         },
         "starting": "正在準備安裝...",
-        "authorizing": "正在授予安裝時選取的權限...",
+        "finalizing": "正在完成安裝...",
         "activationFailed": "外掛程式已安裝並啟用，但權限設定尚未完成。請重試設定。",
-        "refreshing": "安裝已完成，正在重新整理外掛程式中心...",
         "reconnecting": "連線已中斷，正在重新連接至同一安裝作業...",
         "refreshFailed": "外掛程式已安裝，但外掛程式中心無法重新整理最新清單。",
         "retryRefresh": "重新整理清單",

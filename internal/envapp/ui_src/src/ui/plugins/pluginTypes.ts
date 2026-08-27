@@ -283,8 +283,7 @@ export type PluginInstallObservation =
   | 'watching'
   | 'reconnecting'
   | 'failed'
-  | 'refreshing'
-  | 'authorizing'
+  | 'finalizing'
   | 'activation_failed'
   | 'refresh_failed';
 

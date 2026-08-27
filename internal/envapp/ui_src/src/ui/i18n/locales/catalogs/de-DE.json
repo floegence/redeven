@@ -4218,9 +4218,8 @@
           "enable": "Wird aktiviert..."
         },
         "starting": "Installation wird vorbereitet...",
-        "authorizing": "Die bei der Installation ausgewählten Berechtigungen werden erteilt...",
+        "finalizing": "Installation wird abgeschlossen...",
         "activationFailed": "Das Plugin ist installiert und aktiviert, aber die Berechtigungseinrichtung ist noch nicht abgeschlossen. Einrichtung wiederholen.",
-        "refreshing": "Installation abgeschlossen. Plugin-Center wird aktualisiert...",
         "reconnecting": "Verbindung unterbrochen. Dieselbe Installation wird wieder verbunden...",
         "refreshFailed": "Das Plugin wurde installiert, aber das Plugin-Center konnte den aktuellen Bestand nicht laden.",
         "retryRefresh": "Bestand aktualisieren",

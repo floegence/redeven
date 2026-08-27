@@ -9,7 +9,7 @@ quality_exception: Cross-repository platform boundary spanning published artifac
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.16` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.17` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -43,12 +43,12 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v3.0.16` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.17` set:
 
-- `github.com/floegence/redevplugin/v3 v3.0.16`;
-- `@floegence/redevplugin-contracts@3.0.16` and
-  `@floegence/redevplugin-ui@3.0.16`;
-- `redevplugin-runtime@3.0.16` and `redevplugin-worker-sdk@3.0.16` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.17`;
+- `@floegence/redevplugin-contracts@3.0.17` and
+  `@floegence/redevplugin-ui@3.0.17`;
+- `redevplugin-runtime@3.0.17` and `redevplugin-worker-sdk@3.0.17` as the exact
   public Rust source-crate boundary;
 - the released contract registry, release-manifest contract, contract hashes, and
   attested `platform-release-manifest.json` registry readback, whose
@@ -95,7 +95,7 @@ carries its exact permission id, required status, and stable
 facts, but it must not parse the package, derive permissions itself, show method
 inventories in the primary UI, or treat the declaration as final verification.
 
-Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.16` Host
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.17` Host
 revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
 revocation, grants, policy fences, runtime admission, and session scope before it
 publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,

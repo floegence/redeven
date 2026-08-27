@@ -1,4 +1,4 @@
-import type { PluginInventoryItem, PluginPendingCommandType } from './pluginTypes';
+import type { PluginInstallExecutionProjection, PluginInventoryItem, PluginPendingCommandType } from './pluginTypes';
 import type { I18nHelpers } from '../i18n';
 
 export const PLUGIN_MOBILE_TOUCH_TARGET_CLASS = 'min-h-[46px] min-w-[46px] sm:min-h-0 sm:min-w-0';
@@ -120,9 +120,15 @@ export function pluginLifecycleLabel(item: PluginInventoryItem, i18n: I18nHelper
   }
 }
 
-export function pluginPendingCommandLabel(command: PluginPendingCommandType, i18n: I18nHelpers): string {
+export function pluginPendingCommandLabel(
+  command: PluginPendingCommandType,
+  i18n: I18nHelpers,
+  installObservation?: PluginInstallExecutionProjection['observation'],
+): string {
   switch (command) {
-    case 'install': return i18n.t('uiCopy.plugin.installOperation.starting');
+    case 'install': return i18n.t(installObservation === 'finalizing'
+      ? 'uiCopy.plugin.installOperation.finalizing'
+      : 'uiCopy.plugin.installOperation.starting');
     case 'enable': return i18n.t('uiCopy.plugin.lifecycleOperation.enabling');
     case 'disable': return i18n.t('uiCopy.plugin.lifecycleOperation.disabling');
     case 'uninstall': return i18n.t('uiCopy.plugin.lifecycleOperation.uninstalling');

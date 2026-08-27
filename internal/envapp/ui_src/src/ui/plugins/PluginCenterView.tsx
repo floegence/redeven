@@ -187,8 +187,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const installOperationActive = (projection: PluginInstallExecutionProjection): boolean => (
     projection.observation === 'starting'
     || projection.observation === 'reconnecting'
-    || projection.observation === 'refreshing'
-    || projection.observation === 'authorizing'
+    || projection.observation === 'finalizing'
     || (
       projection.observation === 'watching'
       && projection.execution?.status !== 'completed'
@@ -2266,7 +2265,7 @@ function PluginActions(props: {
           onClick={runPrimaryAction}
         >
           {props.commandPendingType
-              ? pluginPendingCommandLabel(props.commandPendingType, i18n)
+              ? pluginPendingCommandLabel(props.commandPendingType, i18n, props.installOperation?.observation)
               : primaryActionLabel(presentation().primaryAction)}
         </Button>
         <Show when={overflowItems().length > 0}>

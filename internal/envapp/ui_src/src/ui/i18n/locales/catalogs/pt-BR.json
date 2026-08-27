@@ -4218,9 +4218,8 @@
           "enable": "Ativando..."
         },
         "starting": "Preparando a instalação...",
-        "authorizing": "Concedendo as permissões selecionadas durante a instalação...",
+        "finalizing": "Finalizando a instalação...",
         "activationFailed": "O plugin está instalado e ativado, mas a configuração de permissões não foi concluída. Tente configurá-lo novamente.",
-        "refreshing": "Instalação concluída. Atualizando a Central de Plugins...",
         "reconnecting": "A conexão foi interrompida. Reconectando à mesma instalação...",
         "refreshFailed": "O plugin foi instalado, mas a Central de Plugins não conseguiu atualizar o inventário.",
         "retryRefresh": "Atualizar inventário",

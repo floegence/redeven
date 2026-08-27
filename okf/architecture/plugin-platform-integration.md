@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v3.0.16 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v3.0.17 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v3.0.16` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v3.0.17` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -100,7 +100,7 @@ digests. A declaration mismatch refreshes the market before a new attempt.
 Confirmed retained-data deletion treats an
 already-absent binding as success and reconciles an unknown mutation outcome
 against the exact generation and binding revision before reinstalling.
-ReDevPlugin `v3.0.16` also preserves the deleted instance's durable revoke-epoch
+ReDevPlugin `v3.0.17` also preserves the deleted instance's durable revoke-epoch
 floor across both retained-data and delete-data reinstalls. Previously issued
 credentials therefore remain revoked, while the newly installed instance can
 open surfaces with credentials minted at the current floor.
@@ -143,7 +143,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`v3.0.16`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
+`v3.0.17`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested release manifest and travel with SBOM, provenance, notices,
 and signature evidence. The expected binary digest comes from the product release
@@ -180,10 +180,16 @@ and `enable` progress contract. Byte progress is shown only when the Host report
 bytes; internal verification diagnostics never create product UI stages. A
 terminal Event advances into one finalization read that is retried independently,
 so a lost Execution response cannot strand the observer after its event cursor.
-succeeded operation refreshes inventory and projects
-the authoritative enabled Host record as product-ready or `needs_attention`
-without rewriting its lifecycle state; a refresh failure is
-shown as a separate recoverable state and never relabeled as an install failure.
+A succeeded operation enters one `finalizing` state. Redeven refreshes inventory
+once, preflights the complete required permission set, grants permissions in
+order by passing each mutation response's revisions into the next mutation, and
+refreshes inventory once more only when it made a grant. It never performs a
+full inventory refresh after an individual grant. The final projection must be
+enabled and openable before the operation leaves `finalizing`. A concurrent
+disable, revoke, or revision conflict supersedes automatic finalization; policy
+failure is an activation failure. A refresh failure is separately recoverable
+and retries finalization without reinstalling. Only the target plugin is locked
+while the rest of Plugin Center remains usable.
 Only the terminal Event's released `retryable` fact may permit a new request;
 Redeven does not infer it from an error code. An uncertain submission replays the
 same reviewed command and request id, while a confirmed retry starts a new
@@ -278,7 +284,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v3.0.16` assembly.
+This concept owns only Redeven's concrete `v3.0.17` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout

@@ -191,12 +191,12 @@ describe('PluginInstallStatus', () => {
     host.remove();
   });
 
-  it('keeps inventory refresh visibly busy after platform installation completed', () => {
+  it('keeps installation finalization visibly busy after platform installation completed', () => {
     const host = document.createElement('div');
     document.body.append(host);
     const dispose = render(() => <PluginInstallStatus
       projection={projection({
-        observation: 'refreshing',
+        observation: 'finalizing',
         execution: execution({ status: 'completed', terminal_at: '2026-08-14T00:00:02Z' }),
         progress: [],
       })}
@@ -204,6 +204,7 @@ describe('PluginInstallStatus', () => {
 
     expect(host.querySelector('[data-plugin-install-execution]')?.getAttribute('aria-busy')).toBe('true');
     expect(host.querySelector('svg')?.classList.contains('animate-spin')).toBe(true);
+    expect(host.textContent).toContain('Finalizing installation...');
     dispose();
     host.remove();
   });
