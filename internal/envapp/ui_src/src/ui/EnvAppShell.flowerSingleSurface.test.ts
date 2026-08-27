@@ -12,11 +12,13 @@ describe('Env App Flower ownership', () => {
     const widgets = fs.readFileSync(path.join(uiRoot, 'workbench', 'redevenWorkbenchWidgets.tsx'), 'utf8');
 
     expect(shell.match(/<EnvAIPage/g)).toHaveLength(1);
+    expect(shell.match(/\{renderFlowerProduct\(\)\}/g)).toHaveLength(1);
+    expect(shell.indexOf('{renderFlowerProduct()}')).toBeGreaterThan(shell.indexOf('const renderMainShell'));
     expect(shell).toContain("flowerProductPlacement() === 'workbench'");
     expect(shell).toContain('setFlowerWorkbenchHost,');
     expect(widgets).not.toContain("import('../pages/EnvAIPage')");
     expect(widgets).not.toContain('<EnvAIPage');
     expect(widgets).toContain('data-flower-workbench-host');
-    expect(widgets).toContain('env.setFlowerWorkbenchHost?.(host(), engaged())');
+    expect(widgets).toContain('env.setFlowerWorkbenchHost?.(target, true)');
   });
 });

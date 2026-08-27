@@ -115,7 +115,7 @@ export type EnvContextValue = {
 
   settingsSeq: () => number;
   bumpSettingsSeq: () => void;
-  setFlowerWorkbenchHost?: (host: HTMLElement | null, active: boolean) => void;
+  setFlowerWorkbenchHost?: (host: HTMLElement | null, foreground: boolean) => void;
   openSettings: (section?: EnvSettingsSection, options?: OpenEnvSettingsOptions) => void;
   settingsOrigin: () => EnvSettingsOrigin;
   returnFromSettingsOrigin: () => void;

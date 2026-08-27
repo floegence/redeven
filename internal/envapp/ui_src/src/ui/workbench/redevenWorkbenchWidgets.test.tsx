@@ -488,7 +488,7 @@ describe('redevenWorkbenchWidgets assistant metadata', () => {
     });
   });
 
-  it('keeps the Flower host engaged while the selected widget lifecycle is hot', async () => {
+  it('keeps the Flower host in the foreground after canvas selection is cleared', async () => {
     const flower = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.ai');
     if (!flower?.body) throw new Error('missing Flower widget body');
     const Body = flower.body;
@@ -503,6 +503,8 @@ describe('redevenWorkbenchWidgets assistant metadata', () => {
       }),
       { state: 'ready' },
     );
+    const [selected, setSelected] = createSignal(true);
+    const [filtered, setFiltered] = createSignal(false);
     const [lifecycle, setLifecycle] = createSignal<'hot' | 'cold'>('hot');
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -513,22 +515,37 @@ describe('redevenWorkbenchWidgets assistant metadata', () => {
             widgetId="widget-flower-1"
             title="Flower"
             type="redeven.ai"
-            selected
-            filtered={false}
+            selected={selected()}
+            filtered={filtered()}
             lifecycle={lifecycle()}
           />
         </EnvContext.Provider>
       </I18nProvider>
     ), host);
 
-    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(setFlowerWorkbenchHost).toHaveBeenLastCalledWith(
+        host.querySelector('[data-flower-workbench-host]'),
+        true,
+      );
+    });
     const flowerHost = host.querySelector('[data-flower-workbench-host]');
     expect(flowerHost).toBeInstanceOf(HTMLElement);
     expect(setFlowerWorkbenchHost).toHaveBeenLastCalledWith(flowerHost, true);
 
+    setSelected(false);
     setLifecycle('cold');
     await Promise.resolve();
+    expect(setFlowerWorkbenchHost).toHaveBeenLastCalledWith(flowerHost, true);
+
+    setFiltered(true);
+    await Promise.resolve();
     expect(setFlowerWorkbenchHost).toHaveBeenLastCalledWith(flowerHost, false);
+
+    setFiltered(false);
+    await vi.waitFor(() => {
+      expect(setFlowerWorkbenchHost).toHaveBeenLastCalledWith(flowerHost, true);
+    });
 
     dispose();
     host.remove();
