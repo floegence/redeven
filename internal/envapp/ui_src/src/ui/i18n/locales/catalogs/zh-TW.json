@@ -458,6 +458,19 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "遠端"
     },
+    "runtimeStatus": {
+      "triggerLabel": "{environment} 的運行時詳細資料",
+      "runtime": "運行時",
+      "version": "版本",
+      "started": "啟動時間",
+      "cpu": "CPU",
+      "memory": "記憶體",
+      "unavailable": "暫時無法使用",
+      "connectionUnavailable": "連線至運行時後即可載入詳細資料。",
+      "detailsUnavailable": "運行時詳細資料暫時無法使用。",
+      "readPermissionRequired": "需要讀取權限才能查看資源使用量。",
+      "metricsUnavailable": "運行時資源使用量暫時無法使用。"
+    },
     "flowerCompanion": {
       "openAria": "Flower 對話面板。{status}",
       "collapse": "收合 Flower",

@@ -36,3 +36,9 @@ export type SysMonitorKillProcessResponse = {
   ok: boolean;
   pid: number;
 };
+
+export type RuntimeProcessMetrics = {
+  cpuPercent: number;
+  memoryBytes: number;
+  sampledAtMs: number;
+};

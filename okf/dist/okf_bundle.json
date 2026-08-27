@@ -149,7 +149,7 @@
               "security",
               "session-security"
             ],
-            "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward.",
+            "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward. Protected read-only Runtime observability requires the effective read grant; system-wide process monitoring and process control continue to require execute.",
             "section_count": 2
           },
           {
@@ -5116,7 +5116,7 @@
         "security",
         "session-security"
       ],
-      "timestamp": "2026-06-17T00:00:00Z",
+      "timestamp": "2026-08-27T00:00:00Z",
       "frontmatter": {
         "description": "Redeven validates session metadata and clamps granted permissions before opening runtime sessions.",
         "tags": [
@@ -5124,26 +5124,26 @@
           "security",
           "session-security"
         ],
-        "timestamp": "2026-06-17T00:00:00Z",
+        "timestamp": "2026-08-27T00:00:00Z",
         "title": "Runtime session permission gates",
         "type": "Runtime Contract"
       },
-      "body_length": 1854,
-      "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward.",
+      "body_length": 3219,
+      "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward. Protected read-only Runtime observability requires the effective read grant; system-wide process monitoring and process control continue to require execute.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nWhen `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements. The raw execute bit remains available to explicitly modeled operations such as runtime monitoring or port forwarding, while a general terminal or arbitrary command process derives a separate effective process-launch capability from `write \u0026\u0026 execute`.",
-          "char_count": 662
+          "body": "## Mechanism\n\nWhen `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements. The raw execute bit remains available to explicitly modeled operations such as system-wide process monitoring, process termination, or port forwarding, while a general terminal or arbitrary command process derives a separate effective process-launch capability from `write \u0026\u0026 execute`.\n\nThe protected Runtime process metrics RPC is a narrower read-only exception. It requires `CanRead`, returns only the current Runtime process interval CPU percentage, RSS memory, and sample time, and reads the Monitor service's existing two-second cache. The Monitor service samples one persistent handle opened for its own PID; the RPC does not enumerate processes, expose a PID, guess by process name, or create another polling owner. Runtime version and process start time remain owned by `sys.ping` and are not duplicated in the metrics response.",
+          "char_count": 1247
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Browser or UI-side permission claims remain non-authoritative. Frontend terminal affordances mirror the write-and-execute rule for usability, but Terminal RPC and AI terminal process dispatch remain the authoritative enforcement points. This concept only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.",
-          "char_count": 365
+          "body": "Browser or UI-side permission claims remain non-authoritative. Frontend terminal affordances mirror the write-and-execute rule for usability, but Runtime RPC handlers, Terminal RPC, and AI terminal process dispatch remain the authoritative enforcement points. The Env App requests cached Runtime process metrics only while the environment identity tooltip is hovered or keyboard-focused; this lifecycle does not broaden access and does not replace server enforcement. This concept only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.",
+          "char_count": 596
         }
       ],
       "evidence": [
@@ -5170,6 +5170,18 @@
           "source": "redeven:internal/ai/run.go",
           "line": 4325,
           "description": "Hosted terminal command dispatch rechecks the process-launch capability before starting a process."
+        },
+        {
+          "id": "redeven:internal/monitor/service.go:150:monitor registers the cached runtime process metrics endpoint as protected read-only access while retaining execute on system-wide monitoring.",
+          "source": "redeven:internal/monitor/service.go",
+          "line": 150,
+          "description": "Monitor registers the cached Runtime process metrics endpoint as protected read-only access while retaining execute on system-wide monitoring."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/EnvironmentRuntimeStatusTooltip.tsx:226:env app scopes metrics requests to the active tooltip interaction and preserves partial information on local failures.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/EnvironmentRuntimeStatusTooltip.tsx",
+          "line": 226,
+          "description": "Env App scopes metrics requests to the active tooltip interaction and preserves partial information on local failures."
         }
       ],
       "snippet": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code ",
@@ -10252,5 +10264,5 @@
       ]
     }
   ],
-  "source_sha256": "c2d315792cc1c9f277bb764b7b13951f9df389244ab6fd5cea27561e5420215d"
+  "source_sha256": "e9fb2c0ca4b828c93ed505aca2f20dda44937f081d20282f806134e0290b75a4"
 }

@@ -458,6 +458,19 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "远程"
     },
+    "runtimeStatus": {
+      "triggerLabel": "{environment} 的运行时详情",
+      "runtime": "运行时",
+      "version": "版本",
+      "started": "启动时间",
+      "cpu": "CPU",
+      "memory": "内存",
+      "unavailable": "暂不可用",
+      "connectionUnavailable": "连接运行时后即可加载详情。",
+      "detailsUnavailable": "运行时详情暂不可用。",
+      "readPermissionRequired": "需要读取权限才能查看资源占用。",
+      "metricsUnavailable": "运行时资源占用暂不可用。"
+    },
     "flowerCompanion": {
       "openAria": "Flower 伴随工作区。{status}",
       "collapse": "收起 Flower",

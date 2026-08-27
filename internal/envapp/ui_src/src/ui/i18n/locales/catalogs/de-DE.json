@@ -458,6 +458,19 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Entfernt"
     },
+    "runtimeStatus": {
+      "triggerLabel": "Laufzeitdetails für {environment}",
+      "runtime": "Laufzeit",
+      "version": "Version",
+      "started": "Gestartet",
+      "cpu": "CPU",
+      "memory": "Arbeitsspeicher",
+      "unavailable": "Nicht verfügbar",
+      "connectionUnavailable": "Stellen Sie eine Verbindung zur Laufzeit her, um Details zu laden.",
+      "detailsUnavailable": "Die Laufzeitdetails sind vorübergehend nicht verfügbar.",
+      "readPermissionRequired": "Zum Anzeigen der Auslastung ist Leseberechtigung erforderlich.",
+      "metricsUnavailable": "Die Laufzeitauslastung ist vorübergehend nicht verfügbar."
+    },
     "flowerCompanion": {
       "openAria": "Flower-Begleitbereich. {status}",
       "collapse": "Flower einklappen",

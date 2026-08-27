@@ -132,6 +132,11 @@ import { ConnectionRecoveryView } from './reconnect/ConnectionRecoveryView';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { EnvAppThemePicker } from './EnvAppThemePicker';
+import {
+  EnvironmentRuntimeStatusTooltip,
+  type EnvSessionIdentity,
+  type EnvSessionSource,
+} from './EnvironmentRuntimeStatusTooltip';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
 import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewport';
@@ -325,20 +330,6 @@ function createActivityPluginWindow(
   const [target, setTarget] = createSignal({ ...initialTarget });
   return { instanceID, targetKey, target, setTarget };
 }
-
-type EnvSessionSource =
-  | 'local_runtime'
-  | 'provider_environment'
-  | 'ssh_environment'
-  | 'external_local_ui'
-  | 'runtime_gateway'
-  | 'region_sandbox';
-
-type EnvSessionIdentity = Readonly<{
-  source: EnvSessionSource;
-  displayName: string;
-  displayID: string;
-}>;
 
 type FlowerFileActionOpenTarget = Readonly<{
   path?: string;
@@ -4196,17 +4187,6 @@ export function EnvAppShell() {
     };
   });
 
-  const envTypeLabel = createMemo(() => {
-    switch (envSessionIdentity().source) {
-      case 'ssh_environment': return i18n.t('shell.status.envTypeSSH');
-      case 'provider_environment': return i18n.t('shell.status.envTypeProvider');
-      case 'external_local_ui':
-      case 'runtime_gateway':
-      case 'region_sandbox': return i18n.t('shell.status.envTypeRemote');
-      default: return i18n.t('shell.status.envTypeLocal');
-    }
-  });
-
   function consoleOrigin(): string {
     try {
       return controlPlaneOriginFromSandboxLocation(window.location);
@@ -4915,33 +4895,13 @@ export function EnvAppShell() {
           data-activity-flower-bottom-bar
         >
           <div class="flower-activity-bottom-side flower-activity-bottom-side-start">
-            <div class="flower-activity-env-identity">
-              <span class={`shrink-0 w-3.5 h-3.5 flex items-center justify-center ${
-                envSessionIdentity().source === 'local_runtime' ? 'text-primary' :
-                envSessionIdentity().source === 'ssh_environment' ? 'text-info' :
-                'text-accent'
-              }`}>
-                {envSessionIdentity().source === 'ssh_environment' ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                ) : envSessionIdentity().source !== 'local_runtime' ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-                ) : (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                )}
-              </span>
-              <span class="truncate text-[11px] font-medium text-foreground">{envSessionIdentity().displayName}</span>
-              <span class="flower-activity-env-secondary w-px h-3.5 bg-border shrink-0" />
-              <span class="flower-activity-env-secondary truncate text-[11px] text-muted-foreground">
-                {envSessionIdentity().displayID || i18n.t('shell.status.missingEnvId')}
-              </span>
-            </div>
-            <span class={`flower-activity-env-type text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-tight shrink-0 whitespace-nowrap ${
-              envSessionIdentity().source === 'local_runtime' ? 'bg-primary/10 text-primary' :
-              envSessionIdentity().source === 'ssh_environment' ? 'bg-info/10 text-info' :
-              'bg-accent/10 text-accent'
-            }`}>
-              {envTypeLabel()}
-            </span>
+            <EnvironmentRuntimeStatusTooltip
+              identity={envSessionIdentity()}
+              connectionStatus={status()}
+              connectionLabel={statusLabel()}
+              canRead={env.state === 'ready' ? Boolean(env()?.permissions?.can_read) : null}
+              mobile={layout.isMobile()}
+            />
           </div>
 
           {renderActivityFlowerAnchor()}

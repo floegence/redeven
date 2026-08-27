@@ -13,6 +13,12 @@ export type wire_sys_monitor_kill_process_resp = {
   pid: number;
 };
 
+export type wire_runtime_process_metrics_resp = {
+  cpu_percent: number;
+  memory_bytes: number;
+  sampled_at_ms: number;
+};
+
 export type wire_sys_monitor_process_info = {
   pid: number;
   name: string;

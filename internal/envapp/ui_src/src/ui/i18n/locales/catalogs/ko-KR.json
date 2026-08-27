@@ -458,6 +458,19 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "원격"
     },
+    "runtimeStatus": {
+      "triggerLabel": "{environment} 런타임 세부 정보",
+      "runtime": "런타임",
+      "version": "버전",
+      "started": "시작 시간",
+      "cpu": "CPU",
+      "memory": "메모리",
+      "unavailable": "사용할 수 없음",
+      "connectionUnavailable": "세부 정보를 불러오려면 런타임에 연결하세요.",
+      "detailsUnavailable": "런타임 세부 정보를 일시적으로 확인할 수 없습니다.",
+      "readPermissionRequired": "사용량을 보려면 읽기 권한이 필요합니다.",
+      "metricsUnavailable": "런타임 사용량을 일시적으로 확인할 수 없습니다."
+    },
     "flowerCompanion": {
       "openAria": "Flower 보조 작업 영역. {status}",
       "collapse": "Flower 접기",
