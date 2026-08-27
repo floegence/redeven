@@ -55,9 +55,67 @@ describe('ThreadCache', () => {
     cache = result.cache;
     expect(result.state).toBe('accepted');
     expect(result.runtimeState).toBe('unchanged');
+    expect(result.activityState).toBe('unchanged');
     expect(result.settingsState).toBe('accepted');
     expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('runtime-current');
     expect(cache.views.get('a')?.thread.permission_type).toBe('full_access');
+  });
+
+  it('accepts newer activity metadata without replacing runtime content or settings', () => {
+    const current = view('a', 81, 'canonical assistant reply');
+    let cache = receive(createThreadCache(), {
+      ...current,
+      thread: {
+        ...current.thread,
+        updated_at_ms: 3_589,
+        settings_revision: 7,
+        permission_type: 'full_access',
+        read_status: {
+          is_unread: true,
+          snapshot: {
+            activity_revision: 3_589,
+            last_message_at_unix_ms: 3_589,
+            activity_signature: 'running',
+          },
+          read_state: current.thread.read_status.read_state,
+        },
+      },
+    });
+    const candidate = view('a', 81, 'duplicate runtime content');
+    const result = cache.receiveView({
+      ...candidate,
+      thread: {
+        ...candidate.thread,
+        updated_at_ms: 5_555,
+        settings_revision: 7,
+        permission_type: 'approval_required',
+        read_status: {
+          is_unread: false,
+          snapshot: {
+            activity_revision: 5_555,
+            last_message_at_unix_ms: 5_541,
+            activity_signature: 'success',
+          },
+          read_state: {
+            last_seen_activity_revision: 5_555,
+            last_read_message_at_unix_ms: 5_541,
+            last_seen_activity_signature: 'success',
+          },
+        },
+      },
+    });
+
+    cache = result.cache;
+    expect(result.state).toBe('accepted');
+    expect(result.runtimeState).toBe('unchanged');
+    expect(result.activityState).toBe('accepted');
+    expect(result.settingsState).toBe('unchanged');
+    expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('canonical assistant reply');
+    expect(cache.views.get('a')?.thread.updated_at_ms).toBe(5_555);
+    expect(cache.views.get('a')?.thread.read_status.snapshot.activity_revision).toBe(5_555);
+    expect(cache.views.get('a')?.thread.permission_type).toBe('full_access');
+    expect(cache.summaries.get('a')?.updated_at_ms).toBe(5_555);
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread)).toBe(false);
   });
 
   it('accepts newer runtime content without restoring stale settings', () => {
@@ -74,10 +132,39 @@ describe('ThreadCache', () => {
 
     cache = result.cache;
     expect(result.runtimeState).toBe('accepted');
+    expect(result.activityState).toBe('accepted');
     expect(result.settingsState).toBe('stale');
     expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('runtime-new');
     expect(cache.views.get('a')?.thread.permission_type).toBe('full_access');
     expect(cache.views.get('a')?.thread.settings_revision).toBe(5);
+  });
+
+  it('accepts newer runtime content without restoring stale activity metadata', () => {
+    const initial = view('a', 4, 'runtime-current');
+    let cache = receive(createThreadCache(), {
+      ...initial,
+      thread: {
+        ...initial.thread,
+        updated_at_ms: 10,
+        read_status: {
+          ...initial.thread.read_status,
+          snapshot: {
+            ...initial.thread.read_status.snapshot,
+            activity_revision: 10,
+            last_message_at_unix_ms: 10,
+          },
+        },
+      },
+    });
+    const candidate = view('a', 6, 'runtime-new');
+    const result = cache.receiveView(candidate);
+
+    cache = result.cache;
+    expect(result.runtimeState).toBe('accepted');
+    expect(result.activityState).toBe('stale');
+    expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('runtime-new');
+    expect(cache.views.get('a')?.thread.updated_at_ms).toBe(10);
+    expect(cache.views.get('a')?.thread.read_status.snapshot.activity_revision).toBe(10);
   });
 
   it('detects when a summary revision or lifecycle state is ahead of detail', () => {
@@ -168,6 +255,42 @@ describe('ThreadCache', () => {
     expect(cache.views.get('a')?.thread.status).toBe('running');
     expect(cache.summaries.get('a')?.status).toBe('success');
     expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread)).toBe(true);
+  });
+
+  it('does not let accepted detail metadata regress a newer preserved summary', () => {
+    const cached = view('a', 4, 'cached runtime');
+    let cache = receive(createThreadCache(), {
+      ...cached,
+      thread: {
+        ...cached.thread,
+        updated_at_ms: 4,
+        settings_revision: 1,
+      },
+    });
+    const advancedSummary = {
+      ...thread('a', 9, 'advanced summary'),
+      messages: [],
+      settings_revision: 9,
+      permission_type: 'full_access' as const,
+    };
+    cache = cache.replaceSummary(advancedSummary);
+    const candidate = view('a', 5, 'new runtime');
+    const result = cache.receiveView({
+      ...candidate,
+      thread: {
+        ...candidate.thread,
+        settings_revision: 5,
+        permission_type: 'approval_required',
+      },
+    }, { preserveSummary: true });
+
+    expect(result.runtimeState).toBe('accepted');
+    expect(result.activityState).toBe('accepted');
+    expect(result.settingsState).toBe('accepted');
+    expect(result.cache.views.get('a')?.thread.updated_at_ms).toBe(5);
+    expect(result.cache.summaries.get('a')?.updated_at_ms).toBe(9);
+    expect(result.cache.summaries.get('a')?.settings_revision).toBe(9);
+    expect(result.cache.summaries.get('a')?.permission_type).toBe('full_access');
   });
 
   it('drops stale views and keeps the selected id independent of fetch completion', () => {
