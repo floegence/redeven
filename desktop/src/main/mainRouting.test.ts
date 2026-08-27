@@ -762,32 +762,24 @@ describe('main routing', () => {
     expect(openSSHSrc).toContain('return bridgeOpenResult;');
     expect(openSSHSrc).not.toContain('sshRuntimeReadyByKey');
     expect(openSSHSrc).not.toContain('probeManagedSSHRuntimeStatus');
-    expect(mainSrc).toContain('if (!sessionRecord.env_app_ready || !sessionRecord.desktop_model_source_settled) {');
+    expect(mainSrc).toContain('if (!sessionRecord.env_app_ready) {');
+    expect(mainSrc).not.toContain('desktop_model_source_settled');
     expect(mainSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
     expect(mainSrc).toContain("'environment_open_timing'");
     expect(mainSrc).toContain('launcher_phases: operation?.open_timing?.completed_phases.map((phase) => ({');
     const appReadyGateStart = mainSrc.indexOf('function markSessionAppReady(');
-    const appReadyGateEnd = mainSrc.indexOf('function markSessionDesktopModelSourceSettled(', appReadyGateStart);
+    const appReadyGateEnd = mainSrc.indexOf('async function failOpeningSession(', appReadyGateStart);
     const appReadyGateSrc = mainSrc.slice(appReadyGateStart, appReadyGateEnd);
     expect(appReadyGateSrc).toContain('sessionRecord.env_app_ready = true;');
     expect(appReadyGateSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
     expect(appReadyGateSrc).not.toContain('presentAppWindow(');
-    const modelSourceGateStart = appReadyGateEnd;
-    const modelSourceGateEnd = mainSrc.indexOf('async function failOpeningSession(', modelSourceGateStart);
-    const modelSourceGateSrc = mainSrc.slice(modelSourceGateStart, modelSourceGateEnd);
-    expect(modelSourceGateSrc).toContain('sessionRecord.desktop_model_source_settled = true;');
-    expect(modelSourceGateSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
-    expect(modelSourceGateSrc).not.toContain('presentAppWindow(');
     const bridgeOpenStart = mainSrc.indexOf('async function openRuntimePlacementBridgeFromLauncher(');
     const bridgeOpenEnd = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(', bridgeOpenStart);
     const bridgeOpenSrc = mainSrc.slice(bridgeOpenStart, bridgeOpenEnd);
-    expect(bridgeOpenSrc).toContain('desktopModelSourceSettled: desktopModelSourceTask === null');
-    expect(bridgeOpenSrc).toContain('markSessionDesktopModelSourceSettled(sessionRecord);');
-    expect(bridgeOpenSrc.indexOf('desktopModelSourceTask = (async () => {')).toBeLessThan(
+    expect(bridgeOpenSrc).toContain('const desktopModelSource = await startDesktopModelSourceForStartup({');
+    expect(bridgeOpenSrc).not.toContain('await desktopModelSource.ready');
+    expect(bridgeOpenSrc.indexOf('const desktopModelSource = await startDesktopModelSourceForStartup({')).toBeLessThan(
       bridgeOpenSrc.indexOf('sessionRecord = await createSessionRecord(openTarget'),
-    );
-    expect(bridgeOpenSrc.indexOf('sessionRecord = await createSessionRecord(openTarget')).toBeLessThan(
-      bridgeOpenSrc.indexOf('await desktopModelSourceTask;'),
     );
 
     expect(mainSrc).not.toContain('async function ensureRuntimePlacementReadyRecordFromLauncher(');

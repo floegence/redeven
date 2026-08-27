@@ -9,7 +9,6 @@ import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 
 const STARTUP_REPORT_POLL_MS = 100;
-const DEFAULT_MODEL_SOURCE_STARTUP_TIMEOUT_MS = 8_000;
 const DEFAULT_MODEL_SOURCE_STOP_TIMEOUT_MS = 3_000;
 const TOKEN_ENV_NAME = 'REDEVEN_DESKTOP_MODEL_SOURCE_RUNTIME_CONTROL_TOKEN';
 
@@ -27,9 +26,12 @@ export type DesktopModelSourceStartupReport = Readonly<{
 export type ManagedDesktopModelSource = Readonly<{
   sessionID: string;
   expiresAtUnixMs: number;
-  configured: boolean;
-  modelCount: number;
-  missingKeyProviderIDs: readonly string[];
+  ready: Promise<Readonly<{
+    pid: number;
+    configured: boolean;
+    modelCount: number;
+    missingKeyProviderIDs: readonly string[];
+  }>>;
   stop: () => Promise<void>;
 }>;
 
@@ -38,7 +40,6 @@ export type StartDesktopModelSourceArgs = Readonly<{
   stateRoot: string;
   runtimeControl: DesktopRuntimeControlEndpoint;
   tempRoot?: string;
-  startupTimeoutMs?: number;
   stopTimeoutMs?: number;
   signal?: AbortSignal;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
@@ -114,8 +115,11 @@ async function stopProcess(child: ModelSourceProcess, timeoutMs: number): Promis
   if (child.exitCode !== null || child.signalCode) {
     return;
   }
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => resolve());
+    child.once('error', () => resolve());
+  });
   child.kill('SIGTERM');
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
   const timedOut = delay(timeoutMs).then(() => 'timeout' as const);
   if (await Promise.race([exited, timedOut]) === 'timeout' && child.exitCode === null) {
     child.kill('SIGKILL');
@@ -152,7 +156,6 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
     reportFile,
   ], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    signal: args.signal,
     env: sanitizeDesktopChildEnvironment({
       ...process.env,
       [TOKEN_ENV_NAME]: token,
@@ -172,37 +175,58 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
   child.stdout?.on('data', (chunk: string) => args.onLog?.('stdout', chunk));
   child.stderr?.on('data', (chunk: string) => args.onLog?.('stderr', chunk));
 
-  const cleanup = async () => {
-    await stopProcess(child, args.stopTimeoutMs ?? DEFAULT_MODEL_SOURCE_STOP_TIMEOUT_MS).catch(() => undefined);
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  const readinessController = new AbortController();
+  let cleanupTask: Promise<void> | null = null;
+  const cleanup = (): Promise<void> => {
+    if (cleanupTask) {
+      return cleanupTask;
+    }
+    cleanupTask = (async () => {
+      if (!readinessController.signal.aborted) {
+        readinessController.abort(modelSourceStartupCanceledError());
+      }
+      args.signal?.removeEventListener('abort', onAbort);
+      await stopProcess(child, args.stopTimeoutMs ?? DEFAULT_MODEL_SOURCE_STOP_TIMEOUT_MS).catch(() => undefined);
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    })();
+    return cleanupTask;
   };
+  const onAbort = () => {
+    void cleanup();
+  };
+  args.signal?.addEventListener('abort', onAbort, { once: true });
 
-  try {
-    const deadline = Date.now() + (args.startupTimeoutMs ?? DEFAULT_MODEL_SOURCE_STARTUP_TIMEOUT_MS);
+  const ready = (async () => {
     for (;;) {
-      throwIfModelSourceStartupCanceled(args.signal);
+      throwIfModelSourceStartupCanceled(readinessController.signal);
       if (spawnError) throw spawnError;
       const report = await readStartupReport(reportFile, sessionID);
       if (report) {
         return {
-          sessionID,
-          expiresAtUnixMs,
+          pid: report.pid,
           configured: report.configured === true,
           modelCount: Math.max(0, Math.floor(Number(report.model_count ?? 0))),
           missingKeyProviderIDs: report.missing_key_provider_ids ?? [],
-          stop: cleanup,
         };
       }
       if (child.exitCode !== null || child.signalCode) {
         throw new Error(`Desktop model source exited before connecting (${child.exitCode !== null ? `exit code ${child.exitCode}` : `signal ${child.signalCode}`}).`);
       }
-      if (Date.now() >= deadline) {
-        throw new Error('Timed out waiting for Desktop model source connection.');
-      }
-      await delay(STARTUP_REPORT_POLL_MS, args.signal);
+      await delay(STARTUP_REPORT_POLL_MS, readinessController.signal);
     }
-  } catch (error) {
+  })().catch(async (error: unknown) => {
     await cleanup();
     throw error;
+  });
+  void ready.catch(() => undefined);
+  if (args.signal?.aborted) {
+    await cleanup();
+    throw modelSourceStartupCanceledError();
   }
+  return {
+    sessionID,
+    expiresAtUnixMs,
+    ready,
+    stop: cleanup,
+  };
 }
