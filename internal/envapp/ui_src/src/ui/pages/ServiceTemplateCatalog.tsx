@@ -310,12 +310,11 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
   const i18n = useI18n();
   const categoryPresentation = createMemo<Readonly<{
     category: ServiceTemplateCategory;
-    direction: -1 | 0 | 1;
+    active: boolean;
   }>>((previous) => {
     const category = props.category;
-    const direction = category === previous.category ? 0 : category === 'container' ? 1 : -1;
-    return { category, direction };
-  }, { category: props.category, direction: 0 });
+    return { category, active: category !== previous.category };
+  }, { category: props.category, active: false });
   const [requestedTemplateID, setRequestedTemplateID] = createSignal<string | null>(null);
   const builtInTemplates = createMemo(() => props.templates.filter((template) => template.source === 'builtin'));
   const customTemplates = createMemo(() => props.templates.filter((template) => template.source === 'custom'));
@@ -405,7 +404,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
             class="service-template-category-transition"
             data-testid="service-template-category-content"
             data-template-category={presentation.category}
-            data-transition-direction={presentation.direction}
+            data-transition-active={presentation.active}
           >
             <Show
               when={!props.loading}
