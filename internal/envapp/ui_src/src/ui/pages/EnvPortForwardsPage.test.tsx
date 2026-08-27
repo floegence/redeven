@@ -39,6 +39,10 @@ const desktopContextMocks = vi.hoisted(() => ({
   readDesktopSessionContextSnapshot: vi.fn(),
 }));
 
+const redevenRpcMocks = vi.hoisted(() => ({
+  fs: { list: vi.fn(async () => ({ entries: [] })) },
+}));
+
 const sandboxWindowRegistryMocks = vi.hoisted(() => ({
   registerSandboxWindow: vi.fn(),
 }));
@@ -61,6 +65,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Stop: (props: any) => <span class={props.class} data-testid="stop-icon" />,
   Refresh: (props: any) => <span class={props.class} data-testid="restart-icon" />,
   FileText: (props: any) => <span class={props.class} data-testid="file-text-icon" />,
+  FolderOpen: (props: any) => <span class={props.class} data-testid="folder-open-icon" />,
+  ShieldCheck: (props: any) => <span class={props.class} data-testid="shield-check-icon" />,
   Copy: (props: any) => <span class={props.class} data-testid="copy-icon" />,
   Pencil: (props: any) => <span class={props.class} data-testid="pencil-icon" />,
   CheckCircle: (props: any) => <span class={props.class} data-testid="check-circle-icon" />,
@@ -162,6 +168,18 @@ vi.mock('../primitives/EnvAppModal', () => ({
 
 vi.mock('../primitives/EnvAppDrawer', () => ({
   EnvAppDrawer: (props: any) => <Show when={props.open}><div data-testid="env-app-drawer-mock"><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
+}));
+
+vi.mock('../primitives/LazyMountedPickers', () => ({
+  LazyMountedDirectoryPicker: (props: any) => <Show when={props.open}><div data-testid="managed-workspace-picker-mock"><h2>{props.title}</h2><button type="button" onClick={() => { props.onSelect('/Users/demo/Projects/Focused App'); props.onOpenChange(false); }}>Select focused folder</button></div></Show>,
+}));
+
+vi.mock('@floegence/floe-webapp-protocol', () => ({
+  useProtocol: () => ({ session: () => ({}) }),
+}));
+
+vi.mock('../protocol/redeven_v1', () => ({
+  useRedevenRpc: () => redevenRpcMocks,
 }));
 
 vi.mock('./EnvContext', () => ({
@@ -633,6 +651,46 @@ describe('EnvPortForwardsPage', () => {
     expect(drawer.querySelector('h2')?.textContent).toBe('New service template');
     expect(drawer.textContent).toContain('Install script');
     expect(drawer.textContent).toContain('Save template');
+  });
+
+  it('starts deployment from the template dedicated workspace instead of the home root', async () => {
+    const template = {
+      template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment',
+      source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true,
+      deployments: [{ deployment: 'native', available: true }],
+      default_workspace_path: '/Users/demo/Redeven Workspaces/Managed Services/DeepSeek Harness',
+      workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+    };
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
+    await flushPage();
+
+    const workspace = host.querySelector<HTMLElement>('[data-testid="managed-workspace-path"]');
+    expect(workspace?.dataset.path).toBe(template.default_workspace_path);
+    expect(workspace?.dataset.path).not.toBe(template.workspace_roots[0]?.path);
+
+    host.querySelector<HTMLButtonElement>('[data-testid="managed-workspace-picker-trigger"]')?.click();
+    await flushPage();
+    expect(host.querySelector('[data-testid="managed-workspace-picker-mock"]')).toBeTruthy();
+    host.querySelector<HTMLButtonElement>('[data-testid="managed-workspace-picker-mock"] button')?.click();
+    await flushPage();
+    expect(workspace?.dataset.path).toBe('/Users/demo/Projects/Focused App');
+    expect(host.textContent).toContain('The service can read and modify the selected folder.');
+
+    const restore = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Restore recommended workspace'));
+    restore?.click();
+    await flushPage();
+    expect(workspace?.dataset.path).toBe(template.default_workspace_path);
   });
 
   it('searches the catalog using localized built-in identity copy', async () => {

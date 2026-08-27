@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
@@ -17,9 +16,11 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
+	scope, stateDir := newManagedServiceTestScope(t)
 	manager := &Manager{
 		registry:  registry,
-		scope:     &filesystemscope.Registry{},
+		scope:     scope,
+		stateDir:  stateDir,
 		downloads: defaultPackageDownloadClient(),
 	}
 	source, err := manager.CreateTemplate(context.Background(), TemplateWriteRequest{
@@ -43,6 +44,9 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 	if copy.Source != "custom" || !copy.Editable || copy.DerivedFromTemplateID != source.TemplateID || copy.DerivedFromRevision != source.Revision || copy.ServiceFamilyID == source.ServiceFamilyID {
 		t.Fatalf("duplicate = %+v, source = %+v", copy, source)
 	}
+	if source.DefaultWorkspacePath == "" || copy.DefaultWorkspacePath == "" || source.DefaultWorkspacePath == copy.DefaultWorkspacePath {
+		t.Fatalf("independent template workspaces = %q, %q", source.DefaultWorkspacePath, copy.DefaultWorkspacePath)
+	}
 	if copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.StartScript != source.Spec.Host.StartScript {
 		t.Fatalf("duplicate definition = %+v", copy.Spec)
 	}
@@ -59,7 +63,8 @@ func TestDuplicateBuiltInHostRetainsReleaseLockedRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	manager := &Manager{registry: registry, scope: &filesystemscope.Registry{}, downloads: defaultPackageDownloadClient()}
+	scope, stateDir := newManagedServiceTestScope(t)
+	manager := &Manager{registry: registry, scope: scope, stateDir: stateDir, downloads: defaultPackageDownloadClient()}
 	copy, err := manager.DuplicateTemplate(context.Background(), DeepSeekHarnessHostTemplateID, TemplateDuplicateRequest{
 		RequestID: "request-duplicate-builtin-host",
 		Name:      "DeepSeek Harness host copy",

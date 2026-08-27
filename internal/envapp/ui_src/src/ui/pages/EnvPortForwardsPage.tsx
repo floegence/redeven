@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ExternalLink, Globe, Plus, RefreshIcon, Save, Search, Trash, Play, Stop, Refresh, FileText } from '@floegence/floe-webapp-core/icons';
+import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { AlertTriangle, ExternalLink, FolderOpen, Globe, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh, FileText } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -19,6 +20,7 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
+import { LazyMountedDirectoryPicker } from '../primitives/LazyMountedPickers';
 
 import {
   getEnvPublicIDFromSession,
@@ -40,7 +42,9 @@ import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redev
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
+import { createDirectoryPickerDataSource } from '../../../../../flower_ui/src/filePicker/createDirectoryPickerDataSource';
 import {
   ServiceTemplateCatalog,
   ServiceTemplateIdentity,
@@ -136,6 +140,7 @@ type ManagedCatalogTemplate = Readonly<{
   reason_code?: string;
   reason?: string;
   deployments: ReadonlyArray<{ deployment: ManagedDeployment; available: boolean; reason_code?: string; reason?: string }>;
+  default_workspace_path: string;
   workspace_roots: ReadonlyArray<{ id: string; label: string; path: string }>;
   spec?: ManagedTemplateSpec;
 }>;
@@ -835,6 +840,8 @@ async function openWebServiceRoute(
 
 export function EnvPortForwardsPage() {
   const ctx = useEnvContext();
+  const protocol = useProtocol();
+  const rpc = useRedevenRpc();
   const notify = useNotification();
   const outlineControlClass = redevenSurfaceRoleClass('control');
   const i18n = useI18n();
@@ -878,6 +885,7 @@ export function EnvPortForwardsPage() {
   const [managedBusy, setManagedBusy] = createSignal(false);
   const [managedOperation, setManagedOperation] = createSignal<ManagedOperation | null>(null);
   const [workspacePath, setWorkspacePath] = createSignal('');
+  const [workspacePickerOpen, setWorkspacePickerOpen] = createSignal(false);
   const [templateDrawerOpen, setTemplateDrawerOpen] = createSignal(false);
   const [templateDrawerView, setTemplateDrawerView] = createSignal<TemplateDrawerView>('catalog');
   const [templateCategory, setTemplateCategory] = createSignal<ServiceTemplateCategory>('host');
@@ -892,6 +900,27 @@ export function EnvPortForwardsPage() {
   let managedStreamAbort: AbortController | null = null;
   let resumedOperationID: string | null = null;
 
+  const workspacePicker = createDirectoryPickerDataSource({
+    homePath: () => '/',
+    listDirectory: async (absolutePath) => {
+      if (!protocol.session?.()) return [];
+      const response = await rpc.fs.list({ path: absolutePath, showHidden: false });
+      return response.entries ?? [];
+    },
+  });
+
+  const openWorkspacePicker = () => {
+    workspacePicker.reset();
+    setWorkspacePickerOpen(true);
+    void workspacePicker.ensureRootLoaded();
+  };
+
+  createEffect(() => {
+    ctx.env_id();
+    protocol.session?.();
+    workspacePicker.reset();
+  });
+
   const loadManaged = async (refreshCatalog = true) => {
     if (!permissionReady() || !canRead()) return;
     setManagedLoading(true);
@@ -904,7 +933,6 @@ export function EnvPortForwardsPage() {
       ]);
       const templates = Array.isArray(catalog.templates) ? catalog.templates : [];
       setManagedTemplates(templates);
-      setWorkspacePath((current) => current.trim() || templates[0]?.workspace_roots?.[0]?.path || '');
       const nextServices = Array.isArray(services.services) ? services.services : [];
       setManagedState(nextServices);
       setManagedLoadError(false);
@@ -1127,6 +1155,10 @@ export function EnvPortForwardsPage() {
     const template = selectedTemplate();
     return template ? templatePresentation(template) : null;
   });
+  const workspaceUsesRecommendedPath = createMemo(() => {
+    const template = selectedTemplate();
+    return Boolean(template?.default_workspace_path) && workspacePath() === template?.default_workspace_path;
+  });
   const templateByID = (templateID: string) => managedTemplates().find((template) => template.template_id === templateID);
 
   const openTemplateCatalog = () => {
@@ -1139,7 +1171,7 @@ export function EnvPortForwardsPage() {
   const beginTemplateInstall = (template: ManagedCatalogTemplate) => {
     if (!template.available || templateInstalled(template)) return;
     setSelectedTemplateID(template.template_id);
-    setWorkspacePath(template.workspace_roots?.[0]?.path || '');
+    setWorkspacePath(template.default_workspace_path);
     setTemplateDrawerView('install');
   };
 
@@ -1758,9 +1790,60 @@ export function EnvPortForwardsPage() {
               <section class="service-template-install-section border-t pt-4">
                 <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.workspaceSection')}</h3>
                 <p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.workspaceSectionDescription')}</p>
-                <label class="mb-1 mt-3 block text-xs font-medium">{i18n.t('webServices.managed.workspace')}</label>
-                <Input value={workspacePath()} onInput={(event) => setWorkspacePath(event.currentTarget.value)} disabled={managedBusy()} class="w-full font-mono" placeholder={i18n.t('webServices.managed.workspacePlaceholder')} />
-                <div class="mt-2 flex flex-wrap gap-1.5"><For each={template.workspace_roots ?? []}>{(root) => <Button size="sm" variant="ghost" onClick={() => setWorkspacePath(root.path)} disabled={managedBusy()} title={root.path}>{root.label || root.path}</Button>}</For></div>
+                <div class="service-template-workspace-picker mt-3" data-recommended={workspaceUsesRecommendedPath()}>
+                  <div class="flex min-w-0 items-center gap-3">
+                    <span class="service-template-workspace-picker__icon flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" aria-hidden="true">
+                      <FolderOpen class="h-4 w-4" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-medium text-foreground">{i18n.t('webServices.managed.workspace')}</span>
+                        <Show when={workspaceUsesRecommendedPath()}>
+                          <span class="service-template-workspace-picker__badge rounded-full px-2 py-0.5 text-[10px] font-semibold">{i18n.t('webServices.managed.recommended')}</span>
+                        </Show>
+                      </div>
+                      <p
+                        class="mt-1 truncate font-mono text-xs text-muted-foreground"
+                        title={workspacePath()}
+                        data-testid="managed-workspace-path"
+                        data-path={workspacePath()}
+                      >
+                        {workspacePath() || i18n.t('webServices.managed.workspacePlaceholder')}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      class="shrink-0 gap-1.5"
+                      data-testid="managed-workspace-picker-trigger"
+                      onClick={openWorkspacePicker}
+                      disabled={managedBusy()}
+                    >
+                      <FolderOpen class="h-3.5 w-3.5" aria-hidden="true" />
+                      {i18n.t('webServices.managed.chooseWorkspace')}
+                    </Button>
+                  </div>
+                </div>
+                <div class={cn('mt-2 flex items-start gap-2 text-[11px] leading-4', workspaceUsesRecommendedPath() ? 'text-muted-foreground' : 'text-warning')}>
+                  <Show when={workspaceUsesRecommendedPath()} fallback={<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}>
+                    <ShieldCheck class="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                  </Show>
+                  <span>{workspaceUsesRecommendedPath() ? i18n.t('webServices.managed.workspaceSafeDefaultDescription') : i18n.t('webServices.managed.workspaceCustomDescription')}</span>
+                </div>
+                <Show when={!workspaceUsesRecommendedPath() && template.default_workspace_path}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    class="mt-1.5 h-7 gap-1.5 px-2 text-xs"
+                    onClick={() => setWorkspacePath(template.default_workspace_path)}
+                    disabled={managedBusy()}
+                  >
+                    <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
+                    {i18n.t('webServices.managed.restoreRecommendedWorkspace')}
+                  </Button>
+                </Show>
               </section>
               <section class="service-template-install-section border-t pt-4">
                 <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.deploymentInformation')}</h3>
@@ -1779,30 +1862,99 @@ export function EnvPortForwardsPage() {
           )}</Show>
 
           <Show when={templateDrawerView() === 'editor' && templateDraft()} keyed>{(draft) => (
-            <div class="space-y-5">
+            <div class="service-template-editor space-y-5">
               <div class="rounded-md border border-warning/25 bg-warning/[0.05] p-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.customTemplateSafety')}</div>
-              <div class="grid gap-3 sm:grid-cols-2"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={draft.name} onInput={(event) => setTemplateDraft({ ...draft, name: event.currentTarget.value })} /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateVersion')}</label><Input value={draft.version} onInput={(event) => setTemplateDraft({ ...draft, version: event.currentTarget.value })} /></div></div>
-              <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateDescriptionLabel')}</label><Textarea value={draft.description} onInput={(event) => setTemplateDraft({ ...draft, description: event.currentTarget.value })} rows={2} /></div>
-              <div class="grid gap-3 sm:grid-cols-3"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.webScheme')}</label><select class="h-9 w-full rounded-md border bg-background px-2 text-sm" value={draft.scheme} onChange={(event) => setTemplateDraft({ ...draft, scheme: event.currentTarget.value as 'http' | 'https' })}><option value="http">HTTP</option><option value="https">HTTPS</option></select></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.webPath')}</label><Input value={draft.path} onInput={(event) => setTemplateDraft({ ...draft, path: event.currentTarget.value })} class="font-mono" /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.healthPath')}</label><Input value={draft.healthPath} onInput={(event) => setTemplateDraft({ ...draft, healthPath: event.currentTarget.value })} class="font-mono" /></div></div>
-              <Show when={draft.kind === 'host'}>
-                <div class="rounded-md border p-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.hostScriptNote')}</div>
-                <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.installScript')}</label><Textarea value={draft.installScript} onInput={(event) => setTemplateDraft({ ...draft, installScript: event.currentTarget.value })} rows={5} class="font-mono text-xs" /></div>
-                <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.startScript')}</label><Textarea value={draft.startScript} onInput={(event) => setTemplateDraft({ ...draft, startScript: event.currentTarget.value })} rows={7} class="font-mono text-xs" /></div>
-                <div class="grid gap-3 sm:grid-cols-2"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.stopScript')}</label><Textarea value={draft.stopScript} onInput={(event) => setTemplateDraft({ ...draft, stopScript: event.currentTarget.value })} rows={4} class="font-mono text-xs" /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.uninstallScript')}</label><Textarea value={draft.uninstallScript} onInput={(event) => setTemplateDraft({ ...draft, uninstallScript: event.currentTarget.value })} rows={4} class="font-mono text-xs" /></div></div>
-              </Show>
-              <Show when={draft.kind === 'container'}>
-                <div class="grid gap-3 sm:grid-cols-[1fr_160px]"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerImage')}</label><Input value={draft.image} onInput={(event) => setTemplateDraft({ ...draft, image: event.currentTarget.value })} class="font-mono" /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerPort')}</label><Input value={draft.containerPort} onInput={(event) => setTemplateDraft({ ...draft, containerPort: event.currentTarget.value })} inputmode="numeric" /></div></div>
-                <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.entrypoint')}</label><Input value={draft.entrypoint} onInput={(event) => setTemplateDraft({ ...draft, entrypoint: event.currentTarget.value })} class="font-mono" /></div>
-                <div class="grid gap-3 sm:grid-cols-2"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.commandArguments')}</label><Textarea value={draft.command} onInput={(event) => setTemplateDraft({ ...draft, command: event.currentTarget.value })} rows={6} class="font-mono text-xs" /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.environmentVariables')}</label><Textarea value={draft.environment} onInput={(event) => setTemplateDraft({ ...draft, environment: event.currentTarget.value })} rows={6} class="font-mono text-xs" /></div></div>
-              </Show>
-              <Show when={draft.kind === 'compose'}>
-                <div class="grid gap-3 sm:grid-cols-[1fr_180px]"><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.composeMainService')}</label><Input value={draft.mainService} onInput={(event) => setTemplateDraft({ ...draft, mainService: event.currentTarget.value })} /></div><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerPort')}</label><Input value={draft.containerPort} onInput={(event) => setTemplateDraft({ ...draft, containerPort: event.currentTarget.value })} inputmode="numeric" /></div></div>
-                <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.composeYAML')}</label><Textarea value={draft.composeYAML} onInput={(event) => setTemplateDraft({ ...draft, composeYAML: event.currentTarget.value })} rows={18} class="font-mono text-xs" /></div>
-              </Show>
+              <section class="service-template-editor__section">
+                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.templateBasics')}</h3>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={draft.name} maxlength={80} onInput={(event) => setTemplateDraft({ ...draft, name: event.currentTarget.value })} /></div>
+                  <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateVersion')}</label><Input value={draft.version} maxlength={80} onInput={(event) => setTemplateDraft({ ...draft, version: event.currentTarget.value })} /></div>
+                </div>
+                <div class="mt-3"><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateDescriptionLabel')}</label><Textarea value={draft.description} maxlength={1000} onInput={(event) => setTemplateDraft({ ...draft, description: event.currentTarget.value })} rows={2} /></div>
+              </section>
+
+              <section class="service-template-editor__section">
+                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.endpointSettings')}</h3>
+                <div class="mt-3 grid gap-3 sm:grid-cols-[180px_1fr_1fr]">
+                  <div>
+                    <div class="mb-1 text-xs font-medium">{i18n.t('webServices.managed.webScheme')}</div>
+                    <div class="service-template-scheme-picker grid h-9 grid-cols-2 gap-1 rounded-md p-1" role="radiogroup" aria-label={i18n.t('webServices.managed.webScheme')}>
+                      <For each={['http', 'https'] as const}>{(scheme) => (
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={draft.scheme === scheme}
+                          class="service-template-scheme-picker__option rounded px-2 text-xs font-semibold uppercase"
+                          onClick={() => setTemplateDraft({ ...draft, scheme })}
+                        >
+                          {scheme}
+                        </button>
+                      )}</For>
+                    </div>
+                  </div>
+                  <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.webPath')}</label><Input value={draft.path} onInput={(event) => setTemplateDraft({ ...draft, path: event.currentTarget.value })} class="font-mono" /></div>
+                  <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.healthPath')}</label><Input value={draft.healthPath} onInput={(event) => setTemplateDraft({ ...draft, healthPath: event.currentTarget.value })} class="font-mono" /></div>
+                </div>
+              </section>
+
+              <section class="service-template-editor__section">
+                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.serviceRuntimeSettings')}</h3>
+                <Show when={draft.kind === 'host'}>
+                  <p class="mt-2 text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.hostScriptNote')}</p>
+                  <div class="mt-3"><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.startScript')}</label><Textarea value={draft.startScript} onInput={(event) => setTemplateDraft({ ...draft, startScript: event.currentTarget.value })} rows={7} class="font-mono text-xs" /></div>
+                  <details class="service-template-editor__advanced mt-3" open={Boolean(draft.installScript || draft.stopScript || draft.uninstallScript)}>
+                    <summary class="py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.optionalLifecycleScripts')}</summary>
+                    <div class="space-y-3 pb-1 pt-2">
+                      <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.installScript')}</label><Textarea value={draft.installScript} onInput={(event) => setTemplateDraft({ ...draft, installScript: event.currentTarget.value })} rows={5} class="font-mono text-xs" /></div>
+                      <div class="grid gap-3 sm:grid-cols-2">
+                        <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.stopScript')}</label><Textarea value={draft.stopScript} onInput={(event) => setTemplateDraft({ ...draft, stopScript: event.currentTarget.value })} rows={4} class="font-mono text-xs" /></div>
+                        <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.uninstallScript')}</label><Textarea value={draft.uninstallScript} onInput={(event) => setTemplateDraft({ ...draft, uninstallScript: event.currentTarget.value })} rows={4} class="font-mono text-xs" /></div>
+                      </div>
+                    </div>
+                  </details>
+                </Show>
+                <Show when={draft.kind === 'container'}>
+                  <div class="mt-3 grid gap-3 sm:grid-cols-[1fr_160px]">
+                    <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerImage')}</label><Input value={draft.image} onInput={(event) => setTemplateDraft({ ...draft, image: event.currentTarget.value })} class="font-mono" /></div>
+                    <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerPort')}</label><Input type="number" min="1" max="65535" value={draft.containerPort} onInput={(event) => setTemplateDraft({ ...draft, containerPort: event.currentTarget.value })} inputmode="numeric" /></div>
+                  </div>
+                  <details class="service-template-editor__advanced mt-3" open={Boolean(draft.entrypoint || draft.command || draft.environment)}>
+                    <summary class="py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.optionalContainerSettings')}</summary>
+                    <div class="space-y-3 pb-1 pt-2">
+                      <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.entrypoint')}</label><Input value={draft.entrypoint} onInput={(event) => setTemplateDraft({ ...draft, entrypoint: event.currentTarget.value })} class="font-mono" /></div>
+                      <div class="grid gap-3 sm:grid-cols-2">
+                        <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.commandArguments')}</label><Textarea value={draft.command} onInput={(event) => setTemplateDraft({ ...draft, command: event.currentTarget.value })} rows={6} class="font-mono text-xs" /></div>
+                        <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.environmentVariables')}</label><Textarea value={draft.environment} onInput={(event) => setTemplateDraft({ ...draft, environment: event.currentTarget.value })} rows={6} class="font-mono text-xs" /></div>
+                      </div>
+                    </div>
+                  </details>
+                </Show>
+                <Show when={draft.kind === 'compose'}>
+                  <div class="mt-3 grid gap-3 sm:grid-cols-[1fr_180px]">
+                    <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.composeMainService')}</label><Input value={draft.mainService} onInput={(event) => setTemplateDraft({ ...draft, mainService: event.currentTarget.value })} /></div>
+                    <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerPort')}</label><Input type="number" min="1" max="65535" value={draft.containerPort} onInput={(event) => setTemplateDraft({ ...draft, containerPort: event.currentTarget.value })} inputmode="numeric" /></div>
+                  </div>
+                  <div class="mt-3"><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.composeYAML')}</label><Textarea value={draft.composeYAML} onInput={(event) => setTemplateDraft({ ...draft, composeYAML: event.currentTarget.value })} rows={18} class="font-mono text-xs" /></div>
+                </Show>
+              </section>
             </div>
           )}</Show>
         </div>
       </EnvAppDrawer>
+
+      <LazyMountedDirectoryPicker
+        open={workspacePickerOpen()}
+        onOpenChange={setWorkspacePickerOpen}
+        files={workspacePicker.files()}
+        initialPath={workspacePath()}
+        homePath="/"
+        title={i18n.t('webServices.managed.selectWorkspace')}
+        confirmText={i18n.t('common.actions.confirm')}
+        cancelText={i18n.t('common.actions.cancel')}
+        onExpand={workspacePicker.expandPath}
+        ensurePath={workspacePicker.ensurePath}
+        onSelect={setWorkspacePath}
+      />
 
       <Dialog open={templateDuplicate() !== null} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-sm text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
 

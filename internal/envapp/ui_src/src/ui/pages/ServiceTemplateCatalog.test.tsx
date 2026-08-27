@@ -156,6 +156,7 @@ describe('ServiceTemplateCatalog', () => {
 
     expect(actions.onCategoryChange).toHaveBeenCalledWith('container');
     expect(actions.onCreate).toHaveBeenCalledWith('host');
+    expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container');
   });
 
   it('moves selection and the detail pane together with arrow keys', () => {

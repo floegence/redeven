@@ -3,6 +3,7 @@ package managedwebservice
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -15,13 +16,73 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
+func newManagedServiceTestScope(t *testing.T) (*filesystemscope.Registry, string) {
+	t.Helper()
+	home := t.TempDir()
+	scope, err := filesystemscope.NewDefaultRegistry(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scope, filepath.Join(home, ".redeven", "local-environment", "apps", "managed-web-services")
+}
+
+func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	scope, err := filesystemscope.NewDefaultRegistry(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	manager, err := New(ManagerOptions{
+		StateDir: filepath.Join(home, ".redeven", "local-environment"),
+		Registry: registry,
+		Scope:    scope,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+
+	templates, err := manager.Catalog(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostTemplate := templateByID(templates, DeepSeekHarnessHostTemplateID)
+	containerTemplate := templateByID(templates, DeepSeekHarnessContainerTemplateID)
+	if hostTemplate == nil || containerTemplate == nil {
+		t.Fatalf("built-in templates = %+v", templates)
+	}
+	canonicalHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(canonicalHome, "Redeven Workspaces", "Managed Services", "DeepSeek Harness")
+	if hostTemplate.DefaultWorkspacePath != want || containerTemplate.DefaultWorkspacePath != want {
+		t.Fatalf("default workspaces = %q, %q; want %q", hostTemplate.DefaultWorkspacePath, containerTemplate.DefaultWorkspacePath, want)
+	}
+	if hostTemplate.DefaultWorkspacePath == home {
+		t.Fatal("managed service defaulted to the whole home directory")
+	}
+	info, err := os.Stat(want)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("dedicated workspace was not prepared: info=%v err=%v", info, err)
+	}
+}
+
 func TestCatalogMakesReleaseLockedHostRuntimeAvailableWithoutOnlineCatalog(t *testing.T) {
 	t.Parallel()
 	if (runtime.GOOS != "linux" && runtime.GOOS != "darwin") || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
 		t.Skip("native managed service is intentionally unavailable on this platform")
 	}
+	scope, stateDir := newManagedServiceTestScope(t)
 	manager := &Manager{
-		scope:     &filesystemscope.Registry{},
+		scope:     scope,
+		stateDir:  stateDir,
 		downloads: defaultPackageDownloadClient(),
 	}
 	templates, err := manager.Catalog(context.Background())
@@ -46,8 +107,10 @@ func TestCatalogKeepsPinnedDockerTemplateAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	scope, stateDir := newManagedServiceTestScope(t)
 	manager := &Manager{
-		scope:      &filesystemscope.Registry{},
+		scope:      scope,
+		stateDir:   stateDir,
 		containers: adapter,
 		downloads:  defaultPackageDownloadClient(),
 	}
