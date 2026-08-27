@@ -74,13 +74,16 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     ), host);
   }
 
-  it('uses the available content width and exposes a clear keyboard focus path', async () => {
+  it('uses a gallery and adjacent detail pane with a clear keyboard selection path', async () => {
     await page.viewport(1280, 720);
     mount();
 
     const catalog = document.querySelector<HTMLElement>('[data-testid="service-template-catalog"]')!;
     const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
-    expect(card.getBoundingClientRect().width / catalog.getBoundingClientRect().width).toBeGreaterThan(0.97);
+    const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
+    expect(card.getBoundingClientRect().width / catalog.getBoundingClientRect().width).toBeLessThan(0.5);
+    expect(details.getBoundingClientRect().left).toBeGreaterThan(card.getBoundingClientRect().right);
+    expect(card.getAttribute('aria-selected')).toBe('true');
 
     await userEvent.tab();
     expect(document.activeElement?.getAttribute('role')).toBe('tab');
@@ -90,28 +93,33 @@ describe('ServiceTemplateCatalog browser presentation', () => {
   it('resolves the card surface through both light and dark theme tokens', () => {
     document.documentElement.classList.add('light');
     mount();
-    const catalogSurface = document.querySelector<HTMLElement>('[data-testid="service-template-catalog"]')!.parentElement!;
+    const catalogSurface = document.querySelector<HTMLElement>('.service-template-catalog__canvas')!;
     const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
+    const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
     const lightBackground = getComputedStyle(card).backgroundColor;
     const lightCatalogBackground = getComputedStyle(catalogSurface).backgroundColor;
+    const lightDetailsBackground = getComputedStyle(details).backgroundColor;
 
     document.documentElement.classList.replace('light', 'dark');
     const darkBackground = getComputedStyle(card).backgroundColor;
 
     expect(lightBackground).not.toBe('rgba(0, 0, 0, 0)');
     expect(lightBackground).not.toBe(lightCatalogBackground);
+    expect(lightDetailsBackground).not.toBe(lightCatalogBackground);
     expect(darkBackground).not.toBe('rgba(0, 0, 0, 0)');
     expect(darkBackground).not.toBe(lightBackground);
   });
 
-  it('keeps card actions touchable and stacked on narrow screens', async () => {
+  it('stacks the selected template detail pane with touchable actions on narrow screens', async () => {
     await page.viewport(390, 760);
     mount();
 
-    const footer = document.querySelector<HTMLElement>('.service-template-card__footer')!;
+    const layout = document.querySelector<HTMLElement>('.service-template-catalog__layout')!;
+    const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
     const deploy = document.querySelector<HTMLElement>('[data-testid="service-template-primary"]')!;
     const more = document.querySelector<HTMLElement>('[data-testid="service-template-more"]')!;
-    expect(getComputedStyle(footer).flexDirection).toBe('column');
+    expect(getComputedStyle(layout).gridTemplateColumns.split(' ')).toHaveLength(1);
+    expect(details.getBoundingClientRect().top).toBeGreaterThan(document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!.getBoundingClientRect().bottom);
     expect(deploy.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     expect(more.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   });

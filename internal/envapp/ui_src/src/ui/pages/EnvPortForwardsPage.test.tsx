@@ -596,9 +596,10 @@ describe('EnvPortForwardsPage', () => {
     containerTab?.click();
     await flushPage();
     const containerCard = document.querySelector('[data-template-id="deepseek-harness-container"]');
+    const containerDetails = document.querySelector('[data-testid="service-template-details"][data-template-id="deepseek-harness-container"]');
     expect(containerCard).toBeTruthy();
-    expect(Array.from(containerCard?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === 'Deploy')?.disabled).toBe(true);
-    expect(containerCard?.textContent).toContain('Docker is unavailable');
+    expect(containerDetails?.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
+    expect(containerDetails?.textContent).toContain('Docker is unavailable');
     expect(containerCard?.textContent).toContain('Run the reviewed community DeepSeek Harness image in Docker.');
     expect(containerCard?.className).not.toContain('opacity');
   });

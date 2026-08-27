@@ -104,7 +104,7 @@
               "ui",
               "web-services"
             ],
-            "summary": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.\n- Outcome: users open one right-side Service templates drawer, browse host or container cards, create custom definitions, duplicate any complete definition, and deploy into the current Environment without crowding the Web Services page.\n- Invariants: built-ins are immutable; custom templates are explicit and revisioned; duplication copies definition only into a new family; container cards stay visible with a concrete disabled reason; deployed services use snapshots rather than live definitions.\n- Failure boundary: malformed, incomplete, unsafe, unavailable, or conflicting definitions are rejected before lifecycle work. A template with an installed service cannot be deleted.",
+            "summary": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.\n- Outcome: users open one right-side Service templates drawer, browse a host or container gallery with an adjacent selected-template detail pane, create custom definitions, duplicate any complete definition, and deploy into the current Environment without crowding the Web Services page.\n- Invariants: built-ins are immutable; custom templates are explicit and revisioned; duplication copies definition only into a new family; container cards stay visible with a concrete disabled reason; deployed services use snapshots rather than live definitions.\n- Failure boundary: malformed, incomplete, unsafe, unavailable, or conflicting definitions are rejected before lifecycle work. A template with an installed service cannot be deleted.",
             "section_count": 3
           },
           {
@@ -4357,15 +4357,15 @@
         "title": "Managed Web Service Templates",
         "type": "Product Contract"
       },
-      "body_length": 8382,
-      "summary": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.\n- Outcome: users open one right-side Service templates drawer, browse host or container cards, create custom definitions, duplicate any complete definition, and deploy into the current Environment without crowding the Web Services page.\n- Invariants: built-ins are immutable; custom templates are explicit and revisioned; duplication copies definition only into a new family; container cards stay visible with a concrete disabled reason; deployed services use snapshots rather than live definitions.\n- Failure boundary: malformed, incomplete, unsafe, unavailable, or conflicting definitions are rejected before lifecycle work. A template with an installed service cannot be deleted.",
+      "body_length": 8886,
+      "summary": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.\n- Outcome: users open one right-side Service templates drawer, browse a host or container gallery with an adjacent selected-template detail pane, create custom definitions, duplicate any complete definition, and deploy into the current Environment without crowding the Web Services page.\n- Invariants: built-ins are immutable; custom templates are explicit and revisioned; duplication copies definition only into a new family; container cards stay visible with a concrete disabled reason; deployed services use snapshots rather than live definitions.\n- Failure boundary: malformed, incomplete, unsafe, unavailable, or conflicting definitions are rejected before lifecycle work. A template with an installed service cannot be deleted.",
       "sections": [
         {
           "id": "interaction-contract",
           "title": "Interaction contract",
           "level": 1,
-          "body": "The Web Services header provides one **Service templates** action. It opens a large right-side drawer and replaces the separate one-click-deployment strip. The catalog uses one sticky toolbar for category counts, search, and a permission-aware create menu. Host and container definitions are distinct categories; built-in and custom definitions are separate groups inside each category. Managed and manually registered services remain in one responsive main grid.\n\nCatalog cards are full-width service identities rather than generic form cards. A reviewed built-in uses its official upstream application mark when an attributable asset is available; other definitions fall back to a neutral host, container, or Compose kind icon. Each card uses a surface distinct from the drawer, localized name and description, one metadata line, one explicit availability state, one primary deployment action, and a labeled overflow menu for duplicate, edit, and delete. Unavailable definitions remain fully readable and state the exact disabled reason; installed definitions use a success state. Catalog menus and child dialogs stay above the drawer and preserve their actions. The catalog has no redundant footer or cancel action and closes through the drawer close action, Escape, or a click on the backdrop outside the drawer. Deployment and editor views keep their fixed operation footer, and the deployment view reuses the selected service identity before workspace, deployment, data, and operation information.\n\nContainer cards remain discoverable but disabled when Docker is unavailable, the Environment is itself in a container, workspace mounting is unavailable, or Docker Compose is missing. The card explains the exact reason. DeepSeek Harness is represented by separate reviewed host and community-container cards; the latter links its source and is never described as an official DeepSeek image.\n\nUsers with read permission can inspect templates. Users with Web Service read, write, and execute permission can create, edit, duplicate, delete, or deploy custom templates. The drawer editor provides metadata, endpoint/health paths, host lifecycle scripts, guided single-container fields, and Compose YAML. User-visible copy is localized in every published locale.",
-          "char_count": 2262
+          "body": "The Web Services header provides one **Service templates** action. It opens a large right-side drawer and replaces the separate one-click-deployment strip. The catalog uses one sticky toolbar for a low-contrast category switcher with counts, search, and a permission-aware create menu. Host and container definitions are distinct categories; built-in and custom definitions are separate groups inside each category. Managed and manually registered services remain in one responsive main grid.\n\nThe catalog is a primary-detail explorer. Compact two-column tiles on a recessed gallery surface provide identity, a two-line description, deployment metadata, and a concise state; the selected tile uses a clear focus/selection treatment. Its adjacent elevated detail pane owns the full description, version, exact availability reason, primary deploy action, and the labeled duplicate/edit/delete menu. This single action owner keeps interactive controls out of selectable tiles and makes keyboard arrow navigation deterministic. At narrow widths the detail pane moves below the single-column gallery and action targets remain at least 44 px high.\n\nA reviewed built-in uses its official upstream application mark when an attributable asset is available; other definitions fall back to a neutral host, container, or Compose kind icon. Unavailable definitions remain fully readable; installed definitions use a success state. Catalog menus and child dialogs stay above the drawer and preserve their actions. The catalog has no redundant footer or cancel action and closes through the drawer close action, Escape, or a click on the backdrop outside the drawer. Deployment and editor views keep their fixed operation footer, and the deployment view reuses the selected service identity before workspace, deployment, data, and operation information.\n\nContainer cards remain discoverable but disabled when Docker is unavailable, the Environment is itself in a container, workspace mounting is unavailable, or Docker Compose is missing. The card explains the exact reason. DeepSeek Harness is represented by separate reviewed host and community-container cards; the latter links its source and is never described as an official DeepSeek image.\n\nUsers with read permission can inspect templates. Users with Web Service read, write, and execute permission can create, edit, duplicate, delete, or deploy custom templates. The drawer editor provides metadata, endpoint/health paths, host lifecycle scripts, guided single-container fields, and Compose YAML. User-visible copy is localized in every published locale.",
+          "char_count": 2597
         },
         {
           "id": "definition-and-duplication-contract",
@@ -4409,9 +4409,9 @@
           "description": "Owns template data, deployment and editor state, and the unified service grid."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx:0:presents the catalog toolbar, grouping, service identities, availability states, and card actions.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx:0:owns the catalog selection model, toolbar, grouped tile gallery, keyboard navigation, selected-template details, and action placement.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx",
-          "description": "Presents the catalog toolbar, grouping, service identities, availability states, and card actions."
+          "description": "Owns the catalog selection model, toolbar, grouped tile gallery, keyboard navigation, selected-template details, and action placement."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/icons/DeepSeekHarnessLogo.tsx:0:adapts the official mit-licensed deepseek harness fish mark for theme-aware catalog identity.",
@@ -4444,14 +4444,14 @@
           "description": "Covers discovery, container unavailability, duplication, unified cards, and uninstall interaction."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx:0:covers grouping, counts, state presentation, permissions, search, and card actions.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx:0:covers grouping, selection, keyboard movement, counts, state presentation, permissions, search, and selected-template actions.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx",
-          "description": "Covers grouping, counts, state presentation, permissions, search, and card actions."
+          "description": "Covers grouping, selection, keyboard movement, counts, state presentation, permissions, search, and selected-template actions."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.browser.test.tsx:0:verifies card/background contrast, floating menu and duplicate-dialog layering, create actions, and outside-click dismissal in chromium.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.browser.test.tsx:0:verifies gallery/detail geometry, theme surface contrast, narrow layouts, floating menu and duplicate-dialog layering, create actions, and outside-click dismissal in chromium.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.browser.test.tsx",
-          "description": "Verifies card/background contrast, floating menu and duplicate-dialog layering, create actions, and outside-click dismissal in Chromium."
+          "description": "Verifies gallery/detail geometry, theme surface contrast, narrow layouts, floating menu and duplicate-dialog layering, create actions, and outside-click dismissal in Chromium."
         }
       ],
       "snippet": "- Authority: Redeven owns the Environment-local template catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.",
@@ -10285,5 +10285,5 @@
       ]
     }
   ],
-  "source_sha256": "a5c5f7e6e40bb3b6a80ff584c048e96bd103600830dcb00e5a0d2f2d8eb774b7"
+  "source_sha256": "a2a2c0d4bf342f08fbd6fcea753e8811fdba9c9de0814ac30f052fcbeac9726d"
 }
