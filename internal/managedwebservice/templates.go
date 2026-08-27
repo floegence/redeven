@@ -21,10 +21,11 @@ import (
 const templateSpecSchemaVersion = 1
 
 var (
-	templateNamePattern      = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
-	templateParameterPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
-	composeServicePattern    = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
-	composeVolumePattern     = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+	templateNamePattern           = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
+	templateParameterPattern      = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+	managedWorkspaceFamilyPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+	composeServicePattern         = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
+	composeVolumePattern          = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 )
 
 func (m *Manager) Template(ctx context.Context, templateID string) (*Template, error) {
@@ -86,6 +87,9 @@ func (m *Manager) CreateTemplate(ctx context.Context, req TemplateWriteRequest) 
 	}
 	familyID, err := randomID("family")
 	if err != nil {
+		return nil, err
+	}
+	if _, err := m.prepareDefaultWorkspace(familyID); err != nil {
 		return nil, err
 	}
 	record := pfregistry.ManagedTemplate{
@@ -184,6 +188,9 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 	if err != nil {
 		return nil, err
 	}
+	if _, err := m.prepareDefaultWorkspace(familyID); err != nil {
+		return nil, err
+	}
 	record := pfregistry.ManagedTemplate{
 		TemplateID: copyID, Name: name, Description: source.Description, Source: "custom", Deployment: string(spec.Kind), Version: source.Version,
 		Revision: 1, SpecJSON: specJSON, SpecSHA256: specHash, DerivedFromTemplateID: source.TemplateID, DerivedFromRevision: source.Revision, ServiceFamilyID: familyID,
@@ -233,11 +240,15 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 		return nil, serviceError("TEMPLATE_IDENTITY_MISMATCH", "The saved template definition identity has changed.", 409, false, nil)
 	}
 	available, code, reason := m.customTemplateAvailability(ctx, spec.Kind)
+	defaultWorkspacePath, err := m.prepareDefaultWorkspace(record.ServiceFamilyID)
+	if err != nil {
+		return nil, err
+	}
 	return &Template{
 		TemplateID: record.TemplateID, Name: record.Name, Description: record.Description, Version: record.Version, Source: "custom", Deployment: spec.Kind,
 		ContainerMode: containerMode(spec.Kind), Revision: record.Revision, Editable: true, Duplicateable: true, DerivedFromTemplateID: record.DerivedFromTemplateID,
 		DerivedFromRevision: record.DerivedFromRevision, ServiceFamilyID: record.ServiceFamilyID, Available: available, ReasonCode: code, Reason: reason,
-		Deployments: []DeploymentAvailability{{Deployment: spec.Kind, Available: available, ReasonCode: code, Reason: reason}}, WorkspaceRoots: m.workspaceRoots(), Spec: &spec,
+		Deployments: []DeploymentAvailability{{Deployment: spec.Kind, Available: available, ReasonCode: code, Reason: reason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: m.workspaceRoots(), Spec: &spec,
 	}, nil
 }
 

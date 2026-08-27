@@ -59,6 +59,7 @@ type Template struct {
 	SourceURL             string                   `json:"source_url"`
 	DockerSourceURL       string                   `json:"docker_source_url"`
 	Deployments           []DeploymentAvailability `json:"deployments"`
+	DefaultWorkspacePath  string                   `json:"default_workspace_path"`
 	WorkspaceRoots        []WorkspaceRoot          `json:"workspace_roots"`
 	Source                string                   `json:"source"`
 	Deployment            Deployment               `json:"deployment"`

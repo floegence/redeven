@@ -82,6 +82,9 @@ func New(opts ManagerOptions) (*Manager, error) {
 	m.host = &hostScriptDriver{manager: m, processes: map[string]nativeProcess{}}
 	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
 	m.compose = &composeTemplateDriver{manager: m, adapter: opts.Containers}
+	if _, err := m.prepareDefaultWorkspace(DeepSeekHarnessTemplateID); err != nil {
+		return nil, err
+	}
 	if err := m.registry.MarkManagedOperationsInterrupted(context.Background()); err != nil {
 		return nil, err
 	}
@@ -162,14 +165,18 @@ func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
 		}
 	}
 	workspaceRoots := m.workspaceRoots()
+	defaultWorkspacePath, err := m.prepareDefaultWorkspace(DeepSeekHarnessTemplateID)
+	if err != nil {
+		return nil, err
+	}
 	hostSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: `exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"`, RuntimeBundle: deepSeekRuntimeBundleID}}
 	containerSpec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: auditedDockerImage, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {Type: "workspace", Target: "/workspace"}, {Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512}}
 	if dockerArtifactAvailable {
 		containerSpec.Container.Image = dockerArtifact.Image + "@" + dockerArtifact.Digest
 	}
 	items := []Template{
-		{TemplateID: DeepSeekHarnessHostTemplateID, Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", Source: "builtin", Deployment: DeploymentNative, Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(hostSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentNative, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason}}, WorkspaceRoots: workspaceRoots, Spec: &hostSpec},
-		{TemplateID: DeepSeekHarnessContainerTemplateID, Name: "DeepSeek Harness · Container", Description: "Run the reviewed community DeepSeek Harness image in Docker.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Source: "builtin", Deployment: DeploymentDocker, ContainerMode: "single", Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(containerSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentDocker, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason}}, WorkspaceRoots: workspaceRoots, Spec: &containerSpec},
+		{TemplateID: DeepSeekHarnessHostTemplateID, Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", Source: "builtin", Deployment: DeploymentNative, Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(hostSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentNative, Available: nativeAvailable, ReasonCode: nativeReasonCode, Reason: nativeReason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: workspaceRoots, Spec: &hostSpec},
+		{TemplateID: DeepSeekHarnessContainerTemplateID, Name: "DeepSeek Harness · Container", Description: "Run the reviewed community DeepSeek Harness image in Docker.", Version: DeepSeekHarnessVersion, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, DataLocation: filepath.Join(m.stateDir, DeepSeekHarnessTemplateID, "data"), SourceURL: "https://github.com/deepseek-ai/deepseek-harness", DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Source: "builtin", Deployment: DeploymentDocker, ContainerMode: "single", Revision: 1, Duplicateable: completeBuiltInDuplicateSpec(containerSpec), ServiceFamilyID: DeepSeekHarnessTemplateID, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason, Deployments: []DeploymentAvailability{{Deployment: DeploymentDocker, Available: dockerAvailable, ReasonCode: dockerReasonCode, Reason: dockerReason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: workspaceRoots, Spec: &containerSpec},
 	}
 	if m.registry != nil {
 		custom, err := m.registry.ListManagedTemplates(ctx)
@@ -198,6 +205,64 @@ func (m *Manager) workspaceRoots() []WorkspaceRoot {
 		workspaceRoots = append(workspaceRoots, WorkspaceRoot{ID: root.ID, Label: root.Label, Path: root.PathAbs})
 	}
 	return workspaceRoots
+}
+
+func (m *Manager) defaultWorkspacePath(serviceFamilyID string) (string, error) {
+	serviceFamilyID = strings.TrimSpace(serviceFamilyID)
+	if !managedWorkspaceFamilyPattern.MatchString(serviceFamilyID) {
+		return "", serviceError("TEMPLATE_IDENTITY_INVALID", "The service template family identity is invalid.", 409, false, nil)
+	}
+	pathContext := m.scope.PathContext()
+	var selectedRoot string
+	for _, root := range pathContext.Roots {
+		if root.Kind == filesystemscope.RootKindHome && !root.Hidden && root.Permissions.Write {
+			selectedRoot = root.PathAbs
+			break
+		}
+	}
+	if selectedRoot == "" {
+		for _, root := range pathContext.Roots {
+			if root.ID == pathContext.DefaultRootID && !root.Hidden && root.Permissions.Write {
+				selectedRoot = root.PathAbs
+				break
+			}
+		}
+	}
+	if selectedRoot == "" {
+		for _, root := range pathContext.Roots {
+			if !root.Hidden && root.Permissions.Write {
+				selectedRoot = root.PathAbs
+				break
+			}
+		}
+	}
+	if selectedRoot == "" {
+		return "", serviceError("WORKSPACE_UNAVAILABLE", "The Environment does not expose a writable root for managed-service workspaces.", 409, false, nil)
+	}
+	directoryName := serviceFamilyID
+	if serviceFamilyID == DeepSeekHarnessTemplateID {
+		directoryName = "DeepSeek Harness"
+	}
+	return filepath.Join(selectedRoot, "Redeven Workspaces", "Managed Services", directoryName), nil
+}
+
+func (m *Manager) prepareDefaultWorkspace(serviceFamilyID string) (string, error) {
+	path, err := m.defaultWorkspacePath(serviceFamilyID)
+	if err != nil || path == "" {
+		return path, err
+	}
+	resolvedTarget, err := m.scope.ResolveTarget(path, filesystemscope.ResolveOptions{ForWrite: true})
+	if err != nil {
+		return "", serviceError("WORKSPACE_UNAVAILABLE", "Redeven could not prepare the dedicated managed-service workspace.", 409, false, err)
+	}
+	if err := os.MkdirAll(resolvedTarget.LogicalAbs, 0o700); err != nil {
+		return "", serviceError("WORKSPACE_UNAVAILABLE", "Redeven could not prepare the dedicated managed-service workspace.", 409, false, err)
+	}
+	resolved, err := m.scope.Resolve(resolvedTarget.LogicalAbs, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true, ForWrite: true})
+	if err != nil {
+		return "", serviceError("WORKSPACE_UNAVAILABLE", "Redeven could not verify the dedicated managed-service workspace.", 409, false, err)
+	}
+	return resolved.RealAbs, nil
 }
 
 func (m *Manager) dockerAvailability(ctx context.Context) (bool, string, string) {

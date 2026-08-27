@@ -3,20 +3,22 @@ type: Runtime Contract
 title: Managed Web Services
 description: Deploy, operate, recover, and expose immutable Web Service template snapshots through one Redeven-owned lifecycle boundary.
 tags: [architecture, web-services, runtime, containers, security]
-timestamp: 2026-08-26T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 # Summary
 
-- Authority: Redeven owns an installed service's immutable template snapshot, lifecycle state, exact runtime identity, private runtime data, and protected forward. The application owns its settings and credentials.
-- Outcome: a deployment requested from the [Service template center](managed-web-service-templates.md) becomes one managed card alongside manually registered Web Services and can be opened, stopped, started, restarted, inspected, retried, or uninstalled.
-- Invariants: one installed instance exists per service family; every Web port binds only to loopback; lifecycle requests are idempotent and serialized; every destructive action verifies the exact stored identity; credentials never enter records, audits, or returned logs.
-- Failure boundary: invalid snapshots, identity drift, unavailable prerequisites, occupied ports, interrupted operations, unhealthy processes, or unverified artifacts fail closed. Redeven never scans for or terminates unrelated processes, containers, projects, or volumes.
+- Authority: Redeven owns each installed service's immutable snapshot, lifecycle, runtime identity, private data, and protected forward; the application owns its settings and credentials.
+- Outcome: a [Service template](managed-web-service-templates.md) becomes one managed card with open, lifecycle, logs, retry, and uninstall actions.
+- Invariants: one instance exists per family, Web ports bind only to loopback, lifecycle work is idempotent and serialized, destructive work verifies exact identity, and credentials never enter records or logs.
+- Failure boundary: invalid identity, prerequisites, health, or artifacts fail closed without touching unrelated resources.
 
-# Deployment execution
+# Contract
+
+## Deployment execution
 
 A deployment reports environment check, download/pull, verification, installation, start, health, forward registration, and open through an authenticated Local API stream. The managed card owns Start, Stop, Restart, Retry, Logs, and Uninstall; its backing forward is hidden from manual controls.
 
-The instance saves the exact template revision, canonical definition, SHA-256, service-family identity, workspace, non-secret configuration, and runtime manifest before execution. Later template edits do not alter it. Secret inputs live only in a private `0600` Runtime file and are removed on uninstall.
+The instance saves the exact template revision, canonical definition, SHA-256, service-family identity, selected workspace, non-secret configuration, and runtime manifest before execution. Later template edits do not alter it. Redeven prepares a family-specific directory under the Environment home as the explicit default, so installation never grants the whole home directory merely because it is the first writable filesystem root. A user-selected replacement must still resolve to an existing writable directory inside the Environment filesystem scope. Secret inputs live only in a private `0600` Runtime file and are removed on uninstall.
 
 Host scripts run through `/bin/sh -eu` as the current OS user with workspace, private data, loopback host, reserved port, and optional verified executable variables. Start remains foreground. Stop-script failure cannot bypass exact process-group cleanup; a PID outside the current Runtime generation is never adopted or killed.
 
@@ -24,7 +26,7 @@ Single-container deployment pulls first and requires a verifiable immutable OCI 
 
 Compose pins every image and hashes its private generated configuration. Only the entry service receives the loopback Web port. Each lifecycle action verifies configuration, project, one-container-per-service membership, labels, images, hardening, and sidecar isolation.
 
-# Built-in DeepSeek Harness
+## Built-in DeepSeek Harness
 
 DeepSeek Harness remains Developer Preview software fixed at `0.1.1-rc.2`. The host and container cards share one service family, so one Environment can own at most one built-in DeepSeek Harness instance. Redeven does not automatically follow upstream releases.
 
@@ -34,7 +36,7 @@ Container deployment identifies `runzhliu/deepseek-harness:0.1.1-rc.2` as commun
 
 Changing either built-in deployment requires reviewed source/version, licenses, architecture, immutable identities, persistence, WebSocket, loopback, and protected-routing smoke tests. Host availability is derived only from the complete platform manifest compiled into the Redeven release, so an unrelated version-service response cannot disable the card. Container deployment remains gated by the exact per-platform digest compiled into the same release. Third-party notices distinguish on-demand software from code embedded in Redeven.
 
-# Persistence and recovery
+## Persistence and recovery
 
 Port-forward registry schema v3 is the contiguous successor of v1 and v2. It preserves existing forwards and v2 DeepSeek Harness instances, adds template persistence, and expands managed services with source, revision, definition hash, immutable snapshot, service family, configuration, and runtime manifest. Every edge verifies the exact historical shape before applying and commits migration, data, metadata, version, and final verification atomically. Drift, future versions, or failure leave the prior database unchanged.
 
@@ -46,11 +48,11 @@ Uninstall retains data by default. Deleting data requires a second destructive c
 
 Health succeeds only after the application responds on its assigned loopback port. Redeven exposes the stable identity through the Local and remote protected routes defined by [Web Service browser sessions](web-service-browser-sessions.md).
 
-# Local API and authorization
+## Local API and authorization
 
 Catalog/list/create live under `/_redeven_proxy/api/managed-web-services`; lifecycle/logs use its `{id}` routes; cancellation/events use `.../managed-web-service-operations/{id}`. Reads require Web Service read permission. Mutations require read, write, and execute; data deletion also requires administrator or owner. Bodies and audits are bounded and exclude definitions, scripts, values, and secrets.
 
-# Scope boundaries
+# Boundaries
 
 This contract does not include Windows host deployment, cross-Environment scheduling, nested Docker, automatic upgrades, migration between deployment kinds, public or LAN listeners, arbitrary multi-port publication, or Redeven management of application API keys.
 

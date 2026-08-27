@@ -1,4 +1,5 @@
-import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
+import { Motion } from 'solid-motionone';
 import { cn } from '@floegence/floe-webapp-core';
 import {
   AlertTriangle,
@@ -308,6 +309,15 @@ export function ServiceTemplateDetailsPane(props: {
 
 export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.Element {
   const i18n = useI18n();
+  const [categoryTransitionDirection, setCategoryTransitionDirection] = createSignal(0);
+  let previousCategory = props.category;
+  createEffect(() => {
+    const nextCategory = props.category;
+    if (nextCategory !== previousCategory) {
+      setCategoryTransitionDirection(nextCategory === 'container' ? 1 : -1);
+      previousCategory = nextCategory;
+    }
+  });
   const [requestedTemplateID, setRequestedTemplateID] = createSignal<string | null>(null);
   const builtInTemplates = createMemo(() => props.templates.filter((template) => template.source === 'builtin'));
   const customTemplates = createMemo(() => props.templates.filter((template) => template.source === 'custom'));
@@ -391,60 +401,72 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
         </div>
       </div>
 
-      <Show
-        when={!props.loading}
-        fallback={<div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center text-sm text-muted-foreground">{i18n.t('common.status.loading')}</div>}
-      >
-        <Show
-          when={props.templates.length > 0}
-          fallback={(
-            <div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center">
-              <p class="text-sm font-medium text-foreground">{props.query.trim() ? i18n.t('webServices.managed.noTemplateMatches') : i18n.t('webServices.managed.noTemplates')}</p>
-              <Show when={props.query.trim()}>
-                <Button size="sm" variant="ghost" class="mt-2" onClick={() => props.onQueryChange('')}>{i18n.t('webServices.managed.clearTemplateSearch')}</Button>
-              </Show>
-            </div>
-          )}
+      <Show when={props.category} keyed>{(category) => (
+        <Motion.div
+          class="service-template-category-transition"
+          data-testid="service-template-category-content"
+          data-template-category={category}
+          data-transition-direction={categoryTransitionDirection()}
+          initial={{ opacity: 0, x: categoryTransitionDirection() * 14, y: categoryTransitionDirection() === 0 ? 4 : 0 }}
+          animate={{ opacity: 1, x: 0, y: 0 }}
+          transition={{ duration: 0.2 }}
         >
-          <div class="service-template-catalog__layout service-template-catalog__layout--with-details">
-            <div
-              class="service-template-catalog__canvas min-w-0"
-              role="listbox"
-              aria-label={i18n.t('webServices.managed.serviceTemplates')}
-              data-testid="service-template-gallery"
+          <Show
+            when={!props.loading}
+            fallback={<div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center text-sm text-muted-foreground">{i18n.t('common.status.loading')}</div>}
+          >
+            <Show
+              when={props.templates.length > 0}
+              fallback={(
+                <div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center">
+                  <p class="text-sm font-medium text-foreground">{props.query.trim() ? i18n.t('webServices.managed.noTemplateMatches') : i18n.t('webServices.managed.noTemplates')}</p>
+                  <Show when={props.query.trim()}>
+                    <Button size="sm" variant="ghost" class="mt-2" onClick={() => props.onQueryChange('')}>{i18n.t('webServices.managed.clearTemplateSearch')}</Button>
+                  </Show>
+                </div>
+              )}
             >
-              <div class="space-y-7">
-                <TemplateGroup
-                  title={i18n.t('webServices.managed.builtInTemplates')}
-                  description={i18n.t('webServices.managed.builtInTemplatesDescription')}
-                  templates={builtInTemplates()}
-                  selectedTemplateID={selectedTemplate()?.id}
-                  onSelect={setRequestedTemplateID}
-                  onKeyDown={moveTileSelection}
-                />
-                <TemplateGroup
-                  title={i18n.t('webServices.managed.customTemplates')}
-                  description={i18n.t('webServices.managed.customTemplatesDescription')}
-                  templates={customTemplates()}
-                  selectedTemplateID={selectedTemplate()?.id}
-                  onSelect={setRequestedTemplateID}
-                  onKeyDown={moveTileSelection}
-                />
+              <div class="service-template-catalog__layout service-template-catalog__layout--with-details">
+                <div
+                  class="service-template-catalog__canvas min-w-0"
+                  role="listbox"
+                  aria-label={i18n.t('webServices.managed.serviceTemplates')}
+                  data-testid="service-template-gallery"
+                >
+                  <div class="space-y-7">
+                    <TemplateGroup
+                      title={i18n.t('webServices.managed.builtInTemplates')}
+                      description={i18n.t('webServices.managed.builtInTemplatesDescription')}
+                      templates={builtInTemplates()}
+                      selectedTemplateID={selectedTemplate()?.id}
+                      onSelect={setRequestedTemplateID}
+                      onKeyDown={moveTileSelection}
+                    />
+                    <TemplateGroup
+                      title={i18n.t('webServices.managed.customTemplates')}
+                      description={i18n.t('webServices.managed.customTemplatesDescription')}
+                      templates={customTemplates()}
+                      selectedTemplateID={selectedTemplate()?.id}
+                      onSelect={setRequestedTemplateID}
+                      onKeyDown={moveTileSelection}
+                    />
+                  </div>
+                </div>
+                <Show when={selectedTemplate()} keyed>{(template) => (
+                  <ServiceTemplateDetailsPane
+                    template={template}
+                    canManage={props.canManage}
+                    onDeploy={() => props.onDeploy(template.id)}
+                    onDuplicate={() => props.onDuplicate(template.id)}
+                    onEdit={() => props.onEdit(template.id)}
+                    onDelete={() => props.onDelete(template.id)}
+                  />
+                )}</Show>
               </div>
-            </div>
-            <Show when={selectedTemplate()} keyed>{(template) => (
-              <ServiceTemplateDetailsPane
-                template={template}
-                canManage={props.canManage}
-                onDeploy={() => props.onDeploy(template.id)}
-                onDuplicate={() => props.onDuplicate(template.id)}
-                onEdit={() => props.onEdit(template.id)}
-                onDelete={() => props.onDelete(template.id)}
-              />
-            )}</Show>
-          </div>
-        </Show>
-      </Show>
+            </Show>
+          </Show>
+        </Motion.div>
+      )}</Show>
     </section>
   );
 }

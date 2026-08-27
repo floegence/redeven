@@ -9,6 +9,16 @@
 @source '../../../flower_ui/src/**/*.{ts,tsx,html}';
 @source '../index.html';
 
+@layer base {
+  :where(button, [role='button'], [role='tab'], [role='option'], [role='menuitem'], a[href], summary, select, input[type='checkbox'], input[type='radio'], input[type='file']):not(:disabled):not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  :where(button, [role='button'], [role='tab'], [role='option'], [role='menuitem'], select, input[type='checkbox'], input[type='radio'], input[type='file']):is(:disabled, [aria-disabled='true']) {
+    cursor: not-allowed;
+  }
+}
+
 :root {
   color-scheme: light dark;
 }

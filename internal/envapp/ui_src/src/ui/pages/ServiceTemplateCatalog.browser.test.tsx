@@ -151,6 +151,56 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(getComputedStyle(icon).transitionDuration).toBe('0s');
   });
 
+  it('uses pointer cursors for actions while preserving text input affordance', () => {
+    mount();
+
+    const tab = document.querySelector<HTMLElement>('[role="tab"]')!;
+    const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
+    const search = document.querySelector<HTMLInputElement>('input[aria-label="Search templates"]')!;
+    expect(getComputedStyle(tab).cursor).toBe('pointer');
+    expect(getComputedStyle(card).cursor).toBe('pointer');
+    expect(getComputedStyle(search).cursor).toBe('text');
+  });
+
+  it('animates the content surface in the direction of the selected category', async () => {
+    const host = document.createElement('div');
+    host.className = 'mx-auto w-[900px] max-w-full bg-card p-4';
+    document.body.appendChild(host);
+    const [category, setCategory] = createSignal<'host' | 'container'>('host');
+    const containerTemplate: ServiceTemplatePresentation = {
+      ...template,
+      id: 'deepseek-harness-container',
+      kind: 'container',
+      deploymentLabel: 'Container',
+    };
+    dispose = render(() => (
+      <ServiceTemplateCatalog
+        category={category()}
+        query=""
+        hostCount={1}
+        containerCount={1}
+        templates={category() === 'host' ? [template] : [containerTemplate]}
+        loading={false}
+        canManage
+        onCategoryChange={setCategory}
+        onQueryChange={() => undefined}
+        onCreate={() => undefined}
+        onDeploy={() => undefined}
+        onDuplicate={() => undefined}
+        onEdit={() => undefined}
+        onDelete={() => undefined}
+      />
+    ), host);
+
+    const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab) => tab.textContent?.includes('Container templates'))!;
+    await userEvent.click(containerTab);
+    const content = document.querySelector<HTMLElement>('[data-testid="service-template-category-content"]')!;
+    expect(content.dataset.templateCategory).toBe('container');
+    expect(content.dataset.transitionDirection).toBe('1');
+    expect(content.getAnimations().length).toBeGreaterThan(0);
+  });
+
   it('keeps catalog menus above the drawer and closes from the outside backdrop', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
