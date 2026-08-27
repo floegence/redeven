@@ -60,7 +60,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v5.0.3's public ordered `ThreadView.Items` and
+Redeven consumes Floret v5.0.4's public ordered `ThreadView.Items` and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
@@ -81,7 +81,7 @@ Every public Activity item passes through one host projection before it reaches
 current view, timeline pagination, live stream, or historical replay. The
 projection removes host paths, working directories, pending handles, and
 nested private values while keeping renderer, operation, status, summary,
-stable IDs, and display names. Floret v5.0.3 `StructuredActivityPayload.Rows`
+stable IDs, and display names. Floret v5.0.4 `StructuredActivityPayload.Rows`
 is the only generic rich-detail contract: Redeven creates bounded, ordered,
 safe display rows before admission, and Flower expands only those rows, a
 meaningful summary, or an error. It never rebuilds detail from raw tool JSON.
@@ -96,6 +96,14 @@ insufficient disk space, and timeout are observable safe skips; the subsequent
 runtime open remains the only final authority for accepting or rejecting the
 database. Redeven never reads, copies, replaces, or compacts opaque Floret
 records itself.
+
+Redeven reports the `verifying` readiness phase immediately before the single
+`runtime.Open` call. Floret v5.0.4 atomically converges the exact legacy
+tool-result Raw representation produced before UTF-8 normalization and maps
+all remaining session-tree authority failures to public
+`runtime.ErrAuthorityCorrupt`. Redeven classifies only that public error; it
+does not parse error text or inspect Floret records. Sanitized startup logs
+record the phase and class without backend detail or conversation content.
 
 Thread inventory uses one Floret `List` snapshot. Redeven merges each public
 `ThreadSummary` with host-owned settings and does not load `ThreadView`,
@@ -144,7 +152,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v5.0.3 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v5.0.4 typed runtime without local replacement.
 - `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces exact published-v5 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.

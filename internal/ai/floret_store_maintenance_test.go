@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	flruntime "github.com/floegence/floret/v5/runtime"
@@ -130,6 +131,40 @@ func TestClassifyFloretStorageOpenErrorTreatsAuthorityCorruptionAsIntegrityFailu
 	}
 	if startupErr.Class != FloretStoreStartupIntegrityError || startupErr.Retryable || startupErr.SafeToRetry {
 		t.Fatalf("startup error = %#v, want fail-closed integrity classification", startupErr)
+	}
+}
+
+func TestOpenFloretRuntimeReportsVerifyingBeforeClassifiedOpenFailure(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "floret.sqlite")
+	phases := make([]FloretStoreStartupPhase, 0, 3)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	_, err := openFloretRuntimeWith(
+		t.Context(),
+		storePath,
+		func(phase FloretStoreStartupPhase) { phases = append(phases, phase) },
+		logger,
+		func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
+			return flstorage.SQLiteMaintenanceResult{Action: flstorage.SQLiteMaintenanceActionNone, Reason: "file_below_threshold"}, nil
+		},
+		func(context.Context, flruntime.Options) (*flruntime.Host, error) {
+			return nil, fmt.Errorf("private backend detail: %w", flruntime.ErrAuthorityCorrupt)
+		},
+	)
+	var startupErr *FloretStoreStartupError
+	if !errors.As(err, &startupErr) || startupErr.Class != FloretStoreStartupIntegrityError {
+		t.Fatalf("startup error=%#v, want integrity classification", startupErr)
+	}
+	wantPhases := []FloretStoreStartupPhase{FloretStoreStartupInspecting, FloretStoreStartupOptimizing, FloretStoreStartupVerifying}
+	if fmt.Sprint(phases) != fmt.Sprint(wantPhases) {
+		t.Fatalf("startup phases=%v, want %v", phases, wantPhases)
+	}
+	logged := logs.String()
+	if !strings.Contains(logged, "startup_phase=verifying") || !strings.Contains(logged, "error_class=store_integrity_error") {
+		t.Fatalf("sanitized startup log=%q", logged)
+	}
+	if strings.Contains(logged, "private backend detail") {
+		t.Fatalf("startup log exposed raw error: %q", logged)
 	}
 }
 
