@@ -2340,6 +2340,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   type ThreadDetailReceiveResult = Readonly<{
     state: ThreadViewAcceptance;
     runtimeState: ThreadViewAcceptance;
+    activityState: ThreadViewAcceptance;
     settingsState: ThreadViewAcceptance;
     thread: FlowerThreadSnapshot;
   }>;
@@ -3097,18 +3098,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const reportThreadDetailDiagnostic = (
     threadID: string,
-    stage: 'request_or_mapping' | 'current_projection' | 'cache_receive',
+    stage: 'request_or_mapping' | 'current_projection' | 'cache_receive' | 'recovery_exhausted',
     source: ThreadDetailSource,
     error: unknown,
     viewVersion = 0,
+    acceptance?: Pick<ThreadDetailReceiveResult, 'runtimeState' | 'activityState' | 'settingsState'>,
   ) => {
-    const summary = threadCache().summaries.get(trimString(threadID));
+    const cache = threadCache();
+    const normalizedThreadID = trimString(threadID);
+    const summary = cache.summaries.get(normalizedThreadID);
+    const detail = cache.views.get(normalizedThreadID);
     console.error('Flower thread detail convergence failed.', {
-      thread_id: trimString(threadID),
+      thread_id: normalizedThreadID,
       stage,
       source,
       summary_revision: threadSnapshotRevision(summary),
-      view_version: Math.max(0, Math.floor(Number(viewVersion) || 0)),
+      detail_activity_revision: threadSnapshotRevision(detail?.thread),
+      settings_revision: Math.max(0, Math.floor(Number(detail?.thread.settings_revision) || 0)),
+      view_version: Math.max(0, Math.floor(Number(viewVersion || detail?.version) || 0)),
+      ...(acceptance ? {
+        runtime_state: acceptance.runtimeState,
+        activity_state: acceptance.activityState,
+        settings_state: acceptance.settingsState,
+      } : {}),
       error,
     });
   };
@@ -3130,6 +3142,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return {
         state: 'stale',
         runtimeState: 'stale',
+        activityState: 'stale',
         settingsState: 'stale',
         thread: candidate.thread,
       };
@@ -3147,7 +3160,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       reportThreadDetailDiagnostic(threadID, 'cache_receive', source, error, candidate.version);
       throw error;
     }
-    const { state, runtimeState, settingsState } = result;
+    const {
+      state,
+      runtimeState,
+      activityState,
+      settingsState,
+    } = result;
     const retained = result.cache.views.get(threadID)?.thread ?? candidate.thread;
     const currentOutbox = transportOutbox();
     const reconciliation = current
@@ -3189,33 +3207,45 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setSidePanel('chat');
       }
     });
-    if (state !== 'accepted') return { state, runtimeState, settingsState, thread: retained };
-    if (runtimeState !== 'accepted') {
-      return { state, runtimeState, settingsState, thread: retained };
+    if (state !== 'accepted') return {
+      state,
+      runtimeState,
+      activityState,
+      settingsState,
+      thread: retained,
+    };
+    const acceptedSummary = nextCache.summaries.get(threadID);
+    const detailConverged = !threadSummaryNeedsDetail(acceptedSummary, retained);
+    if (detailConverged) {
+      summaryDetailRecoveryExhaustedSignatures.delete(threadID);
+      if (threadID === selectedThreadID()) setThreadLoadError('');
     }
-    summaryDetailRecoveryExhaustedSignatures.delete(threadID);
-    const acceptedSummary = result.cache.summaries.get(threadID);
     if (
       busyAdmissionThreadIDs().has(threadID)
       && !flowerThreadHasActiveTurnEvidence(retained)
-      && !threadSummaryNeedsDetail(acceptedSummary, retained)
+      && detailConverged
     ) {
       updateThreadIDMembership(setBusyAdmissionThreadIDs, threadID, false);
       busyAdmissionNotifiedThreadIDs.delete(threadID);
     }
 
-    if (
+    if (runtimeState === 'accepted' && (
       previous
       && previous.model_id !== retained.model_id
       && !sameFlowerReasoningSelection(previous.reasoning_selection, retained.reasoning_selection)
-    ) {
+    )) {
       notifySuccess('Reasoning adjusted for this model.');
     }
-    if (threadID === selectedThreadID()) {
-      setThreadLoadError('');
+    if (runtimeState === 'accepted' && threadID === selectedThreadID()) {
       setTranscriptLayoutRevision((revision) => revision + 1);
     }
-    return { state, runtimeState, settingsState, thread: retained };
+    return {
+      state,
+      runtimeState,
+      activityState,
+      settingsState,
+      thread: retained,
+    };
   };
 
   const receiveThreadView = (
@@ -3406,6 +3436,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       let observedGeneration = 0;
       let attempt = 0;
       let lastError: unknown = null;
+      let lastReceiveResult: ThreadDetailReceiveResult | undefined;
       while (
         !surfaceDisposed
         && tid === selectedThreadID()
@@ -3423,7 +3454,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           lastError = null;
         }
         if (attempt > THREAD_DETAIL_RECOVERY_RETRY_DELAYS_MS.length) {
-          reportThreadDetailDiagnostic(tid, 'request_or_mapping', 'summary_recovery', lastError);
+          reportThreadDetailDiagnostic(
+            tid,
+            'recovery_exhausted',
+            'summary_recovery',
+            lastError,
+            threadCache().views.get(tid)?.version,
+            lastReceiveResult,
+          );
           if (tid === selectedThreadID()) setThreadLoadError(threadDetailUserError(lastError));
           const exhaustedTarget = summaryDetailRecoveryTargets.get(tid);
           if (exhaustedTarget) summaryDetailRecoveryExhaustedSignatures.set(tid, exhaustedTarget.signature);
@@ -3437,10 +3475,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         try {
           const result = await reloadSelectedThread(tid, sequence, 'summary_recovery');
-          lastError = result?.runtimeState === 'accepted'
-            ? null
-            : new Error(`runtime detail snapshot was ${result?.runtimeState ?? 'discarded'}`);
+          lastReceiveResult = result ?? undefined;
+          if (!summaryRecoveryStillNeeded(tid)) {
+            summaryDetailRecoveryTargets.delete(tid);
+            return;
+          }
+          lastError = new Error(result
+            ? `thread detail did not converge (runtime=${result.runtimeState}, activity=${result.activityState}, settings=${result.settingsState})`
+            : 'thread detail response was discarded');
         } catch (error) {
+          lastReceiveResult = undefined;
           lastError = error;
           if (getErrorMessage(error).startsWith('Flower contract error:')) {
             reportThreadDetailDiagnostic(tid, 'request_or_mapping', 'summary_recovery', error);
@@ -3448,10 +3492,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             summaryDetailRecoveryTargets.delete(tid);
             return;
           }
-        }
-        if (!summaryRecoveryStillNeeded(tid)) {
-          summaryDetailRecoveryTargets.delete(tid);
-          return;
         }
         attempt += 1;
       }

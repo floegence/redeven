@@ -528,6 +528,64 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(surfaceAdapter.loadThread).toHaveBeenCalledTimes(3);
   });
 
+  it('converges newer activity metadata when terminal runtime content is unchanged', async () => {
+    const completed = thread({
+      thread_id: 'thread-activity-metadata-convergence',
+      title: 'Activity metadata convergence',
+      status: 'success',
+      active_run_id: undefined,
+      updated_at_ms: 796,
+      read_status: readStatus(false, 796, 'success'),
+      messages: [
+        { id: 'metadata-user', turn_id: 'turn-metadata', role: 'user', content: 'hi', status: 'complete', created_at_ms: 790 },
+        { id: 'metadata-answer', turn_id: 'turn-metadata', role: 'assistant', content: 'Hello from Flower.', status: 'complete', created_at_ms: 796 },
+      ],
+    });
+    const running = thread({
+      ...completed,
+      status: 'running',
+      active_run_id: 'turn-terminal',
+      updated_at_ms: 795,
+      read_status: readStatus(false, 795, 'running'),
+      model_io_status: modelIOStatus({ run_id: 'turn-terminal', updated_at_ms: 795 }),
+      messages: completed.messages.slice(0, 1),
+    });
+    const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running] }]);
+    let loadCount = 0;
+    const surfaceAdapter = {
+      ...adapter(true),
+      listThreads: vi.fn(async () => [running]),
+      loadThread: vi.fn(async () => {
+        loadCount += 1;
+        return loadCount === 1
+          ? liveBootstrap(running, 80)
+          : liveBootstrap(completed, 81);
+      }),
+      connectLiveStream: stream.connect,
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-model-status-indicator') !== null);
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: completed.thread_id,
+      current: runtimeCurrentView(completed, 81),
+    });
+    await waitFor(() => runtime.textContent?.includes('Hello from Flower.') ?? false);
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [completed] });
+
+    await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 2);
+    await waitFor(() => runtime.querySelector(`[data-thread-id="${completed.thread_id}"]`)?.getAttribute('data-flower-thread-status') === 'success');
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
+    expect(runtime.querySelector('.flower-composer-stop')).toBeNull();
+    expect(runtime.textContent).toContain('Hello from Flower.');
+    expect(surfaceAdapter.loadThread).toHaveBeenCalledTimes(2);
+  });
+
   it('does not let a pre-completion detail request replace terminal recovery', async () => {
     const completed = completedTerminalThread();
     const running = thread({

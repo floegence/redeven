@@ -22,8 +22,10 @@ describe('Flower terminal detail convergence architecture', () => {
     expect(cacheSource).not.toContain('connectionEpoch');
     expect(cacheSource).not.toContain('canReplaceThreadView');
     expect(cacheSource.match(/function classifyThreadView/gu)).toHaveLength(1);
+    expect(cacheSource.match(/function classifyThreadActivity/gu)).toHaveLength(1);
     expect(cacheSource.match(/function classifyThreadSettings/gu)).toHaveLength(1);
     expect(cacheSource.match(/^ {4}receiveView\(view/gmu)).toHaveLength(1);
     expect(cacheSource).not.toContain('updateThread(');
+    expect(surfaceSource).not.toContain('runtime detail snapshot was');
   });
 });

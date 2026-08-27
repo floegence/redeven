@@ -13,6 +13,7 @@ export type ThreadViewReceiveResult = Readonly<{
   cache: ThreadCache;
   state: ThreadViewAcceptance;
   runtimeState: ThreadViewAcceptance;
+  activityState: ThreadViewAcceptance;
   settingsState: ThreadViewAcceptance;
 }>;
 
@@ -38,6 +39,18 @@ function classifyThreadSettings(
   return 'unchanged';
 }
 
+function classifyThreadActivity(
+  current: ThreadView | undefined,
+  candidate: ThreadView,
+): ThreadViewAcceptance {
+  if (!current) return 'accepted';
+  const currentRevision = threadSnapshotRevision(current.thread);
+  const candidateRevision = threadSnapshotRevision(candidate.thread);
+  if (candidateRevision > currentRevision) return 'accepted';
+  if (candidateRevision < currentRevision) return 'stale';
+  return 'unchanged';
+}
+
 function mergeThreadSettings(
   runtime: FlowerThreadSnapshot,
   settings: FlowerThreadSnapshot,
@@ -54,12 +67,38 @@ function mergeThreadSettings(
   };
 }
 
+function mergeThreadActivity(
+  runtime: FlowerThreadSnapshot,
+  activity: FlowerThreadSnapshot,
+): FlowerThreadSnapshot {
+  return {
+    ...runtime,
+    updated_at_ms: activity.updated_at_ms,
+    read_status: activity.read_status,
+  };
+}
+
+function mergeNewerSummaryMetadata(
+  base: FlowerThreadSnapshot,
+  candidate: FlowerThreadSnapshot,
+): FlowerThreadSnapshot {
+  const withActivity = threadSnapshotRevision(candidate) > threadSnapshotRevision(base)
+    ? mergeThreadActivity(base, candidate)
+    : base;
+  const baseSettingsRevision = Math.max(0, Math.floor(Number(withActivity.settings_revision) || 0));
+  const candidateSettingsRevision = Math.max(0, Math.floor(Number(candidate.settings_revision) || 0));
+  return candidateSettingsRevision > baseSettingsRevision
+    ? mergeThreadSettings(withActivity, candidate)
+    : withActivity;
+}
+
 function aggregateAcceptance(
   runtimeState: ThreadViewAcceptance,
+  activityState: ThreadViewAcceptance,
   settingsState: ThreadViewAcceptance,
 ): ThreadViewAcceptance {
-  if (runtimeState === 'accepted' || settingsState === 'accepted') return 'accepted';
-  if (runtimeState === 'unchanged' || settingsState === 'unchanged') return 'unchanged';
+  if (runtimeState === 'accepted' || activityState === 'accepted' || settingsState === 'accepted') return 'accepted';
+  if (runtimeState === 'unchanged' || activityState === 'unchanged' || settingsState === 'unchanged') return 'unchanged';
   return 'stale';
 }
 
@@ -187,18 +226,30 @@ function createCache(
         cache: this,
         state: 'stale',
         runtimeState: 'stale',
+        activityState: 'stale',
         settingsState: 'stale',
       };
       const current = views.get(id)?.view;
       const runtimeState = classifyThreadView(current, view);
+      const activityState = classifyThreadActivity(current, view);
       const settingsState = classifyThreadSettings(current, view);
-      const state = aggregateAcceptance(runtimeState, settingsState);
-      if (state !== 'accepted') return { cache: this, state, runtimeState, settingsState };
+      const state = aggregateAcceptance(runtimeState, activityState, settingsState);
+      if (state !== 'accepted') return {
+        cache: this,
+        state,
+        runtimeState,
+        activityState,
+        settingsState,
+      };
       const runtimeView = current && runtimeState !== 'accepted' ? current : view;
+      const activityThread = current && activityState !== 'accepted' ? current.thread : view.thread;
       const settingsThread = current && settingsState !== 'accepted' ? current.thread : view.thread;
       const mergedView: ThreadView = {
         version: runtimeView.version,
-        thread: mergeThreadSettings(runtimeView.thread, settingsThread),
+        thread: mergeThreadSettings(
+          mergeThreadActivity(runtimeView.thread, activityThread),
+          settingsThread,
+        ),
       };
       const next = new Map(views);
       next.set(id, { view: mergedView, usedAt: clock + 1 });
@@ -208,16 +259,20 @@ function createCache(
         next.delete(oldest[0]);
       }
       const summary = new Map(summaries);
+      const currentSummary = summary.get(id);
       if (!options?.preserveSummary) {
-        summary.set(id, summaryOnly(mergedView.thread));
-      } else if (settingsState === 'accepted') {
-        const currentSummary = summary.get(id);
-        if (currentSummary) summary.set(id, summaryOnly(mergeThreadSettings(currentSummary, settingsThread)));
+        const nextSummary = currentSummary
+          ? mergeNewerSummaryMetadata(mergedView.thread, currentSummary)
+          : mergedView.thread;
+        summary.set(id, summaryOnly(nextSummary));
+      } else if (currentSummary) {
+        summary.set(id, summaryOnly(mergeNewerSummaryMetadata(currentSummary, mergedView.thread)));
       }
       return {
         cache: createCache(selectedId, summary, next, clock + 1),
         state,
         runtimeState,
+        activityState,
         settingsState,
       };
     },
