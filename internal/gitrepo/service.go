@@ -237,7 +237,7 @@ func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		}
 		return &listCommitsResp{
 			RepoRootPath: repo.repoRootReal,
-			Commits:      commits,
+			Commits:      requiredJSONArray(commits),
 			NextOffset:   nextOffset,
 			HasMore:      hasMore,
 		}, nil
@@ -271,7 +271,7 @@ func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 			RepoRootPath: repo.repoRootReal,
 			Commit:       detail,
 			Presentation: presentation,
-			Files:        files,
+			Files:        requiredJSONArray(files),
 		}, nil
 	})
 

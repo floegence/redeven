@@ -164,6 +164,11 @@ import {
 import { isGitWorkspaceSnapshotStale, type GitCapabilityMode } from '../services/gitWorkspaceRuntime';
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
+type GitBranchStatusPresentationState =
+  | "loading"
+  | "ready"
+  | "error"
+  | "unavailable";
 
 export function gitBranchPanelIdentityKey(
   ...parts: ReadonlyArray<string | number>
@@ -2468,7 +2473,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     Record<GitWorkspaceViewSection, GitWorkspaceViewPageState>
   >(createEmptyWorkspaceViewPageStateRecord());
   const [statusLoading, setStatusLoading] = createSignal(false);
-  const [statusError, setStatusError] = createSignal("");
   const [selectedStatusSection, setSelectedStatusSection] =
     createSignal<GitWorkspaceViewSection>("changes");
   const [statusSectionPinned, setStatusSectionPinned] = createSignal(false);
@@ -2549,7 +2553,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     setStatusWorkspace(null);
     setStatusPages(createEmptyWorkspaceViewPageStateRecord());
     setStatusLoading(false);
-    setStatusError("");
     statusWorkspaceRevision = '';
   };
   const updateStatusPageState = (
@@ -2592,7 +2595,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       directoryPath: String(page.directoryPath ?? ""),
       breadcrumbs: Array.isArray(page.breadcrumbs) ? [...page.breadcrumbs] : [],
     }));
-    setStatusError("");
   };
   const visibleStatusPageState = () => statusPageState(selectedStatusSection());
   const visibleStatusWorkspace = () => statusWorkspace();
@@ -2605,11 +2607,18 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     );
   const visibleStatusError = () =>
     String(
-      statusError() ||
-        (!visibleStatusPageState().initialized
-          ? visibleStatusPageState().error
-          : ""),
+      !visibleStatusPageState().initialized
+        ? visibleStatusPageState().error
+        : "",
     );
+  const branchStatusPresentationState =
+    (): GitBranchStatusPresentationState => {
+      if (branchIsVerifying() || visibleStatusLoading()) return "loading";
+      if (branchHasDetailIssue()) return "unavailable";
+      if (!branchIsReady() || !statusRepoRootPath()) return "unavailable";
+      if (visibleStatusError()) return "error";
+      return visibleStatusWorkspace() ? "ready" : "unavailable";
+    };
   const visibleStatusTotalRows = () =>
     visibleStatusPageState().initialized
       ? Number(visibleStatusPageState().totalCount ?? 0)
@@ -3562,7 +3571,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     }));
     if (selectedStatusSection() === section && !append && !background) {
       setStatusLoading(true);
-      setStatusError("");
     }
 
     try {
@@ -3603,7 +3611,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         if (!currentState.initialized) {
           setStatusWorkspace(null);
         }
-        setStatusError(message);
       } else if (background) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
@@ -3769,19 +3776,19 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     </div>
   );
   const renderBranchStatusContentFallback = () => {
-    if (branchIsReady() && !visibleStatusWorkspace()) {
+    if (
+      branchStatusPresentationState() === "unavailable" &&
+      branchIsReady()
+    ) {
       return <BranchStatusUnavailableTable state={statusEmptyState()} />;
     }
     return renderBranchStablePlaceholder("status");
   };
   const renderBranchStatusStrip = () => {
-    const pending = branchIsVerifying() || visibleStatusLoading();
-    const unavailable = branchHasDetailIssue();
-    if (
-      branchIsReady() &&
-      !pending &&
-      visibleStatusError()
-    ) {
+    const presentationState = branchStatusPresentationState();
+    const pending = presentationState === "loading";
+    const unavailable = presentationState === "unavailable";
+    if (presentationState === "error") {
       return (
         <GitStatePane
           tone="error"
@@ -3791,11 +3798,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         />
       );
     }
-    if (
-      branchIsReady() &&
-      !pending &&
-      !visibleStatusWorkspace()
-    ) {
+    if (unavailable && branchIsReady()) {
       return renderStatusUnavailableSummary();
     }
 
@@ -3992,7 +3995,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               data-git-branch-status-content-frame="true"
             >
               <Show
-                when={branchIsReady() && visibleStatusWorkspace()}
+                when={branchStatusPresentationState() === "ready"}
                 fallback={renderBranchStatusContentFallback()}
               >
                 <BranchStatusTable

@@ -83,7 +83,7 @@ func (s *Service) previewMergeBranch(ctx context.Context, repo repoContext, name
 		BlockingReason:    plan.BlockingReason,
 		Blocking:          plan.Blocking,
 		PlanFingerprint:   plan.PlanFingerprint,
-		Files:             plan.Files,
+		Files:             requiredJSONArray(plan.Files),
 		LinkedWorktree:    plan.LinkedWorktree,
 	}, nil
 }

@@ -62,7 +62,7 @@ func (s *Service) listStashes(ctx context.Context, repo repoContext) (*listStash
 	}
 	return &listStashesResp{
 		RepoRootPath: repo.repoRootReal,
-		Stashes:      stashes,
+		Stashes:      requiredJSONArray(stashes),
 	}, nil
 }
 
@@ -79,7 +79,7 @@ func (s *Service) getStashDetail(ctx context.Context, repo repoContext, id strin
 		RepoRootPath: repo.repoRootReal,
 		Stash: gitStashDetail{
 			gitStashSummary: summary,
-			Files:           files,
+			Files:           requiredJSONArray(files),
 		},
 	}, nil
 }

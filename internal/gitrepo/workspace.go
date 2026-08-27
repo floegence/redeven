@@ -100,13 +100,12 @@ func (s *Service) listWorkspaceChanges(ctx context.Context, repo repoContext) (*
 		ConflictedCount: len(conflicted),
 	}
 	return &listWorkspaceChangesResp{
-		RepoRootPath:      repo.repoRootReal,
-		WorkspaceRevision: snapshot.revision,
-		Summary:           summary,
-		Staged:            staged,
-		Unstaged:          unstaged,
-		Untracked:         untracked,
-		Conflicted:        conflicted,
+		RepoRootPath: repo.repoRootReal,
+		Summary:      summary,
+		Staged:       requiredJSONArray(staged),
+		Unstaged:     requiredJSONArray(unstaged),
+		Untracked:    requiredJSONArray(untracked),
+		Conflicted:   requiredJSONArray(conflicted),
 	}, nil
 }
 
@@ -219,7 +218,7 @@ func (s *Service) listWorkspaceDirectoryPage(repoRoot string, status workspaceSt
 		Offset:            offset,
 		NextOffset:        nextOffset,
 		HasMore:           hasMore,
-		Items:             pageItems,
+		Items:             requiredJSONArray(pageItems),
 	}, nil
 }
 
@@ -289,7 +288,7 @@ func (s *Service) listWorkspacePathStatuses(ctx context.Context, repo repoContex
 	return &listWorkspacePathStatusesResp{
 		RepoRootPath:      repo.repoRootReal,
 		WorkspaceRevision: snapshot.revision,
-		Items:             items,
+		Items:             requiredJSONArray(items),
 	}, nil
 }
 
