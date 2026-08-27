@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { analyzeInitialBuildGraph } from './initialBuildGraphPolicy.mjs';
+import {
+  analyzeInitialBuildGraph,
+  findForbiddenInitialAssetNames,
+} from './initialBuildGraphPolicy.mjs';
 
 const entry = (file, options = {}) => ({ file, isEntry: true, ...options });
 const chunk = (modules) => ({ modules });
@@ -93,4 +96,23 @@ test('fails closed when a static manifest edge is missing', () => {
   }, {
     chunks: { 'assets/index.js': chunk(['src/index.ts']) },
   }), /manifest import is missing/u);
+});
+
+test('ignores forbidden words that occur only inside Vite content hashes', () => {
+  assert.deepEqual(findForbiddenInitialAssetNames(
+    ['assets/index-Biuxjpdf.js', 'assets/index-DDO0JaUN.css'],
+    ['pdf'],
+  ), []);
+});
+
+test('rejects forbidden semantic asset names before Vite content hashes', () => {
+  assert.deepEqual(findForbiddenInitialAssetNames([
+    'assets/pdf.worker.min-CLrFZWeq.mjs',
+    'assets/markdown-BYOwaDjH.js',
+    'assets/flower-feature-BYroGOxD.css',
+  ], ['pdf', 'markdown', 'flower-feature']), [
+    'pdf',
+    'markdown',
+    'flower-feature',
+  ]);
 });

@@ -3,7 +3,10 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
-import { analyzeInitialBuildGraph } from './initialBuildGraphPolicy.mjs';
+import {
+  analyzeInitialBuildGraph,
+  findForbiddenInitialAssetNames,
+} from './initialBuildGraphPolicy.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.resolve(scriptDir, '../../ui/dist/env');
@@ -47,9 +50,7 @@ const javascriptBytes = javascriptAssets.reduce((total, asset) => total + compre
 const cssBytes = cssAssets.reduce((total, asset) => total + compressedBytes(asset), 0);
 const totalBytes = javascriptBytes + cssBytes;
 const initialAssets = [...javascriptAssets, ...cssAssets];
-const forbiddenNames = forbiddenInitialAssets.filter((name) => (
-  initialAssets.some((asset) => asset.toLowerCase().includes(name.toLowerCase()))
-));
+const forbiddenNames = findForbiddenInitialAssetNames(initialAssets, forbiddenInitialAssets);
 const forbiddenModules = graph.forbiddenModules.map((item) => (
   `forbidden initial module: ${item.path.join(' -> ')} -> ${item.moduleId}`
 ));
