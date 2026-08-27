@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-08-27
+* **Flower compaction qualification**: Added an isolated real-provider test for
+  `deepseek-v4-flash` that requires both manual and pre-request automatic
+  compaction to commit canonical checkpoints, reduce estimated tokens, and
+  preserve an older marker. Floret context policy now derives default output
+  headroom from the resolved model capability while leaving the provider's
+  unset output request behavior unchanged.
 * **Floret v5.0.4 startup convergence**: Redeven now reports storage
   verification before `runtime.Open`, consumes Floret's exact legacy UTF-8 Raw
   repair, and classifies remaining authority failures only through the public
