@@ -23,7 +23,7 @@ Stable row identity and order come only from the published Floret current view. 
 
 # Evidence
 
-- `redeven:go.mod` - Pins the published Floret v5.0.7 ordered current-view contract.
+- `redeven:go.mod` - Pins the published Floret v5.0.8 ordered current-view contract.
 - `redeven:internal/ai/floret_timeline_messages_test.go` - Proves Redeven preserves public ordered items and live markers from the typed view.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Current-view projection.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Versioned bounded detail cache.

@@ -1,15 +1,87 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/floegence/floret/v5/config"
+	"github.com/floegence/floret/v5/florettest"
 	"github.com/floegence/floret/v5/identity"
 	"github.com/floegence/floret/v5/observation"
+	flprovider "github.com/floegence/floret/v5/provider"
 	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v5/storage"
 )
+
+func TestPublishedFloretUsageReachesFlowerThreadProjection(t *testing.T) {
+	gateway := florettest.NewScriptedGateway(
+		flprovider.Identity{Provider: "test", Model: "cache-usage", StateCompatibilityKey: "test:cache-usage:v1"},
+		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
+		florettest.Step{Events: []flprovider.Event{
+			{Type: flprovider.EventUsage, Usage: flprovider.Usage{
+				InputTokens: 60, OutputTokens: 20, CacheReadTokens: 35, CacheWriteTokens: 5,
+				WindowInputTokens: 100, TotalTokens: 120, Source: "native", Available: true,
+			}},
+			{Type: flprovider.EventDelta, Text: "done"},
+			{Type: flprovider.EventDone, Reason: "stop"},
+		}},
+	)
+	agent, err := flruntime.NewAgent(config.AgentConfig{
+		Profile:      config.AgentProfile{ID: "cache-usage", Name: "Cache Usage"},
+		SystemPrompt: "Test canonical cache usage.",
+		Context:      config.ContextPolicy{ContextWindowTokens: config.DefaultContextWindowTokens},
+	}, gateway)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: storage.Memory()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) {
+		return agent, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := service.(flruntime.ThreadContextReader)
+	created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create-cache-usage"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Send(t.Context(), flruntime.SendInput{
+		ThreadID: created.ThreadID, Input: flruntime.UserInput{Text: "measure"}, RequestKey: "send-cache-usage",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		snapshot, readErr := reader.Context(t.Context(), created.ThreadID)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if snapshot.UsageTotals != nil {
+			projection, projectErr := flowerThreadContextProjection(snapshot, flruntime.ThreadView{ThreadID: created.ThreadID})
+			if projectErr != nil {
+				t.Fatal(projectErr)
+			}
+			if projection.Usage == nil || projection.Usage.ThreadUsage == nil || *projection.Usage.ThreadUsage != (FlowerThreadTokenUsage{
+				InputTokens: 60, OutputTokens: 20, CacheReadTokens: 35, CacheWriteTokens: 5,
+			}) {
+				t.Fatalf("Flower thread usage=%#v", projection.Usage)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("published Floret usage did not reach Flower thread projection")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
 
 func TestFlowerThreadContextProjectionRestoresOneTerminalCompactionDivider(t *testing.T) {
 	observedAt := time.Unix(1_723_800_000, 0).UTC()
