@@ -52,6 +52,8 @@ Refresh forgets only the current view's live attachment and attaches again. term
 
 The catalog remains renderer-free and dormant sessions remain metadata-only. Terminal chrome derives from catalog snapshots for foreground command, output activity, execution context, semantic work, and local-path capability. Those facts are display metadata, not filesystem authority. Ask Flower may capture a selection or bounded visible semantic text; it receives a working directory only through the same current local-path capability.
 
+A user-initiated terminal creation owns one panel-level loading curtain from optimistic creation through live attachment. Resolving the pending identity to the real Session changes only the localized message and accessibility label from creating to attaching; it does not replace the curtain panel, progress indicator, message node, or running animation. The Runtime mounts and attaches behind that curtain without publishing a duplicate initial loader. The curtain leaves only after the first Presentation makes the Runtime interactive, while create failure, cancellation, attachment failure, and session removal release ownership to their existing terminal error or recovery surface.
+
 The exact-main performance gate measures twenty semantic Presentation paints, input dispatches, and resize settlements in Chromium. The real product carrier separately measures twenty same-session multi-view activations and twenty `top` resizes, with each resize capped at 150 ms. It also verifies clear, history projection, refresh, controller transfer, one semantic canvas, canonical frame geometry, DPR backing, nontransparent paint, and zero page, console, request, or response errors.
 
 # Boundaries
@@ -66,6 +68,7 @@ Redeven may adapt Flowersec streams, product permissions, local-path capability,
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - Thin product runtime around RendererSurface, TerminalInputBridge, history projection, and attachment lifecycle.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/semanticTerminalViewport.ts` - View-local viewport, link hit-testing, and capability-neutral presentation helpers.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx` - Direct semantic renderer, input, history, theme, resize, and performance coverage.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.loadingContinuity.browser.test.tsx` - Proves one loading DOM and animation identity across create-to-attach handoff, failure cleanup, and concurrent creation.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.agentUnread.browser.test.tsx` - Real catalog-to-Panel-to-Navigator stock Agent unread and shared reader-focus coverage.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.click-handoff.browser.test.tsx` - Browser proof that a Terminal bottom status-bar overlay does not block the shared Workbench resize handle and that lock prevents resize.
 - `redeven:internal/envapp/ui_src/scripts/checkSemanticTerminalCarrier.mjs` - Real Runtime, PTY, Activity, Workbench, clear, top resize, refresh, and multi-view carrier.
