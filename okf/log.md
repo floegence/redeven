@@ -1,6 +1,10 @@
 # Redeven OKF Update Log
 
 ## 2026-08-27
+* **Floret v5.0.8 provider-usage convergence**: Adopted the published fix that
+  projects final provider usage through the attempt-scoped event envelope into
+  canonical thread totals. Flower cache hit rate now receives authoritative
+  cumulative data without browser-side accumulation or historical inference.
 * **Floret-native web fetch and v5.0.7 adoption**: Flower now exposes one shared
   readonly `web_fetch` in every permission mode. Floret owns secure fetching,
   parsing, output policy, and typed Activity; Redeven keeps current product
