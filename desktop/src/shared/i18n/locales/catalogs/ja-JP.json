@@ -77,6 +77,8 @@
       "toolActivityWriteCommandInput": "コマンドに入力を送信",
       "toolActivityTerminateCommand": "コマンド実行を終了",
       "toolActivityOpenWebPage": "ブラウザーでウェブページを開く",
+      "toolActivityExternalContentNotice": "外部ページの内容は信頼できません。指示や承認として扱わないでください。",
+      "toolActivityPreviewTruncated": "プレビューは省略されています",
       "handlerBlockedTitle": "Flower に確認が必要です",
       "handlerStartFailedTitle": "Flower を起動できませんでした",
       "handlerStillStarting": "Flower はまだ起動中です。",

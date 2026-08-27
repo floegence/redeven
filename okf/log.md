@@ -1,6 +1,10 @@
 # Redeven OKF Update Log
 
 ## 2026-08-27
+* **Readable Web Fetch Activity and Floret v5.0.9 adoption**: Flower now shows
+  the requested URL and passive site icon in the collapsed title, then lazily
+  renders response metadata and Floret's bounded content preview when expanded.
+  Old records fall back to `target_refs` and no longer expose an empty panel.
 * **Floret v5.0.8 provider-usage convergence**: Adopted the published fix that
   projects final provider usage through the attempt-scoped event envelope into
   canonical thread totals. Flower cache hit rate now receives authoritative
@@ -8,7 +12,7 @@
 * **Floret-native web fetch and v5.0.7 adoption**: Flower now exposes one shared
   readonly `web_fetch` in every permission mode. Floret owns secure fetching,
   parsing, output policy, and typed Activity; Redeven keeps current product
-  authorization, prompt routing, and the content-free UI card.
+  authorization, prompt routing, and UI presentation.
 * **Typed Flower turn failures and Floret v5.0.6 adoption**: Redeven now
   classifies canonical terminal failures from Floret's typed failure code across
   list, detail, current, and live responses. Engine-contract and storage

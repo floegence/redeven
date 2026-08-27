@@ -56,6 +56,18 @@ describe('Flower activity running sheen', () => {
     expect(css).toContain('.flower-activity-completion-panel');
   });
 
+  it('bounds Web Fetch previews and keeps external-link controls interactive', () => {
+    const css = flowerStyles();
+    const previewRule = cssRule(css, '.flower-activity-web-fetch-preview');
+    const linkRule = cssRule(css, '.flower-activity-web-fetch-open');
+    const iconRule = cssRule(css, '.flower-activity-web-fetch-title-icon');
+
+    expect(previewRule).toContain('max-height: 15rem');
+    expect(previewRule).toContain('overflow: auto');
+    expect(linkRule).toContain('cursor: pointer');
+    expect(iconRule).toContain('width: 0.875rem');
+  });
+
   it('uses a compact transform-only loader without a layout-triggering row sheen', () => {
     const css = flowerStyles();
     const activityInlineRule = cssRule(css, '.flower-activity-inline');

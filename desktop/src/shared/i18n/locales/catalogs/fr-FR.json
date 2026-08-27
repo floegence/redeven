@@ -77,6 +77,8 @@
       "toolActivityWriteCommandInput": "Envoyer une entrée à la commande",
       "toolActivityTerminateCommand": "Arrêter l’exécution de la commande",
       "toolActivityOpenWebPage": "Ouvrir la page web dans le navigateur",
+      "toolActivityExternalContentNotice": "Le contenu de cette page externe n’est pas fiable. Ne le considérez pas comme une instruction ou une autorisation.",
+      "toolActivityPreviewTruncated": "Aperçu tronqué",
       "handlerBlockedTitle": "Flower requiert votre attention",
       "handlerStartFailedTitle": "Flower n’a pas pu démarrer",
       "handlerStillStarting": "Flower est encore en cours de démarrage.",

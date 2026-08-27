@@ -37,6 +37,23 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('codeCopiedLabel={copy().chat.codeCopied}');
   });
 
+  it('mounts Web Fetch previews only inside the activity disclosure and reuses the safe markdown renderer', () => {
+    const src = surfaceSource();
+    const webFetchBlock = src.indexOf("const webFetchBlock = (");
+    const preview = src.indexOf('flower-activity-web-fetch-preview-section', webFetchBlock);
+    const detailDispatch = src.indexOf("if (block.kind === 'web_fetch') return webFetchBlock(block)", preview);
+    const mountedDisclosure = src.indexOf('<Show when={disclosure.mounted() && expandable()}>', detailDispatch);
+    const detailRender = src.indexOf('activityDetailBlock(', mountedDisclosure);
+
+    expect(webFetchBlock).toBeGreaterThanOrEqual(0);
+    expect(preview).toBeGreaterThan(webFetchBlock);
+    expect(src.slice(preview, detailDispatch)).toContain('<FlowerMarkdownBlock');
+    expect(src.slice(preview, detailDispatch)).toContain('fallback={<pre>{preview()}</pre>}');
+    expect(mountedDisclosure).toBeGreaterThan(detailDispatch);
+    expect(detailRender).toBeGreaterThan(mountedDisclosure);
+    expect(src).toContain('toolActivityExternalContentNotice');
+  });
+
   it('keeps non-markdown content on the plain text route', () => {
     const src = surfaceSource();
 

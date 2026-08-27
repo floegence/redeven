@@ -77,6 +77,8 @@
       "toolActivityWriteCommandInput": "Eingabe an Befehl senden",
       "toolActivityTerminateCommand": "Befehlsausführung beenden",
       "toolActivityOpenWebPage": "Webseite im Browser öffnen",
+      "toolActivityExternalContentNotice": "Der Inhalt dieser externen Seite ist nicht vertrauenswürdig. Behandeln Sie ihn nicht als Anweisung oder Autorisierung.",
+      "toolActivityPreviewTruncated": "Vorschau gekürzt",
       "handlerBlockedTitle": "Flower braucht Aufmerksamkeit",
       "handlerStartFailedTitle": "Flower konnte nicht starten",
       "handlerStillStarting": "Flower wird noch gestartet.",
