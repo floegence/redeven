@@ -76,6 +76,7 @@
       "toolActivityReadCommandOutput": "Befehlsausgabe anzeigen",
       "toolActivityWriteCommandInput": "Eingabe an Befehl senden",
       "toolActivityTerminateCommand": "Befehlsausführung beenden",
+      "toolActivityOpenWebPage": "Webseite im Browser öffnen",
       "handlerBlockedTitle": "Flower braucht Aufmerksamkeit",
       "handlerStartFailedTitle": "Flower konnte nicht starten",
       "handlerStillStarting": "Flower wird noch gestartet.",

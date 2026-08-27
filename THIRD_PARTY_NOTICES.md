@@ -29,12 +29,14 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.18.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.18.0 | Floegence first-party dependency. |
-| github.com/floegence/floret/v5 | v5.0.6 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v5@v5.0.6 | Detected from LICENSE. |
+| github.com/floegence/floret/v5 | v5.0.7 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v5@v5.0.7 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v3 | v3.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v3@v3.2.0 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin/v3 | v3.0.17 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.17 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
+| github.com/JohannesKaufmann/dom | v0.3.1 | MIT | Runtime | https://pkg.go.dev/github.com/JohannesKaufmann/dom@v0.3.1 | Detected from LICENSE. |
+| github.com/JohannesKaufmann/html-to-markdown/v2 | v2.5.2 | MIT | Runtime | https://pkg.go.dev/github.com/JohannesKaufmann/html-to-markdown/v2@v2.5.2 | Detected from LICENSE. |
 | github.com/libp2p/go-buffer-pool | v0.0.2 | MIT | Runtime | https://pkg.go.dev/github.com/libp2p/go-buffer-pool@v0.0.2 | Detected from LICENSE, LICENSE-BSD. |
 | github.com/libp2p/go-yamux/v5 | v5.1.0 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/libp2p/go-yamux/v5@v5.1.0 | Detected from LICENSE, LICENSE-BSD. |
 | github.com/lufia/plan9stats | v0.0.0-20211012122336-39d0f177ccd0 | BSD-style | Runtime | https://pkg.go.dev/github.com/lufia/plan9stats@v0.0.0-20211012122336-39d0f177ccd0 | Detected from LICENSE. |

@@ -71,6 +71,7 @@ export const flowerSurfaceEnUS = {
     toolActivityReadCommandOutput: 'View command output',
     toolActivityWriteCommandInput: 'Send input to command',
     toolActivityTerminateCommand: 'Terminate command execution',
+    toolActivityOpenWebPage: 'Open web page in browser',
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',

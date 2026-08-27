@@ -14,7 +14,7 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 		{Name: "read_files", Visibility: ToolVisibilityReadonlyExclusive},
 		{Name: "rgrep", Visibility: ToolVisibilityReadonlyExclusive},
 		{Name: "find", Visibility: ToolVisibilityReadonlyExclusive},
-		{Name: "web_fetch", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "web_fetch", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "file.read", Visibility: ToolVisibilityReadonlyExclusive},
 		{Name: "web.search", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "okf.index", Visibility: ToolVisibilitySharedReadonly},
@@ -68,6 +68,7 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 				"terminal.exec",
 				"use_skill",
 				"web.search",
+				"web_fetch",
 				"write_todos",
 			},
 		},
@@ -86,6 +87,7 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 				"terminal.exec",
 				"use_skill",
 				"web.search",
+				"web_fetch",
 				"write_todos",
 			},
 		},
@@ -156,12 +158,12 @@ func TestPermissionSnapshotConsistencyForBuiltinMatrix(t *testing.T) {
 				}
 				return
 			}
-			for _, blocked := range []string{"read_file", "read_files", "rgrep", "find", "web_fetch"} {
+			for _, blocked := range []string{"read_file", "read_files", "rgrep", "find"} {
 				if containsString(names, blocked) {
 					t.Fatalf("%s tool set includes readonly-exclusive %q: %v", permissionType, blocked, names)
 				}
 			}
-			if !containsString(names, "terminal.exec") || !containsString(names, "subagents") {
+			if !containsString(names, "terminal.exec") || !containsString(names, "subagents") || !containsString(names, "web_fetch") {
 				t.Fatalf("%s tool set missing standard delegation surface: %v", permissionType, names)
 			}
 		})

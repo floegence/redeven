@@ -119,6 +119,16 @@ export type FlowerActivityWebSearchDetail = Readonly<{
   sections: readonly FlowerActivityWebSearchEntry[];
 }>;
 
+export type FlowerActivityWebFetchDetail = Readonly<{
+  url: string;
+  final_url: string;
+  status_code?: number;
+  content_type: string;
+  format: string;
+  bytes_read?: number;
+  truncated: boolean;
+}>;
+
 export type FlowerActivityQuestionChoice = Readonly<{
   label: string;
   description: string;
@@ -207,6 +217,10 @@ export type FlowerActivityDetailBlock =
   | Readonly<{
     kind: 'web_search';
     search: FlowerActivityWebSearchDetail;
+  }>
+  | Readonly<{
+    kind: 'web_fetch';
+    fetch: FlowerActivityWebFetchDetail;
   }>
   | Readonly<{
     kind: 'question';
@@ -1175,6 +1189,57 @@ function presentationForWebSearch(item: FlowerActivityItem): FlowerActivityPrese
   };
 }
 
+export function safeWebFetchURL(value: string): string {
+  const raw = trimString(value);
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.username || parsed.password) return '';
+    return parsed.href;
+  } catch {
+    return '';
+  }
+}
+
+function webFetchHostname(value: string): string {
+  const safe = safeWebFetchURL(value);
+  if (!safe) return '';
+  try {
+    return new URL(safe).hostname;
+  } catch {
+    return '';
+  }
+}
+
+function presentationForWebFetch(item: FlowerActivityItem): FlowerActivityPresentation {
+  const payload = item.payload ?? {};
+  const requestedURL = payloadValue(payload, 'url');
+  const finalURL = payloadValue(payload, 'final_url');
+  const displayURL = finalURL || requestedURL;
+  const hostname = webFetchHostname(displayURL);
+  const titleText = hostname ? `Web fetch · ${hostname}` : 'Web fetch';
+  const errorBlock = errorDetailBlockForItem(item, payload);
+  const fetch: FlowerActivityWebFetchDetail = {
+    url: requestedURL,
+    final_url: finalURL,
+    status_code: optionalNumericValue(payload.status_code),
+    content_type: payloadValue(payload, 'content_type'),
+    format: payloadValue(payload, 'format'),
+    bytes_read: optionalNumericValue(payload.bytes_read),
+    truncated: boolValue(payload.truncated),
+  };
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (errorBlock) detailBlocks.push(errorBlock);
+  detailBlocks.push({ kind: 'web_fetch', fetch });
+  return {
+    label: titleText,
+    title: { kind: 'plain', text: titleText },
+    meta: metaWithError(item, metaForItem(item)),
+    detailLines: [],
+    detailBlocks,
+  };
+}
+
 function questionChoices(value: unknown): readonly FlowerActivityQuestionChoice[] {
   return asArray(value).map((entry) => {
     const record = asRecord(entry);
@@ -1343,6 +1408,7 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   file: (item, context) => presentationForFile(item, context.fileActions),
   patch: (item, context) => presentationForPatch(item, context.fileActions),
   web_search: (item) => presentationForWebSearch(item),
+  web_fetch: (item) => presentationForWebFetch(item),
   todos: (item) => presentationForTodos(item),
   question: (item) => presentationForQuestion(item),
   completion: (item) => presentationForCompletion(item),

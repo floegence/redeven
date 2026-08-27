@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FlowerActivityItem, FlowerApprovalAction, FlowerSubagentSummary } from './contracts/flowerSurfaceContracts';
-import { pendingApprovalCommandForActivityItem, presentFlowerActivityItem } from './flowerActivityPresentation';
+import { pendingApprovalCommandForActivityItem, presentFlowerActivityItem, safeWebFetchURL } from './flowerActivityPresentation';
 
 function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   return {
@@ -169,6 +169,7 @@ describe('presentFlowerActivityItem', () => {
     { name: 'patch', renderer: 'patch' },
     { name: 'todos', renderer: 'todos' },
     { name: 'web_search', renderer: 'web_search' },
+    { name: 'web_fetch', renderer: 'web_fetch' },
     { name: 'question', renderer: 'question' },
     { name: 'completion', renderer: 'completion' },
     { name: 'subagents', renderer: undefined, toolName: 'subagents' },
@@ -678,6 +679,59 @@ describe('presentFlowerActivityItem', () => {
     });
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('results');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('sources');
+  });
+
+  it('renders web fetch metadata without copying fetched content', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'web_fetch',
+      renderer: 'web_fetch',
+      status: 'success',
+      payload: {
+        url: 'https://example.test/start',
+        final_url: 'https://docs.example.test/page',
+        status_code: 200,
+        content_type: 'text/html',
+        format: 'markdown',
+        bytes_read: 4096,
+        truncated: true,
+        content: 'must not reach activity UI',
+        body: 'legacy content must not reach activity UI',
+      },
+    }));
+
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Web fetch · docs.example.test' });
+    expect(presentation.detailBlocks).toEqual([{
+      kind: 'web_fetch',
+      fetch: {
+        url: 'https://example.test/start',
+        final_url: 'https://docs.example.test/page',
+        status_code: 200,
+        content_type: 'text/html',
+        format: 'markdown',
+        bytes_read: 4096,
+        truncated: true,
+      },
+    }]);
+    expect(JSON.stringify(presentation)).not.toContain('must not reach');
+  });
+
+  it('keeps web fetch failures in the shared error style and rejects unsafe links', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'web_fetch',
+      renderer: 'web_fetch',
+      status: 'error',
+      payload: {
+        url: 'https://example.test',
+        format: 'markdown',
+        error: { message: 'blocked target' },
+      },
+    }));
+
+    expect(presentation.detailBlocks[0]).toEqual({ kind: 'error', error: { message: 'blocked target' } });
+    expect(presentation.detailBlocks[1]).toEqual(expect.objectContaining({ kind: 'web_fetch' }));
+    expect(safeWebFetchURL('https://example.test/page')).toBe('https://example.test/page');
+    expect(safeWebFetchURL('https://user:secret@example.test/page')).toBe('');
+    expect(safeWebFetchURL('javascript:alert(1)')).toBe('');
   });
 
   it('renders question payloads as prompts and choices', () => {

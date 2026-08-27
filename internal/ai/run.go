@@ -84,9 +84,7 @@ type runOptions struct {
 	CanonicalReferenceAuthority *flowerCanonicalReferenceTargetAuthority
 	TargetToolExecutor          TargetToolExecutor
 
-	WebFetchHTTPClient *http.Client
-	WebFetchResolver   webFetchResolver
-	LiveMetrics        *flowerLiveMetrics
+	LiveMetrics *flowerLiveMetrics
 }
 
 type run struct {
@@ -207,9 +205,6 @@ type run struct {
 
 	skillManager    *skillManager
 	subagentRuntime subagentRuntime
-
-	webFetchHTTPClient *http.Client
-	webFetchResolver   webFetchResolver
 }
 
 var ErrRunExecutionClosed = errors.New("run execution is closed")
@@ -364,8 +359,6 @@ func newRun(opts runOptions) *run {
 			}
 			return opts.SubagentDepth <= 0
 		}(),
-		webFetchHTTPClient: opts.WebFetchHTTPClient,
-		webFetchResolver:   opts.WebFetchResolver,
 	}
 	if r.idleTimeout > 0 {
 		r.activityCh = make(chan struct{}, 1)
@@ -2129,20 +2122,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("invalid args")
 		}
 		return r.toolReadonlyGrep(ctx, p.Query, p.Paths, p.Glob, p.CaseSensitive, p.FixedStrings, p.MaxMatches, p.ContextLines)
-
-	case "web_fetch":
-		if !r.canExecuteReadonlyExclusiveTool(ctx) {
-			return nil, errors.New("readonly tool unavailable for current permission type")
-		}
-		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
-		}
-		var p webFetchArgs
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		return r.toolWebFetch(ctx, p)
 
 	case "file.read":
 		if !r.canExecuteReadonlyExclusiveTool(ctx) {

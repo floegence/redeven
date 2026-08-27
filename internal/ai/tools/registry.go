@@ -178,12 +178,12 @@ var builtinDefinitions = map[string]Definition{
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
-			presentation(ToolPresentationResearch, "readonly", "web_search", "research", "web_fetch", "args"),
+			presentation(ToolPresentationResearch, "readonly", "web_fetch", "research", "web_fetch", "error"),
 			operation("web_fetch"),
 			labelFields("url"),
-			callPayloadFields("url", "format", "timeout_seconds"),
-			resultPayloadFields("url", "final_url", "content_type", "body", "truncated"),
-			chipFields("operation", "content_type", "truncated"),
+			callPayloadFields("url", "format"),
+			resultPayloadFields("url", "final_url", "status_code", "content_type", "format", "bytes_read", "truncated"),
+			chipFields("operation", "status_code", "content_type", "format", "bytes_read", "truncated"),
 		),
 	},
 	"file.edit": {

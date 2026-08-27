@@ -3614,6 +3614,7 @@
       "toolActivityReadCommandOutput": "Ver saída do comando",
       "toolActivityWriteCommandInput": "Enviar entrada ao comando",
       "toolActivityTerminateCommand": "Encerrar execução do comando",
+      "toolActivityOpenWebPage": "Abrir página web no navegador",
       "handlerBlockedTitle": "O Flower precisa de atenção",
       "handlerStartFailedTitle": "O Flower não pôde iniciar",
       "handlerStillStarting": "O Flower ainda está iniciando.",

@@ -106,6 +106,7 @@ import { FLOWER_COMPACT_CONTEXT_COMMAND, parseFlowerSlashCommand } from './flowe
 import {
   pendingApprovalCommandForActivityItem,
   presentFlowerActivityItem,
+  safeWebFetchURL,
   type FlowerActivityDetailBlock,
   type FlowerActivityDiffFile,
   type FlowerActivityFileAction,
@@ -8031,6 +8032,63 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const formatWebFetchBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const webFetchBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'web_fetch' }>) => {
+    const fetch = block.fetch;
+    const openURL = safeWebFetchURL(fetch.final_url || fetch.url);
+    const redirected = fetch.url && fetch.final_url && fetch.url !== fetch.final_url;
+    return (
+      <section class="flower-activity-web-fetch-panel">
+        <div class="flower-activity-web-fetch-route">
+          <Show when={fetch.url}>
+            {(url) => <span class="flower-activity-web-fetch-url" title={url()}>{url()}</span>}
+          </Show>
+          <Show when={redirected}>
+            <span class="flower-activity-web-fetch-arrow" aria-hidden="true">→</span>
+            <span class="flower-activity-web-fetch-url" title={fetch.final_url}>{fetch.final_url}</span>
+          </Show>
+          <Show when={openURL}>
+            {(url) => (
+              <a
+                class="flower-activity-web-fetch-open"
+                href={url()}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={copy().chat.toolActivityOpenWebPage}
+                title={copy().chat.toolActivityOpenWebPage}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ExternalLink class="h-3.5 w-3.5" />
+              </a>
+            )}
+          </Show>
+        </div>
+        <div class="flower-activity-web-summary">
+          <Show when={fetch.status_code !== undefined}>
+            <span class="flower-activity-web-chip">HTTP {fetch.status_code}</span>
+          </Show>
+          <Show when={fetch.content_type}>
+            {(contentType) => <span class="flower-activity-web-chip">{contentType()}</span>}
+          </Show>
+          <Show when={fetch.format}>
+            {(format) => <span class="flower-activity-web-chip">{format()}</span>}
+          </Show>
+          <Show when={fetch.bytes_read !== undefined}>
+            <span class="flower-activity-web-chip">{formatWebFetchBytes(fetch.bytes_read ?? 0)}</span>
+          </Show>
+          <Show when={fetch.truncated}>
+            <span class="flower-activity-web-chip flower-activity-web-fetch-truncated">{copy().chat.truncatedLabel}</span>
+          </Show>
+        </div>
+      </section>
+    );
+  };
+
   const questionBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'question' }>) => (
     <section class="flower-activity-question-panel">
       <Show when={block.question.reason}>
@@ -8323,6 +8381,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       );
     }
     if (block.kind === 'web_search') return webSearchBlock(block);
+    if (block.kind === 'web_fetch') return webFetchBlock(block);
     if (block.kind === 'question') return questionBlock(block);
     if (block.kind === 'completion') return completionBlock(block);
     if (block.kind === 'file_read') return fileReadBlock(messageID, blockIndex, item.item_id, block);

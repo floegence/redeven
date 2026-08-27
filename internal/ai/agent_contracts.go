@@ -179,18 +179,6 @@ type ToolDef struct {
 	Priority         int                          `json:"priority,omitempty"`
 }
 
-type ToolHandler interface {
-	Validate(ctx context.Context, call ToolCall) error
-	Execute(ctx context.Context, call ToolCall) (ToolResult, error)
-	HandlePartial(ctx context.Context, partial PartialToolCall) error
-}
-
-type ToolRegistry interface {
-	Register(tool ToolDef, handler ToolHandler) error
-	Unregister(name string) error
-	Snapshot() []ToolDef
-}
-
 type PermissionToolFilter interface {
 	FilterTools(permissionType FlowerPermissionType, all []ToolDef) []ToolDef
 }

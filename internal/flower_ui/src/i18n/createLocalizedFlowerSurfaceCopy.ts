@@ -84,6 +84,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       toolActivityReadCommandOutput: t(i18n, k('chat.toolActivityReadCommandOutput')),
       toolActivityWriteCommandInput: t(i18n, k('chat.toolActivityWriteCommandInput')),
       toolActivityTerminateCommand: t(i18n, k('chat.toolActivityTerminateCommand')),
+      toolActivityOpenWebPage: t(i18n, k('chat.toolActivityOpenWebPage')),
       handlerBlockedTitle: t(i18n, k('chat.handlerBlockedTitle')),
       handlerStartFailedTitle: t(i18n, k('chat.handlerStartFailedTitle')),
       handlerStillStarting: t(i18n, k('chat.handlerStillStarting')),

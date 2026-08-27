@@ -76,6 +76,7 @@
       "toolActivityReadCommandOutput": "查看命令输出",
       "toolActivityWriteCommandInput": "向命令发送输入",
       "toolActivityTerminateCommand": "终止命令执行",
+      "toolActivityOpenWebPage": "在浏览器中打开网页",
       "handlerBlockedTitle": "Flower 需要处理",
       "handlerStartFailedTitle": "Flower 启动失败",
       "handlerStillStarting": "Flower 仍在启动。",

@@ -18,36 +18,29 @@ const (
 )
 
 var sourceRank = map[string]int{
+	"floret":   5,
 	"builtin":  4,
 	"mcp":      3,
 	"skill":    2,
 	"subagent": 1,
 }
 
-type registeredTool struct {
-	def     ToolDef
-	handler ToolHandler
-}
-
 type InMemoryToolRegistry struct {
 	mu    sync.RWMutex
-	tools map[string]registeredTool
+	tools map[string]ToolDef
 }
 
 func NewInMemoryToolRegistry() *InMemoryToolRegistry {
-	return &InMemoryToolRegistry{tools: make(map[string]registeredTool)}
+	return &InMemoryToolRegistry{tools: make(map[string]ToolDef)}
 }
 
-func (r *InMemoryToolRegistry) Register(tool ToolDef, handler ToolHandler) error {
+func (r *InMemoryToolRegistry) Register(tool ToolDef) error {
 	if r == nil {
 		return errors.New("nil tool registry")
 	}
 	name := strings.TrimSpace(tool.Name)
 	if name == "" {
 		return errors.New("tool name is required")
-	}
-	if handler == nil {
-		return fmt.Errorf("tool %s missing handler", name)
 	}
 	tool.Name = name
 	tool = normalizeToolPermissionMetadata(tool)
@@ -66,7 +59,7 @@ func (r *InMemoryToolRegistry) Register(tool ToolDef, handler ToolHandler) error
 	defer r.mu.Unlock()
 
 	if existing, ok := r.tools[name]; ok {
-		replace, err := shouldReplaceTool(existing.def, tool)
+		replace, err := shouldReplaceTool(existing, tool)
 		if err != nil {
 			return err
 		}
@@ -74,7 +67,7 @@ func (r *InMemoryToolRegistry) Register(tool ToolDef, handler ToolHandler) error
 			return nil
 		}
 	}
-	r.tools[name] = registeredTool{def: tool, handler: handler}
+	r.tools[name] = tool
 	return nil
 }
 
@@ -117,8 +110,8 @@ func (r *InMemoryToolRegistry) Snapshot() []ToolDef {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]ToolDef, 0, len(r.tools))
-	for _, item := range r.tools {
-		out = append(out, item.def)
+	for _, def := range r.tools {
+		out = append(out, def)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Priority == out[j].Priority {
