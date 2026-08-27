@@ -116,7 +116,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     document.body.replaceChildren();
   });
 
-  function mount(props: Readonly<{ canRead?: boolean | null; mobile?: boolean }> = {}) {
+  function mount(props: Readonly<{ canRead?: boolean | null; mobile?: boolean; processStartedAtMs?: number }> = {}) {
     return render(() => (
       <EnvironmentRuntimeStatusTooltip
         identity={{ source: 'local_runtime', displayName: 'Local Environment', displayID: 'env_local' }}
@@ -125,7 +125,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
         runtimeSnapshot={{
           serverTimeMs: Date.now(),
           version: 'v2.4.0',
-          processStartedAtMs: Date.now() - 3_600_000,
+          processStartedAtMs: props.processStartedAtMs ?? Date.now() - 3_600_000,
           runtimeService: {
             runtimeVersion: 'v2.4.1',
             remoteEnabled: false,
@@ -139,6 +139,22 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       />
     ), host);
   }
+
+  it('keeps the relative runtime age current while the tooltip stays open', async () => {
+    const initialNow = Date.now();
+    const dispose = mount({ processStartedAtMs: initialNow - 3_000 });
+    try {
+      const tooltip = await openTooltip(host);
+      expect(tooltip.querySelector('[data-runtime-started]')?.textContent).toContain('3 seconds ago');
+
+      vi.advanceTimersByTime(117_000);
+      await flushPromises();
+      expect(Date.now() - initialNow).toBe(117_180);
+      expect(tooltip.querySelector('[data-runtime-started]')?.textContent).toContain('2 minutes ago');
+    } finally {
+      dispose();
+    }
+  });
 
   it('warms the cached metrics before hover, reuses the existing runtime snapshot, and stops polling after leave', async () => {
     const dispose = mount();
@@ -158,6 +174,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       expect(runtimeHarness.monitor).toHaveBeenCalledTimes(1);
       expect(tooltip.querySelector('[data-environment-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('1');
       expect(tooltip.querySelector('[data-environment-sparkline="memory"]')?.getAttribute('data-sample-count')).toBe('1');
+      const initialCpuPath = tooltip.querySelector('[data-environment-sparkline="cpu"] .environment-runtime-sparkline-line')?.getAttribute('d');
 
       const trigger = host.querySelector<HTMLElement>('[data-environment-runtime-trigger]')!;
       trigger.click();
@@ -169,7 +186,9 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       expect(runtimeHarness.ping).not.toHaveBeenCalled();
       expect(runtimeHarness.monitor).toHaveBeenCalledTimes(2);
       expect(tooltip.querySelector('[data-environment-sparkline="cpu"]')?.getAttribute('data-sample-count')).toBe('2');
-      expect(tooltip.querySelector('[data-environment-sparkline="cpu"] .environment-runtime-sparkline-line')?.getAttribute('d')).toContain('L');
+      expect(tooltip.querySelector('[data-environment-sparkline="cpu"] .environment-runtime-sparkline-line')?.getAttribute('d')).not.toBe(initialCpuPath);
+      expect(tooltip.querySelector('[data-environment-cpu]')?.textContent).toBe('13.3%');
+      expect(tooltip.querySelector('[data-environment-memory]')?.textContent).toBe('9 GB');
 
       const anchor = host.querySelector<HTMLElement>('[data-redeven-tooltip-anchor]')!;
       trigger.dispatchEvent(new MouseEvent('mouseleave'));

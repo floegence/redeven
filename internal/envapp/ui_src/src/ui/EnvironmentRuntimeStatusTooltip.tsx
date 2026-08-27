@@ -136,6 +136,7 @@ function MetricSparkline(props: Readonly<{ values: readonly number[]; tone: 'cpu
       <path class="environment-runtime-sparkline-guide" d={`M0,${SPARKLINE_HEIGHT - 1} L${SPARKLINE_WIDTH},${SPARKLINE_HEIGHT - 1}`} />
       <Show
         when={geometry()}
+        keyed
         fallback={(
           <rect
             class="environment-runtime-sparkline-skeleton"
@@ -150,9 +151,9 @@ function MetricSparkline(props: Readonly<{ values: readonly number[]; tone: 'cpu
       >
         {(current) => (
           <>
-            <path class="environment-runtime-sparkline-area" d={current().areaPath} />
-            <path class="environment-runtime-sparkline-line" d={current().linePath} />
-            <circle class="environment-runtime-sparkline-point" cx={current().lastX} cy={current().lastY} r="1.6" />
+            <path class="environment-runtime-sparkline-area" d={current.areaPath} />
+            <path class="environment-runtime-sparkline-line" d={current.linePath} />
+            <circle class="environment-runtime-sparkline-point" cx={current.lastX} cy={current.lastY} r="1.6" />
           </>
         )}
       </Show>
@@ -253,8 +254,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
     if (!connected()) return '';
     const value = Number(props.runtimeSnapshot?.processStartedAtMs ?? Number.NaN);
     if (!Number.isFinite(value) || value <= 0) return '';
-    void clock();
-    return `${i18n.formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' })} · ${i18n.formatRelativeTime(value)}`;
+    return `${i18n.formatDateTime(value, { dateStyle: 'medium', timeStyle: 'short' })} · ${i18n.formatRelativeTime(value, clock())}`;
   };
 
   const cpuLabel = () => {
@@ -386,8 +386,9 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
             <span class="environment-runtime-tooltip-version" data-runtime-version>
               <Show
                 when={runtimeVersion()}
+                keyed
                 fallback={<span class="environment-runtime-value-skeleton environment-runtime-version-skeleton" data-loading={props.runtimeSnapshotLoading ? 'true' : 'false'} aria-hidden="true" />}
-              >{(version) => version()}</Show>
+              >{(version) => version}</Show>
             </span>
           </div>
         </div>
@@ -404,8 +405,9 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
             <strong data-environment-cpu>
               <Show
                 when={cpuLabel()}
+                keyed
                 fallback={<span class="environment-runtime-value-skeleton environment-runtime-metric-value-skeleton" data-loading={metricsLoading() ? 'true' : 'false'} aria-hidden="true" />}
-              >{(value) => value()}</Show>
+              >{(value) => value}</Show>
             </strong>
           </div>
           <MetricSparkline values={cpuHistory()} tone="cpu" loading={metricsLoading()} />
@@ -416,8 +418,9 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
             <strong data-environment-memory>
               <Show
                 when={memoryLabel()}
+                keyed
                 fallback={<span class="environment-runtime-value-skeleton environment-runtime-metric-value-skeleton" data-loading={metricsLoading() ? 'true' : 'false'} aria-hidden="true" />}
-              >{(value) => value()}</Show>
+              >{(value) => value}</Show>
             </strong>
           </div>
           <MetricSparkline values={memoryHistory()} tone="memory" loading={metricsLoading()} />
@@ -429,8 +432,9 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
         <span data-runtime-started>
           <Show
             when={startedAt()}
+            keyed
             fallback={<span class="environment-runtime-value-skeleton environment-runtime-started-skeleton" data-loading={props.runtimeSnapshotLoading ? 'true' : 'false'} aria-hidden="true" />}
-          >{(value) => value()}</Show>
+          >{(value) => value}</Show>
         </span>
       </div>
     </div>
