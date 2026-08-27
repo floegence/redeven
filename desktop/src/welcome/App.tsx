@@ -1559,7 +1559,7 @@ function localizedFactValue(i18n: DesktopI18n, label: string, value: string): st
   if (label === 'Bootstrap') {
     return localizedStringByValue(i18n, value, {
       'Desktop upload': 'environmentFacts.desktopUpload',
-      'Remote fallback': 'environmentFacts.remoteFallback',
+      'Remote download & install': 'environmentFacts.remoteDownloadInstall',
       Automatic: 'environmentFacts.automatic',
     });
   }
@@ -14256,7 +14256,7 @@ function ConnectionDialog(props: Readonly<{
       case 'desktop_upload':
         return sshReleaseBaseURLLabel();
       case 'remote_install':
-        return props.i18n.t('connectionDialog.remoteFallback');
+        return props.i18n.t('connectionDialog.remoteDownloadInstall');
       default:
         return props.i18n.t('connectionDialog.automatic');
     }
@@ -14606,7 +14606,7 @@ function ConnectionDialog(props: Readonly<{
                             options={[
                               { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
                               { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
-                              { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteFallback') },
+                              { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteDownloadInstall') },
                             ]}
                             size="sm"
                           />
@@ -14852,7 +14852,7 @@ function GatewaySetupDialog(props: Readonly<{
   const gatewayBootstrapSummaryLabel = createMemo(() => {
     switch (gatewayBootstrapStrategy()) {
       case 'desktop_upload': return gatewayReleaseBaseURLLabel();
-      case 'remote_install': return props.i18n.t('connectionDialog.remoteFallback');
+      case 'remote_install': return props.i18n.t('connectionDialog.remoteDownloadInstall');
       default: return props.i18n.t('connectionDialog.automatic');
     }
   });
@@ -15093,7 +15093,7 @@ function GatewaySetupDialog(props: Readonly<{
                               options={[
                                 { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
                                 { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
-                                { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteFallback') },
+                                { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteDownloadInstall') },
                               ]}
                               size="sm"
                             />

@@ -5910,7 +5910,7 @@
         "title": "Desktop Environment registration ownership",
         "type": "Desktop Contract"
       },
-      "body_length": 5859,
+      "body_length": 6282,
       "summary": "Each Environment card has one authoritative registration owner. Built-in Local Environment uses `local_environment`; SSH host and Local/SSH container targets use `runtime_target`; URL entries use `saved_environment`; Gateway-backed entries use their Gateway profile. Renderer display kinds never select storage, edit, pin, rename, or removal behavior. Desktop serializes registration mutations against the latest preferences state, broadcasts the committed snapshot immediately, and prevents late probes or Open tasks from recreating a removed registration.",
       "sections": [
         {
@@ -5938,8 +5938,8 @@
           "id": "operation-presentation",
           "title": "Operation presentation",
           "level": 1,
-          "body": "Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline. A lifecycle operation started directly owns and completes its Operation. A lifecycle recovery invoked by Open is a child stage: it updates Runtime progress without finishing or scheduling removal of the parent, then explicitly returns ownership to Open. The renderer creates and binds lifecycle disclosure to the exact `operation_key` and `started_at_unix_ms`. Lifecycle timeline selection never chooses an attempt by recency or combines retained and current operations for the same Environment.\n\nThe main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.\n\nEach action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. A non-scrolling parent must not reserve a scrollbar gutter, so the body scrollbar stays against the popup's inner edge instead of being inset. Parent and body scrollbars must never overlap.",
-          "char_count": 1562
+          "body": "Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline. A lifecycle operation started directly owns and completes its Operation. A lifecycle recovery invoked by Open is a child stage: it updates Runtime progress without finishing or scheduling removal of the parent, then explicitly returns ownership to Open. The renderer creates and binds lifecycle disclosure to the exact `operation_key` and `started_at_unix_ms`. Lifecycle timeline selection never chooses an attempt by recency or combines retained and current operations for the same Environment.\n\nThe main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.\n\nEach action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. A non-scrolling parent must not reserve a scrollbar gutter, so the body scrollbar stays against the popup's inner edge instead of being inset. Parent and body scrollbars must never overlap.\n\nSSH Runtime package-delivery choices name the user-visible data path rather than an internal strategy relationship. `desktop_upload` is presented as Desktop upload, while `remote_install` is presented as remote download and install; neither an explicit selector nor an Environment fact calls the latter a fallback. Automatic describes its ordered choice in plain language without changing the persisted strategy contract.",
+          "char_count": 1985
         }
       ],
       "evidence": [
@@ -10204,5 +10204,5 @@
       ]
     }
   ],
-  "source_sha256": "8c70d58166491ebd9ff88ffa767eed049bc68c7e6ad8da27fdcc2004611311d8"
+  "source_sha256": "b4389c338d72e8d2145256fbfb629f6e90550fac17f76b79fb5820534e3b057b"
 }

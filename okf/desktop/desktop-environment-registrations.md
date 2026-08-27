@@ -33,6 +33,8 @@ The main-process Launcher Operation Registry timestamps the active step. Repeate
 
 Each action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. A non-scrolling parent must not reserve a scrollbar gutter, so the body scrollbar stays against the popup's inner edge instead of being inset. Parent and body scrollbars must never overlap.
 
+SSH Runtime package-delivery choices name the user-visible data path rather than an internal strategy relationship. `desktop_upload` is presented as Desktop upload, while `remote_install` is presented as remote download and install; neither an explicit selector nor an Environment fact calls the latter a fallback. Automatic describes its ordered choice in plain language without changing the persisted strategy contract.
+
 # Evidence
 
 - `redeven:desktop/src/shared/desktopLauncherIPC.ts:1` - Explicit registration reference and progress-surface contracts.
