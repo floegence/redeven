@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/floegence/floret/v5/identity"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -14,7 +13,6 @@ import (
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
 	authorityThreadID         string
-	broadcastThreadState      func(string, string, string, string)
 	broadcastThreadSummary    func() error
 	lastVisibleTimelineAnchor func(context.Context) (FlowerTimelineAnchor, error)
 	resolveRunModel           func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
@@ -36,14 +34,6 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 	host, err := s.bindExactRunExecutionCapabilities(endpointID, threadID, threadID)
 	if err != nil {
 		return runHostCapabilities{}, err
-	}
-	host.broadcastThreadState = func(runID string, status string, errCode string, runErr string) {
-		if s.threadRuntime == nil {
-			return
-		}
-		if current, err := s.threadRuntime.View(context.Background(), identity.ThreadID(threadID)); err == nil {
-			s.publishFlowerRuntimeCurrent(endpointID, current)
-		}
 	}
 	host.broadcastThreadSummary = func() error {
 		return s.broadcastThreadSummary(endpointID, threadID)

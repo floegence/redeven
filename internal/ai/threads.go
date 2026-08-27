@@ -1312,6 +1312,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if err := db.DeleteThreadProductData(ctxOrBackground(ctx), endpointID, threadID); err != nil {
 		return err
 	}
+	s.forgetFlowerRuntimeThread(threadID)
 	if readStateCleaner != nil {
 		go func() {
 			if err := readStateCleaner.RetireFlowerThreadReadState(context.Background(), endpointID, threadID); err != nil && s.log != nil {

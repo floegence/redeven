@@ -11,6 +11,7 @@ import (
 
 	"github.com/floegence/floret/v5/identity"
 	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -23,6 +24,18 @@ const (
 )
 
 var ErrFlowerLiveTooManySubscribers = errors.New("too many Flower live observers")
+
+type flowerLiveSubscriberCloseReason string
+
+const (
+	flowerLiveSubscriberCloseClient           flowerLiveSubscriberCloseReason = "client_closed"
+	flowerLiveSubscriberCloseService          flowerLiveSubscriberCloseReason = "service_closed"
+	flowerLiveSubscriberCloseOversizedBatch   flowerLiveSubscriberCloseReason = "oversized_batch"
+	flowerLiveSubscriberCloseInitQueueLimit   flowerLiveSubscriberCloseReason = "initialization_queue_limit"
+	flowerLiveSubscriberCloseBatchQueueLimit  flowerLiveSubscriberCloseReason = "batch_queue_limit"
+	flowerLiveSubscriberCloseByteQueueLimit   flowerLiveSubscriberCloseReason = "byte_queue_limit"
+	flowerLiveSubscriberCloseGlobalQueueLimit flowerLiveSubscriberCloseReason = "global_queue_limit"
+)
 
 type FlowerLiveStreamKind string
 
@@ -205,7 +218,7 @@ func flowerLiveSummaryNeedsCurrentBaseline(summary ThreadView) bool {
 	}
 }
 
-func (s *Service) publishFlowerRuntimeCurrent(endpointID string, current flruntime.ThreadView) {
+func (s *Service) broadcastFlowerRuntimeCurrent(endpointID string, current flruntime.ThreadView) {
 	if s == nil || strings.TrimSpace(endpointID) == "" || current.ThreadID == "" {
 		return
 	}
@@ -333,13 +346,13 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 		return false
 	}
 	if len(batch.data) > flowerLiveSubscriberByteLimit {
-		closeFlowerLiveSubscriberLocked(service, subscriber)
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseOversizedBatch)
 		return false
 	}
 	if subscriber.initializing {
 		subscriber.buffered = append(subscriber.buffered, batch)
 		if len(subscriber.buffered) > flowerLiveSubscriberBatchLimit {
-			closeFlowerLiveSubscriberLocked(service, subscriber)
+			closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseInitQueueLimit)
 			return false
 		}
 		return true
@@ -352,10 +365,20 @@ func enqueueFlowerLiveSubscriberDirectLocked(service *Service, subscriber *flowe
 	if queueLimit <= 0 {
 		queueLimit = flowerLiveSubscriberBatchLimit
 	}
-	if len(batch.data) > flowerLiveSubscriberByteLimit || len(subscriber.queue) >= queueLimit ||
-		subscriber.queuedBytes+len(batch.data) > flowerLiveSubscriberByteLimit ||
-		service.flowerLiveQueuedBytes+len(batch.data) > flowerLiveGlobalQueuedByteLimit {
-		closeFlowerLiveSubscriberLocked(service, subscriber)
+	if len(batch.data) > flowerLiveSubscriberByteLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseOversizedBatch)
+		return false
+	}
+	if len(subscriber.queue) >= queueLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseBatchQueueLimit)
+		return false
+	}
+	if subscriber.queuedBytes+len(batch.data) > flowerLiveSubscriberByteLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseByteQueueLimit)
+		return false
+	}
+	if service.flowerLiveQueuedBytes+len(batch.data) > flowerLiveGlobalQueuedByteLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseGlobalQueueLimit)
 		return false
 	}
 	subscriber.queue <- batch
@@ -364,10 +387,12 @@ func enqueueFlowerLiveSubscriberDirectLocked(service *Service, subscriber *flowe
 	return true
 }
 
-func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber) {
+func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, reason flowerLiveSubscriberCloseReason) {
 	if subscriber == nil || subscriber.closed {
 		return
 	}
+	queuedBatches := len(subscriber.queue) + len(subscriber.buffered)
+	queuedBytes := subscriber.queuedBytes
 	subscriber.closed = true
 	subscriber.buffered = nil
 	for len(subscriber.queue) > 0 {
@@ -386,6 +411,17 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 		service.flowerLiveSubscribersByEndpoint[subscriber.endpointID]--
 	}
 	service.flowerLiveMetrics.subscriberClosed()
+	service.flowerLiveMetrics.subscriberDropped(reason)
+	if service.log != nil && reason != flowerLiveSubscriberCloseClient && reason != flowerLiveSubscriberCloseService {
+		service.log.Warn(
+			"ai: Flower live subscriber closed by stream limit",
+			"endpoint_id", logsafe.Text(subscriber.endpointID, 256),
+			"subscriber_id", subscriber.id,
+			"reason", reason,
+			"queued_batches", queuedBatches,
+			"queued_bytes", queuedBytes,
+		)
+	}
 	close(subscriber.queue)
 }
 
@@ -394,7 +430,7 @@ func closeFlowerLiveSubscribersLocked(service *Service) {
 		return
 	}
 	for _, subscriber := range service.flowerLiveSubscribers {
-		closeFlowerLiveSubscriberLocked(service, subscriber)
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseService)
 	}
 	service.flowerLiveSubscribers = make(map[uint64]*flowerLiveSubscriber)
 	service.flowerLiveSubscribersByEndpoint = make(map[string]int)
@@ -405,7 +441,7 @@ func closeFlowerLiveSubscription(service *Service, subscriber *flowerLiveSubscri
 		return
 	}
 	service.mu.Lock()
-	closeFlowerLiveSubscriberLocked(service, subscriber)
+	closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseClient)
 	service.mu.Unlock()
 }
 
@@ -438,7 +474,7 @@ func (s *FlowerLiveStreamSubscription) Close() {
 	s.closeOnce.Do(func() {
 		s.service.mu.Lock()
 		if !s.subscriber.closed {
-			closeFlowerLiveSubscriberLocked(s.service, s.subscriber)
+			closeFlowerLiveSubscriberLocked(s.service, s.subscriber, flowerLiveSubscriberCloseClient)
 		}
 		for batch := range s.subscriber.queue {
 			s.subscriber.queuedBytes -= len(batch.data)

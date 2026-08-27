@@ -215,6 +215,7 @@ func (service *Service) DeleteOrphanCanonicalRoot(ctx context.Context, req Delet
 	if err != nil && !errors.Is(err, flruntime.ErrThreadNotFound) && !errors.Is(err, flruntime.ErrThreadDeleted) {
 		return 0, err
 	}
+	service.forgetFlowerRuntimeThread(req.ThreadID)
 	return service.ReconcileCanonicalRootOwnership(ctx)
 }
 
