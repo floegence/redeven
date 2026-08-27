@@ -22,6 +22,14 @@ test('keeps the supported terminal carriers explicit in the exact-main pre-push 
   assert.match(carrierSource, /chromium\.launch\(\{\s*headless: options\.headless,/u);
   assert.match(carrierSource, /--enable-gpu/u);
   assert.match(carrierSource, /installReDevPluginRuntimeFixture\(tempDir\)/u);
+  assert.match(carrierSource, /'local-authority', 'device-ca', 'generate', '--state-root', stateRoot/u);
+  assert.match(carrierSource, /const localUIServerSPKIHash = await readTLSServerSPKIHash\(runtime\.startup\.local_ui_url\)/u);
+  assert.match(carrierSource, /--ignore-certificate-errors-spki-list=\$\{localUIServerSPKIHash\}/u);
+  assert.doesNotMatch(carrierSource, /ignoreHTTPSErrors/u);
+  assert.match(carrierSource, /getByRole\('button', \{ name: 'Terminal', exact: true \}\)/u);
+  assert.doesNotMatch(carrierSource, /activity-bar"\]\s*button'\)\.first\(\)/u);
+  assert.match(carrierSource, /getByRole\('button', \{ name: \/\^New session in \/u \}\)/u);
+  assert.doesNotMatch(carrierSource, /terminal-sidebar-add-session/u);
 
   assert.doesNotMatch(ciSource, /test:terminal-carrier/u);
 

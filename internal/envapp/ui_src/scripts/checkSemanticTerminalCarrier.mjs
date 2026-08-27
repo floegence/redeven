@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, X509Certificate } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { connect as connectTLS } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
@@ -52,6 +53,37 @@ function sha256(data) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readTLSServerSPKIHash(rawURL) {
+  const url = new URL(rawURL);
+  if (url.protocol !== 'https:') throw new Error('terminal carrier Local UI must use HTTPS');
+  return new Promise((resolve, reject) => {
+    const socket = connectTLS({
+      host: url.hostname,
+      port: Number(url.port || 443),
+      rejectUnauthorized: false,
+    });
+    const finish = (error, value) => {
+      socket.destroy();
+      if (error) reject(error);
+      else resolve(value);
+    };
+    socket.setTimeout(5_000, () => finish(new Error('read Local UI TLS certificate timed out')));
+    socket.once('error', (error) => finish(error));
+    socket.once('secureConnect', () => {
+      const certificate = socket.getPeerCertificate();
+      if (!certificate?.raw) {
+        finish(new Error('Local UI TLS peer certificate is missing'));
+        return;
+      }
+      const parsed = new X509Certificate(certificate.raw);
+      finish(null, createHash('sha256').update(parsed.publicKey.export({
+        type: 'spki',
+        format: 'der',
+      })).digest('base64'));
+    });
+  });
 }
 
 async function dispatchTerminalWheel(canvas, deltaY) {
@@ -175,6 +207,15 @@ async function startRuntime(tempDir) {
   const stateRoot = path.join(tempDir, 'state');
   const startupReportPath = path.join(tempDir, 'startup.json');
   await mkdir(homeDir, { recursive: true });
+  const authorityResult = await runCommand(binaryPath, [
+    'local-authority', 'device-ca', 'generate', '--state-root', stateRoot,
+  ], {
+    env: { ...process.env, HOME: homeDir, GOWORK: 'off' },
+  });
+  const authorityReport = JSON.parse(authorityResult.stdout);
+  if (authorityReport?.status !== 'generated' || typeof authorityReport.certificate_path !== 'string') {
+    throw new Error('terminal carrier did not generate an isolated Local UI device CA');
+  }
   const child = spawn(binaryPath, [
     'run',
     '--mode', 'local',
@@ -260,7 +301,9 @@ async function selectSurface(page, surface) {
   if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
   const panel = page.locator('[data-terminal-panel-variant="panel"]:visible');
   if (!(await panel.count())) {
-    const terminalActivity = page.locator('nav[data-floe-shell-slot="activity-bar"] button').first();
+    const terminalActivity = page
+      .locator('nav[data-floe-shell-slot="activity-bar"]')
+      .getByRole('button', { name: 'Terminal', exact: true });
     await terminalActivity.waitFor({ state: 'visible', timeout: 10_000 });
     await terminalActivity.click();
   }
@@ -542,7 +585,7 @@ async function activateSession(panel, sessionID) {
 async function createSession(page, panel) {
   const createButton = panel.getByRole('button', { name: 'Create session', exact: true });
   if (await createButton.count()) await createButton.click();
-  else await panel.locator('[data-testid="terminal-sidebar-add-session"]:visible').first().click();
+  else await panel.getByRole('button', { name: /^New session in /u }).first().click();
   const { runtime } = await terminalInput(panel, true);
   const sessionID = await runtime.getAttribute('data-terminal-runtime-session');
   if (!sessionID) throw new Error('created terminal has no session identity');
@@ -1076,9 +1119,15 @@ async function main(options) {
   try {
     runtime = await startRuntime(tempDir);
     const entryURL = new URL('_redeven_proxy/env/', runtime.startup.local_ui_url).toString();
+    const localUIServerSPKIHash = await readTLSServerSPKIHash(runtime.startup.local_ui_url);
     browser = await chromium.launch({
       headless: options.headless,
-      args: ['--enable-gpu', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
+      args: [
+        `--ignore-certificate-errors-spki-list=${localUIServerSPKIHash}`,
+        '--enable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+      ],
     });
     carrierProgress.runner.chromium = browser.version();
     const reusedContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
