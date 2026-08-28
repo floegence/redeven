@@ -2161,9 +2161,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("kind: 'cancel_launcher_operation'");
     expect(appSrc).not.toContain("kind: 'continue_launcher_operation'");
     expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
-    expect(appSrc).toContain("? 'progress.titleStoppingRuntimeUpdate'");
-    expect(appSrc).toContain("? 'progress.titleStoppingRuntimeRestart'");
-    expect(appSrc).toContain("showActionToast(i18n().t(cancellationTitleKey), 'info');");
+    expect(appSrc).toContain('const presentation = launcherOperationInterruptionPresentation(progress.action);');
+    expect(appSrc).toContain("showActionToast(i18n().t(presentation.cancelingTitleKey), 'info');");
+    expect(appSrc).toContain('launcherOperationInterruptionPresentation(progress.action).labelKey');
+    expect(appSrc).toContain('launcherOperationInterruptionPresentation(progress.action).detailKey');
+    expect(appSrc).not.toContain('progress.interrupt_label_key');
+    expect(appSrc).not.toContain('progress.interrupt_detail_key');
+    expect(appSrc).not.toContain('progress.interrupt_kind');
+    expect(appSrc).not.toContain("i18n.t('progress.stopStartup')");
     expect(appSrc).toMatch(/cancelOperation=\{\(progress\) => \{\s+void cancelLauncherOperation\(progress\);/u);
     expect(appSrc).toContain('cancelOperation: (progress: DesktopLauncherActionProgress) => void;');
     expect(appSrc).toContain("case 'cleanup_failed':\n      return i18n.t('progress.cleanupNeedsAttention');");

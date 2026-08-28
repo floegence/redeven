@@ -12,7 +12,30 @@ import {
 import type { DesktopLauncherActionProgress, DesktopLauncherOperationSnapshot } from './desktopLauncherIPC';
 import { runtimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 
+type LegacyInterruptionField =
+  | 'interrupt_label'
+  | 'interrupt_label_key'
+  | 'interrupt_detail'
+  | 'interrupt_detail_key'
+  | 'interrupt_kind';
+
+const actionProgressHasNoLegacyInterruptionFields: [
+  Extract<keyof DesktopLauncherActionProgress, LegacyInterruptionField>,
+] extends [never]
+  ? true
+  : false = true;
+const operationSnapshotHasNoLegacyInterruptionFields: [
+  Extract<keyof DesktopLauncherOperationSnapshot, LegacyInterruptionField>,
+] extends [never]
+  ? true
+  : false = true;
+
 describe('desktopLauncherIPC', () => {
+  it('keeps interruption presentation out of Launcher progress snapshots', () => {
+    expect(actionProgressHasNoLegacyInterruptionFields).toBe(true);
+    expect(operationSnapshotHasNoLegacyInterruptionFields).toBe(true);
+  });
+
   it('orders welcome snapshots by generation before revision', () => {
     const running = { snapshot_generation: 4, snapshot_revision: 10, value: 'running' };
     const failed = { snapshot_generation: 5, snapshot_revision: 9, value: 'failed' };
@@ -864,7 +887,6 @@ describe('desktopLauncherIPC', () => {
       detail: 'Desktop is opening the loopback Desktop bridge.',
       open_progress: openProgress,
       cancelable: true,
-      interrupt_label: 'Stop opening',
     };
 
     expect(progress.lifecycle_progress).toBeUndefined();

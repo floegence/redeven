@@ -12729,9 +12729,6 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
       targetLabel: openTarget.targetLabel,
     }),
     cancelable: true,
-    interrupt_label: 'Stop opening',
-    interrupt_detail: 'Desktop is stopping this open request before opening the local environment window.',
-    interrupt_kind: 'stop_opening',
     failure: undefined,
     next_actions: undefined,
   } as const;
@@ -13075,9 +13072,6 @@ async function openProviderRemoteEnvironmentRecord(
       location: 'provider_remote',
     }),
     cancelable: true,
-    interrupt_label: 'Stop opening',
-    interrupt_detail: 'Desktop is stopping this provider open request before opening the environment window.',
-    interrupt_kind: 'stop_opening',
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
 
@@ -13314,9 +13308,6 @@ async function openRemoteEnvironmentFromLauncher(
       location: 'external_local_ui',
     }),
     cancelable: true,
-    interrupt_label: 'Stop opening',
-    interrupt_detail: 'Desktop is stopping this open request before opening the Redeven URL window.',
-    interrupt_kind: 'stop_opening',
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
   const preferences = await loadDesktopPreferencesCached();
@@ -13909,9 +13900,6 @@ async function openRuntimePlacementBridgeFromLauncher(
         targetLabel: label,
       }),
       cancelable: true,
-      interrupt_label: 'Stop opening',
-      interrupt_detail: 'Desktop is stopping this open request and closing local connection resources already created.',
-      interrupt_kind: 'stop_opening',
       failure: undefined,
       next_actions: undefined,
     } as const;
@@ -15264,9 +15252,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       detail: 'Desktop is checking the registered direct Runtime target.',
       active_progress_surface: 'runtime_lifecycle',
       cancelable: requestedOperation !== 'stop',
-      interrupt_label: 'Stop operation',
-      interrupt_detail: 'Desktop is canceling this Runtime operation.',
-      interrupt_kind: 'generic',
       started_at_unix_ms: request.operation_started_at_unix_ms,
     });
     return executeDirectManagedEnvironmentLifecycle({
@@ -15609,7 +15594,7 @@ async function cancelLauncherOperationFromLauncher(
       },
     );
   }
-  const reason = operation.interrupt_detail || 'Desktop is stopping this background task.';
+  const reason = 'User canceled the active Launcher operation.';
   const coordinatorOwned =
     operation.action === 'open_local_environment' ||
     operation.action === 'open_provider_environment' ||
