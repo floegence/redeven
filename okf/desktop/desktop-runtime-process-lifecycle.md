@@ -7,7 +7,7 @@ timestamp: 2026-08-28T00:00:00Z
 ---
 # Summary
 
-Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, WSL-host, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLifecycleCoordinator` before any Launcher Operation is created, then execute through the saved direct channel. The first accepted operation remains the only owner until it reaches a terminal state; a conflicting request neither preempts nor queues work and returns the current operation identity. Gateway and Provider are access-only; Runtime does not expose a second external lifecycle protocol. A direct-channel or filesystem failure can end an operation, while old Runtime, Gateway, data, process, or renderer state cannot create another owner or fallback path.
+Redeven Desktop is the only product owner of managed Runtime lifecycle. Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall for Local, WSL-host, SSH-host, local-container, and SSH-container targets enter one process-local `RuntimeLifecycleCoordinator` before creating any Launcher Operation, then use the saved direct channel. The first accepted operation owns the target until terminal; a conflicting request neither preempts nor queues work and returns the current operation identity. Gateway and Provider are access-only; Runtime does not expose a second external lifecycle protocol. A direct-channel or filesystem failure can end an operation, while old Runtime, Gateway, data, process, or renderer state cannot create another owner or fallback path.
 
 # Contract
 
