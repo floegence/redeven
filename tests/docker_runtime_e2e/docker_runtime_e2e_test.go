@@ -97,6 +97,8 @@ type launchReport struct {
 	Message                  string                            `json:"message,omitempty"`
 	LocalUIURL               string                            `json:"local_ui_url,omitempty"`
 	LocalUIURLs              []string                          `json:"local_ui_urls,omitempty"`
+	LocalUIBridgeURL         string                            `json:"local_ui_bridge_url,omitempty"`
+	LocalUIBridgeToken       string                            `json:"local_ui_bridge_token,omitempty"`
 	RuntimeControl           *runtimeControlEndpoint           `json:"runtime_control,omitempty"`
 	PasswordRequired         bool                              `json:"password_required"`
 	Exposure                 runtimemanagement.LocalUIExposure `json:"exposure"`
@@ -155,9 +157,9 @@ type helperResult struct {
 			Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
 			URLs             []string                          `json:"urls"`
 		} `json:"access_status"`
-		EnvAppLoaded           bool `json:"env_app_loaded"`
-		WrongHostStatus        int  `json:"wrong_host_status"`
-		DirectArtifactRejected bool `json:"direct_artifact_rejected"`
+		EnvAppLoaded            bool `json:"env_app_loaded"`
+		WrongHostStatus         int  `json:"wrong_host_status"`
+		DirectArtifactAvailable bool `json:"direct_artifact_available"`
 	} `json:"network_check,omitempty"`
 }
 
@@ -193,11 +195,6 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 
 	f.startRuntime(ctx)
 	initial := f.waitReady(ctx)
-	initialPing := f.runHelper(ctx, initial.LocalUIURL, "ping", "")
-	if initialPing.Ping == nil || initialPing.Ping.ProcessStartedAtMs <= 0 {
-		t.Fatalf("unexpected initial ping result: %#v", initialPing)
-	}
-
 	hello := f.openBridgeAndAssertRequests(ctx, initial)
 	if hello.ProtocolVersion != desktopbridge.ProtocolVersion {
 		t.Fatalf("bridge protocol = %q, want %q", hello.ProtocolVersion, desktopbridge.ProtocolVersion)
@@ -211,22 +208,14 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 		t.Fatalf("second runtime attached PID = %d, want existing PID %d", conflict.PID, initial.PID)
 	}
 
-	afterSocketRecovery := f.recoverRuntimeAfterManagementSocketLoss(ctx, initialPing.Ping.ProcessStartedAtMs)
-
-	restart := f.runHelper(ctx, afterSocketRecovery.LocalUIURL, "restart", "")
-	if restart.Restart == nil || !restart.Restart.OK {
-		t.Fatalf("unexpected restart result: %#v", restart)
-	}
-	afterRestart := f.waitPingAfter(ctx, afterSocketRecovery.ProcessStartedAtMs)
+	afterSocketRecovery := f.recoverRuntimeAfterManagementSocketLoss(ctx, initial.PID)
+	f.openBridgeAndAssertRequests(ctx, afterSocketRecovery)
 
 	stoppedAfterStop := f.stopRuntime(ctx)
 	f.assertStoppedRuntimeStatus(stoppedAfterStop)
 	f.startRuntime(ctx)
-	afterManualStart := f.waitPingAfter(ctx, afterRestart.ProcessStartedAtMs)
-
-	if _, err := f.tryHelper(ctx, afterManualStart.LocalUIURL, "upgrade", targetVersion); err == nil || !strings.Contains(err.Error(), "upgrade not supported") {
-		t.Fatalf("Runtime sys.upgrade error = %v, want unsupported", err)
-	}
+	afterManualStart := f.waitReadyAfterPID(ctx, afterSocketRecovery.PID)
+	f.openBridgeAndAssertRequests(ctx, afterManualStart)
 }
 
 func TestDockerUbuntuTLSNetworkExposure(t *testing.T) {
@@ -270,16 +259,12 @@ func TestDockerUbuntuTLSNetworkExposure(t *testing.T) {
 	deviceCAPath := "/tmp/redeven-local-ui-device-ca.crt"
 	f.dockerExec(ctx, nil, containerRedeven, "local-authority", "device-ca", "generate", "--state-root", stateRoot)
 	f.dockerExec(ctx, nil, containerRedeven, "local-authority", "device-ca", "export", "--state-root", stateRoot, "--output", deviceCAPath)
-	f.dockerExec(ctx, nil, "sh", "-c", "cp "+deviceCAPath+" /usr/local/share/ca-certificates/redeven-local-ui.crt && update-ca-certificates")
 	hostDeviceCAPath := filepath.Join(f.tempRoot, "redeven-local-ui-device-ca.crt")
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.containerName+":"+deviceCAPath, hostDeviceCAPath); err != nil {
 		t.Fatalf("copy Local UI device CA from runtime container: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", hostDeviceCAPath, clientName+":"+deviceCAPath); err != nil {
 		t.Fatalf("copy Local UI device CA to client container: %v", err)
-	}
-	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", clientName, "sh", "-c", "cp "+deviceCAPath+" /usr/local/share/ca-certificates/redeven-local-ui.crt && update-ca-certificates"); err != nil {
-		t.Fatalf("trust Local UI device CA in client container: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil,
 		"docker", "exec", "-d", f.containerName,
@@ -309,6 +294,7 @@ func TestDockerUbuntuTLSNetworkExposure(t *testing.T) {
 		"--base-url", report.LocalUIURL,
 		"--action", "network-check",
 		"--password", networkTestPassword,
+		"--ca-file", deviceCAPath,
 	)
 	if err != nil {
 		f.dumpContainerDiagnostics(ctx)
@@ -321,8 +307,8 @@ func TestDockerUbuntuTLSNetworkExposure(t *testing.T) {
 	if result.NetworkCheck == nil || !result.NetworkCheck.EnvAppLoaded {
 		t.Fatalf("network helper did not load Env App: %#v", result)
 	}
-	if result.NetworkCheck.WrongHostStatus != http.StatusMisdirectedRequest || !result.NetworkCheck.DirectArtifactRejected {
-		t.Fatalf("network helper did not reject Host/direct-session attacks: %#v", result.NetworkCheck)
+	if result.NetworkCheck.WrongHostStatus != http.StatusMisdirectedRequest || !result.NetworkCheck.DirectArtifactAvailable {
+		t.Fatalf("network helper did not enforce Host validation or expose the unlocked TLS session: %#v", result.NetworkCheck)
 	}
 	if result.NetworkCheck.AccessStatus.Exposure.Scope != runtimemanagement.LocalUIExposureScopeNetwork ||
 		result.NetworkCheck.AccessStatus.Exposure.Transport != runtimemanagement.LocalUITransportTLS ||
@@ -333,13 +319,6 @@ func TestDockerUbuntuTLSNetworkExposure(t *testing.T) {
 	if !containsString(result.NetworkCheck.AccessStatus.URLs, report.LocalUIURL) {
 		t.Fatalf("access status URLs %v do not include startup URL %q", result.NetworkCheck.AccessStatus.URLs, report.LocalUIURL)
 	}
-}
-
-type pingSnapshot struct {
-	LocalUIURL            string
-	ProcessStartedAtMs    int64
-	Version               string
-	RuntimeServiceVersion string
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -889,7 +868,7 @@ func (f *fixture) stopAutomaticRuntimeInventoryInContainer(
 	}
 }
 
-func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {
+func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, previousPID int) launchReport {
 	f.t.Helper()
 	status := f.waitReady(ctx)
 	if strings.TrimSpace(status.RuntimeControlSocketPath) == "" {
@@ -914,7 +893,7 @@ func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, p
 	}
 	f.stopRuntime(ctx)
 	f.startRuntime(ctx)
-	return f.waitPingAfter(ctx, previousProcessStartedAtMs)
+	return f.waitReadyAfterPID(ctx, previousPID)
 }
 
 func (f *fixture) assertRuntimeNotStarted(ctx context.Context) launchReport {
@@ -938,7 +917,7 @@ func (f *fixture) assertStoppedRuntimeStatus(report launchReport) {
 	if report.Code != "not_running" {
 		f.t.Fatalf("stopped runtime code = %q, want not_running; report=%#v", report.Code, report)
 	}
-	if report.LocalUIURL != "" || report.RuntimeControl != nil {
+	if report.LocalUIURL != "" || report.LocalUIBridgeURL != "" || report.LocalUIBridgeToken != "" || report.RuntimeControl != nil {
 		f.t.Fatalf("stopped runtime exposed open surfaces: %#v", report)
 	}
 	if report.Diagnostics == nil {
@@ -961,7 +940,7 @@ func (f *fixture) waitReady(ctx context.Context) launchReport {
 		report, err := f.runtimeStatus(ctx)
 		if err == nil {
 			last = report
-			if report.Status == "ready" && report.LocalUIURL != "" && report.RuntimeControl != nil && report.PID > 0 {
+			if report.Status == "ready" && report.RuntimeControl != nil && report.PID > 0 {
 				f.assertReadyRuntimeStatus(report)
 				return report
 			}
@@ -978,48 +957,42 @@ func (f *fixture) waitReady(ctx context.Context) launchReport {
 
 func (f *fixture) assertReadyRuntimeStatus(report launchReport) {
 	f.t.Helper()
+	if report.LocalUIURL != "" || len(report.LocalUIURLs) != 0 {
+		f.t.Fatalf("desktop runtime exposed a public Local UI URL: %#v", report)
+	}
+	if report.LocalUIBridgeURL == "" || report.LocalUIBridgeToken == "" {
+		f.t.Fatalf("ready desktop bridge endpoint is incomplete: %#v", report)
+	}
 	if report.RuntimeControl == nil || report.RuntimeControl.Token == "" {
 		f.t.Fatalf("ready runtime-control endpoint is incomplete: %#v", report.RuntimeControl)
+	}
+	if report.Exposure.Scope != runtimemanagement.LocalUIExposureScopeLoopback || report.Exposure.Transport != runtimemanagement.LocalUITransportTLS {
+		f.t.Fatalf("ready desktop exposure is not loopback TLS: %#v", report.Exposure)
 	}
 	if report.RuntimeService == nil {
 		f.t.Fatalf("ready status did not include runtime_service: %#v", report)
 	}
 }
 
-func (f *fixture) waitPingAfter(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {
+func (f *fixture) waitReadyAfterPID(ctx context.Context, previousPID int) launchReport {
 	f.t.Helper()
 	deadline := time.Now().Add(35 * time.Second)
 	var lastErr error
 	for time.Now().Before(deadline) {
 		status, err := f.runtimeStatus(ctx)
-		if err == nil && status.Status == "ready" && status.LocalUIURL != "" {
-			result, helperErr := f.tryHelper(ctx, status.LocalUIURL, "ping", "")
-			if helperErr == nil && result.Ping != nil && result.Ping.ProcessStartedAtMs > previousProcessStartedAtMs {
-				return pingSnapshot{
-					LocalUIURL:            status.LocalUIURL,
-					ProcessStartedAtMs:    result.Ping.ProcessStartedAtMs,
-					Version:               result.Ping.Version,
-					RuntimeServiceVersion: runtimeServiceVersion(result.Ping.RuntimeService),
-				}
-			}
-			lastErr = helperErr
+		if err == nil && status.Status == "ready" && status.PID > 0 && status.PID != previousPID {
+			f.assertReadyRuntimeStatus(status)
+			return status
 		} else if err != nil {
 			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("runtime PID did not change from %d: %#v", previousPID, status)
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
 	f.dumpContainerDiagnostics(ctx)
-	f.t.Fatalf("runtime did not restart after process_started_at_ms=%d: %v", previousProcessStartedAtMs, lastErr)
-	return pingSnapshot{}
-}
-
-func runtimeServiceVersion(snapshot *struct {
-	RuntimeVersion string `json:"runtime_version,omitempty"`
-}) string {
-	if snapshot == nil {
-		return ""
-	}
-	return strings.TrimSpace(snapshot.RuntimeVersion)
+	f.t.Fatalf("runtime did not restart after PID %d: %v", previousPID, lastErr)
+	return launchReport{}
 }
 
 func (f *fixture) runtimeStatus(ctx context.Context) (launchReport, error) {
@@ -1100,10 +1073,6 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 		f.t.Fatalf("create bridge HTTP/2 client: %v", err)
 	}
 	defer func() {
-		response, _ := client.RoundTrip(bridgeHTTP2Request(http.MethodPost, desktopbridge.BridgeAuthority, desktopbridge.ShutdownRuntimePath, nil))
-		if response != nil {
-			_ = response.Body.Close()
-		}
 		_ = client.Close()
 		_ = bridgeConn.Close()
 		cancel()
@@ -1126,16 +1095,17 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 		f.t.Fatalf("unexpected runtime-control hello: %#v", hello.RuntimeControl)
 	}
 
-	localURL, err := url.Parse(status.LocalUIURL)
+	localURL, err := url.Parse(status.LocalUIBridgeURL)
 	if err != nil || localURL.Host == "" {
-		f.t.Fatalf("parse Local UI URL %q: %v", status.LocalUIURL, err)
+		f.t.Fatalf("parse Local UI bridge URL %q: %v", status.LocalUIBridgeURL, err)
 	}
-	localBody := bridgeHTTPRequest(f.t, client, desktopbridge.StreamSurfaceLocalUI, "GET /api/local/runtime/health HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
+	bridgeAuthorization := "X-Redeven-Desktop-Bridge-Token: " + hello.LocalUI.BridgeToken + "\r\n"
+	localBody := bridgeHTTPRequest(f.t, client, desktopbridge.StreamSurfaceLocalUI, "GET /api/local/runtime/health HTTP/1.1\r\nHost: "+localURL.Host+"\r\n"+bridgeAuthorization+"Connection: close\r\n\r\n")
 	assertContains(f.t, string(localBody), `"status":"online"`)
 	if bytes.Contains(localBody, []byte("desktop_managed")) || bytes.Contains(localBody, []byte("desktop_owner_id")) {
 		f.t.Fatalf("Local UI health exposed removed Desktop ownership fields: %s", string(localBody))
 	}
-	workspaceBody := bridgeHTTPRequest(f.t, client, desktopbridge.StreamSurfaceLocalUI, "GET /_redeven_proxy/env/ HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
+	workspaceBody := bridgeHTTPRequest(f.t, client, desktopbridge.StreamSurfaceLocalUI, "GET /_redeven_proxy/env/ HTTP/1.1\r\nHost: "+localURL.Host+"\r\n"+bridgeAuthorization+"Connection: close\r\n\r\n")
 	if !bytes.Contains(bytes.ToLower(workspaceBody), []byte("<html")) {
 		f.t.Fatalf("Workspace did not return HTML through Runtime Local UI: %s", string(workspaceBody))
 	}
