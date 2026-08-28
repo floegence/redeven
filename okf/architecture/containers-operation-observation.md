@@ -64,8 +64,9 @@ an operation lock.
 Changing engine, endpoint, resource view, or detail tool closes the stream that
 lost ownership, clears endpoint-specific detail, and fences prior responses.
 List metrics are opt-in and use one endpoint-wide batch statistics process per
-sample instead of one process per row. Detail statistics and logs retain only a
-bounded browser window. The Operations drawer
+sample instead of one process per row. Detail statistics select their container
+from the same endpoint-wide engine primitive rather than relying on inconsistent
+targeted CLI output. Statistics and logs retain only a bounded browser window. The Operations drawer
 persists within its native surface instance and always shows engine, endpoint,
 resource identity, state, and recovery guidance. Mobile and desktop expose the
 same state and cancellation authority.

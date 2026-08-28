@@ -117,26 +117,26 @@ describe('native container resources API', () => {
     );
   });
 
-  it('uses no-store reads for explicit raw inspect and resource files', async () => {
+  it('uses no-store reads for explicit raw inspect and Podman volume files', async () => {
     localApiMocks.fetchLocalApiJSON
       .mockResolvedValueOnce({ Config: { Image: 'alpine:3.22' } })
       .mockResolvedValueOnce({ path: '/etc', entries: [{ name: 'hosts', path: '/etc/hosts', kind: 'file' }], truncated: false });
     localApiMocks.fetchLocalApi.mockResolvedValue(new Response('127.0.0.1 localhost', { status: 200 }));
 
     await expect(getRawContainerInspect('container/one', 'docker', 'endpoint/primary')).resolves.toMatchObject({ Config: { Image: 'alpine:3.22' } });
-    await expect(listContainerResourceFiles('containers', 'container/one', '/etc', 'docker', 'endpoint/primary')).resolves.toMatchObject({ path: '/etc' });
-    await expect(readContainerResourceFile('containers', 'container/one', '/etc/hosts', 'docker', 'endpoint/primary')).resolves.toMatchObject({ size: 19 });
+    await expect(listContainerResourceFiles('volumes', 'container/one', '/etc', 'podman', 'endpoint/primary')).resolves.toMatchObject({ path: '/etc' });
+    await expect(readContainerResourceFile('volumes', 'container/one', '/etc/hosts', 'podman', 'endpoint/primary')).resolves.toMatchObject({ size: 19 });
 
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenNthCalledWith(1,
       '/_redeven_proxy/api/container-resources/containers/container%2Fone/inspect/raw?engine=docker&endpoint_id=endpoint%2Fprimary',
       { method: 'GET', cache: 'no-store' },
     );
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenNthCalledWith(2,
-      '/_redeven_proxy/api/container-resources/containers/container%2Fone/files?engine=docker&path=%2Fetc&endpoint_id=endpoint%2Fprimary',
+      '/_redeven_proxy/api/container-resources/volumes/container%2Fone/files?engine=podman&path=%2Fetc&endpoint_id=endpoint%2Fprimary',
       { method: 'GET', cache: 'no-store' },
     );
     expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(
-      '/_redeven_proxy/api/container-resources/containers/container%2Fone/files/content?engine=docker&path=%2Fetc%2Fhosts&endpoint_id=endpoint%2Fprimary',
+      '/_redeven_proxy/api/container-resources/volumes/container%2Fone/files/content?engine=podman&path=%2Fetc%2Fhosts&endpoint_id=endpoint%2Fprimary',
       { method: 'GET', cache: 'no-store' },
     );
   });

@@ -65,13 +65,6 @@ func (f *appserverContainerEngine) RawInspectContainer(context.Context, containe
 	return json.RawMessage(`[{"Id":"container-one","Config":{"Secret":"raw-secret-value"}}]`), nil
 }
 
-func (f *appserverContainerEngine) ContainerArchive(_ context.Context, _ containerengine.Engine, _ string, requested string) ([]byte, error) {
-	if strings.HasSuffix(requested, ".txt") {
-		return appserverResourceArchive("token.txt", []byte("file-secret-value")), nil
-	}
-	return appserverResourceArchive("root/", []byte(nil), "root/token.txt", []byte("file-secret-value")), nil
-}
-
 func (f *appserverContainerEngine) VolumeArchive(context.Context, containerengine.Engine, string) ([]byte, error) {
 	return appserverResourceArchive("token.txt", []byte("volume-value")), nil
 }
@@ -246,10 +239,9 @@ func TestContainerResourceReadExtensionsEnforceAdminAndDoNotLeakAuditPayloads(t 
 		t.Fatalf("read-only raw inspect status=%d body=%s", response.Code, response.Body.String())
 	}
 	response = serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/container-one/files?engine=docker&path=%2Fprivate", "")
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("read-only file list status=%d body=%s", response.Code, response.Body.String())
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("removed container file route status=%d body=%s", response.Code, response.Body.String())
 	}
-
 	auditStore, err := auditlog.New(auditlog.Options{StateDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -259,11 +251,6 @@ func TestContainerResourceReadExtensionsEnforceAdminAndDoNotLeakAuditPayloads(t 
 	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), "raw-secret-value") {
 		t.Fatalf("admin raw inspect status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
 	}
-	response = serveContainerAPI(t, admin, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/container-one/files/content?engine=docker&path=%2Fprivate%2Ftoken.txt", "")
-	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || response.Body.String() != "file-secret-value" {
-		t.Fatalf("admin file read status=%d headers=%v body=%q", response.Code, response.Header(), response.Body.String())
-	}
-
 	entries, err := auditStore.List(10)
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +259,7 @@ func TestContainerResourceReadExtensionsEnforceAdminAndDoNotLeakAuditPayloads(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{"raw-secret-value", "file-secret-value", "/private/token.txt"} {
+	for _, forbidden := range []string{"raw-secret-value"} {
 		if bytes.Contains(rawAudit, []byte(forbidden)) {
 			t.Fatalf("audit contains forbidden payload %q: %s", forbidden, rawAudit)
 		}

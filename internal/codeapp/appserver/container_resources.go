@@ -288,12 +288,6 @@ func (g *Server) handleContainerCollection(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: raw})
 		return true
 	}
-	if len(parts) == 3 && parts[2] == "files" {
-		return g.handleContainerFiles(w, r, engine, endpointID, identity, false)
-	}
-	if len(parts) == 4 && parts[2] == "files" && parts[3] == "content" {
-		return g.handleContainerFiles(w, r, engine, endpointID, identity, true)
-	}
 	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 	return true
 }
@@ -706,40 +700,6 @@ func (g *Server) streamContainerStatsCollection(w http.ResponseWriter, r *http.R
 		case <-ticker.C:
 		}
 	}
-}
-
-func (g *Server) handleContainerFiles(w http.ResponseWriter, r *http.Request, engine containerengine.Engine, endpointID containerengine.EndpointID, identity string, content bool) bool {
-	if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id", "path") {
-		writeContainerResourceError(w, containerresource.ErrInvalidRequest)
-		return true
-	}
-	meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
-	if !ok {
-		return true
-	}
-	req := containerengine.ContainerFileRequest{Engine: engine, EndpointID: endpointID, ContainerID: identity, Path: r.URL.Query().Get("path")}
-	detail := map[string]any{"engine": engine, "endpoint_id": endpointID, "resource_kind": "container", "resource_identity": truncateString(identity, 160), "content": content}
-	w.Header().Set("Cache-Control", "no-store")
-	if content {
-		item, err := g.containers.ReadContainerFile(r.Context(), req)
-		if err != nil {
-			g.appendAudit(meta, "container_resource_file_read", "failure", detail, errors.New(publicContainerResourceMessage(err)))
-			writeContainerResourceError(w, err)
-			return true
-		}
-		g.appendAudit(meta, "container_resource_file_read", "success", detail, nil)
-		writeContainerFileContent(w, item)
-		return true
-	}
-	listing, err := g.containers.ListContainerFiles(r.Context(), req)
-	if err != nil {
-		g.appendAudit(meta, "container_resource_file_list", "failure", detail, errors.New(publicContainerResourceMessage(err)))
-		writeContainerResourceError(w, err)
-		return true
-	}
-	g.appendAudit(meta, "container_resource_file_list", "success", detail, nil)
-	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: listing})
-	return true
 }
 
 func (g *Server) handleVolumeFiles(w http.ResponseWriter, r *http.Request, engine containerengine.Engine, endpointID containerengine.EndpointID, identity string, content bool) bool {

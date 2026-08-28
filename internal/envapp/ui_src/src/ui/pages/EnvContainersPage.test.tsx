@@ -69,14 +69,21 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Terminal: icon('terminal'),
 }));
 
+vi.mock('@floegence/floe-webapp-core/layout', () => ({
+  Panel: (props: any) => <section class={props.class} data-container-monitor-panel={props['data-container-monitor-panel']} data-container-cpu-panel={props['data-container-cpu-panel']} data-container-memory-panel={props['data-container-memory-panel']} data-container-network-panel={props['data-container-network-panel']}>{props.children}</section>,
+  PanelContent: (props: any) => <div class={props.class}>{props.children}</div>,
+}));
+
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => <button type="button" class={props.class} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
+  Dropdown: (props: any) => <div class="test-dropdown">{props.trigger}<div data-test-dropdown-menu>{props.items.map((item: any) => <button type="button" disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.label}</button>)}</div></div>,
   Input: (props: any) => <input class={props.class} value={props.value} placeholder={props.placeholder} aria-label={props['aria-label']} onInput={props.onInput} />,
   MonitoringChart: (props: any) => <div
     class={props.class}
     data-monitoring-chart
     data-series={props.series.map((series: { name: string }) => series.name).join(',')}
     data-series-colors={props.series.map((series: { color: string }) => series.color).join(',')}
+    data-point-count={props.series[0]?.data?.length ?? 0}
     data-y-max={props.yMax}
   />,
   Tag: (props: any) => <span>{props.children}</span>,
@@ -161,11 +168,11 @@ describe('native Containers page', () => {
       default: true,
       remote: false,
       available: true,
-      capabilities: { collection_stats: true, container_files: true, volume_files: false, exec: false },
+      capabilities: { collection_stats: true, volume_files: false, exec: false },
     }]);
     harness.endpointStatus.mockReset().mockResolvedValue({
       endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', available: true,
-      capabilities: { collection_stats: true, container_files: true, volume_files: false, exec: false },
+      capabilities: { collection_stats: true, volume_files: false, exec: false },
     });
     harness.listResources.mockReset().mockResolvedValue([{
       container_id: 'container-1',
@@ -279,12 +286,19 @@ describe('native Containers page', () => {
     await settle();
 
     expect(host.querySelector('[data-container-summary]')?.textContent).toContain('containers.filters.active');
+    expect(host.querySelector<HTMLButtonElement>('.container-filter-switch button[aria-pressed="true"]')?.textContent).toContain('containers.filters.active');
     expect(host.querySelector('.container-distribution__track')).toBeNull();
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.image');
     expect(host.querySelectorAll('thead th')).toHaveLength(5);
     expect(host.textContent).toContain('containers.states.running');
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(host.querySelector('tbody tr')?.textContent).not.toContain('container-1');
     expect(host.querySelector('.container-managed-label')?.textContent).toBe('');
+
+    const allFilter = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-filter-switch button'))
+      .find((button) => button.textContent?.includes('containers.filters.all'));
+    allFilter?.click();
+    await settle();
 
     const search = host.querySelector<HTMLInputElement>('input[aria-label="containers.search.label"]');
     expect(search).not.toBeNull();
@@ -307,7 +321,7 @@ describe('native Containers page', () => {
     await settle();
     expect(host.querySelector('[data-container-detail-page]')).not.toBeNull();
     expect(host.querySelector('.container-inspector')).toBeNull();
-    expect(host.querySelector('[data-container-detail-grid]')?.textContent).toContain('containers.inspector.networkMode');
+    await vi.waitFor(() => expect(host.querySelector('[data-container-detail-grid]')?.textContent).toContain('containers.inspector.networkMode'));
   });
 
   it('keeps a Web Services-managed resource read-only and links to its owner', async () => {
@@ -348,6 +362,15 @@ describe('native Containers page', () => {
   it('uses floe monitoring charts with truthful utilization scales and network rates', async () => {
     harness.subscribeStats.mockImplementation(async (_identity, _engine, _endpoint, observe) => {
       observe({
+        sampled_at_unix_ms: 1_700_000_000_000,
+        container_id: 'container-1',
+        cpu_percent: 96.1,
+        memory_bytes: 300_000_000,
+        memory_limit: 1_073_741_824,
+        network_rx_bytes: 1_024,
+        network_tx_bytes: 500,
+      });
+      observe({
         sampled_at_unix_ms: 1_700_000_001_000,
         container_id: 'container-1',
         cpu_percent: 104.8,
@@ -378,8 +401,72 @@ describe('native Containers page', () => {
     ]);
     expect(charts[0].dataset.yMax).toBe('200');
     expect(charts[1].dataset.yMax).toBe('50');
-    expect(host.querySelector('.container-monitor-panel--network')?.textContent).toContain('KB/s');
+    expect(charts.every((chart) => Number(chart.dataset.pointCount) >= 1)).toBe(true);
+    expect(host.querySelector('[data-container-network-panel]')?.textContent).toContain('KB/s');
     expect(host.querySelector('.container-sparkline')).toBeNull();
+  });
+
+  it('does not expose container file browsing when the product cannot render it reliably', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    (host.querySelector('tbody tr') as HTMLElement).click();
+    await settle();
+
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).map((tab) => tab.textContent);
+    expect(tabs).not.toContain('containers.detailTabs.files');
+    expect(harness.listFiles).not.toHaveBeenCalled();
+  });
+
+  it('uses the stable image ID to load sanitized layer history for dangling images', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [{
+      id: 'sha256:image-layered',
+      reference: 'ghcr.io/floegence/flowersec-runtime',
+      tags: [],
+      size_bytes: 20_880_000,
+      referenced_containers: 0,
+    }] : [{
+      container_id: 'container-1', name: 'Managed API', state: 'running', management: { managed: false },
+    }]));
+    harness.resourceDetails.mockResolvedValue({ id: 'sha256:image-layered', reference: 'ghcr.io/floegence/flowersec-runtime' });
+    harness.imageHistory.mockResolvedValue([
+      { id: 'sha256:top-layer', size_bytes: 10_400_000, created_at_unix_ms: 1_700_000_000_000 },
+      { size_bytes: 582_000, created_at_unix_ms: 0 },
+    ]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-nav button'))
+      .find((button) => button.textContent?.includes('containers.views.images'))
+      ?.click();
+    await settle();
+    (host.querySelector('tbody tr') as HTMLElement).click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.layers'))
+      ?.click();
+    await settle();
+
+    expect(harness.imageHistory).toHaveBeenCalledWith('sha256:image-layered', 'docker', 'docker-primary');
+    expect(host.querySelectorAll('.container-layer-row')).toHaveLength(2);
+  });
+
+  it.each([
+    ['ENGINE_UNAVAILABLE', 'containers.engineState.unavailableTitle'],
+    ['ENGINE_PERMISSION_DENIED', 'containers.engineState.permissionTitle'],
+  ])('renders a calm engine detection state for %s', async (code, title) => {
+    harness.listEndpoints.mockRejectedValue(Object.assign(new Error('engine failure'), { code }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    expect(host.querySelector('[data-container-engine-state]')?.textContent).toContain(title);
+    expect(host.querySelector('[data-container-resource-table]')).toBeNull();
   });
 
   it('uses resource-specific columns for images, volumes, Compose projects, and pods', async () => {
@@ -425,6 +512,8 @@ describe('native Containers page', () => {
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent === 'containers.filters.all')?.click();
+    await settle();
 
     const create = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('containers.create.container'));
     expect(create?.disabled).toBe(true);
@@ -440,6 +529,8 @@ describe('native Containers page', () => {
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent === 'containers.filters.all')?.click();
     await settle();
 
     host.querySelector<HTMLButtonElement>('button[aria-label="containers.actions.start"]')?.click();

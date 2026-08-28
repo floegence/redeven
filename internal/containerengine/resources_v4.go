@@ -24,7 +24,6 @@ type EngineEndpoint struct {
 
 type EndpointCapabilities struct {
 	CollectionStats bool `json:"collection_stats"`
-	ContainerFiles  bool `json:"container_files"`
 	VolumeFiles     bool `json:"volume_files"`
 	Exec            bool `json:"exec"`
 }
@@ -32,7 +31,6 @@ type EndpointCapabilities struct {
 func endpointCapabilities(engine Engine) EndpointCapabilities {
 	return EndpointCapabilities{
 		CollectionStats: engine == EngineDocker || engine == EnginePodman,
-		ContainerFiles:  engine == EngineDocker || engine == EnginePodman,
 		VolumeFiles:     engine == EnginePodman,
 		// Floeterm v0.18.0 does not expose per-session argv. Keep this false until
 		// Redeven can consume a published upstream session-command contract.
