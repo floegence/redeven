@@ -136,6 +136,20 @@ describe('flower context presentation', () => {
     expect(view.ariaValueText).toContain('Conversation cache hit rate: 45%');
   });
 
+  it('shows the first live cache hit rate without waiting for a refresh', () => {
+    const current = usage({
+      thread_usage: {
+        input_tokens: 44_896,
+        output_tokens: 4_365,
+        cache_read_tokens: 16_128,
+        cache_write_tokens: 0,
+      },
+    });
+
+    expect(threadCacheHitRatio(current)).toBeCloseTo(0.2642789722);
+    expect(formatThreadCacheHitPercent(current, 'Not available')).toBe('26%');
+  });
+
   it('formats zero, exact, near-perfect, and unavailable cache hit rates honestly', () => {
     expect(formatThreadCacheHitPercent(usage({
       thread_usage: { input_tokens: 100, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 },

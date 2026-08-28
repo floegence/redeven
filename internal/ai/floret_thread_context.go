@@ -35,15 +35,10 @@ func (s *Service) readCanonicalThreadContextProjection(ctx context.Context, curr
 func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
 	projection := flowerCanonicalContextProjection{}
 	if snapshot.Usage != nil {
-		usage, err := flowerContextUsageFromFloret(snapshot.Usage)
+		usage, err := flowerContextUsageFromFloret(snapshot.Usage, snapshot.UsageTotals)
 		if err != nil {
 			return flowerCanonicalContextProjection{}, fmt.Errorf("project Floret context usage: %w", err)
 		}
-		threadUsage, err := flowerThreadTokenUsageFromFloret(snapshot.UsageTotals)
-		if err != nil {
-			return flowerCanonicalContextProjection{}, fmt.Errorf("project Floret thread token usage: %w", err)
-		}
-		usage.ThreadUsage = threadUsage
 		projection.Usage = &usage
 	}
 	compactions := make([]FlowerContextCompaction, 0, len(snapshot.Compactions))
