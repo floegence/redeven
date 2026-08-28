@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 func (a *Adapter) Create(ctx context.Context, req ContainerCreateRequest) (ContainerActionResponse, error) {
@@ -90,17 +91,31 @@ func removalBlockingState(state ContainerState) bool {
 }
 
 func (a *Adapter) Stats(ctx context.Context, engine Engine, containerID string) (ContainerStats, error) {
-	ext, err := requireExtended(a.client)
-	if err != nil {
-		return ContainerStats{}, err
-	}
 	if err := validateEngine(engine); err != nil {
 		return ContainerStats{}, err
 	}
 	if err := validateContainerIdentifier(containerID); err != nil {
 		return ContainerStats{}, err
 	}
-	return ext.Stats(ctx, engine, strings.TrimSpace(containerID))
+	identity := strings.TrimSpace(containerID)
+	if client, ok := a.client.(statsCollectionClient); ok && !interfaceIsNil(client) {
+		samples, err := client.StatsMany(ctx, engine)
+		if err != nil {
+			return ContainerStats{}, err
+		}
+		for _, sample := range samples {
+			if sample.ContainerID == identity || strings.HasPrefix(sample.ContainerID, identity) || strings.HasPrefix(identity, sample.ContainerID) {
+				sample.SampledAtUnixMs = time.Now().UnixMilli()
+				return sample, nil
+			}
+		}
+		return ContainerStats{}, &ContainerNotFoundError{ContainerID: identity}
+	}
+	ext, err := requireExtended(a.client)
+	if err != nil {
+		return ContainerStats{}, err
+	}
+	return ext.Stats(ctx, engine, identity)
 }
 
 func (a *Adapter) Pause(ctx context.Context, req ContainerActionRequest) (ContainerActionResponse, error) {

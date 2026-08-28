@@ -30,7 +30,8 @@ import {
   Trash,
   X,
 } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, MonitoringChart, Tag } from '@floegence/floe-webapp-core/ui';
+import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
+import { Button, Dropdown, Input, MonitoringChart, Tag, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
@@ -41,7 +42,6 @@ import {
   getContainerImageHistory,
   getRawContainerInspect,
   getContainerResourceDetails,
-  getContainerStats,
   listContainerEndpoints,
   listContainerOperations,
   listContainerResources,
@@ -99,6 +99,7 @@ type ReviewState = Readonly<{
 }>;
 
 type ResourceFilter = 'all' | 'active' | 'inactive' | 'managed';
+type EndpointIssue = 'unavailable' | 'permission';
 type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'used-by' | 'containers';
 type ResourceSortKey = 'status' | 'name' | 'secondary' | 'created';
 type ResourceSortDirection = 'ascending' | 'descending';
@@ -174,7 +175,7 @@ function resourceIdentity(view: ContainerResourceView, item: ContainerResourceIn
     case 'containers': return compact((item as ContainerInventoryItem).container_id);
     case 'images': {
       const image = item as ImageInventoryItem;
-      return compact(image.reference || image.tags?.[0] || image.digest || image.id);
+      return compact(image.id || image.digest || image.tags?.[0] || image.reference);
     }
     case 'volumes': return compact((item as VolumeInventoryItem).name);
     case 'compose-projects': return compact((item as ComposeProjectInventoryItem).project_id);
@@ -209,7 +210,18 @@ function resourceActive(view: ContainerResourceView, item: ContainerResourceInve
   if (view === 'images' || view === 'volumes') {
     return Number(resourceStatus(view, item)) > 0;
   }
-  return ['running', 'restarting', 'up', 'healthy', 'partial'].includes(resourceStatus(view, item).toLowerCase());
+  return ['running', 'restarting', 'paused', 'up', 'healthy', 'partial'].includes(resourceStatus(view, item).toLowerCase());
+}
+
+function endpointIssueFromError(cause: unknown): EndpointIssue | null {
+  const code = compact((cause as { code?: unknown } | null)?.code);
+  if (code === 'ENGINE_PERMISSION_DENIED') return 'permission';
+  if (code === 'ENGINE_UNAVAILABLE') return 'unavailable';
+  return null;
+}
+
+function defaultResourceFilter(view: ContainerResourceView): ResourceFilter {
+  return view === 'containers' ? 'active' : 'all';
 }
 
 function resourceSearchText(view: ContainerResourceView, item: ContainerResourceInventoryItem): string {
@@ -363,10 +375,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [inventory, setInventory] = createSignal<ContainerResourceInventoryItem[]>([]);
   const [details, setDetails] = createSignal<unknown>(null);
   const [searchQuery, setSearchQuery] = createSignal('');
-  const [resourceFilter, setResourceFilter] = createSignal<ResourceFilter>('all');
+  const [resourceFilter, setResourceFilter] = createSignal<ResourceFilter>(defaultResourceFilter(restored.view));
   const [loading, setLoading] = createSignal(true);
   const [refreshing, setRefreshing] = createSignal(false);
   const [error, setError] = createSignal('');
+  const [endpointIssue, setEndpointIssue] = createSignal<EndpointIssue | null>(null);
   const [operations, setOperations] = createSignal<ContainerOperation[]>([]);
   const [operationsOpen, setOperationsOpen] = createSignal(false);
   const [creationMode, setCreationMode] = createSignal<CreationMode | null>(null);
@@ -392,7 +405,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [showCreatedColumn, setShowCreatedColumn] = createSignal(true);
   const [sortKey, setSortKey] = createSignal<ResourceSortKey>('name');
   const [sortDirection, setSortDirection] = createSignal<ResourceSortDirection>('ascending');
-  const [rowMenuIdentity, setRowMenuIdentity] = createSignal('');
   const [detailTab, setDetailTab] = createSignal<DetailTab>('overview');
   const [logQuery, setLogQuery] = createSignal('');
   const [logsPaused, setLogsPaused] = createSignal(false);
@@ -400,6 +412,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [rawInspect, setRawInspect] = createSignal<unknown>(null);
   const [rawInspectLoading, setRawInspectLoading] = createSignal(false);
   const [imageHistory, setImageHistory] = createSignal<ContainerImageHistoryEntry[]>([]);
+  const [imageHistoryLoading, setImageHistoryLoading] = createSignal(false);
+  const [imageHistoryError, setImageHistoryError] = createSignal('');
+  const [statsLoading, setStatsLoading] = createSignal(false);
+  const [statsError, setStatsError] = createSignal('');
   const [filePath, setFilePath] = createSignal('/');
   const [fileEntries, setFileEntries] = createSignal<ContainerResourceFileEntry[]>([]);
   const [filesLoading, setFilesLoading] = createSignal(false);
@@ -421,7 +437,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       setView(next.view);
       setSelectedIdentity(next.selectedIdentity);
       setSearchQuery('');
-      setResourceFilter('all');
+      setResourceFilter(defaultResourceFilter(next.view));
       setDetailTab('overview');
     });
     onCleanup(unsubscribe);
@@ -510,6 +526,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     const sequence = ++endpointLoadSequence;
     setLoading(true);
     setError('');
+    setEndpointIssue(null);
     try {
       const nextEndpoints = await listContainerEndpoints(engine());
       if (sequence !== endpointLoadSequence) return;
@@ -518,16 +535,21 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       const nextEndpoint = current ?? nextEndpoints.find((item) => item.default) ?? nextEndpoints[0];
       setEndpointID(nextEndpoint?.endpoint_id ?? '');
       setEndpointStatus(nextEndpoint ?? null);
-      if (nextEndpoint?.endpoint_id) {
-        getContainerEndpointStatus(engine(), nextEndpoint.endpoint_id)
-          .then((status) => sequence === endpointLoadSequence && setEndpointStatus(status))
-          .catch(() => undefined);
+      if (!nextEndpoint?.endpoint_id) {
+        setEndpointIssue('unavailable');
+        return;
       }
+      const status = await getContainerEndpointStatus(engine(), nextEndpoint.endpoint_id);
+      if (sequence !== endpointLoadSequence) return;
+      setEndpointStatus(status);
+      if (!status.available) setEndpointIssue('unavailable');
     } catch (cause) {
       if (sequence !== endpointLoadSequence) return;
       setEndpoints([]);
       setEndpointStatus(null);
-      setError(cause instanceof Error ? cause.message : String(cause));
+      const issue = endpointIssueFromError(cause);
+      setEndpointIssue(issue);
+      if (!issue) setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (sequence === endpointLoadSequence) setLoading(false);
     }
@@ -545,6 +567,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     try {
       const items = await listContainerResources(view(), engine(), endpointID());
       if (sequence !== inventoryLoadSequence) return;
+      setEndpointIssue(null);
       setInventory(items);
       const currentIdentity = selectedIdentity();
       if (currentIdentity && !items.some((item) => resourceIdentity(view(), item) === currentIdentity)) {
@@ -556,7 +579,12 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
     } catch (cause) {
       if (sequence !== inventoryLoadSequence) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
+      const issue = endpointIssueFromError(cause);
+      if (issue && inventory().length === 0) {
+        setEndpointIssue(issue);
+      } else {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      }
     } finally {
       if (sequence === inventoryLoadSequence) {
         setLoading(false);
@@ -565,14 +593,23 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     }
   };
 
+  const retryContainerEngine = async () => {
+    await loadEndpointInventory();
+    if (endpointID()) await loadInventory();
+  };
+
   createEffect(() => {
     engine();
     void loadEndpointInventory().then(loadOperations);
   });
 
   createEffect(() => {
-    endpointID();
+    const currentEndpointID = endpointID();
     view();
+    if (!currentEndpointID) {
+      setInventory([]);
+      return;
+    }
     void loadInventory();
   });
 
@@ -610,23 +647,22 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     if (detailTab() !== 'stats' || view() !== 'containers' || !selectedIdentity()) return;
     const controller = new AbortController();
     let active = true;
-    let receivedStreamSample = false;
+    setStats(null);
     setStatsHistory([]);
-    void getContainerStats(selectedIdentity(), engine(), endpointID()).then((sample) => {
-      if (!active) return;
-      const normalized = normalizedStatsSample(sample);
-      if (!receivedStreamSample) setStats(normalized);
-      setStatsHistory((items) => mergeStatsSample(items, normalized));
-    }).catch(() => {
-      if (active && !receivedStreamSample) setStats(null);
-    });
+    setStatsLoading(true);
+    setStatsError('');
     void subscribeContainerStats(selectedIdentity(), engine(), endpointID(), (sample) => {
       if (!active) return;
-      receivedStreamSample = true;
       const normalized = normalizedStatsSample(sample);
       setStats(normalized);
       setStatsHistory((items) => mergeStatsSample(items, normalized));
-    }, controller.signal).catch(() => undefined);
+      setStatsLoading(false);
+      setStatsError('');
+    }, controller.signal).catch((cause) => {
+      if (!active || controller.signal.aborted) return;
+      setStatsLoading(false);
+      setStatsError(cause instanceof Error ? cause.message : String(cause));
+    });
     onCleanup(() => {
       active = false;
       controller.abort();
@@ -645,12 +681,24 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   createEffect(() => {
     if (detailTab() !== 'layers' || view() !== 'images' || !selectedIdentity()) return;
-    void getContainerImageHistory(selectedIdentity(), engine(), endpointID()).then(setImageHistory).catch(() => setImageHistory([]));
+    let active = true;
+    setImageHistory([]);
+    setImageHistoryLoading(true);
+    setImageHistoryError('');
+    void getContainerImageHistory(selectedIdentity(), engine(), endpointID())
+      .then((history) => active && setImageHistory(history))
+      .catch((cause) => {
+        if (!active) return;
+        setImageHistory([]);
+        setImageHistoryError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => active && setImageHistoryLoading(false));
+    onCleanup(() => { active = false; });
   });
 
   createEffect(() => {
     const currentView = view();
-    if (detailTab() !== 'files' || (currentView !== 'containers' && currentView !== 'volumes') || !selectedIdentity()) return;
+    if (detailTab() !== 'files' || currentView !== 'volumes' || !selectedIdentity()) return;
     if (!canAdmin()) return;
     if (currentView === 'volumes' && !endpointStatus()?.capabilities?.volume_files) return;
     setFilesLoading(true);
@@ -669,7 +717,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setSelectedIdentity('');
     setDetails(null);
     setSearchQuery('');
-    setResourceFilter('all');
+    setResourceFilter(defaultResourceFilter(view()));
     setChartsOpen(false);
     if (next === 'podman' && view() === 'compose-projects') setView('pods');
     if (next === 'docker' && view() === 'pods') setView('compose-projects');
@@ -683,6 +731,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setStats(null);
     setRawInspect(null);
     setImageHistory([]);
+    setImageHistoryError('');
     setFilePath('/');
     setFileEntries([]);
   };
@@ -915,7 +964,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const runRowAction = (event: MouseEvent, item: ContainerResourceInventoryItem, method: string) => {
     event.stopPropagation();
-    setRowMenuIdentity('');
+    const request = actionRequest(method, item);
+    if (request) beginMutation(request);
+  };
+
+  const runRowMenuAction = (item: ContainerResourceInventoryItem, method: string) => {
     const request = actionRequest(method, item);
     if (request) beginMutation(request);
   };
@@ -1041,7 +1094,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       return;
     }
     const resourceView = view();
-    if ((resourceView !== 'containers' && resourceView !== 'volumes') || !selectedIdentity()) return;
+    if (resourceView !== 'volumes' || !selectedIdentity()) return;
     try {
       const blob = await readContainerResourceFile(resourceView, selectedIdentity(), entry.path, engine(), endpointID());
       if (download) {
@@ -1188,8 +1241,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   };
 
   const renderRowOverflow = (item: ContainerResourceInventoryItem) => {
-    const identity = resourceIdentity(view(), item);
-    const open = () => rowMenuIdentity() === identity;
     const operationDisabled = (method: string) => {
       if (method === 'containers.kill') return !canExecute() || !canAdmin();
       if (method === 'containers.remove' || method === 'images.remove' || method === 'volumes.remove' || method === 'compose.projects.down' || method === 'pods.remove') {
@@ -1197,26 +1248,39 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
       return !canExecute();
     };
-    const menuAction = (method: string, destructive = false) => (
-      <button type="button" class={destructive ? 'container-destructive-action' : undefined} disabled={operationDisabled(method)} onClick={(event) => runRowAction(event, item, method)}>
-        {operationLabel(method)}
-      </button>
-    );
+    const menuItem = (method: string, destructive = false): DropdownItem => ({
+      id: method,
+      label: operationLabel(method),
+      disabled: operationDisabled(method),
+      ...(destructive ? {
+        icon: () => <Trash class="h-3.5 w-3.5 text-destructive" />,
+      } : {}),
+    });
+    const items = (): DropdownItem[] => {
+      if (view() === 'containers') return [
+        menuItem('containers.restart'),
+        menuItem((item as ContainerInventoryItem).state === 'paused' ? 'containers.unpause' : 'containers.pause'),
+        menuItem('containers.kill', true),
+        menuItem('containers.remove', true),
+      ];
+      if (view() === 'images') return [menuItem('images.remove', true)];
+      if (view() === 'volumes') return [menuItem('volumes.remove', true)];
+      if (view() === 'compose-projects') return [menuItem('compose.projects.restart'), menuItem('compose.projects.down', true)];
+      return [menuItem('pods.restart'), menuItem('pods.remove', true)];
+    };
     return (
-      <div class="container-row-menu">
-        <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.actions')} aria-expanded={open()} onClick={(event) => { event.stopPropagation(); setRowMenuIdentity(open() ? '' : identity); }}><MoreVertical class="h-4 w-4" /></Button>
-        <Show when={open()}><div class="container-row-menu__content" role="menu">
-          <Show when={view() === 'containers'}>
-            {menuAction('containers.restart')}
-            <Show when={(item as ContainerInventoryItem).state === 'paused'} fallback={menuAction('containers.pause')}>{menuAction('containers.unpause')}</Show>
-            {menuAction('containers.kill', true)}
-            {menuAction('containers.remove', true)}
-          </Show>
-          <Show when={view() === 'images'}>{menuAction('images.remove', true)}</Show>
-          <Show when={view() === 'volumes'}>{menuAction('volumes.remove', true)}</Show>
-          <Show when={view() === 'compose-projects'}>{menuAction('compose.projects.restart')}{menuAction('compose.projects.down', true)}</Show>
-          <Show when={view() === 'pods'}>{menuAction('pods.restart')}{menuAction('pods.remove', true)}</Show>
-        </div></Show>
+      <div class="container-row-menu" onClick={(event) => event.stopPropagation()}>
+        <Dropdown
+          align="end"
+          items={items()}
+          onSelect={(method) => runRowMenuAction(item, method)}
+          triggerAriaLabel={`${resourceName(view(), item)}: ${i18n.t('containers.detail.actions')}`}
+          trigger={(
+            <button type="button" class="container-icon-action inline-flex items-center justify-center" title={i18n.t('containers.detail.actions')}>
+              <MoreVertical class="h-4 w-4" />
+            </button>
+          )}
+        />
       </div>
     );
   };
@@ -1231,7 +1295,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     if (view() === 'containers') {
       const tabs: DetailTab[] = ['overview', 'logs', 'inspect', 'mounts'];
       if (endpointStatus()?.capabilities?.exec) tabs.push('exec');
-      if (endpointStatus()?.capabilities?.container_files) tabs.push('files');
       tabs.push('stats');
       return tabs;
     }
@@ -1310,16 +1373,20 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       </div>
     );
     if (tab === 'stats') {
-      return <ContainerStatsDashboard
+      return <Show when={!statsError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.stats.refreshUnavailable')}</strong></div>}>
+        <Show when={!statsLoading() || stats()} fallback={<div class="container-empty-inline"><Activity class="h-5 w-5" /><strong>{i18n.t('containers.stats.waiting')}</strong></div>}>
+        <ContainerStatsDashboard
         history={statsHistory()}
         latest={stats()}
         cpuLabel={i18n.t('containers.stats.cpu')}
         memoryLabel={i18n.t('containers.stats.memory')}
         networkInLabel={i18n.t('containers.stats.networkIn')}
         networkOutLabel={i18n.t('containers.stats.networkOut')}
-      />;
+        />
+        </Show>
+      </Show>;
     }
-    if (tab === 'layers') return <div class="container-layer-list"><Show when={imageHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}><For each={imageHistory()}>{(layer, index) => <div class="container-layer-row"><span>{index() + 1}</span><span class="font-mono">{layer.id?.slice(0, 18) || i18n.t('containers.detail.layer')}</span><span>{formatBytes(layer.size_bytes)}</span><span>{formatDate(layer.created_at_unix_ms)}</span></div>}</For></Show></div>;
+    if (tab === 'layers') return <div class="container-layer-list"><Show when={!imageHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}><Show when={!imageHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.layersUnavailable')}</strong></div>}><Show when={imageHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyLayers')}</div>}><For each={imageHistory()}>{(layer, index) => <div class="container-layer-row"><span>{index() + 1}</span><span class="font-mono">{layer.id?.slice(0, 18) || `${i18n.t('containers.detail.layer')} ${index() + 1}`}</span><span>{formatBytes(layer.size_bytes)}</span><span>{formatDate(layer.created_at_unix_ms)}</span></div>}</For></Show></Show></Show></div>;
     if (tab === 'used-by' || tab === 'containers') return renderReferences();
     return <div class="container-empty-inline"><Terminal class="h-5 w-5" />{i18n.t('containers.detail.execUnavailable')}</div>;
   };
@@ -1338,7 +1405,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 <button type="button" role="radio" aria-checked={engine() === value} class="container-touch-target" onClick={() => setCurrentEngine(value)}>{value}</button>
               )}</For>
             </div>
-            <div class="container-endpoint-control min-w-0">
+            <Show when={endpointID()}><div class="container-endpoint-control min-w-0">
               <span class="container-endpoint-status" data-available={endpointStatus()?.available ? 'true' : 'false'} aria-hidden="true" />
               <label class="sr-only" for={`container-endpoint-${props.stateScope ?? 'activity'}`}>{i18n.t('containers.endpoint')}</label>
               <select
@@ -1351,8 +1418,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 <For each={endpoints()}>{(endpoint) => <option value={endpoint.endpoint_id}>{endpoint.display_name}</option>}</For>
               </select>
               <span class="sr-only" role="status">{endpointStatus()?.available ? i18n.t('containers.status.connected') : i18n.t('containers.status.unavailable')}</span>
-            </div>
-            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void loadInventory(true)} disabled={refreshing()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${refreshing() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
+            </div></Show>
+            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void (endpointIssue() ? retryContainerEngine() : loadInventory(true))} disabled={refreshing() || loading()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${refreshing() || loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
             <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setOperationsOpen(true)} aria-label={i18n.t('containers.operations.title')} title={i18n.t('containers.operations.title')}>
               <Activity class="h-4 w-4" aria-hidden="true" />
               <Show when={activeOperationCount() > 0}><span class="container-operation-count">{activeOperationCount()}</span></Show>
@@ -1360,17 +1427,26 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           </div>
         </div>
 
-        <nav class="container-resource-nav flex gap-1 overflow-x-auto" aria-label={i18n.t('containers.resourceNavigation')}>
+        <Show when={!endpointIssue() && endpointID()}><nav class="container-resource-nav flex gap-1 overflow-x-auto" aria-label={i18n.t('containers.resourceNavigation')}>
           <For each={availableViews()}>{(item) => (
-            <button type="button" class="container-touch-target" aria-current={view() === item ? 'page' : undefined} onClick={() => { setView(item); setSelectedIdentity(''); setSearchQuery(''); setResourceFilter('all'); setDetailTab('overview'); }}>
+            <button type="button" class="container-touch-target" aria-current={view() === item ? 'page' : undefined} onClick={() => { setView(item); setSelectedIdentity(''); setSearchQuery(''); setResourceFilter(defaultResourceFilter(item)); setDetailTab('overview'); }}>
               <ViewIcon view={item} class="h-4 w-4" />
               <span>{viewLabel(item)}</span>
             </button>
           )}</For>
-        </nav>
+        </nav></Show>
       </header>
 
       <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy={loading()}>
+        <Show when={!endpointIssue()} fallback={
+          <div class="container-engine-state" data-container-engine-state={endpointIssue()} role="status">
+            <div class="container-empty-state__mark"><Show when={endpointIssue() === 'permission'} fallback={<Layers class="h-6 w-6" />}><AlertTriangle class="h-6 w-6" /></Show></div>
+            <span>{engine()}</span>
+            <strong>{i18n.t(endpointIssue() === 'permission' ? 'containers.engineState.permissionTitle' : 'containers.engineState.unavailableTitle', { engine: engine() })}</strong>
+            <p>{i18n.t(endpointIssue() === 'permission' ? 'containers.engineState.permissionDescription' : 'containers.engineState.unavailableDescription', { engine: engine() })}</p>
+            <Button size="sm" variant="outline" onClick={() => void retryContainerEngine()} disabled={loading()}><Refresh class={`mr-1.5 h-3.5 w-3.5 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} />{i18n.t('containers.engineState.retry')}</Button>
+          </div>
+        }>
         <Show when={selected()} keyed fallback={
           <div class="container-list-page">
             <section class="container-resource-toolbar" data-container-summary>
@@ -1417,6 +1493,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             </div>
           </div>
         }>{(item) => <article class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2>{resourceName(view(), item)}</h2><small>{resourceIdentity(view(), item).slice(0, 24)}</small></div><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><nav class="container-detail-tabs" role="tablist"><For each={detailTabs()}>{(tab) => <button type="button" role="tab" aria-selected={detailTab() === tab} onClick={() => setDetailTab(tab)}>{detailTabLabel(tab)}</button>}</For></nav><div class="container-detail-body">{renderDetailContent()}</div></article>}</Show>
+        </Show>
       </main>
 
       <EnvAppDrawer open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} description={i18n.t('containers.operations.description')} bodyClass="min-h-0">
@@ -1478,22 +1555,17 @@ function ContainerStatsDashboard(props: {
 
   return (
     <div class="container-stats-dashboard" data-container-stats-dashboard>
-      <section class="container-monitor-panel" data-tone="cpu">
+      <div class="container-monitor-panel" data-container-monitor-panel data-container-cpu-panel><Panel class="overflow-hidden">
+        <PanelContent class="space-y-2 p-3">
         <div class="container-monitor-heading">
-          <span class="container-monitor-symbol" aria-hidden="true"><Cpu class="h-4 w-4" /></span>
-          <div class="container-monitor-reading">
-            <span>{props.cpuLabel}</span>
-            <strong>{formatPercent(latest()?.cpu_percent)}</strong>
-          </div>
-          <div class="container-utilization-meter" role="progressbar" aria-label={props.cpuLabel} aria-valuemin="0" aria-valuemax={cpuMaximum()} aria-valuenow={Math.max(0, Number(latest()?.cpu_percent ?? 0))}>
-            <span style={{ width: `${clampPercent((Math.max(0, Number(latest()?.cpu_percent ?? 0)) / cpuMaximum()) * 100)}%` }} />
-          </div>
+          <span>{props.cpuLabel}</span>
+          <strong>{formatPercent(latest()?.cpu_percent)}</strong>
         </div>
         <MonitoringChart
           class="container-monitor-chart"
           series={[{ name: props.cpuLabel, data: cpuValues(), color: 'var(--redeven-runtime-monitor-cpu-line)' }]}
           labels={labels()}
-          height={176}
+          height={140}
           maxPoints={60}
           showGrid
           showLegend={false}
@@ -1504,30 +1576,20 @@ function ContainerStatsDashboard(props: {
           formatTooltipValue={(value) => formatPercent(value)}
           maxXAxisLabels={5}
         />
-      </section>
+        </PanelContent>
+      </Panel></div>
 
-      <section class="container-monitor-panel" data-tone="memory">
+      <div class="container-monitor-panel" data-container-monitor-panel data-container-memory-panel><Panel class="overflow-hidden">
+        <PanelContent class="space-y-2 p-3">
         <div class="container-monitor-heading">
-          <span class="container-monitor-symbol" aria-hidden="true"><Database class="h-4 w-4" /></span>
-          <div class="container-monitor-reading">
-            <span>{props.memoryLabel}</span>
-            <strong>{formatBytes(latest()?.memory_bytes)}</strong>
-          </div>
-          <div class="container-monitor-context tabular-nums">
-            <strong>{memoryLimit() > 0 ? formatPercent(memoryPercent()) : '—'}</strong>
-            <span>{memoryLimit() > 0 ? formatBytes(memoryLimit()) : '—'}</span>
-          </div>
-          <Show when={memoryLimit() > 0}>
-            <div class="container-utilization-meter" role="progressbar" aria-label={props.memoryLabel} aria-valuemin="0" aria-valuemax="100" aria-valuenow={memoryPercent()}>
-              <span style={{ width: `${memoryPercent()}%` }} />
-            </div>
-          </Show>
+          <span>{props.memoryLabel}</span>
+          <strong>{formatBytes(latest()?.memory_bytes)}<Show when={memoryLimit() > 0}><small> / {formatBytes(memoryLimit())} · {formatPercent(memoryPercent())}</small></Show></strong>
         </div>
         <MonitoringChart
           class="container-monitor-chart"
           series={[{ name: props.memoryLabel, data: memoryValues(), color: 'var(--redeven-runtime-monitor-memory-line)' }]}
           labels={labels()}
-          height={176}
+          height={140}
           maxPoints={60}
           showGrid
           showLegend={false}
@@ -1543,9 +1605,11 @@ function ContainerStatsDashboard(props: {
           }}
           maxXAxisLabels={5}
         />
-      </section>
+        </PanelContent>
+      </Panel></div>
 
-      <section class="container-monitor-panel container-monitor-panel--network" data-tone="network">
+      <div class="container-monitor-panel container-monitor-panel--network" data-container-monitor-panel data-container-network-panel><Panel class="overflow-hidden">
+        <PanelContent class="space-y-2 p-3">
         <div class="container-monitor-heading container-monitor-heading--network">
           <div class="container-network-reading" data-direction="in">
             <span><ArrowDown class="h-3.5 w-3.5" aria-hidden="true" />{props.networkInLabel}</span>
@@ -1563,17 +1627,18 @@ function ContainerStatsDashboard(props: {
             { name: props.networkOutLabel, data: networkOutValues(), color: 'var(--redeven-runtime-monitor-upload-line)' },
           ]}
           labels={labels()}
-          height={190}
+          height={140}
           maxPoints={60}
           showGrid
-          showLegend={false}
+          showLegend
           smooth={false}
           yMin={0}
           formatYTick={(value) => formatByteRate(value)}
           formatTooltipValue={(value) => formatByteRate(value)}
           maxXAxisLabels={8}
         />
-      </section>
+        </PanelContent>
+      </Panel></div>
     </div>
   );
 }

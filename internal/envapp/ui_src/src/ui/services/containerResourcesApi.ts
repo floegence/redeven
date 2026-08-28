@@ -15,7 +15,6 @@ export type ContainerEndpoint = Readonly<{
   rootless?: boolean;
 	capabilities?: Readonly<{
 		collection_stats: boolean;
-		container_files: boolean;
 		volume_files: boolean;
 		exec: boolean;
 	}>;
@@ -260,7 +259,7 @@ export async function getRawContainerInspect(identity: string, engine: Container
 }
 
 export async function listContainerResourceFiles(
-	view: 'containers' | 'volumes',
+	view: 'volumes',
 	identity: string,
 	path: string,
 	engine: ContainerEngine,
@@ -273,7 +272,7 @@ export async function listContainerResourceFiles(
 }
 
 export async function readContainerResourceFile(
-	view: 'containers' | 'volumes',
+	view: 'volumes',
 	identity: string,
 	path: string,
 	engine: ContainerEngine,

@@ -41,7 +41,7 @@ func TestCLIClientV4BatchesPodInspectionWithinResourceLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if capabilities := endpoints[len(endpoints)-1].Capabilities; !capabilities.CollectionStats || !capabilities.ContainerFiles || !capabilities.VolumeFiles || capabilities.Exec {
+	if capabilities := endpoints[len(endpoints)-1].Capabilities; !capabilities.CollectionStats || !capabilities.VolumeFiles || capabilities.Exec {
 		t.Fatalf("Podman endpoint capabilities = %+v", capabilities)
 	}
 	bound, _, err := client.BindEndpoint(context.Background(), EnginePodman, endpoints[len(endpoints)-1].EndpointID)
@@ -71,7 +71,7 @@ func TestCLIClientV4BindsOpaqueDockerEndpointWithoutChangingGlobalContext(t *tes
 	if len(endpoints) != 2 || endpoints[1].DisplayName != "production" || !endpoints[1].Default {
 		t.Fatalf("endpoints = %+v", endpoints)
 	}
-	if capabilities := endpoints[1].Capabilities; !capabilities.CollectionStats || !capabilities.ContainerFiles || capabilities.VolumeFiles || capabilities.Exec {
+	if capabilities := endpoints[1].Capabilities; !capabilities.CollectionStats || capabilities.VolumeFiles || capabilities.Exec {
 		t.Fatalf("Docker endpoint capabilities = %+v", capabilities)
 	}
 	if endpoints[1].EndpointID == EndpointID("production") || !endpoints[1].EndpointID.Valid() {

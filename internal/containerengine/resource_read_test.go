@@ -67,7 +67,7 @@ func TestResourceArchiveRejectsEscapingPathsAndLinks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := safeArchiveEntries(buildResourceArchive(t, tt.fixture)); err == nil {
+			if _, err := safeArchiveEntriesReader(bytes.NewReader(buildResourceArchive(t, tt.fixture))); err == nil {
 				t.Fatal("safeArchiveEntries() succeeded")
 			}
 		})
@@ -82,7 +82,7 @@ func TestResourceArchiveListingIsFlatSortedAndBounded(t *testing.T) {
 		resourceArchiveFixture{name: "root/a/", typeflag: tar.TypeDir},
 		resourceArchiveFixture{name: "root/a/child.txt", typeflag: tar.TypeReg, data: []byte("child")},
 	)
-	listing, err := parseResourceArchiveListing(raw, "/root")
+	listing, err := parseResourceArchiveListingExactReader(bytes.NewReader(raw), "/root")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,14 +101,14 @@ func TestResourceArchiveContentSelectsRequestedFile(t *testing.T) {
 		resourceArchiveFixture{name: "unrelated.txt", typeflag: tar.TypeReg, data: []byte("wrong")},
 		resourceArchiveFixture{name: "folder/wanted.txt", typeflag: tar.TypeReg, data: []byte("right")},
 	)
-	content, err := parseResourceArchiveContent(raw, "/folder/wanted.txt")
+	content, err := parseResourceArchiveExactContent(bytes.NewReader(raw), "/folder/wanted.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if content.Name != "wanted.txt" || string(content.Data) != "right" || content.MediaType != "text/plain; charset=utf-8" {
 		t.Fatalf("content = %+v", content)
 	}
-	if _, err := parseResourceArchiveContent(raw, "/folder/missing.txt"); err == nil {
+	if _, err := parseResourceArchiveExactContent(bytes.NewReader(raw), "/folder/missing.txt"); err == nil {
 		t.Fatal("missing content succeeded")
 	}
 }
@@ -116,7 +116,7 @@ func TestResourceArchiveContentSelectsRequestedFile(t *testing.T) {
 func TestResourceArchiveContentEnforcesByteLimit(t *testing.T) {
 	t.Parallel()
 	raw := buildResourceArchive(t, resourceArchiveFixture{name: "large.bin", typeflag: tar.TypeReg, data: bytes.Repeat([]byte{'x'}, maxResourceFileBytes+1)})
-	_, err := parseResourceArchiveContent(raw, "/large.bin")
+	_, err := parseResourceArchiveExactContent(bytes.NewReader(raw), "/large.bin")
 	if !errors.Is(err, ErrResourceFileLimit) {
 		t.Fatalf("error = %v, want ErrResourceFileLimit", err)
 	}
@@ -188,6 +188,30 @@ func TestCLIClientStatsManyUsesOneCollectionCommand(t *testing.T) {
 		t.Fatalf("samples = %+v", samples)
 	}
 	if len(runner.calls) != 1 || runner.calls[0] != "docker stats --no-stream --format json" {
+		t.Fatalf("calls = %#v", runner.calls)
+	}
+}
+
+func TestAdapterStatsUsesEndpointCollectionForOneContainer(t *testing.T) {
+	t.Parallel()
+	runner := &fakeCommandRunner{outputs: map[string]string{
+		"docker stats --no-stream --format json": strings.Join([]string{
+			`{"ID":"container_123","CPUPerc":"12.5%","MemUsage":"10.5MiB / 1GiB","NetIO":"1.5kB / 2MB"}`,
+			`{"ID":"another_456","CPUPerc":"2%","MemUsage":"20MiB / 2GiB","NetIO":"3kB / 4kB"}`,
+		}, "\n"),
+	}}
+	adapter, err := NewAdapter(&CLIClient{Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats, err := adapter.Stats(context.Background(), EngineDocker, "container_123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.ContainerID != "container_123" || stats.MemoryBytes != int64(10.5*1024*1024) {
+		t.Fatalf("stats = %+v", stats)
+	}
+	if !reflect.DeepEqual(runner.calls, []string{"docker stats --no-stream --format json"}) {
 		t.Fatalf("calls = %#v", runner.calls)
 	}
 }

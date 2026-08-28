@@ -29,8 +29,8 @@ user's global engine selection.
 The engine supports endpoint status, containers, images, volumes, Docker
 Compose Projects, Podman Pods, bounded logs, endpoint-wide statistics, safe
 resource reads, and typed mutations. Endpoint responses advertise collection
-statistics, container files, volume files, and Exec independently so the UI
-never presents an unsupported tool.
+statistics, Podman volume files, and Exec independently so the UI never
+presents an unsupported tool.
 Docker-only methods reject Podman targets and Podman-only methods reject Docker
 targets. Compose configuration paths and engine connection details remain
 private. Compose down never removes volumes implicitly.
@@ -61,8 +61,8 @@ or a bounded inventory snapshot. Unknown results remain explicit.
 The Local API is under `/_redeven_proxy/api/container-resources` and
 `/_redeven_proxy/api/container-resource-operations`. Read covers inventory,
 redacted details, logs, statistics, operations, and streams. Raw container
-Inspect and every file list, preview, or download require Read and Admin. Exec
-requires Read and Execute when a published Floeterm contract advertises it.
+Inspect and every Podman volume file list, preview, or download require Read and
+Admin. Exec requires Read and Execute when a published Floeterm contract advertises it.
 Lifecycle requires Read and Execute. Creation, pull, removal, and cleanup
 require Read, Write, and Execute. High-risk preflights additionally require
 Admin and exact-name confirmation.
@@ -89,10 +89,10 @@ persisted, and its payload cannot enter errors, audit detail, Operations, or
 application logs. Public errors omit command arguments, stderr, raw output,
 tokens, URLs, and host paths.
 
-Container files use the engine-native `container cp` tar stream. Podman volume
-files parse `volume export` as a bounded stream without buffering the full
-archive; Docker volume files are unavailable because Redeven
-does not inspect `/var/lib/docker` and does not create helper containers. Every
+Container filesystem browsing is not a product capability. Podman volume files
+parse `volume export` as a bounded stream without buffering the full archive;
+Docker volume files are unavailable because Redeven does not inspect
+`/var/lib/docker` and does not create helper containers. Every
 path is absolute and canonical, `..` is rejected, archive paths and links must
 remain inside the export, and entry count, content bytes, command output, and
 execution time are bounded. File payloads are never written to product state.
@@ -111,21 +111,24 @@ engine, endpoint health, refresh, and Operations. Workbench hides the duplicate
 product title. Underlined resource tabs, a single toolbar, status color, icons,
 spacing, sortable type-specific columns, direct lifecycle actions, and an
 overflow menu replace overview cards, nested panels, repeated prose, and long
-identifiers. Column visibility is user-controlled. Metrics are off by default;
+identifiers. The overflow menu follows shared outside-click, Escape, and focus
+behavior. Containers default to the Active filter while other resource views
+default to All. Column visibility is user-controlled. Metrics are off by default;
 when requested, one endpoint-wide SSE sample updates aggregate values and row
 metrics and stops as soon as its owning view closes.
 
 Selecting a resource opens a component-local detail page, never a floating
 inspector. Returning preserves the list query, filter, sort, and scroll owner.
 Container details provide Overview, live searchable logs, redacted Inspect,
-mounts, capability-gated files and Exec, and bounded in-browser statistics.
-Each single-container sample carries its authoritative capture time. The detail view
-uses the published Floe monitoring chart, presents CPU and memory as labeled
-utilization scales, and derives receive/send rates from successive engine
-counters instead of charting cumulative byte totals. A late initial snapshot
-may extend history but cannot replace a newer live sample.
+mounts, capability-gated Exec, and bounded in-browser statistics. Detail
+statistics select the container from one endpoint-wide sample because engine
+versions do not consistently return targeted `stats` output. Each sample carries
+its authoritative capture time. The detail view uses the same Floe monitoring
+panels and charts as Env Monitor and derives receive/send rates from successive
+engine counters instead of charting cumulative byte totals.
 Image details provide Overview, sanitized layers, references, Run, Tag, and
-Delete without vulnerability or package-analysis placeholders. Volume details
+Delete without vulnerability or package-analysis placeholders. Image history
+queries use the stable image ID so dangling images remain inspectable. Volume details
 provide Overview, references, and capability-gated files. Compose Projects and
 Pods expose overview, members, lifecycle, and member navigation. Managed
 resources replace mutation controls with one Web Services link.
@@ -137,8 +140,10 @@ screen. A shared Operations drawer keeps endpoint and target identity visible.
 
 The UI provides structured create dialogs and a separate risk review before
 submission. It supports keyboard operation, 44 px touch targets, forced colors,
-reduced motion, and every shipped locale. Stale or unavailable inventory is
-shown explicitly and cannot authorize destructive work.
+reduced motion, and every shipped locale. A missing, stopped, unreachable, or
+permission-denied engine produces a dedicated detection state with retry instead
+of a broken resource table. Stale or unavailable inventory is shown explicitly
+and cannot authorize destructive work.
 
 # Boundaries
 
@@ -154,7 +159,7 @@ shown explicitly and cannot authorize destructive work.
 
 - `redeven:internal/containerengine/adapter.go` - Defines the shared typed engine boundary.
 - `redeven:internal/containerengine/resources_v4_cli.go` - Resolves opaque endpoints and constructs explicit Docker and Podman commands.
-- `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe native archive reads.
+- `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe Podman volume archive reads.
 - `redeven:internal/containerresource/service.go` - Owns strict preflight admission, operations, cancellation, and startup observation.
 - `redeven:internal/containerresource/schema.go` - Defines the Redeven-owned product database lineage.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Enforces native Local API routes and RWX/Admin permissions.

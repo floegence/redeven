@@ -40,12 +40,12 @@ vi.mock('../services/containerResourcesApi', () => ({
   listContainerEndpoints: vi.fn().mockResolvedValue([{
     endpoint_id: 'desktop-linux', engine: 'docker', display_name: 'Desktop Linux', default: true,
     remote: false, available: true, engine_version: '27.3.1', rootless: false,
-    capabilities: { collection_stats: true, container_files: true, volume_files: false, exec: false },
+    capabilities: { collection_stats: true, volume_files: false, exec: false },
   }]),
   getContainerEndpointStatus: vi.fn().mockResolvedValue({
     endpoint_id: 'desktop-linux', engine: 'docker', display_name: 'Desktop Linux', default: true,
     remote: false, available: true, engine_version: '27.3.1', rootless: false,
-    capabilities: { collection_stats: true, container_files: true, volume_files: false, exec: false },
+    capabilities: { collection_stats: true, volume_files: false, exec: false },
   }),
   listContainerResources: vi.fn().mockResolvedValue([
     {
@@ -98,6 +98,15 @@ vi.mock('../services/containerResourcesApi', () => ({
   subscribeContainerOperation: vi.fn(),
   subscribeContainerLogs: vi.fn().mockResolvedValue(undefined),
   subscribeContainerStats: vi.fn().mockImplementation(async (_identity: string, _engine: string, _endpoint: string, observe: (sample: unknown) => void) => {
+    observe({
+      sampled_at_unix_ms: 1_725_000_000_000,
+      container_id: 'e2c83fcda485',
+      cpu_percent: 31.4,
+      memory_bytes: 260_000_000,
+      memory_limit: 1_073_741_824,
+      network_rx_bytes: 12_000_000,
+      network_tx_bytes: 4_000_000,
+    });
     observe({
       sampled_at_unix_ms: 1_725_000_001_000,
       container_id: 'e2c83fcda485',
@@ -160,9 +169,19 @@ describe('native Containers responsive product surface', () => {
     expect(root.querySelector('.container-distribution__track')).toBeNull();
     expect(root.querySelector('.container-inspector')).toBeNull();
     expect(root.querySelectorAll('thead th')).toHaveLength(5);
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(3);
     expect(rows[0].textContent).not.toContain('8bbf320351e557285fe1f143ee14a6d2334f24f5');
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+
+    const overflow = root.querySelector<HTMLButtonElement>('.container-row-menu button');
+    expect(overflow).not.toBeNull();
+    overflow!.click();
+    await settle();
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    root.querySelector<HTMLElement>('.container-list-heading')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    root.querySelector<HTMLElement>('.container-list-heading')!.click();
+    await settle();
+    expect(document.querySelector('[role="menu"]')?.getAttribute('aria-hidden')).toBe('true');
 
     rows[0].focus();
     rows[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
@@ -180,10 +199,10 @@ describe('native Containers responsive product surface', () => {
     const statsTab = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Stats'))!;
     statsTab.click();
     await settle();
-    expect(detailPage.querySelectorAll('.container-monitor-panel')).toHaveLength(3);
+    expect(detailPage.querySelectorAll('[data-container-monitor-panel]')).toHaveLength(3);
     expect(detailPage.querySelectorAll('.container-monitor-chart .chart-svg')).toHaveLength(3);
     expect(detailPage.querySelector('.container-sparkline')).toBeNull();
-    expect(detailPage.querySelector('.container-network-reading')?.textContent).toContain('/s');
+    expect(detailPage.querySelector('[data-container-network-panel]')?.textContent).toContain('/s');
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
@@ -195,7 +214,7 @@ describe('native Containers responsive product surface', () => {
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
     const cards = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-container-mobile-list] > button'));
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(3);
     expect(getComputedStyle(root.querySelector<HTMLElement>('.container-resource-table-shell')!).display).toBe('none');
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     cards[0].click();
@@ -211,7 +230,7 @@ describe('native Containers responsive product surface', () => {
     const statsTab = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Stats'))!;
     statsTab.click();
     await settle();
-    expect(detailPage.querySelectorAll('.container-monitor-panel')).toHaveLength(3);
+    expect(detailPage.querySelectorAll('[data-container-monitor-panel]')).toHaveLength(3);
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });

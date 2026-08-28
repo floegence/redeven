@@ -22,13 +22,6 @@ const (
 
 var ErrResourceFileLimit = errors.New("container resource file limit exceeded")
 
-type ContainerFileRequest struct {
-	Engine      Engine     `json:"engine"`
-	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
-	ContainerID string     `json:"container_id"`
-	Path        string     `json:"path"`
-}
-
 type VolumeFileRequest struct {
 	Engine     Engine     `json:"engine"`
 	EndpointID EndpointID `json:"endpoint_id,omitempty"`
@@ -57,10 +50,15 @@ type ResourceFileContent struct {
 	Data      []byte
 }
 
-type resourceReadClient interface {
+type statsCollectionClient interface {
 	StatsMany(context.Context, Engine) ([]ContainerStats, error)
+}
+
+type rawInspectClient interface {
 	RawInspectContainer(context.Context, Engine, string) (json.RawMessage, error)
-	ContainerArchive(context.Context, Engine, string, string) ([]byte, error)
+}
+
+type volumeArchiveClient interface {
 	VolumeArchive(context.Context, Engine, string) ([]byte, error)
 }
 
@@ -69,7 +67,7 @@ type volumeArchiveStreamClient interface {
 }
 
 func (a *Adapter) StatsCollection(ctx context.Context, req ContainerStatsCollectionRequest) (ContainerStatsCollection, error) {
-	client, ok := a.client.(resourceReadClient)
+	client, ok := a.client.(statsCollectionClient)
 	if !ok || interfaceIsNil(client) {
 		return ContainerStatsCollection{}, ErrResourceCapabilityUnsupported
 	}
@@ -84,7 +82,7 @@ func (a *Adapter) StatsCollection(ctx context.Context, req ContainerStatsCollect
 }
 
 func (a *Adapter) RawContainerInspect(ctx context.Context, req ContainerInspectRequest) (json.RawMessage, error) {
-	client, ok := a.client.(resourceReadClient)
+	client, ok := a.client.(rawInspectClient)
 	if !ok || interfaceIsNil(client) {
 		return nil, ErrResourceCapabilityUnsupported
 	}
@@ -97,49 +95,11 @@ func (a *Adapter) RawContainerInspect(ctx context.Context, req ContainerInspectR
 	return client.RawInspectContainer(ctx, req.Engine, strings.TrimSpace(req.ContainerID))
 }
 
-func (a *Adapter) ListContainerFiles(ctx context.Context, req ContainerFileRequest) (ResourceFileListing, error) {
-	client, ok := a.client.(resourceReadClient)
-	if !ok || interfaceIsNil(client) {
-		return ResourceFileListing{}, ErrResourceCapabilityUnsupported
-	}
-	clean, err := validateResourceFilePath(req.Path)
-	if err != nil {
-		return ResourceFileListing{}, err
-	}
-	if err := validateContainerIdentifier(req.ContainerID); err != nil {
-		return ResourceFileListing{}, err
-	}
-	raw, err := client.ContainerArchive(ctx, req.Engine, strings.TrimSpace(req.ContainerID), clean)
-	if err != nil {
-		return ResourceFileListing{}, err
-	}
-	return parseResourceArchiveListing(raw, clean)
-}
-
-func (a *Adapter) ReadContainerFile(ctx context.Context, req ContainerFileRequest) (ResourceFileContent, error) {
-	client, ok := a.client.(resourceReadClient)
-	if !ok || interfaceIsNil(client) {
-		return ResourceFileContent{}, ErrResourceCapabilityUnsupported
-	}
-	clean, err := validateResourceFilePath(req.Path)
-	if err != nil {
-		return ResourceFileContent{}, err
-	}
-	if err := validateContainerIdentifier(req.ContainerID); err != nil {
-		return ResourceFileContent{}, err
-	}
-	raw, err := client.ContainerArchive(ctx, req.Engine, strings.TrimSpace(req.ContainerID), clean)
-	if err != nil {
-		return ResourceFileContent{}, err
-	}
-	return parseResourceArchiveContent(raw, clean)
-}
-
 func (a *Adapter) ListVolumeFiles(ctx context.Context, req VolumeFileRequest) (ResourceFileListing, error) {
 	if req.Engine != EnginePodman {
 		return ResourceFileListing{}, ErrResourceCapabilityUnsupported
 	}
-	client, ok := a.client.(resourceReadClient)
+	client, ok := a.client.(volumeArchiveClient)
 	if !ok || interfaceIsNil(client) {
 		return ResourceFileListing{}, ErrResourceCapabilityUnsupported
 	}
@@ -169,7 +129,7 @@ func (a *Adapter) ReadVolumeFile(ctx context.Context, req VolumeFileRequest) (Re
 	if req.Engine != EnginePodman {
 		return ResourceFileContent{}, ErrResourceCapabilityUnsupported
 	}
-	client, ok := a.client.(resourceReadClient)
+	client, ok := a.client.(volumeArchiveClient)
 	if !ok || interfaceIsNil(client) {
 		return ResourceFileContent{}, ErrResourceCapabilityUnsupported
 	}
@@ -220,10 +180,6 @@ type archiveEntry struct {
 	name   string
 }
 
-func safeArchiveEntries(raw []byte) ([]archiveEntry, error) {
-	return safeArchiveEntriesReader(bytes.NewReader(raw))
-}
-
 func safeArchiveEntriesReader(source io.Reader) ([]archiveEntry, error) {
 	reader := tar.NewReader(source)
 	entries := make([]archiveEntry, 0, 32)
@@ -266,30 +222,14 @@ func safeArchiveHeader(header *tar.Header) (string, error) {
 	return name, nil
 }
 
-func parseResourceArchiveListing(raw []byte, requested string) (ResourceFileListing, error) {
-	return parseResourceArchiveListingReader(bytes.NewReader(raw), requested)
-}
-
-func parseResourceArchiveListingReader(reader io.Reader, requested string) (ResourceFileListing, error) {
-	return parseResourceArchiveListingWithMode(reader, requested, true)
-}
-
 func parseResourceArchiveListingExactReader(reader io.Reader, requested string) (ResourceFileListing, error) {
-	return parseResourceArchiveListingWithMode(reader, requested, false)
-}
-
-func parseResourceArchiveListingWithMode(reader io.Reader, requested string, wrapped bool) (ResourceFileListing, error) {
 	entries, err := safeArchiveEntriesReader(reader)
 	if err != nil {
 		return ResourceFileListing{}, err
 	}
-	base := ""
-	if wrapped {
-		base = archiveBase(entries, requested)
-	}
 	byName := make(map[string]ResourceFileEntry)
 	for _, item := range entries {
-		relative := archiveRelative(item.name, base, requested)
+		relative := archiveRelative(item.name, requested)
 		if relative == "" {
 			continue
 		}
@@ -371,98 +311,7 @@ func parseResourceArchiveExactContent(source io.Reader, requested string) (Resou
 	return *content, nil
 }
 
-func parseResourceArchiveContent(raw []byte, requested string) (ResourceFileContent, error) {
-	entries, err := safeArchiveEntries(raw)
-	if err != nil {
-		return ResourceFileContent{}, err
-	}
-	requestedRelative := strings.TrimPrefix(path.Clean(requested), "/")
-	target := ""
-	regular := make([]archiveEntry, 0, 1)
-	for _, item := range entries {
-		if item.header.Typeflag != tar.TypeReg && item.header.Typeflag != tar.TypeRegA {
-			continue
-		}
-		regular = append(regular, item)
-		if item.name == requestedRelative {
-			target = item.name
-		}
-	}
-	// Docker and Podman container cp wrap a single copied file under its base
-	// name. Only accept that shortened form when the archive has one regular
-	// file, so a full volume export can never return an unrelated first entry.
-	if target == "" && len(regular) == 1 && path.Base(regular[0].name) == path.Base(requestedRelative) {
-		target = regular[0].name
-	}
-	if target == "" {
-		return ResourceFileContent{}, errors.New("resource file was not found in archive")
-	}
-
-	reader := tar.NewReader(bytes.NewReader(raw))
-	for {
-		header, err := reader.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return ResourceFileContent{}, errors.New("container resource archive is invalid")
-		}
-		name := strings.TrimPrefix(path.Clean(strings.TrimSpace(header.Name)), "./")
-		if strings.HasPrefix(header.Name, "/") || name == ".." || strings.HasPrefix(name, "../") {
-			return ResourceFileContent{}, errors.New("container resource archive path is invalid")
-		}
-		if name != target {
-			continue
-		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
-			return ResourceFileContent{}, errors.New("resource file type is not readable")
-		}
-		if header.Size > maxResourceFileBytes {
-			return ResourceFileContent{}, ErrResourceFileLimit
-		}
-		data, err := io.ReadAll(io.LimitReader(reader, maxResourceFileBytes+1))
-		if err != nil || len(data) > maxResourceFileBytes {
-			return ResourceFileContent{}, ErrResourceFileLimit
-		}
-		fileName := path.Base(requested)
-		if fileName == "." || fileName == "/" {
-			fileName = path.Base(name)
-		}
-		mediaType := mime.TypeByExtension(path.Ext(fileName))
-		if mediaType == "" {
-			mediaType = "application/octet-stream"
-		}
-		return ResourceFileContent{Name: fileName, MediaType: mediaType, Data: data}, nil
-	}
-	return ResourceFileContent{}, errors.New("resource file was not found in archive")
-}
-
-func archiveBase(entries []archiveEntry, requested string) string {
-	if len(entries) == 0 {
-		return ""
-	}
-	first := entries[0].name
-	if first == "" {
-		return ""
-	}
-	if entries[0].header.Typeflag == tar.TypeDir {
-		return strings.TrimSuffix(first, "/")
-	}
-	if path.Base(requested) == path.Base(first) {
-		return path.Dir(first)
-	}
-	return ""
-}
-
-func archiveRelative(name, base, requested string) string {
-	if base != "" {
-		if name == base {
-			return ""
-		}
-		if strings.HasPrefix(name, base+"/") {
-			return strings.TrimPrefix(name, base+"/")
-		}
-	}
+func archiveRelative(name, requested string) string {
 	requestedRelative := strings.TrimPrefix(path.Clean(requested), "/")
 	if requestedRelative != "" && requestedRelative != "." {
 		if name == requestedRelative {
@@ -522,20 +371,6 @@ func (c *CLIClient) RawInspectContainer(ctx context.Context, engine Engine, cont
 		return nil, errors.New("container inspect returned invalid json")
 	}
 	return json.RawMessage(append([]byte(nil), raw...)), nil
-}
-
-func (c *CLIClient) ContainerArchive(ctx context.Context, engine Engine, containerID, filePath string) ([]byte, error) {
-	if err := validateEngine(engine); err != nil {
-		return nil, err
-	}
-	if err := validateContainerIdentifier(containerID); err != nil {
-		return nil, err
-	}
-	clean, err := validateResourceFilePath(filePath)
-	if err != nil {
-		return nil, err
-	}
-	return c.run(ctx, engine, "cp", strings.TrimSpace(containerID)+":"+clean, "-")
 }
 
 func (c *CLIClient) VolumeArchive(ctx context.Context, engine Engine, name string) ([]byte, error) {

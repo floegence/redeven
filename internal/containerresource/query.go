@@ -190,22 +190,6 @@ func (s *Service) RawContainerInspect(ctx context.Context, req containerengine.C
 	return s.engine.RawContainerInspect(bound, req)
 }
 
-func (s *Service) ListContainerFiles(ctx context.Context, req containerengine.ContainerFileRequest) (containerengine.ResourceFileListing, error) {
-	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
-	if err != nil {
-		return containerengine.ResourceFileListing{}, err
-	}
-	return s.engine.ListContainerFiles(bound, req)
-}
-
-func (s *Service) ReadContainerFile(ctx context.Context, req containerengine.ContainerFileRequest) (containerengine.ResourceFileContent, error) {
-	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
-	if err != nil {
-		return containerengine.ResourceFileContent{}, err
-	}
-	return s.engine.ReadContainerFile(bound, req)
-}
-
 func (s *Service) ListVolumeFiles(ctx context.Context, req containerengine.VolumeFileRequest) (containerengine.ResourceFileListing, error) {
 	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
 	if err != nil {

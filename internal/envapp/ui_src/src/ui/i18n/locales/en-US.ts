@@ -2667,6 +2667,13 @@ export const enUS = defineDictionary({
     endpoint: 'Engine endpoint',
     resourceNavigation: 'Container resources',
     loading: 'Loading container resources...',
+    engineState: {
+      unavailableTitle: 'No container engine detected',
+      unavailableDescription: '{engine} is not installed, running, or reachable on this system.',
+      permissionTitle: 'Container engine access denied',
+      permissionDescription: 'Redeven cannot access {engine}. Check the current user’s engine permissions.',
+      retry: 'Check again',
+    },
     views: {
       containers: 'Containers',
       images: 'Images',
@@ -2720,7 +2727,8 @@ export const enUS = defineDictionary({
       rawJson: 'Raw JSON', rawWarning: 'Raw data can contain sensitive configuration. Open it only when needed.',
       emptyReferences: 'No referenced containers', emptyMounts: 'No mounts', redacted: 'Redacted',
       parentFolder: 'Parent folder', downloadFile: 'Download file', binaryFile: 'This file cannot be previewed as text.',
-      layer: 'Layer', execUnavailable: 'This Floeterm release does not support a container terminal.', fullscreen: 'Full screen',
+      layer: 'Layer', layersUnavailable: 'Image layers could not be loaded', emptyLayers: 'No image layers reported',
+      execUnavailable: 'This Floeterm release does not support a container terminal.', fullscreen: 'Full screen',
     },
     inspector: {
       title: 'Resource details', details: 'Details', logs: 'Logs', stats: 'Stats', overview: 'Overview', runtime: 'Runtime',
@@ -2729,7 +2737,7 @@ export const enUS = defineDictionary({
       identity: 'Identity', selfManaged: 'Managed here', networkMode: 'Network mode', user: 'Runtime user',
       privileged: 'Privileged', readOnlyRoot: 'Read-only root', ports: 'Published ports',
     },
-    stats: { cpu: 'CPU', memory: 'Memory', networkIn: 'Network in', networkOut: 'Network out' },
+    stats: { cpu: 'CPU', memory: 'Memory', networkIn: 'Network in', networkOut: 'Network out', waiting: 'Waiting for the first sample…', refreshUnavailable: 'Live statistics are unavailable' },
     operations: {
       title: 'Operations', description: 'Audited container operations and their current state.', empty: 'No container operations yet.',
     },
@@ -2746,7 +2754,7 @@ export const enUS = defineDictionary({
     permissions: {
       read: 'Read permission is required to view container resources.',
       admin: 'Admin permission is required for this high-risk operation.',
-      adminFiles: 'Read and Admin permissions are required to browse container or volume files.',
+      adminFiles: 'Read and Admin permissions are required to browse volume files.',
     },
     notifications: {
       inventoryChangedTitle: 'Inventory changed', inventoryChangedMessage: 'The selected resource is no longer available.',
