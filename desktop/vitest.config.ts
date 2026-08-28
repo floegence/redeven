@@ -3,6 +3,7 @@ import solid from 'vite-plugin-solid';
 
 const coreDist = new URL('./node_modules/@floegence/floe-webapp-core/dist/', import.meta.url).pathname;
 const markedDist = new URL('./node_modules/marked/lib/marked.esm.js', import.meta.url).pathname;
+const thinkingOrbsEngine = new URL('./node_modules/thinking-orbs/dist/engine.es.js', import.meta.url).pathname;
 export default defineConfig({
   server: {
     fs: {
@@ -15,6 +16,7 @@ export default defineConfig({
       { find: /^@floegence\/floe-webapp-core\/(icons|layout|loading|ui)$/, replacement: `${coreDist}$1.js` },
       { find: /^@floegence\/floe-webapp-core$/, replacement: `${coreDist}index.js` },
       { find: /^marked$/, replacement: markedDist },
+      { find: /^thinking-orbs\/engine$/, replacement: thinkingOrbsEngine },
     ],
     dedupe: ['solid-js'],
   },
