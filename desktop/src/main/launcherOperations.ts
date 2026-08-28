@@ -7,6 +7,7 @@ import type {
   DesktopLauncherProgressSurface,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopTranslationKey } from '../shared/i18n/desktopI18n';
+import { launcherOperationInterruptionPresentation } from '../shared/launcherOperationInterruptionPresentation';
 import { advanceOpenConnectionTiming } from '../shared/desktopOpenConnectionProgress';
 import type { DesktopOpenConnectionProgress, DesktopOpenConnectionTiming } from '../shared/desktopOpenConnectionProgress';
 import type { DesktopRuntimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
@@ -40,11 +41,6 @@ type CreateLauncherOperationInput = Readonly<{
   gateway_diagnosis?: DesktopLauncherOperationSnapshot['gateway_diagnosis'];
   presentation_context?: DesktopLauncherOperationSnapshot['presentation_context'];
   cancelable?: boolean;
-  interrupt_label?: string;
-  interrupt_label_key?: DesktopTranslationKey;
-  interrupt_detail?: string;
-  interrupt_detail_key?: DesktopTranslationKey;
-  interrupt_kind?: DesktopLauncherOperationSnapshot['interrupt_kind'];
   failure?: DesktopOperationFailurePresentation;
   next_actions?: DesktopLauncherOperationSnapshot['next_actions'];
   started_at_unix_ms?: number;
@@ -145,11 +141,6 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     ...(snapshot.gateway_diagnosis ? { gateway_diagnosis: snapshot.gateway_diagnosis } : {}),
     ...(snapshot.presentation_context ? { presentation_context: snapshot.presentation_context } : {}),
     cancelable: snapshot.cancelable,
-    interrupt_label: snapshot.interrupt_label,
-    interrupt_label_key: snapshot.interrupt_label_key,
-    interrupt_detail: snapshot.interrupt_detail,
-    interrupt_detail_key: snapshot.interrupt_detail_key,
-    interrupt_kind: snapshot.interrupt_kind,
     deleted_subject: snapshot.deleted_subject,
     next_actions: snapshot.next_actions,
     failure: snapshot.failure,
@@ -307,64 +298,13 @@ function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Rea
       detailKey: 'progress.detailCancelingDeletedConnection',
     };
   }
-  if (snapshot.active_progress_surface === 'runtime_lifecycle') {
-    if (
-      snapshot.action === 'open_local_environment' ||
-      snapshot.action === 'open_provider_environment' ||
-      snapshot.action === 'open_gateway_environment' ||
-      snapshot.action === 'open_remote_environment' ||
-      snapshot.action === 'open_ssh_environment' ||
-      snapshot.action === 'prepare_environment_open'
-    ) {
-      return {
-        phase: 'open_connection_canceling',
-        title: 'Stopping open',
-        titleKey: 'progress.titleStoppingOpen',
-        detail: 'Desktop is stopping the connection setup and cleaning up local resources already created.',
-        detailKey: 'progress.detailStoppingOpen',
-      };
-    }
-    if (snapshot.action === 'update_environment_runtime') {
-      return {
-        phase: 'runtime_lifecycle_canceling',
-        title: 'Canceling Runtime update',
-        titleKey: 'progress.titleStoppingRuntimeUpdate',
-        detail: 'Desktop is canceling the Runtime update and cleaning up resources already created.',
-        detailKey: 'progress.detailStoppingRuntimeUpdate',
-      };
-    }
-    if (snapshot.action === 'restart_environment_runtime') {
-      return {
-        phase: 'runtime_lifecycle_canceling',
-        title: 'Canceling Runtime restart',
-        titleKey: 'progress.titleStoppingRuntimeRestart',
-        detail: 'Desktop is canceling the Runtime restart and cleaning up resources already created.',
-        detailKey: 'progress.detailStoppingRuntimeRestart',
-      };
-    }
-    return {
-      phase: 'runtime_lifecycle_canceling',
-      title: 'Stopping runtime startup',
-      titleKey: 'progress.titleStoppingRuntimeStartup',
-      detail: 'Desktop is stopping the runtime startup and cleaning up resources already created.',
-      detailKey: 'progress.detailStoppingRuntimeStartup',
-    };
-  }
-  if (snapshot.active_progress_surface === 'open') {
-    return {
-      phase: 'open_connection_canceling',
-      title: 'Stopping open',
-      titleKey: 'progress.titleStoppingOpen',
-      detail: 'Desktop is stopping the connection setup and cleaning up local resources already created.',
-      detailKey: 'progress.detailStoppingOpen',
-    };
-  }
+  const presentation = launcherOperationInterruptionPresentation(snapshot.action);
   return {
-    phase: 'canceling',
-    title: 'Stopping operation',
-    titleKey: 'progress.titleStoppingOperation',
-    detail: 'Desktop is stopping this background task.',
-    detailKey: 'progress.stopBackgroundTask',
+    phase: presentation.cancelingPhase,
+    title: 'Canceling operation',
+    titleKey: presentation.cancelingTitleKey,
+    detail: 'Desktop is canceling this operation and cleaning up resources already created.',
+    detailKey: presentation.cancelingDetailKey,
   };
 }
 
@@ -451,11 +391,6 @@ export class LauncherOperationRegistry {
       ...(input.gateway_diagnosis ? { gateway_diagnosis: input.gateway_diagnosis } : {}),
       ...(input.presentation_context ? { presentation_context: input.presentation_context } : {}),
       cancelable: input.cancelable === true,
-      interrupt_label: compact(input.interrupt_label) || undefined,
-      interrupt_label_key: input.interrupt_label_key,
-      interrupt_detail: compact(input.interrupt_detail) || undefined,
-      interrupt_detail_key: input.interrupt_detail_key,
-      interrupt_kind: input.interrupt_kind,
       deleted_subject: false,
       ...(input.next_actions ? { next_actions: input.next_actions } : {}),
       ...(input.failure ? { failure: input.failure } : {}),
@@ -654,9 +589,6 @@ export class LauncherOperationRegistry {
       ...(runtimeLifecycle ? { lifecycle_progress: runtimeLifecycle } : {}),
       ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
       cancelable: false,
-      interrupt_label: undefined,
-      interrupt_detail: undefined,
-      interrupt_kind: undefined,
       next_actions: undefined,
     });
   }

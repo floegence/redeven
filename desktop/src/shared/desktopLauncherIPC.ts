@@ -550,11 +550,6 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   gateway_diagnosis?: DesktopGatewayDiagnosis;
   presentation_context?: 'flower_warmup';
   cancelable: boolean;
-  interrupt_label?: string;
-  interrupt_label_key?: DesktopTranslationKey;
-  interrupt_detail?: string;
-  interrupt_detail_key?: DesktopTranslationKey;
-  interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject: boolean;
   next_actions?: readonly DesktopLauncherOperationNextAction[];
   failure?: DesktopOperationFailurePresentation;
@@ -974,11 +969,6 @@ export type DesktopLauncherActionProgress = Readonly<{
   gateway_diagnosis?: DesktopGatewayDiagnosis;
   presentation_context?: 'flower_warmup';
   cancelable?: boolean;
-  interrupt_label?: string;
-  interrupt_label_key?: DesktopTranslationKey;
-  interrupt_detail?: string;
-  interrupt_detail_key?: DesktopTranslationKey;
-  interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject?: boolean;
   next_actions?: readonly DesktopLauncherOperationNextAction[];
   failure?: DesktopOperationFailurePresentation;

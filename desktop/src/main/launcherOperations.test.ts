@@ -255,9 +255,6 @@ describe('LauncherOperationRegistry', () => {
         targetDetail: 'devbox',
       }),
       cancelable: true,
-      interrupt_label: 'Stop startup',
-      interrupt_detail: 'Stops this SSH runtime startup.',
-      interrupt_kind: 'generic',
     });
 
     expect(operation.subject_generation).toBe(0);
@@ -276,8 +273,6 @@ describe('LauncherOperationRegistry', () => {
           target_label: 'Devbox',
         }),
         cancelable: true,
-        interrupt_label: 'Stop startup',
-        interrupt_kind: 'generic',
       }),
     ]);
     expect(changed).toEqual([`${operation.operation_key}:running:ssh_connecting`]);
@@ -339,8 +334,6 @@ describe('LauncherOperationRegistry', () => {
         stepStates: [{ id: 'checking_container', status: 'running' }],
       }),
       cancelable: true,
-      interrupt_label: 'Stop startup',
-      interrupt_kind: 'generic',
     });
 
     expect(registry.progressItems()).toHaveLength(1);
@@ -692,13 +685,12 @@ describe('LauncherOperationRegistry', () => {
         status: 'canceling',
         cancelable: false,
         phase: 'runtime_lifecycle_canceling',
-        title: 'Stopping runtime startup',
+        title: 'Canceling operation',
+        title_key: 'progress.titleStoppingRuntimeStartup',
         lifecycle_progress: expect.objectContaining({
           phase: 'checking_runtime_service',
           active_step_id: 'checking_runtime_service',
         }),
-        interrupt_label: undefined,
-        interrupt_kind: undefined,
       }),
     );
     registry.finish(operation.operation_key, 'canceled', {
@@ -717,17 +709,15 @@ describe('LauncherOperationRegistry', () => {
   it.each([
     {
       action: 'update_environment_runtime' as const,
-      title: 'Canceling Runtime update',
       titleKey: 'progress.titleStoppingRuntimeUpdate',
       detailKey: 'progress.detailStoppingRuntimeUpdate',
     },
     {
       action: 'restart_environment_runtime' as const,
-      title: 'Canceling Runtime restart',
       titleKey: 'progress.titleStoppingRuntimeRestart',
       detailKey: 'progress.detailStoppingRuntimeRestart',
     },
-  ])('uses action-specific cancellation copy for $action', ({ action, title, titleKey, detailKey }) => {
+  ])('uses the shared action-specific cancellation keys for $action', ({ action, titleKey, detailKey }) => {
     const registry = new LauncherOperationRegistry();
     const operation = registry.create({
       operation_key: `local:${action}`,
@@ -751,9 +741,21 @@ describe('LauncherOperationRegistry', () => {
     expect(registry.cancel(operation.operation_key, 'Technical abort reason.')).toEqual(
       expect.objectContaining({
         status: 'canceling',
-        title,
+        title: 'Canceling operation',
         title_key: titleKey,
         detail_key: detailKey,
+      }),
+    );
+    registry.finish(operation.operation_key, 'canceled', {
+      phase: 'canceled',
+      title: 'Operation canceled',
+      detail: 'Desktop canceled the Runtime operation.',
+    });
+    expect(registry.get(operation.operation_key)).toEqual(
+      expect.objectContaining({
+        action,
+        status: 'canceled',
+        phase: 'canceled',
       }),
     );
   });

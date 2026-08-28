@@ -77,7 +77,7 @@ function listSourceFiles(root: string): readonly string[] {
 function collectLiteralTranslationKeysFromSource(root: string): ReadonlyMap<string, readonly string[]> {
   const keyPattern = '([A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)+)';
   const directCallPattern = new RegExp(`(?:^|[^\\w.])(?:props\\.i18n\\.|[A-Za-z_$][A-Za-z0-9_$]*(?:\\([^)]*\\))?\\.|createDesktopI18n\\([^)]*\\)\\.)?(?:t|tn|translateDesktopKey)\\(\\s*['"\`]${keyPattern}['"\`]`, 'g');
-  const snakeKeyFieldPattern = new RegExp(`\\b(?:title|summary|detail|recovery_hint|interrupt_label|interrupt_detail|label|value|content|help|placeholder|description|message|aria_label|window_title|save_label|access_mode_label)_key\\s*:\\s*['"\`]${keyPattern}['"\`]`, 'g');
+  const snakeKeyFieldPattern = new RegExp(`\\b(?:title|summary|detail|recovery_hint|label|value|content|help|placeholder|description|message|aria_label|window_title|save_label|access_mode_label)_key\\s*:\\s*['"\`]${keyPattern}['"\`]`, 'g');
   const camelKeyFieldPattern = new RegExp(`\\b(?:titleKey|labelKey|valueKey|contentKey|helpKey|placeholderKey|descriptionKey|detailKey|messageKey|ariaLabelKey)\\s*:\\s*['"\`]${keyPattern}['"\`]`, 'g');
   const returnLiteralPattern = new RegExp(`\\breturn\\s+['"\`]${keyPattern}['"\`]\\s*;`, 'g');
   const typeAssertionPattern = new RegExp(`['"\`]${keyPattern}['"\`]\\s+as\\s+Desktop(?:Plural)?TranslationKey\\b`, 'g');

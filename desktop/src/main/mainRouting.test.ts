@@ -771,7 +771,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain("subject_kind: 'runtime_target'");
     expect(mainSrc).toContain('operation_key: operationKey');
     expect(mainSrc).toContain('open_progress: buildOpenConnectionProgress(input)');
-    expect(mainSrc).toContain("interrupt_label: 'Stop opening'");
+    expect(mainSrc).not.toContain('interrupt_label:');
+    expect(mainSrc).not.toContain('interrupt_detail:');
+    expect(mainSrc).not.toContain('interrupt_kind:');
     expect(mainSrc).toContain('const runtimeLifecycleCoordinator = new RuntimeLifecycleCoordinator();');
     expect(mainSrc).toContain('runtimeLifecycleCoordinator.run({');
     expect(mainSrc).not.toContain('runtimeLifecycleCoordinator.waitForReadyMutation(');
@@ -798,7 +800,6 @@ describe('main routing', () => {
     expect(mainSrc).toContain('action,');
     expect(mainSrc).toContain('cancelable: true');
     expect(mainSrc).toContain('signal,');
-    expect(mainSrc).toContain("interrupt_kind: 'stop_opening'");
     expect(mainSrc).toContain(
       'const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;',
     );

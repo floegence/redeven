@@ -105,6 +105,7 @@ import {
   isDesktopLauncherActionSuccess,
   selectLatestDesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
+import { launcherOperationInterruptionPresentation } from '../shared/launcherOperationInterruptionPresentation';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
   REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
@@ -4311,15 +4312,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       operation_key: operationKey,
     });
     if (result?.outcome === 'canceled_launcher_operation') {
-      const cancellationTitleKey: DesktopTranslationKey =
-        progress.action === 'update_environment_runtime'
-          ? 'progress.titleStoppingRuntimeUpdate'
-          : progress.action === 'restart_environment_runtime'
-            ? 'progress.titleStoppingRuntimeRestart'
-            : progress.open_progress
-              ? 'progress.titleStoppingOpen'
-              : 'progress.titleStoppingRuntimeStartup';
-      showActionToast(i18n().t(cancellationTitleKey), 'info');
+      const presentation = launcherOperationInterruptionPresentation(progress.action);
+      showActionToast(i18n().t(presentation.cancelingTitleKey), 'info');
     }
   }
 
@@ -8956,23 +8950,11 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
 }
 
 function localizedProgressInterruptLabel(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
-  if (progress.subject_kind === 'gateway') {
-    return i18n.t('progress.interruptStopGatewayAction');
-  }
-  if (progress.interrupt_label_key) return i18n.t(progress.interrupt_label_key);
-  return progress.interrupt_kind === 'stop_opening'
-    ? i18n.t('progress.interruptStopOpening')
-    : i18n.t('progress.stopStartup');
+  return i18n.t(launcherOperationInterruptionPresentation(progress.action).labelKey);
 }
 
 function localizedProgressInterruptDetail(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
-  if (progress.subject_kind === 'gateway') {
-    return i18n.t('progress.interruptStopGatewayActionDetail');
-  }
-  if (progress.interrupt_detail_key) return i18n.t(progress.interrupt_detail_key);
-  return progress.interrupt_kind === 'stop_opening'
-    ? i18n.t('progress.interruptStopOpeningDetail')
-    : i18n.t('progress.stopBackgroundTask');
+  return i18n.t(launcherOperationInterruptionPresentation(progress.action).detailKey);
 }
 
 function localizedProgressPlanningLabel(i18n: DesktopI18n, action: DesktopLauncherActionKind): string {
