@@ -596,10 +596,6 @@ func (c *CLIClient) inspectAllContainers(ctx context.Context, engine Engine) ([]
 	return inspected, failures, nil
 }
 
-func countImageReferences(image ImageRecord, containers []EngineContainer) int {
-	return len(imageReferences(image, containers))
-}
-
 func imageReferences(image ImageRecord, containers []EngineContainer) []ResourceReference {
 	candidates := append([]string{image.ID, image.Reference, image.Digest}, image.Tags...)
 	out := make([]ResourceReference, 0)
@@ -625,10 +621,6 @@ func anyImageIdentityMatches(candidates []string, values ...string) bool {
 		}
 	}
 	return false
-}
-
-func countVolumeReferences(name string, containers []EngineContainer) int {
-	return len(volumeReferences(name, containers))
 }
 
 func volumeReferences(name string, containers []EngineContainer) []ResourceReference {
