@@ -13,6 +13,7 @@
       "marked": ["node_modules/marked/lib/marked.d.ts"],
       "solid-js": ["node_modules/solid-js"],
       "solid-js/*": ["node_modules/solid-js/*"],
+      "thinking-orbs/engine": ["node_modules/thinking-orbs/dist/engine/index.d.ts"],
       "vitest": ["node_modules/vitest"]
     },
     "resolveJsonModule": true,

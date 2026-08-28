@@ -4996,11 +4996,11 @@ html.dark .flower-component-shell {
   white-space: nowrap;
 }
 
-.flower-activity-web-fetch-title-icon {
-  width: 0.875rem;
-  height: 0.875rem;
+.flower-activity-web-fetch-searching-orb {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
   flex: 0 0 auto;
-  color: currentColor;
 }
 
 .flower-activity-web-fetch-title-url {

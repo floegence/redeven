@@ -1015,7 +1015,7 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | tar | 7.5.22 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/tar/v/7.5.22 |  |
 | temp-file | 3.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/temp-file/v/3.4.0 |  |
 | temp | 0.9.4 | MIT | Desktop shell | https://www.npmjs.com/package/temp/v/0.9.4 |  |
-| thinking-orbs | 0.3.1 | MIT | Desktop shell | https://www.npmjs.com/package/thinking-orbs/v/0.3.1 |  |
+| thinking-orbs | 0.3.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/thinking-orbs/v/0.3.1 |  |
 | tiny-async-pool | 1.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/tiny-async-pool/v/1.3.0 |  |
 | tiny-typed-emitter | 2.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/tiny-typed-emitter/v/2.1.0 |  |
 | tinybench | 2.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tinybench/v/2.9.0 |  |

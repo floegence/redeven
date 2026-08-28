@@ -33,6 +33,7 @@ import {
   createFlowerClientRequestID,
 } from './flowerRequestIdentity';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
+import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
@@ -7532,7 +7533,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (title.kind === 'web_fetch') {
       return (
         <>
-          <Globe class="flower-activity-web-fetch-title-icon" aria-hidden="true" />
           <strong class="flower-activity-inline-title-verb">Web fetch</strong>
           <span class="flower-activity-inline-title-target flower-activity-web-fetch-title-url" title={title.url}>{title.url}</span>
         </>
@@ -8495,6 +8495,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : null;
     });
     const displayStatus = createMemo(() => item().status);
+    const webFetchActivity = createMemo(() => (
+      item().renderer === 'web_fetch' || trimString(item().tool_name) === 'web_fetch'
+    ));
     const effectRetry = createMemo(() => item().effect_retry);
     const retryUnknownEffect = async () => {
       const threadID = trimString(selectedThreadID());
@@ -8526,7 +8529,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const activityRowContent = () => (
       <>
         <span class="flower-activity-inline-icon">
-          {statusIcon(displayStatus())}
+          <Show
+            when={webFetchActivity()}
+            fallback={statusIcon(displayStatus())}
+          >
+            <WebFetchSearchingOrb running={displayStatus() === 'running'} />
+          </Show>
           <Show when={item().approval_state === 'rejected'}>
             <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>
           </Show>
