@@ -288,3 +288,13 @@ func TestContainerResourceCollectionStatsUsesOneEndpointSnapshot(t *testing.T) {
 		t.Fatalf("collection stats status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestContainerResourceStatsExposeSampleTimestamp(t *testing.T) {
+	service := newContainerAPITestService(t)
+	channelID := "ch_container_stats_timestamp"
+	server := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+	response := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/container-one/stats?engine=docker", "")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"sampled_at_unix_ms":`) {
+		t.Fatalf("container stats status=%d body=%s", response.Code, response.Body.String())
+	}
+}

@@ -481,6 +481,7 @@
   --redeven-categorical-7: color-mix(in srgb, var(--redeven-categorical-graph-7) 70%, var(--foreground) 30%);
   --redeven-categorical-8: color-mix(in srgb, var(--redeven-categorical-graph-8) 70%, var(--foreground) 30%);
   --redeven-runtime-monitor-cpu-line: var(--redeven-categorical-graph-1);
+  --redeven-runtime-monitor-memory-line: var(--redeven-categorical-graph-4);
   --redeven-runtime-monitor-download-line: var(--redeven-categorical-graph-2);
   --redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-5);
 }

@@ -30,7 +30,7 @@ import {
   Trash,
   X,
 } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, Tag } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, MonitoringChart, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
@@ -249,6 +249,71 @@ function formatBytes(value: number | undefined): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
   return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatByteRate(value: number | undefined): string {
+  const bytes = Number(value ?? 0);
+  return `${bytes > 0 ? formatBytes(bytes) : '0 B'}/s`;
+}
+
+function formatPercent(value: number | undefined): string {
+  const percent = Number(value ?? 0);
+  return `${Number.isFinite(percent) ? percent.toFixed(1) : '0.0'}%`;
+}
+
+function chartTimeLabel(timestamp: number | undefined): string {
+  const normalized = Number(timestamp ?? 0);
+  if (!Number.isFinite(normalized) || normalized <= 0) return '';
+  const date = new Date(normalized);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function utilizationScaleMaximum(values: readonly number[]): number {
+  const peak = Math.max(0, ...values.filter(Number.isFinite));
+  if (peak <= 1) return 1;
+  if (peak <= 5) return 5;
+  if (peak <= 10) return 10;
+  if (peak <= 25) return 25;
+  if (peak <= 50) return 50;
+  return 100;
+}
+
+function cpuScaleMaximum(values: readonly number[]): number {
+  const peak = Math.max(0, ...values.filter(Number.isFinite));
+  if (peak <= 50) return utilizationScaleMaximum(values);
+  return Math.ceil(peak / 100) * 100;
+}
+
+function clampPercent(value: number): number {
+  return Math.min(100, Math.max(0, Number.isFinite(value) ? value : 0));
+}
+
+function networkRateSeries(
+  history: readonly ContainerStats[],
+  key: 'network_rx_bytes' | 'network_tx_bytes',
+): number[] {
+  return history.map((sample, index) => {
+    if (index === 0) return 0;
+    const previous = history[index - 1];
+    const elapsedSeconds = (Number(sample.sampled_at_unix_ms ?? 0) - Number(previous.sampled_at_unix_ms ?? 0)) / 1000;
+    const delta = sample[key] - previous[key];
+    if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0 || !Number.isFinite(delta) || delta < 0) return 0;
+    return delta / elapsedSeconds;
+  });
+}
+
+function normalizedStatsSample(sample: ContainerStats): ContainerStats {
+  const timestamp = Number(sample.sampled_at_unix_ms ?? 0);
+  return timestamp > 0 && Number.isFinite(timestamp)
+    ? sample
+    : { ...sample, sampled_at_unix_ms: Date.now() };
+}
+
+function mergeStatsSample(history: readonly ContainerStats[], sample: ContainerStats): ContainerStats[] {
+  const timestamp = Number(sample.sampled_at_unix_ms ?? 0);
+  return [...history.filter((item) => Number(item.sampled_at_unix_ms ?? 0) !== timestamp), sample]
+    .sort((left, right) => Number(left.sampled_at_unix_ms ?? 0) - Number(right.sampled_at_unix_ms ?? 0))
+    .slice(-60);
 }
 
 function operationActive(operation: ContainerOperation): boolean {
@@ -528,16 +593,28 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   createEffect(() => {
     if (detailTab() !== 'stats' || view() !== 'containers' || !selectedIdentity()) return;
     const controller = new AbortController();
+    let active = true;
+    let receivedStreamSample = false;
     setStatsHistory([]);
     void getContainerStats(selectedIdentity(), engine(), endpointID()).then((sample) => {
-      setStats(sample);
-      setStatsHistory([sample]);
-    }).catch(() => setStats(null));
+      if (!active) return;
+      const normalized = normalizedStatsSample(sample);
+      if (!receivedStreamSample) setStats(normalized);
+      setStatsHistory((items) => mergeStatsSample(items, normalized));
+    }).catch(() => {
+      if (active && !receivedStreamSample) setStats(null);
+    });
     void subscribeContainerStats(selectedIdentity(), engine(), endpointID(), (sample) => {
-      setStats(sample);
-      setStatsHistory((items) => [...items.slice(-59), sample]);
+      if (!active) return;
+      receivedStreamSample = true;
+      const normalized = normalizedStatsSample(sample);
+      setStats(normalized);
+      setStatsHistory((items) => mergeStatsSample(items, normalized));
     }, controller.signal).catch(() => undefined);
-    onCleanup(() => controller.abort());
+    onCleanup(() => {
+      active = false;
+      controller.abort();
+    });
   });
 
   createEffect(() => {
@@ -1217,8 +1294,14 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       </div>
     );
     if (tab === 'stats') {
-      const values = statsHistory();
-      return <div class="container-stats-dashboard"><div class="container-stat-summary"><StatMetric icon={<Cpu class="h-4 w-4" />} label={i18n.t('containers.stats.cpu')} value={`${(stats()?.cpu_percent ?? 0).toFixed(1)}%`} /><StatMetric icon={<Database class="h-4 w-4" />} label={i18n.t('containers.stats.memory')} value={formatBytes(stats()?.memory_bytes)} /><StatMetric icon={<ArrowDown class="h-4 w-4" />} label={i18n.t('containers.stats.networkIn')} value={formatBytes(stats()?.network_rx_bytes)} /><StatMetric icon={<ArrowUp class="h-4 w-4" />} label={i18n.t('containers.stats.networkOut')} value={formatBytes(stats()?.network_tx_bytes)} /></div><div class="container-chart-grid"><Sparkline label={i18n.t('containers.stats.cpu')} values={values.map((item) => item.cpu_percent)} /><Sparkline label={i18n.t('containers.stats.memory')} values={values.map((item) => item.memory_bytes)} /></div></div>;
+      return <ContainerStatsDashboard
+        history={statsHistory()}
+        latest={stats()}
+        cpuLabel={i18n.t('containers.stats.cpu')}
+        memoryLabel={i18n.t('containers.stats.memory')}
+        networkInLabel={i18n.t('containers.stats.networkIn')}
+        networkOutLabel={i18n.t('containers.stats.networkOut')}
+      />;
     }
     if (tab === 'layers') return <div class="container-layer-list"><Show when={imageHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}><For each={imageHistory()}>{(layer, index) => <div class="container-layer-row"><span>{index() + 1}</span><span class="font-mono">{layer.id?.slice(0, 18) || i18n.t('containers.detail.layer')}</span><span>{formatBytes(layer.size_bytes)}</span><span>{formatDate(layer.created_at_unix_ms)}</span></div>}</For></Show></div>;
     if (tab === 'used-by' || tab === 'containers') return renderReferences();
@@ -1350,15 +1433,131 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   );
 }
 
-function StatMetric(props: { icon: JSX.Element; label: string; value: string }) {
-  return <div class="container-stat-metric"><span aria-hidden="true">{props.icon}</span><div><span>{props.label}</span><strong>{props.value}</strong></div></div>;
-}
+function ContainerStatsDashboard(props: {
+  history: readonly ContainerStats[];
+  latest: ContainerStats | null;
+  cpuLabel: string;
+  memoryLabel: string;
+  networkInLabel: string;
+  networkOutLabel: string;
+}) {
+  const samples = createMemo(() => props.history.length > 0 ? props.history : (props.latest ? [props.latest] : []));
+  const latest = createMemo(() => samples().at(-1) ?? props.latest);
+  const labels = createMemo(() => samples().map((sample) => chartTimeLabel(sample.sampled_at_unix_ms)));
+  const cpuValues = createMemo(() => samples().map((sample) => Math.max(0, Number(sample.cpu_percent) || 0)));
+  const cpuMaximum = createMemo(() => cpuScaleMaximum(cpuValues()));
+  const memoryLimit = createMemo(() => Number(latest()?.memory_limit ?? 0));
+  const memoryValues = createMemo(() => {
+    const limit = memoryLimit();
+    return samples().map((sample) => limit > 0 ? clampPercent((sample.memory_bytes / limit) * 100) : Math.max(0, sample.memory_bytes));
+  });
+  const networkInValues = createMemo(() => networkRateSeries(samples(), 'network_rx_bytes'));
+  const networkOutValues = createMemo(() => networkRateSeries(samples(), 'network_tx_bytes'));
+  const latestNetworkIn = createMemo(() => networkInValues().at(-1) ?? 0);
+  const latestNetworkOut = createMemo(() => networkOutValues().at(-1) ?? 0);
+  const memoryPercent = createMemo(() => {
+    const limit = memoryLimit();
+    return limit > 0 ? clampPercent((Number(latest()?.memory_bytes ?? 0) / limit) * 100) : 0;
+  });
 
-function Sparkline(props: { label: string; values: readonly number[] }) {
-  const points = () => {
-    const values = props.values.length > 1 ? props.values : [0, ...(props.values.length ? props.values : [0])];
-    const maximum = Math.max(1, ...values);
-    return values.map((value, index) => `${(index / Math.max(1, values.length - 1)) * 100},${36 - (Math.max(0, value) / maximum) * 32}`).join(' ');
-  };
-  return <figure class="container-sparkline"><figcaption>{props.label}</figcaption><svg viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label={props.label}><polyline points={points()} /></svg></figure>;
+  return (
+    <div class="container-stats-dashboard" data-container-stats-dashboard>
+      <section class="container-monitor-panel" data-tone="cpu">
+        <div class="container-monitor-heading">
+          <span class="container-monitor-symbol" aria-hidden="true"><Cpu class="h-4 w-4" /></span>
+          <div class="container-monitor-reading">
+            <span>{props.cpuLabel}</span>
+            <strong>{formatPercent(latest()?.cpu_percent)}</strong>
+          </div>
+          <div class="container-utilization-meter" role="progressbar" aria-label={props.cpuLabel} aria-valuemin="0" aria-valuemax={cpuMaximum()} aria-valuenow={Math.max(0, Number(latest()?.cpu_percent ?? 0))}>
+            <span style={{ width: `${clampPercent((Math.max(0, Number(latest()?.cpu_percent ?? 0)) / cpuMaximum()) * 100)}%` }} />
+          </div>
+        </div>
+        <MonitoringChart
+          class="container-monitor-chart"
+          series={[{ name: props.cpuLabel, data: cpuValues(), color: 'var(--redeven-runtime-monitor-cpu-line)' }]}
+          labels={labels()}
+          height={176}
+          maxPoints={60}
+          showGrid
+          showLegend={false}
+          smooth={false}
+          yMin={0}
+          yMax={cpuMaximum()}
+          formatYTick={(value) => `${Number(value.toFixed(1))}%`}
+          formatTooltipValue={(value) => formatPercent(value)}
+          maxXAxisLabels={5}
+        />
+      </section>
+
+      <section class="container-monitor-panel" data-tone="memory">
+        <div class="container-monitor-heading">
+          <span class="container-monitor-symbol" aria-hidden="true"><Database class="h-4 w-4" /></span>
+          <div class="container-monitor-reading">
+            <span>{props.memoryLabel}</span>
+            <strong>{formatBytes(latest()?.memory_bytes)}</strong>
+          </div>
+          <div class="container-monitor-context tabular-nums">
+            <strong>{memoryLimit() > 0 ? formatPercent(memoryPercent()) : '—'}</strong>
+            <span>{memoryLimit() > 0 ? formatBytes(memoryLimit()) : '—'}</span>
+          </div>
+          <Show when={memoryLimit() > 0}>
+            <div class="container-utilization-meter" role="progressbar" aria-label={props.memoryLabel} aria-valuemin="0" aria-valuemax="100" aria-valuenow={memoryPercent()}>
+              <span style={{ width: `${memoryPercent()}%` }} />
+            </div>
+          </Show>
+        </div>
+        <MonitoringChart
+          class="container-monitor-chart"
+          series={[{ name: props.memoryLabel, data: memoryValues(), color: 'var(--redeven-runtime-monitor-memory-line)' }]}
+          labels={labels()}
+          height={176}
+          maxPoints={60}
+          showGrid
+          showLegend={false}
+          smooth={false}
+          yMin={0}
+          yMax={memoryLimit() > 0 ? utilizationScaleMaximum(memoryValues()) : undefined}
+          formatYTick={(value) => memoryLimit() > 0 ? `${Number(value.toFixed(1))}%` : formatBytes(value)}
+          formatTooltipValue={(value, context) => {
+            const sample = samples()[context.pointIndex];
+            return memoryLimit() > 0 && sample
+              ? `${formatBytes(sample.memory_bytes)} · ${formatPercent(value)}`
+              : formatBytes(value);
+          }}
+          maxXAxisLabels={5}
+        />
+      </section>
+
+      <section class="container-monitor-panel container-monitor-panel--network" data-tone="network">
+        <div class="container-monitor-heading container-monitor-heading--network">
+          <div class="container-network-reading" data-direction="in">
+            <span><ArrowDown class="h-3.5 w-3.5" aria-hidden="true" />{props.networkInLabel}</span>
+            <strong>{formatByteRate(latestNetworkIn())}</strong>
+          </div>
+          <div class="container-network-reading" data-direction="out">
+            <span><ArrowUp class="h-3.5 w-3.5" aria-hidden="true" />{props.networkOutLabel}</span>
+            <strong>{formatByteRate(latestNetworkOut())}</strong>
+          </div>
+        </div>
+        <MonitoringChart
+          class="container-monitor-chart"
+          series={[
+            { name: props.networkInLabel, data: networkInValues(), color: 'var(--redeven-runtime-monitor-download-line)' },
+            { name: props.networkOutLabel, data: networkOutValues(), color: 'var(--redeven-runtime-monitor-upload-line)' },
+          ]}
+          labels={labels()}
+          height={190}
+          maxPoints={60}
+          showGrid
+          showLegend={false}
+          smooth={false}
+          yMin={0}
+          formatYTick={(value) => formatByteRate(value)}
+          formatTooltipValue={(value) => formatByteRate(value)}
+          maxXAxisLabels={8}
+        />
+      </section>
+    </div>
+  );
 }

@@ -116,6 +116,11 @@ Selecting a resource opens a component-local detail page, never a floating
 inspector. Returning preserves the list query, filter, sort, and scroll owner.
 Container details provide Overview, live searchable logs, redacted Inspect,
 mounts, capability-gated files and Exec, and bounded in-browser statistics.
+Each single-container sample carries its authoritative capture time. The detail view
+uses the published Floe monitoring chart, presents CPU and memory as labeled
+utilization scales, and derives receive/send rates from successive engine
+counters instead of charting cumulative byte totals. A late initial snapshot
+may extend history but cannot replace a newer live sample.
 Image details provide Overview, sanitized layers, references, Run, Tag, and
 Delete without vulnerability or package-analysis placeholders. Volume details
 provide Overview, references, and capability-gated files. Compose Projects and
