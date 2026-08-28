@@ -163,6 +163,16 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, legacyRaw st
 	}
 }
 
+// These compatibility readers keep the deprecated v5 text mirror behind one
+// boundary while older Floret providers can still emit transient diagnostics.
+func floretThreadViewLegacyError(view flruntime.ThreadView) string {
+	return view.Error //nolint:staticcheck // Floret v5 retains Error as its documented compatibility mirror.
+}
+
+func floretThreadSummaryLegacyError(summary flruntime.ThreadSummary) string {
+	return summary.Error //nolint:staticcheck // Floret v5 retains Error as its documented compatibility mirror.
+}
+
 func providerHTTPStatusRunErrorCode(status int) string {
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden:

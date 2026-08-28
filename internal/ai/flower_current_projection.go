@@ -72,8 +72,9 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 	// and deprecated Error mirror must not become a second public UI contract.
 	delete(root, "failure")
 	delete(root, "error")
-	if current.Failure != nil || strings.TrimSpace(current.Error) != "" {
-		code, message := projectFloretTurnFailure(current.Failure, current.Error, "floret_turn_failed")
+	legacyError := floretThreadViewLegacyError(current)
+	if current.Failure != nil || strings.TrimSpace(legacyError) != "" {
+		code, message := projectFloretTurnFailure(current.Failure, legacyError, "floret_turn_failed")
 		if code == "" && message == "" {
 			delete(root, "run_error_code")
 			return json.Marshal(root)
