@@ -8530,7 +8530,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <>
         <span class="flower-activity-inline-icon">
           <Show
-            when={webFetchActivity()}
+            when={webFetchActivity() && displayStatus() !== 'error'}
             fallback={statusIcon(displayStatus())}
           >
             <WebFetchSearchingOrb running={displayStatus() === 'running'} />
