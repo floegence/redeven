@@ -2675,15 +2675,31 @@ export const enUS = defineDictionary({
       pods: 'Pods',
     },
     status: { connected: 'Connected', unavailable: 'Unavailable' },
-    columns: { name: 'Name', status: 'Status', details: 'Details' },
+    endpointMeta: { local: 'Local', remote: 'Remote', rootless: 'Rootless' },
+    columns: {
+      name: 'Name', status: 'Status', details: 'Details', image: 'Image', size: 'Size', driver: 'Driver',
+      running: 'Running', usage: 'Usage', ownership: 'Ownership', tags: 'Tags', services: 'Services',
+      created: 'Created', health: 'Health', group: 'Group', digest: 'Digest', scope: 'Scope',
+    },
+    states: {
+      running: 'Running', stopped: 'Stopped', exited: 'Exited', paused: 'Paused', restarting: 'Restarting',
+      created: 'Created', removing: 'Removing', dead: 'Dead', healthy: 'Healthy', unhealthy: 'Unhealthy',
+      degraded: 'Degraded', partial: 'Partially running', unknown: 'Unknown',
+    },
+    search: { label: 'Search resources', placeholder: 'Search by name, image, ID, or group', clear: 'Clear search' },
+    filters: { label: 'Filter resources', all: 'All', active: 'Active', inactive: 'Inactive', managed: 'Managed', inUse: 'In use', unused: 'Unused' },
+    summary: { showing: 'Showing {visible} of {total}', total: 'Total', managed: 'Managed' },
+    usage: { containers: 'Containers: {count}' },
     empty: {
       title: 'No resources found',
       description: 'This endpoint does not currently expose resources in this category.',
+      filteredTitle: 'No matching resources',
+      filteredDescription: 'Adjust the search or filters to see resources in this endpoint.',
     },
     actions: {
       refresh: 'Refresh', start: 'Start', stop: 'Stop', restart: 'Restart', pause: 'Pause', resume: 'Resume',
       kill: 'Kill', remove: 'Remove', down: 'Down', tag: 'Add tag', prune: 'Prune unused', cancel: 'Cancel',
-      close: 'Close', review: 'Review', run: 'Run operation',
+      close: 'Close', review: 'Review', run: 'Run operation', clearFilters: 'Clear filters',
     },
     create: {
       title: 'Create resource', tagTitle: 'Add image tag', advanced: 'Runtime settings',
@@ -2693,11 +2709,18 @@ export const enUS = defineDictionary({
       name: 'Name', image: 'Image', driver: 'Driver', tag: 'New tag', command: 'Command',
       restartPolicy: 'Restart policy', cpus: 'CPUs', memory: 'Memory (MiB)',
     },
-    inspector: { title: 'Resource details', details: 'Details', logs: 'Logs', stats: 'Stats' },
+    inspector: {
+      title: 'Resource details', details: 'Details', logs: 'Logs', stats: 'Stats', overview: 'Overview', runtime: 'Runtime',
+      technicalDetails: 'Technical details', selectTitle: 'Select a resource',
+      selectDescription: 'Choose a resource to inspect its identity, runtime configuration, health, and available actions.',
+      identity: 'Identity', selfManaged: 'Managed here', networkMode: 'Network mode', user: 'Runtime user',
+      privileged: 'Privileged', readOnlyRoot: 'Read-only root', ports: 'Published ports',
+    },
     stats: { cpu: 'CPU', memory: 'Memory', networkIn: 'Network in', networkOut: 'Network out' },
     operations: {
       title: 'Operations', description: 'Audited container operations and their current state.', empty: 'No container operations yet.',
     },
+    operationStates: { queued: 'Queued', running: 'Running', canceling: 'Canceling', succeeded: 'Completed', failed: 'Failed', canceled: 'Canceled', interrupted: 'Interrupted' },
     managed: {
       badge: 'Managed by Web Services', title: 'Managed by Web Services',
       description: '“{name}” owns this resource. Its lifecycle is protected here.', openService: 'Open Web Service',
