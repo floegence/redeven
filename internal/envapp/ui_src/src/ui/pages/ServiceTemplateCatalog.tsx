@@ -91,7 +91,9 @@ export function ServiceTemplateIdentity(props: {
             </span>
           </Show>
         </div>
-        <p class={cn('text-xs text-muted-foreground', props.compact ? 'mt-0.5 truncate leading-4' : 'mt-1 leading-5')} dir="auto">{props.template.description}</p>
+        <Show when={!props.compact}>
+          <p class="mt-1 text-xs leading-5 text-muted-foreground" dir="auto">{props.template.description}</p>
+        </Show>
         <div class={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground', props.compact ? 'mt-0.5 leading-4' : 'mt-2')} data-template-metadata>
           <Show when={props.compact}>
             <span>{props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}</span>

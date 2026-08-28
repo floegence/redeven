@@ -559,14 +559,15 @@ describe('EnvPortForwardsPage', () => {
     expect(actions?.item((actions?.length ?? 1) - 1)?.textContent).toContain('Add Service');
   });
 
-  it('keeps the address launcher intentionally sized while allowing its input shell to fill the row', async () => {
+  it('keeps the address launcher on the full content axis and lets its input shell fill the row', async () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
     const form = host.querySelector<HTMLElement>('[data-testid="web-service-address-form"]');
     const inputShell = host.querySelector<HTMLElement>('[data-testid="web-service-address-input-shell"]');
 
-    expect(form?.className).toContain('max-w-3xl');
+    expect(form?.className).toContain('w-full');
+    expect(form?.className).not.toContain('max-w-3xl');
     expect(inputShell?.className).toContain('flex-1');
   });
 
@@ -660,6 +661,8 @@ describe('EnvPortForwardsPage', () => {
 
     const collection = host.querySelector<HTMLElement>('[data-testid="web-services-collection"]');
     const search = host.querySelector<HTMLElement>('[data-testid="web-services-search"]');
+    const toolbarActions = host.querySelector<HTMLElement>('[data-testid="web-services-toolbar-actions"]');
+    const refresh = host.querySelector<HTMLElement>('[data-testid="web-services-refresh"]');
     const list = host.querySelector<HTMLElement>('[data-testid="unified-web-services-list"]');
     const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]');
     const workspace = host.querySelector<HTMLElement>('[data-testid="managed-service-workspace"]');
@@ -668,13 +671,15 @@ describe('EnvPortForwardsPage', () => {
     expect(collection?.parentElement?.className).toContain('max-w-5xl');
     expect(collection?.contains(search ?? null)).toBe(true);
     expect(collection?.contains(list ?? null)).toBe(true);
-    expect(search?.className).toContain('sm:w-72');
-    expect(search?.className).toContain('sm:ml-auto');
+    expect(search?.className).toContain('sm:w-64');
+    expect(toolbarActions?.className).toContain('sm:ml-auto');
+    expect(toolbarActions?.contains(refresh ?? null)).toBe(true);
+    expect(host.querySelector('[data-testid="web-services-panel"]')?.contains(refresh ?? null)).toBe(false);
     expect(list?.className).toContain('divide-y');
     expect(list?.className).not.toContain('grid');
     expect(row?.className).not.toContain('bg-[var(--redeven-status-success-soft)]');
     expect(workspace?.className).toContain('truncate');
-    expect(actions?.className).not.toContain('grid-cols-2');
+    expect(actions?.className).toContain('grid-cols-[4.75rem_4.75rem_2rem]');
     expect(actions?.querySelector('[data-testid="managed-service-more"]')).toBeTruthy();
     expect(row?.querySelector('[data-template-brand="interactive-desktop"]')).toBeTruthy();
   });
