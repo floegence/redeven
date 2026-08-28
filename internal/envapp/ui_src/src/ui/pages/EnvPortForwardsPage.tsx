@@ -1836,7 +1836,7 @@ export function EnvPortForwardsPage() {
           <div class="mx-auto w-full max-w-6xl space-y-3" data-testid="web-services-collection">
             {/* Search bar - only show when there are services */}
             <Show when={unmanagedForwards().length > 0 || managedState().length > 0}>
-              <div class="w-full max-w-sm" data-testid="web-services-search">
+              <div class="w-full max-w-[23.5rem]" data-testid="web-services-search">
                 <div class="relative min-w-0">
                   <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <Input

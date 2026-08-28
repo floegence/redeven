@@ -655,7 +655,7 @@ describe('EnvPortForwardsPage', () => {
     expect(collection?.className).toContain('max-w-6xl');
     expect(collection?.contains(search ?? null)).toBe(true);
     expect(collection?.contains(grid ?? null)).toBe(true);
-    expect(search?.className).toContain('max-w-sm');
+    expect(search?.className).toContain('max-w-[23.5rem]');
     expect(search?.className).not.toContain('grid-cols-2');
     expect(grid?.className).toContain('lg:grid-cols-2');
     expect(card?.className).not.toContain('h-full');

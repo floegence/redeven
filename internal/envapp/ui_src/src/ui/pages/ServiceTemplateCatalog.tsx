@@ -85,12 +85,18 @@ export function ServiceTemplateIdentity(props: {
       <div class={cn('min-w-0 flex-1', !props.compact && 'pt-0.5')}>
         <div class={cn('flex min-w-0 items-center gap-x-2 gap-y-1', props.compact ? 'flex-nowrap' : 'flex-wrap')}>
           <h3 class={cn('min-w-0 text-sm font-semibold leading-5 text-foreground', props.compact && 'truncate')} dir="auto">{props.template.name}</h3>
-          <span class="service-template-source-badge inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
-            {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : i18n.t('webServices.managed.custom')}
-          </span>
+          <Show when={!props.compact}>
+            <span class="service-template-source-badge inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
+              {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : i18n.t('webServices.managed.custom')}
+            </span>
+          </Show>
         </div>
         <p class={cn('text-xs text-muted-foreground', props.compact ? 'mt-0.5 truncate leading-4' : 'mt-1 leading-5')} dir="auto">{props.template.description}</p>
         <div class={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground', props.compact ? 'mt-0.5 leading-4' : 'mt-2')} data-template-metadata>
+          <Show when={props.compact}>
+            <span>{props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}</span>
+            <span aria-hidden="true">·</span>
+          </Show>
           <span>{props.template.deploymentLabel}</span>
           <Show when={props.template.version}>
             <span aria-hidden="true">·</span>
