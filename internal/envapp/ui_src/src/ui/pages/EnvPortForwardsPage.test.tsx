@@ -578,6 +578,90 @@ describe('EnvPortForwardsPage', () => {
     expect(host.textContent).toContain('Running');
   });
 
+  it('opens a managed service through a route-safe browser session', async () => {
+    const service = {
+      service_id: 'mws-legacy',
+      template_id: 'linuxserver-webtop-ubuntu-kde',
+      service_family_id: 'linuxserver-webtop-ubuntu-kde',
+      name: 'LinuxServer Webtop · Ubuntu KDE',
+      description: 'Managed desktop',
+      template_source: 'builtin',
+      deployment: 'container',
+      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde',
+      version: '654ea8e3-ls177',
+      desired_state: 'running',
+      observed_state: 'running',
+      forward_id: 'pf_legacy_managed_service',
+      runtime_port: 54945,
+      update_available: false,
+    };
+    const assign = vi.fn();
+    vi.spyOn(window, 'open').mockReturnValue({ location: { assign }, close: vi.fn() } as unknown as Window);
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
+      if (url === '/_redeven_proxy/api/forwards') {
+        return { forwards: [{ forward_id: service.forward_id, target_url: 'http://127.0.0.1:54945', name: service.name, description: 'Managed by Redeven' }] };
+      }
+      if (url === '/_redeven_proxy/api/forward-sessions' && init?.method === 'POST') {
+        return {
+          forward: { forward_id: 'pf-route-safe-alias', target_url: 'http://127.0.0.1:54945' },
+          app_path: '/',
+          ephemeral: true,
+        };
+      }
+      if (url === '/_redeven_proxy/api/forwards/pf-route-safe-alias/touch') return { forward_id: 'pf-route-safe-alias' };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-card"]')).toBeTruthy());
+    const openButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-card"] button'))
+      .find((button) => button.textContent?.trim() === 'Open');
+    openButton?.click();
+
+    await waitForAssertion(() => {
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forward-sessions', {
+        method: 'POST',
+        body: JSON.stringify({ target: 'http://127.0.0.1:54945' }),
+      });
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/pf-route-safe-alias/touch', { method: 'POST' });
+      expect(assign).toHaveBeenCalledWith('http://127.0.0.1:54945');
+    });
+  });
+
+  it('keeps the service search, grid, and managed card on one aligned visual frame', async () => {
+    envContextMocks.env = Object.assign(
+      () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
+      { state: 'ready', loading: false, error: null },
+    );
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'LinuxServer Webtop · Ubuntu KDE', description: 'Managed desktop', template_source: 'builtin', brand_icon: 'interactive-desktop', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls177', desired_state: 'running', observed_state: 'running', forward_id: 'pf-managed', runtime_port: 54945, update_available: false }] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'pf-managed', target_url: 'http://127.0.0.1:54945', name: 'Webtop', description: 'Managed by Redeven' }] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-card"]')).toBeTruthy());
+
+    const collection = host.querySelector<HTMLElement>('[data-testid="web-services-collection"]');
+    const search = host.querySelector<HTMLElement>('[data-testid="web-services-search"]');
+    const grid = host.querySelector<HTMLElement>('[data-testid="unified-web-services-grid"]');
+    const card = host.querySelector<HTMLElement>('[data-testid="managed-service-card"]');
+    const workspace = host.querySelector<HTMLElement>('[data-testid="managed-service-workspace"]');
+    const actions = host.querySelector<HTMLElement>('[data-testid="managed-service-actions"]');
+
+    expect(collection?.className).toContain('max-w-6xl');
+    expect(collection?.contains(search ?? null)).toBe(true);
+    expect(collection?.contains(grid ?? null)).toBe(true);
+    expect(search?.className).toContain('w-full');
+    expect(card?.className).toContain('h-full');
+    expect(workspace?.className).toContain('truncate');
+    expect(actions?.className).toContain('grid-cols-2');
+    expect(card?.querySelector('[data-template-brand="interactive-desktop"]')).toBeTruthy();
+  });
+
   it('shows managed service status and read actions without lifecycle permission', async () => {
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_read: true, can_write: false, can_execute: false } }),

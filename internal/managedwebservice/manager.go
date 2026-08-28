@@ -380,7 +380,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	forwardID, err := randomID("pf")
+	forwardID, err := randomManagedForwardID()
 	if err != nil {
 		return nil, err
 	}
@@ -999,9 +999,17 @@ func requestFingerprint(parts ...string) string {
 	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 func randomID(prefix string) (string, error) {
+	return randomIDWithSeparator(prefix, "_")
+}
+
+func randomManagedForwardID() (string, error) {
+	return randomIDWithSeparator("pf", "-")
+}
+
+func randomIDWithSeparator(prefix string, separator string) (string, error) {
 	raw := make([]byte, 18)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
-	return prefix + "_" + strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)), nil
+	return prefix + separator + strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)), nil
 }

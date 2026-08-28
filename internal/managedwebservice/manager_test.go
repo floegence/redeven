@@ -13,8 +13,21 @@ import (
 
 	"github.com/floegence/redeven/internal/capabilities/containers"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
+
+func TestManagedForwardIDIsRouteSafe(t *testing.T) {
+	t.Parallel()
+
+	id, err := randomManagedForwardID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !portforward.IsValidForwardID(id) {
+		t.Fatalf("managed forward ID %q is not route safe", id)
+	}
+}
 
 func newManagedServiceTestScope(t *testing.T) (*filesystemscope.Registry, string) {
 	t.Helper()

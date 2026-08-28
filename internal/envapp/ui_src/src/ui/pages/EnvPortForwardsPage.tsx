@@ -688,24 +688,73 @@ export function ManagedTemplateNotices(props: {
   );
 }
 
-function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+function managedServicePresentation(service: ManagedService, i18n: WebServicesI18n): ServiceTemplatePresentation {
+  const identity = managedServiceLocalizedIdentity(service, i18n);
+  const kind = service.deployment === 'native' || service.deployment === 'host'
+    ? 'host'
+    : service.deployment === 'compose'
+      ? 'compose'
+      : 'container';
+  return {
+    id: service.template_id,
+    name: identity.name,
+    description: identity.description,
+    source: service.template_source === 'custom' ? 'custom' : 'builtin',
+    kind,
+    brandIcon: service.brand_icon,
+    deploymentLabel: managedDeploymentLabel(service.deployment, i18n),
+    version: service.version,
+    developerPreview: false,
+    available: true,
+    installed: true,
+    duplicateable: false,
+    editable: false,
+  };
+}
+
+export function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
-  const identity = () => managedServiceLocalizedIdentity(props.service, i18n);
+  const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
   const failed = () => props.service.observed_state === 'error';
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
   return (
-    <Card class={cn('border transition-colors', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card">
-      <CardHeader class="pb-2"><div class="flex items-start justify-between gap-2"><div class="min-w-0"><CardTitle class="text-sm truncate">{identity().name}</CardTitle><CardDescription class="text-xs mt-0.5">{props.service.version ? `v${props.service.version} · ` : ''}{managedDeploymentLabel(props.service.deployment, i18n)}</CardDescription></div><div class="flex shrink-0 flex-col items-end gap-1"><Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag><Show when={props.service.update_available}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.updateAvailable')}</Tag></Show></div></div></CardHeader>
-      <CardContent class="pt-0 pb-2"><div class="space-y-1 text-[11px]"><div class="flex justify-between gap-3"><span class="text-muted-foreground">{i18n.t('webServices.managed.workspace')}</span><span class="font-mono truncate" title={props.service.workspace_path}>{props.service.workspace_path}</span></div><Show when={props.service.last_error_code}><p class="text-destructive">{i18n.t('webServices.managed.stages.failed')}</p></Show></div></CardContent>
-      <CardFooter class={cn('pt-2 flex flex-wrap items-center gap-2 border-t', redevenDividerRoleClass())}>
-        <Button size="sm" variant="default" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="w-3.5 h-3.5 mr-1" />{i18n.t('webServices.actions.open')}</Button>
-        <Button size="sm" variant="outline" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="w-3.5 h-3.5 mr-1" /> : <Play class="w-3.5 h-3.5 mr-1" />}><Stop class="w-3.5 h-3.5 mr-1" /></Show>{primaryLabel()}</Button>
-        <Show when={props.service.update_available}><Button size="sm" variant="outline" onClick={props.onUpdate} disabled={props.busy || !props.canManage}><Refresh class="mr-1 h-3.5 w-3.5" />{i18n.t('webServices.managed.update')}</Button></Show>
-        <Button size="sm" variant="ghost" onClick={() => props.onAction('restart')} disabled={props.busy || !props.canManage || !running()} title={i18n.t('webServices.managed.restart')}><Refresh class="w-3.5 h-3.5" /></Button>
-        <Button size="sm" variant="ghost" onClick={props.onLogs} disabled={props.busy} title={i18n.t('webServices.managed.logs')}><FileText class="w-3.5 h-3.5" /></Button>
-        <Button size="sm" variant="ghost" onClick={props.onUninstall} disabled={props.busy || !props.canManage} title={i18n.t('webServices.managed.uninstall')}><Trash class="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" /></Button>
+    <Card class={cn('flex h-full min-w-0 flex-col overflow-hidden border transition-colors duration-200', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card">
+      <CardHeader class="pb-3">
+        <div class="flex min-w-0 items-start gap-3">
+          <div class="min-w-0 flex-1"><ServiceTemplateIdentity template={presentation()} compact /></div>
+          <div class="flex shrink-0 flex-col items-end gap-1.5 pt-0.5" data-testid="managed-service-status">
+            <Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag>
+            <Show when={props.service.update_available}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.updateAvailable')}</Tag></Show>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent class="flex-1 pb-4 pt-0">
+        <div class={cn('border-t pt-3', redevenDividerRoleClass())}>
+          <div class="flex min-w-0 items-center gap-2 text-[11px] font-medium text-muted-foreground">
+            <FolderOpen class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>{i18n.t('webServices.managed.workspace')}</span>
+          </div>
+          <div class="mt-1 truncate pl-[1.375rem] font-mono text-[11px] leading-5 text-foreground/80" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</div>
+        </div>
+        <Show when={props.service.last_error_code}><p class="mt-2 text-xs text-destructive">{i18n.t('webServices.managed.stages.failed')}</p></Show>
+      </CardContent>
+      <CardFooter class={cn('border-t pt-3', redevenDividerRoleClass())}>
+        <div class="w-full min-w-0" data-testid="managed-service-footer">
+          <div class="grid min-w-0 grid-cols-2 gap-2" data-testid="managed-service-actions">
+            <Button size="sm" variant="default" class="min-w-0" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
+            <Button size="sm" variant="outline" class="min-w-0" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>{primaryLabel()}</Button>
+          </div>
+          <div class={cn('mt-2 flex min-h-8 items-center border-t pt-2', redevenDividerRoleClass())}>
+            <Show when={props.service.update_available}><Button size="sm" variant="ghost" class="px-2" onClick={props.onUpdate} disabled={props.busy || !props.canManage}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.managed.update')}</Button></Show>
+            <div class="ml-auto flex shrink-0 items-center gap-0.5">
+              <Button size="sm" variant="ghost" onClick={() => props.onAction('restart')} disabled={props.busy || !props.canManage || !running()} title={i18n.t('webServices.managed.restart')}><Refresh class="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" onClick={props.onLogs} disabled={props.busy} title={i18n.t('webServices.managed.logs')}><FileText class="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" onClick={props.onUninstall} disabled={props.busy || !props.canManage} title={i18n.t('webServices.managed.uninstall')}><Trash class="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" /></Button>
+            </div>
+          </div>
+        </div>
       </CardFooter>
     </Card>
   );
@@ -1079,6 +1128,19 @@ export function EnvPortForwardsPage() {
 
   const selectedTemplate = createMemo(() => managedTemplates().find((template) => template.template_id === selectedTemplateID()) ?? null);
 
+  const resolveManagedForwardSession = async (service: ManagedService): Promise<ForwardSession> => {
+    let forward = forwards()?.find((item) => item.forward_id === service.forward_id);
+    if (!forward) {
+      const refreshed = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
+      forward = refreshed.forwards?.find((item) => item.forward_id === service.forward_id);
+    }
+    if (!forward) throw new Error(i18n.t('webServices.errors.loadFailedPrefix'));
+    return fetchLocalApiJSON<ForwardSession>('/_redeven_proxy/api/forward-sessions', {
+      method: 'POST',
+      body: JSON.stringify({ target: forward.target_url }),
+    });
+  };
+
   const installManaged = async () => {
     const template = selectedTemplate();
     if (!template || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.service_family_id === template.service_family_id) || !canManageManagedService()) return;
@@ -1097,13 +1159,12 @@ export function EnvPortForwardsPage() {
       setTemplateDrawerOpen(false);
       await loadManaged(true);
       bumpRefresh();
-      const refreshed = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
-      const forward = refreshed.forwards?.find((item) => item.forward_id === result.service.forward_id);
       notify.success(i18n.t('webServices.notifications.serviceAddedTitle'), i18n.t('webServices.notifications.serviceAddedMessage'));
-      if (forward && (useDesktopWindow || reservedWindow)) {
-        setBusyID(forward.forward_id);
+      if (useDesktopWindow || reservedWindow) {
+        setBusyID(`managed:${result.service.service_id}`);
         try {
-          await performOpen(forward, '/', useDesktopWindow, reservedWindow);
+          const session = await resolveManagedForwardSession(result.service);
+          await performOpen(session.forward, session.app_path, useDesktopWindow, reservedWindow);
         } finally {
           setBusyID(null);
           setBusyText('');
@@ -1146,16 +1207,15 @@ export function EnvPortForwardsPage() {
   };
 
   const openManaged = async (service: ManagedService) => {
-    let forward = forwards()?.find((item) => item.forward_id === service.forward_id);
-    if (!forward) {
-      const refreshed = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
-      forward = refreshed.forwards?.find((item) => item.forward_id === service.forward_id);
-    }
-    if (!forward) {
-      notify.error(i18n.t('webServices.notifications.failedToOpenTitle'), i18n.t('webServices.errors.loadFailedPrefix'));
-      return;
-    }
-    await doOpen(forward);
+    await runOpenTransaction(
+      `managed:${service.service_id}`,
+      `redeven_managed_${service.service_id}`,
+      i18n.t('webServices.status.opening'),
+      async () => {
+        const session = await resolveManagedForwardSession(service);
+        return { forward: session.forward, appPath: session.app_path };
+      },
+    );
   };
 
   const uninstallManaged = async (request: ManagedUninstallRequest) => {
@@ -1743,47 +1803,46 @@ export function EnvPortForwardsPage() {
             </div>
           </Show>
 
-          {/* Search bar - only show when there are services */}
-          <Show when={unmanagedForwards().length > 0 || managedState().length > 0}>
-            <div class="flex items-center gap-2">
-              <div class="relative w-full max-w-sm">
-                <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <div class="mx-auto w-full max-w-6xl space-y-3" data-testid="web-services-collection">
+            {/* Search bar - only show when there are services */}
+            <Show when={unmanagedForwards().length > 0 || managedState().length > 0}>
+              <div class="relative w-full" data-testid="web-services-search">
+                <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <Input
                   value={searchQuery()}
                   onInput={(e) => setSearchQuery(e.currentTarget.value)}
                   placeholder={i18n.t('webServices.search.placeholder')}
                   size="sm"
-                  class="w-full pl-8"
+                  class="h-9 w-full pl-9 pr-9"
                 />
+                <Show when={searchQuery()}>
+                  <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="absolute right-0.5 top-1/2 h-8 -translate-y-1/2 px-2" aria-label={i18n.t('webServices.search.clear')}>
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                  </Button>
+                </Show>
               </div>
-              <Show when={searchQuery()}>
-                <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="px-2">
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                  </svg>
-                </Button>
-              </Show>
-            </div>
-          </Show>
-
-          {/* Services list */}
-          <div
-            class="relative"
-            style={{ 'min-height': '200px' }}
-            aria-busy={forwardsRefreshing() ? 'true' : undefined}
-            data-testid="web-services-list-region"
-          >
-            <EnvCollectionLoadingSkeleton
-              visible={initialForwardsLoading()}
-              message={i18n.t('webServices.loadingMessage')}
-              testId="web-services-initial-loading"
-            />
-            <Show when={forwardsRefreshing()}>
-              <span class="sr-only" role="status" aria-live="polite">{i18n.t('webServices.loadingMessage')}</span>
             </Show>
 
-            <Show when={forwards.error}>
-              <div class="flex items-center gap-2 text-sm text-destructive p-4">
+            {/* Services list */}
+            <div
+              class="relative"
+              style={{ 'min-height': '200px' }}
+              aria-busy={forwardsRefreshing() ? 'true' : undefined}
+              data-testid="web-services-list-region"
+            >
+              <EnvCollectionLoadingSkeleton
+                visible={initialForwardsLoading()}
+                message={i18n.t('webServices.loadingMessage')}
+                testId="web-services-initial-loading"
+              />
+              <Show when={forwardsRefreshing()}>
+                <span class="sr-only" role="status" aria-live="polite">{i18n.t('webServices.loadingMessage')}</span>
+              </Show>
+
+              <Show when={forwards.error}>
+                <div class="flex items-center gap-2 text-sm text-destructive p-4">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path
                     stroke-linecap="round"
@@ -1792,8 +1851,8 @@ export function EnvPortForwardsPage() {
                   />
                 </svg>
                 {i18n.t('webServices.errors.loadFailedPrefix')}: {String(forwards.error)}
-              </div>
-            </Show>
+                </div>
+              </Show>
 
             <Show when={(forwardsRenderable() || managedState().length > 0) && !forwards.error}>
               <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}>
@@ -1803,9 +1862,9 @@ export function EnvPortForwardsPage() {
                     <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button>
                   </div>
                 }>
-                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="unified-web-services-grid">
+                  <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="unified-web-services-grid">
                     <For each={filteredManagedServices()}>{(service) => (
-                      <ManagedServiceCard service={service} busy={managedBusy()} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
+                      <ManagedServiceCard service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
                     )}</For>
                     <For each={filteredForwards()}>{(f) => (
                       <PortForwardCard forward={f} busy={busyID() === f.forward_id} busyText={busyID() === f.forward_id ? busyText() : undefined} onOpen={() => void doOpen(f)} onDelete={() => setDeleteID(f.forward_id)} />
@@ -1822,6 +1881,7 @@ export function EnvPortForwardsPage() {
                 <Show when={['pending', 'running', 'cancelling'].includes(operation.state)}><Button size="sm" variant="ghost" onClick={() => void cancelManagedOperation()} disabled={operation.state === 'cancelling' || !canManageManagedService()}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show>
               </div>
             )}</Show>
+            </div>
           </div>
         </PanelContent>
       </Panel>

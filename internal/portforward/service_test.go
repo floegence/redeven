@@ -192,6 +192,41 @@ func TestService_OpenForwardSessionReusesSavedOriginAndPreservesNavigation(t *te
 	}
 }
 
+func TestService_OpenForwardSessionUsesRouteSafeAliasForLegacyPersistedID(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t)
+	ctx := context.Background()
+	legacy := registry.Forward{
+		ForwardID: "pf_legacy_managed_service",
+		TargetURL: "http://127.0.0.1:4173",
+		Name:      "Legacy managed service",
+	}
+	if err := svc.reg.CreateForward(ctx, legacy); err != nil {
+		t.Fatalf("seed legacy managed forward: %v", err)
+	}
+
+	opened, err := svc.OpenForwardSession(ctx, OpenForwardSessionRequest{Target: legacy.TargetURL})
+	if err != nil {
+		t.Fatalf("OpenForwardSession: %v", err)
+	}
+	if !opened.Ephemeral {
+		t.Fatal("legacy non-route-safe identity must be opened through an ephemeral alias")
+	}
+	if opened.Forward.ForwardID == legacy.ForwardID || !IsValidForwardID(opened.Forward.ForwardID) {
+		t.Fatalf("ForwardID = %q, want a distinct DNS-safe alias", opened.Forward.ForwardID)
+	}
+	if opened.Forward.TargetURL != legacy.TargetURL {
+		t.Fatalf("TargetURL = %q, want %q", opened.Forward.TargetURL, legacy.TargetURL)
+	}
+	persisted, err := svc.reg.GetForward(ctx, legacy.ForwardID)
+	if err != nil {
+		t.Fatalf("read legacy forward: %v", err)
+	}
+	if persisted == nil || persisted.LastOpenedAtUnixMs != 0 {
+		t.Fatalf("legacy forward was mutated: %#v", persisted)
+	}
+}
+
 func TestService_SaveForwardSessionKeepsIDAndPersistsMetadata(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t)
