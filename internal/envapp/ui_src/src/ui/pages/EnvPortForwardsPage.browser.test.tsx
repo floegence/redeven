@@ -3,9 +3,9 @@ import '../../index.css';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
-import { userEvent } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 
-import { ManagedServiceCard, ManagedTemplateNotices } from './EnvPortForwardsPage';
+import { ManagedServiceRow, ManagedTemplateNotices } from './EnvPortForwardsPage';
 
 async function settle(): Promise<void> {
   await Promise.resolve();
@@ -69,12 +69,13 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(followingContent.getBoundingClientRect().top).toBe(before.followingTop);
   });
 
-  it('keeps the managed service card compact and aligned at card width', async () => {
+  it('keeps the managed service row dense and column-aligned', async () => {
+    await page.viewport(1200, 800);
     const host = document.createElement('div');
-    host.style.width = '376px';
+    host.style.width = '1024px';
     document.body.appendChild(host);
     dispose = render(() => (
-      <ManagedServiceCard
+      <ManagedServiceRow
         service={{
           service_id: 'mws-webtop',
           template_id: 'linuxserver-webtop-ubuntu-kde',
@@ -104,23 +105,28 @@ describe('EnvPortForwardsPage browser presentation', () => {
     ), host);
     await settle();
 
-    const card = document.querySelector<HTMLElement>('[data-testid="managed-service-card"]')!;
-    const identity = card.querySelector<HTMLElement>('.service-template-identity')!;
+    const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
+    const identity = row.querySelector<HTMLElement>('.service-template-identity')!;
     const name = identity.querySelector<HTMLElement>('h3')!;
-    const status = card.querySelector<HTMLElement>('[data-testid="managed-service-status"]')!;
-    const workspace = card.querySelector<HTMLElement>('[data-testid="managed-service-workspace"]')!;
-    const actions = card.querySelector<HTMLElement>('[data-testid="managed-service-actions"]')!;
+    const status = row.querySelector<HTMLElement>('[data-testid="managed-service-status"]')!;
+    const workspaceColumn = row.querySelector<HTMLElement>('[data-testid="managed-service-workspace-column"]')!;
+    const workspace = row.querySelector<HTMLElement>('[data-testid="managed-service-workspace"]')!;
+    const actions = row.querySelector<HTMLElement>('[data-testid="managed-service-actions"]')!;
     const actionButtons = Array.from(actions.querySelectorAll<HTMLElement>('button'));
-    const cardRect = card.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
     const identityRect = identity.getBoundingClientRect();
-    const statusRect = status.getBoundingClientRect();
+    const workspaceRect = workspaceColumn.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
 
-    expect(cardRect.width).toBeLessThanOrEqual(376);
-    expect(cardRect.height).toBeLessThanOrEqual(132);
-    expect(identityRect.right).toBeLessThanOrEqual(statusRect.left);
+    expect(rowRect.width).toBe(1024);
+    expect(rowRect.height).toBeLessThanOrEqual(96);
+    expect(identityRect.right).toBeLessThanOrEqual(workspaceRect.left);
+    expect(workspaceRect.right).toBeLessThanOrEqual(actionsRect.left);
     expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
     expect(workspace.scrollWidth).toBeGreaterThan(workspace.clientWidth);
     expect(workspace.getBoundingClientRect().height).toBeLessThanOrEqual(20);
+    expect(status.textContent).toContain('Running');
+    expect(row.className).not.toContain('bg-[var(--redeven-status-success-soft)]');
     expect(actionButtons).toHaveLength(3);
     expect(new Set(actionButtons.map((button) => button.getBoundingClientRect().top)).size).toBe(1);
     expect(new Set(actionButtons.map((button) => button.getBoundingClientRect().height)).size).toBe(1);

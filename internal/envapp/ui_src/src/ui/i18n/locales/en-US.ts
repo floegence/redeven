@@ -2789,6 +2789,9 @@ export const enUS = defineDictionary({
     session: {
       temporary: 'Temporary',
     },
+    collection: {
+      title: 'Services',
+    },
     card: {
       fallbackName: 'Service {id}',
     },

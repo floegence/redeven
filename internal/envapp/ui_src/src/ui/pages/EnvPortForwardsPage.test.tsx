@@ -109,7 +109,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
-  Card: (props: any) => <div class={props.class} data-testid={props['data-testid'] ?? 'port-forward-card'} data-template-id={props['data-template-id']}>{props.children}</div>,
+  Card: (props: any) => <div class={props.class} data-testid={props['data-testid'] ?? 'mock-card'} data-template-id={props['data-template-id']}>{props.children}</div>,
   CardContent: (props: any) => <div class={props.class}>{props.children}</div>,
   CardDescription: (props: any) => <div class={props.class} title={props.title}>{props.children}</div>,
   CardFooter: (props: any) => <div class={props.class}>{props.children}</div>,
@@ -433,7 +433,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const currentCard = host.querySelector('[data-testid="port-forward-card"]');
+    const currentCard = host.querySelector('[data-testid="port-forward-row"]');
     const searchInput = host.querySelector('input[placeholder^="Search services"]') as HTMLInputElement | null;
     expect(searchInput).toBeTruthy();
     if (searchInput) {
@@ -451,7 +451,7 @@ describe('EnvPortForwardsPage', () => {
     refreshButton?.click();
     await flushMicrotasks();
 
-    expect(host.querySelector('[data-testid="port-forward-card"]')).toBe(currentCard);
+    expect(host.querySelector('[data-testid="port-forward-row"]')).toBe(currentCard);
     expect(host.querySelector('input[placeholder^="Search services"]')).toBe(searchInput);
     expect(searchInput?.value).toBe('Demo');
     expect(host.querySelector('[data-testid="web-services-list-region"]')?.getAttribute('aria-busy')).toBe('true');
@@ -523,7 +523,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-card"] button');
+    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-row"] button');
     openButton?.click();
     await flushMicrotasks();
 
@@ -536,25 +536,27 @@ describe('EnvPortForwardsPage', () => {
     });
   });
 
-  it('uses semantic panel and card surface classes for neutral forward shells', async () => {
+  it('uses one neutral collection surface instead of nested service panels', async () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const panel = host.querySelector('[data-testid="web-services-panel"]') as HTMLDivElement | null;
-    const card = host.querySelector('[data-testid="port-forward-card"]') as HTMLDivElement | null;
+    const header = host.querySelector('[data-testid="web-services-panel"]') as HTMLDivElement | null;
+    const list = host.querySelector('[data-testid="unified-web-services-list"]') as HTMLDivElement | null;
+    const row = host.querySelector('[data-testid="port-forward-row"]') as HTMLDivElement | null;
 
-    expect(panel?.className).toContain('redeven-surface-panel--strong');
-    expect(card?.className).toContain('redeven-surface-panel--interactive');
+    expect(header?.className).toContain('border-b');
+    expect(list?.className).toContain('redeven-surface-panel');
+    expect(row?.className).not.toContain('redeven-surface-panel');
   });
 
-  it('places Service templates at the far right of the page actions', async () => {
+  it('keeps the primary Add Service action at the far right', async () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
     const templates = host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]');
     const actions = templates?.parentElement?.querySelectorAll<HTMLButtonElement>(':scope > button');
     expect(templates).toBeTruthy();
-    expect(actions?.item((actions?.length ?? 1) - 1)).toBe(templates);
+    expect(actions?.item((actions?.length ?? 1) - 1)?.textContent).toContain('Add Service');
   });
 
   it('shows a managed DeepSeek Harness card without duplicating its protected forward', async () => {
@@ -572,8 +574,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    expect(host.querySelectorAll('[data-testid="managed-service-card"]')).toHaveLength(1);
-    expect(host.querySelectorAll('[data-testid="port-forward-card"]')).toHaveLength(0);
+    expect(host.querySelectorAll('[data-testid="managed-service-row"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-testid="port-forward-row"]')).toHaveLength(0);
     expect(host.textContent).toContain('DeepSeek Harness');
     expect(host.textContent).toContain('Running');
   });
@@ -615,8 +617,8 @@ describe('EnvPortForwardsPage', () => {
     });
 
     render(() => <EnvPortForwardsPage />, host);
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-card"]')).toBeTruthy());
-    const openButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-card"] button'))
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
+    const openButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button'))
       .find((button) => button.textContent?.trim() === 'Open');
     openButton?.click();
 
@@ -643,26 +645,27 @@ describe('EnvPortForwardsPage', () => {
     });
 
     render(() => <EnvPortForwardsPage />, host);
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-card"]')).toBeTruthy());
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
 
     const collection = host.querySelector<HTMLElement>('[data-testid="web-services-collection"]');
     const search = host.querySelector<HTMLElement>('[data-testid="web-services-search"]');
-    const grid = host.querySelector<HTMLElement>('[data-testid="unified-web-services-grid"]');
-    const card = host.querySelector<HTMLElement>('[data-testid="managed-service-card"]');
+    const list = host.querySelector<HTMLElement>('[data-testid="unified-web-services-list"]');
+    const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]');
     const workspace = host.querySelector<HTMLElement>('[data-testid="managed-service-workspace"]');
     const actions = host.querySelector<HTMLElement>('[data-testid="managed-service-actions"]');
 
-    expect(collection?.className).toContain('max-w-6xl');
+    expect(collection?.parentElement?.className).toContain('max-w-5xl');
     expect(collection?.contains(search ?? null)).toBe(true);
-    expect(collection?.contains(grid ?? null)).toBe(true);
-    expect(search?.className).toContain('max-w-[23.5rem]');
-    expect(search?.className).not.toContain('grid-cols-2');
-    expect(grid?.className).toContain('lg:grid-cols-2');
-    expect(card?.className).not.toContain('h-full');
+    expect(collection?.contains(list ?? null)).toBe(true);
+    expect(search?.className).toContain('sm:w-72');
+    expect(search?.className).toContain('sm:ml-auto');
+    expect(list?.className).toContain('divide-y');
+    expect(list?.className).not.toContain('grid');
+    expect(row?.className).not.toContain('bg-[var(--redeven-status-success-soft)]');
     expect(workspace?.className).toContain('truncate');
     expect(actions?.className).not.toContain('grid-cols-2');
     expect(actions?.querySelector('[data-testid="managed-service-more"]')).toBeTruthy();
-    expect(card?.querySelector('[data-template-brand="interactive-desktop"]')).toBeTruthy();
+    expect(row?.querySelector('[data-template-brand="interactive-desktop"]')).toBeTruthy();
   });
 
   it('shows managed service status and read actions without lifecycle permission', async () => {
@@ -677,9 +680,9 @@ describe('EnvPortForwardsPage', () => {
     });
 
     render(() => <EnvPortForwardsPage />, host);
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-card"]')).toBeTruthy());
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
 
-    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-card"] button'));
+    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button'));
     expect(buttons.find((button) => button.textContent?.trim() === 'Open')?.disabled).toBe(true);
     expect(buttons.find((button) => button.textContent?.trim() === 'Stop')?.disabled).toBe(true);
     expect(buttons.find((button) => button.title === 'View logs')?.disabled).toBe(false);
@@ -879,7 +882,7 @@ describe('EnvPortForwardsPage', () => {
 
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.textContent).toContain('Update available'));
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-card"] button')).find((button) => button.textContent?.trim() === 'Update')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button')).find((button) => button.textContent?.trim() === 'Update')?.click();
     await flushPage();
 
     expect(host.querySelector('[data-testid="managed-service-update-dialog"]')?.textContent).toContain('Update from 654ea8e3-ls176 to 654ea8e3-ls177');
@@ -1134,7 +1137,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-card"] button');
+    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-row"] button');
     expect(openButton).toBeTruthy();
     openButton?.click();
 
@@ -1273,7 +1276,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-card"] button');
+    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-row"] button');
     expect(openButton).toBeTruthy();
     openButton?.click();
 

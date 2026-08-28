@@ -2916,6 +2916,9 @@
     "session": {
       "temporary": "Temporário"
     },
+    "collection": {
+      "title": "Serviços"
+    },
     "card": {
       "fallbackName": "Serviço {id}"
     },

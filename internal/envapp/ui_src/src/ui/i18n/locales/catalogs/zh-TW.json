@@ -2916,6 +2916,9 @@
     "session": {
       "temporary": "暫時"
     },
+    "collection": {
+      "title": "服務"
+    },
     "card": {
       "fallbackName": "服務 {id}"
     },
