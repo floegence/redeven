@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { access, readFile } from 'node:fs/promises';
+import { request as requestHTTPS } from 'node:https';
 import test from 'node:test';
 import { parseArtifact } from '@floegence/flowersec-core';
 import { assertProxyRuntimeScope } from '@floegence/flowersec-core/proxy';
@@ -10,6 +11,28 @@ const packagedRendererSource = await readFile(new URL('./checkPackagedRenderer.m
 
 function sha256Base64URL(value) {
   return createHash('sha256').update(value).digest('base64url');
+}
+
+function requestTrustedJSON(url, certificate, body) {
+  return new Promise((resolve, reject) => {
+    const request = requestHTTPS(url, {
+      method: 'POST',
+      ca: certificate,
+      headers: {
+        'content-length': Buffer.byteLength(body),
+        'content-type': 'application/json',
+      },
+    }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => resolve({
+        status: response.statusCode,
+        json: () => JSON.parse(Buffer.concat(chunks).toString('utf8')),
+      }));
+    });
+    request.on('error', reject);
+    request.end(body);
+  });
 }
 
 test('packaged renderer close terminates its published Flowersec Go v3 peer', async () => {
@@ -37,13 +60,13 @@ test('unlocked packaged renderer emits a current validated Floe acquisition enve
   const server = await createBuiltDistServer({ accessReady: true, tls });
 
   try {
-    const response = await fetch(new URL('/api/local/direct/connect_artifact', server.baseURL), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    });
+    const response = await requestTrustedJSON(
+      new URL('/api/local/direct/connect_artifact', server.baseURL),
+      tls.certificate,
+      '{}',
+    );
     assert.equal(response.status, 200);
-    const envelope = await response.json();
+    const envelope = response.json();
     const origin = new URL(server.baseURL).origin;
     assert.equal(envelope.v, 1);
     assert.equal(envelope.channel_id, 'channel-1');
