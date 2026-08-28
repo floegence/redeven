@@ -1,9 +1,0 @@
-{
-  "schema_version": "redeven.official_release_trust_anchors.v1",
-  "source_id": "redeven_official",
-  "root": {
-    "algorithm": "ed25519",
-    "key_id": "redeven_official_root_2026",
-    "public_key": "2nZtMCZWoIVm4ivB7e64IjRsQqYnlSug1XTiAlH1C9Y="
-  }
-}

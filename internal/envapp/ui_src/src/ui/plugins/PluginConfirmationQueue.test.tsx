@@ -40,7 +40,7 @@ afterEach(() => {
 function owner(id: string, canConfirm: () => boolean = () => true): PluginConfirmationOwner {
   return {
     pluginID: `com.example.${id}`,
-    displayName: id === 'containers' ? 'Containers' : undefined,
+    displayName: id === 'metrics' ? 'Metrics' : undefined,
     pluginInstanceID: `plugin_${id}`,
     surfaceID: `${id}.main`,
     canConfirm,
@@ -54,7 +54,7 @@ function intent(
 ): PluginConfirmationIntent {
   return {
     requestId: requestID,
-    method: 'containers.delete',
+    method: 'metrics.delete',
     params: { resource_id: requestID },
     requestHash: `sha256:${requestID}`,
     planHash: `sha256:plan-${requestID}`,
@@ -206,7 +206,7 @@ describe('createPluginConfirmationQueue', () => {
 describe('PluginConfirmationDialog', () => {
   it('leads with the trusted plan, exposes queue position, and folds technical evidence', async () => {
     const queue = createPluginConfirmationQueue();
-    const requestOwner = owner('containers');
+    const requestOwner = owner('metrics');
     const riskPlan: PluginRiskPlan = {
       schema_version: 'redevplugin.capability.risk_plan.v1',
       summary: 'Remove the api container?',
@@ -231,7 +231,7 @@ describe('PluginConfirmationDialog', () => {
     await Promise.resolve();
 
     expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Remove the api container?');
-    expect(document.querySelector('[data-plugin-confirmation-owner]')?.textContent).toBe('Containers');
+    expect(document.querySelector('[data-plugin-confirmation-owner]')?.textContent).toBe('Metrics');
     expect(document.querySelector('[data-plugin-confirmation-target]')?.textContent).toContain('api');
     expect(document.querySelector('[data-plugin-confirmation-destructive]')?.textContent?.trim()).toBe('destructive');
     expect(document.querySelector('[data-plugin-confirmation-impact]')?.textContent).toContain('Permanent removal');
@@ -240,12 +240,12 @@ describe('PluginConfirmationDialog', () => {
     expect(document.querySelector<HTMLDetailsElement>('[data-plugin-confirmation-technical-details]')?.open).toBe(false);
 
     const technicalText = document.querySelector('[data-plugin-confirmation-technical-details]')?.textContent ?? '';
-    expect(technicalText).toContain('containers.delete');
+    expect(technicalText).toContain('metrics.delete');
     expect(technicalText).toContain('sha256:first');
     expect(technicalText).toContain('sha256:plan-first');
     expect(technicalText).toContain('confirmation_first');
-    expect(technicalText).toContain('plugin_containers');
-    expect(technicalText).toContain('containers.main');
+    expect(technicalText).toContain('plugin_metrics');
+    expect(technicalText).toContain('metrics.main');
 
     const cancel = document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-reject]')!;
     const approve = document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')!;
@@ -272,11 +272,11 @@ describe('PluginConfirmationDialog', () => {
     await expect(second).resolves.toEqual({ confirmed: false });
   });
 
-  it('renders the complete contract-validated Containers domain plan as high risk', async () => {
+  it('renders the complete contract-validated Metrics domain plan as high risk', async () => {
     const queue = createPluginConfirmationQueue();
-    const requestOwner = owner('containers');
+    const requestOwner = owner('metrics');
     const domainPlan = {
-      method: 'containers.start',
+      method: 'metrics.start',
       request: {
         engine: 'docker',
         container_id: 'container-api-id',
@@ -284,7 +284,7 @@ describe('PluginConfirmationDialog', () => {
       target: {
         engine: 'docker',
         container_id: 'container-api-id',
-        container_name: 'redeven-containers-acceptance',
+        container_name: 'redeven-metrics-acceptance',
         target_hash: 'sha256:container-target',
       },
       image: {
@@ -312,7 +312,7 @@ describe('PluginConfirmationDialog', () => {
     const controller = new AbortController();
     const requestIntent = {
       ...intent('domain-plan', controller.signal, domainPlan),
-      method: 'containers.start',
+      method: 'metrics.start',
     };
     const pending = Promise.resolve(queue.createHandler(requestOwner)(requestIntent));
     const mount = document.createElement('div');
@@ -323,7 +323,7 @@ describe('PluginConfirmationDialog', () => {
 
     expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Start the selected container?');
     expect(document.querySelector('[data-plugin-confirmation-summary]')?.textContent).toContain('configured runtime access');
-    expect(document.querySelector('[data-plugin-confirmation-target]')?.textContent).toContain('redeven-containers-acceptance');
+    expect(document.querySelector('[data-plugin-confirmation-target]')?.textContent).toContain('redeven-metrics-acceptance');
     expect(document.querySelector('[data-plugin-confirmation-target-identity]')?.textContent?.trim()).toBe('container-api-id');
     expect(document.querySelector('[data-plugin-confirmation-risk-level]')?.textContent?.trim()).toBe('critical');
     expect(document.querySelector('[data-plugin-confirmation-admin-required]')?.textContent).toContain('Admin required');
@@ -413,7 +413,7 @@ describe('PluginConfirmationDialog', () => {
     document.body.append(mount);
 
     dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
-    expect(document.querySelector('[data-plugin-confirmation-method-fallback]')?.textContent).toContain('containers.delete');
+    expect(document.querySelector('[data-plugin-confirmation-method-fallback]')?.textContent).toContain('metrics.delete');
 
     document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-reject]')!.click();
     await expect(first).resolves.toEqual({ confirmed: false });

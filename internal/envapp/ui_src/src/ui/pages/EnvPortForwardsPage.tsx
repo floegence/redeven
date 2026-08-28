@@ -36,6 +36,7 @@ import {
 } from '../services/desktopSessionContext';
 import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
 import { fetchLocalApi, fetchLocalApiJSON } from '../services/localApi';
+import { readUIStorageJSON, removeUIStorageItem, writeUIStorageJSON } from '../services/uiStorage';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
@@ -112,6 +113,12 @@ type ManagedService = Readonly<{
   target_version?: string;
   update_notices?: ReadonlyArray<ManagedTemplateNotice>;
   active_operation?: ManagedOperation;
+  container_resource?: Readonly<{
+    engine: 'docker';
+    endpoint_id?: string;
+    view: 'containers' | 'compose-projects';
+    identity: string;
+  }>;
 }>;
 
 type ManagedDeployment = 'native' | 'docker' | 'host' | 'container' | 'compose';
@@ -714,7 +721,7 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
   };
 }
 
-export function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenContainers?: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
@@ -722,6 +729,10 @@ export function ManagedServiceCard(props: { service: ManagedService; busy: boole
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
   const moreItems = (): DropdownItem[] => [
+    ...(props.onOpenContainers ? [{
+      id: 'containers',
+      label: i18n.t('shell.nav.containers'),
+    }] : []),
     ...(props.service.update_available ? [{
       id: 'update',
       label: i18n.t('webServices.managed.update'),
@@ -744,13 +755,14 @@ export function ManagedServiceCard(props: { service: ManagedService; busy: boole
     },
   ];
   const selectMoreItem = (id: string) => {
-    if (id === 'update') props.onUpdate();
+    if (id === 'containers') props.onOpenContainers?.();
+    else if (id === 'update') props.onUpdate();
     else if (id === 'restart') props.onAction('restart');
     else if (id === 'logs') props.onLogs();
     else if (id === 'uninstall') props.onUninstall();
   };
   return (
-    <Card class={cn('min-w-0 overflow-hidden border px-3 py-2.5 transition-colors duration-200', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card">
+    <Card class={cn('min-w-0 overflow-hidden border px-3 py-2.5 transition-colors duration-200', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card" data-managed-service-id={props.service.service_id}>
       <div class="flex min-w-0 items-start gap-3">
         <div class="min-w-0 flex-1"><ServiceTemplateIdentity template={presentation()} compact /></div>
         <div class="flex shrink-0 flex-col items-end gap-1 pt-0.5" data-testid="managed-service-status">
@@ -1003,6 +1015,8 @@ export function EnvPortForwardsPage() {
   const notify = useNotification();
   const outlineControlClass = redevenSurfaceRoleClass('control');
   const i18n = useI18n();
+  const initialFocus = readUIStorageJSON<{ version?: number; serviceID?: string }>('webServices:focus', {});
+  const [focusedManagedServiceID, setFocusedManagedServiceID] = createSignal(String(initialFocus.serviceID ?? '').trim());
 
   // Permission checks
   const permissionReady = () => ctx.env.state === 'ready';
@@ -1114,6 +1128,19 @@ export function EnvPortForwardsPage() {
     } catch {
       setManagedLoadError(true);
     } finally { setManagedLoading(false); }
+  };
+
+  const openManagedContainerResource = (service: ManagedService) => {
+    const link = service.container_resource;
+    if (!link) return;
+    writeUIStorageJSON('containers:activity', {
+      version: 1,
+      engine: link.engine,
+      endpointID: link.endpoint_id ?? '',
+      view: link.view,
+      selectedIdentity: link.identity,
+    });
+    ctx.goActivity('containers');
   };
 
   const waitManagedOperation = async (operationID: string) => {
@@ -1469,6 +1496,24 @@ export function EnvPortForwardsPage() {
   const filteredManagedServices = createMemo(() => {
     const query = searchQuery().trim().toLowerCase();
     return managedState().filter((service) => !query || `${service.name}\n${service.description ?? ''}\n${service.workspace_path}\n${service.template_id}`.toLowerCase().includes(query));
+  });
+
+  createEffect(() => {
+    const serviceID = focusedManagedServiceID();
+    if (!serviceID) return;
+    const service = managedState().find((item) => item.service_id === serviceID);
+    if (!service) return;
+    setSearchQuery(service.name);
+    removeUIStorageItem('webServices:focus');
+    setFocusedManagedServiceID('');
+    window.requestAnimationFrame(() => {
+      const card = Array.from(document.querySelectorAll<HTMLElement>('[data-managed-service-id]'))
+        .find((item) => item.dataset.managedServiceId === serviceID);
+      card?.scrollIntoView({
+        block: 'center',
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      });
+    });
   });
 
   // Busy state for individual operations
@@ -1896,7 +1941,7 @@ export function EnvPortForwardsPage() {
                 }>
                   <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3" data-testid="unified-web-services-grid">
                     <For each={filteredManagedServices()}>{(service) => (
-                      <ManagedServiceCard service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
+                      <ManagedServiceCard service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onOpenContainers={service.container_resource ? () => openManagedContainerResource(service) : undefined} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
                     )}</For>
                     <For each={filteredForwards()}>{(f) => (
                       <PortForwardCard forward={f} busy={busyID() === f.forward_id} busyText={busyID() === f.forward_id ? busyText() : undefined} onOpen={() => void doOpen(f)} onDelete={() => setDeleteID(f.forward_id)} />

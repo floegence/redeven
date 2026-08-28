@@ -30,8 +30,8 @@ vi.mock('../services/localApi', () => ({
 }));
 
 const request: PluginOpenSurfaceRequest = {
-  plugin_instance_id: 'plugini_redeven_official_containers',
-  surface_id: 'containers.dashboard',
+  plugin_instance_id: 'plugini_redeven_official_metrics',
+  surface_id: 'metrics.dashboard',
   expected_management_revision: 7,
 };
 
@@ -91,16 +91,16 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     const coordinator = createPluginSurfacePlacementCoordinator(client);
 
     await coordinator.open(firstSlot, request);
-    await coordinator.open(secondSlot, { ...request, surface_id: 'containers.details' });
+    await coordinator.open(secondSlot, { ...request, surface_id: 'metrics.details' });
 
     expect(order).toEqual([
-      'open:containers.dashboard',
-      'open:containers.details',
+      'open:metrics.dashboard',
+      'open:metrics.details',
     ]);
     await coordinator.release(firstSlot);
     expect(order).toEqual([
-      'open:containers.dashboard',
-      'open:containers.details',
+      'open:metrics.dashboard',
+      'open:metrics.details',
       'first:close',
       'first:dispose',
     ]);
@@ -140,7 +140,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     coordinator.setVisible(firstSlot, true);
     coordinator.setVisible(secondSlot, true);
     await coordinator.open(firstSlot, request);
-    await coordinator.open(secondSlot, { ...request, surface_id: 'containers.details' });
+    await coordinator.open(secondSlot, { ...request, surface_id: 'metrics.details' });
     await coordinator.closeAll();
     await coordinator.dispose();
     await coordinator.release(firstSlot);
@@ -180,7 +180,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
       );
 
       await coordinator.open(firstSlot, request);
-      await coordinator.open(secondSlot, { ...request, surface_id: 'containers.details' });
+      await coordinator.open(secondSlot, { ...request, surface_id: 'metrics.details' });
 
       let completed = false;
       let observedFailure: unknown;
@@ -337,7 +337,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     );
 
     await coordinator.open(failedSlot, request);
-    await coordinator.open(siblingSlot, { ...request, surface_id: 'containers.details' });
+    await coordinator.open(siblingSlot, { ...request, surface_id: 'metrics.details' });
 
     await expect(coordinator.release(failedSlot)).rejects.toBe(revokeFailure);
     await expect(coordinator.release(siblingSlot)).resolves.toBeUndefined();

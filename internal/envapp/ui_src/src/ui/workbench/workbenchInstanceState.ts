@@ -10,6 +10,7 @@ import type { TerminalGeometryPreferences } from '../services/terminalGeometry';
 export type RedevenWorkbenchMultiInstanceWidgetType =
   | 'redeven.terminal'
   | 'redeven.files'
+  | 'redeven.containers'
   | 'redeven.preview';
 
 export type RedevenWorkbenchTerminalPanelState = Readonly<{
@@ -207,7 +208,10 @@ export function reconcileWorkbenchInstanceState(
 export function isRedevenWorkbenchMultiInstanceWidgetType(
   value: unknown,
 ): value is RedevenWorkbenchMultiInstanceWidgetType {
-  return value === 'redeven.terminal' || value === 'redeven.files' || value === 'redeven.preview';
+  return value === 'redeven.terminal'
+    || value === 'redeven.files'
+    || value === 'redeven.containers'
+    || value === 'redeven.preview';
 }
 
 export function buildWorkbenchFileBrowserStateScope(widgetId: string): string {

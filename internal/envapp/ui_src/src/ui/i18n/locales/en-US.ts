@@ -466,20 +466,20 @@ export const enUS = defineDictionary({
       permissionNotGranted: 'Not granted',
       permission: {
         read: {
-          label: 'View containers',
-          description: 'Read engine status, container details, logs, and operation preflight information.',
+          label: 'Read data',
+          description: 'Read data and status exposed by this plugin.',
         },
         execute: {
-          label: 'Operate containers',
-          description: 'Start, stop, and restart containers after the required confirmations.',
+          label: 'Run operations',
+          description: 'Run operations exposed by this plugin after any required confirmations.',
         },
         delete: {
-          label: 'Delete containers',
-          description: 'Remove containers. This is a destructive optional permission.',
+          label: 'Delete data',
+          description: 'Delete data through this plugin. This is a destructive optional permission.',
         },
-        images_write: {
-          label: 'Write images',
-          description: 'Pull container images into the selected engine.',
+        write: {
+          label: 'Write data',
+          description: 'Create or change data through this plugin.',
         },
         other: {
           label: 'Plugin permission',
@@ -1126,6 +1126,7 @@ export const enUS = defineDictionary({
       codespaces: 'Codespaces',
       browserEditor: 'Browser Editor',
       webServices: 'Web Services',
+      containers: 'Containers',
       flower: 'Flower',
     },
     topbar: {
@@ -1493,6 +1494,7 @@ export const enUS = defineDictionary({
       monitor: { label: 'Monitoring', defaultTitle: 'Monitoring' },
       codespaces: { label: 'Codespaces', defaultTitle: 'Codespaces' },
       ports: { label: 'Web Services', defaultTitle: 'Web Services' },
+      containers: { label: 'Containers', defaultTitle: 'Containers' },
       flower: { label: 'Flower', defaultTitle: 'Flower' },
     },
     notices: {
@@ -2656,6 +2658,64 @@ export const enUS = defineDictionary({
       desktopOpenFailed: 'Desktop failed to open the system browser.',
       desktopWindowOpenFailed: 'Desktop failed to open the codespace window.',
       missingEnvContext: 'Missing env context. Please reopen from the control plane.',
+    },
+  },
+  containers: {
+    title: 'Containers',
+    description: 'Inspect and safely manage Docker and Podman resources in this environment.',
+    engine: 'Container engine',
+    endpoint: 'Engine endpoint',
+    resourceNavigation: 'Container resources',
+    loading: 'Loading container resources...',
+    views: {
+      containers: 'Containers',
+      images: 'Images',
+      volumes: 'Volumes',
+      'compose-projects': 'Compose Projects',
+      pods: 'Pods',
+    },
+    status: { connected: 'Connected', unavailable: 'Unavailable' },
+    columns: { name: 'Name', status: 'Status', details: 'Details' },
+    empty: {
+      title: 'No resources found',
+      description: 'This endpoint does not currently expose resources in this category.',
+    },
+    actions: {
+      refresh: 'Refresh', start: 'Start', stop: 'Stop', restart: 'Restart', pause: 'Pause', resume: 'Resume',
+      kill: 'Kill', remove: 'Remove', down: 'Down', tag: 'Add tag', prune: 'Prune unused', cancel: 'Cancel',
+      close: 'Close', review: 'Review', run: 'Run operation',
+    },
+    create: {
+      title: 'Create resource', tagTitle: 'Add image tag', advanced: 'Runtime settings',
+      container: 'Create container', image: 'Pull image', volume: 'Create volume', pod: 'Create pod',
+    },
+    fields: {
+      name: 'Name', image: 'Image', driver: 'Driver', tag: 'New tag', command: 'Command',
+      restartPolicy: 'Restart policy', cpus: 'CPUs', memory: 'Memory (MiB)',
+    },
+    inspector: { title: 'Resource details', details: 'Details', logs: 'Logs', stats: 'Stats' },
+    stats: { cpu: 'CPU', memory: 'Memory', networkIn: 'Network in', networkOut: 'Network out' },
+    operations: {
+      title: 'Operations', description: 'Audited container operations and their current state.', empty: 'No container operations yet.',
+    },
+    managed: {
+      badge: 'Managed by Web Services', title: 'Managed by Web Services',
+      description: '“{name}” owns this resource. Its lifecycle is protected here.', openService: 'Open Web Service',
+    },
+    confirm: {
+      title: 'Confirm high-risk operation', warning: 'This operation can permanently remove or interrupt resources.',
+      typeName: 'Type “{name}” exactly to continue.',
+    },
+    review: { title: 'Review operation', operation: 'Operation' },
+    permissions: {
+      read: 'Read permission is required to view container resources.',
+      admin: 'Admin permission is required for this high-risk operation.',
+    },
+    notifications: {
+      inventoryChangedTitle: 'Inventory changed', inventoryChangedMessage: 'The selected resource is no longer available.',
+      preflightFailedTitle: 'Preflight failed', operationFailedTitle: 'Operation failed',
+      operationCompleteTitle: 'Operation complete', operationCompleteMessage: 'The authoritative inventory has been refreshed.',
+      logsFailedTitle: 'Logs unavailable',
     },
   },
   webServices: {

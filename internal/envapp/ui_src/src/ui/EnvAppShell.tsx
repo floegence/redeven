@@ -11,6 +11,7 @@ import {
   Globe,
   Grid3x3,
   Highlighter,
+  Layers,
   LayoutDashboard,
   Refresh,
   Search,
@@ -21,6 +22,7 @@ import {
 import type { WorkbenchCanvasWidgetPlacement, WorkbenchExternalDockDragController, WorkbenchHostDockItem } from '@floegence/floe-webapp-core/workbench';
 import {
   ActivityBarCodespacesIcon,
+  ActivityBarContainersIcon,
   ActivityBarFolderIcon,
   ActivityBarMonitorIcon,
   ActivityBarPortsIcon,
@@ -289,6 +291,7 @@ const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module)
 const EnvFileBrowserPage = lazy(() => import('./pages/EnvFileBrowserPage').then((module) => ({ default: module.EnvFileBrowserPage })));
 const EnvCodespacesPage = lazy(() => import('./pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
 const EnvPortForwardsPage = lazy(() => import('./pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
+const EnvContainersPage = lazy(() => import('./pages/EnvContainersPage').then((module) => ({ default: module.EnvContainersPage })));
 const EnvAIPage = lazy(() => import('./pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
 const EnvSettingsPage = lazy(() => import('./pages/EnvSettingsPage').then((module) => ({ default: module.EnvSettingsPage })));
 const ActivityPluginSurfaceWindow = lazy(() => import('./plugins/ActivityPluginSurfaceWindow').then((module) => ({ default: module.ActivityPluginSurfaceWindow })));
@@ -3792,6 +3795,7 @@ export function EnvAppShell() {
       { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
       { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
       { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
+      { id: 'containers', name: i18n.t('shell.nav.containers'), icon: Layers, component: EnvContainersPage, sidebar: { order: 6, fullScreen: true } },
     ];
     const ActivityFlowerFullPageHost = () => {
       let host: HTMLDivElement | undefined;
@@ -3814,7 +3818,7 @@ export function EnvAppShell() {
       name: i18n.t('shell.nav.flower'),
       icon: FlowerNavigationIcon,
       component: ActivityFlowerFullPageHost,
-      sidebar: { order: 6, fullScreen: true },
+      sidebar: { order: 7, fullScreen: true },
     });
     list.push({
       id: PLUGIN_CENTER_ACTIVITY_ID,
@@ -4098,6 +4102,7 @@ export function EnvAppShell() {
         : { id: 'files', icon: ActivityBarFolderIcon, label: i18n.t('shell.nav.fileBrowser'), collapseBehavior: 'preserve' },
       { id: 'codespaces', icon: ActivityBarCodespacesIcon, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
       { id: 'ports', icon: ActivityBarPortsIcon, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
+      { id: 'containers', icon: ActivityBarContainersIcon, label: i18n.t('shell.nav.containers'), collapseBehavior: 'preserve' },
     );
     if (layout.isMobile()) items.push(pluginPanelItem);
     if (canUseFlower()) {

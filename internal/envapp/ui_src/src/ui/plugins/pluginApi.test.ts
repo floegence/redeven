@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fetchLocalApiJSONResponse } from '../services/localApi';
 import { createPluginLifecycleAPI, loadPluginMarketDetail } from './pluginApi';
 import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
-import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
+import { EXAMPLE_PLUGIN_RELEASE_REF } from './examplePluginRelease.test-fixture';
 import type { ReDevPluginRecord } from './pluginTypes';
 
 vi.mock('../services/localApi', () => ({
@@ -16,17 +16,17 @@ vi.mock('../services/localApi', () => ({
   prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
 }));
 
-const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
+const examplePlugin = OFFICIAL_PLUGIN_CATALOG_SEED[0];
 const officialInstallCommand = {
   type: 'install' as const,
-  pluginID: officialContainers.pluginID,
+  pluginID: examplePlugin.pluginID,
   source: 'official_catalog' as const,
-  pluginInstanceID: officialContainers.pluginInstanceID,
-  releaseRef: officialContainers.installPreview!.release_ref,
-  releaseIdentityDigest: officialContainers.installPreview!.release_identity_digest,
-  manifestSHA256: officialContainers.installPreview!.manifest_sha256,
-  contractSetSHA256: officialContainers.installPreview!.contract_set_sha256,
-  summarySHA256: officialContainers.installPreview!.summary_sha256,
+  pluginInstanceID: examplePlugin.pluginInstanceID,
+  releaseRef: examplePlugin.installPreview!.release_ref,
+  releaseIdentityDigest: examplePlugin.installPreview!.release_identity_digest,
+  manifestSHA256: examplePlugin.installPreview!.manifest_sha256,
+  contractSetSHA256: examplePlugin.installPreview!.contract_set_sha256,
+  summarySHA256: examplePlugin.installPreview!.summary_sha256,
 };
 
 function createClientHarness() {
@@ -48,21 +48,21 @@ function createClientHarness() {
     revokePermission: vi.fn(async () => ({})),
     getPermissionRequirements: vi.fn(async ({ plugin_instance_id }: { plugin_instance_id: string }): ReturnType<PluginPlatformClient['getPermissionRequirements']> => ({
       plugin_instance_id,
-      plugin_version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
-      active_fingerprint: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
+      plugin_version: EXAMPLE_PLUGIN_RELEASE_REF.version,
+      active_fingerprint: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
       management_revision: 23,
       required_permissions: [],
       contracts: [],
     })),
     inspectReleasePackage: vi.fn(async () => ({
-      plugin_instance_id: officialContainers.pluginInstanceID,
-      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
-      inspected_hashes: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes,
-      presentation: generatedContainersRecord.presentation,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
+      release_ref: EXAMPLE_PLUGIN_RELEASE_REF,
+      inspected_hashes: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes,
+      presentation: generatedMetricsRecord.presentation,
       presentation_sha256: 'sha256:' + 'a'.repeat(64),
       security_summary: {
         summary_sha256: 'sha256:' + 'b'.repeat(64),
-        permissions: [{ permission_id: 'containers.read', methods: ['containers.list'], required: true, effects: ['read'] }],
+        permissions: [{ permission_id: 'metrics.read', methods: ['metrics.list'], required: true, effects: ['read'] }],
         methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
       },
     })),
@@ -70,9 +70,9 @@ function createClientHarness() {
     inspectUploadedExternalPackage: vi.fn(async () => ({})),
     installInspectedPackage: vi.fn(async () => ({})),
     recoverEnabled: vi.fn(async () => ({ revision: 1, complete: true, results: [] })),
-    retryRecovery: vi.fn(async () => ({ plugin_instance_id: officialContainers.pluginInstanceID, status: 'ready' as const })),
+    retryRecovery: vi.fn(async () => ({ plugin_instance_id: examplePlugin.pluginInstanceID, status: 'ready' as const })),
     listRetainedData: vi.fn(async () => ({ retained_data: [{
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
       generation_id: 'gen-retained',
       state: 'retained' as const,
       revision: 4,
@@ -88,7 +88,7 @@ function createClientHarness() {
   };
 }
 
-const generatedContainersInstanceID = 'plugin_dea00daa09166c33302f92c9b090f62a';
+const generatedMetricsInstanceID = 'plugin_dea00daa09166c33302f92c9b090f62a';
 const releaseInstallRequestID = '996224cb-c992-4fc3-b74a-9a100f306da4';
 
 function releaseInstallExecution(
@@ -96,7 +96,7 @@ function releaseInstallExecution(
 ): PluginExecution {
   return {
     execution_id: 'release_install_4c9d48a3',
-    plugin_instance_id: officialContainers.pluginInstanceID,
+    plugin_instance_id: examplePlugin.pluginInstanceID,
     kind: 'operation',
     status: 'completed',
     cursor: 1,
@@ -107,22 +107,22 @@ function releaseInstallExecution(
     ...overrides,
   };
 }
-const generatedContainersRecord: ReDevPluginRecord = {
-  plugin_instance_id: generatedContainersInstanceID,
-  publisher_id: officialContainers.publisherID,
-  plugin_id: officialContainers.pluginID,
-  version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
-  active_fingerprint: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
-  package_hash: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
-  manifest_hash: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.manifest_sha256,
-  entries_hash: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.entries_sha256,
+const generatedMetricsRecord: ReDevPluginRecord = {
+  plugin_instance_id: generatedMetricsInstanceID,
+  publisher_id: examplePlugin.publisherID,
+  plugin_id: examplePlugin.pluginID,
+  version: EXAMPLE_PLUGIN_RELEASE_REF.version,
+  active_fingerprint: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
+  package_hash: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
+  manifest_hash: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.manifest_sha256,
+  entries_hash: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.entries_sha256,
   trust_state: 'untrusted',
   trust_assessment: {
     trust_state: 'untrusted',
     verified_hashes: {
-      package_sha256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
-      manifest_sha256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.manifest_sha256,
-      entries_sha256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.entries_sha256,
+      package_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
+      manifest_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.manifest_sha256,
+      entries_sha256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.entries_sha256,
     },
   },
   enable_state: 'enabled',
@@ -131,17 +131,17 @@ const generatedContainersRecord: ReDevPluginRecord = {
   revoke_epoch: 0,
   manifest: {
     schema_version: 'redevplugin.manifest.v9',
-    publisher: { publisher_id: officialContainers.publisherID, display_name: officialContainers.publisher },
+    publisher: { publisher_id: examplePlugin.publisherID, display_name: examplePlugin.publisher },
     plugin: {
-      plugin_id: officialContainers.pluginID, display_name: officialContainers.displayName,
-      version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
+      plugin_id: examplePlugin.pluginID, display_name: examplePlugin.displayName,
+      version: EXAMPLE_PLUGIN_RELEASE_REF.version,
     },
     api: { major: 1 },
     permissions: [],
     presentation: { locales: { default: 'en-US' } },
     surfaces: [{
-      surface_id: 'containers.dashboard', kind: 'view', intent: 'primary',
-      label: officialContainers.displayName, entry: 'ui/index.html',
+      surface_id: 'metrics.dashboard', kind: 'view', intent: 'primary',
+      label: examplePlugin.displayName, entry: 'ui/index.html',
     }],
     workers: [],
     methods: [],
@@ -155,13 +155,13 @@ describe('plugin lifecycle client integration', () => {
   it('keeps the verified installed icon URL in the first inventory projection', async () => {
     const { mocks } = createClientHarness();
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-    const iconPath = 'ui/assets/containers.png';
+    const iconPath = 'ui/assets/metrics.png';
     mocks.catalog.mockResolvedValue({
       plugins: [{
-        ...generatedContainersRecord,
+        ...generatedMetricsRecord,
         manifest: {
-          ...generatedContainersRecord.manifest,
-          presentation: { ...generatedContainersRecord.manifest.presentation, icon: { path: iconPath } },
+          ...generatedMetricsRecord.manifest,
+          presentation: { ...generatedMetricsRecord.manifest.presentation, icon: { path: iconPath } },
         },
         package_entries: [{
           path: iconPath,
@@ -176,20 +176,20 @@ describe('plugin lifecycle client integration', () => {
 
     const projection = await lifecycle.loadInventoryProjection();
 
-    expect(projection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID)?.iconURL)
-      .toBe(`/_redevplugin/api/plugins/${encodeURIComponent(generatedContainersInstanceID)}/icon/${iconDigest.slice(7)}`);
+    expect(projection.items.find((item) => item.pluginInstanceID === generatedMetricsInstanceID)?.iconURL)
+      .toBe(`/_redevplugin/api/plugins/${encodeURIComponent(generatedMetricsInstanceID)}/icon/${iconDigest.slice(7)}`);
   });
 
   it('changes the icon URL when the installed package digest changes', async () => {
     const { mocks } = createClientHarness();
     const firstDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const secondDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-    const iconPath = 'ui/assets/containers.png';
+    const iconPath = 'ui/assets/metrics.png';
     const record = {
-      ...generatedContainersRecord,
+      ...generatedMetricsRecord,
       manifest: {
-        ...generatedContainersRecord.manifest,
-        presentation: { ...generatedContainersRecord.manifest.presentation, icon: { path: iconPath } },
+        ...generatedMetricsRecord.manifest,
+        presentation: { ...generatedMetricsRecord.manifest.presentation, icon: { path: iconPath } },
       },
       package_entries: [{
         path: iconPath,
@@ -216,23 +216,23 @@ describe('plugin lifecycle client integration', () => {
     });
     const secondProjection = await lifecycle.loadInventoryProjection();
 
-    expect(firstProjection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID)?.iconURL)
+    expect(firstProjection.items.find((item) => item.pluginInstanceID === generatedMetricsInstanceID)?.iconURL)
       .toContain(firstDigest.slice(7));
-    expect(secondProjection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID)?.iconURL)
+    expect(secondProjection.items.find((item) => item.pluginInstanceID === generatedMetricsInstanceID)?.iconURL)
       .toContain(secondDigest.slice(7));
   });
 
   it('keeps an enabled registry record visible when lifecycle metadata reads fail', async () => {
     const { mocks, lifecycle } = createClientHarness();
-    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    mocks.catalog.mockResolvedValue({ plugins: [generatedMetricsRecord] });
     mocks.listPermissions.mockRejectedValue(new Error('plugin session lifecycle is unavailable'));
     mocks.listSecurityPolicies.mockRejectedValue(new Error('plugin session lifecycle is unavailable'));
     mocks.getPermissionRequirements.mockRejectedValue(new Error('plugin session lifecycle is unavailable'));
 
     const projection = await lifecycle.loadInventoryProjection();
-    const installed = projection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID);
+    const installed = projection.items.find((item) => item.pluginInstanceID === generatedMetricsInstanceID);
     expect(installed).toMatchObject({
-      pluginInstanceID: generatedContainersInstanceID,
+      pluginInstanceID: generatedMetricsInstanceID,
       lifecycleState: 'needs_attention',
       attentionReason: 'diagnostic_error',
     });
@@ -243,26 +243,26 @@ describe('plugin lifecycle client integration', () => {
     const { mocks, lifecycle } = createClientHarness();
     mocks.catalog.mockResolvedValue({
       plugins: [{
-        ...generatedContainersRecord,
+        ...generatedMetricsRecord,
         trust_state: 'verified',
         trust_assessment: {
-          ...generatedContainersRecord.trust_assessment,
+          ...generatedMetricsRecord.trust_assessment,
           trust_state: 'verified',
         },
       }],
     });
     mocks.listPermissions.mockResolvedValue({
       permissions: [{
-        plugin_instance_id: generatedContainersInstanceID,
-        permission_id: 'containers.read',
+        plugin_instance_id: generatedMetricsInstanceID,
+        permission_id: 'metrics.read',
         effect: 'grant',
         granted_at: '2026-08-12T16:13:36Z',
       }],
     });
     mocks.listSecurityPolicies.mockResolvedValue({
       security_policies: [{
-        plugin_instance_id: generatedContainersInstanceID,
-        allowed_permissions: ['containers.read'],
+        plugin_instance_id: generatedMetricsInstanceID,
+        allowed_permissions: ['metrics.read'],
         denied_methods: [],
         policy_revision: 3,
         management_revision: 23,
@@ -271,18 +271,18 @@ describe('plugin lifecycle client integration', () => {
       }],
     });
     mocks.getPermissionRequirements.mockResolvedValue({
-      plugin_instance_id: generatedContainersInstanceID,
-      plugin_version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
-      active_fingerprint: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
+      plugin_instance_id: generatedMetricsInstanceID,
+      plugin_version: EXAMPLE_PLUGIN_RELEASE_REF.version,
+      active_fingerprint: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.package_sha256,
       management_revision: 23,
-      required_permissions: ['containers.read'],
+      required_permissions: ['metrics.read'],
       contracts: [],
     });
 
     const projection = await lifecycle.loadInventoryProjection();
     expect(projection.items).toEqual([
       expect.objectContaining({
-        pluginInstanceID: generatedContainersInstanceID,
+        pluginInstanceID: generatedMetricsInstanceID,
         lifecycleState: 'enabled',
         defaultLaunchTarget: undefined,
       }),
@@ -327,7 +327,7 @@ describe('plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({
-        pluginID: 'com.redeven.official.containers',
+        pluginID: 'com.example.metrics',
         lifecycleState: 'not_installed',
         officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
@@ -362,7 +362,7 @@ describe('plugin lifecycle client integration', () => {
     await expect(refresh).resolves.toBe(true);
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       items: [expect.objectContaining({
-        pluginID: 'com.redeven.official.containers',
+        pluginID: 'com.example.metrics',
         officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
     });
@@ -397,7 +397,7 @@ describe('plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({
-        pluginID: 'com.redeven.official.containers',
+        pluginID: 'com.example.metrics',
         officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
     });
@@ -405,7 +405,7 @@ describe('plugin lifecycle client integration', () => {
 
   it('projects installed plugins without waiting for the market snapshot', async () => {
     const { mocks } = createClientHarness();
-    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    mocks.catalog.mockResolvedValue({ plugins: [generatedMetricsRecord] });
     const lifecycle = createPluginLifecycleAPI(
       mocks as unknown as PluginPlatformClient,
       undefined,
@@ -415,8 +415,8 @@ describe('plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({
-        pluginInstanceID: generatedContainersInstanceID,
-        pluginID: 'com.redeven.official.containers',
+        pluginInstanceID: generatedMetricsInstanceID,
+        pluginID: 'com.example.metrics',
       })],
     });
   });
@@ -424,7 +424,7 @@ describe('plugin lifecycle client integration', () => {
   it('projects installed plugins without waiting for an unresponsive market snapshot', async () => {
     vi.useFakeTimers();
     const { mocks } = createClientHarness();
-    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    mocks.catalog.mockResolvedValue({ plugins: [generatedMetricsRecord] });
     const lifecycle = createPluginLifecycleAPI(
       mocks as unknown as PluginPlatformClient,
       undefined,
@@ -436,8 +436,8 @@ describe('plugin lifecycle client integration', () => {
     await expect(loading).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({
-        pluginInstanceID: generatedContainersInstanceID,
-        pluginID: 'com.redeven.official.containers',
+        pluginInstanceID: generatedMetricsInstanceID,
+        pluginID: 'com.example.metrics',
       })],
     });
     vi.useRealTimers();
@@ -463,7 +463,7 @@ describe('plugin lifecycle client integration', () => {
     const { lifecycle, mocks } = createClientHarness();
     let releaseCatalog!: () => void;
     mocks.catalog.mockImplementation(() => new Promise((resolve) => {
-      releaseCatalog = () => resolve({ plugins: [generatedContainersRecord] });
+      releaseCatalog = () => resolve({ plugins: [generatedMetricsRecord] });
     }));
 
     const loading = lifecycle.loadInventoryProjection();
@@ -482,19 +482,19 @@ describe('plugin lifecycle client integration', () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(mocks.getPermissionRequirements).toHaveBeenCalledWith(
-      { plugin_instance_id: generatedContainersInstanceID },
+      { plugin_instance_id: generatedMetricsInstanceID },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
   it('keeps the installed record when permission requirements are unavailable', async () => {
     const { lifecycle, mocks } = createClientHarness();
-    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    mocks.catalog.mockResolvedValue({ plugins: [generatedMetricsRecord] });
     mocks.getPermissionRequirements.mockRejectedValue(new Error('permission requirements unavailable'));
 
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       items: [expect.objectContaining({
-        pluginInstanceID: generatedContainersInstanceID,
+        pluginInstanceID: generatedMetricsInstanceID,
         lifecycleState: 'needs_attention',
         attentionReason: 'diagnostic_error',
       })],
@@ -510,20 +510,20 @@ describe('plugin lifecycle client integration', () => {
 
     expect(mocks.startReleaseInstallExecution).toHaveBeenCalledWith({
       request_id: releaseInstallRequestID,
-      plugin_instance_id: officialContainers.pluginInstanceID,
-      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
-      release_identity_digest: officialContainers.installPreview!.release_identity_digest,
-      manifest_sha256: officialContainers.installPreview!.manifest_sha256,
-      contract_set_sha256: officialContainers.installPreview!.contract_set_sha256,
-      summary_sha256: officialContainers.installPreview!.summary_sha256,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
+      release_ref: EXAMPLE_PLUGIN_RELEASE_REF,
+      release_identity_digest: examplePlugin.installPreview!.release_identity_digest,
+      manifest_sha256: examplePlugin.installPreview!.manifest_sha256,
+      contract_set_sha256: examplePlugin.installPreview!.contract_set_sha256,
+      summary_sha256: examplePlugin.installPreview!.summary_sha256,
     }, {});
     expect(mocks.installReleaseRef).not.toHaveBeenCalled();
     expect(mocks.listExecutionEvents).not.toHaveBeenCalled();
     expect(mocks.getExecution).not.toHaveBeenCalled();
-    expect(OFFICIAL_CONTAINERS_RELEASE_REF).toMatchObject({
-      publisher_id: officialContainers.publisherID,
-      plugin_id: officialContainers.pluginID,
-      version: officialContainers.stableVersion,
+    expect(EXAMPLE_PLUGIN_RELEASE_REF).toMatchObject({
+      publisher_id: examplePlugin.publisherID,
+      plugin_id: examplePlugin.pluginID,
+      version: examplePlugin.stableVersion,
     });
   });
 
@@ -562,17 +562,17 @@ describe('plugin lifecycle client integration', () => {
   it('deletes the exact retained data revision before an incompatible-data reinstall', async () => {
     const { lifecycle, mocks } = createClientHarness();
 
-    const revision = await lifecycle.getIncompatibleRetainedDataRevision(officialContainers.pluginInstanceID);
-    await lifecycle.deleteIncompatibleRetainedData(officialContainers.pluginInstanceID, revision);
+    const revision = await lifecycle.getIncompatibleRetainedDataRevision(examplePlugin.pluginInstanceID);
+    await lifecycle.deleteIncompatibleRetainedData(examplePlugin.pluginInstanceID, revision);
 
     expect(mocks.listRetainedData).toHaveBeenNthCalledWith(1, {
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
     }, {});
     expect(mocks.listRetainedData).toHaveBeenNthCalledWith(2, {
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
     }, {});
     expect(mocks.deleteRetainedData).toHaveBeenCalledWith({
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
       expected_binding_revision: 4,
     }, {});
   });
@@ -581,7 +581,7 @@ describe('plugin lifecycle client integration', () => {
     const { lifecycle, mocks } = createClientHarness();
     mocks.listRetainedData.mockResolvedValueOnce({ retained_data: [] });
 
-    await lifecycle.deleteIncompatibleRetainedData(officialContainers.pluginInstanceID, 4);
+    await lifecycle.deleteIncompatibleRetainedData(examplePlugin.pluginInstanceID, 4);
 
     expect(mocks.deleteRetainedData).not.toHaveBeenCalled();
   });
@@ -589,7 +589,7 @@ describe('plugin lifecycle client integration', () => {
   it('rejects deleting retained data when the confirmed revision changed', async () => {
     const { lifecycle, mocks } = createClientHarness();
     mocks.listRetainedData.mockResolvedValueOnce({ retained_data: [{
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
       generation_id: 'gen-new',
       state: 'retained',
       revision: 5,
@@ -597,7 +597,7 @@ describe('plugin lifecycle client integration', () => {
     }] });
 
     await expect(lifecycle.deleteIncompatibleRetainedData(
-      officialContainers.pluginInstanceID,
+      examplePlugin.pluginInstanceID,
       4,
     )).rejects.toThrow('changed after confirmation');
     expect(mocks.deleteRetainedData).not.toHaveBeenCalled();
@@ -608,16 +608,16 @@ describe('plugin lifecycle client integration', () => {
 
     await lifecycle.execute({
       type: 'update',
-      pluginID: officialContainers.pluginID,
-      pluginInstanceID: officialContainers.pluginInstanceID,
+      pluginID: examplePlugin.pluginID,
+      pluginInstanceID: examplePlugin.pluginInstanceID,
       expectedManagementRevision: 17,
-      targetVersion: OFFICIAL_CONTAINERS_RELEASE_REF.version,
+      targetVersion: EXAMPLE_PLUGIN_RELEASE_REF.version,
     });
 
     expect(mocks.updateReleaseRef).toHaveBeenCalledWith({
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
       expected_management_revision: 17,
-      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+      release_ref: EXAMPLE_PLUGIN_RELEASE_REF,
     }, {});
   });
 
@@ -626,8 +626,8 @@ describe('plugin lifecycle client integration', () => {
 
     await expect(lifecycle.execute({
       type: 'update',
-      pluginID: officialContainers.pluginID,
-      pluginInstanceID: officialContainers.pluginInstanceID,
+      pluginID: examplePlugin.pluginID,
+      pluginInstanceID: examplePlugin.pluginInstanceID,
       expectedManagementRevision: 17,
       targetVersion: '1.9.9',
     })).rejects.toThrow('does not match its signed release reference');
@@ -639,32 +639,32 @@ describe('plugin lifecycle client integration', () => {
 
     await lifecycle.execute({
       type: 'enable',
-      pluginInstanceID: officialContainers.pluginInstanceID,
+      pluginInstanceID: examplePlugin.pluginInstanceID,
       expectedManagementRevision: 4,
     });
     await lifecycle.execute({
       type: 'disable',
-      pluginInstanceID: officialContainers.pluginInstanceID,
+      pluginInstanceID: examplePlugin.pluginInstanceID,
       expectedManagementRevision: 5,
     });
     await lifecycle.execute({
       type: 'uninstall',
-      pluginInstanceID: officialContainers.pluginInstanceID,
+      pluginInstanceID: examplePlugin.pluginInstanceID,
       expectedManagementRevision: 6,
       dataRetention: 'delete_data',
     });
 
     expect(mocks.enablePlugin).toHaveBeenCalledWith({
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
       expected_management_revision: 4,
     }, {});
     expect(mocks.disablePlugin).toHaveBeenCalledWith({
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
       expected_management_revision: 5,
       reason: 'user_disabled',
     }, {});
     expect(mocks.uninstallPlugin).toHaveBeenCalledWith({
-      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
       expected_management_revision: 6,
       delete_data: true,
     }, {});
@@ -680,27 +680,27 @@ describe('plugin lifecycle client integration', () => {
 
     await lifecycle.execute({
       type: 'grant_permission',
-      pluginInstanceID: officialContainers.pluginInstanceID,
-      permissionID: 'containers.read',
+      pluginInstanceID: examplePlugin.pluginInstanceID,
+      permissionID: 'metrics.read',
       ...revisions,
     });
     await lifecycle.execute({
       type: 'revoke_permission',
-      pluginInstanceID: officialContainers.pluginInstanceID,
-      permissionID: 'containers.execute',
+      pluginInstanceID: examplePlugin.pluginInstanceID,
+      permissionID: 'metrics.execute',
       ...revisions,
     });
 
     expect(mocks.grantPermission).toHaveBeenCalledWith({
-      plugin_instance_id: officialContainers.pluginInstanceID,
-      permission_id: 'containers.read',
+      plugin_instance_id: examplePlugin.pluginInstanceID,
+      permission_id: 'metrics.read',
       expected_policy_revision: 11,
       expected_management_revision: 17,
       expected_revoke_epoch: 4,
     }, {});
     expect(mocks.revokePermission).toHaveBeenCalledWith({
-      plugin_instance_id: officialContainers.pluginInstanceID,
-      permission_id: 'containers.execute',
+      plugin_instance_id: examplePlugin.pluginInstanceID,
+      permission_id: 'metrics.execute',
       expected_policy_revision: 11,
       expected_management_revision: 17,
       expected_revoke_epoch: 4,
@@ -769,8 +769,8 @@ describe('plugin lifecycle client integration', () => {
       intent: { action: 'install' as const },
       security_summary: {
         permissions: [
-          { permission_id: 'containers.read', methods: ['containers.list'] },
-          { permission_id: 'containers.execute', methods: ['containers.start'] },
+          { permission_id: 'metrics.read', methods: ['metrics.list'] },
+          { permission_id: 'metrics.execute', methods: ['metrics.start'] },
         ],
       },
     };

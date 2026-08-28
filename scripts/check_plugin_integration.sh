@@ -9,7 +9,7 @@ Usage:
 Runs the current Redeven-side ReDevPlugin integration gate. This gate checks the
 published-dependency boundary, release artifact consumer guards, AppServer and
 Local UI origin isolation, mounted released-handler delegation, session/security
-adapters, and Redeven-owned Containers capability adapter contracts.
+adapters, and the retained general-purpose plugin platform contracts.
 
 It must not consume unreleased ReDevPlugin routes, local sibling checkouts,
 copied contracts, or local runtime binaries.
@@ -73,9 +73,6 @@ require_embedded_assets() {
 log "checking ReDevPlugin published dependency boundary"
 ./scripts/check_redevplugin_dependency_boundary.sh --ci
 
-log "checking immutable official Containers capability source"
-./scripts/check_containers_v4_release_capability.sh
-
 log "checking controlled release archive extraction"
 python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]'
 ./scripts/safe_extract_tar.py --self-test
@@ -101,8 +98,5 @@ run_focused_go_tests ./internal/localui \
 
 log "checking ReDevPlugin session, security, runtime, and route adapters"
 go test ./internal/redevpluginintegration -count=1
-
-log "checking Containers capability adapter and fixture contracts"
-go test ./internal/capabilities/containers -count=1
 
 log "ReDevPlugin integration gate passed"

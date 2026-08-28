@@ -2006,22 +2006,22 @@ function humanizePermissionIdentifier(permissionID: string): string {
   return normalized.charAt(0).toLocaleUpperCase() + normalized.slice(1);
 }
 
-function permissionLabel(group: 'read' | 'execute' | 'delete' | 'images_write' | 'other', i18n: I18nHelpers): string {
+function permissionLabel(group: 'read' | 'execute' | 'delete' | 'write' | 'other', i18n: I18nHelpers): string {
   switch (group) {
     case 'read': return i18n.t('uiCopy.plugin.permission.read.label');
     case 'execute': return i18n.t('uiCopy.plugin.permission.execute.label');
     case 'delete': return i18n.t('uiCopy.plugin.permission.delete.label');
-    case 'images_write': return i18n.t('uiCopy.plugin.permission.images_write.label');
+    case 'write': return i18n.t('uiCopy.plugin.permission.write.label');
     case 'other': return i18n.t('uiCopy.plugin.permission.other.label');
   }
 }
 
-function permissionDescription(group: 'read' | 'execute' | 'delete' | 'images_write' | 'other', i18n: I18nHelpers): string {
+function permissionDescription(group: 'read' | 'execute' | 'delete' | 'write' | 'other', i18n: I18nHelpers): string {
   switch (group) {
     case 'read': return i18n.t('uiCopy.plugin.permission.read.description');
     case 'execute': return i18n.t('uiCopy.plugin.permission.execute.description');
     case 'delete': return i18n.t('uiCopy.plugin.permission.delete.description');
-    case 'images_write': return i18n.t('uiCopy.plugin.permission.images_write.description');
+    case 'write': return i18n.t('uiCopy.plugin.permission.write.description');
     case 'other': return i18n.t('uiCopy.plugin.permission.other.description');
   }
 }

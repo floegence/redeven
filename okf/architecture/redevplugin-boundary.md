@@ -220,12 +220,12 @@ descriptor with `0600` metadata before activation. This packaging rule does not
 replace ReDevPlugin admission: later ownership, permission, identity, ELF, or
 digest drift is still rejected by the released Host without a fallback.
 
-Official Containers `4.4.9` is a signed manifest-v9 release-ref package over the
-`redeven.capability.container_resources@3.0.0` adapter. The latest-only market
-selects its immutable GitHub Release and complete transport, while ReDevPlugin
-verifies release and capability artifacts as one closed source. The market is
-not a trust source and the official signing flow is not generalized into a
-requirement for externally supplied packages.
+Native Containers does not cross this boundary: it has no ReDevPlugin package,
+capability contract, adapter, or sandboxed surface. Its product and security
+ownership is documented in
+[Native container resources](container-resources-capability.md). Historical
+plugin releases remain immutable audit artifacts but are not discoverable or
+installable by current Redeven.
 
 # Boundaries
 

@@ -635,7 +635,7 @@ func TestServer_DistRoutes_AreIsolated(t *testing.T) {
 	}{
 		{name: "codespace", origin: "https://cs-abc.example.com", want: http.StatusOK},
 		{name: "env", origin: "https://env-123.example.com", want: http.StatusNotFound},
-		{name: "plugin", origin: "https://plg-containers.example.com", want: http.StatusNotFound},
+		{name: "plugin", origin: "https://plg-containerengine.example.com", want: http.StatusNotFound},
 		{name: "missing_origin", origin: "", want: http.StatusNotFound},
 	} {
 		t.Run("inject/"+tc.name, func(t *testing.T) {
@@ -734,7 +734,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 		},
 		{
 			name:   "plugin",
-			origin: "https://plg-containers.example.com",
+			origin: "https://plg-containerengine.example.com",
 			wantStatus: map[string]int{
 				"api":        http.StatusNotFound,
 				"plugin_api": http.StatusNotFound,
@@ -3772,7 +3772,7 @@ func TestServer_PluginOriginCannotAccessManagementSurfaces(t *testing.T) {
 	} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
-			req.Header.Set("Origin", "https://plg-containers.example.com")
+			req.Header.Set("Origin", "https://plg-containerengine.example.com")
 			rr := httptest.NewRecorder()
 			srv.serveHTTP(rr, req)
 			if rr.Code != http.StatusNotFound {

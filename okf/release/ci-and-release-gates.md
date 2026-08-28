@@ -52,7 +52,7 @@ generator that changes the tree fails the gate.
 
 `go.mod` is the single authoritative Go toolchain version and currently pins
 Go 1.26.6. Every GitHub Actions `setup-go` step resolves that file through
-`go-version-file: go.mod`; owned container capability checks select the matching
+`go-version-file: go.mod`; repository checks select the matching
 `GOTOOLCHAIN=go1.26.6+auto`; public README prerequisites and badges mirror the
 same value. Quick CI and the exact-main final integration gate run
 `scripts/check_go_version_consistency.mjs`, which rejects drift among these
@@ -135,12 +135,12 @@ platform-core package tree. Local-wiring scans cover maintained source, scripts,
 and build configuration while excluding generated `dist` and `node_modules`
 trees; a scanner error fails closed instead of being treated as no match.
 
-The product does not commit a Containers package or catalog distribution
-manifest. Production refreshes and atomically publishes a validated latest-only market snapshot, then
-ReDevPlugin retrieves and verifies the exact immutable GitHub Release transport.
-Focused gates cover snapshot schema/generation, last-known-good fallback,
-official anchor pins, release identity, complete locator mapping, and content
-digests without turning market metadata into trust.
+The product does not commit plugin packages or a product-specific catalog
+distribution manifest. Production refreshes and atomically publishes a
+validated latest-only market snapshot, then ReDevPlugin retrieves and verifies
+the selected immutable release transport. Focused gates cover snapshot
+schema/generation, last-known-good fallback, release identity, locator mapping,
+and content digests without turning market metadata into trust.
 
 The upstream GitHub Release contains exactly one
 `platform-release-manifest.json` asset. The verifier binds it to the tag,
@@ -236,21 +236,15 @@ The focused plugin gate covers:
 
 - Host construction, authenticated owner/session mapping, direct authorization,
   explicit origin/CSRF/action policy, and stable observability;
-- signed official release-ref install/update and exact publisher/plugin/instance
-  identity, market preview digests, stable four-stage progress, and no official
-  pre-install package inspection;
+- market release install/update and exact publisher/plugin/instance identity,
+  market preview digests, stable progress, and no duplicate package parser;
 - public HTTPS URL, GitHub Release, and local `.redevplugin`
   inspect-confirm-install admission, process-local TTL inspection identity,
   strict source provenance, exact owner/session/bytes/hash revalidation,
   enabled install state with no implicit grants, permission-attention handling
   for missing access, and no durable receipt/query lifecycle;
-- the market-selected Containers release through Redeven HTTP integration,
-  including exact snapshot identity, complete remote assets, signed release-ref
-  install, and zero implicit grants;
 - runtime path/target/hash, ProcessManager health, persistent lease replay, and
   Host storage/network/Event services;
-- the Host-known Containers capability, Execution/cancellation/Event behavior, and
-  domain-only container package boundary;
 - canonical AppServer route reservation/delegation and Local UI access checks;
 - generated UI lifecycle DTOs, management revisions, production Plugin entry,
   generic permission requirements, exact inventory-key selection, full external

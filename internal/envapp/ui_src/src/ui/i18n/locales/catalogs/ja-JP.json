@@ -363,6 +363,7 @@
       "codespaces": "Codespaces",
       "browserEditor": "Browser Editor",
       "webServices": "Webサービス",
+      "containers": "コンテナ",
       "flower": "Flower"
     },
     "topbar": {
@@ -722,6 +723,10 @@
       "ports": {
         "label": "Webサービス",
         "defaultTitle": "Webサービス"
+      },
+      "containers": {
+        "label": "コンテナ",
+        "defaultTitle": "コンテナ"
       },
       "flower": {
         "label": "Flower",
@@ -2833,6 +2838,29 @@
       "missingEnvContext": "環境コンテキストが欠落しています。コントロールプレーンから再度開いてください。"
     }
   },
+  "containers": {
+    "title": "コンテナ",
+    "description": "この環境の Docker と Podman リソースを安全に確認・管理します。",
+    "engine": "コンテナエンジン",
+    "endpoint": "エンジンエンドポイント",
+    "resourceNavigation": "コンテナリソース",
+    "loading": "コンテナリソースを読み込んでいます…",
+    "views": { "containers": "コンテナ", "images": "イメージ", "volumes": "ボリューム", "compose-projects": "Compose プロジェクト", "pods": "Pod" },
+    "status": { "connected": "接続済み", "unavailable": "利用不可" },
+    "columns": { "name": "名前", "status": "状態", "details": "詳細" },
+    "empty": { "title": "リソースがありません", "description": "このエンドポイントには現在、この種類のリソースがありません。" },
+    "actions": { "refresh": "更新", "start": "開始", "stop": "停止", "restart": "再起動", "pause": "一時停止", "resume": "再開", "kill": "強制終了", "remove": "削除", "down": "停止して削除", "tag": "タグを追加", "prune": "未使用をクリーンアップ", "cancel": "キャンセル", "close": "閉じる", "review": "確認", "run": "操作を実行" },
+    "create": { "title": "リソースを作成", "tagTitle": "イメージタグを追加", "advanced": "実行設定", "container": "コンテナを作成", "image": "イメージを取得", "volume": "ボリュームを作成", "pod": "Pod を作成" },
+    "fields": { "name": "名前", "image": "イメージ", "driver": "ドライバー", "tag": "新しいタグ", "command": "コマンド", "restartPolicy": "再起動ポリシー", "cpus": "CPU", "memory": "メモリ (MiB)" },
+    "inspector": { "title": "リソースの詳細", "details": "詳細", "logs": "ログ", "stats": "統計" },
+    "stats": { "cpu": "CPU", "memory": "メモリ", "networkIn": "受信ネットワーク", "networkOut": "送信ネットワーク" },
+    "operations": { "title": "操作", "description": "監査対象のコンテナ操作と現在の状態です。", "empty": "コンテナ操作はまだありません。" },
+    "managed": { "badge": "Web Services が管理", "title": "Web Services が管理", "description": "「{name}」がこのリソースを所有しています。ライフサイクルはここでは保護されます。", "openService": "Web Service を開く" },
+    "confirm": { "title": "高リスク操作の確認", "warning": "この操作によりリソースが完全に削除または中断される可能性があります。", "typeName": "続行するには「{name}」を正確に入力してください。" },
+    "review": { "title": "操作を確認", "operation": "操作" },
+    "permissions": { "read": "コンテナリソースの表示には読み取り権限が必要です。", "admin": "この高リスク操作には管理者権限が必要です。" },
+    "notifications": { "inventoryChangedTitle": "インベントリが変更されました", "inventoryChangedMessage": "選択したリソースは利用できなくなりました。", "preflightFailedTitle": "事前確認に失敗しました", "operationFailedTitle": "操作に失敗しました", "operationCompleteTitle": "操作が完了しました", "operationCompleteMessage": "正式なインベントリを更新しました。", "logsFailedTitle": "ログを利用できません" }
+  },
   "webServices": {
     "title": "Webサービス",
     "description": "この環境のループバックインターフェースで待ち受ける HTTP サービスを、隔離された Desktop ウィンドウまたは利用可能な最も安全なルートで開きます。",
@@ -4411,20 +4439,20 @@
       "permissionNotGranted": "未付与",
       "permission": {
         "read": {
-          "label": "コンテナを表示",
-          "description": "エンジンの状態、コンテナの詳細とログ、操作の事前確認情報を読み取ります。"
+          "label": "データを読み取る",
+          "description": "このプラグインが公開するデータと状態を読み取ります。"
         },
         "execute": {
-          "label": "コンテナを操作",
-          "description": "必要な確認後にコンテナを起動、停止、再起動します。"
+          "label": "操作を実行",
+          "description": "必要な確認後、このプラグインが公開する操作を実行します。"
         },
         "delete": {
-          "label": "コンテナを削除",
-          "description": "コンテナを削除します。これは破壊的な操作を許可する任意の権限です。"
+          "label": "データを削除",
+          "description": "このプラグインを通じてデータを削除します。これは任意の破壊的な権限です。"
         },
-        "images_write": {
-          "label": "イメージを書き込む",
-          "description": "選択したエンジンにコンテナイメージをプルします。"
+        "write": {
+          "label": "データを書き込む",
+          "description": "このプラグインを通じてデータを作成または変更します。"
         },
         "other": {
           "label": "プラグイン権限",

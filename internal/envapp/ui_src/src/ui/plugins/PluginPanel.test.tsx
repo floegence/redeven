@@ -18,14 +18,14 @@ afterEach(() => {
 
 function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInventoryItem {
   return {
-    inventoryKey: 'instance:plugininst_containers',
-    pluginID: 'com.redeven.official.containers',
-    pluginInstanceID: 'plugininst_containers',
-    displayName: 'Containers',
-    description: 'Manage Docker and Podman resources.',
+    inventoryKey: 'instance:plugininst_metrics',
+    pluginID: 'com.example.metrics',
+    pluginInstanceID: 'plugininst_metrics',
+    displayName: 'Metrics',
+    description: 'Show neutral runtime metrics.',
     iconFallback: 'generic',
     category: 'infrastructure',
-    searchKeywords: ['docker', 'podman'],
+    searchKeywords: ['metrics', 'monitoring'],
     publisher: 'Redeven',
     version: '2.0.0',
     managementRevision: 23,
@@ -33,9 +33,9 @@ function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInvento
     trustBadge: 'official',
     pinned: false,
     defaultLaunchTarget: {
-      pluginID: 'com.redeven.official.containers',
-      pluginInstanceID: 'plugininst_containers',
-      surfaceID: 'containers.dashboard',
+      pluginID: 'com.example.metrics',
+      pluginInstanceID: 'plugininst_metrics',
+      surfaceID: 'metrics.dashboard',
       expectedManagementRevision: 23,
       preferredPlacement: 'activity',
     },
@@ -145,13 +145,13 @@ describe('PluginPanel', () => {
       <PluginPanel open model={model()} onClose={vi.fn()} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
     ), mount);
 
-    const tileBefore = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]');
+    const tileBefore = document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]');
     expect(tileBefore).not.toBeNull();
     setLoading(true);
     await Promise.resolve();
 
-    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).not.toBeNull();
-    expect(document.querySelector('[data-plugin-launcher-grid]')?.textContent).toContain('Containers');
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-launcher-grid]')?.textContent).toContain('Metrics');
     expect(document.querySelector('[role="status"]')).toBeNull();
     expect(document.body.textContent).not.toContain('Loading plugins...');
   });
@@ -247,9 +247,9 @@ describe('PluginPanel', () => {
     mountPanel({ onOpenCenter });
 
     const dialog = document.querySelector('[role="dialog"]')!;
-    const plugin = dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    const plugin = dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')!;
     const center = dialog.querySelectorAll<HTMLButtonElement>('[data-plugin-center-market-action]');
-    expect(plugin.textContent).toContain('Containers');
+    expect(plugin.textContent).toContain('Metrics');
     const grid = dialog.querySelector('[data-plugin-launcher-grid]')!;
     expect(grid.tagName).toBe('UL');
     expect(plugin.tagName).toBe('BUTTON');
@@ -269,7 +269,7 @@ describe('PluginPanel', () => {
   it('opens the mode-specific Activity pin action without closing the panel', async () => {
     const onSetPluginPin = vi.fn();
     mountPanel({ placement: 'activity', onSetPluginPin });
-    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_metrics"]')!;
 
     tile.dispatchEvent(new MouseEvent('contextmenu', {
       bubbles: true,
@@ -284,14 +284,14 @@ describe('PluginPanel', () => {
     expect(action.textContent).toContain('Pin to Activity Bar');
     action.click();
     await Promise.resolve();
-    expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_containers', true);
+    expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_metrics', true);
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 
   it('opens Plugin Center details for the selected plugin from the context menu', async () => {
     const onOpenPluginDetails = vi.fn();
     mountPanel({ placement: 'activity', onOpenPluginDetails, onSetPluginPin: vi.fn() });
-    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_metrics"]')!;
 
     tile.dispatchEvent(new MouseEvent('contextmenu', {
       bubbles: true,
@@ -304,13 +304,13 @@ describe('PluginPanel', () => {
     const information = document.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="plugin-information"]')!;
     expect(information.textContent).toContain('Plugin information');
     information.click();
-    expect(onOpenPluginDetails).toHaveBeenCalledWith('instance:plugininst_containers');
+    expect(onOpenPluginDetails).toHaveBeenCalledWith('instance:plugininst_metrics');
   });
 
   it('projects the Workbench Dock action through the owning surface floating layer', async () => {
     const { surface, trigger } = createWorkbenchTrigger();
     mountPanel({ placement: 'workbench', trigger, onSetPluginPin: vi.fn() });
-    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_metrics"]')!;
 
     tile.dispatchEvent(new MouseEvent('contextmenu', {
       bubbles: true,
@@ -332,10 +332,10 @@ describe('PluginPanel', () => {
     const onSetPluginPin = vi.fn();
     mountPanel({
       placement: 'activity',
-      pinnedInventoryKeys: ['instance:plugininst_containers'],
+      pinnedInventoryKeys: ['instance:plugininst_metrics'],
       onSetPluginPin,
     });
-    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:plugininst_metrics"]')!;
     tile.focus();
     tile.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ContextMenu' }));
     await Promise.resolve();
@@ -348,7 +348,7 @@ describe('PluginPanel', () => {
     expect(document.activeElement).toBe(action);
     action.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
     await Promise.resolve();
-    expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_containers', false);
+    expect(onSetPluginPin).toHaveBeenCalledWith('activity', 'instance:plugininst_metrics', false);
 
     tile.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'F10', shiftKey: true }));
     await Promise.resolve();
@@ -394,7 +394,7 @@ describe('PluginPanel', () => {
       externalDockDragController: { begin: (_event, item) => { dragItem = item; } },
     });
 
-    const tile = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    const tile = document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')!;
     tile.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
 
     expect(dragItem.dockPlacement).toBe('after-components');
@@ -406,13 +406,13 @@ describe('PluginPanel', () => {
     } as const;
     dragItem.canvasPlacement.onDrop(placement);
     expect(onDropPlugin).toHaveBeenCalledWith(expect.objectContaining({
-      pluginInstanceID: 'plugininst_containers',
+      pluginInstanceID: 'plugininst_metrics',
       preferredPlacement: 'workbench',
     }), placement);
     expect(document.querySelector('[data-plugin-workbench-drag-ghost]')).toBeNull();
 
     dragItem.onDropToDock();
-    expect(onSetPluginPin).toHaveBeenCalledWith('workbench', 'instance:plugininst_containers', true);
+    expect(onSetPluginPin).toHaveBeenCalledWith('workbench', 'instance:plugininst_metrics', true);
   });
 
   it('opens on the first normal click after a canvas drop and panel reopen', async () => {
@@ -437,7 +437,7 @@ describe('PluginPanel', () => {
       />
     ), mount);
 
-    document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')
+    document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')
       ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     dragItem.canvasPlacement.onDrop({
       widgetType: 'redeven.plugin',
@@ -448,7 +448,7 @@ describe('PluginPanel', () => {
 
     setOpen(true);
     await Promise.resolve();
-    (document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement).click();
+    (document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]') as HTMLButtonElement).click();
     expect(onOpenPluginSurface).toHaveBeenCalledOnce();
   });
 
@@ -479,14 +479,14 @@ describe('PluginPanel', () => {
       })),
     });
 
-    const plugin = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    const plugin = document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')!;
     expect(plugin.textContent).toContain('Installed Name');
     expect(plugin.textContent).not.toContain('Market Name');
   });
 
   it('keeps catalog-only plugins in Plugin Center and shows the installed-plugin empty state', () => {
     const catalogItem = pluginItem({
-      inventoryKey: 'catalog:containers',
+      inventoryKey: 'catalog:metrics',
       pluginInstanceID: undefined,
       lifecycleState: 'not_installed',
       managementRevision: undefined,
@@ -495,7 +495,7 @@ describe('PluginPanel', () => {
     mountPanel({ model: buildPluginPanelModel({ items: [catalogItem] }) });
 
     const dialog = document.querySelector('[role="dialog"]')!;
-    expect(dialog.querySelector('[data-plugin-panel-tile="catalog:containers"]')).toBeNull();
+    expect(dialog.querySelector('[data-plugin-panel-tile="catalog:metrics"]')).toBeNull();
     expect(dialog.textContent).toContain('No installed plugins yet.');
     expect(dialog.querySelector('[data-plugin-center-market-action]')).not.toBeNull();
   });
@@ -511,9 +511,9 @@ describe('PluginPanel', () => {
     mountPanel({ model });
 
     const dialog = document.querySelector('[role="dialog"]')!;
-    expect(dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).not.toBeNull();
+    expect(dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')).not.toBeNull();
     expect(dialog.textContent).not.toContain('No installed plugins yet.');
-    expect(dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')?.getAttribute('aria-describedby')).toBeTruthy();
+    expect(dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')?.getAttribute('aria-describedby')).toBeTruthy();
   });
 
   it('opens the plugin default surface from the primary tile action', () => {
@@ -521,10 +521,10 @@ describe('PluginPanel', () => {
     const onOpenPluginSurface = vi.fn();
     mountPanel({ onOpenPluginDetails, onOpenPluginSurface });
 
-    (document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement).click();
+    (document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]') as HTMLButtonElement).click();
     expect(onOpenPluginSurface).toHaveBeenCalledWith(expect.objectContaining({
-      pluginInstanceID: 'plugininst_containers',
-      surfaceID: 'containers.dashboard',
+      pluginInstanceID: 'plugininst_metrics',
+      surfaceID: 'metrics.dashboard',
       preferredPlacement: 'activity',
     }));
     expect(onOpenPluginDetails).not.toHaveBeenCalled();
@@ -543,7 +543,7 @@ describe('PluginPanel', () => {
       onOpenPluginSurface,
     });
 
-    const tile = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement;
+    const tile = document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]') as HTMLButtonElement;
     const badge = tile.querySelector('[data-plugin-update-badge]');
     expect(badge?.textContent).toBe('New');
     tile.click();
@@ -562,7 +562,7 @@ describe('PluginPanel', () => {
       }),
     });
 
-    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).toBeNull();
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')).toBeNull();
   });
 
   it('renders the desktop launcher as an isolated centered modal', async () => {
@@ -645,12 +645,12 @@ describe('PluginPanel', () => {
     search.value = 'ＴＥＲＭＩＮＡＬ';
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
     expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_toolbox"]')).not.toBeNull();
-    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).toBeNull();
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')).toBeNull();
 
     search.value = '';
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (document.querySelector('[data-plugin-launcher-category="infrastructure"]') as HTMLButtonElement).click();
-    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')).not.toBeNull();
     expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_toolbox"]')).toBeNull();
 
   });
@@ -660,7 +660,7 @@ describe('PluginPanel', () => {
     mountPanel({ onClose });
     await Promise.resolve();
     const search = document.querySelector('[data-plugin-launcher-search]') as HTMLInputElement;
-    search.value = 'docker';
+    search.value = 'metrics';
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));

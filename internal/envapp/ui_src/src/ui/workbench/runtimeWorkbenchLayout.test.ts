@@ -1018,7 +1018,7 @@ describe('runtimeWorkbenchLayout', () => {
           state: {
             kind: 'plugin',
             plugin_instance_id: ' instance-containers ',
-            plugin_id: ' io.redeven.containers ',
+            plugin_id: ' io.example.metrics ',
             surface_id: ' containers ',
             display_name: ' Containers ',
             expected_management_revision: 7,
@@ -1046,7 +1046,7 @@ describe('runtimeWorkbenchLayout', () => {
     expect(states['widget-plugin-1']?.state).toEqual({
       kind: 'plugin',
       plugin_instance_id: 'instance-containers',
-      plugin_id: 'io.redeven.containers',
+      plugin_id: 'io.example.metrics',
       surface_id: 'containers',
       display_name: 'Containers',
       expected_management_revision: 7,

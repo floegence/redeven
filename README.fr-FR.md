@@ -121,6 +121,7 @@ Pour découvrir les autres modes d'exécution et la protection locale facultativ
 | Supervision | Vues du processeur, de la mémoire, du disque, du réseau et des processus fournies par l'environnement d'exécution du point de terminaison. |
 | Browser Editor | Sessions d'éditeur dans le navigateur, configurées explicitement par Desktop et isolées par espace de travail. |
 | Services web | Enregistrement de services et accès par redirection de ports gérés par l'environnement d'exécution, sans tunnel SSH écrit à la main. |
+| Containers | Gestion native des conteneurs Docker et Podman, images, volumes, Compose Projects et Pods, avec journaux, statistiques et protection de propriété des services web. |
 | Flower | Surfaces d'IA facultatives utilisant des outils validés par l'environnement d'exécution et une configuration locale du modèle et de l'hôte. |
 | Desktop | Lanceur natif pour les environnements locaux, les environnements hébergés par Redeven Cloud, ceux initialisés via SSH et les environnements Local UI enregistrés. |
 

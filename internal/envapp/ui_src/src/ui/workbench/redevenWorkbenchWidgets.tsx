@@ -27,6 +27,7 @@ import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
 const FRONTABLE_WORKBENCH_RENDER_MODE = 'projected_surface';
 const EnvCodespacesPage = lazy(() => import('../pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
+const EnvContainersPage = lazy(() => import('../pages/EnvContainersPage').then((module) => ({ default: module.EnvContainersPage })));
 const EnvPortForwardsPage = lazy(() => import('../pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
 const RemoteFileBrowser = lazy(() => import('../widgets/RemoteFileBrowser').then((module) => ({ default: module.RemoteFileBrowser })));
 const RuntimeMonitorPanel = lazy(() => import('../widgets/RuntimeMonitorPanel').then((module) => ({ default: module.RuntimeMonitorPanel })));
@@ -251,6 +252,17 @@ function PortsWidget() {
   );
 }
 
+function ContainersWidget(props: RedevenWorkbenchWidgetBodyProps) {
+  return (
+    <div
+      {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}
+      class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden"
+    >
+      <EnvContainersPage stateScope={`workbench:${props.widgetId}`} variant="workbench" />
+    </div>
+  );
+}
+
 function FlowerWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
   const i18n = useI18n();
@@ -412,6 +424,17 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     projectedSurfaceScaleBehavior: 'settle_sharp_zoom',
   },
   {
+    type: 'redeven.containers',
+    label: 'Containers',
+    icon: DockLayers,
+    body: ContainersWidget,
+    defaultTitle: 'Containers',
+    defaultSize: { width: 1120, height: 720 },
+    group: 'runtime',
+    singleton: false,
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
+  },
+  {
     type: 'redeven.ai',
     label: 'Flower',
     icon: FlowerWorkbenchIcon,
@@ -443,6 +466,8 @@ function localizedWorkbenchWidgetCopy(
       return { label: t('workbench.widgets.codespaces.label'), defaultTitle: t('workbench.widgets.codespaces.defaultTitle') };
     case 'redeven.ports':
       return { label: t('workbench.widgets.ports.label'), defaultTitle: t('workbench.widgets.ports.defaultTitle') };
+    case 'redeven.containers':
+      return { label: t('workbench.widgets.containers.label'), defaultTitle: t('workbench.widgets.containers.defaultTitle') };
     case 'redeven.ai':
       return { label: t('workbench.widgets.flower.label'), defaultTitle: t('workbench.widgets.flower.defaultTitle') };
     default:
@@ -463,6 +488,7 @@ export const redevenWorkbenchFilterBarWidgetTypes: readonly WorkbenchWidgetType[
   'redeven.monitor',
   'redeven.codespaces',
   'redeven.ports',
+  'redeven.containers',
   'redeven.ai',
 ];
 

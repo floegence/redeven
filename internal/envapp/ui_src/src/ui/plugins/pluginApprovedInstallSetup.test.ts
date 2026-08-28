@@ -7,12 +7,12 @@ import {
 } from './pluginApprovedInstallSetup';
 import type { PluginInventoryItem, PluginInventoryProjection } from './pluginTypes';
 
-const pluginInstanceID = 'plugini_redeven_official_containers';
+const pluginInstanceID = 'plugini_redeven_official_metrics';
 const permissionIDs = [
-  'containers.read',
-  'containers.execute',
-  'containers.logs',
-  'containers.admin',
+  'metrics.read',
+  'metrics.execute',
+  'metrics.logs',
+  'metrics.admin',
 ] as const;
 
 function item(
@@ -23,10 +23,10 @@ function item(
   const readyToOpen = lifecycleState === 'enabled' || lifecycleState === 'update_available';
   return {
     inventoryKey: `instance:${pluginInstanceID}`,
-    pluginID: 'com.redeven.official.containers',
+    pluginID: 'com.example.metrics',
     pluginInstanceID,
-    displayName: 'Containers',
-    description: 'Containers',
+    displayName: 'Metrics',
+    description: 'Metrics',
     iconFallback: 'generic',
     category: 'other',
     searchKeywords: [],
@@ -38,9 +38,9 @@ function item(
     trustBadge: 'official',
     pinned: false,
     defaultLaunchTarget: readyToOpen ? {
-      pluginID: 'com.redeven.official.containers',
+      pluginID: 'com.example.metrics',
       pluginInstanceID,
-      surfaceID: 'containers.dashboard',
+      surfaceID: 'metrics.dashboard',
       expectedManagementRevision: revisions.managementRevision,
       preferredPlacement: 'activity',
     } : undefined,
@@ -48,7 +48,7 @@ function item(
       grants: [],
       permissions: permissionIDs.map((permissionID) => ({
         permissionID,
-        group: permissionID === 'containers.read' ? 'read' as const : 'execute' as const,
+        group: permissionID === 'metrics.read' ? 'read' as const : 'execute' as const,
         requiredToOpen: true,
         methods: [],
         granted: granted.includes(permissionID),

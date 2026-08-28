@@ -85,7 +85,7 @@ function packageURL(preview: PluginMarketInstallPreview): string {
 function permissionGroup(effects: readonly string[]): OfficialPluginPermission['group'] {
   if (effects.includes('delete')) return 'delete';
   if (effects.includes('execute')) return 'execute';
-  if (effects.includes('write')) return 'images_write';
+  if (effects.includes('write')) return 'write';
   if (effects.includes('read')) return 'read';
   return 'other';
 }

@@ -1,0 +1,31 @@
+.redeven-containers .container-touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+.redeven-containers button,
+.redeven-containers [tabindex="0"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (forced-colors: active) {
+  .redeven-containers button[aria-current="page"],
+  .redeven-containers tr[aria-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .redeven-containers .container-inspector {
+    border-color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-containers *,
+  .redeven-containers *::before,
+  .redeven-containers *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

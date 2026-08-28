@@ -28,10 +28,10 @@ const builtPluginPackageHashes = Object.freeze({
 const builtPluginReleaseRef = Object.freeze({
   source_id: 'redeven_official',
   channel: 'stable',
-  release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.9/release.json',
+  release_metadata_ref: 'plugins/com.redeven.official/com.example.metrics/4.4.9/release.json',
   release_metadata_sha256: '7f36244ce5fe5f80751051f1aa2adcb49d049eab2f748d751ae7021cbf074a15',
   publisher_id: 'com.redeven.official',
-  plugin_id: 'com.redeven.official.containers',
+  plugin_id: 'com.example.metrics',
   version: '4.4.9',
   expected_hashes: builtPluginPackageHashes,
 });
@@ -41,7 +41,7 @@ const builtPluginReleaseIdentityDigest = 'sha256:824e51f410a597845d546835e61271b
 const builtPluginContractSetSHA256 = 'sha256:9229d7b5a76273a40818deb9fedb64ee83146cf11ec66edda20743c38eebd9ab';
 const builtPluginSummarySHA256 = 'sha256:ef067082e92647c5e5ab73787bc2f5e6d83ce9a60be56daf738293103e9d9673';
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
-const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.9/containers-4.4.9.redevplugin';
+const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.9/metrics-4.4.9.redevplugin';
 
 const builtDistProxyRuntimeProjection = JSON.stringify({
   scope: 'proxy.runtime',
@@ -286,7 +286,7 @@ function builtPluginMarketSnapshot() {
           keywords: ['fixture'],
         }],
       },
-      categories: ['containers', 'development'],
+      categories: ['metrics', 'development'],
       channels: ['stable'],
       latest: {
         channel: 'stable',
@@ -296,7 +296,7 @@ function builtPluginMarketSnapshot() {
           release_ref: builtPluginReleaseRef,
           security_summary: {
             summary_sha256: builtPluginSummarySHA256,
-            permissions: [{ permission_id: 'containers.read', methods: ['containers.list'], required: true, effects: ['read'] }],
+            permissions: [{ permission_id: 'metrics.read', methods: ['metrics.list'], required: true, effects: ['read'] }],
           },
           release_identity_digest: builtPluginReleaseIdentityDigest,
           manifest_sha256: builtPluginPackageHashes.manifest_sha256,
@@ -546,7 +546,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           data: {
             permissions: installedPlugin ? [{
               plugin_instance_id: builtPluginInstanceID,
-              permission_id: 'containers.read',
+              permission_id: 'metrics.read',
               effect: 'grant',
               granted_at: '2026-08-05T08:00:02Z',
             }] : [],
@@ -575,7 +575,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
             plugin_version: builtPluginReleaseRef.version,
             active_fingerprint: builtPluginPackageHashes.package_sha256,
             management_revision: 1,
-            required_permissions: ['containers.read'],
+            required_permissions: ['metrics.read'],
             contracts: [],
           },
         });

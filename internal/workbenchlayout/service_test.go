@@ -1035,7 +1035,7 @@ func TestServicePutPluginWidgetStateUsesClosedValidatedContract(t *testing.T) {
 		State: WidgetStateData{
 			Kind:                       WidgetStateKindPlugin,
 			PluginInstanceID:           " instance-containers ",
-			PluginID:                   " io.redeven.containers ",
+			PluginID:                   " io.example.metrics ",
 			SurfaceID:                  " containers ",
 			DisplayName:                " Containers ",
 			ExpectedManagementRevision: 7,
@@ -1047,7 +1047,7 @@ func TestServicePutPluginWidgetStateUsesClosedValidatedContract(t *testing.T) {
 	wantState := WidgetStateData{
 		Kind:                       WidgetStateKindPlugin,
 		PluginInstanceID:           "instance-containers",
-		PluginID:                   "io.redeven.containers",
+		PluginID:                   "io.example.metrics",
 		SurfaceID:                  "containers",
 		DisplayName:                "Containers",
 		ExpectedManagementRevision: 7,
@@ -1057,13 +1057,13 @@ func TestServicePutPluginWidgetStateUsesClosedValidatedContract(t *testing.T) {
 	}
 
 	invalid := []WidgetStateData{
-		{Kind: WidgetStateKindPlugin, PluginID: "io.redeven.containers", SurfaceID: "containers", ExpectedManagementRevision: 7},
+		{Kind: WidgetStateKindPlugin, PluginID: "io.example.metrics", SurfaceID: "containers", ExpectedManagementRevision: 7},
 		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", SurfaceID: "containers", ExpectedManagementRevision: 7},
-		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", ExpectedManagementRevision: 7},
-		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", SurfaceID: "containers"},
-		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", SurfaceID: "containers", ExpectedManagementRevision: 7},
-		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", SurfaceID: "containers", DisplayName: "Containers", ExpectedManagementRevision: 7, CurrentPath: "/not-allowed"},
-		{Kind: WidgetStateKindFiles, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", SurfaceID: "containers", ExpectedManagementRevision: 7},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.example.metrics", ExpectedManagementRevision: 7},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.example.metrics", SurfaceID: "containers"},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.example.metrics", SurfaceID: "containers", ExpectedManagementRevision: 7},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.example.metrics", SurfaceID: "containers", DisplayName: "Containers", ExpectedManagementRevision: 7, CurrentPath: "/not-allowed"},
+		{Kind: WidgetStateKindFiles, PluginInstanceID: "instance-containers", PluginID: "io.example.metrics", SurfaceID: "containers", ExpectedManagementRevision: 7},
 	}
 	for index, invalidState := range invalid {
 		_, err := svc.PutWidgetState(ctx, "widget-plugin-1", PutWidgetStateRequest{
@@ -1084,7 +1084,7 @@ func TestServicePutPluginWidgetStateUsesClosedValidatedContract(t *testing.T) {
   "state": {
     "kind": "plugin",
     "plugin_instance_id": "instance-containers",
-    "plugin_id": "io.redeven.containers",
+    "plugin_id": "io.example.metrics",
     "surface_id": "containers",
     "display_name": "Containers",
     "expected_management_revision": 7,

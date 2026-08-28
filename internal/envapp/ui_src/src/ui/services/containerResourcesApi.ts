@@ -1,0 +1,287 @@
+import { fetchLocalApi, fetchLocalApiJSON } from './localApi';
+
+export type ContainerEngine = 'docker' | 'podman';
+export type ContainerResourceView = 'containers' | 'images' | 'volumes' | 'compose-projects' | 'pods';
+export type ContainerOperationState = 'queued' | 'running' | 'canceling' | 'succeeded' | 'failed' | 'canceled' | 'interrupted';
+
+export type ContainerEndpoint = Readonly<{
+  endpoint_id: string;
+  engine: ContainerEngine;
+  display_name: string;
+  default: boolean;
+  remote: boolean;
+  available: boolean;
+  engine_version?: string;
+  rootless?: boolean;
+}>;
+
+export type ContainerManagement = Readonly<{
+  managed: boolean;
+  owner?: Readonly<{ kind: 'web_service'; service_id: string; name: string }>;
+}>;
+
+export type ContainerInventoryItem = Readonly<{
+  container_id: string;
+  name?: string;
+  image?: Readonly<{ reference?: string; digest?: string; digest_pinned?: boolean }>;
+  state: string;
+  health?: string;
+  created_at_unix_ms?: number;
+  ports?: readonly unknown[];
+  group_kind?: string;
+  group_id?: string;
+  group_name?: string;
+  management: ContainerManagement;
+}>;
+
+export type ImageInventoryItem = Readonly<{
+  id: string;
+  reference?: string;
+  digest?: string;
+  tags?: readonly string[];
+  size_bytes?: number;
+  created_at_unix_ms?: number;
+  referenced_containers: number;
+}>;
+
+export type VolumeInventoryItem = Readonly<{
+  name: string;
+  driver?: string;
+  scope?: string;
+  created_at_unix_ms?: number;
+  referenced_containers: number;
+  management: ContainerManagement;
+}>;
+
+export type ComposeProjectInventoryItem = Readonly<{
+  project_id: string;
+  name: string;
+  status: string;
+  service_count: number;
+  container_count: number;
+  running_count: number;
+  management: ContainerManagement;
+}>;
+
+export type PodInventoryItem = Readonly<{
+  pod_id: string;
+  name: string;
+  status: string;
+  infra_id?: string;
+  container_count: number;
+  running_count: number;
+  created_at_unix_ms?: number;
+}>;
+
+export type ContainerResourceInventoryItem =
+  | ContainerInventoryItem
+  | ImageInventoryItem
+  | VolumeInventoryItem
+  | ComposeProjectInventoryItem
+  | PodInventoryItem;
+
+export type ContainerRiskFlag = Readonly<{
+  id: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  detail?: string;
+  admin_required?: boolean;
+}>;
+
+export type ContainerPreflight = Readonly<{
+  method: string;
+  engine: ContainerEngine;
+  endpoint_id?: string;
+  resource_kind: string;
+  resource_identity: string;
+  request_hash: string;
+  plan_hash: string;
+  plan: Readonly<{
+    method: string;
+    target: Readonly<Record<string, unknown>>;
+    plan_digest: string;
+    summary?: readonly string[];
+    risk_level: 'none' | 'low' | 'medium' | 'high' | 'critical';
+    risk_flags: readonly ContainerRiskFlag[];
+    requires_admin: boolean;
+  }>;
+  management: ContainerManagement;
+}>;
+
+export type ContainerOperation = Readonly<{
+  operation_id: string;
+  request_id: string;
+  request_hash: string;
+  plan_hash: string;
+  method: string;
+  engine: ContainerEngine;
+  endpoint_id?: string;
+  resource_kind: string;
+  resource_identity: string;
+  state: ContainerOperationState;
+  cancel_requested: boolean;
+  error_code?: string;
+  error_message?: string;
+  reconciliation?: Readonly<Record<string, unknown>>;
+  created_at_unix_ms: number;
+  started_at_unix_ms?: number;
+  finished_at_unix_ms?: number;
+  updated_at_unix_ms: number;
+}>;
+
+export type ContainerLogLine = Readonly<{ timestamp_unix_ms?: number; message: string }>;
+export type ContainerStats = Readonly<{
+  container_id: string;
+  cpu_percent: number;
+  memory_bytes: number;
+  memory_limit: number;
+  network_rx_bytes: number;
+  network_tx_bytes: number;
+}>;
+
+function query(engine: ContainerEngine, endpointID: string, extras: Readonly<Record<string, string>> = {}): string {
+  const params = new URLSearchParams({ engine, ...extras });
+  if (endpointID) params.set('endpoint_id', endpointID);
+  return params.toString();
+}
+export async function listContainerEndpoints(engine: ContainerEngine): Promise<ContainerEndpoint[]> {
+  const response = await fetchLocalApiJSON<{ engines: readonly Readonly<{ engine: ContainerEngine; endpoints: ContainerEndpoint[] }>[] }>(
+    `/_redeven_proxy/api/container-resources/endpoints?engine=${encodeURIComponent(engine)}`,
+    { method: 'GET' },
+  );
+  return response.engines?.[0]?.endpoints ?? [];
+}
+
+export async function getContainerEndpointStatus(engine: ContainerEngine, endpointID: string): Promise<ContainerEndpoint> {
+  return fetchLocalApiJSON<ContainerEndpoint>(
+    `/_redeven_proxy/api/container-resources/endpoints/${encodeURIComponent(endpointID)}?engine=${encodeURIComponent(engine)}`,
+    { method: 'GET' },
+  );
+}
+
+export async function listContainerResources(
+  view: ContainerResourceView,
+  engine: ContainerEngine,
+  endpointID: string,
+): Promise<ContainerResourceInventoryItem[]> {
+  const response = await fetchLocalApiJSON<Record<string, ContainerResourceInventoryItem[]>>(
+    `/_redeven_proxy/api/container-resources/${view}?${query(engine, endpointID, view === 'containers' ? { all: 'true' } : {})}`,
+    { method: 'GET' },
+  );
+  const key = view === 'compose-projects' ? 'compose_projects' : view;
+  return response[key] ?? [];
+}
+
+export async function getContainerResourceDetails(
+  view: ContainerResourceView,
+  identity: string,
+  engine: ContainerEngine,
+  endpointID: string,
+): Promise<unknown> {
+  return fetchLocalApiJSON<unknown>(
+    `/_redeven_proxy/api/container-resources/${view}/${encodeURIComponent(identity)}?${query(engine, endpointID)}`,
+    { method: 'GET' },
+  );
+}
+
+export async function tailContainerLogs(
+  identity: string,
+  engine: ContainerEngine,
+  endpointID: string,
+): Promise<ContainerLogLine[]> {
+  const response = await fetchLocalApiJSON<{ lines: ContainerLogLine[] }>(
+    `/_redeven_proxy/api/container-resources/containers/${encodeURIComponent(identity)}/logs?${query(engine, endpointID, { tail: '400' })}`,
+    { method: 'GET' },
+  );
+  return response.lines ?? [];
+}
+
+export async function getContainerStats(
+  identity: string,
+  engine: ContainerEngine,
+  endpointID: string,
+): Promise<ContainerStats> {
+  return fetchLocalApiJSON<ContainerStats>(
+    `/_redeven_proxy/api/container-resources/containers/${encodeURIComponent(identity)}/stats?${query(engine, endpointID)}`,
+    { method: 'GET' },
+  );
+}
+
+export async function preflightContainerOperation(method: string, request: unknown): Promise<ContainerPreflight> {
+  return fetchLocalApiJSON<ContainerPreflight>('/_redeven_proxy/api/container-resources/preflights', {
+    method: 'POST',
+    body: JSON.stringify({ method, request }),
+  });
+}
+
+export async function createContainerOperation(
+  preflight: ContainerPreflight,
+  request: unknown,
+): Promise<ContainerOperation> {
+  return fetchLocalApiJSON<ContainerOperation>('/_redeven_proxy/api/container-resource-operations', {
+    method: 'POST',
+    body: JSON.stringify({
+      request_id: `envapp-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
+      method: preflight.method,
+      request,
+      request_hash: preflight.request_hash,
+      plan_hash: preflight.plan_hash,
+    }),
+  });
+}
+
+export async function listContainerOperations(): Promise<ContainerOperation[]> {
+  const response = await fetchLocalApiJSON<{ operations: ContainerOperation[] }>(
+    '/_redeven_proxy/api/container-resource-operations?limit=100',
+    { method: 'GET' },
+  );
+  return response.operations ?? [];
+}
+
+export async function cancelContainerOperation(operationID: string): Promise<ContainerOperation> {
+  return fetchLocalApiJSON<ContainerOperation>(
+    `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}/cancel`,
+    { method: 'POST' },
+  );
+}
+
+export async function subscribeContainerOperation(
+  operationID: string,
+  onEvent: (operation: ContainerOperation) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const response = await fetchLocalApi(
+    `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}/events`,
+    { method: 'GET', headers: { Accept: 'text/event-stream' }, signal },
+  );
+  if (!response.ok || !response.body) throw new Error('Container operation stream is unavailable.');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const result = await reader.read();
+      if (result.done) break;
+      buffer += decoder.decode(result.value, { stream: true });
+      const events = buffer.split(/\r?\n\r?\n/u);
+      buffer = events.pop() ?? '';
+      for (const event of events) {
+        const data = event.split(/\r?\n/u)
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trim())
+          .join('\n');
+        if (!data) continue;
+        const parsed = JSON.parse(data) as { operation_id?: string };
+        if (!parsed.operation_id) continue;
+        const latest = await fetchLocalApiJSON<ContainerOperation>(
+          `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}`,
+          { method: 'GET', signal },
+        );
+        onEvent(latest);
+        if (['succeeded', 'failed', 'canceled', 'interrupted'].includes(latest.state)) return;
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}

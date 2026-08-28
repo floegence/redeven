@@ -109,10 +109,10 @@ test('packaged renderer fixture submits the market preview directly to the insta
   const releaseRef = {
     source_id: 'redeven_official',
     channel: 'stable',
-    release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.9/release.json',
+    release_metadata_ref: 'plugins/com.redeven.official/com.example.metrics/4.4.9/release.json',
     release_metadata_sha256: '7f36244ce5fe5f80751051f1aa2adcb49d049eab2f748d751ae7021cbf074a15',
     publisher_id: 'com.redeven.official',
-    plugin_id: 'com.redeven.official.containers',
+    plugin_id: 'com.example.metrics',
     version: '4.4.9',
     expected_hashes: {
       package_sha256: 'sha256:954894fbc63c3490fe011c9a6baf8985258a3c9c98a16827ed8342aaf438ed32',
@@ -134,7 +134,7 @@ test('packaged renderer fixture submits the market preview directly to the insta
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         request_id: '00000000-0000-4000-8000-000000000001',
-        plugin_instance_id: 'catalog_com.redeven.official_com.redeven.official.containers',
+        plugin_instance_id: 'catalog_com.redeven.official_com.example.metrics',
         ...installPreview,
       }),
     });
@@ -148,7 +148,7 @@ test('packaged renderer fixture submits the market preview directly to the insta
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         request_id: '00000000-0000-4000-8000-000000000002',
-        plugin_instance_id: 'catalog_com.redeven.official_com.redeven.official.containers',
+        plugin_instance_id: 'catalog_com.redeven.official_com.example.metrics',
         ...installPreview,
         release_ref: { ...releaseRef, version: '4.4.6' },
       }),

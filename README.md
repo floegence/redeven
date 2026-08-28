@@ -121,6 +121,7 @@ Run `redeven help run` for other run modes and optional local password protectio
 | Monitor | CPU, memory, disk, network, and process views from the endpoint runtime. |
 | Browser Editor | Browser editor sessions set up explicitly by Desktop, isolated per workspace. |
 | Web Services | Runtime-managed service registration and port-forward access without hand-written SSH tunnels. |
+| Containers | Native Docker and Podman management for containers, images, volumes, Compose Projects, and Pods, with logs, statistics, and Web Services ownership protection. |
 | Flower | Optional AI surfaces that use runtime-validated tools and local model/host configuration. |
 | Desktop | Native launcher for local, Redeven Cloud-hosted, SSH-bootstrapped, and saved Local UI environments. |
 

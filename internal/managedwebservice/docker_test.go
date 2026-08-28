@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
@@ -43,7 +43,7 @@ func TestHardenedDockerCreateRequestUsesExactIdentityAndLoopbackOnly(t *testing.
 	pinnedImage := auditedDockerImage + "@sha256:" + strings.Repeat("a", 64)
 	req := hardenedDockerCreateRequest(service, pinnedImage, "redeven-dsh-data-one")
 
-	if req.Engine != containers.EngineDocker || req.Name != "redeven-dsh-one" || req.Image != pinnedImage || req.Labels[managedServiceLabel] != service.ServiceID {
+	if req.Engine != containerengine.EngineDocker || req.Name != "redeven-dsh-one" || req.Image != pinnedImage || req.Labels[managedServiceLabel] != service.ServiceID {
 		t.Fatalf("container identity request = %+v", req)
 	}
 	if req.Privileged || !req.ReadOnlyRoot || req.PIDsLimit != 512 || req.ShmSizeBytes != 1024*1024*1024 || req.User != "1000:1000" || !slices.Contains(req.CapDrop, "ALL") || !slices.Contains(req.SecurityOpts, "no-new-privileges:true") {
@@ -57,7 +57,7 @@ func TestHardenedDockerCreateRequestUsesExactIdentityAndLoopbackOnly(t *testing.
 			t.Fatalf("noVNC port was published: %+v", req.Ports)
 		}
 	}
-	if len(req.Mounts) != 3 || req.Mounts[0].Type != containers.MountTypeVolume || req.Mounts[1].Source != service.WorkspacePath || req.Mounts[2].Type != containers.MountTypeTmpfs {
+	if len(req.Mounts) != 3 || req.Mounts[0].Type != containerengine.MountTypeVolume || req.Mounts[1].Source != service.WorkspacePath || req.Mounts[2].Type != containerengine.MountTypeTmpfs {
 		t.Fatalf("container mounts = %+v", req.Mounts)
 	}
 }

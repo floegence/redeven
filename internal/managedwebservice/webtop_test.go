@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -52,7 +52,7 @@ func TestCatalogIncludesIndependentWebtopTemplatesWithDeclarativeSafety(t *testi
 	if runningInsideContainer() {
 		t.Skip("nested Docker is intentionally unavailable")
 	}
-	adapter, err := containers.NewAdapter(catalogDockerEngineClient{})
+	adapter, err := containerengine.NewAdapter(catalogDockerEngineClient{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,9 +135,9 @@ func TestInteractiveDesktopCreateRequestUsesOnlyReviewedCapabilities(t *testing.
 	spec := webtopTemplateSpec(WebtopUbuntuKDETemplateID, dockerArtifact{Image: webtopImage, Digest: strings.Repeat("a", 64)})
 	spec.Container.Image = webtopImage + "@sha256:" + strings.Repeat("a", 64)
 	service := &pfregistry.ManagedService{ServiceID: "mws_webtop", WorkspacePath: "/workspace/project", RuntimePort: 43123}
-	mounts := []containers.ContainerMount{
-		{Type: containers.MountTypeVolume, Source: "redeven-config", Target: "/config"},
-		{Type: containers.MountTypeBind, Source: service.WorkspacePath, Target: "/workspace"},
+	mounts := []containerengine.ContainerMount{
+		{Type: containerengine.MountTypeVolume, Source: "redeven-config", Target: "/config"},
+		{Type: containerengine.MountTypeBind, Source: service.WorkspacePath, Target: "/workspace"},
 	}
 	request := containerCreateRequest(service, spec, spec.Container.Image, mounts, []string{"PUID=501", "PGID=20"})
 	if request.Privileged || request.ReadOnlyRoot || request.NetworkMode != "bridge" || request.PIDMode != "" || request.IPCMode != "" {
@@ -149,14 +149,14 @@ func TestInteractiveDesktopCreateRequestUsesOnlyReviewedCapabilities(t *testing.
 	if request.ShmSizeBytes != 1024*1024*1024 || request.PIDsLimit != 2048 {
 		t.Fatalf("interactive desktop resource policy = %+v", request)
 	}
-	if !reflect.DeepEqual(request.Ports, []containers.ContainerPortPublish{{ContainerPort: 3000, HostPort: 43123, HostIP: "127.0.0.1", Protocol: "tcp"}}) {
+	if !reflect.DeepEqual(request.Ports, []containerengine.ContainerPortPublish{{ContainerPort: 3000, HostPort: 43123, HostIP: "127.0.0.1", Protocol: "tcp"}}) {
 		t.Fatalf("interactive desktop ports = %+v", request.Ports)
 	}
 }
 
 func TestInteractiveDesktopRuntimeAcceptsOnlyPrivateNamespaces(t *testing.T) {
 	t.Parallel()
-	runtime := containers.RuntimeSummary{
+	runtime := containerengine.RuntimeSummary{
 		NetworkMode: "bridge", IPCMode: "private", PIDsLimit: 2048, ShmSizeBytes: 1024 * 1024 * 1024,
 	}
 	if !containerRuntimeMatchesProfile(runtime, ContainerRuntimeProfileInteractiveDesktop, 2048) {
@@ -178,23 +178,23 @@ func TestInteractiveDesktopRuntimeAcceptsOnlyPrivateNamespaces(t *testing.T) {
 
 func TestMountSourceMatchingOnlyNormalizesDockerDesktopBindPaths(t *testing.T) {
 	t.Parallel()
-	bind := containers.ContainerMount{Type: containers.MountTypeBind, Source: "/Users/redeven/workspace", Target: "/workspace"}
-	actual := containers.MountSummary{Type: containers.MountTypeBind, Source: "/host_mnt/Users/redeven/workspace", Target: "/workspace"}
+	bind := containerengine.ContainerMount{Type: containerengine.MountTypeBind, Source: "/Users/redeven/workspace", Target: "/workspace"}
+	actual := containerengine.MountSummary{Type: containerengine.MountTypeBind, Source: "/host_mnt/Users/redeven/workspace", Target: "/workspace"}
 	if !mountSourceMatchesForHost(bind, actual, "darwin") {
 		t.Fatal("Docker Desktop bind path was not recognized as the same host path")
 	}
 	if mountSourceMatchesForHost(bind, actual, "linux") {
 		t.Fatal("Docker Desktop path normalization was accepted on Linux")
 	}
-	volume := containers.ContainerMount{Type: containers.MountTypeVolume, Source: "redeven-config", Target: "/config"}
-	if mountSourceMatchesForHost(volume, containers.MountSummary{Type: containers.MountTypeVolume, Source: "/host_mnt/redeven-config"}, "darwin") {
+	volume := containerengine.ContainerMount{Type: containerengine.MountTypeVolume, Source: "redeven-config", Target: "/config"}
+	if mountSourceMatchesForHost(volume, containerengine.MountSummary{Type: containerengine.MountTypeVolume, Source: "/host_mnt/redeven-config"}, "darwin") {
 		t.Fatal("Docker Desktop path normalization was applied to a named volume")
 	}
 }
 
 func TestWebtopArtifactPreparationRejectsAnyDigestDrift(t *testing.T) {
 	t.Parallel()
-	adapter, err := containers.NewAdapter(webtopPullEngineClient{digest: "sha256:" + strings.Repeat("b", 64)})
+	adapter, err := containerengine.NewAdapter(webtopPullEngineClient{digest: "sha256:" + strings.Repeat("b", 64)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,9 +224,9 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Fatal("Docker CLI is unavailable")
 	}
-	client := containers.NewCLIClient()
+	client := containerengine.NewCLIClient()
 	client.Timeout = 10 * time.Minute
-	adapter, err := containers.NewAdapter(client)
+	adapter, err := containerengine.NewAdapter(client)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,8 +286,8 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 		}
 		volumeName := "redeven-mws-data-" + resourceNameSuffix(service.ServiceFamilyID) + "-0"
 		t.Cleanup(func() {
-			_, _ = client.Action(context.Background(), containers.EngineActionRequest{Engine: containers.EngineDocker, Method: containers.MethodRemove, ContainerID: customContainerName(service.ServiceID), Force: true})
-			_ = adapter.RemoveVolume(context.Background(), containers.VolumeRemoveRequest{Engine: containers.EngineDocker, Name: volumeName})
+			_, _ = client.Action(context.Background(), containerengine.EngineActionRequest{Engine: containerengine.EngineDocker, Method: containerengine.MethodRemove, ContainerID: customContainerName(service.ServiceID), Force: true})
+			_ = adapter.RemoveVolume(context.Background(), containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: volumeName})
 		})
 		runtimeID, artifactReference, err := driver.Install(ctx, service, catalogPayload{}, func(string, int64) {})
 		if err != nil {
@@ -340,7 +340,7 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 		if err := driver.Uninstall(ctx, item.service, true); err != nil {
 			t.Fatalf("delete-data uninstall %s: %v", item.service.TemplateID, err)
 		}
-		volumes, err := adapter.ListVolumes(ctx, containers.EngineDocker)
+		volumes, err := adapter.ListVolumes(ctx, containerengine.EngineDocker)
 		if err != nil {
 			t.Fatalf("list volumes after deleting %s: %v", item.volume, err)
 		}
@@ -366,8 +366,8 @@ type webtopPullEngineClient struct {
 	digest string
 }
 
-func (c webtopPullEngineClient) PullImage(_ context.Context, engine containers.Engine, imageRef string) (containers.EngineImageResult, error) {
-	return containers.EngineImageResult{
-		Engine: engine, Image: containers.ImageInput{Reference: imageRef, Digest: c.digest}, Completed: true,
+func (c webtopPullEngineClient) PullImage(_ context.Context, engine containerengine.Engine, imageRef string) (containerengine.EngineImageResult, error) {
+	return containerengine.EngineImageResult{
+		Engine: engine, Image: containerengine.ImageInput{Reference: imageRef, Digest: c.digest}, Completed: true,
 	}, nil
 }

@@ -121,6 +121,7 @@ redeven run
 | 監控 | 來自端點執行階段的 CPU、記憶體、磁碟、網路與處理程序檢視。 |
 | Browser Editor | 由 Desktop 明確設定、依工作區隔離的瀏覽器編輯器工作階段。 |
 | Web 服務 | 由執行階段管理的服務註冊與連接埠轉送存取，不必手動編寫 SSH 通道。 |
+| Containers | 原生管理 Docker 與 Podman 的容器、映像、磁碟區、Compose Project 與 Pod，並提供日誌、統計資料及 Web 服務擁有權保護。 |
 | Flower | 選用的 AI 介面，使用經執行階段驗證的工具及本機模型和主機設定。 |
 | Desktop | 用於本機環境、Redeven Cloud 託管環境、透過 SSH 引導初始化的環境及已儲存 Local UI 環境的原生啟動器。 |
 

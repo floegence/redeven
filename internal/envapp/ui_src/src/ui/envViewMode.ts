@@ -6,6 +6,7 @@ export type EnvSurfaceId =
   | 'files'
   | 'codespaces'
   | 'ports'
+  | 'containers'
   | 'ai';
 
 export type EnvSurfaceOpenReason =
@@ -56,6 +57,7 @@ export const ENV_SURFACE_IDS = [
   'files',
   'codespaces',
   'ports',
+  'containers',
   'ai',
 ] as const satisfies readonly EnvSurfaceId[];
 
@@ -67,6 +69,7 @@ export const ENV_SURFACE_LABELS: Record<EnvSurfaceId, string> = {
   files: 'File Browser',
   codespaces: 'Codespaces',
   ports: 'Web Services',
+  containers: 'Containers',
   ai: 'Flower',
 };
 
@@ -76,6 +79,7 @@ export const ENV_SURFACE_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
   files: 'redeven.files',
   codespaces: 'redeven.codespaces',
   ports: 'redeven.ports',
+  containers: 'redeven.containers',
   ai: 'redeven.ai',
 };
 
@@ -100,6 +104,7 @@ export function isEnvSurfaceId(value: unknown): value is EnvSurfaceId {
     || value === 'files'
     || value === 'codespaces'
     || value === 'ports'
+    || value === 'containers'
     || value === 'ai'
   );
 }

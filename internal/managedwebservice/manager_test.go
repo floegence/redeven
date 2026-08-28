@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -119,7 +119,7 @@ func TestCatalogKeepsPinnedDockerTemplateAvailable(t *testing.T) {
 	if runningInsideContainer() {
 		t.Skip("nested Docker is intentionally unavailable")
 	}
-	adapter, err := containers.NewAdapter(catalogDockerEngineClient{})
+	adapter, err := containerengine.NewAdapter(catalogDockerEngineClient{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,28 +207,28 @@ func (*captureInstallCatalogDriver) Logs(context.Context, *pfregistry.ManagedSer
 	return nil, errors.New("unexpected logs")
 }
 
-func (catalogDockerEngineClient) Status(_ context.Context, engine containers.Engine) (containers.EngineStatus, error) {
-	return containers.EngineStatus{Engine: engine, Available: engine == containers.EngineDocker, Version: "test"}, nil
+func (catalogDockerEngineClient) Status(_ context.Context, engine containerengine.Engine) (containerengine.EngineStatus, error) {
+	return containerengine.EngineStatus{Engine: engine, Available: engine == containerengine.EngineDocker, Version: "test"}, nil
 }
 
-func (catalogDockerEngineClient) List(context.Context, containers.Engine, bool) ([]containers.EngineContainer, error) {
+func (catalogDockerEngineClient) List(context.Context, containerengine.Engine, bool) ([]containerengine.EngineContainer, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (catalogDockerEngineClient) Inspect(context.Context, containers.Engine, string) (containers.EngineContainer, error) {
-	return containers.EngineContainer{}, errors.New("not implemented")
+func (catalogDockerEngineClient) Inspect(context.Context, containerengine.Engine, string) (containerengine.EngineContainer, error) {
+	return containerengine.EngineContainer{}, errors.New("not implemented")
 }
 
-func (catalogDockerEngineClient) Action(context.Context, containers.EngineActionRequest) (containers.EngineActionResult, error) {
-	return containers.EngineActionResult{}, errors.New("not implemented")
+func (catalogDockerEngineClient) Action(context.Context, containerengine.EngineActionRequest) (containerengine.EngineActionResult, error) {
+	return containerengine.EngineActionResult{}, errors.New("not implemented")
 }
 
-func (catalogDockerEngineClient) TailLogs(context.Context, containers.EngineLogsRequest) (containers.EngineLogsResult, error) {
-	return containers.EngineLogsResult{}, errors.New("not implemented")
+func (catalogDockerEngineClient) TailLogs(context.Context, containerengine.EngineLogsRequest) (containerengine.EngineLogsResult, error) {
+	return containerengine.EngineLogsResult{}, errors.New("not implemented")
 }
 
-func (catalogDockerEngineClient) PullImage(context.Context, containers.Engine, string) (containers.EngineImageResult, error) {
-	return containers.EngineImageResult{}, errors.New("not implemented")
+func (catalogDockerEngineClient) PullImage(context.Context, containerengine.Engine, string) (containerengine.EngineImageResult, error) {
+	return containerengine.EngineImageResult{}, errors.New("not implemented")
 }
 
 func templateByID(templates []Template, templateID string) *Template {

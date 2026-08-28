@@ -155,6 +155,6 @@ does not grant permissions or enable runtime access.
 - `redeven:internal/codeapp/codeapp.go` - Starts background refresh and keeps market failure non-fatal.
 - `redeven:internal/codeapp/appserver/server.go` - Serves the current validated snapshot through the read-gated Env App route.
 - `redeven:internal/codeapp/appserver/server.go` - Preserves validated detail generation in the read-gated local proxy envelope.
-- `redeven:internal/redevpluginintegration/release_module.go` - Converts validated market data into one current remote release transport, preserves its verified asset cache only for an identical release and complete asset projection, and replaces it when either identity changes.
+- `redeven:internal/redevpluginintegration/integration.go` - Publishes and refreshes one current validated market snapshot without adding product-specific package behavior.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current official discovery from the validated snapshot.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Preserves installed inventory and reports market unavailability.

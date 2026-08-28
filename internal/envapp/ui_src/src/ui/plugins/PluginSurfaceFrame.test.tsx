@@ -18,9 +18,9 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
 }));
 
 const target: PluginSurfaceLaunchTarget = {
-  pluginID: 'com.redeven.official.containers',
-  pluginInstanceID: 'plugini_redeven_official_containers',
-  surfaceID: 'containers.dashboard',
+  pluginID: 'com.example.metrics',
+  pluginInstanceID: 'plugini_redeven_official_metrics',
+  surfaceID: 'metrics.dashboard',
   expectedManagementRevision: 7,
   preferredPlacement: 'activity',
 };
@@ -211,7 +211,7 @@ describe('PluginSurfaceBody', () => {
     const confirmationQueue = createConfirmationQueue();
     const [currentTarget, setCurrentTarget] = createSignal<PluginSurfaceLaunchTarget>({
       ...target,
-      displayName: 'Containers',
+      displayName: 'Metrics',
     });
 
     dispose = render(() => (
@@ -225,13 +225,13 @@ describe('PluginSurfaceBody', () => {
     ), mount);
     await flushAsync();
     const iframe = host.element;
-    expect(iframe.title).toBe('Containers - containers.dashboard plugin content');
+    expect(iframe.title).toBe('Metrics - metrics.dashboard plugin content');
 
-    setCurrentTarget((current) => ({ ...current, displayName: 'Containers renamed' }));
+    setCurrentTarget((current) => ({ ...current, displayName: 'Metrics renamed' }));
     await flushAsync();
 
     expect(host.element).toBe(iframe);
-    expect(iframe.title).toBe('Containers renamed - containers.dashboard plugin content');
+    expect(iframe.title).toBe('Metrics renamed - metrics.dashboard plugin content');
     expect(coordinator.open).toHaveBeenCalledOnce();
   });
 

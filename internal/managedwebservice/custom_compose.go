@@ -10,14 +10,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"gopkg.in/yaml.v3"
 )
 
 type composeTemplateDriver struct {
 	manager *Manager
-	adapter *containers.Adapter
+	adapter *containerengine.Adapter
 }
 
 func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress func(string, int64)) (string, string, error) {
@@ -78,7 +78,7 @@ func (d *composeTemplateDriver) generateCompose(ctx context.Context, service *pf
 			return nil, nil, serviceError("TEMPLATE_COMPOSE_INVALID", "A Compose service definition is invalid.", 400, false, nil)
 		}
 		image := strings.TrimSpace(fmt.Sprint(entry["image"]))
-		pulled, err := d.adapter.PullImage(ctx, containers.ImagePullRequest{Engine: containers.EngineDocker, ImageRef: image})
+		pulled, err := d.adapter.PullImage(ctx, containerengine.ImagePullRequest{Engine: containerengine.EngineDocker, ImageRef: image})
 		if err != nil || !pulled.Completed {
 			return nil, nil, serviceError("IMAGE_PULL_FAILED", "A Compose template image could not be pulled.", 503, true, err)
 		}
@@ -164,9 +164,9 @@ func writePrivateFile(path string, contents []byte) error {
 	return nil
 }
 
-func (d *composeTemplateDriver) request(service *pfregistry.ManagedService) containers.ComposeDeploymentRequest {
+func (d *composeTemplateDriver) request(service *pfregistry.ManagedService) containerengine.ComposeDeploymentRequest {
 	root := filepath.Join(d.manager.stateDir, "instances", service.ServiceID, "compose")
-	return containers.ComposeDeploymentRequest{ConfigPath: filepath.Join(root, "compose.yaml"), EnvFilePath: filepath.Join(root, "template.env"), ProjectName: d.projectName(service)}
+	return containerengine.ComposeDeploymentRequest{ConfigPath: filepath.Join(root, "compose.yaml"), EnvFilePath: filepath.Join(root, "template.env"), ProjectName: d.projectName(service)}
 }
 
 func (d *composeTemplateDriver) projectName(service *pfregistry.ManagedService) string {
@@ -194,71 +194,71 @@ func (d *composeTemplateDriver) verifyIdentity(service *pfregistry.ManagedServic
 	return nil
 }
 
-func (d *composeTemplateDriver) verifyProject(ctx context.Context, service *pfregistry.ManagedService) (containers.ComposeProjectDetails, error) {
+func (d *composeTemplateDriver) verifyProject(ctx context.Context, service *pfregistry.ManagedService) (containerengine.ComposeProjectDetails, error) {
 	spec, err := templateSpecFromService(service)
 	if err != nil {
-		return containers.ComposeProjectDetails{}, err
+		return containerengine.ComposeProjectDetails{}, err
 	}
 	expectedImages, err := d.expectedImages(service)
 	if err != nil {
-		return containers.ComposeProjectDetails{}, err
+		return containerengine.ComposeProjectDetails{}, err
 	}
 	details, err := d.verifyOwnedProject(ctx, service, expectedImages)
 	if err != nil {
-		return containers.ComposeProjectDetails{}, err
+		return containerengine.ComposeProjectDetails{}, err
 	}
 	if len(details.Containers) != len(expectedImages) {
-		return containers.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The managed Compose project is missing an expected service.", 409, false, nil)
+		return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The managed Compose project is missing an expected service.", 409, false, nil)
 	}
 	for _, child := range details.Containers {
 		expectedImage := expectedImages[child.Service]
-		inspected, err := d.adapter.Inspect(ctx, containers.ContainerInspectRequest{Engine: containers.EngineDocker, ContainerID: child.ContainerID})
+		inspected, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID})
 		if err != nil {
-			return containers.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISSING", "A managed Compose container could not be inspected.", 409, false, err)
+			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISSING", "A managed Compose container could not be inspected.", 409, false, err)
 		}
 		container := inspected.Container
 		if container.ContainerID != child.ContainerID || container.Image.Reference != expectedImage || !container.Image.DigestPinned {
-			return containers.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A managed Compose container image identity has changed.", 409, false, nil)
+			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A managed Compose container image identity has changed.", 409, false, nil)
 		}
 		runtime := container.Runtime
 		if runtime.Privileged || !runtime.ReadOnlyRoot || runtime.PIDsLimit != 512 || !containsString(runtime.CapDrop, "ALL") || !containsString(runtime.SecurityOpts, "no-new-privileges:true") {
-			return containers.ComposeProjectDetails{}, serviceError("CONTAINER_HARDENING_MISMATCH", "A managed Compose container no longer matches Redeven's hardened runtime policy.", 409, false, nil)
+			return containerengine.ComposeProjectDetails{}, serviceError("CONTAINER_HARDENING_MISMATCH", "A managed Compose container no longer matches Redeven's hardened runtime policy.", 409, false, nil)
 		}
 		if child.Service == spec.Compose.MainService {
 			if len(container.Ports) != 1 || container.Ports[0].Port != spec.Endpoint.ContainerPort || container.Ports[0].HostPort != service.RuntimePort || container.Ports[0].HostIP != "127.0.0.1" {
-				return containers.ComposeProjectDetails{}, serviceError("CONTAINER_NETWORK_MISMATCH", "The managed Compose Web port must be the only published port and bind to 127.0.0.1.", 409, false, nil)
+				return containerengine.ComposeProjectDetails{}, serviceError("CONTAINER_NETWORK_MISMATCH", "The managed Compose Web port must be the only published port and bind to 127.0.0.1.", 409, false, nil)
 			}
 		} else if len(container.Ports) != 0 {
-			return containers.ComposeProjectDetails{}, serviceError("CONTAINER_NETWORK_MISMATCH", "Managed Compose sidecars cannot publish host ports.", 409, false, nil)
+			return containerengine.ComposeProjectDetails{}, serviceError("CONTAINER_NETWORK_MISMATCH", "Managed Compose sidecars cannot publish host ports.", 409, false, nil)
 		}
 	}
 	return details, nil
 }
 
-func (d *composeTemplateDriver) verifyOwnedProject(ctx context.Context, service *pfregistry.ManagedService, expectedImages map[string]string) (containers.ComposeProjectDetails, error) {
+func (d *composeTemplateDriver) verifyOwnedProject(ctx context.Context, service *pfregistry.ManagedService, expectedImages map[string]string) (containerengine.ComposeProjectDetails, error) {
 	if err := d.verifyIdentity(service); err != nil {
-		return containers.ComposeProjectDetails{}, err
+		return containerengine.ComposeProjectDetails{}, err
 	}
 	details, err := d.adapter.InspectComposeDeployment(ctx, d.request(service))
 	if err != nil {
-		return containers.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISSING", "The exact managed Compose project could not be inspected.", 409, false, err)
+		return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISSING", "The exact managed Compose project could not be inspected.", 409, false, err)
 	}
 	if details.Name != d.projectName(service) {
-		return containers.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The exact managed Compose project identity has changed.", 409, false, nil)
+		return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The exact managed Compose project identity has changed.", 409, false, nil)
 	}
 	seen := make(map[string]struct{}, len(details.Containers))
 	for _, child := range details.Containers {
 		_, known := expectedImages[child.Service]
 		if !known {
-			return containers.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The managed Compose project contains an unexpected service.", 409, false, nil)
+			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The managed Compose project contains an unexpected service.", 409, false, nil)
 		}
 		if _, duplicate := seen[child.Service]; duplicate {
-			return containers.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The managed Compose project contains an unexpected service replica.", 409, false, nil)
+			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The managed Compose project contains an unexpected service replica.", 409, false, nil)
 		}
 		seen[child.Service] = struct{}{}
-		matches, err := d.adapter.ContainerMatchesLabel(ctx, containers.ContainerLabelMatchRequest{Engine: containers.EngineDocker, ContainerID: child.ContainerID, Key: managedServiceLabel, Value: service.ServiceID})
+		matches, err := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID, Key: managedServiceLabel, Value: service.ServiceID})
 		if err != nil || !matches {
-			return containers.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A managed Compose container no longer has the exact service identity.", 409, false, err)
+			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A managed Compose container no longer has the exact service identity.", 409, false, err)
 		}
 	}
 	return details, nil

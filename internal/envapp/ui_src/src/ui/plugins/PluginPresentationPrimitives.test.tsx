@@ -26,12 +26,12 @@ describe('PluginIcon', () => {
     const root = document.createElement('div');
     document.body.append(root);
     const item: PluginInventoryItem = {
-      inventoryKey: 'instance:containers',
-      pluginID: 'com.redeven.official.containers',
-      pluginInstanceID: 'containers',
-      displayName: 'Containers',
-      description: 'Containers',
-      iconURL: '/_redevplugin/api/plugins/containers/icon/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      inventoryKey: 'instance:metrics',
+      pluginID: 'com.example.metrics',
+      pluginInstanceID: 'metrics',
+      displayName: 'Metrics',
+      description: 'Metrics',
+      iconURL: '/_redevplugin/api/plugins/metrics/icon/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       iconFallback: 'generic',
       category: 'infrastructure',
       searchKeywords: [],
@@ -53,12 +53,12 @@ describe('PluginIcon', () => {
     const root = document.createElement('div');
     document.body.append(root);
     const item: PluginInventoryItem = {
-      inventoryKey: 'instance:containers',
-      pluginID: 'com.redeven.official.containers',
-      pluginInstanceID: 'containers',
-      displayName: 'Containers',
-      description: 'Containers',
-      iconURL: '/_redeven_proxy/api/plugins/market/plugins/com.redeven.official.containers/icon?sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      inventoryKey: 'instance:metrics',
+      pluginID: 'com.example.metrics',
+      pluginInstanceID: 'metrics',
+      displayName: 'Metrics',
+      description: 'Metrics',
+      iconURL: '/_redeven_proxy/api/plugins/market/plugins/com.example.metrics/icon?sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       iconFallback: 'generic',
       category: 'infrastructure',
       searchKeywords: [],
@@ -80,12 +80,12 @@ describe('PluginIcon', () => {
     const root = document.createElement('div');
     document.body.append(root);
     const item: PluginInventoryItem = {
-      inventoryKey: 'instance:containers',
-      pluginID: 'com.redeven.official.containers',
-      pluginInstanceID: 'containers',
-      displayName: 'Containers',
-      description: 'Containers',
-      iconURL: '/_redeven_proxy/api/plugins/market/plugins/com.redeven.official.containers/icon?sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      inventoryKey: 'instance:metrics',
+      pluginID: 'com.example.metrics',
+      pluginInstanceID: 'metrics',
+      displayName: 'Metrics',
+      description: 'Metrics',
+      iconURL: '/_redeven_proxy/api/plugins/market/plugins/com.example.metrics/icon?sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       iconFallback: 'generic',
       category: 'infrastructure',
       searchKeywords: [],

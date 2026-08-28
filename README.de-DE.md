@@ -121,6 +121,7 @@ Weitere Ausführungsmodi und den optionalen lokalen Passwortschutz beschreibt `r
 | Monitoring | Ansichten für CPU, Arbeitsspeicher, Datenträger, Netzwerk und Prozesse aus der Endpunkt-Laufzeit. |
 | Browser Editor | Von Desktop ausdrücklich eingerichtete und nach Arbeitsbereich isolierte Browser-Editor-Sitzungen. |
 | Webdienste | Von der Laufzeit verwaltete Dienstregistrierung und Portweiterleitung ohne manuell erstellte SSH-Tunnel. |
+| Containers | Native Verwaltung von Docker- und Podman-Containern, Images, Volumes, Compose Projects und Pods einschließlich Protokollen, Statistiken und Eigentumsschutz für Webdienste. |
 | Flower | Optionale KI-Oberflächen mit von der Laufzeit geprüften Werkzeugen und lokaler Modell- und Hostkonfiguration. |
 | Desktop | Nativer Starter für lokale, in Redeven Cloud gehostete, per SSH initialisierte und gespeicherte Local UI-Umgebungen. |
 

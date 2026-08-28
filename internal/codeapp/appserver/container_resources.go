@@ -1,0 +1,813 @@
+package appserver
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/floegence/redeven/internal/containerengine"
+	"github.com/floegence/redeven/internal/containerresource"
+	"github.com/floegence/redeven/internal/session"
+)
+
+const (
+	containerResourcesAPIBase  = "/_redeven_proxy/api/container-resources"
+	containerOperationsAPIBase = "/_redeven_proxy/api/container-resource-operations"
+)
+
+func (g *Server) handleContainerResourcesAPI(w http.ResponseWriter, r *http.Request) bool {
+	if r == nil || (!strings.HasPrefix(r.URL.Path, containerResourcesAPIBase) && !strings.HasPrefix(r.URL.Path, containerOperationsAPIBase)) {
+		return false
+	}
+	if g.containers == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "Containers are not ready", ErrorCode: "CONTAINER_RESOURCES_UNAVAILABLE"})
+		return true
+	}
+	if strings.HasPrefix(r.URL.Path, containerOperationsAPIBase) {
+		return g.handleContainerOperationRoute(w, r)
+	}
+	if r.Method == http.MethodPost && r.URL.Path == containerResourcesAPIBase+"/preflights" {
+		var request containerresource.PreflightRequest
+		if err := decodeContainerResourceJSON(r, &request); err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		meta, ok := g.requirePermission(w, r, permissionForContainerMutation(request.Method))
+		if !ok {
+			return true
+		}
+		preflight, err := g.containers.Preflight(r.Context(), request)
+		if err != nil {
+			g.appendContainerAudit(meta, "container_resource_preflight", "failure", request.Method, containerresource.Preflight{}, err)
+			writeContainerResourceError(w, err)
+			return true
+		}
+		if preflight.Plan.RequiresAdmin && !meta.CanAdmin {
+			err := errors.New("admin permission is required for this high-risk container operation")
+			g.appendContainerAudit(meta, "container_resource_preflight", "failure", request.Method, preflight, err)
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: err.Error(), ErrorCode: "ADMIN_REQUIRED"})
+			return true
+		}
+		g.appendContainerAudit(meta, "container_resource_preflight", "success", request.Method, preflight, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: preflight})
+		return true
+	}
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return true
+	}
+	if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+		return true
+	}
+	return g.handleContainerReadRoute(w, r)
+}
+
+func (g *Server) handleContainerReadRoute(w http.ResponseWriter, r *http.Request) bool {
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, containerResourcesAPIBase), "/")
+	parts := []string{}
+	if rest != "" {
+		parts = strings.Split(rest, "/")
+	}
+	if len(parts) == 1 && parts[0] == "endpoints" {
+		if !containerQueryOnly(r.URL.Query(), "engine") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		engines := []containerengine.Engine{containerengine.EngineDocker, containerengine.EnginePodman}
+		if raw := strings.TrimSpace(r.URL.Query().Get("engine")); raw != "" {
+			engine, err := parseContainerEngine(raw)
+			if err != nil {
+				writeContainerResourceError(w, err)
+				return true
+			}
+			engines = []containerengine.Engine{engine}
+		}
+		responses := make([]containerengine.EndpointListResponse, 0, len(engines))
+		for _, engine := range engines {
+			response, err := g.containers.Endpoints(r.Context(), engine)
+			if err != nil {
+				writeContainerResourceError(w, err)
+				return true
+			}
+			responses = append(responses, response)
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"engines": responses}})
+		return true
+	}
+	if len(parts) == 2 && parts[0] == "endpoints" {
+		if !containerQueryOnly(r.URL.Query(), "engine") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		engine, endpointID, err := containerRouteTarget(r, parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		endpoint, err := g.containers.EndpointStatus(r.Context(), containerengine.EndpointStatusRequest{Engine: engine, EndpointID: endpointID})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: endpoint})
+		return true
+	}
+	if len(parts) == 0 {
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return true
+	}
+	engine, endpointID, err := containerRouteTarget(r, "")
+	if err != nil {
+		writeContainerResourceError(w, err)
+		return true
+	}
+	switch parts[0] {
+	case "containers":
+		return g.handleContainerCollection(w, r, parts, engine, endpointID)
+	case "images":
+		return g.handleImageCollection(w, r, parts, engine, endpointID)
+	case "volumes":
+		return g.handleVolumeCollection(w, r, parts, engine, endpointID)
+	case "compose-projects":
+		return g.handleComposeCollection(w, r, parts, engine, endpointID)
+	case "pods":
+		return g.handlePodCollection(w, r, parts, engine, endpointID)
+	default:
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return true
+	}
+}
+
+func (g *Server) handleContainerCollection(w http.ResponseWriter, r *http.Request, parts []string, engine containerengine.Engine, endpointID containerengine.EndpointID) bool {
+	if len(parts) == 1 {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id", "all") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		all, err := parseOptionalBool(r.URL.Query().Get("all"))
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		items, err := g.containers.Containers(r.Context(), containerengine.ContainerListRequest{Engine: engine, EndpointID: endpointID, All: all})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"containers": items}})
+		return true
+	}
+	identity, err := decodeResourcePathSegment(parts[1])
+	if err != nil {
+		writeContainerResourceError(w, err)
+		return true
+	}
+	if len(parts) == 2 {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		item, err := g.containers.Container(r.Context(), containerengine.ContainerInspectRequest{Engine: engine, EndpointID: endpointID, ContainerID: identity})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: item})
+		return true
+	}
+	if len(parts) == 3 && parts[2] == "logs" {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id", "tail", "since_unix_ms") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		req, err := containerLogsRequest(r, engine, endpointID, identity)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		result, err := g.containers.TailLogs(r.Context(), req)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return true
+	}
+	if len(parts) == 4 && parts[2] == "logs" && parts[3] == "events" {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id", "tail", "since_unix_ms") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		req, err := containerLogsRequest(r, engine, endpointID, identity)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		req.Follow = true
+		g.streamContainerLogs(w, r, req)
+		return true
+	}
+	if len(parts) == 3 && parts[2] == "stats" {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		stats, err := g.containers.Stats(r.Context(), containerengine.ContainerStatsWatchRequest{Engine: engine, EndpointID: endpointID, ContainerID: identity})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: stats})
+		return true
+	}
+	if len(parts) == 4 && parts[2] == "stats" && parts[3] == "events" {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id", "interval_ms") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		interval, err := parseBoundedInt(r.URL.Query().Get("interval_ms"), 1000, 500, 10000)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.streamContainerStats(w, r, containerengine.ContainerStatsWatchRequest{Engine: engine, EndpointID: endpointID, ContainerID: identity, IntervalMS: interval})
+		return true
+	}
+	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+	return true
+}
+
+func (g *Server) handleImageCollection(w http.ResponseWriter, r *http.Request, parts []string, engine containerengine.Engine, endpointID containerengine.EndpointID) bool {
+	if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+		writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+		return true
+	}
+	if len(parts) == 1 {
+		items, err := g.containers.Images(r.Context(), containerengine.ImageListRequest{Engine: engine, EndpointID: endpointID})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"images": items}})
+		return true
+	}
+	identity, err := decodeResourcePathSegment(parts[1])
+	if err != nil {
+		writeContainerResourceError(w, err)
+		return true
+	}
+	if len(parts) == 3 && parts[2] == "history" {
+		items, err := g.containers.ImageHistory(r.Context(), containerengine.ImageHistoryRequest{Engine: engine, EndpointID: endpointID, Image: identity})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"history": items}})
+		return true
+	}
+	if len(parts) == 2 {
+		item, err := g.containers.Image(r.Context(), containerengine.ImageInspectRequest{Engine: engine, EndpointID: endpointID, Image: identity})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: item})
+		return true
+	}
+	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+	return true
+}
+
+func (g *Server) handleVolumeCollection(w http.ResponseWriter, r *http.Request, parts []string, engine containerengine.Engine, endpointID containerengine.EndpointID) bool {
+	if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+		writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+		return true
+	}
+	if len(parts) == 1 {
+		items, err := g.containers.Volumes(r.Context(), containerengine.VolumeListRequest{Engine: engine, EndpointID: endpointID})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"volumes": items}})
+		return true
+	}
+	if len(parts) == 2 {
+		identity, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		item, err := g.containers.Volume(r.Context(), containerengine.VolumeInspectRequest{Engine: engine, EndpointID: endpointID, Name: identity})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: item})
+		return true
+	}
+	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+	return true
+}
+
+func (g *Server) handleComposeCollection(w http.ResponseWriter, r *http.Request, parts []string, engine containerengine.Engine, endpointID containerengine.EndpointID) bool {
+	if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+		writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+		return true
+	}
+	if len(parts) == 1 {
+		items, err := g.containers.ComposeProjects(r.Context(), containerengine.ComposeProjectListRequest{Engine: engine, EndpointID: endpointID})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"compose_projects": items}})
+		return true
+	}
+	if len(parts) == 2 {
+		identity, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		item, management, err := g.containers.ComposeProject(r.Context(), containerengine.ComposeProjectRequest{Engine: engine, EndpointID: endpointID, ProjectID: identity})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"project": item, "management": management}})
+		return true
+	}
+	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+	return true
+}
+
+func (g *Server) handlePodCollection(w http.ResponseWriter, r *http.Request, parts []string, engine containerengine.Engine, endpointID containerengine.EndpointID) bool {
+	if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+		writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+		return true
+	}
+	if len(parts) == 1 {
+		items, err := g.containers.Pods(r.Context(), containerengine.PodListRequest{Engine: engine, EndpointID: endpointID})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"pods": items}})
+		return true
+	}
+	if len(parts) == 2 {
+		identity, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		item, err := g.containers.Pod(r.Context(), containerengine.PodRequest{Engine: engine, EndpointID: endpointID, PodID: identity})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: item})
+		return true
+	}
+	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+	return true
+}
+
+func (g *Server) handleContainerOperationRoute(w http.ResponseWriter, r *http.Request) bool {
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, containerOperationsAPIBase), "/")
+	parts := []string{}
+	if rest != "" {
+		parts = strings.Split(rest, "/")
+	}
+	if r.Method == http.MethodPost && len(parts) == 0 {
+		var request containerresource.CreateOperationRequest
+		if err := decodeContainerResourceJSON(r, &request); err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		meta, ok := g.requirePermission(w, r, permissionForContainerMutation(request.Method))
+		if !ok {
+			return true
+		}
+		preflight, err := g.containers.Preflight(r.Context(), containerresource.PreflightRequest{Method: request.Method, Request: request.Request})
+		if err != nil {
+			g.appendContainerAudit(meta, "container_resource_operation_create", "failure", request.Method, containerresource.Preflight{}, err)
+			writeContainerResourceError(w, err)
+			return true
+		}
+		if preflight.Plan.RequiresAdmin && !meta.CanAdmin {
+			err := errors.New("admin permission is required for this high-risk container operation")
+			g.appendContainerAudit(meta, "container_resource_operation_create", "failure", request.Method, preflight, err)
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: err.Error(), ErrorCode: "ADMIN_REQUIRED"})
+			return true
+		}
+		operation, err := g.containers.CreateOperation(r.Context(), request)
+		if err != nil {
+			g.appendContainerAudit(meta, "container_resource_operation_create", "failure", request.Method, preflight, err)
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.appendContainerAudit(meta, "container_resource_operation_create", "success", request.Method, preflight, nil)
+		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: operation})
+		return true
+	}
+	if r.Method == http.MethodGet && len(parts) == 0 {
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return true
+		}
+		if !containerQueryOnly(r.URL.Query(), "limit") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		limit, err := parseBoundedInt(r.URL.Query().Get("limit"), 100, 1, 200)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		operations, err := g.containers.Operations(r.Context(), limit)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"operations": operations}})
+		return true
+	}
+	if len(parts) == 0 {
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return true
+	}
+	operationID, err := decodeResourcePathSegment(parts[0])
+	if err != nil {
+		writeContainerResourceError(w, err)
+		return true
+	}
+	if r.Method == http.MethodGet && len(parts) == 1 {
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return true
+		}
+		op, err := g.containers.Operation(r.Context(), operationID)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: op})
+		return true
+	}
+	if r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "cancel" {
+		meta, ok := g.requirePermission(w, r, requiredPermissionReadExecute)
+		if !ok {
+			return true
+		}
+		op, err := g.containers.CancelOperation(r.Context(), operationID)
+		if err != nil {
+			g.appendAudit(meta, "container_resource_operation_cancel", "failure", map[string]any{"operation_id": operationID}, errors.New(publicContainerResourceMessage(err)))
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "container_resource_operation_cancel", "success", map[string]any{"operation_id": operationID, "method": op.Method}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: op})
+		return true
+	}
+	if r.Method == http.MethodGet && len(parts) == 2 && parts[1] == "events" {
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return true
+		}
+		if !containerQueryOnly(r.URL.Query(), "after_sequence") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		after, err := parseBoundedInt64(r.URL.Query().Get("after_sequence"), 0, 0, 1<<62)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.streamContainerOperationEvents(w, r, operationID, after)
+		return true
+	}
+	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+	return true
+}
+
+func permissionForContainerMutation(method containerengine.Method) requiredPermission {
+	switch method {
+	case containerengine.MethodStart, containerengine.MethodStop, containerengine.MethodRestart,
+		containerengine.MethodPause, containerengine.MethodUnpause, containerengine.MethodKill,
+		containerengine.MethodComposeProjectsStart, containerengine.MethodComposeProjectsStop, containerengine.MethodComposeProjectsRestart,
+		containerengine.MethodPodsStart, containerengine.MethodPodsStop, containerengine.MethodPodsRestart:
+		return requiredPermissionReadExecute
+	default:
+		return requiredPermissionFull
+	}
+}
+
+func (g *Server) appendContainerAudit(meta *session.Meta, action, status string, method containerengine.Method, preflight containerresource.Preflight, err error) {
+	detail := map[string]any{"method": method}
+	if preflight.Engine != "" {
+		detail["engine"] = preflight.Engine
+		detail["endpoint_id"] = preflight.EndpointID
+		detail["resource_kind"] = preflight.ResourceKind
+		detail["resource_identity"] = truncateString(preflight.ResourceIdentity, 160)
+		detail["request_hash"] = preflight.RequestHash
+		detail["plan_hash"] = preflight.PlanHash
+	}
+	if err != nil {
+		err = errors.New(publicContainerResourceMessage(err))
+	}
+	g.appendAudit(meta, action, status, detail, err)
+}
+
+func (g *Server) streamContainerOperationEvents(w http.ResponseWriter, r *http.Request, operationID string, after int64) {
+	baseline, events, err := g.containers.Subscribe(r.Context(), operationID, after)
+	if err != nil {
+		writeContainerResourceError(w, err)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming is unavailable"})
+		return
+	}
+	setContainerSSEHeaders(w)
+	for _, event := range baseline {
+		if err := writeContainerSSE(w, "operation", event); err != nil {
+			return
+		}
+	}
+	flusher.Flush()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case event, ok := <-events:
+			if !ok {
+				return
+			}
+			if err := writeContainerSSE(w, "operation", event); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func (g *Server) streamContainerLogs(w http.ResponseWriter, r *http.Request, req containerengine.LogsTailRequest) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming is unavailable"})
+		return
+	}
+	setContainerSSEHeaders(w)
+	err := g.containers.FollowLogs(r.Context(), req, containerengine.LogLineSinkFunc(func(ctx context.Context, line containerengine.LogLine) error {
+		if err := writeContainerSSE(w, "log", line); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
+	}))
+	if err != nil && r.Context().Err() == nil {
+		_ = writeContainerSSE(w, "error", map[string]string{"code": publicContainerResourceCode(err), "message": publicContainerResourceMessage(err)})
+		flusher.Flush()
+	}
+}
+
+func (g *Server) streamContainerStats(w http.ResponseWriter, r *http.Request, req containerengine.ContainerStatsWatchRequest) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming is unavailable"})
+		return
+	}
+	setContainerSSEHeaders(w)
+	ticker := time.NewTicker(time.Duration(req.IntervalMS) * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		stats, err := g.containers.Stats(r.Context(), req)
+		if err != nil {
+			_ = writeContainerSSE(w, "error", map[string]string{"code": publicContainerResourceCode(err), "message": publicContainerResourceMessage(err)})
+			flusher.Flush()
+			return
+		}
+		if err := writeContainerSSE(w, "stats", stats); err != nil {
+			return
+		}
+		flusher.Flush()
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func writeContainerSSE(w io.Writer, eventType string, payload any) error {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, raw)
+	return err
+}
+
+func setContainerSSEHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+}
+
+func containerRouteTarget(r *http.Request, endpointPath string) (containerengine.Engine, containerengine.EndpointID, error) {
+	engine, err := parseContainerEngine(r.URL.Query().Get("engine"))
+	if err != nil {
+		return "", "", err
+	}
+	rawEndpoint := strings.TrimSpace(r.URL.Query().Get("endpoint_id"))
+	if endpointPath != "" {
+		rawEndpoint, err = decodeResourcePathSegment(endpointPath)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	endpointID := containerengine.EndpointID(rawEndpoint)
+	if endpointID != "" && !endpointID.Valid() {
+		return "", "", fmt.Errorf("%w: endpoint_id is invalid", containerresource.ErrInvalidRequest)
+	}
+	return engine, endpointID, nil
+}
+
+func parseContainerEngine(raw string) (containerengine.Engine, error) {
+	engine := containerengine.Engine(strings.TrimSpace(raw))
+	if !engine.Valid() {
+		return "", fmt.Errorf("%w: engine must be docker or podman", containerresource.ErrInvalidRequest)
+	}
+	return engine, nil
+}
+
+func containerLogsRequest(r *http.Request, engine containerengine.Engine, endpointID containerengine.EndpointID, identity string) (containerengine.LogsTailRequest, error) {
+	tail, err := parseBoundedInt(r.URL.Query().Get("tail"), 200, 1, 5000)
+	if err != nil {
+		return containerengine.LogsTailRequest{}, err
+	}
+	since, err := parseBoundedInt64(r.URL.Query().Get("since_unix_ms"), 0, 0, 1<<62)
+	if err != nil {
+		return containerengine.LogsTailRequest{}, err
+	}
+	return containerengine.LogsTailRequest{Engine: engine, EndpointID: endpointID, ContainerID: identity, TailLines: tail, SinceUnixMs: since}, nil
+}
+
+func decodeResourcePathSegment(raw string) (string, error) {
+	value, err := url.PathUnescape(strings.TrimSpace(raw))
+	if err != nil || value == "" || len(value) > 512 || strings.ContainsAny(value, "/\\\x00\r\n") {
+		return "", fmt.Errorf("%w: resource identity is invalid", containerresource.ErrInvalidRequest)
+	}
+	return value, nil
+}
+
+func decodeContainerResourceJSON(r *http.Request, target any) error {
+	if r == nil || r.Body == nil {
+		return containerresource.ErrInvalidRequest
+	}
+	decoder := json.NewDecoder(io.LimitReader(r.Body, (1<<20)+1))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("%w: invalid json", containerresource.ErrInvalidRequest)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return fmt.Errorf("%w: body must contain one object", containerresource.ErrInvalidRequest)
+	}
+	return nil
+}
+
+func containerQueryOnly(query url.Values, allowed ...string) bool {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, key := range allowed {
+		allowedSet[key] = struct{}{}
+	}
+	for key, values := range query {
+		if _, ok := allowedSet[key]; !ok || len(values) != 1 {
+			return false
+		}
+	}
+	return true
+}
+
+func parseOptionalBool(raw string) (bool, error) {
+	if strings.TrimSpace(raw) == "" {
+		return false, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%w: invalid boolean", containerresource.ErrInvalidRequest)
+	}
+	return value, nil
+}
+
+func parseBoundedInt(raw string, fallback, minimum, maximum int) (int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < minimum || value > maximum {
+		return 0, fmt.Errorf("%w: numeric query is out of range", containerresource.ErrInvalidRequest)
+	}
+	return value, nil
+}
+
+func parseBoundedInt64(raw string, fallback, minimum, maximum int64) (int64, error) {
+	if strings.TrimSpace(raw) == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < minimum || value > maximum {
+		return 0, fmt.Errorf("%w: numeric query is out of range", containerresource.ErrInvalidRequest)
+	}
+	return value, nil
+}
+
+func writeContainerResourceError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	switch {
+	case errors.Is(err, containerresource.ErrOperationNotFound), errors.Is(err, containerengine.ErrContainerNotFound), errors.Is(err, containerengine.ErrImageNotFound), errors.Is(err, containerengine.ErrEndpointNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, containerresource.ErrManagedByWebService), errors.Is(err, containerengine.ErrPermissionDenied):
+		status = http.StatusForbidden
+	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerresource.ErrIdempotencyConflict), errors.Is(err, containerresource.ErrOperationTerminal), errors.Is(err, containerengine.ErrResourcePlanStale):
+		status = http.StatusConflict
+	case errors.Is(err, containerengine.ErrEngineUnavailable), errors.Is(err, containerengine.ErrCLIUnavailable), errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped), errors.Is(err, containerengine.ErrResourceCapabilityUnsupported):
+		status = http.StatusServiceUnavailable
+	case errors.Is(err, containerengine.ErrEngineTimeout), errors.Is(err, context.DeadlineExceeded):
+		status = http.StatusGatewayTimeout
+	}
+	writeJSON(w, status, apiResp{OK: false, Error: publicContainerResourceMessage(err), ErrorCode: publicContainerResourceCode(err)})
+}
+
+func publicContainerResourceCode(err error) string {
+	switch {
+	case errors.Is(err, containerresource.ErrInvalidRequest):
+		return "REQUEST_INVALID"
+	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerengine.ErrResourcePlanStale):
+		return "PREFLIGHT_STALE"
+	case errors.Is(err, containerresource.ErrIdempotencyConflict):
+		return "IDEMPOTENCY_CONFLICT"
+	case errors.Is(err, containerresource.ErrOperationNotFound):
+		return "OPERATION_NOT_FOUND"
+	case errors.Is(err, containerresource.ErrOperationTerminal):
+		return "OPERATION_TERMINAL"
+	case errors.Is(err, containerresource.ErrManagedByWebService):
+		return "MANAGED_BY_WEB_SERVICE"
+	case errors.Is(err, containerengine.ErrContainerNotFound):
+		return "CONTAINER_NOT_FOUND"
+	case errors.Is(err, containerengine.ErrImageNotFound):
+		return "IMAGE_NOT_FOUND"
+	case errors.Is(err, containerengine.ErrEndpointNotFound):
+		return "ENDPOINT_NOT_FOUND"
+	case errors.Is(err, containerengine.ErrPermissionDenied):
+		return "ENGINE_PERMISSION_DENIED"
+	case errors.Is(err, containerengine.ErrEngineTimeout), errors.Is(err, context.DeadlineExceeded):
+		return "ENGINE_TIMEOUT"
+	case errors.Is(err, containerengine.ErrResourceCapabilityUnsupported):
+		return "CAPABILITY_UNSUPPORTED"
+	case errors.Is(err, containerengine.ErrEngineUnavailable), errors.Is(err, containerengine.ErrCLIUnavailable), errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped):
+		return "ENGINE_UNAVAILABLE"
+	default:
+		return "CONTAINER_RESOURCE_ERROR"
+	}
+}
+
+func publicContainerResourceMessage(err error) string {
+	switch publicContainerResourceCode(err) {
+	case "REQUEST_INVALID":
+		return "The container request is invalid."
+	case "PREFLIGHT_STALE":
+		return "The reviewed container plan is stale. Review it again before continuing."
+	case "IDEMPOTENCY_CONFLICT":
+		return "This request identifier is already used by another operation."
+	case "OPERATION_NOT_FOUND":
+		return "The container operation was not found."
+	case "OPERATION_TERMINAL":
+		return "The container operation has already finished."
+	case "MANAGED_BY_WEB_SERVICE":
+		return "This resource is managed by Web Services. Open its service to make lifecycle changes."
+	case "CONTAINER_NOT_FOUND":
+		return "The container was not found."
+	case "IMAGE_NOT_FOUND":
+		return "The image was not found."
+	case "ENDPOINT_NOT_FOUND":
+		return "The container engine endpoint was not found."
+	case "ENGINE_PERMISSION_DENIED":
+		return "The container engine denied this request."
+	case "ENGINE_TIMEOUT":
+		return "The container engine did not respond in time."
+	case "CAPABILITY_UNSUPPORTED":
+		return "This resource is not supported by the selected engine."
+	case "ENGINE_UNAVAILABLE":
+		return "The selected container engine is unavailable."
+	default:
+		return "The container request could not be completed."
+	}
+}
