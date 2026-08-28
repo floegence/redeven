@@ -79,7 +79,12 @@ vi.mock('../services/containerResourcesApi', () => ({
   listContainerOperations: vi.fn().mockResolvedValue([]),
   cancelContainerOperation: vi.fn(),
   createContainerOperation: vi.fn(),
-  getContainerStats: vi.fn(),
+  getContainerStats: vi.fn().mockResolvedValue({
+    cpu_percent: 37.4,
+    memory_bytes: 268_435_456,
+    network_rx_bytes: 12_582_912,
+    network_tx_bytes: 4_194_304,
+  }),
   preflightContainerOperation: vi.fn(),
   subscribeContainerOperation: vi.fn(),
   tailContainerLogs: vi.fn(),
@@ -118,7 +123,7 @@ describe('native Containers responsive product surface', () => {
     await page.viewport(1280, 720);
   });
 
-  it('keeps the desktop inventory dense, navigable, and secondary to structured details', async () => {
+  it('uses a visual status overview, borderless inventory, and on-demand details on desktop', async () => {
     await page.viewport(1440, 900);
     const mounted = mount();
     dispose = mounted.dispose;
@@ -126,11 +131,14 @@ describe('native Containers responsive product surface', () => {
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
     const table = root.querySelector<HTMLElement>('[data-container-resource-table]')!;
-    const placeholder = root.querySelector<HTMLElement>('.container-inspector-placeholder')!;
+    const distribution = root.querySelector<HTMLElement>('.container-distribution__track')!;
     const rows = Array.from(root.querySelectorAll<HTMLElement>('tbody tr'));
     expect(getComputedStyle(table).display).not.toBe('none');
-    expect(getComputedStyle(placeholder).display).toBe('flex');
+    expect(distribution.getBoundingClientRect().width).toBeGreaterThan(100);
+    expect(root.querySelector('.container-inspector')).toBeNull();
+    expect(root.querySelectorAll('thead th')).toHaveLength(3);
     expect(rows).toHaveLength(4);
+    expect(rows[0].textContent).not.toContain('8bbf320351e557285fe1f143ee14a6d2334f24f5');
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
 
     rows[0].focus();
@@ -141,10 +149,18 @@ describe('native Containers responsive product surface', () => {
 
     const inspector = root.querySelector<HTMLElement>('.container-inspector')!;
     const technical = inspector.querySelector<HTMLDetailsElement>('[data-container-technical-details]')!;
-    expect(inspector.getBoundingClientRect().width).toBeGreaterThanOrEqual(400);
+    expect(inspector.getBoundingClientRect().width).toBeGreaterThanOrEqual(360);
+    expect(getComputedStyle(inspector).position).toBe('absolute');
+    expect(inspector.querySelector('.container-inspector__header')?.textContent).not.toContain('8bbf320351e557285fe1f143ee14a6d2334f24f5');
     expect(inspector.querySelector('[data-container-detail-grid]')?.textContent).toContain('Network mode');
     expect(technical.open).toBe(false);
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+
+    const statsTab = Array.from(inspector.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Stats'))!;
+    statsTab.click();
+    await settle();
+    const gauge = inspector.querySelector<HTMLElement>('.container-cpu-gauge')!;
+    expect(gauge.style.getPropertyValue('--container-cpu-usage')).not.toBe('');
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 

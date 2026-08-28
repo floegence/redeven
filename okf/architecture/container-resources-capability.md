@@ -88,16 +88,22 @@ Containers has a fixed Activity entry and a multi-instance
 `redeven.containers` Workbench component. Each instance persists engine,
 endpoint, and selected resource view independently. Desktop uses a compact
 master-detail workspace; mobile uses a resource selector, card list, and
-full-screen detail. The endpoint command bar keeps engine, endpoint health,
-refresh, and Operations in one stable control area. Resource views expose
-type-specific columns plus local search and lifecycle filters instead of a
-generic name/status/details projection.
+full-screen detail. One compact command bar keeps engine, endpoint health,
+refresh, Operations, and resource navigation stable without repeating endpoint
+metadata as prose. Each resource view leads with one interactive active/inactive
+distribution chart, search, and only the filters and primary creation action
+that affect the current inventory. The desktop inventory uses three
+type-specific columns and status color instead of boxed summary cards, generic
+details columns, long identifiers, or repeated ownership labels.
 
-Selecting a resource opens a structured inspector for identity, ownership,
-health, runtime settings, and published ports. Redacted wire data remains
-available only through an explicitly collapsed technical-details section; it
-is never the default product presentation. A shared Operations drawer keeps
-endpoint and target identity visible.
+Selecting a resource opens an on-demand floating inspector; no empty inspector
+occupies the desktop before selection. Its header owns the selected name and
+lifecycle state, while the body shows each remaining health or runtime fact
+once. Managed ownership is one compact Web Services link. Redacted identity and
+wire data remain available only through an explicitly collapsed technical-
+details section; they are never the default product presentation. Container
+statistics use a CPU ring and compact traffic metrics. A shared Operations
+drawer keeps endpoint and target identity visible.
 
 The UI provides structured create dialogs and a separate risk review before
 submission. It supports keyboard operation, 44 px touch targets, forced colors,
