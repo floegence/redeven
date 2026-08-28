@@ -354,6 +354,8 @@ describe('main routing', () => {
     expect(helperSrc).toContain("role: 'web_service_child'");
     expect(helperSrc).toContain("preload: 'web_service_browser'");
     expect(helperSrc).toContain('const contentView = new WebContentsView({');
+    expect(helperSrc).toContain('sessionKeyByWebContentsID.set(contentView.webContents.id, sessionRecord.session_key);');
+    expect(helperSrc).toContain('sessionKeyByWebContentsID.delete(contentView.webContents.id);');
     expect(helperSrc).toContain('partition,');
     expect(helperSrc).toContain('sandbox: true,');
     expect(helperSrc).toContain('contextIsolation: true,');

@@ -69,9 +69,9 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(followingContent.getBoundingClientRect().top).toBe(before.followingTop);
   });
 
-  it('keeps managed service identity, workspace, and actions aligned at card width', async () => {
+  it('keeps the managed service card compact and aligned at card width', async () => {
     const host = document.createElement('div');
-    host.style.width = '520px';
+    host.style.width = '376px';
     document.body.appendChild(host);
     dispose = render(() => (
       <ManagedServiceCard
@@ -114,12 +114,13 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const identityRect = identity.getBoundingClientRect();
     const statusRect = status.getBoundingClientRect();
 
-    expect(cardRect.width).toBeLessThanOrEqual(520);
+    expect(cardRect.width).toBeLessThanOrEqual(376);
+    expect(cardRect.height).toBeLessThanOrEqual(132);
     expect(identityRect.right).toBeLessThanOrEqual(statusRect.left);
     expect(workspace.scrollWidth).toBeGreaterThan(workspace.clientWidth);
     expect(workspace.getBoundingClientRect().height).toBeLessThanOrEqual(20);
-    expect(actionButtons).toHaveLength(2);
-    expect(actionButtons[0].getBoundingClientRect().top).toBe(actionButtons[1].getBoundingClientRect().top);
-    expect(actionButtons[0].getBoundingClientRect().height).toBe(actionButtons[1].getBoundingClientRect().height);
+    expect(actionButtons).toHaveLength(3);
+    expect(new Set(actionButtons.map((button) => button.getBoundingClientRect().top)).size).toBe(1);
+    expect(new Set(actionButtons.map((button) => button.getBoundingClientRect().height)).size).toBe(1);
   });
 });

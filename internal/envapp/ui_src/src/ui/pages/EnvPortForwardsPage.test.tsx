@@ -630,7 +630,7 @@ describe('EnvPortForwardsPage', () => {
     });
   });
 
-  it('keeps the service search, grid, and managed card on one aligned visual frame', async () => {
+  it('keeps service discovery and managed actions in one compact visual frame', async () => {
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
       { state: 'ready', loading: false, error: null },
@@ -655,12 +655,13 @@ describe('EnvPortForwardsPage', () => {
     expect(collection?.className).toContain('max-w-6xl');
     expect(collection?.contains(search ?? null)).toBe(true);
     expect(collection?.contains(grid ?? null)).toBe(true);
-    expect(search?.className).toContain('w-full');
-    expect(search?.className).toContain('lg:grid-cols-2');
+    expect(search?.className).toContain('max-w-sm');
+    expect(search?.className).not.toContain('grid-cols-2');
     expect(grid?.className).toContain('lg:grid-cols-2');
-    expect(card?.className).toContain('h-full');
+    expect(card?.className).not.toContain('h-full');
     expect(workspace?.className).toContain('truncate');
-    expect(actions?.className).toContain('grid-cols-2');
+    expect(actions?.className).not.toContain('grid-cols-2');
+    expect(actions?.querySelector('[data-testid="managed-service-more"]')).toBeTruthy();
     expect(card?.querySelector('[data-template-brand="interactive-desktop"]')).toBeTruthy();
   });
 
@@ -1028,7 +1029,10 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
     await flushPage();
-    const uninstall = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Uninstall');
+    const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
+      .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
+    const uninstall = Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+      .find((button) => button.textContent?.trim() === 'Uninstall');
     uninstall?.click();
 
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: false }));
@@ -1061,7 +1065,10 @@ describe('EnvPortForwardsPage', () => {
     const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(checkbox?.disabled).toBe(false);
     checkbox?.click();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Uninstall')?.click();
+    const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
+      .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
+    Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+      .find((button) => button.textContent?.trim() === 'Uninstall')?.click();
     await flushPage();
     expect(operationBody).toBeNull();
     expect(host.textContent).toContain('This permanently deletes');

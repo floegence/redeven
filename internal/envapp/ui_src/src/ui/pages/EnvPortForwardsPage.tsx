@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { AlertTriangle, ExternalLink, FolderOpen, Globe, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh, FileText } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -13,9 +13,11 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
+  Dropdown,
   Input,
   Textarea,
   Tag,
+  type DropdownItem,
   type TagProps,
 } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
@@ -719,43 +721,71 @@ export function ManagedServiceCard(props: { service: ManagedService; busy: boole
   const failed = () => props.service.observed_state === 'error';
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
+  const moreItems = (): DropdownItem[] => [
+    ...(props.service.update_available ? [{
+      id: 'update',
+      label: i18n.t('webServices.managed.update'),
+      disabled: props.busy || !props.canManage,
+    }] : []),
+    {
+      id: 'restart',
+      label: i18n.t('webServices.managed.restart'),
+      disabled: props.busy || !props.canManage || !running(),
+    },
+    {
+      id: 'logs',
+      label: i18n.t('webServices.managed.logs'),
+      disabled: props.busy,
+    },
+    {
+      id: 'uninstall',
+      label: i18n.t('webServices.managed.uninstall'),
+      disabled: props.busy || !props.canManage,
+    },
+  ];
+  const selectMoreItem = (id: string) => {
+    if (id === 'update') props.onUpdate();
+    else if (id === 'restart') props.onAction('restart');
+    else if (id === 'logs') props.onLogs();
+    else if (id === 'uninstall') props.onUninstall();
+  };
   return (
-    <Card class={cn('flex h-full min-w-0 flex-col overflow-hidden border transition-colors duration-200', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card">
-      <CardHeader class="pb-3">
-        <div class="flex min-w-0 items-start gap-3">
-          <div class="min-w-0 flex-1"><ServiceTemplateIdentity template={presentation()} compact /></div>
-          <div class="flex shrink-0 flex-col items-end gap-1.5 pt-0.5" data-testid="managed-service-status">
-            <Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag>
-            <Show when={props.service.update_available}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.updateAvailable')}</Tag></Show>
-          </div>
+    <Card class={cn('min-w-0 overflow-hidden border px-3 py-2.5 transition-colors duration-200', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card">
+      <div class="flex min-w-0 items-start gap-3">
+        <div class="min-w-0 flex-1"><ServiceTemplateIdentity template={presentation()} compact /></div>
+        <div class="flex shrink-0 flex-col items-end gap-1 pt-0.5" data-testid="managed-service-status">
+          <Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag>
+          <Show when={props.service.update_available}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.updateAvailable')}</Tag></Show>
         </div>
-      </CardHeader>
-      <CardContent class="flex-1 pb-4 pt-0">
-        <div class={cn('border-t pt-3', redevenDividerRoleClass())}>
-          <div class="flex min-w-0 items-center gap-2 text-[11px] font-medium text-muted-foreground">
-            <FolderOpen class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span>{i18n.t('webServices.managed.workspace')}</span>
-          </div>
-          <div class="mt-1 truncate pl-[1.375rem] font-mono text-[11px] leading-5 text-foreground/80" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</div>
+      </div>
+      <Show when={props.service.last_error_code}><p class="mt-1.5 text-xs text-destructive">{i18n.t('webServices.managed.stages.failed')}</p></Show>
+      <div class={cn('mt-2 flex min-w-0 items-center gap-2 border-t pt-2', redevenDividerRoleClass())} data-testid="managed-service-footer">
+        <div class="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
+          <FolderOpen class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span class="truncate font-mono leading-5 text-foreground/80" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</span>
         </div>
-        <Show when={props.service.last_error_code}><p class="mt-2 text-xs text-destructive">{i18n.t('webServices.managed.stages.failed')}</p></Show>
-      </CardContent>
-      <CardFooter class={cn('border-t pt-3', redevenDividerRoleClass())}>
-        <div class="w-full min-w-0" data-testid="managed-service-footer">
-          <div class="grid min-w-0 grid-cols-2 gap-2" data-testid="managed-service-actions">
-            <Button size="sm" variant="default" class="min-w-0" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
-            <Button size="sm" variant="outline" class="min-w-0" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>{primaryLabel()}</Button>
-          </div>
-          <div class={cn('mt-2 flex min-h-8 items-center border-t pt-2', redevenDividerRoleClass())}>
-            <Show when={props.service.update_available}><Button size="sm" variant="ghost" class="px-2" onClick={props.onUpdate} disabled={props.busy || !props.canManage}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.managed.update')}</Button></Show>
-            <div class="ml-auto flex shrink-0 items-center gap-0.5">
-              <Button size="sm" variant="ghost" onClick={() => props.onAction('restart')} disabled={props.busy || !props.canManage || !running()} title={i18n.t('webServices.managed.restart')}><Refresh class="h-3.5 w-3.5" /></Button>
-              <Button size="sm" variant="ghost" onClick={props.onLogs} disabled={props.busy} title={i18n.t('webServices.managed.logs')}><FileText class="h-3.5 w-3.5" /></Button>
-              <Button size="sm" variant="ghost" onClick={props.onUninstall} disabled={props.busy || !props.canManage} title={i18n.t('webServices.managed.uninstall')}><Trash class="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" /></Button>
-            </div>
-          </div>
+        <div class="flex shrink-0 items-center gap-1.5" data-testid="managed-service-actions">
+          <Button size="sm" variant="default" class="h-8 px-3" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
+          <Button size="sm" variant="outline" class="h-8 px-3" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>{primaryLabel()}</Button>
+          <Dropdown
+            align="end"
+            items={moreItems()}
+            onSelect={selectMoreItem}
+            triggerAriaLabel={`${props.service.name}: ${i18n.t('webServices.managed.moreActions')}`}
+            triggerClass="shrink-0 rounded-md"
+            trigger={(
+              <button
+                type="button"
+                class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="managed-service-more"
+                title={i18n.t('webServices.managed.moreActions')}
+              >
+                <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          />
         </div>
-      </CardFooter>
+      </div>
     </Card>
   );
 }
@@ -1806,7 +1836,7 @@ export function EnvPortForwardsPage() {
           <div class="mx-auto w-full max-w-6xl space-y-3" data-testid="web-services-collection">
             {/* Search bar - only show when there are services */}
             <Show when={unmanagedForwards().length > 0 || managedState().length > 0}>
-              <div class="grid w-full grid-cols-1 gap-4 lg:grid-cols-2" data-testid="web-services-search">
+              <div class="w-full max-w-sm" data-testid="web-services-search">
                 <div class="relative min-w-0">
                   <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <Input
@@ -1864,7 +1894,7 @@ export function EnvPortForwardsPage() {
                     <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button>
                   </div>
                 }>
-                  <div class="grid grid-cols-1 gap-4 lg:grid-cols-2" data-testid="unified-web-services-grid">
+                  <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3" data-testid="unified-web-services-grid">
                     <For each={filteredManagedServices()}>{(service) => (
                       <ManagedServiceCard service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
                     )}</For>
