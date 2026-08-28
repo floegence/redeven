@@ -25,11 +25,16 @@ export type DesktopSessionTransport = Readonly<{
 
 export type DesktopRequestHeaders = Record<string, string | string[]>;
 
+export type DesktopPrivateBridgeRequestScope = Readonly<{
+  webServiceForwardID?: string;
+}>;
+
 export function desktopPrivateBridgeRequestHeaders(
   transport: DesktopSessionTransport,
   startup: StartupReport,
   requestURL: string,
   requestHeaders: DesktopRequestHeaders,
+  scope: DesktopPrivateBridgeRequestScope = {},
 ): DesktopRequestHeaders {
   if (transport.kind !== 'native_local_bridge' && transport.kind !== 'placement_bridge') {
     return requestHeaders;
@@ -42,12 +47,9 @@ export function desktopPrivateBridgeRequestHeaders(
     const request = new URL(requestURL);
     const allowed = new URL(transport.allowedBaseURL);
     const privateProtocol = request.protocol === 'http:' || request.protocol === 'ws:';
-    if (
-      allowed.protocol !== 'http:'
-      || !privateProtocol
-      || request.hostname !== allowed.hostname
-      || request.port !== allowed.port
-    ) {
+    const webServiceForwardID = String(scope.webServiceForwardID ?? '').trim().toLowerCase();
+    const expectedHostname = webServiceForwardID ? `pf-${webServiceForwardID}.localhost` : allowed.hostname;
+    if (allowed.protocol !== 'http:' || !privateProtocol || request.hostname !== expectedHostname || request.port !== allowed.port) {
       return requestHeaders;
     }
   } catch {

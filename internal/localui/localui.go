@@ -247,9 +247,12 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 			http.Error(w, "invalid Local UI request", http.StatusBadRequest)
 			return
 		}
-		if _, err := canonicalLoopbackAuthority(r.Host); err != nil {
-			http.Error(w, "invalid Local UI bridge authority", http.StatusMisdirectedRequest)
-			return
+		forwardID, portForwardOrigin := desktopBridgePortForwardAuthority(r.Host)
+		if !portForwardOrigin {
+			if _, err := canonicalLoopbackAuthority(r.Host); err != nil {
+				http.Error(w, "invalid Local UI bridge authority", http.StatusMisdirectedRequest)
+				return
+			}
 		}
 		expectedToken := strings.TrimSpace(s.localUIBridgeToken)
 		presentedToken := strings.TrimSpace(r.Header.Get(localDesktopBridgeTokenHeader))
@@ -261,6 +264,14 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 			r.Body = http.MaxBytesReader(w, r.Body, localUIBodyLimit)
 		}
 		trustedRequest := withTrustedLocalUIBridge(r)
+		if portForwardOrigin {
+			if s.appServer == nil {
+				http.NotFound(w, trustedRequest)
+				return
+			}
+			s.appServer.ServeHTTP(w, appserver.WithLocalUIPortForwardOrigin(trustedRequest, forwardID))
+			return
+		}
 		if r.URL.Path == flowersec.WebSocketDirectPath {
 			if s.desktopBridgeDirect == nil {
 				http.Error(w, "Flowersec private bridge is unavailable", http.StatusServiceUnavailable)
@@ -271,6 +282,32 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 		}
 		next.ServeHTTP(w, trustedRequest)
 	})
+}
+
+func desktopBridgePortForwardAuthority(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" || strings.ContainsAny(value, "@/?#%") {
+		return "", false
+	}
+	host, portRaw, err := net.SplitHostPort(value)
+	if err != nil || portRaw == "" {
+		return "", false
+	}
+	port, err := strconv.Atoi(portRaw)
+	if err != nil || port <= 0 || port > 65535 || portRaw != strconv.Itoa(port) {
+		return "", false
+	}
+	host = strings.ToLower(strings.TrimSpace(host))
+	const prefix = "pf-"
+	const suffix = ".localhost"
+	if !strings.HasPrefix(host, prefix) || !strings.HasSuffix(host, suffix) {
+		return "", false
+	}
+	forwardID := strings.TrimSuffix(strings.TrimPrefix(host, prefix), suffix)
+	if !portforward.IsValidForwardID(forwardID) {
+		return "", false
+	}
+	return forwardID, true
 }
 
 func (s *Server) LocalUIBridgeURLForDesktop() string {

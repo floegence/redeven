@@ -256,6 +256,21 @@ export function isPortForwardURLForForward(input: string, forwardID: string): bo
 }
 
 export function isAllowedWebServiceWindowNavigation(input: string, allowedBaseURL: string, forwardID: string): boolean {
+  try {
+    const candidate = new URL(input);
+    const allowed = new URL(allowedBaseURL);
+    const expectedHost = `pf-${compactCodeSpaceID(forwardID).toLowerCase()}.localhost`;
+    const localDesktopRoute = candidate.protocol === 'http:'
+      && candidate.hostname.toLowerCase() === expectedHost
+      && allowed.protocol === 'http:'
+      && isWebServiceLoopbackHostname(allowed.hostname)
+      && normalizeHTTPPort(candidate) === normalizeHTTPPort(allowed);
+    if (localDesktopRoute) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
   return isAllowedAppNavigation(input, allowedBaseURL) && isPortForwardURLForForward(input, forwardID);
 }
 
@@ -265,6 +280,58 @@ function webServiceRouteRoot(routeURL: URL, forwardID: string): URL | null {
   const labels = splitHostname(routeURL.hostname);
   if (labels[0] === `pf-${expectedID.toLowerCase()}`) return new URL('/', routeURL);
   return new URL(`/pf/${encodeURIComponent(expectedID)}/`, routeURL);
+}
+
+function isWebServiceLoopbackHostname(hostname: string): boolean {
+  const host = String(hostname ?? '').trim().toLowerCase().replace(/^\[/u, '').replace(/\]$/u, '');
+  if (host === 'localhost' || host === '::1') return true;
+  const octets = host.split('.');
+  return octets.length === 4
+    && octets[0] === '127'
+    && octets.every((octet) => /^(?:0|[1-9][0-9]{0,2})$/u.test(octet) && Number(octet) <= 255);
+}
+
+function protocolFamily(protocol: string): 'http' | 'https' | null {
+  switch (protocol) {
+    case 'http:':
+    case 'ws:':
+      return 'http';
+    case 'https:':
+    case 'wss:':
+      return 'https';
+    default:
+      return null;
+  }
+}
+
+export function routeWebServiceTargetRequest(
+  input: string,
+  routeInput: string,
+  targetInput: string,
+  forwardID: string,
+): string | null {
+  try {
+    const candidate = new URL(input);
+    const routeURL = new URL(routeInput);
+    const targetURL = new URL(targetInput);
+    const expectedHost = `pf-${compactCodeSpaceID(forwardID).toLowerCase()}.localhost`;
+    if (routeURL.protocol !== 'http:' || routeURL.hostname.toLowerCase() !== expectedHost) return null;
+    if (candidate.username || candidate.password) return null;
+    const candidateFamily = protocolFamily(candidate.protocol);
+    const targetFamily = protocolFamily(targetURL.protocol);
+    if (!candidateFamily || candidateFamily !== targetFamily) return null;
+    if (!isWebServiceLoopbackHostname(candidate.hostname) || !isWebServiceLoopbackHostname(targetURL.hostname)) return null;
+    if (normalizeHTTPPort(candidate) !== normalizeHTTPPort(targetURL)) return null;
+
+    const routed = new URL(routeURL.origin);
+    routed.protocol = candidate.protocol === 'ws:' || candidate.protocol === 'wss:' ? 'ws:' : 'http:';
+    routed.pathname = candidate.pathname;
+    routed.search = candidate.search;
+    routed.hash = candidate.hash;
+    return routed.toString();
+  } catch {
+    return null;
+  }
 }
 
 function webServiceRouteAppPath(routeURL: URL, forwardID: string): string | null {
@@ -298,6 +365,29 @@ export function webServiceBrowserDisplayURL(
       displayURL.hash = routeURL.hash;
     }
     return displayURL.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function webServiceBrowserExternalURL(
+  routeInput: string,
+  publicBaseInput: string,
+  forwardID: string,
+): string | null {
+  try {
+    const routeURL = new URL(routeInput);
+    const expectedHost = `pf-${compactCodeSpaceID(forwardID).toLowerCase()}.localhost`;
+    if (routeURL.protocol !== 'http:' || routeURL.hostname.toLowerCase() !== expectedHost) {
+      return isPortForwardURLForForward(routeURL.toString(), forwardID) ? routeURL.toString() : null;
+    }
+    const publicBase = new URL(publicBaseInput);
+    if (publicBase.protocol !== 'http:' && publicBase.protocol !== 'https:') return null;
+    const external = new URL(`/pf/${encodeURIComponent(forwardID)}/`, publicBase);
+    external.pathname += routeURL.pathname.replace(/^\/+/, '');
+    external.search = routeURL.search;
+    external.hash = routeURL.hash;
+    return external.toString();
   } catch {
     return null;
   }

@@ -357,7 +357,7 @@ describe('main routing', () => {
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
     expect(helperSrc).toContain('const webSession = session.fromPartition(partition);');
     expect(helperSrc).toContain('await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });');
-    expect(helperSrc.indexOf('await prepareWebServiceWindowPartition(sessionRecord, partition);')).toBeLessThan(
+    expect(helperSrc.indexOf('await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id);')).toBeLessThan(
       helperSrc.indexOf('const controller = createWebServiceBrowserController(sessionRecord, request, partition);'),
     );
     expect(helperSrc).toContain("role: 'web_service_child'");
@@ -393,6 +393,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('if (unavailablePageURL !== retryPageURL) return;');
     expect(helperSrc).toContain('if (contentView.webContents.getURL() !== `${retryPageURL}#retry`) return;');
     expect(helperSrc).toContain('await openExternalURL(targetURL);');
+    expect(helperSrc).toContain('webServiceBrowserExternalURL(currentRouteURL, sessionRecord.startup.local_ui_url, request.forward_id)');
     expect(helperSrc).toContain('blockExternalNavigation(url);');
     expect(helperSrc).toContain('blockExternalNavigation(targetURL);');
     expect(helperSrc).not.toContain(".t('webServiceBrowser.blockedNavigation')");
@@ -402,7 +403,13 @@ describe('main routing', () => {
     expect(helperSrc).toContain('webSession.clearCache()');
     expect(helperSrc).toContain('current?.webContentsID !== closedWindow.webContentsID');
     expect(helperSrc).toContain('clearWebServiceWindowPartition(partition);');
+    expect(helperSrc).toContain('routeWebServiceTargetRequest(');
+    expect(helperSrc).toContain('callback(redirectURL ? { redirectURL } : {});');
+    expect(helperSrc).toContain('webSession.webRequest.onBeforeRequest(null);');
+    expect(helperSrc).toContain('webSession.webRequest.onBeforeSendHeaders(null);');
     expect(helperSrc).toContain('webSession.webRequest.onHeadersReceived(null);');
+    expect(helperSrc).toContain('webSession.webRequest.onCompleted(null);');
+    expect(helperSrc).toContain('webSession.webRequest.onErrorOccurred(null);');
     expect(helperSrc).not.toContain('sessionRecord.session_partition');
   });
 
@@ -1795,7 +1802,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('placementBridge: options.transportRecovery != null');
     expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport);');
     expect(mainSrc).toContain("await webSession.setProxy({ mode: 'direct' });");
-    expect(mainSrc).toContain('function installDesktopDiagnosticsHooks(webSession: Session): void');
+    expect(mainSrc).toContain('function installDesktopDiagnosticsHooks(webSession: Session, webServiceForwardID?: string): void');
     expect(mainSrc).toContain('desktopDiagnosticsHookSessions.has(webSession)');
     expect(mainSrc).toContain('shouldFailDesktopSessionMainDocument({');
     expect(mainSrc).toContain('details.resourceType');

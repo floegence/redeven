@@ -135,6 +135,14 @@ func TestDesktopBridgeAcceptsOnlyLoopbackAuthority(t *testing.T) {
 			t.Fatalf("bridge Host %q status = %d, want %d", host, res.Code, http.StatusFound)
 		}
 	}
+	pfReq := httptest.NewRequest(http.MethodGet, "http://pf-demo.localhost:24000/assets/app.js", nil)
+	pfReq.Host = "pf-demo.localhost:24000"
+	pfReq.Header.Set(localDesktopBridgeTokenHeader, s.localUIBridgeToken)
+	pfRes := httptest.NewRecorder()
+	s.HandlerForDesktopBridge().ServeHTTP(pfRes, pfReq)
+	if pfRes.Code == http.StatusMisdirectedRequest || pfRes.Code == http.StatusUnauthorized {
+		t.Fatalf("authorized Desktop Web Service origin status = %d, want bridge admission", pfRes.Code)
+	}
 	for _, host := range []string{"192.168.1.10:23998", "evil.example:23998", "127.0.0.1", "127.0.0.1:notaport"} {
 		req := httptest.NewRequest(http.MethodGet, "http://localhost:24000/", nil)
 		req.Host = host
@@ -161,6 +169,31 @@ func TestDesktopBridgeAcceptsOnlyLoopbackAuthority(t *testing.T) {
 		})
 	}
 
+}
+
+func TestDesktopBridgePortForwardAuthority(t *testing.T) {
+	t.Parallel()
+
+	for raw, want := range map[string]string{
+		"pf-demo.localhost:24000":      "demo",
+		"PF-forward-1.LOCALHOST:43123": "forward-1",
+	} {
+		got, ok := desktopBridgePortForwardAuthority(raw)
+		if !ok || got != want {
+			t.Fatalf("desktopBridgePortForwardAuthority(%q) = %q, %v; want %q, true", raw, got, ok, want)
+		}
+	}
+	for _, raw := range []string{
+		"pf-.localhost:24000",
+		"pf-demo.localhost",
+		"pf-demo.localhost:0",
+		"pf-demo.other.localhost:24000",
+		"pf-demo.example.com:24000",
+	} {
+		if got, ok := desktopBridgePortForwardAuthority(raw); ok {
+			t.Fatalf("desktopBridgePortForwardAuthority(%q) = %q, true; want rejection", raw, got)
+		}
+	}
 }
 
 func TestConfigureNetworkAuthoritiesUsesResolvedWildcardHosts(t *testing.T) {

@@ -456,6 +456,91 @@ func TestServer_LocalUIPortForwardProxyKeepsLocalPrefixInTargetRedirects(t *test
 	}
 }
 
+func TestRewriteLocationToProxyKeepsSameProtocolAndLoopbackPort(t *testing.T) {
+	t.Parallel()
+
+	target, err := url.Parse("http://127.0.0.1:3080")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for location, want := range map[string]string{
+		"/login?next=%2F":                  "/pf/demo/login?next=%2F",
+		"http://127.0.0.1:3080/dashboard":  "/pf/demo/dashboard",
+		"http://localhost:3080/dashboard":  "/pf/demo/dashboard",
+		"http://127.42.0.9:3080/dashboard": "/pf/demo/dashboard",
+	} {
+		if got := rewriteLocationToProxy(location, target, "/pf/demo"); got != want {
+			t.Fatalf("rewriteLocationToProxy(%q) = %q, want %q", location, got, want)
+		}
+	}
+	for _, location := range []string{
+		"http://localhost:3081/dashboard",
+		"https://localhost:3080/dashboard",
+		"https://example.com/dashboard",
+	} {
+		if got := rewriteLocationToProxy(location, target, "/pf/demo"); got != location {
+			t.Fatalf("rewriteLocationToProxy(%q) = %q, want unchanged", location, got)
+		}
+	}
+}
+
+func TestRewriteHTMLOriginsDoesNotCrossProtocol(t *testing.T) {
+	t.Parallel()
+
+	target, err := url.Parse("http://127.0.0.1:3080")
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := `http://127.0.0.1:3080/a https://127.0.0.1:3080/b ws://127.0.0.1:3080/c wss://127.0.0.1:3080/d`
+	want := `http://pf-demo.localhost:43123/a https://127.0.0.1:3080/b ws://pf-demo.localhost:43123/c wss://127.0.0.1:3080/d`
+	if got := rewriteHTMLOrigins(input, target, "http://pf-demo.localhost:43123", "ws://pf-demo.localhost:43123"); got != want {
+		t.Fatalf("rewriteHTMLOrigins() = %q, want %q", got, want)
+	}
+}
+
+func TestServer_LocalUIPortForwardOriginKeepsApplicationPathsAtRoot(t *testing.T) {
+	t.Parallel()
+
+	var receivedPath string
+	var redirectPort string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedPath = r.URL.RequestURI()
+		http.Redirect(w, r, "http://localhost:"+redirectPort+r.URL.Path+"/next", http.StatusTemporaryRedirect)
+	}))
+	defer upstream.Close()
+	target, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redirectPort = target.Port()
+
+	srv, err := New(Options{
+		Backend: &stubBackend{},
+		PortForward: &stubPortForwardBackend{forwards: map[string]pfregistry.Forward{
+			"demo": {ForwardID: "demo", TargetURL: upstream.URL},
+		}},
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ConfigPath:         writeLocalUITestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://pf-demo.localhost:23998/pf/demo/assets/app.js?rev=1", nil)
+	req = WithLocalUIPortForwardOrigin(req, "demo")
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+
+	if receivedPath != "/pf/demo/assets/app.js?rev=1" {
+		t.Fatalf("upstream request = %q, want application path unchanged", receivedPath)
+	}
+	wantLocation := "/pf/demo/assets/app.js/next"
+	if rr.Code != http.StatusTemporaryRedirect || rr.Header().Get("Location") != wantLocation {
+		t.Fatalf("response = %d Location %q, want %d %q", rr.Code, rr.Header().Get("Location"), http.StatusTemporaryRedirect, wantLocation)
+	}
+}
+
 func TestServer_LocalUIPortForwardProxyMarksUnavailableUpstream(t *testing.T) {
 	t.Parallel()
 

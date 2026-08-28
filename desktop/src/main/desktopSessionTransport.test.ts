@@ -231,4 +231,43 @@ describe('desktopPrivateBridgeRequestHeaders', () => {
       { Accept: '*/*' },
     )).toEqual({ Accept: '*/*' });
   });
+
+  it('binds an isolated Web Service partition to its exact private origin', () => {
+    const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+    const scope = { webServiceForwardID: 'demo' };
+    expect(desktopPrivateBridgeRequestHeaders(
+      transport,
+      localStartup,
+      'http://pf-demo.localhost:43123/assets/app.js',
+      { Accept: '*/*' },
+      scope,
+    )).toEqual({
+      Accept: '*/*',
+      'X-Redeven-Desktop-Bridge-Token': localStartup.local_ui_bridge_token,
+    });
+    expect(desktopPrivateBridgeRequestHeaders(
+      transport,
+      localStartup,
+      'ws://pf-demo.localhost:43123/socket',
+      { Upgrade: 'websocket' },
+      scope,
+    )).toEqual({
+      Upgrade: 'websocket',
+      'X-Redeven-Desktop-Bridge-Token': localStartup.local_ui_bridge_token,
+    });
+    for (const url of [
+      'http://127.0.0.1:43123/_redeven_proxy/api/forwards',
+      'http://pf-other.localhost:43123/',
+      'http://pf-demo.localhost:43124/',
+      'https://pf-demo.localhost:43123/',
+    ]) {
+      expect(desktopPrivateBridgeRequestHeaders(
+        transport,
+        localStartup,
+        url,
+        { Accept: '*/*' },
+        scope,
+      )).toEqual({ Accept: '*/*' });
+    }
+  });
 });
