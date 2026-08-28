@@ -523,6 +523,11 @@
             "other": "{count} результата готовы"
           }
         },
+        "failure": {
+          "withTitle": "Задача завершилась с ошибкой: {title}",
+          "withReason": "Сбой Flower · {reason}",
+          "withoutTitle": "Задача Flower завершилась с ошибкой"
+        },
         "secondaryWorking": {
           "one": "Flower также работает над ещё одной задачей",
           "few": "Flower также работает над ещё {count} задачами",

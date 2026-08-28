@@ -57,6 +57,7 @@ describe('projectFlowerCompanionPresence', () => {
     expect(presence).toEqual({
       priority_status: 'running',
       priority_count: 1,
+      priority_thread_id: 'running',
       priority_thread_title: 'Thread',
       attention_count: 0,
       unread_failed_count: 1,
@@ -83,6 +84,7 @@ describe('projectFlowerCompanionPresence', () => {
     ], true)).toEqual({
       priority_status: 'running',
       priority_count: 1,
+      priority_thread_id: 'running-with-queue',
       priority_thread_title: 'Thread',
       attention_count: 0,
       unread_failed_count: 0,
@@ -170,6 +172,7 @@ describe('projectFlowerCompanionPresence', () => {
     ], true)).toEqual({
       priority_status: 'running',
       priority_count: 1,
+      priority_thread_id: 'thread-1',
       attention_count: 0,
       unread_failed_count: 0,
       running_count: 1,

@@ -509,6 +509,11 @@
             "other": "{count} resultados estão prontos"
           }
         },
+        "failure": {
+          "withTitle": "A tarefa falhou: {title}",
+          "withReason": "O Flower falhou · {reason}",
+          "withoutTitle": "Uma tarefa do Flower falhou"
+        },
         "secondaryWorking": {
           "one": "Flower também está trabalhando em outra tarefa",
           "other": "Flower também está trabalhando em outras {count} tarefas"

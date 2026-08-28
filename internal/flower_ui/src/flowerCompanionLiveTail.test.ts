@@ -121,6 +121,20 @@ describe('projectFlowerCompanionLiveTail', () => {
     });
   });
 
+  it('accepts typed-current assistant output owned by the active turn', () => {
+    expect(projectFlowerCompanionLiveTail(thread({
+      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
+      messages: [message({
+        run_id: undefined,
+        turn_id: 'run-live',
+        content: 'Typed current output remains visible.',
+      })],
+    }), label)).toMatchObject({
+      kind: 'output',
+      text: 'Typed current output remains visible.',
+    });
+  });
+
   it('projects the latest tool presentation instead of an internal tool name', () => {
     expect(projectFlowerCompanionLiveTail(thread({
       model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },

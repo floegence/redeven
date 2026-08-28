@@ -9,6 +9,7 @@ export type FlowerCompanionThreadListItem = FlowerThreadListItem & Readonly<{
   progress_text?: string;
   progress_kind?: FlowerCompanionProgressKind;
   progress_identity?: string;
+  error_text?: string;
 }>;
 
 export type FlowerCompanionTerminalTransition = Readonly<{
@@ -115,15 +116,19 @@ export function projectFlowerCompanionPresence(
   const priorityThreadTitle = priorityThread ? canonicalThreadTitle(priorityThread) : undefined;
   const priorityThreadProgress = priority?.status === 'running'
     ? priorityThread?.progress_text?.trim() || undefined
-    : undefined;
-  const priorityThreadProgressKind = priorityThreadProgress
-    ? priorityThread?.progress_kind ?? 'status'
-    : undefined;
+    : priority?.status === 'failed'
+      ? priorityThread?.error_text?.trim() || undefined
+      : undefined;
+  const priorityThreadProgressKind = priority?.status === 'failed'
+    ? 'error'
+    : priorityThreadProgress
+      ? priorityThread?.progress_kind ?? 'status'
+      : undefined;
   const priorityThreadProgressIdentity = priorityThreadProgress
     ? priorityThread?.progress_identity
     : undefined;
   const priorityRunID = priority?.status === 'running' ? priorityThread?.active_run_id?.trim() || undefined : undefined;
-  const priorityThreadID = priorityRunID ? priorityThread?.thread_id : undefined;
+  const priorityThreadID = priorityThread?.thread_id;
   const priorityRunGeneration = priority?.status === 'running' && Number.isFinite(priorityThread?.run_generation)
     ? priorityThread?.run_generation
     : undefined;

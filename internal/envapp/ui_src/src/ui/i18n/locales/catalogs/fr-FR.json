@@ -509,6 +509,11 @@
             "other": "{count} résultats sont prêts"
           }
         },
+        "failure": {
+          "withTitle": "Échec de la tâche : {title}",
+          "withReason": "Échec de Flower · {reason}",
+          "withoutTitle": "Une tâche Flower a échoué"
+        },
         "secondaryWorking": {
           "one": "Flower travaille également sur une autre tâche",
           "other": "Flower travaille également sur {count} autres tâches"

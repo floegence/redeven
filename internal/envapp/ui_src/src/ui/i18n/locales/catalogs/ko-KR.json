@@ -509,6 +509,11 @@
             "other": "결과 {count}개가 준비되었습니다"
           }
         },
+        "failure": {
+          "withTitle": "작업 실패: {title}",
+          "withReason": "Flower 실패 · {reason}",
+          "withoutTitle": "Flower 작업이 실패했습니다"
+        },
         "secondaryWorking": {
           "one": "Flower가 다른 작업 1개도 처리하고 있습니다",
           "other": "Flower가 다른 작업 {count}개도 처리하고 있습니다"

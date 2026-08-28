@@ -4,6 +4,7 @@ export type FlowerCompanionTailProjection = Readonly<{
 }>;
 
 export type FlowerCompanionTailMotionElements = Readonly<{
+  prefix?: HTMLElement;
   viewport: HTMLElement;
   value: HTMLElement;
 }>;
@@ -121,6 +122,7 @@ export class FlowerCompanionTailMotionController {
     this.elements.value.textContent = this.buffer;
     this.elements.viewport.scrollLeft = compensatedScrollLeft;
     this.target = this.maximumScrollLeft();
+    this.updateOverflowPresentation();
     const distance = this.target - this.elements.viewport.scrollLeft;
     const burstLimit = Math.max(240, this.elements.viewport.clientWidth * 1.5);
     if (this.reducedMotion() || distance > burstLimit) {
@@ -161,6 +163,12 @@ export class FlowerCompanionTailMotionController {
     this.snap();
   }
 
+  private updateOverflowPresentation(): void {
+    const overflows = this.maximumScrollLeft() > FOLLOW_EPSILON_PX;
+    this.elements.viewport.dataset.flowerCompanionOverflow = overflows ? 'true' : 'false';
+    if (this.elements.prefix) this.elements.prefix.hidden = !overflows;
+  }
+
   private snap(): void {
     this.generation += 1;
     if (this.frame !== null) this.cancelFrame(this.frame);
@@ -168,6 +176,7 @@ export class FlowerCompanionTailMotionController {
     this.target = this.maximumScrollLeft();
     this.elements.viewport.scrollLeft = this.target;
     this.trimSettledBuffer();
+    this.updateOverflowPresentation();
   }
 
   private follow(): void {
@@ -190,7 +199,7 @@ export class FlowerCompanionTailMotionController {
         ? 1000 / 60
         : Math.min(64, Math.max(1, timestamp - previousTimestamp));
       previousTimestamp = timestamp;
-      const alpha = 1 - Math.exp(-elapsedMs / 72);
+      const alpha = 1 - Math.exp(-elapsedMs / 112);
       const step = delta * alpha;
       this.elements.viewport.scrollLeft = Math.min(this.target, current + step);
       const achieved = this.elements.viewport.scrollLeft;
@@ -211,5 +220,6 @@ export class FlowerCompanionTailMotionController {
     this.elements.value.textContent = this.buffer;
     this.target = this.maximumScrollLeft();
     this.elements.viewport.scrollLeft = this.target;
+    this.updateOverflowPresentation();
   }
 }

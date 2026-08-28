@@ -509,6 +509,11 @@
             "other": "{count}件の結果を確認できます"
           }
         },
+        "failure": {
+          "withTitle": "タスクに失敗しました：{title}",
+          "withReason": "Flower が失敗しました · {reason}",
+          "withoutTitle": "Flower のタスクに失敗しました"
+        },
         "secondaryWorking": {
           "one": "Flower がほかに1件のタスクを処理しています",
           "other": "Flower がほかに{count}件のタスクを処理しています"

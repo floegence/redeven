@@ -14,6 +14,7 @@ function fixture(options: Readonly<{ reduced?: boolean; viewportWidth?: number; 
   let reduced = Boolean(options.reduced);
   let trimmedWidth = 0;
   const viewport = {
+    dataset: {},
     get clientWidth() { return options.viewportWidth ?? 100; },
     get scrollWidth() { return Array.from(content).length * 10; },
     get scrollLeft() { return scrollLeft; },

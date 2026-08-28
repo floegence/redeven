@@ -89,6 +89,7 @@ import { presentFlowerApproval } from './flowerApprovalPresentation';
 import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 import { FlowerCompanionTailMotionController } from './flowerCompanionTailMotion';
+import { FlowerCompanionRunTracker } from './flowerCompanionRunTracker';
 import {
   buildFlowerTimelineEntries,
   flowerTimelineHasUserRejectedTool,
@@ -181,6 +182,7 @@ import {
   projectFlowerCompanionPresence,
   type FlowerCompanionPriorityStatus,
   type FlowerCompanionPresenceProjection,
+  type FlowerCompanionTerminalTransition,
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
 import { createDirectoryPickerDataSource } from './filePicker/createDirectoryPickerDataSource';
@@ -657,6 +659,7 @@ export type FlowerSurfaceProps = Readonly<{
     progressKind?: FlowerCompanionProgressKind;
     progressIdentity?: string;
     ephemeralKind?: 'completion';
+    targetThreadID?: string;
     running: boolean;
   }>;
   companionActionLabel?: string;
@@ -664,7 +667,7 @@ export type FlowerSurfaceProps = Readonly<{
   headerTrailingActions?: JSX.Element;
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
-  onCompanionOpenRequest?: () => void;
+  onCompanionOpenRequest?: (threadID?: string) => void;
   onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   class?: string;
 }>;
@@ -673,6 +676,7 @@ const FlowerCompanionLiveTailText: Component<Readonly<{
   text: string;
   identity: string;
 }>> = (props) => {
+  let prefixRef: HTMLSpanElement | undefined;
   let viewportRef: HTMLSpanElement | undefined;
   let valueRef: HTMLSpanElement | undefined;
   let controller: FlowerCompanionTailMotionController | null = null;
@@ -686,6 +690,7 @@ const FlowerCompanionLiveTailText: Component<Readonly<{
     if (!viewportRef || !valueRef) return;
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     controller = new FlowerCompanionTailMotionController({
+      prefix: prefixRef,
       viewport: viewportRef,
       value: valueRef,
     });
@@ -709,7 +714,7 @@ const FlowerCompanionLiveTailText: Component<Readonly<{
 
   return (
     <>
-      <span class="flower-companion-collapsed-tail-prefix" aria-hidden="true">&hellip;</span>
+      <span ref={prefixRef} class="flower-companion-collapsed-tail-prefix" aria-hidden="true" hidden>&hellip;</span>
       <span
         ref={viewportRef}
         class="flower-companion-collapsed-tail-viewport"
@@ -801,7 +806,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return next;
     });
   };
-	const liveTransport = createLiveTransport<FlowerLiveStreamEnvelope>();
+  const liveTransport = createLiveTransport<FlowerLiveStreamEnvelope>();
+  const companionRunTracker = new FlowerCompanionRunTracker();
+  const [companionRunRevision, setCompanionRunRevision] = createSignal(0);
+  const [companionTerminalTransition, setCompanionTerminalTransition] = createSignal<FlowerCompanionTerminalTransition>();
 	const outboxResendInFlight = new Set<string>();
 	const pendingAdmissionHandoffs = new Map<string, PendingAdmissionHandoff>();
 	let transportOutboxDisposed = false;
@@ -2295,7 +2303,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const warmupPhaseLabel = createMemo(() => trimString(warmupState()?.phaseLabel) || copy().chat.loadingSettings);
   const warmupModelLabel = createMemo(() => trimString(warmupState()?.modelLabel) || copy().chat.warmupModelLabel);
 
-  const presentRunError = (error: FlowerThreadSnapshot['error']): string => {
+  const presentRunError = (
+    error: FlowerThreadSnapshot['error'],
+    includeUnmappedMessage = true,
+  ): string => {
     const code = trimString(error?.code);
     switch (code) {
       case 'provider_auth_failed':
@@ -2321,7 +2332,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'runtime_restarted':
         return copy().chat.runErrors.runtimeRestarted;
       default:
-        return trimString(error?.message);
+        return includeUnmappedMessage ? trimString(error?.message) : '';
     }
   };
   const selectedThreadRunErrorMessage = createMemo(() => {
@@ -2429,19 +2440,38 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidebarListItems(items);
   });
   const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
-    const threadStateByID = new Map(threads().map((thread) => [thread.thread_id, thread] as const));
-    return sidebarListItems().map((item) => {
-      const thread = threadStateByID.get(item.thread_id);
-      const liveTail = thread ? projectFlowerCompanionLiveTail(thread, modelStatusLabel) : null;
+    companionRunRevision();
+    const cache = threadCache();
+    return threads().map((summary) => {
+      const visibleSummary = threadWithLocalReadVisibility(summary);
+      const item = projectFlowerThreadListItem(visibleSummary);
+      const detail = cache.views.get(summary.thread_id)?.thread;
+      const activeRunID = trimString(summary.active_run_id);
+      const matchingActiveDetail = detail?.status === 'running'
+        && trimString(detail.active_run_id) === activeRunID
+        ? detail
+        : undefined;
+      const matchingFailedDetail = summary.status === 'failed' && detail?.status === 'failed'
+        ? detail
+        : undefined;
+      const liveTail = matchingActiveDetail
+        ? projectFlowerCompanionLiveTail(matchingActiveDetail, modelStatusLabel)
+        : null;
+      const runGeneration = activeRunID
+        ? companionRunTracker.generationFor(summary.thread_id, activeRunID)
+        : undefined;
+      const errorText = matchingFailedDetail ? presentRunError(matchingFailedDetail.error, false) : '';
       return {
         ...item,
-        queued_turn_count: thread?.queued_turn_count ?? thread?.queued_turns?.length ?? 0,
-        ...(thread?.active_run_id ? { active_run_id: thread.active_run_id } : {}),
+        queued_turn_count: summary.queued_turn_count ?? summary.queued_turns?.length ?? 0,
+        ...(activeRunID ? { active_run_id: activeRunID } : {}),
+        ...(runGeneration !== undefined ? { run_generation: runGeneration } : {}),
         ...(liveTail ? {
           progress_text: liveTail.text,
           progress_kind: liveTail.kind,
           progress_identity: liveTail.identity,
         } : {}),
+        ...(errorText ? { error_text: errorText } : {}),
       };
     });
   });
@@ -2450,6 +2480,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const presence = projectFlowerCompanionPresence(
       companionThreadItems(),
       !loadError(),
+      companionTerminalTransition(),
     );
     const signature = JSON.stringify(presence);
     if (signature === lastCompanionPresenceSignature) return;
@@ -4185,13 +4216,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (envelope.current) {
-      applyRuntimeCurrent(
+      const accepted = applyRuntimeCurrent(
         envelope.current,
         envelope.context_usage,
         envelope.context_compactions,
         envelope.timeline_decorations,
         'live_current',
       );
+      if (accepted && envelope.kind === 'thread.batch') {
+        const observation = companionRunTracker.observe(envelope.current);
+        if (observation.changed) {
+          setCompanionTerminalTransition(observation.terminalTransition);
+          setCompanionRunRevision((revision) => revision + 1);
+        }
+      }
       return;
     }
     if (envelope.kind === 'thread.batch' && envelope.context_usage) {
@@ -6294,6 +6332,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
   const companionSummaryAnnounces = createMemo(() => (
     props.companionSummary?.ephemeralKind === 'completion'
+    || props.companionSummary?.priorityStatus === 'failed'
     || (
       (props.companionSummary?.priorityStatus === 'running' || props.companionSummary?.priorityStatus === 'queued')
       && props.companionSummary?.progressKind !== 'tool'
@@ -10646,15 +10685,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     type="button"
                     class={cn(
                       'flower-companion-collapsed-summary',
+                      props.companionSummary?.running
+                        && 'flower-companion-collapsed-summary-running',
+                      props.companionSummary?.priorityStatus === 'failed'
+                        && 'flower-companion-collapsed-summary-failed',
                       props.companionSummary?.ephemeralKind === 'completion'
                         && 'flower-companion-collapsed-summary-completion',
                     )}
+                    data-flower-companion-status={props.companionSummary?.priorityStatus}
                     data-flower-companion-ephemeral-kind={props.companionSummary?.ephemeralKind}
                     title={props.companionSummary?.accessibleText}
                     aria-label={props.companionSummary?.accessibleText}
                     aria-controls={props.companionRegionID}
                     aria-expanded="false"
-                    onClick={() => props.onCompanionOpenRequest?.()}
+                    onClick={() => props.onCompanionOpenRequest?.(props.companionSummary?.targetThreadID)}
                   >
                     <span
                       class={cn(

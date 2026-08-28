@@ -7,7 +7,7 @@ import type {
 import { presentFlowerActivityItem } from './flowerActivityPresentation';
 import { trimString } from './flowerSurfaceModel';
 
-export type FlowerCompanionProgressKind = 'status' | 'tool' | 'output';
+export type FlowerCompanionProgressKind = 'status' | 'tool' | 'output' | 'error';
 
 export type FlowerCompanionLiveTail = Readonly<{
   kind: FlowerCompanionProgressKind;
@@ -34,7 +34,10 @@ function singleLineHead(value: string | null | undefined): string {
 }
 
 function belongsToActiveRun(message: FlowerChatMessage, activeRunID: string): boolean {
-  const messageRunID = trimString(message.run_id);
+  // Typed current views own assistant output by turn_id. Older projected
+  // snapshots may still provide run_id, so accept either explicit identity
+  // without guessing from live/cursor presentation flags.
+  const messageRunID = trimString(message.run_id) || trimString(message.turn_id);
   return messageRunID !== '' && messageRunID === activeRunID;
 }
 

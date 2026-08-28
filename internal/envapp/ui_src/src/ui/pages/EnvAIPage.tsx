@@ -55,6 +55,7 @@ export type EnvAIPageProps = Readonly<{
     progressKind?: FlowerCompanionProgressKind;
     progressIdentity?: string;
     ephemeralKind?: 'completion';
+    targetThreadID?: string;
     running: boolean;
   }>;
   companionActionLabel?: string;
@@ -62,7 +63,7 @@ export type EnvAIPageProps = Readonly<{
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
-  onCompanionOpenRequest?: () => void;
+  onCompanionOpenRequest?: (threadID?: string) => void;
   companionCopy?: Omit<FlowerThreadSwitcherCopy, 'threadList'>;
   headerTrailingActions?: JSX.Element;
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
