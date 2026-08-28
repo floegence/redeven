@@ -600,6 +600,7 @@
     "navigate": "Перейти по адресу",
     "developerTools": "Инструменты разработчика (F12)",
     "openInBrowser": "Открыть в браузере",
+    "openInBrowserFailed": "Redeven не удалось авторизовать и открыть этот Web Service в системном браузере.",
     "secureRoute": "Эта страница использует маршрут Web Service текущего окружения",
     "invalidAddress": "Введите HTTP(S)-адрес или путь внутри этого Web Service.",
     "loadFailed": "Web Service не удалось загрузить этот адрес.",

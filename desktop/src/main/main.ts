@@ -244,9 +244,10 @@ import {
   shouldFailDesktopSessionMainDocument,
   type DesktopSessionTransport,
 } from './desktopSessionTransport';
-import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress, routeWebServiceTargetRequest, webServiceBrowserDisplayURL, webServiceBrowserExternalURL } from './navigation';
+import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress, routeWebServiceTargetRequest, webServiceBrowserDisplayURL } from './navigation';
 import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
+import { openWebServiceInSystemBrowser } from './webServiceBrowserExternal';
 import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
 import { isWebServiceBrowserDevToolsShortcut } from './webServiceBrowserShortcuts';
 import { buildWebServiceUnavailableDocumentURL } from './webServiceUnavailableDocument';
@@ -8493,17 +8494,22 @@ function createWebServiceBrowserController(
         return { ok: true };
       case 'open_external': {
         const currentRouteURL = unavailableRequestURL || requestedURL || request.url;
-        const targetURL = pendingExternalURL
-          || webServiceBrowserExternalURL(currentRouteURL, sessionRecord.startup.local_ui_url, request.forward_id)
-          || currentRouteURL;
         try {
-          await openExternalURL(targetURL);
+          await openWebServiceInSystemBrowser({
+            currentRouteURL,
+            ...(pendingExternalURL ? { pendingExternalURL } : {}),
+            bridgeBaseURL: sessionRecord.startup.local_ui_bridge_url,
+            bridgeToken: sessionRecord.startup.local_ui_bridge_token,
+            allowedBaseURL: sessionRecord.allowed_base_url,
+            forwardID: request.forward_id,
+          }, { openURL: openExternalURL });
           pendingExternalURL = '';
           errorMessage = '';
           publishState();
           return { ok: true };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+        } catch {
+          const message = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+            .t('webServiceBrowser.openInBrowserFailed');
           errorMessage = message;
           publishState();
           return { ok: false, message };

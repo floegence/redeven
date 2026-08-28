@@ -392,8 +392,11 @@ describe('main routing', () => {
     expect(helperSrc).toContain('unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress);');
     expect(helperSrc).toContain('if (unavailablePageURL !== retryPageURL) return;');
     expect(helperSrc).toContain('if (contentView.webContents.getURL() !== `${retryPageURL}#retry`) return;');
-    expect(helperSrc).toContain('await openExternalURL(targetURL);');
-    expect(helperSrc).toContain('webServiceBrowserExternalURL(currentRouteURL, sessionRecord.startup.local_ui_url, request.forward_id)');
+    expect(helperSrc).toContain('await openWebServiceInSystemBrowser({');
+    expect(helperSrc).toContain('bridgeBaseURL: sessionRecord.startup.local_ui_bridge_url,');
+    expect(helperSrc).toContain('bridgeToken: sessionRecord.startup.local_ui_bridge_token,');
+    expect(helperSrc).not.toContain('|| currentRouteURL');
+    expect(helperSrc).not.toContain('webServiceBrowserExternalURL(');
     expect(helperSrc).toContain('blockExternalNavigation(url);');
     expect(helperSrc).toContain('blockExternalNavigation(targetURL);');
     expect(helperSrc).not.toContain(".t('webServiceBrowser.blockedNavigation')");

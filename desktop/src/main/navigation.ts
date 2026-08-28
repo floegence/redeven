@@ -255,13 +255,25 @@ export function isPortForwardURLForForward(input: string, forwardID: string): bo
   }
 }
 
+export function isDesktopPrivateWebServiceURLForForward(input: string, forwardID: string): boolean {
+  const expectedID = compactCodeSpaceID(forwardID);
+  if (!expectedID) return false;
+  try {
+    const candidate = new URL(input);
+    return candidate.protocol === 'http:'
+      && !candidate.username
+      && !candidate.password
+      && candidate.hostname.toLowerCase() === `pf-${expectedID.toLowerCase()}.localhost`;
+  } catch {
+    return false;
+  }
+}
+
 export function isAllowedWebServiceWindowNavigation(input: string, allowedBaseURL: string, forwardID: string): boolean {
   try {
     const candidate = new URL(input);
     const allowed = new URL(allowedBaseURL);
-    const expectedHost = `pf-${compactCodeSpaceID(forwardID).toLowerCase()}.localhost`;
-    const localDesktopRoute = candidate.protocol === 'http:'
-      && candidate.hostname.toLowerCase() === expectedHost
+    const localDesktopRoute = isDesktopPrivateWebServiceURLForForward(candidate.toString(), forwardID)
       && allowed.protocol === 'http:'
       && isWebServiceLoopbackHostname(allowed.hostname)
       && normalizeHTTPPort(candidate) === normalizeHTTPPort(allowed);
@@ -370,24 +382,26 @@ export function webServiceBrowserDisplayURL(
   }
 }
 
-export function webServiceBrowserExternalURL(
+export function webServiceBrowserPrivateAppLocation(
   routeInput: string,
-  publicBaseInput: string,
+  bridgeBaseInput: string,
   forwardID: string,
 ): string | null {
   try {
     const routeURL = new URL(routeInput);
-    const expectedHost = `pf-${compactCodeSpaceID(forwardID).toLowerCase()}.localhost`;
-    if (routeURL.protocol !== 'http:' || routeURL.hostname.toLowerCase() !== expectedHost) {
-      return isPortForwardURLForForward(routeURL.toString(), forwardID) ? routeURL.toString() : null;
+    const bridgeBase = new URL(bridgeBaseInput);
+    if (
+      !isDesktopPrivateWebServiceURLForForward(routeURL.toString(), forwardID)
+      || bridgeBase.protocol !== 'http:'
+      || !isWebServiceLoopbackHostname(bridgeBase.hostname)
+      || normalizeHTTPPort(routeURL) !== normalizeHTTPPort(bridgeBase)
+    ) return null;
+    const appPath = webServiceRouteAppPath(routeURL, forwardID);
+    if (!appPath) return null;
+    if (appPath === '/' && (routeURL.pathname === '/_redeven_boot/' || routeURL.pathname === '/_redeven_boot')) {
+      return '/';
     }
-    const publicBase = new URL(publicBaseInput);
-    if (publicBase.protocol !== 'http:' && publicBase.protocol !== 'https:') return null;
-    const external = new URL(`/pf/${encodeURIComponent(forwardID)}/`, publicBase);
-    external.pathname += routeURL.pathname.replace(/^\/+/, '');
-    external.search = routeURL.search;
-    external.hash = routeURL.hash;
-    return external.toString();
+    return `${appPath}${routeURL.search}${routeURL.hash}`;
   } catch {
     return null;
   }

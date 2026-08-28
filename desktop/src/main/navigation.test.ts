@@ -8,8 +8,8 @@ import {
   isPortForwardURLForForward,
   resolveWebServiceBrowserAddress,
   routeWebServiceTargetRequest,
-  webServiceBrowserExternalURL,
   webServiceBrowserDisplayURL,
+  webServiceBrowserPrivateAppLocation,
 } from './navigation';
 import { isLoopbackHost } from './localUIURL';
 
@@ -238,17 +238,22 @@ describe('navigation', () => {
     )).toBe('http://localhost:3000/');
   });
 
-  it('opens the public pf route only when leaving the isolated Desktop window', () => {
-    expect(webServiceBrowserExternalURL(
+  it('extracts an app location only from the exact private Web Service origin', () => {
+    expect(webServiceBrowserPrivateAppLocation(
       'http://pf-demo.localhost:43123/docs?q=1#api',
-      'http://127.0.0.1:23998/',
+      'http://127.0.0.1:43123/',
       'demo',
-    )).toBe('http://127.0.0.1:23998/pf/demo/docs?q=1#api');
-    expect(webServiceBrowserExternalURL(
+    )).toBe('/docs?q=1#api');
+    expect(webServiceBrowserPrivateAppLocation(
       'https://pf-demo.sg.redeven.online/docs',
-      'https://env-demo.sg.redeven.online/',
+      'http://127.0.0.1:43123/',
       'demo',
-    )).toBe('https://pf-demo.sg.redeven.online/docs');
+    )).toBeNull();
+    expect(webServiceBrowserPrivateAppLocation(
+      'http://pf-demo.localhost:43124/docs',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBeNull();
   });
 
   it('rejects browser address input outside the current forward', () => {

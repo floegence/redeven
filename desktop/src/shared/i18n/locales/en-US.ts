@@ -76,6 +76,7 @@ export const enUS = {
     navigate: 'Go to address',
     developerTools: 'Developer tools (F12)',
     openInBrowser: 'Open in browser',
+    openInBrowserFailed: 'Redeven could not authorize and open this Web Service in your system browser.',
     secureRoute: 'This page uses the current Environment Web Service route',
     invalidAddress: 'Enter an HTTP(S) address or path inside this Web Service.',
     loadFailed: 'The Web Service could not load this address.',

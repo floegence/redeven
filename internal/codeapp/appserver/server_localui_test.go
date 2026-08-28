@@ -419,6 +419,50 @@ func TestServer_LocalUIPortForwardProxyStripsPathPrefix(t *testing.T) {
 	}
 }
 
+func TestServer_LocalUIPortForwardProxyKeepsBrowserAuthorizationOutOfUpstream(t *testing.T) {
+	t.Parallel()
+
+	var receivedCookies []*http.Cookie
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedCookies = r.Cookies()
+		http.SetCookie(w, &http.Cookie{Name: LocalUIPortForwardBrowserSessionCookieName, Value: "upstream-collision", Path: "/"})
+		http.SetCookie(w, &http.Cookie{Name: "application", Value: "kept", Path: "/", Domain: "example.invalid"})
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	srv, err := New(Options{
+		Backend: &stubBackend{},
+		PortForward: &stubPortForwardBackend{forwards: map[string]pfregistry.Forward{
+			"demo": {ForwardID: "demo", TargetURL: upstream.URL},
+		}},
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ConfigPath:         writeLocalUITestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://pf-demo.localhost:23998/", nil)
+	req.Header.Add("Cookie", "application=request; "+LocalUIPortForwardBrowserSessionCookieName+"=secret")
+	StripLocalUIPortForwardBrowserSessionCookie(req)
+	req = WithLocalUIPortForwardOrigin(req, "demo")
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNoContent)
+	}
+	if len(receivedCookies) != 1 || receivedCookies[0].Name != "application" || receivedCookies[0].Value != "request" {
+		t.Fatalf("upstream cookies = %#v, want only application cookie", receivedCookies)
+	}
+	setCookies := rr.Result().Cookies()
+	if len(setCookies) != 1 || setCookies[0].Name != "application" || setCookies[0].Domain != "" {
+		t.Fatalf("response cookies = %#v, want only host-bound application cookie", setCookies)
+	}
+}
+
 func TestServer_LocalUIPortForwardProxyKeepsLocalPrefixInTargetRedirects(t *testing.T) {
 	t.Parallel()
 

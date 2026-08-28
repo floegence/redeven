@@ -284,6 +284,10 @@ type localUIRoute struct {
 
 type localUIRouteContextKey struct{}
 
+// LocalUIPortForwardBrowserSessionCookieName is reserved for Runtime-managed
+// browser authorization and must never cross the Web Service proxy boundary.
+const LocalUIPortForwardBrowserSessionCookieName = "__redeven_web_service_browser_session_v1"
+
 func WithLocalUIEnvRoute(r *http.Request) *http.Request {
 	return withLocalUIRoute(r, localUIRoute{kind: localUIRouteEnv})
 }
@@ -316,6 +320,33 @@ func WithLocalUIPortForwardOrigin(r *http.Request, forwardID string) *http.Reque
 		kind:      localUIRoutePortForward,
 		forwardID: strings.TrimSpace(forwardID),
 	})
+}
+
+// StripLocalUIPortForwardBrowserSessionCookie removes every Runtime browser
+// authorization cookie before a request is forwarded to a user service.
+func StripLocalUIPortForwardBrowserSessionCookie(r *http.Request) {
+	if r == nil {
+		return
+	}
+	values := r.Header.Values("Cookie")
+	r.Header.Del("Cookie")
+	for _, value := range values {
+		parts := strings.Split(value, ";")
+		kept := make([]string, 0, len(parts))
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			name, _, found := strings.Cut(trimmed, "=")
+			if found && strings.TrimSpace(name) == LocalUIPortForwardBrowserSessionCookieName {
+				continue
+			}
+			if trimmed != "" {
+				kept = append(kept, trimmed)
+			}
+		}
+		if len(kept) > 0 {
+			r.Header.Add("Cookie", strings.Join(kept, "; "))
+		}
+	}
 }
 
 func withLocalUIRoute(r *http.Request, route localUIRoute) *http.Request {
@@ -6136,6 +6167,9 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 			if sc := resp.Header.Values("Set-Cookie"); len(sc) > 0 {
 				resp.Header.Del("Set-Cookie")
 				for _, v := range sc {
+					if setCookieName(v) == LocalUIPortForwardBrowserSessionCookieName {
+						continue
+					}
 					resp.Header.Add("Set-Cookie", stripCookieDomain(v))
 				}
 			}
@@ -6178,6 +6212,15 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 	}
 
 	proxy.ServeHTTP(w, r)
+}
+
+func setCookieName(value string) string {
+	first, _, _ := strings.Cut(strings.TrimSpace(value), ";")
+	name, _, ok := strings.Cut(first, "=")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(name)
 }
 
 func rewriteLocationToProxy(location string, target *url.URL, proxyBasePath string) string {

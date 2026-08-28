@@ -598,6 +598,7 @@
     "navigate": "Adresse aufrufen",
     "developerTools": "Entwicklerwerkzeuge (F12)",
     "openInBrowser": "Im Browser öffnen",
+    "openInBrowserFailed": "Redeven konnte diesen Web Service im Systembrowser nicht autorisieren und öffnen.",
     "secureRoute": "Diese Seite verwendet die Web-Service-Route der aktuellen Umgebung",
     "invalidAddress": "Gib eine HTTP(S)-Adresse oder einen Pfad innerhalb dieses Web Service ein.",
     "loadFailed": "Der Web Service konnte diese Adresse nicht laden.",
