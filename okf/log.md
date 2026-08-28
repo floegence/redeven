@@ -1,10 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-28
-* **Single Web Fetch Searching indicator**: Flower now uses the `thinking-orbs`
-  Searching style as the only Web Fetch row icon. It animates while running,
-  freezes afterward, pauses offscreen, and respects reduced motion. The former
-  generic status glyph and separate globe icon are removed.
+* **Single Web Fetch status indicator**: Flower uses the `thinking-orbs`
+  Searching style while Web Fetch is running and after success, with animation
+  stopped for the completed state. Failed fetches use the shared error alert.
+  The indicator pauses offscreen, respects reduced motion, and never appears
+  beside a second title or status icon.
 * **Floret v5.0.10 adoption**: Floret no longer discovers, requests, or emits
   page icons, and Redeven drops the deprecated icon field at its public Activity
   boundary.
