@@ -1,3 +1,6 @@
+import '../index.css';
+import './flower-feature.css';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -397,7 +400,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(okfToggle.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('uses one Searching orb for running and completed Web Fetch rows', async () => {
+  it('uses one Web Fetch indicator and animates only the running title', async () => {
     const threadID = 'thread-web-fetch-searching-orb';
     const turnID = 'turn-web-fetch-searching-orb';
     const webFetchThread = thread({
@@ -424,8 +427,8 @@ describe('Flower final thread cache and workspace transport', () => {
               tool_name: 'web_fetch',
               renderer: 'web_fetch',
               status: 'running',
-              label: 'Web fetch · https://example.test/running',
-              payload: { url: 'https://example.test/running' },
+              label: 'Web fetch · https://example.test/a/very/long/path/that/must/remain/truncated/while-the-title-sweep-is-running',
+              payload: { url: 'https://example.test/a/very/long/path/that/must/remain/truncated/while-the-title-sweep-is-running' },
             }),
             activityItem({
               item_id: 'web-fetch-complete',
@@ -435,6 +438,15 @@ describe('Flower final thread cache and workspace transport', () => {
               status: 'success',
               label: 'Web fetch · https://example.test/complete',
               payload: { url: 'https://example.test/complete' },
+            }),
+            activityItem({
+              item_id: 'web-fetch-error',
+              tool_id: 'web-fetch-error',
+              tool_name: 'web_fetch',
+              renderer: 'web_fetch',
+              status: 'error',
+              label: 'Web fetch · https://example.test/error',
+              payload: { url: 'https://example.test/error' },
             }),
           ],
         })],
@@ -452,17 +464,31 @@ describe('Flower final thread cache and workspace transport', () => {
 
     const runningRow = runtime.querySelector('[data-flower-activity-item-id="web-fetch-running"]') as HTMLElement;
     const completeRow = runtime.querySelector('[data-flower-activity-item-id="web-fetch-complete"]') as HTMLElement;
+    const errorRow = runtime.querySelector('[data-flower-activity-item-id="web-fetch-error"]') as HTMLElement;
     const runningOrb = runningRow.querySelector('.flower-activity-web-fetch-searching-orb') as HTMLCanvasElement;
     const completeOrb = completeRow.querySelector('.flower-activity-web-fetch-searching-orb') as HTMLCanvasElement;
+    const runningTitle = runningRow.querySelector('.flower-activity-inline-title') as HTMLElement;
+    const runningTarget = runningTitle.querySelector('.flower-activity-inline-title-target') as HTMLElement;
+    const completeTitle = completeRow.querySelector('.flower-activity-inline-title') as HTMLElement;
+    const errorTitle = errorRow.querySelector('.flower-activity-inline-title') as HTMLElement;
 
     expect(runningRow.querySelectorAll('.flower-activity-inline-icon > *')).toHaveLength(1);
     expect(completeRow.querySelectorAll('.flower-activity-inline-icon > *')).toHaveLength(1);
+    expect(errorRow.querySelectorAll('.flower-activity-inline-icon > *')).toHaveLength(1);
     expect(runningRow.querySelector('.flower-activity-inline-title svg')).toBeNull();
     expect(completeRow.querySelector('.flower-activity-inline-title svg')).toBeNull();
+    expect(errorRow.querySelector('.flower-activity-web-fetch-searching-orb')).toBeNull();
+    expect(errorRow.dataset.flowerActivityStatus).toBe('error');
     expect(runningOrb.dataset.running).toBe('true');
     expect(completeOrb.dataset.running).toBe('false');
     expect(runningOrb.width).toBeGreaterThanOrEqual(20);
     expect(completeOrb.width).toBeGreaterThanOrEqual(20);
+    expect(window.getComputedStyle(runningTitle, '::after').animationName).toBe('flower-activity-title-sweep');
+    expect(window.getComputedStyle(runningTitle, '::after').pointerEvents).toBe('none');
+    expect(window.getComputedStyle(completeTitle, '::after').animationName).toBe('none');
+    expect(window.getComputedStyle(errorTitle, '::after').animationName).toBe('none');
+    expect(window.getComputedStyle(runningTarget).textOverflow).toBe('ellipsis');
+    expect(runningTarget.title).toBe('https://example.test/a/very/long/path/that/must/remain/truncated/while-the-title-sweep-is-running');
   });
 
   it('uses semantic terminal titles and omits empty terminal disclosures', async () => {

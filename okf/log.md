@@ -1,6 +1,10 @@
 # Redeven OKF Update Log
 
 ## 2026-08-28
+* **Running tool title sweep**: Flower gives every running Activity tool title a
+  theme-aware left-to-right sweep with a short end pause. The effect never
+  covers the icon, metadata, duration, detail, or row background, stops on
+  settlement, and is absent in reduced-motion and forced-colors modes.
 * **Single Web Fetch status indicator**: Flower uses the `thinking-orbs`
   Searching style while Web Fetch is running and after success, with animation
   stopped for the completed state. Failed fetches use the shared error alert.

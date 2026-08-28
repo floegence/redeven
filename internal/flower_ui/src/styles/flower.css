@@ -4967,6 +4967,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-title {
+  position: relative;
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
@@ -5033,7 +5034,34 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-row-running .flower-activity-inline-title {
   font-weight: 600;
-  text-shadow: 0 0 0.65rem color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent);
+}
+
+.flower-activity-inline-row-running .flower-activity-inline-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 40%,
+    color-mix(in srgb, var(--flower-chat-surface) 60%, transparent) 50%,
+    transparent 60%,
+    transparent 100%
+  );
+  background-position: 100% 0;
+  background-size: 250% 100%;
+  pointer-events: none;
+  animation: flower-activity-title-sweep 2.6s ease-out infinite;
+}
+
+@keyframes flower-activity-title-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+  90%,
+  100% {
+    background-position: 0 0;
+  }
 }
 
 .flower-activity-inline-row-running .flower-activity-inline-button {
@@ -10062,6 +10090,10 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     transform: none !important;
   }
 
+  .flower-activity-inline-row-running .flower-activity-inline-title::after {
+    content: none !important;
+  }
+
   .flower-model-status-text {
     color: var(--muted-foreground);
   }
@@ -10084,5 +10116,11 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 
   .flower-activity-inline-details {
     transform: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .flower-activity-inline-row-running .flower-activity-inline-title::after {
+    content: none;
   }
 }
