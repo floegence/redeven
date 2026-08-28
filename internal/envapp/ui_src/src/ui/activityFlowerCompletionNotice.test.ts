@@ -82,6 +82,33 @@ describe('ActivityFlowerCompletionNoticeController', () => {
     expect(changes.at(-1)).toBeNull();
   });
 
+  it('keeps the matching candidate while terminal current precedes the completed summary', () => {
+    const terminal = {
+      thread_id: 'thread-1',
+      run_id: 'run-1',
+      run_generation: 7,
+      outcome: 'completed' as const,
+    };
+    controller.update(running());
+    controller.update(presence({
+      ...running(),
+      priority_run_generation: undefined,
+      terminal_transition: terminal,
+    }));
+    expect(changes.filter(Boolean)).toHaveLength(0);
+
+    controller.update(presence({
+      priority_status: 'completed',
+      unread_completed_count: 1,
+      terminal_transition: terminal,
+    }));
+    expect(changes.at(-1)).toMatchObject({
+      threadID: 'thread-1',
+      runID: 'run-1',
+      title: 'Refine the companion',
+    });
+  });
+
   it.each(['failed', 'canceled'] as const)('does not show a notice for %s', (outcome) => {
     controller.update(running());
     controller.update(presence({
@@ -90,14 +117,10 @@ describe('ActivityFlowerCompletionNoticeController', () => {
     expect(changes.filter(Boolean)).toHaveLength(0);
   });
 
-  it('rejects mismatched, expired, and active-success transitions', () => {
+  it('does not announce mismatched or still-active success transitions', () => {
     controller.update(running());
     controller.update(presence({
       terminal_transition: { thread_id: 'thread-1', run_id: 'other-run', run_generation: 7, outcome: 'completed' },
-    }));
-    vi.advanceTimersByTime(5_001);
-    controller.update(presence({
-      terminal_transition: { thread_id: 'thread-1', run_id: 'run-1', run_generation: 7, outcome: 'completed' },
     }));
     controller.update(running());
     controller.update(presence({
@@ -106,6 +129,15 @@ describe('ActivityFlowerCompletionNoticeController', () => {
       terminal_transition: { thread_id: 'thread-1', run_id: 'run-1', run_generation: 7, outcome: 'completed' },
     }));
     expect(changes.filter(Boolean)).toHaveLength(0);
+  });
+
+  it('acknowledges a matching completion after a long quiet provider wait', () => {
+    controller.update(running());
+    vi.advanceTimersByTime(30_000);
+    controller.update(presence({
+      terminal_transition: { thread_id: 'thread-1', run_id: 'run-1', run_generation: 7, outcome: 'completed' },
+    }));
+    expect(changes.at(-1)).toMatchObject({ threadID: 'thread-1', runID: 'run-1' });
   });
 
   it.each([
@@ -165,7 +197,7 @@ describe('ActivityFlowerCompletionNoticeController', () => {
     controller.update(presence({
       terminal_transition: { thread_id: 'thread-1', run_id: 'run-1', run_generation: 7, outcome: 'completed' },
     }));
-    const staleNoticeTimer = callbacks[1];
+    const staleNoticeTimer = callbacks[0];
     controller.update(presence({
       priority_status: 'running',
       priority_count: 1,
@@ -177,7 +209,7 @@ describe('ActivityFlowerCompletionNoticeController', () => {
     controller.update(presence({
       terminal_transition: { thread_id: 'thread-2', run_id: 'run-2', run_generation: 8, outcome: 'completed' },
     }));
-    const currentNoticeTimer = callbacks[3];
+    const currentNoticeTimer = callbacks[1];
     expect(manualChanges.at(-1)).toMatchObject({ runID: 'run-2' });
     staleNoticeTimer();
     expect(manualChanges.at(-1)).toMatchObject({ runID: 'run-2' });

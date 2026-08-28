@@ -509,6 +509,11 @@
             "other": "有 {count} 项结果已就绪"
           }
         },
+        "failure": {
+          "withTitle": "任务失败：{title}",
+          "withReason": "Flower 运行失败 · {reason}",
+          "withoutTitle": "Flower 任务失败"
+        },
         "secondaryWorking": {
           "one": "Flower 还在处理另外 1 项任务",
           "other": "Flower 还在处理另外 {count} 项任务"

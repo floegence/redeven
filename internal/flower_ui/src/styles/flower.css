@@ -121,6 +121,7 @@
 }
 
 .flower-companion-collapsed-icon {
+  position: relative;
   display: inline-flex;
   width: 0.875rem;
   height: 0.875rem;
@@ -129,6 +130,7 @@
   justify-content: center;
   color: color-mix(in srgb, var(--primary) 78%, var(--foreground));
   transform-origin: 50% 50%;
+  border-radius: 50%;
 }
 
 .flower-companion-collapsed-icon > svg {
@@ -137,7 +139,7 @@
 }
 
 .flower-companion-collapsed-icon-running {
-  animation: flower-companion-running-turn 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: flower-companion-running-breathe 2.4s ease-in-out infinite;
 }
 
 .flower-companion-collapsed-status {
@@ -155,6 +157,14 @@
   opacity: 0.9;
 }
 
+.flower-companion-collapsed-status-running {
+  animation: flower-companion-status-breathe 2.4s ease-in-out infinite;
+}
+
+.flower-companion-collapsed-status-queued {
+  animation: flower-companion-status-breathe 3.2s ease-in-out infinite;
+}
+
 .flower-companion-collapsed-status-attention,
 .flower-companion-collapsed-status-failed,
 .flower-companion-collapsed-status-canceled {
@@ -168,6 +178,8 @@
 }
 
 .flower-companion-collapsed-summary {
+  position: relative;
+  isolation: isolate;
   display: flex;
   width: 100%;
   min-width: 0;
@@ -184,6 +196,29 @@
   line-height: 1rem;
   text-align: left;
   outline: none;
+  border-radius: 0.375rem;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.flower-companion-collapsed-summary-running::after {
+  position: absolute;
+  z-index: -1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  content: '';
+  opacity: 0.72;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 18%, transparent) 28%,
+    color-mix(in srgb, var(--primary) 78%, white 8%) 50%,
+    color-mix(in srgb, var(--primary) 18%, transparent) 72%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  animation: flower-companion-running-flow 1.8s linear infinite;
 }
 
 .flower-companion-collapsed-summary:focus-visible {
@@ -206,6 +241,12 @@
   text-overflow: clip;
 }
 
+.flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='status'],
+.flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='tool'],
+.flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='error'] {
+  animation: flower-companion-status-enter 160ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
 .flower-companion-collapsed-tail-prefix {
   flex: 0 0 auto;
   margin-right: 0.18rem;
@@ -221,6 +262,11 @@
   scrollbar-width: none;
 }
 
+.flower-companion-collapsed-tail-viewport[data-flower-companion-overflow='true'] {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 0.75rem, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 0.75rem, #000 100%);
+}
+
 .flower-companion-collapsed-tail-value {
   display: block;
   width: max-content;
@@ -231,12 +277,12 @@
   border-radius: 0.375rem;
   color: color-mix(in srgb, var(--success, var(--primary)) 44%, var(--foreground));
   background: color-mix(in srgb, var(--success, var(--primary)) 8%, transparent);
-  animation: flower-companion-completion-wash 640ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  animation: flower-companion-completion-wash 520ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 .flower-companion-collapsed-icon-completion {
   color: color-mix(in srgb, var(--success, var(--primary)) 74%, var(--foreground));
-  animation: flower-companion-completion-settle 620ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  animation: flower-companion-completion-settle 520ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 .flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='output'] {
@@ -245,6 +291,16 @@
 
 .flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='tool'] {
   color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground));
+}
+
+.flower-companion-collapsed-summary-failed {
+  color: color-mix(in srgb, var(--destructive) 48%, var(--foreground));
+  background: color-mix(in srgb, var(--destructive) 5%, transparent);
+  animation: flower-companion-failure-arrive 320ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='error'] {
+  color: color-mix(in srgb, var(--destructive) 44%, var(--foreground));
 }
 
 .flower-composer[data-flower-companion-compact='true'] {
@@ -305,12 +361,32 @@
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ring) 38%, transparent);
 }
 
-@keyframes flower-companion-running-turn {
-  0% { transform: rotate(0deg); }
-  16% { transform: rotate(-12deg); }
-  72% { transform: rotate(372deg); }
-  86% { transform: rotate(350deg); }
-  100% { transform: rotate(360deg); }
+@keyframes flower-companion-running-breathe {
+  0%, 100% {
+    opacity: 0.78;
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+    box-shadow: 0 0 0.55rem color-mix(in srgb, var(--primary) 24%, transparent);
+  }
+}
+
+@keyframes flower-companion-status-breathe {
+  0%, 100% { opacity: 0.56; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes flower-companion-running-flow {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+
+@keyframes flower-companion-status-enter {
+  from { opacity: 0.58; transform: translateX(2px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes flower-companion-completion-wash {
@@ -325,15 +401,31 @@
 }
 
 @keyframes flower-companion-completion-settle {
-  0% { transform: rotate(-8deg) scale(0.94); }
-  58% { transform: rotate(5deg) scale(1.04); }
-  100% { transform: rotate(0deg) scale(1); }
+  0% { transform: scale(0.94); }
+  58% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+@keyframes flower-companion-failure-arrive {
+  0% {
+    background: color-mix(in srgb, var(--destructive) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 30%, transparent);
+  }
+  100% {
+    background: color-mix(in srgb, var(--destructive) 5%, transparent);
+    box-shadow: inset 0 0 0 1px transparent;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .flower-companion-collapsed-icon-running,
+  .flower-companion-collapsed-status-running,
+  .flower-companion-collapsed-status-queued,
+  .flower-companion-collapsed-summary-running::after,
   .flower-companion-collapsed-summary-completion,
-  .flower-companion-collapsed-icon-completion {
+  .flower-companion-collapsed-icon-completion,
+  .flower-companion-collapsed-summary-failed,
+  .flower-companion-collapsed-summary-text {
     animation: none;
   }
 }

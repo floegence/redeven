@@ -622,15 +622,18 @@ vi.mock('./pages/EnvAIPage', () => ({
               type="button"
               classList={{
                 'flower-companion-collapsed-summary': true,
+                'flower-companion-collapsed-summary-running': Boolean(props.companionSummary?.running),
+                'flower-companion-collapsed-summary-failed': props.companionSummary?.priorityStatus === 'failed',
                 'flower-companion-collapsed-summary-completion': props.companionSummary?.ephemeralKind === 'completion',
               }}
+              data-flower-companion-status={props.companionSummary?.priorityStatus}
               data-flower-companion-ephemeral-kind={props.companionSummary?.ephemeralKind}
               data-testid="activity-flower-presence-summary"
               title={props.companionSummary?.accessibleText}
               aria-label={props.companionSummary?.accessibleText}
               aria-controls={props.companionRegionID}
               aria-expanded="false"
-              onClick={() => props.onCompanionOpenRequest?.()}
+              onClick={() => props.onCompanionOpenRequest?.(props.companionSummary?.targetThreadID)}
             >
               <span classList={{
                 'flower-companion-collapsed-icon-running': Boolean(props.companionSummary?.running),
@@ -656,6 +659,7 @@ vi.mock('./pages/EnvAIPage', () => ({
             data-testid="activity-flower-presence-announcement"
             role={(
               props.companionSummary?.ephemeralKind === 'completion'
+              || props.companionSummary?.priorityStatus === 'failed'
               || props.companionSummary?.priorityStatus === 'running'
               || props.companionSummary?.priorityStatus === 'queued'
             ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
@@ -663,6 +667,7 @@ vi.mock('./pages/EnvAIPage', () => ({
               : undefined}
             aria-live={(
               props.companionSummary?.ephemeralKind === 'completion'
+              || props.companionSummary?.priorityStatus === 'failed'
               || props.companionSummary?.priorityStatus === 'running'
               || props.companionSummary?.priorityStatus === 'queued'
             ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
@@ -670,6 +675,7 @@ vi.mock('./pages/EnvAIPage', () => ({
               : undefined}
             aria-atomic={(
               props.companionSummary?.ephemeralKind === 'completion'
+              || props.companionSummary?.priorityStatus === 'failed'
               || props.companionSummary?.priorityStatus === 'running'
               || props.companionSummary?.priorityStatus === 'queued'
             ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
@@ -1662,14 +1668,14 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     }
   });
 
-  it('keeps a visible running status while reduced motion disables the playful rotation', async () => {
+  it('keeps a visible running status while reduced motion disables companion motion', async () => {
     await page.viewport(390, 844);
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
     activityFlowerPresence = {
       ...runningActivityFlowerPresence(),
       unread_failed_count: 1,
     };
-    await mountProductionMobileShell();
+    const fixture = await mountProductionMobileShell();
 
     const icon = document.querySelector('.flower-companion-collapsed-icon-running');
     const status = document.querySelector('.flower-companion-collapsed-summary');
@@ -1689,7 +1695,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(tailValue.scrollWidth).toBeGreaterThan(tailViewport.clientWidth);
     expect(getComputedStyle(tailValue).position).toBe('static');
     expect(getComputedStyle(tailValue).width).not.toBe('auto');
-    expect(getComputedStyle(icon).animationName).toContain('flower-companion-running-turn');
+    expect(getComputedStyle(icon).animationName).toContain('flower-companion-running-breathe');
     expect(elementRect(status).width).toBeGreaterThan(0);
     expect(getComputedStyle(status).opacity).not.toBe('0');
     const announcement = document.querySelector('[data-testid="activity-flower-presence-announcement"]');
@@ -1703,11 +1709,15 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await settleFrames(2);
     expect(getComputedStyle(icon).animationName).toBe('none');
     expect(elementRect(status).width).toBeGreaterThan(0);
+
+    await userEvent.click(summary);
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('expanded');
+    expect(document.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-live');
   });
 
   it.each([
     { priorityStatus: 'attention', countKey: 'attention_count' },
-    { priorityStatus: 'failed', countKey: 'unread_failed_count' },
     { priorityStatus: 'canceled', countKey: 'unread_canceled_count' },
     { priorityStatus: 'completed', countKey: 'unread_completed_count' },
   ])('keeps $priorityStatus-only history out of the collapsed Bottom Bar', async ({ priorityStatus, countKey }) => {
@@ -1740,6 +1750,42 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(document.body.textContent).not.toContain('One task needs review');
     expect(document.body.textContent).not.toContain('One task needs your attention');
     expect(document.querySelector('[title*="Needs review"], [aria-label*="Needs review"]')).toBeNull();
+  });
+
+  it('keeps an unread failure visible and opens its exact Flower thread', async () => {
+    await page.viewport(390, 844);
+    activityFlowerPresence = {
+      priority_status: 'failed',
+      priority_count: 1,
+      priority_thread_id: 'thread-failed-target',
+      priority_thread_title: 'Validate deployment',
+      priority_thread_progress: 'The selected AI provider is rate limiting this request.',
+      priority_thread_progress_kind: 'error',
+      attention_count: 0,
+      unread_failed_count: 1,
+      running_count: 0,
+      queued_count: 0,
+      unread_canceled_count: 0,
+      unread_completed_count: 0,
+    };
+    const fixture = await mountProductionMobileShell();
+    await flushAsync();
+
+    const failure = document.querySelector('[data-flower-companion-status="failed"]');
+    const announcement = document.querySelector('[data-testid="activity-flower-presence-announcement"]');
+    if (!(failure instanceof HTMLButtonElement) || !(announcement instanceof HTMLElement)) {
+      throw new Error('Unread Flower failure did not render.');
+    }
+    expect(failure.textContent).toContain('rate limiting');
+    expect(failure.classList.contains('flower-companion-collapsed-summary-failed')).toBe(true);
+    expect(getComputedStyle(failure).animationName).toContain('flower-companion-failure-arrive');
+    expect(announcement.getAttribute('role')).toBe('status');
+    expect(announcement.getAttribute('aria-live')).toBe('polite');
+
+    await userEvent.click(failure);
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('expanded');
+    expect(document.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-failed-target');
   });
 
   it('acknowledges a just-completed run once, then restores the ordinary composer', async () => {
@@ -1818,6 +1864,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await userEvent.click(completion);
     await flushAsync();
     expect(fixture.product.dataset.presentation).toBe('expanded');
+    expect(document.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-live');
 
     publishActivityFlowerPresence(runningPresence('thread-expanded', 'run-expanded', 2));
     publishActivityFlowerPresence(completedPresence('thread-expanded', 'run-expanded', 2));

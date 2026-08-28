@@ -37,7 +37,7 @@ function mountTail() {
     prefix,
     viewport,
     value,
-    controller: new FlowerCompanionTailMotionController({ viewport, value }),
+    controller: new FlowerCompanionTailMotionController({ prefix, viewport, value }),
   };
 }
 
@@ -51,6 +51,18 @@ afterEach(async () => {
 });
 
 describe('Flower companion live-tail motion', () => {
+  it('keeps short output static without a false overflow affordance', async () => {
+    await page.viewport(800, 600);
+    const tail = mountTail();
+    tail.controller.update({ identity: 'short-output', text: 'Short Flower output' });
+
+    expect(tail.viewport.scrollWidth).toBeLessThanOrEqual(tail.viewport.clientWidth);
+    expect(tail.viewport.dataset.flowerCompanionOverflow).toBe('false');
+    expect(tail.prefix.hidden).toBe(true);
+    expect(tail.viewport.scrollLeft).toBe(0);
+    tail.controller.dispose();
+  });
+
   it('smoothly follows rolling-window appends while the newest text remains visible', async () => {
     await page.viewport(800, 600);
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
@@ -60,6 +72,8 @@ describe('Flower companion live-tail motion', () => {
     tail.button.setAttribute('aria-label', initialWindow);
     tail.controller.update({ identity: 'thread/run/message/block', text: initialWindow });
     expect(tail.viewport.scrollWidth).toBeGreaterThan(tail.viewport.clientWidth);
+    expect(tail.viewport.dataset.flowerCompanionOverflow).toBe('true');
+    expect(tail.prefix.hidden).toBe(false);
     expect(Math.abs(
       tail.viewport.scrollLeft - (tail.viewport.scrollWidth - tail.viewport.clientWidth),
     )).toBeLessThanOrEqual(1);

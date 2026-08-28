@@ -7,6 +7,7 @@ import {
   FlowerSurface as FlowerSurfaceComponent,
   createFlowerComposerDraftCoordinator,
   type FlowerComposerDraftCoordinator,
+  type FlowerCompanionPresenceProjection,
   type FlowerSurfaceProps,
   type FlowerSurfaceNotification,
   type FlowerThreadFocusRequest,
@@ -1045,7 +1046,8 @@ const mountFlowerSurface = (
     transcriptVisible?: boolean;
     companionPresenceOwner?: boolean;
     companionCopy?: FlowerThreadSwitcherCopy;
-    onCompanionOpenRequest?: () => void;
+    onCompanionOpenRequest?: (threadID?: string) => void;
+    onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }> = {},
@@ -1067,6 +1069,7 @@ const mountFlowerSurface = (
       companionPresenceOwner={props.companionPresenceOwner}
       companionCopy={props.companionCopy}
       onCompanionOpenRequest={props.onCompanionOpenRequest}
+      onPresenceChange={props.onPresenceChange}
       onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
       onThreadSelectionEvent={props.onThreadSelectionEvent}
     />
@@ -1122,7 +1125,8 @@ export function renderSurfaceWithAdapterProps(
     transcriptVisible?: boolean;
     companionPresenceOwner?: boolean;
     companionCopy?: FlowerThreadSwitcherCopy;
-    onCompanionOpenRequest?: () => void;
+    onCompanionOpenRequest?: (threadID?: string) => void;
+    onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }>,
@@ -1134,7 +1138,7 @@ export function renderSurfaceWithCompanionController(
   surfaceAdapter: TestFlowerSurfaceAdapter,
   initialOpen: boolean,
   companionCopy: FlowerThreadSwitcherCopy,
-  onCompanionOpenRequest?: () => void,
+  onCompanionOpenRequest?: (threadID?: string) => void,
 ): Readonly<{
   runtime: HTMLDivElement;
   setOpen: (open: boolean) => void;

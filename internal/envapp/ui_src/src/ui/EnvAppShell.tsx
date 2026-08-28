@@ -3195,6 +3195,9 @@ export function EnvAppShell() {
         case 'queued': return i18n.tn('shell.flowerCompanion.summary.withoutTitle.queued', count);
       }
     },
+    failureWithTitle: (title) => i18n.t('shell.flowerCompanion.summary.failure.withTitle', { title }),
+    failureWithReason: (reason) => i18n.t('shell.flowerCompanion.summary.failure.withReason', { reason }),
+    failureWithoutTitle: i18n.t('shell.flowerCompanion.summary.failure.withoutTitle'),
     secondaryWorking: (count) => i18n.tn('shell.flowerCompanion.summary.secondaryWorking', count),
     readyToAsk: i18n.t('shell.flowerCompanion.summary.readyToAsk'),
     unavailable: i18n.t('shell.flowerCompanion.summary.unavailable'),
@@ -3210,6 +3213,7 @@ export function EnvAppShell() {
           i18n.t('chatActivity.todoStatus.completed'),
           notice.title,
           activityFlowerSummaryCopy(),
+          notice.threadID,
         )
       : activityFlowerSummary();
   });
@@ -4837,6 +4841,7 @@ export function EnvAppShell() {
               progressKind: activityFlowerPresentedSummary().progressKind,
               progressIdentity: activityFlowerPresentedSummary().progressIdentity,
               ephemeralKind: activityFlowerPresentedSummary().ephemeralKind,
+              targetThreadID: activityFlowerPresentedSummary().targetThreadID,
               running: activityFlowerPresentedSummary().presentationStatus === 'running',
             }}
             companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}
@@ -4844,7 +4849,10 @@ export function EnvAppShell() {
             focusThreadRequest={flowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
             focusComposerRequest={flowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
             onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
-            onCompanionOpenRequest={() => openActivityFlowerCompanion()}
+            onCompanionOpenRequest={(threadID) => {
+              if (threadID) focusActivityFlowerThread(threadID);
+              openActivityFlowerCompanion();
+            }}
             companionCopy={activityFlowerCompanionCopy()}
             headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
             onPresenceChange={handleActivityFlowerPresenceChange}

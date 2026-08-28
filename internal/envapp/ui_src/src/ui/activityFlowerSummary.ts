@@ -11,6 +11,9 @@ export type ActivityFlowerSummaryCopy = Readonly<{
   withTitle: (lead: string, title: string) => string;
   withTitleAndMore: (lead: string, title: string, count: number) => string;
   withoutTitle: (status: ActiveStatus, count: number) => string;
+  failureWithTitle: (title: string) => string;
+  failureWithReason: (reason: string) => string;
+  failureWithoutTitle: string;
   secondaryWorking: (count: number) => string;
   readyToAsk: string;
   unavailable: string;
@@ -23,6 +26,7 @@ export type ActivityFlowerSummary = Readonly<{
   progressKind?: FlowerCompanionProgressKind;
   progressIdentity?: string;
   ephemeralKind?: 'completion';
+  targetThreadID?: string;
 }>;
 
 export function presentActivityFlowerSummary(
@@ -34,6 +38,25 @@ export function presentActivityFlowerSummary(
   }
   if (presence.priority_status === 'unavailable') {
     return { visualText: '', accessibleText: copy.unavailable, presentationStatus: 'unavailable' };
+  }
+  if (presence.priority_status === 'failed') {
+    const title = String(presence.priority_thread_title ?? '').trim();
+    const reason = String(presence.priority_thread_progress ?? '').trim();
+    const visualText = reason
+      ? copy.failureWithReason(reason)
+      : title
+        ? copy.failureWithTitle(title)
+        : copy.failureWithoutTitle;
+    const accessibleText = reason && title
+      ? `${copy.failureWithTitle(title)}. ${reason}`
+      : visualText;
+    return {
+      visualText,
+      accessibleText,
+      presentationStatus: 'failed',
+      progressKind: presence.priority_thread_progress_kind ?? 'error',
+      ...(presence.priority_thread_id ? { targetThreadID: presence.priority_thread_id } : {}),
+    };
   }
   if (presence.priority_status !== 'running' && presence.priority_status !== 'queued') {
     return { visualText: '', accessibleText: copy.readyToAsk, presentationStatus: 'idle' };
@@ -62,6 +85,7 @@ export function presentActivityFlowerSummary(
   return {
     visualText,
     presentationStatus: status,
+    ...(presence.priority_thread_id ? { targetThreadID: presence.priority_thread_id } : {}),
     ...(status === 'running' && progress
       ? {
           progressKind: presence.priority_thread_progress_kind ?? 'status',
@@ -80,6 +104,7 @@ export function presentActivityFlowerCompletion(
   completed: string,
   title: string | undefined,
   copy: Pick<ActivityFlowerSummaryCopy, 'withTitle'>,
+  targetThreadID?: string,
 ): ActivityFlowerSummary {
   const canonicalCompleted = completed.trim();
   const canonicalTitle = String(title ?? '').trim();
@@ -91,5 +116,6 @@ export function presentActivityFlowerCompletion(
     accessibleText: visualText,
     presentationStatus: 'completed',
     ephemeralKind: 'completion',
+    ...(targetThreadID ? { targetThreadID } : {}),
   };
 }

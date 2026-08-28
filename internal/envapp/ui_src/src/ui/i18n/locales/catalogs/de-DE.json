@@ -509,6 +509,11 @@
             "other": "{count} Ergebnisse sind bereit"
           }
         },
+        "failure": {
+          "withTitle": "Aufgabe fehlgeschlagen: {title}",
+          "withReason": "Flower ist fehlgeschlagen · {reason}",
+          "withoutTitle": "Eine Flower-Aufgabe ist fehlgeschlagen"
+        },
         "secondaryWorking": {
           "one": "Flower bearbeitet außerdem eine weitere Aufgabe",
           "other": "Flower bearbeitet außerdem {count} weitere Aufgaben"

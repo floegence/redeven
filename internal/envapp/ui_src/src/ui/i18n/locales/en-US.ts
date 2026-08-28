@@ -1254,6 +1254,11 @@ export const enUS = defineDictionary({
           stopped: { one: 'One task stopped', other: '{count} tasks stopped' },
           ready: { one: 'One result is ready', other: '{count} results are ready' },
         },
+        failure: {
+          withTitle: 'Task failed: {title}',
+          withReason: 'Flower failed · {reason}',
+          withoutTitle: 'A Flower task failed',
+        },
         secondaryWorking: {
           one: 'Flower is also working on one other task',
           other: 'Flower is also working on {count} other tasks',

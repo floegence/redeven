@@ -15,6 +15,9 @@ const copy: ActivityFlowerSummaryCopy = {
   withTitle: (lead, title) => `${lead} / ${title}`,
   withTitleAndMore: (lead, title, count) => `${lead} / ${title} / +${count}`,
   withoutTitle: (status, count) => `${status} without title ${count}`,
+  failureWithTitle: (title) => `failed / ${title}`,
+  failureWithReason: (reason) => `failed / ${reason}`,
+  failureWithoutTitle: 'failed without title',
   secondaryWorking: (count) => `also working ${count}`,
   readyToAsk: 'Ready to ask Flower',
   unavailable: 'Flower unavailable',
@@ -125,7 +128,41 @@ describe('presentActivityFlowerSummary', () => {
     });
   });
 
-  it.each(['attention', 'failed', 'canceled', 'completed'] as const)(
+  it('keeps an unread failure visible and targets its exact conversation', () => {
+    expect(presentActivityFlowerSummary(presence({
+      priority_status: 'failed',
+      priority_count: 1,
+      priority_thread_id: 'thread-failed',
+      priority_thread_title: 'Run integration checks',
+      priority_thread_progress: 'The model connection was interrupted.',
+      priority_thread_progress_kind: 'error',
+      unread_failed_count: 1,
+    }), copy)).toEqual({
+      visualText: 'failed / The model connection was interrupted.',
+      accessibleText: 'failed / Run integration checks. The model connection was interrupted.',
+      presentationStatus: 'failed',
+      progressKind: 'error',
+      targetThreadID: 'thread-failed',
+    });
+  });
+
+  it('falls back to localized failure copy when reload leaves no safe error detail', () => {
+    expect(presentActivityFlowerSummary(presence({
+      priority_status: 'failed',
+      priority_count: 1,
+      priority_thread_id: 'thread-reloaded-failure',
+      priority_thread_title: 'Run integration checks',
+      unread_failed_count: 1,
+    }), copy)).toEqual({
+      visualText: 'failed / Run integration checks',
+      accessibleText: 'failed / Run integration checks',
+      presentationStatus: 'failed',
+      progressKind: 'error',
+      targetThreadID: 'thread-reloaded-failure',
+    });
+  });
+
+  it.each(['attention', 'canceled', 'completed'] as const)(
     'keeps historical or attention-only %s state out of the collapsed companion',
     (priorityStatus) => {
       expect(presentActivityFlowerSummary(presence({
