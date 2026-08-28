@@ -91,8 +91,5 @@ func partialUsageFromTurnUsage(usage TurnUsage) *PartialUsage {
 }
 
 func validatePartialUsage(usage PartialUsage) error {
-	return validateTurnUsage(TurnUsage{
-		InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, ReasoningTokens: usage.ReasoningTokens,
-		CacheReadTokens: usage.CacheReadTokens, CacheWriteTokens: usage.CacheWriteTokens,
-	})
+	return validateTurnUsage(TurnUsage(usage))
 }

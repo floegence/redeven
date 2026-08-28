@@ -314,7 +314,7 @@ func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 		builder.add(current.Failure.Message)
 	} else {
 		builder.add("")
-		builder.add(current.Error)
+		builder.add(floretThreadViewLegacyError(current))
 	}
 	builder.addInt(int64(len(current.Items)))
 	for _, item := range current.Items {

@@ -451,7 +451,7 @@ func extractManagedArchiveWithOptions(archivePath, destination string, skipSymli
 			if err := os.MkdirAll(target, 0o700); err != nil {
 				return err
 			}
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			if header.Size < 0 || header.Size > maxNativeArchiveBytes {
 				return errors.New("archive entry size is invalid")
 			}
