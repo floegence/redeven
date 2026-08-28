@@ -51,14 +51,14 @@ describe('launcherActionFeedback', () => {
     });
   });
 
-  it('keeps provider and control-plane failures toast-oriented', () => {
+  it('keeps Redeven Cloud and control-plane failures toast-oriented', () => {
     expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'environment_offline',
       scope: 'environment',
       message: 'This environment is currently offline in the provider.',
     })).toEqual({
-      message: 'This Environment is currently offline in the Provider.',
+      message: 'This Environment is currently offline in Redeven Cloud.',
       tone: 'warning',
       refresh_snapshot: false,
       delivery: 'toast',
@@ -115,7 +115,7 @@ describe('launcherActionFeedback', () => {
     });
   });
 
-  it('turns provider authorization failures into persistent reconnect actions', () => {
+  it('turns Redeven Cloud authorization failures into persistent reconnect actions', () => {
     expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'control_plane_auth_required',
@@ -126,8 +126,8 @@ describe('launcherActionFeedback', () => {
       env_public_id: 'env_demo',
       should_refresh_snapshot: true,
     })).toEqual({
-      title: 'Provider Authorization Expired',
-      message: 'Desktop needs fresh Provider authorization before it can open or connect this Provider Environment.',
+      title: 'Redeven Cloud Authorization Expired',
+      message: 'Desktop needs fresh Redeven Cloud authorization before it can open or connect this Redeven Cloud Environment.',
       tone: 'warning',
       refresh_snapshot: true,
       delivery: 'toast',
@@ -152,8 +152,8 @@ describe('launcherActionFeedback', () => {
       provider_origin: 'https://provider.example.invalid',
       env_public_id: 'env_demo',
     })).toMatchObject({
-      title: 'Provider 授权已过期',
-      message: 'Desktop 需要新的 Provider 授权才能打开或连接此 Provider 环境。',
+      title: 'Redeven Cloud 授权已过期',
+      message: 'Desktop 需要新的 Redeven Cloud 授权才能打开或连接此 Redeven Cloud 环境。',
       action: {
         label: '请求访问',
       },
@@ -185,7 +185,7 @@ describe('launcherActionFeedback', () => {
       scope: 'control_plane',
       message: 'This provider cannot be reached right now.',
     })).toMatchObject({
-      message: 'Desktop 无法将此运行时连接到 Provider 环境。',
+      message: 'Desktop 无法将此运行时连接到 Redeven Cloud 环境。',
       tone: 'warning',
     });
   });
@@ -198,7 +198,7 @@ describe('launcherActionFeedback', () => {
       message: 'Desktop failed to connect the Local Runtime to this provider Environment.',
       should_refresh_snapshot: true,
     })).toEqual({
-      message: 'Desktop could not connect this Runtime to the Provider Environment.',
+      message: 'Desktop could not connect this Runtime to the Redeven Cloud Environment.',
       tone: 'warning',
       refresh_snapshot: true,
       delivery: 'toast',
