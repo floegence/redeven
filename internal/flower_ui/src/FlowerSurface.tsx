@@ -752,11 +752,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     title: copy().chat.composerErrorTitle,
     message,
   });
-  const notifyStopError = (message: string) => notify({
-    tone: 'error',
-    title: copy().chat.stopErrorTitle,
-    message,
-  });
   const notifyPermissionError = (message: string) => notify({
     tone: 'error',
     title: copy().chat.permissionSelectorErrorTitle,
@@ -1049,6 +1044,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     approvalActionID: string;
     owned: boolean;
   }>;
+  const [pendingStopFocusHandoff, setPendingStopFocusHandoff] = createSignal<BottomActionFocusHandoff | null>(null);
   const captureBottomActionFocus = (threadID: string, requestedApprovalActionID = ''): BottomActionFocusHandoff => {
     let owner = typeof document === 'undefined' ? null : document.activeElement;
     let surface = owner instanceof HTMLElement
@@ -1442,6 +1438,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return visibleInputRequest(thread);
   });
   const selectedThreadStopPending = createMemo(() => stoppingThreadIDs().has(trimString(selectedThreadID())));
+  const selectedThreadStopLabel = createMemo(() => (
+    selectedThreadStopPending() ? copy().chat.stopping : copy().chat.stop
+  ));
   const selectedThreadHasActiveTurnEvidence = createMemo(() => {
     const threadID = trimString(selectedThreadID());
     if (!threadID) return false;
@@ -1455,6 +1454,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && Boolean(trimString(selectedThreadID()))
     && selectedThreadHasActiveTurnEvidence()
   ));
+  createEffect(() => {
+    const handoff = pendingStopFocusHandoff();
+    if (!handoff) return;
+    if (trimString(selectedThreadID()) !== handoff.threadID) {
+      setPendingStopFocusHandoff(null);
+      return;
+    }
+    if (selectedThreadHasActiveTurnEvidence()) return;
+    setPendingStopFocusHandoff(null);
+    scheduleBottomActionFocus(handoff);
+  });
 	const selectedThreadDetailPending = createMemo(() => {
 		const threadID = trimString(selectedThreadID());
 		return Boolean(threadID && !threadCache().views.has(threadID));
@@ -2348,8 +2358,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     | 'user_action'
     | 'background_refresh'
     | 'summary_recovery'
-    | 'live_current'
-    | 'stop_confirmation';
+    | 'live_current';
   type ThreadDetailReceiveResult = Readonly<{
     state: ThreadViewAcceptance;
     runtimeState: ThreadViewAcceptance;
@@ -3763,8 +3772,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         case 'stop': {
           setThreadActionBusy({ threadID: item.thread_id, action });
-          const stopped = await props.adapter.stopThread(item.thread_id);
-          receiveThreadView(stopped, 'stop_confirmation');
+          await requestThreadStop(item.thread_id);
           return;
         }
         case 'pin':
@@ -4897,38 +4905,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const stopSelectedThread = async (threadID: string): Promise<FlowerThreadSnapshot> => {
-    threadID = trimString(threadID);
-    if (!threadID) throw new Error('Missing thread id.');
-    const live = await props.adapter.stopThread(threadID);
-    const thread = receiveThreadView(live, 'stop_confirmation').thread;
-    if (selectedThreadDetailMatches(threadID)) {
-      setSelectedThreadWithDetail(thread.thread_id);
-      setLoadError('');
-    }
-    return thread;
-  };
-
-  const stopSelectedThreadFromComposer = (): Promise<void> => {
-    const stoppingThreadID = trimString(selectedThreadID());
+  const requestThreadStop = (threadID: string): Promise<void> => {
+    const stoppingThreadID = trimString(threadID);
     if (!stoppingThreadID) return Promise.resolve();
     const existing = stopThreadRequests.get(stoppingThreadID);
     if (existing) return existing;
-    const focusHandoff = captureBottomActionFocus(stoppingThreadID);
     updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, true);
     const request = (async () => {
       try {
-        await stopSelectedThread(stoppingThreadID);
+        await props.adapter.stopThread(stoppingThreadID);
         updateThreadIDMembership(setBusyAdmissionThreadIDs, stoppingThreadID, false);
         busyAdmissionNotifiedThreadIDs.delete(stoppingThreadID);
         if (selectedThreadDetailMatches(stoppingThreadID)) {
           returnToChat();
-          scheduleBottomActionFocus(focusHandoff);
         }
       } catch (error) {
-        if (selectedThreadID() === stoppingThreadID) {
-          notifyStopError(getErrorMessage(error));
+        const handoff = pendingStopFocusHandoff();
+        if (handoff?.threadID === stoppingThreadID) {
+          setPendingStopFocusHandoff(null);
         }
+        console.error('Flower stop request failed.', { threadID: stoppingThreadID, error });
       } finally {
         stopThreadRequests.delete(stoppingThreadID);
         updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, false);
@@ -4936,6 +4932,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     })();
     stopThreadRequests.set(stoppingThreadID, request);
     return request;
+  };
+
+  const stopSelectedThreadFromComposer = (): Promise<void> => {
+    const stoppingThreadID = trimString(selectedThreadID());
+    if (!stoppingThreadID) return Promise.resolve();
+    if (!stopThreadRequests.has(stoppingThreadID)) {
+      setPendingStopFocusHandoff(captureBottomActionFocus(stoppingThreadID));
+    }
+    return requestThreadStop(stoppingThreadID);
   };
 
   const submitChat = async () => {
@@ -6769,7 +6774,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : 'send'
   ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
     if (composerReferenceMutationCount() > 0) return true;
     if (longTextPreparing()) return false;
@@ -7421,8 +7426,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   icon={FlowerStopIcon}
                   size="icon"
                   class="flower-composer-stop-thread rounded-full"
-                  aria-label={copy().chat.stop}
-                  title={copy().chat.stop}
+                  aria-label={selectedThreadStopLabel()}
+                  title={selectedThreadStopLabel()}
                   disabled={!selectedThreadCanStop() || selectedThreadStopPending()}
                   loading={selectedThreadStopPending()}
                   onClick={() => void stopSelectedThreadFromComposer()}
@@ -10794,8 +10799,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                                 icon={FlowerStopIcon}
                                 size="icon"
                                 class="flower-composer-stop-thread rounded-full"
-                                aria-label={copy().chat.stop}
-                                title={copy().chat.stop}
+                                aria-label={selectedThreadStopLabel()}
+                                title={selectedThreadStopLabel()}
                                 disabled={!selectedThreadCanStop() || selectedThreadStopPending()}
                                 loading={selectedThreadStopPending()}
                                 onClick={() => void stopSelectedThreadFromComposer()}
@@ -10829,8 +10834,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         icon={FlowerStopIcon}
                         size="icon"
                         class="flower-composer-stop rounded-full"
-                        aria-label={copy().chat.stop}
-                        title={copy().chat.stop}
+                        aria-label={selectedThreadStopLabel()}
+                        title={selectedThreadStopLabel()}
                         disabled={!selectedThreadCanStop() || selectedThreadStopPending()}
                         loading={selectedThreadStopPending()}
                         onClick={() => void stopSelectedThreadFromComposer()}
@@ -11052,8 +11057,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           icon={FlowerStopIcon}
                           size="icon"
                           class="flower-composer-stop flower-composer-stop-inline rounded-full"
-                          aria-label={copy().chat.stop}
-                          title={copy().chat.stop}
+                          aria-label={selectedThreadStopLabel()}
+                          title={selectedThreadStopLabel()}
                           disabled={selectedThreadStopPending()}
                           loading={selectedThreadStopPending()}
                           onClick={() => void stopSelectedThreadFromComposer()}

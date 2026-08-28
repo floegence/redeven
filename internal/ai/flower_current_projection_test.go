@@ -2,12 +2,27 @@ package ai
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/floegence/floret/v5/identity"
 	flruntime "github.com/floegence/floret/v5/runtime"
 )
+
+func TestStopThreadResponseIsAcknowledgementOnly(t *testing.T) {
+	typeOfResponse := reflect.TypeOf(StopThreadResponse{})
+	if typeOfResponse.NumField() != 1 || typeOfResponse.Field(0).Name != "OK" || typeOfResponse.Field(0).Tag.Get("json") != "ok" {
+		t.Fatalf("stop response fields=%#v, want acknowledgement-only OK field", typeOfResponse)
+	}
+	encoded, err := json.Marshal(StopThreadResponse{OK: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded) != `{"ok":true}` {
+		t.Fatalf("stop response=%s, want acknowledgement only", encoded)
+	}
+}
 
 func TestFlowerCurrentJSONClassifiesAuthorityFailureWithoutExposingRawError(t *testing.T) {
 	rawError := "floret authority state is corrupt: session tree authority state is corrupt"

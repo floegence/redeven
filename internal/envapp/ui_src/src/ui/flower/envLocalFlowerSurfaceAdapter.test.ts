@@ -903,10 +903,10 @@ describe('Env local Flower surface adapter', () => {
     ]));
   });
 
-	it('stops a thread through one atomic cancel bootstrap', async () => {
+	it('stops a thread through one acknowledgement-only cancel request', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_1/cancel' && init?.method === 'POST') {
-        return jsonResponse({ ok: true, data: liveBootstrap('thread_1') });
+        return jsonResponse({ ok: true, data: { ok: true } });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -919,14 +919,12 @@ describe('Env local Flower surface adapter', () => {
       } as any,
     });
 
-    const bootstrap = await adapter.stopThread('thread_1');
+    await expect(adapter.stopThread('thread_1')).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/_redeven_proxy/api/ai/threads/thread_1/cancel',
       expect.objectContaining({ method: 'POST' }),
     );
-    expect(bootstrap.thread.thread_id).toBe('thread_1');
-    expect(bootstrap.thread.status).toBe('canceled');
   });
 
   it('retries only the canonical provider continuation and reloads live bootstrap', async () => {

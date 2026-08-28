@@ -63,6 +63,51 @@ function attachTranscriptScrollMetrics(transcript: HTMLElement, metrics: {
 }
 
 describe('FlowerSurface navigation', () => {
+  it('keeps thread-menu stop failures silent and immediately retryable', async () => {
+    clearFlowerSurfaceNotifications();
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const activeThread = thread({
+        thread_id: 'thread-menu-stop-failure',
+        status: 'running',
+        active_run_id: 'turn-menu-stop-failure',
+      });
+      const stopThread = vi.fn(async () => { throw new Error('simulated stop failure'); });
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [activeThread]),
+        loadThread: vi.fn(async () => liveBootstrap(activeThread, 1)),
+        stopThread,
+      });
+      await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${activeThread.thread_id}"]`)));
+      const card = runtime.querySelector(`[data-thread-id="${activeThread.thread_id}"]`) as HTMLElement;
+      const openStopMenu = async () => {
+        card.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: 40,
+          clientY: 40,
+        }));
+        await waitFor(() => Boolean(document.querySelector('[role="menu"]')));
+        const stop = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+          .find((item) => item.textContent?.includes('Stop conversation'));
+        expect(stop).toBeTruthy();
+        stop!.click();
+      };
+
+      await openStopMenu();
+      await waitFor(() => stopThread.mock.calls.length === 1);
+      expect(flowerSurfaceNotifications()).toHaveLength(0);
+
+      await openStopMenu();
+      await waitFor(() => stopThread.mock.calls.length === 2);
+      expect(flowerSurfaceNotifications()).toHaveLength(0);
+      expect(diagnostic).toHaveBeenCalledTimes(2);
+    } finally {
+      diagnostic.mockRestore();
+    }
+  });
+
   it('follows selected current view updates when the transcript is already at the tail', async () => {
     const initialThread = thread({
       thread_id: 'thread-auto-scroll',
@@ -869,12 +914,6 @@ describe('FlowerSurface navigation', () => {
       active_run_id: 'turn-still-active',
       updated_at_ms: idleThread.updated_at_ms + 1,
     });
-    const stoppedThread = thread({
-      ...activeThread,
-      status: 'canceled',
-      active_run_id: undefined,
-      updated_at_ms: activeThread.updated_at_ms + 1,
-    });
     let detailLoads = 0;
     const activeDetail = deferred<ReturnType<typeof liveBootstrap>>();
     const loadThread = vi.fn(() => {
@@ -887,7 +926,7 @@ describe('FlowerSurface navigation', () => {
       code: 'floret_thread_admission_blocked',
     });
     const launchTurn = vi.fn(async () => { throw admissionError; });
-    const stopThread = vi.fn(async () => liveBootstrap(stoppedThread, 10));
+    const stopThread = vi.fn(async () => undefined);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [idleThread]),
@@ -917,7 +956,7 @@ describe('FlowerSurface navigation', () => {
 
     (runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).click();
     await waitFor(() => stopThread.mock.calls.length === 1);
-    await waitFor(() => runtime.querySelector('.flower-composer-stop-inline') === null);
+    await waitFor(() => !(runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).disabled);
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while the previous reply stops');
   });
 

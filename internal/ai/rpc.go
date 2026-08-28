@@ -62,9 +62,7 @@ type aiStopThreadReq struct {
 }
 
 type aiStopThreadResp struct {
-	OK      bool                 `json:"ok"`
-	Thread  ThreadView           `json:"thread"`
-	Current flruntime.ThreadView `json:"current"`
+	OK bool `json:"ok"`
 }
 
 type aiListMessagesReq struct {
@@ -196,7 +194,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}
-		return &aiStopThreadResp{OK: out.OK, Thread: out.Thread, Current: out.Current}, nil
+		return &aiStopThreadResp{OK: out.OK}, nil
 	})
 
 	accessgate.RegisterTyped[aiListMessagesReq, aiListMessagesResp](r, TypeID_AI_MESSAGES_LIST, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiListMessagesReq) (*aiListMessagesResp, error) {

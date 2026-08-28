@@ -6,12 +6,15 @@ import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/
 import {
   adapter,
   approvalCommandResult,
+  clearFlowerSurfaceNotifications,
   deferred,
+  flowerSurfaceNotifications,
   inputRequest,
   liveBootstrap,
   renderSurfaceWithAdapter,
   renderSurfaceWithAdapterProps,
   renderSurfaceWithDraftCoordinator,
+  runtimeCurrentView,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -801,12 +804,14 @@ describe('Flower bottom decision surface', () => {
       status: 'waiting_approval',
       approval_actions: [action],
     });
-    const stopped = liveBootstrap({
+    const stoppedThread = {
       ...approvalThread,
-      status: 'canceled',
+      status: 'canceled' as const,
+      active_run_id: undefined,
       approval_actions: [],
-    }, 22);
-    const stopResponse = deferred<typeof stopped>();
+    };
+    const stopResponse = deferred<void>();
+    const publishStopped = deferred<void>();
     const stopThread = vi.fn(() => stopResponse.promise);
     const submitApproval = vi.fn(async (input) => approvalCommandResult(input.thread_id, input.interaction_id, input.approved, 22));
     const runtime = renderSurfaceWithAdapter({
@@ -815,6 +820,21 @@ describe('Flower bottom decision surface', () => {
       loadThread: vi.fn(async () => liveBootstrap(approvalThread, 21)),
       stopThread,
       submitApproval,
+      connectLiveStream: async function* ({ signal }) {
+        yield { schema_version: 1, kind: 'ready' as const, summaries: [approvalThread] };
+        await Promise.race([
+          publishStopped.promise,
+          new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })),
+        ]);
+        if (signal.aborted) return;
+        yield {
+          schema_version: 1,
+          kind: 'thread.batch' as const,
+          thread_id: approvalThread.thread_id,
+          current: runtimeCurrentView(stoppedThread, 22),
+        };
+        await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
     });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`) as HTMLButtonElement).click();
@@ -832,11 +852,47 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => stopThread.mock.calls.length === 1);
     expect(stop.disabled).toBe(true);
     expect(stop.dataset.loading).toBe('true');
-    stopResponse.resolve(stopped);
+    stopResponse.resolve();
+    await waitFor(() => stop.dataset.loading !== 'true');
+    publishStopped.resolve();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
     expect(stopThread).toHaveBeenCalledTimes(1);
     expect(submitApproval).not.toHaveBeenCalled();
     await waitFor(() => document.activeElement === runtime.querySelector('[data-flower-bottom-mode="chat"] textarea'));
+  });
+
+  it('shows a pending stop state and never reports stop request failures to the user', async () => {
+    clearFlowerSurfaceNotifications();
+    const action = approval('approval-stop-failure');
+    const approvalThread = thread({
+      thread_id: 'thread-approval-stop-failure',
+      status: 'waiting_approval',
+      approval_actions: [action],
+    });
+    const stopResponse = deferred<void>();
+    const stopThread = vi.fn(() => stopResponse.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 21)),
+      stopThread,
+    });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')));
+
+    const stop = runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement;
+    stop.click();
+    stop.click();
+    await waitFor(() => stopThread.mock.calls.length === 1);
+    expect(stop.disabled).toBe(true);
+    expect(stop.getAttribute('aria-label')).toBe('Stopping...');
+
+    stopResponse.reject(new Error('simulated stop transport failure'));
+    await waitFor(() => !stop.disabled);
+    expect(stop.getAttribute('aria-label')).toBe('Stop');
+    expect(stopThread).toHaveBeenCalledTimes(1);
+    expect(flowerSurfaceNotifications()).toHaveLength(0);
   });
 
   it('does not steal focus when the user leaves the approval surface during submission', async () => {

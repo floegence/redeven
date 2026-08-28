@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-28
+* **Acknowledgement-only Flower Stop**: Flower now treats Stop as one
+  idempotent command shared by Composer and the thread menu. The response is
+  only `{ok:true}`; canonical workspace SSE supplies subsequent thread state,
+  and transport failures remain diagnostic and immediately retryable without a
+  false user-facing Stop error.
 * **Running tool title sweep**: Flower gives every running Activity tool title a
   theme-aware left-to-right sweep with a short end pause. The effect never
   covers the icon, metadata, duration, detail, or row background, stops on
