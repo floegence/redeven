@@ -4,6 +4,7 @@ import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core
 import {
   FileBrowserDragPreview,
   FileBrowserProvider,
+  FileBrowserStatusBar,
   type FileBrowserRevealRequest,
   FileContextMenu,
   FileGridView,
@@ -120,6 +121,11 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
     return path !== '/' && path !== '';
   };
   const toolbarLayout = createMemo(() => resolveFileBrowserToolbarLayout(toolbarWidth()));
+  const hasHeaderStatus = () => (
+    browser.selectedItems().size > 0
+    || Boolean(browser.filterQueryApplied().trim())
+    || Boolean(props.pathStatusText?.trim())
+  );
 
   onMount(() => {
     const syncToolbarWidth = () => {
@@ -233,56 +239,40 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
         </div>
       </div>
 
-      <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-        <span>{i18n.tn('files.visibleCount', browser.currentFiles().length)}</span>
-        <Show when={browser.selectedItems().size > 0}>
-          <>
-            <span aria-hidden="true">·</span>
+      <Show when={hasHeaderStatus()}>
+        <div data-testid="file-browser-header-status" class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+          <Show when={browser.selectedItems().size > 0}>
             <span class="text-primary/80">{i18n.tn('files.selectedCount', browser.selectedItems().size)}</span>
-          </>
-        </Show>
-        <Show when={browser.filterQueryApplied().trim()}>
-          <>
-            <span aria-hidden="true">·</span>
+          </Show>
+          <Show when={browser.filterQueryApplied().trim()}>
+            <Show when={browser.selectedItems().size > 0}>
+              <span aria-hidden="true">·</span>
+            </Show>
             <span>{i18n.t('files.filterActive')}</span>
-          </>
-        </Show>
-        <Show when={props.pathStatusText?.trim()}>
-          <>
-            <span aria-hidden="true">·</span>
+          </Show>
+          <Show when={props.pathStatusText?.trim()}>
+            <Show when={browser.selectedItems().size > 0 || Boolean(browser.filterQueryApplied().trim())}>
+              <span aria-hidden="true">·</span>
+            </Show>
             <span class={props.pathStatusTone === 'error' ? 'text-destructive' : undefined}>{props.pathStatusText}</span>
-          </>
-        </Show>
-      </div>
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 }
 
 function FileWorkspaceStatusBar() {
-  const browser = useFileBrowser();
   const i18n = useI18n();
 
   return (
-    <div class={cn('flex flex-wrap items-center justify-between gap-2 border-t px-2.5 py-1 text-[10px] text-muted-foreground', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
-      <div class="flex flex-wrap items-center gap-1.5">
-        <span>{i18n.tn('files.itemCount', browser.currentFiles().length)}</span>
-        <Show when={browser.filterQueryApplied().trim()}>
-          <>
-            <span aria-hidden="true">·</span>
-            <span>{i18n.t('files.filteredView')}</span>
-          </>
-        </Show>
-        <Show when={browser.selectedItems().size > 0}>
-          <>
-            <span aria-hidden="true">·</span>
-            <span class="text-primary/80">{i18n.tn('files.selectedCount', browser.selectedItems().size)}</span>
-          </>
-        </Show>
-      </div>
-      <div class="max-w-full truncate text-right sm:max-w-[45%]">
-        {browser.currentPath()}
-      </div>
-    </div>
+    <FileBrowserStatusBar
+      class={cn('px-2.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}
+      pathClass="max-w-full sm:max-w-[45%]"
+      formatItemCount={(count) => i18n.tn('files.itemCount', count)}
+      filteredLabel={i18n.t('files.filteredView')}
+      formatSelectedCount={(count) => i18n.tn('files.selectedCount', count)}
+    />
   );
 }
 

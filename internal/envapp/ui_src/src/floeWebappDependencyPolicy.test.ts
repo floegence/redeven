@@ -11,9 +11,9 @@ const FLOE_WEBAPP_DEPENDENCIES = [
 ] as const;
 
 const FLOE_WEBAPP_RELEASE_SET = {
-  '@floegence/floe-webapp-boot': '0.46.2',
-  '@floegence/floe-webapp-core': '0.46.2',
-  '@floegence/floe-webapp-protocol': '0.46.2',
+  '@floegence/floe-webapp-boot': '0.46.3',
+  '@floegence/floe-webapp-core': '0.46.3',
+  '@floegence/floe-webapp-protocol': '0.46.3',
 } as const;
 
 const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/floeterm-terminal-web'] as const;
@@ -41,6 +41,13 @@ function readText(relPath: string): string {
 function readInstalledFloetermDeclaration(relPath: string): string {
   return fs.readFileSync(
     path.join(resolvePackageRoot(), 'node_modules/@floegence/floeterm-terminal-web', relPath),
+    'utf8',
+  );
+}
+
+function readInstalledFloeWebappCoreDeclaration(relPath: string): string {
+  return fs.readFileSync(
+    path.join(resolvePackageRoot(), 'node_modules/@floegence/floe-webapp-core', relPath),
     'utf8',
   );
 }
@@ -162,6 +169,18 @@ describe('published npm dependency policy', () => {
       .toMatch(/window\?: boolean/);
     expect(readInstalledFloetermDeclaration('dist/semantic/RendererSurface.d.ts'))
       .toMatch(/constructor\(canvas: HTMLCanvasElement, onError\?:[^\n]+onRender\?/);
+  });
+
+  it('consumes the published shared file-browser status bar contract', () => {
+    const packageManifest = readJson<PackageJson>(
+      'node_modules/@floegence/floe-webapp-core/package.json',
+    );
+
+    expect(packageManifest.version).toBe('0.46.3');
+    expect(readInstalledFloeWebappCoreDeclaration('dist/components/file-browser/index.d.ts'))
+      .toMatch(/export \{ FileBrowserStatusBar, type FileBrowserStatusBarProps \}/);
+    expect(readInstalledFloeWebappCoreDeclaration('dist/components/file-browser/FileBrowserStatusBar.d.ts'))
+      .toMatch(/export declare function FileBrowserStatusBar/);
   });
 
   it('keeps pnpm-lock aligned to declared published UI releases without local link entries', () => {

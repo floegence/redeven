@@ -9,10 +9,6 @@ export const enUSWidgetChrome = defineDictionary({
     filterPlaceholder: 'Filter files',
     viewList: 'List',
     viewGrid: 'Grid',
-    visibleCount: {
-      one: '{count} visible',
-      other: '{count} visible',
-    },
     selectedCount: {
       one: '{count} selected',
       other: '{count} selected',

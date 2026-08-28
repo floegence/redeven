@@ -1498,10 +1498,6 @@
     "filterPlaceholder": "ファイルを絞り込み",
     "viewList": "リスト",
     "viewGrid": "グリッド",
-    "visibleCount": {
-      "one": "{count} つの表示",
-      "other": "{count} つの表示"
-    },
     "selectedCount": {
       "one": "{count} つの選択済み",
       "other": "{count} つの選択済み"

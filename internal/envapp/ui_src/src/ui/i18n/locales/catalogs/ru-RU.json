@@ -1542,12 +1542,6 @@
     "filterPlaceholder": "Фильтр файлов",
     "viewList": "Список",
     "viewGrid": "Сетка",
-    "visibleCount": {
-      "one": "{count} видимый",
-      "other": "{count} видимый",
-      "few": "{count} видимый",
-      "many": "{count} видимых"
-    },
     "selectedCount": {
       "one": "{count} выбрано",
       "other": "{count} выбрано",
