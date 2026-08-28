@@ -762,18 +762,17 @@ describe('Local Environment Flower surface adapter', () => {
     ]);
   });
 
-  it('stops threads through one atomic runtime cancel detail', async () => {
+  it('stops threads through one acknowledgement-only runtime cancel request', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
       calls.push(request);
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/cancel') return detailView({ run_status: 'canceled' }, { view_version: 4, last_outcome: 'cancelled' });
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/cancel') return { ok: true };
       throw new Error(`unexpected path: ${request.path}`);
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
 
-    const detail = await adapter.stopThread('thread-1');
+    await expect(adapter.stopThread('thread-1')).resolves.toBeUndefined();
 
-    expect(detail.thread.status).toBe('canceled');
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
       'POST /_redeven_proxy/api/ai/threads/thread-1/cancel',
     ]);

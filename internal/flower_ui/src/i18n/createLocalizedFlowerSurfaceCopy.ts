@@ -93,6 +93,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       handlerRetry: t(i18n, k('chat.handlerRetry')),
       send: t(i18n, k('chat.send')),
       stop: t(i18n, k('chat.stop')),
+      stopping: t(i18n, k('chat.stopping')),
       commandMenuLabel: t(i18n, k('chat.commandMenuLabel')),
       commandCompactContext: t(i18n, k('chat.commandCompactContext')),
       compactContext: t(i18n, k('chat.compactContext')),
@@ -153,7 +154,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       threadSyncFailed: t(i18n, k('chat.threadSyncFailed')),
       activeTurnBusy: t(i18n, k('chat.activeTurnBusy')),
       composerErrorTitle: t(i18n, k('chat.composerErrorTitle')),
-      stopErrorTitle: t(i18n, k('chat.stopErrorTitle')),
       toolStatuses: {
         pending: t(i18n, k('chat.toolStatusPending')),
         running: t(i18n, k('chat.toolStatusRunning')),

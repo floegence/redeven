@@ -54,6 +54,13 @@ canonical permission snapshot before model dispatch.
 
 Redeven keeps one typed adapter over the published Floret v5 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
 
+The product Stop boundary is an idempotent command acknowledgement, not a
+thread-read boundary. Redeven invokes typed `Cancel`, discards its returned
+current view, and exposes only `{ok: true}`. Canonical workspace subscription
+and ordinary detail reads remain the only browser state paths; Stop never
+decorates a command response with viewer read state, projects a second detail,
+or starts a follow-up read.
+
 A dynamic `ToolSurface` with registry tools and nil provider definitions inherits
 the registry definitions. A non-nil empty definitions slice intentionally exposes
 no registry tools to the provider. Redeven relies on the published Floret runtime

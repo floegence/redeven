@@ -151,11 +151,6 @@ func (r SubmitRequestUserInputResponseResponse) MarshalJSON() ([]byte, error) {
 	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
 }
 
-func (r StopThreadResponse) MarshalJSON() ([]byte, error) {
-	type wire StopThreadResponse
-	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
-}
-
 func (r SubmitFlowerApprovalResponse) MarshalJSON() ([]byte, error) {
 	type wire SubmitFlowerApprovalResponse
 	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
@@ -168,11 +163,6 @@ func (r aiSendUserTurnResp) MarshalJSON() ([]byte, error) {
 
 func (r aiSubmitRequestUserInputResponseResp) MarshalJSON() ([]byte, error) {
 	type wire aiSubmitRequestUserInputResponseResp
-	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
-}
-
-func (r aiStopThreadResp) MarshalJSON() ([]byte, error) {
-	type wire aiStopThreadResp
 	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
 }
 

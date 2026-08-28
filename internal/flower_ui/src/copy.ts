@@ -309,6 +309,7 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerRetry: string;
     send: string;
     stop: string;
+    stopping: string;
     commandMenuLabel: string;
     commandCompactContext: string;
     compactContext: string;
@@ -369,7 +370,6 @@ export type FlowerSurfaceCopy = Readonly<{
     threadSyncFailed: string;
     activeTurnBusy: string;
     composerErrorTitle: string;
-    stopErrorTitle: string;
     modelStatus: Readonly<{
       preparing: string;
       waitingResponse: string;
@@ -563,6 +563,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerRetry: 'Retry',
     send: 'Send',
     stop: 'Stop',
+    stopping: 'Stopping...',
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact this conversation context',
     compactContext: 'Compact context',
@@ -623,7 +624,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
     activeTurnBusy: 'The previous reply is still active. You can stop it before sending again.',
     composerErrorTitle: 'Flower could not send.',
-    stopErrorTitle: 'Flower could not stop this reply.',
     modelStatus: {
       preparing: 'Preparing model request...',
       waitingResponse: 'Waiting for model response...',

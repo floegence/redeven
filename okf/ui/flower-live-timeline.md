@@ -17,7 +17,16 @@ stream.
 
 # Contract
 
-`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's activity revision orders update and read metadata; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those three authorities independently, so an unchanged runtime view cannot discard newer product metadata.
+`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, state-bearing action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's activity revision orders update and read metadata; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those three authorities independently, so an unchanged runtime view cannot discard newer product metadata.
+
+Stop is the deliberate command-only exception. Composer and thread-menu entry
+points share one per-thread request owner, show pending only while that request
+is in flight, and consume only an acknowledgement. A successful request never
+writes `ThreadCache`; the existing workspace stream supplies the canceled or
+next-active current view. Transport failure clears pending, leaves Stop
+retryable, and records diagnostics without showing a Stop error notification.
+The client does not synthesize `read_status`, load detail, poll, or open another
+connection to confirm cancellation.
 
 A valid current view independently confirms any outbox entry with the same canonical request key, even when its runtime detail is unchanged or older than the cached view. Request identity proves admission; it does not order runtime content. For a New Chat send, that same confirmation settles the submitted draft, moves its scope to the canonical thread, selects the canonical thread when the original selection intent is still current, and replaces the optimistic row in one UI batch. A later navigation invalidates only the selection transfer, not admission or cache convergence. Only accepted runtime content may move the transcript, clear runtime errors, or update status presentation.
 
@@ -60,7 +69,7 @@ Canonical terminal updates and reconnect baselines converge the current view. Ba
 
 Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied by Floret v5.0.5. A live context frame may omit cumulative totals; the single merge helper then retains the last confirmed totals instead of clearing them. The client never sums stream samples, and a zero input denominator is displayed as unavailable.
 
-Summary runtime state only triggers revalidation. Product settings revisions do not enter that signature and cannot start runtime recovery. Exhausted finite recovery remains stopped until a newer runtime signature or an explicit user reload arrives. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, an active-turn admission failure, or an in-flight Stop request proves that a turn may still be active.
+Summary runtime state only triggers revalidation. Product settings revisions do not enter that signature and cannot start runtime recovery. Exhausted finite recovery remains stopped until a newer runtime signature or an explicit user reload arrives. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, or an active-turn admission failure proves that a turn may still be active; an in-flight Stop request changes that control to its localized pending state without creating another lifecycle fact.
 
 Runtime failures are classified once at the Redeven projection boundary before
 summary, detail, and typed current responses reach Flower. Published Floret

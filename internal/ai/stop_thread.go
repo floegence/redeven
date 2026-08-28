@@ -39,19 +39,9 @@ func (s *Service) StopThread(ctx context.Context, meta *session.Meta, threadID s
 		return StopThreadResponse{}, err
 	}
 	requestKey := flruntime.RequestKey(requestID)
-	current, err := typed.Cancel(ctx, flruntime.CancelInput{ThreadID: identity.ThreadID(threadID), RequestKey: requestKey})
+	_, err = typed.Cancel(ctx, flruntime.CancelInput{ThreadID: identity.ThreadID(threadID), RequestKey: requestKey})
 	if err != nil && !errors.Is(err, flruntime.ErrThreadNotFound) && !errors.Is(err, flruntime.ErrThreadDeleted) {
 		return StopThreadResponse{}, err
 	}
-	if err != nil {
-		return StopThreadResponse{OK: true}, nil
-	}
-	detail, err := s.flowerThreadDetailFromCurrent(ctx, meta, threadID, current)
-	if err != nil {
-		return StopThreadResponse{}, err
-	}
-	if detail == nil {
-		return StopThreadResponse{OK: true}, nil
-	}
-	return StopThreadResponse{OK: true, Thread: detail.Thread, Current: detail.Current}, nil
+	return StopThreadResponse{OK: true}, nil
 }

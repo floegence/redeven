@@ -42,7 +42,6 @@ import type {
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
-  FlowerThreadView,
   FlowerWorkingDirectoryEntry,
   FlowerWorkingDirectoryListInput,
   FlowerWorkingDirectoryPathContext,
@@ -941,7 +940,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     stopThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error('Missing thread id.');
-		return runtimeJSON<FlowerThreadView>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {});
+		await runtimeJSON<{ ok: boolean }>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {});
 	},
     submitInput: async (input) => {
       const tid = trim(input.thread_id);
