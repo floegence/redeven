@@ -598,6 +598,7 @@
     "navigate": "前往该地址",
     "developerTools": "开发者工具 (F12)",
     "openInBrowser": "在浏览器中打开",
+    "openInBrowserFailed": "Redeven 无法在系统浏览器中授权并打开此 Web Service。",
     "secureRoute": "此页面使用当前环境的 Web Service 路由",
     "invalidAddress": "请输入此 Web Service 内的 HTTP(S) 地址或路径。",
     "loadFailed": "Web Service 无法加载此地址。",

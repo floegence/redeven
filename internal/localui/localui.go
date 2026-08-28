@@ -144,11 +144,12 @@ type Server struct {
 	directAuthorities      map[string]string
 	resolveDirectAuthority func(string) (string, error)
 
-	desktopBridgeListener net.Listener
-	desktopBridgeServer   *http.Server
-	desktopBridgeDirect   http.Handler
-	localUIBridgeURL      string
-	localUIBridgeToken    string
+	desktopBridgeListener  net.Listener
+	desktopBridgeServer    *http.Server
+	desktopBridgeDirect    http.Handler
+	localUIBridgeURL       string
+	localUIBridgeToken     string
+	desktopBrowserHandoffs desktopBrowserHandoffStore
 
 	runtimeControl *runtimeControlServer
 	runtimeStatus  *runtimemanagement.Server
@@ -248,15 +249,30 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 			return
 		}
 		forwardID, portForwardOrigin := desktopBridgePortForwardAuthority(r.Host)
+		bridgeAuthority := ""
 		if !portForwardOrigin {
-			if _, err := canonicalLoopbackAuthority(r.Host); err != nil {
+			var err error
+			bridgeAuthority, err = canonicalLoopbackAuthority(r.Host)
+			if err != nil {
 				http.Error(w, "invalid Local UI bridge authority", http.StatusMisdirectedRequest)
+				return
+			}
+		} else {
+			var ok bool
+			bridgeAuthority, ok = canonicalDesktopBridgePortForwardAuthority(r.Host, forwardID)
+			if !ok {
+				http.Error(w, "invalid Local UI bridge authority", http.StatusMisdirectedRequest)
+				return
+			}
+			if s.redeemDesktopBrowserHandoff(w, r, bridgeAuthority, forwardID) {
 				return
 			}
 		}
 		expectedToken := strings.TrimSpace(s.localUIBridgeToken)
 		presentedToken := strings.TrimSpace(r.Header.Get(localDesktopBridgeTokenHeader))
-		if expectedToken == "" || len(presentedToken) != len(expectedToken) || subtle.ConstantTimeCompare([]byte(presentedToken), []byte(expectedToken)) != 1 {
+		bridgeAuthorized := expectedToken != "" && len(presentedToken) == len(expectedToken) && subtle.ConstantTimeCompare([]byte(presentedToken), []byte(expectedToken)) == 1
+		browserAuthorized := portForwardOrigin && s.desktopBrowserHandoffs.authorize(bridgeAuthority, forwardID, r.Cookies())
+		if !bridgeAuthorized && !browserAuthorized {
 			http.Error(w, "Local UI bridge authorization required", http.StatusUnauthorized)
 			return
 		}
@@ -264,12 +280,18 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 			r.Body = http.MaxBytesReader(w, r.Body, localUIBodyLimit)
 		}
 		trustedRequest := withTrustedLocalUIBridge(r)
+		trustedRequest.Header.Del(localDesktopBridgeTokenHeader)
 		if portForwardOrigin {
 			if s.appServer == nil {
 				http.NotFound(w, trustedRequest)
 				return
 			}
+			appserver.StripLocalUIPortForwardBrowserSessionCookie(trustedRequest)
 			s.appServer.ServeHTTP(w, appserver.WithLocalUIPortForwardOrigin(trustedRequest, forwardID))
+			return
+		}
+		if r.URL.Path == desktopBrowserHandoffMintPath {
+			s.handleDesktopBrowserHandoffMint(w, trustedRequest, bridgeAuthority)
 			return
 		}
 		if r.URL.Path == flowersec.WebSocketDirectPath {
@@ -308,6 +330,23 @@ func desktopBridgePortForwardAuthority(raw string) (string, bool) {
 		return "", false
 	}
 	return forwardID, true
+}
+
+func canonicalDesktopBridgePortForwardAuthority(raw, forwardID string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	host, portRaw, err := net.SplitHostPort(value)
+	if err != nil || portRaw == "" {
+		return "", false
+	}
+	port, err := strconv.Atoi(portRaw)
+	if err != nil || port <= 0 || port > 65535 || portRaw != strconv.Itoa(port) {
+		return "", false
+	}
+	expectedHost := "pf-" + strings.ToLower(strings.TrimSpace(forwardID)) + ".localhost"
+	if !strings.EqualFold(strings.TrimSpace(host), expectedHost) {
+		return "", false
+	}
+	return net.JoinHostPort(expectedHost, strconv.Itoa(port)), true
 }
 
 func (s *Server) LocalUIBridgeURLForDesktop() string {
@@ -909,6 +948,7 @@ func (s *Server) Close() error {
 	s.desktopBridgeDirect = nil
 	s.localUIBridgeURL = ""
 	s.localUIBridgeToken = ""
+	s.desktopBrowserHandoffs.reset()
 	s.runtimeControl = nil
 	s.runtimeStatus = nil
 	if s.authStore != nil {
