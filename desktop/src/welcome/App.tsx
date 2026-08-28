@@ -7024,7 +7024,7 @@ function WSLDiscoveryPanel(props: Readonly<{
       </Show>
 
       <Show when={discovery()?.availability === 'wsl_missing'}>
-        <div class="mt-3 rounded-md border border-amber-500/25 bg-amber-500/10 p-3">
+        <div class="mt-3 rounded-md border border-warning/25 bg-warning/10 p-3">
           <div class="text-sm font-medium text-foreground">{props.i18n.t('environmentCenter.wslMissingTitle')}</div>
           <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('environmentCenter.wslMissingDescription')}</div>
           <code class="mt-2 block rounded bg-background/80 px-2.5 py-2 text-xs text-foreground">wsl.exe --install</code>
@@ -7048,7 +7048,7 @@ function WSLDiscoveryPanel(props: Readonly<{
         <div class="mt-3 space-y-2">
           <For each={missingRegisteredEnvironments()}>
             {(environment) => (
-              <div class="rounded-md border border-amber-500/25 bg-amber-500/10 p-3">
+              <div class="rounded-md border border-warning/25 bg-warning/10 p-3">
                 <div class="text-sm font-medium text-foreground">{environment.label}</div>
                 <div class="mt-1 text-xs leading-5 text-muted-foreground">
                   {props.i18n.t('environmentCenter.wslDistributionMissing', {
