@@ -867,15 +867,20 @@ async function runScenarios(page, config, telemetry) {
   const s02 = await remember('S02', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const token = marker('EXEC');
-    const sent = await sendPrompt(page, `You MUST call terminal.exec exactly once with command "printf ${token}" and a concise description. Do not simulate the result. After the tool succeeds, reply with ${token} as plain text. Do not call any other tool.`, { visibleMarker: token });
-    const tool = surface.locator('[data-flower-activity-item-id]').filter({ hasText: token });
+    const sent = await sendPrompt(page, `You MUST call terminal.exec exactly once with command "sleep 3; printf ${token}" and a concise description. Do not simulate the result. After the tool succeeds, reply with ${token} as plain text. Do not call any other tool.`, { visibleMarker: token });
+    const tool = surface.locator('[data-flower-activity-item-id]').first();
     await tool.waitFor({ state: 'visible', timeout: 180_000 });
+    const contextProgress = surface.locator('.flower-composer-context-progress').last();
+    const cacheHitAria = await waitFor(async () => {
+      const aria = String(await contextProgress.getAttribute('aria-valuetext') ?? '').trim();
+      return aria && !/(not available|暂无数据)/iu.test(aria) ? aria : '';
+    }, 30_000, 'first live cache hit rate');
     const terminal = await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: sent.turnID });
     if (await tool.count() !== 1) throw new Error('terminal tool row count is not one');
     await tool.locator('.flower-activity-inline-button').click();
     await tool.locator('[data-flower-activity-terminal-panel]').waitFor({ state: 'visible', timeout: 20_000 });
     await checkpoint(page, config, 's02-terminal');
-    return { thread_id: sent.threadID, run_id: sent.runID, canonical: terminal.canonical };
+    return { thread_id: sent.threadID, run_id: sent.runID, canonical: terminal.canonical, cache_hit_aria: cacheHitAria };
   });
 
   const s03 = await remember('S03', async () => {

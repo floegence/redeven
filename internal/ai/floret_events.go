@@ -82,7 +82,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.applyFloretStreamObservation(ev.Stream)
 	}
 	r.applyFloretSourceObservation(ev.Sources)
-	r.applyFloretContextStatus(ev.ContextStatus)
+	r.applyFloretContextStatus(ev.ContextStatus, ev.ThreadUsageTotals)
 	r.applyFloretCompaction(ev.Compaction)
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
@@ -245,14 +245,14 @@ func (r *run) expectFloretRuntimeEventIdentity(runID string, threadID string, tu
 	r.muFloretIdentity.Unlock()
 }
 
-func (r *run) applyFloretContextStatus(status *observation.ContextStatus) {
+func (r *run) applyFloretContextStatus(status *observation.ContextStatus, totals *flruntime.ThreadTokenUsageTotals) {
 	if r == nil || status == nil {
 		return
 	}
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
-	usage, err := flowerContextUsageFromFloret(status)
+	usage, err := flowerContextUsageFromFloret(status, totals)
 	if err != nil {
 		r.rejectFloretContract("context_status", err)
 		return
@@ -450,7 +450,7 @@ func flowerBlockHasVisibleContent(block any) bool {
 	}
 }
 
-func flowerContextUsageFromFloret(status *observation.ContextStatus) (FlowerContextUsage, error) {
+func flowerContextUsageFromFloret(status *observation.ContextStatus, totals *flruntime.ThreadTokenUsageTotals) (FlowerContextUsage, error) {
 	if status == nil {
 		return FlowerContextUsage{}, nil
 	}
@@ -489,6 +489,10 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus) (FlowerCont
 	if err != nil {
 		return FlowerContextUsage{}, err
 	}
+	threadUsage, err := flowerThreadTokenUsageFromFloret(totals)
+	if err != nil {
+		return FlowerContextUsage{}, err
+	}
 	return FlowerContextUsage{
 		RunID:                  runID,
 		StepIndex:              status.Step,
@@ -503,6 +507,7 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus) (FlowerCont
 		PressureStatus:         pressureStatus,
 		Source:                 source,
 		UpdatedAtMs:            updatedAt,
+		ThreadUsage:            threadUsage,
 	}, nil
 }
 

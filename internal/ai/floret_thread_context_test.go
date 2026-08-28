@@ -15,7 +15,8 @@ import (
 	"github.com/floegence/floret/v5/storage"
 )
 
-func TestPublishedFloretUsageReachesFlowerThreadProjection(t *testing.T) {
+func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing.T) {
+	liveUsage := make(chan FlowerContextUsage, 8)
 	gateway := florettest.NewScriptedGateway(
 		flprovider.Identity{Provider: "test", Model: "cache-usage", StateCompatibilityKey: "test:cache-usage:v1"},
 		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
@@ -27,22 +28,32 @@ func TestPublishedFloretUsageReachesFlowerThreadProjection(t *testing.T) {
 			{Type: flprovider.EventDelta, Text: "done"},
 			{Type: flprovider.EventDone, Reason: "stop"},
 		}},
+		florettest.Step{Events: []flprovider.Event{
+			{Type: flprovider.EventUsage, Usage: flprovider.Usage{
+				InputTokens: 40, OutputTokens: 10, CacheReadTokens: 50,
+				WindowInputTokens: 90, TotalTokens: 100, Source: "native", Available: true,
+			}},
+			{Type: flprovider.EventDelta, Text: "done again"},
+			{Type: flprovider.EventDone, Reason: "stop"},
+		}},
 	)
-	agent, err := flruntime.NewAgent(config.AgentConfig{
+	agentConfig := config.AgentConfig{
 		Profile:      config.AgentProfile{ID: "cache-usage", Name: "Cache Usage"},
 		SystemPrompt: "Test canonical cache usage.",
 		Context:      config.ContextPolicy{ContextWindowTokens: config.DefaultContextWindowTokens},
-	}, gateway)
-	if err != nil {
-		t.Fatal(err)
 	}
 	host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: storage.Memory()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
-	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) {
-		return agent, nil
+	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(_ context.Context, request flruntime.AgentRequest) (*flruntime.Agent, error) {
+		adapterRun := &run{threadID: request.ThreadID.String(), host: runHostCapabilities{publishContextUsage: func(usage FlowerContextUsage) {
+			if usage.ThreadUsage != nil {
+				liveUsage <- usage
+			}
+		}}}
+		return flruntime.NewAgent(agentConfig, gateway, flruntime.WithAgentEventSink(floretEventSink{run: adapterRun}))
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -57,6 +68,23 @@ func TestPublishedFloretUsageReachesFlowerThreadProjection(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	firstLive := waitForFlowerLiveUsage(t, liveUsage)
+	firstWant := FlowerThreadTokenUsage{InputTokens: 60, OutputTokens: 20, CacheReadTokens: 35, CacheWriteTokens: 5}
+	if firstLive.ThreadUsage == nil || *firstLive.ThreadUsage != firstWant {
+		t.Fatalf("first live thread usage=%#v, want %#v", firstLive.ThreadUsage, firstWant)
+	}
+	waitForFloretThreadIdle(t, service, created.ThreadID)
+
+	if _, err := service.Send(t.Context(), flruntime.SendInput{
+		ThreadID: created.ThreadID, Input: flruntime.UserInput{Text: "measure again"}, RequestKey: "send-cache-usage-again",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	secondLive := waitForFlowerLiveUsage(t, liveUsage)
+	secondWant := FlowerThreadTokenUsage{InputTokens: 100, OutputTokens: 30, CacheReadTokens: 85, CacheWriteTokens: 5}
+	if secondLive.ThreadUsage == nil || *secondLive.ThreadUsage != secondWant {
+		t.Fatalf("second live thread usage=%#v, want %#v", secondLive.ThreadUsage, secondWant)
+	}
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -64,15 +92,16 @@ func TestPublishedFloretUsageReachesFlowerThreadProjection(t *testing.T) {
 		if readErr != nil {
 			t.Fatal(readErr)
 		}
-		if snapshot.UsageTotals != nil {
+		if snapshot.UsageTotals != nil && snapshot.UsageTotals.InputTokens == secondWant.InputTokens {
 			projection, projectErr := flowerThreadContextProjection(snapshot, flruntime.ThreadView{ThreadID: created.ThreadID})
 			if projectErr != nil {
 				t.Fatal(projectErr)
 			}
-			if projection.Usage == nil || projection.Usage.ThreadUsage == nil || *projection.Usage.ThreadUsage != (FlowerThreadTokenUsage{
-				InputTokens: 60, OutputTokens: 20, CacheReadTokens: 35, CacheWriteTokens: 5,
-			}) {
+			if projection.Usage == nil || projection.Usage.ThreadUsage == nil || *projection.Usage.ThreadUsage != secondWant {
 				t.Fatalf("Flower thread usage=%#v", projection.Usage)
+			}
+			if *projection.Usage.ThreadUsage != *secondLive.ThreadUsage {
+				t.Fatalf("terminal usage=%#v, live usage=%#v", projection.Usage.ThreadUsage, secondLive.ThreadUsage)
 			}
 			return
 		}
@@ -81,6 +110,33 @@ func TestPublishedFloretUsageReachesFlowerThreadProjection(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func waitForFlowerLiveUsage(t *testing.T, usage <-chan FlowerContextUsage) FlowerContextUsage {
+	t.Helper()
+	select {
+	case observed := <-usage:
+		return observed
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for live Flower usage totals")
+		return FlowerContextUsage{}
+	}
+}
+
+func waitForFloretThreadIdle(t *testing.T, service flruntime.ThreadService, threadID identity.ThreadID) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		view, err := service.View(t.Context(), threadID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if view.Activity == flruntime.ThreadActivityIdle {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for Floret thread to become idle")
 }
 
 func TestFlowerThreadContextProjectionRestoresOneTerminalCompactionDivider(t *testing.T) {

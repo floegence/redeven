@@ -85,6 +85,30 @@ describe('Flower context usage contract', () => {
     expect(mergeFlowerContextUsage(null, incoming)).toBe(incoming);
   });
 
+  it('accepts the first confirmed totals while the first turn is still running', () => {
+    const previous = mapContextUsage({
+      phase: 'projected_request',
+      pressure_status: 'stable',
+      input_tokens: 60_000,
+      updated_at_ms: 10,
+    })!;
+    const incoming = mapContextUsage({
+      phase: 'provider_usage',
+      pressure_status: 'stable',
+      input_tokens: 61_024,
+      updated_at_ms: 11,
+      thread_usage: {
+        input_tokens: 44_896,
+        output_tokens: 4_365,
+        cache_read_tokens: 16_128,
+        cache_write_tokens: 0,
+      },
+    })!;
+
+    expect(mergeFlowerContextUsage(previous, incoming)).toBe(incoming);
+    expect(incoming.thread_usage?.cache_read_tokens).toBe(16_128);
+  });
+
   it('replaces confirmed totals when a newer canonical snapshot includes them', () => {
     const previous = mapContextUsage({
       phase: 'provider_usage',
@@ -100,6 +124,24 @@ describe('Flower context usage contract', () => {
     })!;
 
     expect(mergeFlowerContextUsage(previous, incoming)).toBe(incoming);
+  });
+
+  it('converges to the confirmed detail snapshot after reconnect', () => {
+    const live = mapContextUsage({
+      phase: 'provider_usage',
+      pressure_status: 'stable',
+      updated_at_ms: 10,
+      thread_usage: { input_tokens: 44_896, output_tokens: 4_365, cache_read_tokens: 16_128, cache_write_tokens: 0 },
+    })!;
+    const restored = mapContextUsage({
+      phase: 'provider_usage',
+      pressure_status: 'stable',
+      updated_at_ms: 20,
+      thread_usage: { input_tokens: 44_896, output_tokens: 4_365, cache_read_tokens: 16_128, cache_write_tokens: 0 },
+    })!;
+
+    expect(mergeFlowerContextUsage(live, restored)).toBe(restored);
+    expect(restored.thread_usage).toEqual(live.thread_usage);
   });
 });
 
