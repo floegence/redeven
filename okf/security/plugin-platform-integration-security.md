@@ -84,10 +84,7 @@ management remains admin-only.
 
 Plugin Center reads active grants and explicit plugin security policies through
 released ReDevPlugin APIs. It never writes registry tables, invents a default
-grant for an official plugin, or treats official identity as permission.
-Containers therefore remains unable to invoke its adapter until an
-administrator explicitly grants `containers.read`; the UI identifies that state
-before opening instead of misreporting it as a Docker connection failure.
+grant for a catalog plugin, or treats catalog identity as permission.
 
 Grant/revoke requests carry the exact current policy revision, management
 revision, and revoke epoch. A CAS conflict or other failure causes inventory,
@@ -96,9 +93,8 @@ The client does not blindly retry. The active grant, permission allowlist cap,
 and denied methods are separate facts: policy can narrow a grant, and a stale
 grant remains revocable even when policy blocks its use.
 
-Official catalog permission descriptions are product UX only. They may explain
-the exact signed Containers permissions and which methods are needed for the
-initial screen, but ReDevPlugin remains the grant, policy, revision, token
+Catalog permission descriptions are product UX only. ReDevPlugin remains the
+grant, policy, revision, token
 invalidation, and method-enforcement authority. Third-party requirements must
 come from a released Host-verified capability-contract projection, not a
 manifest claim or Redeven contract parser.
@@ -123,11 +119,9 @@ trust badge.
 
 ## Package admission and trust
 
-The retained official release-ref install/update path accepts only the exact
-official Ed25519 root delegation, channel/source policy, revocation evidence,
-publisher, plugin, version, signed release metadata, package hashes, and Host
-requirement. The Containers capability is a Redeven-versioned Host-known contract,
-not a separately published trust chain. Browser-supplied trust state, arbitrary
+The retained release install/update path accepts only the exact source policy,
+revocation evidence, publisher, plugin, version, signed release metadata,
+package hashes, and Host requirement. Browser-supplied trust state, arbitrary
 package bytes, rollback, unknown publishers, invalid or revoked signatures, and
 invented fetch provenance are denied. Redeven persists no trusted-time,
 transparency ledger, publisher-continuity, or activation-evidence database.
@@ -198,12 +192,11 @@ not hash the field binary and accept that value as its own trust anchor.
 
 ## Business adapter and observability boundary
 
-Containers is invoked only after ReDevPlugin resolves lifecycle, permission,
-confirmation, lease, quota, revocation, and audit context. Product code cannot
-bypass that chain. Container identity includes engine; CLI output is bounded
-before parsing, overflow terminates the process group, and public errors omit
-argv, stderr, raw output, secrets, and paths. Terminal sink writes use a finite
-independent deadline and truncated output is never accepted as success.
+Plugin business adapters are invoked only after ReDevPlugin resolves lifecycle,
+permission, confirmation, lease, quota, revocation, and audit context. Product
+code cannot bypass that chain. Native Containers does not register a plugin
+adapter; its separate permission and observability boundary is defined in
+[Native container resources](../architecture/container-resources-capability.md).
 
 Audit, diagnostics, and public errors record stable component, operation,
 failure code, correlation/request identity, and mutation outcome. Raw adapter
@@ -225,12 +218,9 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/redevpluginintegration/session_adapter.go:1` - Derives exact owner hashes and bounded permission cache entries.
 - `redeven:internal/redevpluginintegration/security_adapter.go:1` - Implements the four-step web security contract.
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
-- `redeven:internal/redevpluginintegration/release_module.go:1` - Enforces official source, signature, revocation, and Host-known capability requirements.
 - `redeven:internal/redevpluginintegration/integration.go:260` - Registers the process-local external-package inspection and assessment module.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.test.tsx:1` - Proves unsigned inspection requires explicit confirmation and installs enabled without implicit grants, with permission attention when access is missing.
-- `redeven:internal/redevpluginintegration/release_module_test.go:1` - Proves expired official release evidence fails without a catalog record.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Binds runtime target, hash, IPC, ABI, leases, and Host services.
-- `redeven:internal/redevpluginintegration/containers_capability.go:1` - Adapts authorized capability invocations to domain behavior.
 - `redeven:internal/codeapp/appserver/server_test.go:810` - Covers canonical route reservation and origin delegation.
 - `redeven:internal/localui/localui.go:1` - Owns exact Local UI plugin-binding readiness and route admission.
 - `redeven:internal/envapp/ui_src/src/ui/services/pluginSessionReadinessCoordinator.ts:1` - Promotes only the current staged credential after exact readiness.
@@ -238,5 +228,3 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Reads grants and policies and submits revision-fenced permission mutations through the released client.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Keeps grants, allowlist caps, denied methods, and required-to-open methods distinct.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Presents immutable source, trust, security, and confirmation evidence before Host install.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginConfirmationQueue.test.tsx:211` - Proves strict risk-plan rendering and complete validated Containers domain-plan review without granting authority from display content.
-- `redeven:internal/redevpluginintegration/containers_capability_test.go:78` - Proves Containers preflight output satisfies the released capability response contract before confirmation.

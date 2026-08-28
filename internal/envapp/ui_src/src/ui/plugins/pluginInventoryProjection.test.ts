@@ -9,25 +9,25 @@ import {
 import type { ReDevPluginRecord } from './pluginTypes';
 import type { PluginPermissionRequirements } from '@floegence/redevplugin-ui';
 
-const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
-const packageHash = officialContainers.distribution.releaseRef.expected_hashes.package_sha256;
-const manifestHash = officialContainers.distribution.releaseRef.expected_hashes.manifest_sha256;
-const entriesHash = officialContainers.distribution.releaseRef.expected_hashes.entries_sha256;
+const examplePlugin = OFFICIAL_PLUGIN_CATALOG_SEED[0];
+const packageHash = examplePlugin.distribution.releaseRef.expected_hashes.package_sha256;
+const manifestHash = examplePlugin.distribution.releaseRef.expected_hashes.manifest_sha256;
+const entriesHash = examplePlugin.distribution.releaseRef.expected_hashes.entries_sha256;
 const otherPackageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
 const readGrant = {
-  plugin_instance_id: officialContainers.pluginInstanceID,
-  permission_id: 'containers.read',
+  plugin_instance_id: examplePlugin.pluginInstanceID,
+  permission_id: 'metrics.read',
   effect: 'grant',
   granted_at: '2026-07-04T10:02:00Z',
 } as const;
 function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPluginRecord {
-  const marketIcon = officialContainers.presentation?.icon;
-  const iconPath = 'ui/assets/containers-plugin.png';
+  const marketIcon = examplePlugin.presentation?.icon;
+  const iconPath = 'ui/assets/metrics-plugin.png';
   return {
-    plugin_instance_id: officialContainers.pluginInstanceID,
-    publisher_id: officialContainers.publisherID,
-    plugin_id: officialContainers.pluginID,
-    version: officialContainers.stableVersion,
+    plugin_instance_id: examplePlugin.pluginInstanceID,
+    publisher_id: examplePlugin.publisherID,
+    plugin_id: examplePlugin.pluginID,
+    version: examplePlugin.stableVersion,
     active_fingerprint: packageHash,
     package_hash: packageHash,
     manifest_hash: manifestHash,
@@ -42,7 +42,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
       },
       verified_signature: {
         algorithm: 'ed25519',
-        key_id: 'redeven_official_signing_2026_08',
+        key_id: 'example_signing_key_2026',
       },
     },
     enable_state: 'enabled',
@@ -58,23 +58,23 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
     manifest: {
       schema_version: 'redevplugin.manifest.v9',
       publisher: {
-        publisher_id: officialContainers.publisherID,
-        display_name: officialContainers.publisher,
+        publisher_id: examplePlugin.publisherID,
+        display_name: examplePlugin.publisher,
       },
       plugin: {
-        plugin_id: officialContainers.pluginID,
-        display_name: officialContainers.displayName,
-        version: officialContainers.stableVersion,
+        plugin_id: examplePlugin.pluginID,
+        display_name: examplePlugin.displayName,
+        version: examplePlugin.stableVersion,
       },
       api: { major: 1 },
       permissions: [],
       presentation: { locales: { default: 'en-US' }, icon: { path: iconPath } },
       surfaces: [
         {
-          surface_id: 'containers.dashboard',
+          surface_id: 'metrics.dashboard',
           kind: 'view',
           intent: 'primary',
-          label: officialContainers.displayName,
+          label: examplePlugin.displayName,
           entry: 'ui/index.html',
         },
       ],
@@ -98,7 +98,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
 describe('plugin inventory projection', () => {
   it('keeps Plugin Center as the first panel tile', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [],
     });
 
@@ -109,24 +109,24 @@ describe('plugin inventory projection', () => {
 
   it('joins the registry record only by exact publisher, plugin, and instance identity', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord()],
       permissionGrants: [readGrant],
     });
 
     expect(projection.items).toHaveLength(1);
     expect(projection.items[0]).toMatchObject({
-      pluginID: officialContainers.pluginID,
-      pluginInstanceID: officialContainers.pluginInstanceID,
-      displayName: officialContainers.displayName,
-      iconURL: `/_redevplugin/api/plugins/${encodeURIComponent(officialContainers.pluginInstanceID)}/icon/${officialContainers.presentation?.icon?.sha256}`,
+      pluginID: examplePlugin.pluginID,
+      pluginInstanceID: examplePlugin.pluginInstanceID,
+      displayName: examplePlugin.displayName,
+      iconURL: `/_redevplugin/api/plugins/${encodeURIComponent(examplePlugin.pluginInstanceID)}/icon/${examplePlugin.presentation?.icon?.sha256}`,
       lifecycleState: 'enabled',
       trustBadge: 'official',
       managementRevision: 7,
       defaultLaunchTarget: {
-        pluginID: officialContainers.pluginID,
-        pluginInstanceID: officialContainers.pluginInstanceID,
-        surfaceID: 'containers.dashboard',
+        pluginID: examplePlugin.pluginID,
+        pluginInstanceID: examplePlugin.pluginInstanceID,
+        surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
         preferredPlacement: 'activity',
       },
@@ -146,7 +146,7 @@ describe('plugin inventory projection', () => {
       },
     } as ReDevPluginRecord;
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [blockedByHost],
       permissionGrants: [readGrant],
     });
@@ -162,7 +162,7 @@ describe('plugin inventory projection', () => {
       manifest: { ...installedRecord().manifest, surfaces: [] },
     });
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installed],
       permissionGrants: [readGrant],
     });
@@ -172,7 +172,7 @@ describe('plugin inventory projection', () => {
   });
 
   it('uses an installed package icon URL without a market catalog', () => {
-    const iconPath = 'ui/assets/containers-plugin.png';
+    const iconPath = 'ui/assets/metrics-plugin.png';
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const projection = projectPluginInventory({
       officialCatalog: [],
@@ -192,15 +192,15 @@ describe('plugin inventory projection', () => {
     });
 
     expect(projection.items[0]?.iconURL).toBe(
-      `/_redevplugin/api/plugins/${encodeURIComponent(officialContainers.pluginInstanceID)}/icon/${iconDigest.slice(7)}`,
+      `/_redevplugin/api/plugins/${encodeURIComponent(examplePlugin.pluginInstanceID)}/icon/${iconDigest.slice(7)}`,
     );
   });
 
   it('uses an installed package icon URL even when the market release identity differs', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
-        version: officialContainers.stableVersion,
+        version: examplePlugin.stableVersion,
         manifest_hash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         manifest: {
           ...installedRecord().manifest,
@@ -217,17 +217,17 @@ describe('plugin inventory projection', () => {
       permissionGrants: [readGrant],
     });
 
-    const installed = projection.items.find((item) => item.pluginInstanceID === officialContainers.pluginInstanceID);
+    const installed = projection.items.find((item) => item.pluginInstanceID === examplePlugin.pluginInstanceID);
     expect(installed?.iconURL).toContain('/_redevplugin/api/plugins/');
     expect(installed?.iconURL).toContain('/icon/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
   });
 
   it('uses the content-addressed installed icon when an older release binds the same bytes', () => {
-    const marketIcon = officialContainers.presentation?.icon;
+    const marketIcon = examplePlugin.presentation?.icon;
     expect(marketIcon).toBeDefined();
-    const iconPath = 'ui/assets/containers-plugin.png';
+    const iconPath = 'ui/assets/metrics-plugin.png';
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
         version: '4.4.1',
         manifest: {
@@ -249,16 +249,16 @@ describe('plugin inventory projection', () => {
       permissionGrants: [readGrant],
     });
 
-    const installed = projection.items.find((item) => item.pluginInstanceID === officialContainers.pluginInstanceID);
+    const installed = projection.items.find((item) => item.pluginInstanceID === examplePlugin.pluginInstanceID);
     expect(installed?.iconURL).toBe(
-      `/_redevplugin/api/plugins/${encodeURIComponent(officialContainers.pluginInstanceID)}/icon/${marketIcon!.sha256}`,
+      `/_redevplugin/api/plugins/${encodeURIComponent(examplePlugin.pluginInstanceID)}/icon/${marketIcon!.sha256}`,
     );
   });
 
   it('rejects an installed icon entry with an unsupported media type', () => {
-    const iconPath = 'ui/assets/containers-plugin.png';
+    const iconPath = 'ui/assets/metrics-plugin.png';
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
         version: '4.4.1',
         manifest: {
@@ -280,18 +280,18 @@ describe('plugin inventory projection', () => {
       permissionGrants: [readGrant],
     });
 
-    const installed = projection.items.find((item) => item.pluginInstanceID === officialContainers.pluginInstanceID);
+    const installed = projection.items.find((item) => item.pluginInstanceID === examplePlugin.pluginInstanceID);
     expect(installed?.iconURL).toBeUndefined();
   });
 
   it('does not project market author copy into an installed record without presentation', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
         manifest: {
           ...installedRecord().manifest,
           publisher: {
-            publisher_id: officialContainers.publisherID,
+            publisher_id: examplePlugin.publisherID,
             display_name: 'Installed Publisher',
           },
           plugin: {
@@ -306,16 +306,16 @@ describe('plugin inventory projection', () => {
 
     expect(projection.items).toHaveLength(1);
     expect(projection.items[0]).toMatchObject({
-      pluginInstanceID: officialContainers.pluginInstanceID,
-      displayName: officialContainers.pluginID,
-      description: officialContainers.pluginID,
+      pluginInstanceID: examplePlugin.pluginInstanceID,
+      displayName: examplePlugin.pluginID,
+      description: examplePlugin.pluginID,
       publisher: 'Installed Publisher',
       searchKeywords: [],
       defaultLaunchTarget: {
-        displayName: officialContainers.pluginID,
+        displayName: examplePlugin.pluginID,
       },
     });
-    expect(projection.items[0]?.description).not.toBe(officialContainers.description);
+    expect(projection.items[0]?.description).not.toBe(examplePlugin.description);
   });
 
   const catalogPresentationMismatchCases: Array<{
@@ -336,7 +336,7 @@ describe('plugin inventory projection', () => {
           },
           verified_signature: {
             algorithm: 'ed25519',
-            key_id: 'redeven_official_signing_2026_08',
+            key_id: 'example_signing_key_2026',
           },
         },
       },
@@ -348,7 +348,7 @@ describe('plugin inventory projection', () => {
         source_provenance: {
           kind: 'package_url' as const,
           source_origin: 'https://plugins.example.com',
-          source_path: '/containers-1.9.0.redevplugin',
+          source_path: '/metrics-1.9.0.redevplugin',
           redirect_chain: [],
           package_sha256: packageHash,
           resolved_at: '2026-07-24T10:00:00Z',
@@ -377,7 +377,7 @@ describe('plugin inventory projection', () => {
 
   it.each(catalogPresentationMismatchCases)('does not let a same-identity $label inherit official catalog presentation', ({ overrides }) => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord(overrides)],
     });
 
@@ -385,21 +385,21 @@ describe('plugin inventory projection', () => {
     const catalogItem = projection.items.find((item) => item.inventoryKey.startsWith('catalog:'));
     const externalItem = projection.items.find((item) => item.inventoryKey.startsWith('instance:'));
     expect(catalogItem).toMatchObject({
-      displayName: officialContainers.displayName,
+      displayName: examplePlugin.displayName,
       trustBadge: 'official',
       lifecycleState: 'not_installed',
     });
     expect(externalItem).toMatchObject({
-      inventoryKey: `instance:${officialContainers.pluginInstanceID}`,
-      pluginInstanceID: officialContainers.pluginInstanceID,
+      inventoryKey: `instance:${examplePlugin.pluginInstanceID}`,
+      pluginInstanceID: examplePlugin.pluginInstanceID,
     });
     expect(externalItem).not.toHaveProperty('officialCatalog');
   });
 
   it('binds exact unsigned catalog content to its generated installed instance without upgrading trust', () => {
-    const pluginInstanceID = 'plugin_generated_containers';
+    const pluginInstanceID = 'plugin_generated_metrics';
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
         plugin_instance_id: pluginInstanceID,
         trust_state: 'unsigned_local',
@@ -436,13 +436,13 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       inventoryKey: `instance:${pluginInstanceID}`,
       pluginInstanceID,
-      displayName: officialContainers.displayName,
+      displayName: examplePlugin.displayName,
       trustBadge: 'unsigned',
       lifecycleState: 'disabled',
-      officialCatalog: { pluginID: officialContainers.pluginID },
+      officialCatalog: { pluginID: examplePlugin.pluginID },
       authorization: {
         permissions: expect.arrayContaining([
-          expect.objectContaining({ permissionID: 'containers.read', requiredToOpen: true }),
+          expect.objectContaining({ permissionID: 'metrics.read', requiredToOpen: true }),
         ]),
       },
     });
@@ -451,7 +451,7 @@ describe('plugin inventory projection', () => {
 
   it('keeps a mismatched publisher separate while binding exact catalog content from any generated instance', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [
         installedRecord({ publisher_id: 'com.example.publisher' }),
         installedRecord({ plugin_instance_id: 'plugini_different_instance' }),
@@ -461,25 +461,25 @@ describe('plugin inventory projection', () => {
     expect(projection.items).toHaveLength(2);
     const catalogItem = projection.items.find((item) => item.inventoryKey === 'instance:plugini_different_instance');
     expect(catalogItem).toMatchObject({
-      pluginID: officialContainers.pluginID,
+      pluginID: examplePlugin.pluginID,
       pluginInstanceID: 'plugini_different_instance',
-      officialCatalog: { pluginID: officialContainers.pluginID },
+      officialCatalog: { pluginID: examplePlugin.pluginID },
     });
     expect(projection.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        inventoryKey: `instance:${officialContainers.pluginInstanceID}`,
-        publisher: officialContainers.publisher,
+        inventoryKey: `instance:${examplePlugin.pluginInstanceID}`,
+        publisher: examplePlugin.publisher,
       }),
       expect.objectContaining({
         inventoryKey: 'instance:plugini_different_instance',
-        pluginID: officialContainers.pluginID,
+        pluginID: examplePlugin.pluginID,
       }),
     ]));
   });
 
   it('keeps installed records that are not matched by the official catalog in the inventory union', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
         publisher_id: 'com.example.publisher',
         plugin_id: 'com.example.local.plugin',
@@ -491,7 +491,7 @@ describe('plugin inventory projection', () => {
     expect(projection.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         inventoryKey: expect.stringMatching(/^catalog:/),
-        pluginID: officialContainers.pluginID,
+        pluginID: examplePlugin.pluginID,
         lifecycleState: 'not_installed',
       }),
       expect.objectContaining({
@@ -604,12 +604,12 @@ describe('plugin inventory projection', () => {
 
   it('routes only enabled verified records with a revision-bound launch target', () => {
     const enabledProjection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord()],
       permissionGrants: [readGrant],
     });
     const disabledProjection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
         enable_state: 'disabled_by_user',
         disabled_reason: 'user_disabled',
@@ -640,7 +640,7 @@ describe('plugin inventory projection', () => {
 
   it('keeps an enabled plugin launchable from the panel when an update is available', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({ version: '1.9.0' })],
       permissionGrants: [readGrant],
     });
@@ -660,17 +660,17 @@ describe('plugin inventory projection', () => {
 
   it('does not override Host launch authority when an active read grant is missing', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord()],
     });
 
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'permission_required',
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'containers.dashboard' }),
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'metrics.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
-          expect.objectContaining({ permissionID: 'containers.read', granted: false }),
+          expect.objectContaining({ permissionID: 'metrics.read', granted: false }),
         ]),
       },
     });
@@ -678,25 +678,25 @@ describe('plugin inventory projection', () => {
 
   it('projects Host-verified requirements when the market catalog has no permission metadata', () => {
     const requirements: PluginPermissionRequirements = {
-      plugin_instance_id: officialContainers.pluginInstanceID,
-      plugin_version: officialContainers.stableVersion,
+      plugin_instance_id: examplePlugin.pluginInstanceID,
+      plugin_version: examplePlugin.stableVersion,
       active_fingerprint: packageHash,
       management_revision: 7,
-      required_permissions: ['containers.read', 'containers.execute'],
+      required_permissions: ['metrics.read', 'metrics.execute'],
       contracts: [{
-        contract_id: 'redeven.container_resources.v4',
+        contract_id: 'example.metrics.v1',
         contract_version: '4.0.0',
         contract_sha256: 'a'.repeat(64),
-        capability_id: 'redeven.capability.container_resources',
+        capability_id: 'example.capability.metrics',
         capability_version: '3.0.0',
         methods: [
-          { method: 'containers.list', required_permissions: ['containers.read'] },
-          { method: 'containers.start', required_permissions: ['containers.execute'] },
+          { method: 'metrics.list', required_permissions: ['metrics.read'] },
+          { method: 'metrics.start', required_permissions: ['metrics.execute'] },
         ],
       }],
     };
     const projection = projectPluginInventory({
-      officialCatalog: [{ ...officialContainers, permissions: [] }],
+      officialCatalog: [{ ...examplePlugin, permissions: [] }],
       installedPlugins: [installedRecord()],
       permissionRequirements: [requirements],
     });
@@ -704,11 +704,11 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'permission_required',
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'containers.dashboard' }),
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'metrics.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
-          expect.objectContaining({ permissionID: 'containers.read', methods: ['containers.list'] }),
-          expect.objectContaining({ permissionID: 'containers.execute', methods: ['containers.start'] }),
+          expect.objectContaining({ permissionID: 'metrics.read', methods: ['metrics.list'] }),
+          expect.objectContaining({ permissionID: 'metrics.execute', methods: ['metrics.start'] }),
         ]),
       },
     });
@@ -716,7 +716,7 @@ describe('plugin inventory projection', () => {
 
   it('keeps an explicit deny distinct from a missing grant', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord()],
       permissionGrants: [{ ...readGrant, effect: 'deny' }],
     });
@@ -727,7 +727,7 @@ describe('plugin inventory projection', () => {
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({
-            permissionID: 'containers.read',
+            permissionID: 'metrics.read',
             granted: false,
             deniedByGrant: true,
             blockedByPolicy: false,
@@ -741,11 +741,11 @@ describe('plugin inventory projection', () => {
 
   it('treats an empty policy allowlist as uncapped and carries its CAS revisions', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord()],
       permissionGrants: [readGrant],
       securityPolicies: [{
-        plugin_instance_id: officialContainers.pluginInstanceID,
+        plugin_instance_id: examplePlugin.pluginInstanceID,
         allowed_permissions: [],
         denied_methods: [],
         policy_revision: 19,
@@ -760,7 +760,7 @@ describe('plugin inventory projection', () => {
       authorization: {
         revisions: { policyRevision: 19, managementRevision: 23, revokeEpoch: 5 },
         permissions: expect.arrayContaining([
-          expect.objectContaining({ permissionID: 'containers.read', blockedByPolicy: false }),
+          expect.objectContaining({ permissionID: 'metrics.read', blockedByPolicy: false }),
         ]),
       },
     });
@@ -768,20 +768,20 @@ describe('plugin inventory projection', () => {
 
   it.each([
     {
-      allowed_permissions: ['containers.execute'],
+      allowed_permissions: ['metrics.execute'],
       denied_methods: [],
     },
     {
       allowed_permissions: [],
-      denied_methods: ['containers.list'],
+      denied_methods: ['metrics.list'],
     },
   ])('marks the required read permission as policy restricted for %#', (policyRules) => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord()],
       permissionGrants: [readGrant],
       securityPolicies: [{
-        plugin_instance_id: officialContainers.pluginInstanceID,
+        plugin_instance_id: examplePlugin.pluginInstanceID,
         ...policyRules,
         policy_revision: 8,
         management_revision: 7,
@@ -793,10 +793,10 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'policy_restricted',
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'containers.dashboard' }),
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'metrics.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
-          expect.objectContaining({ permissionID: 'containers.read', granted: true, blockedByPolicy: true }),
+          expect.objectContaining({ permissionID: 'metrics.read', granted: true, blockedByPolicy: true }),
         ]),
       },
     });
@@ -804,13 +804,13 @@ describe('plugin inventory projection', () => {
 
   it('keeps the primary surface launchable when policy denies a non-opening read method', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord()],
       permissionGrants: [readGrant],
       securityPolicies: [{
-        plugin_instance_id: officialContainers.pluginInstanceID,
+        plugin_instance_id: examplePlugin.pluginInstanceID,
         allowed_permissions: [],
-        denied_methods: ['containers.inspect'],
+        denied_methods: ['metrics.inspect'],
         policy_revision: 8,
         management_revision: 7,
         revoke_epoch: 0,
@@ -821,11 +821,11 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'enabled',
       attentionReason: undefined,
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'containers.dashboard' }),
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'metrics.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({
-            permissionID: 'containers.read',
+            permissionID: 'metrics.read',
             blockedByPolicy: true,
             grantBlockedByPolicy: false,
             blockedToOpen: false,
@@ -837,7 +837,7 @@ describe('plugin inventory projection', () => {
 
   it('does not show a revoked official release as installable', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [{ ...officialContainers, rolloutState: 'revoked' }],
+      officialCatalog: [{ ...examplePlugin, rolloutState: 'revoked' }],
       installedPlugins: [],
     });
 
@@ -850,7 +850,7 @@ describe('plugin inventory projection', () => {
 
   it('keeps non-runnable trust states out of enable and open flows', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({
         trust_state: 'needs_review',
         action_state: {
@@ -886,7 +886,7 @@ describe('plugin inventory projection', () => {
 
   it('builds installed and update buckets from the typed registry record', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({ version: '1.9.0' })],
     });
 
@@ -902,7 +902,7 @@ describe('plugin inventory projection', () => {
 
   it('orders strict SemVer prereleases before the matching stable release', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
+      officialCatalog: [examplePlugin],
       installedPlugins: [installedRecord({ version: '2.0.0-rc.1' })],
     });
 
@@ -914,7 +914,7 @@ describe('plugin inventory projection', () => {
     'rejects a non-canonical plugin version %j',
     (version) => {
       expect(() => projectPluginInventory({
-        officialCatalog: [officialContainers],
+        officialCatalog: [examplePlugin],
         installedPlugins: [installedRecord({ version })],
       })).toThrow('canonical strict SemVer');
     },

@@ -80,21 +80,16 @@ handlers, and then invokes the released idempotent Host teardown path.
 
 ## Package sources and lifecycle
 
-Production obtains the official Containers `4.4.9` release from the current
-validated latest-only market snapshot. The snapshot identifies the immutable GitHub
-Release and complete signed transport; it does not carry package bytes or grant
-trust. Redeven immediately opens a concise review from the snapshot's presentation,
-source, version, and declared permission groups. Review performs no package
-download, parsing, signature verification, runtime preflight, or lifecycle work.
-After explicit confirmation Redeven starts one released install Execution with
-the exact release reference and the release-identity, manifest, contract-set, and
-summary digests. The start call only creates or recovers the durable task; one
-Shell coordinator then observes its ordered Events and reads the terminal
-Execution once. Publisher, plugin, version,
-SHA-256 hashes, Ed25519 root and package signatures, revocation evidence, source
-policy, host requirement, and the Host-registered known capability contract must
-all match before ReDevPlugin changes the registry. Invalid, revoked, or
-incomplete evidence fails closed without falling back to external admission.
+Production obtains catalog entries from the validated latest-only market
+snapshot. A snapshot may identify an immutable release and signed transport,
+but it does not carry package bytes or grant trust. Redeven opens a concise
+review from signed presentation, source, version, and declared permissions.
+Review performs no package parsing, signature verification, runtime preflight,
+or lifecycle work. After confirmation, Redeven calls the released Host install
+API and observes the Host-owned Execution and ordered Events. Publisher,
+plugin, version, hashes, signatures, revocation evidence, source policy, and
+Host requirements must match before ReDevPlugin changes the registry. Invalid,
+revoked, or incomplete evidence fails closed.
 Submission response loss is reconciled with the same request id and exact market
 digests. A declaration mismatch refreshes the market before a new attempt.
 Confirmed retained-data deletion treats an
@@ -140,7 +135,7 @@ an administrator-entered tag resolves the latest eligible Release on each new
 inspection; the previously resolved release tag is evidence, not a new durable
 user pin.
 
-## Runtime and Containers
+## Runtime boundary
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
 `v3.0.17`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
@@ -151,15 +146,10 @@ marker; field binary bytes are never hashed and accepted as their own trust
 anchor. Missing, non-canonical, wrong-target, unsigned, or wrong-hash runtime
 evidence blocks startup. Darwin constructs no runtime module.
 
-The Containers adapter receives only ReDevPlugin-authorized calls. Reads, long
-operations, cancellation, and log streams use the released Execution/Event
-envelope; Docker/Podman access stays in the product capability
-package. Installation and enablement do not imply resource access. The initial
-Containers surface requires an active `containers.read` grant, and the product
-shows that requirement before attempting to open the surface.
-
-The Containers operation observation and candidate-release boundary is owned by
-[Containers operation observation](containers-operation-observation.md).
+Native Containers is intentionally outside the plugin runtime and does not
+register a capability adapter. Its Local API, permissions, operation lifecycle,
+and product surfaces are owned by
+[Native container resources](container-resources-capability.md).
 
 ## Env App inventory and permissions
 

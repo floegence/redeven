@@ -363,6 +363,7 @@
       "codespaces": "Codespaces",
       "browserEditor": "Browser Editor",
       "webServices": "Web服務",
+      "containers": "容器",
       "flower": "Flower"
     },
     "topbar": {
@@ -722,6 +723,10 @@
       "ports": {
         "label": "Web服務",
         "defaultTitle": "Web服務"
+      },
+      "containers": {
+        "label": "容器",
+        "defaultTitle": "容器"
       },
       "flower": {
         "label": "Flower",
@@ -2833,6 +2838,29 @@
       "missingEnvContext": "缺少環境上下文。請從控制平面重新開啟。"
     }
   },
+  "containers": {
+    "title": "容器",
+    "description": "檢視並安全管理此環境中的 Docker 與 Podman 資源。",
+    "engine": "容器引擎",
+    "endpoint": "引擎端點",
+    "resourceNavigation": "容器資源",
+    "loading": "正在載入容器資源…",
+    "views": { "containers": "容器", "images": "映像檔", "volumes": "磁碟區", "compose-projects": "Compose 專案", "pods": "Pod" },
+    "status": { "connected": "已連線", "unavailable": "無法使用" },
+    "columns": { "name": "名稱", "status": "狀態", "details": "詳細資料" },
+    "empty": { "title": "找不到資源", "description": "此端點目前沒有這個類別的資源。" },
+    "actions": { "refresh": "重新整理", "start": "啟動", "stop": "停止", "restart": "重新啟動", "pause": "暫停", "resume": "繼續", "kill": "強制終止", "remove": "移除", "down": "停止並移除", "tag": "新增標籤", "prune": "清理未使用項目", "cancel": "取消", "close": "關閉", "review": "檢閱", "run": "執行操作" },
+    "create": { "title": "建立資源", "tagTitle": "新增映像檔標籤", "advanced": "執行設定", "container": "建立容器", "image": "提取映像檔", "volume": "建立磁碟區", "pod": "建立 Pod" },
+    "fields": { "name": "名稱", "image": "映像檔", "driver": "驅動程式", "tag": "新標籤", "command": "命令", "restartPolicy": "重新啟動原則", "cpus": "CPU", "memory": "記憶體 (MiB)" },
+    "inspector": { "title": "資源詳細資料", "details": "詳細資料", "logs": "記錄", "stats": "統計資料" },
+    "stats": { "cpu": "CPU", "memory": "記憶體", "networkIn": "網路接收", "networkOut": "網路傳送" },
+    "operations": { "title": "操作", "description": "已稽核的容器操作及其目前狀態。", "empty": "尚無容器操作。" },
+    "managed": { "badge": "由 Web 服務管理", "title": "由 Web 服務管理", "description": "「{name}」擁有此資源，其生命週期在此受到保護。", "openService": "開啟 Web 服務" },
+    "confirm": { "title": "確認高風險操作", "warning": "此操作可能永久移除或中斷資源。", "typeName": "請準確輸入「{name}」以繼續。" },
+    "review": { "title": "檢閱操作", "operation": "操作" },
+    "permissions": { "read": "檢視容器資源需要讀取權限。", "admin": "此高風險操作需要管理員權限。" },
+    "notifications": { "inventoryChangedTitle": "資源清單已變更", "inventoryChangedMessage": "所選資源已無法使用。", "preflightFailedTitle": "預檢失敗", "operationFailedTitle": "操作失敗", "operationCompleteTitle": "操作完成", "operationCompleteMessage": "已重新整理權威資源清單。", "logsFailedTitle": "無法使用記錄" }
+  },
   "webServices": {
     "title": "Web服務",
     "description": "在隔離的 Desktop 視窗或目前最安全的可用路由中，開啟監聽於目前環境回送介面的 HTTP 服務。",
@@ -4411,20 +4439,20 @@
       "permissionNotGranted": "未授予",
       "permission": {
         "read": {
-          "label": "檢視容器",
-          "description": "讀取引擎狀態、容器詳細資料與日誌，以及操作前檢查資訊。"
+          "label": "讀取資料",
+          "description": "讀取此外掛程式提供的資料與狀態。"
         },
         "execute": {
-          "label": "操作容器",
-          "description": "完成必要確認後啟動、停止和重新啟動容器。"
+          "label": "執行操作",
+          "description": "完成必要確認後執行此外掛程式提供的操作。"
         },
         "delete": {
-          "label": "刪除容器",
-          "description": "移除容器。這是選用的破壞性操作權限。"
+          "label": "刪除資料",
+          "description": "透過此外掛程式刪除資料。這是選用的破壞性權限。"
         },
-        "images_write": {
-          "label": "寫入映像檔",
-          "description": "將容器映像檔提取至所選引擎。"
+        "write": {
+          "label": "寫入資料",
+          "description": "透過此外掛程式建立或變更資料。"
         },
         "other": {
           "label": "外掛程式權限",

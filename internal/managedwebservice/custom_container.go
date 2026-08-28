@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -29,7 +29,7 @@ type customContainerVolumeSet struct {
 
 type containerTemplateDriver struct {
 	manager *Manager
-	adapter *containers.Adapter
+	adapter *containerengine.Adapter
 }
 
 func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress func(string, int64)) (string, string, error) {
@@ -68,7 +68,7 @@ func (d *containerTemplateDriver) PrepareUpdateArtifact(ctx context.Context, spe
 	if d.adapter == nil || spec.Container == nil {
 		return "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
 	}
-	pulled, err := d.adapter.PullImage(ctx, containers.ImagePullRequest{Engine: containers.EngineDocker, ImageRef: spec.Container.Image})
+	pulled, err := d.adapter.PullImage(ctx, containerengine.ImagePullRequest{Engine: containerengine.EngineDocker, ImageRef: spec.Container.Image})
 	if err != nil || !pulled.Completed {
 		return "", serviceError("IMAGE_PULL_FAILED", "The template image could not be pulled.", 503, true, err)
 	}
@@ -133,7 +133,7 @@ func (d *containerTemplateDriver) FindRuntime(ctx context.Context, serviceID str
 	if d.adapter == nil {
 		return "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
 	}
-	listed, err := d.adapter.List(ctx, containers.ContainerListRequest{Engine: containers.EngineDocker, All: true})
+	listed, err := d.adapter.List(ctx, containerengine.ContainerListRequest{Engine: containerengine.EngineDocker, All: true})
 	if err != nil {
 		return "", err
 	}
@@ -143,7 +143,7 @@ func (d *containerTemplateDriver) FindRuntime(ctx context.Context, serviceID str
 		if candidate.Name != name {
 			continue
 		}
-		matches, err := d.adapter.ContainerMatchesLabel(ctx, containers.ContainerLabelMatchRequest{Engine: containers.EngineDocker, ContainerID: candidate.ContainerID, Key: managedServiceLabel, Value: serviceID})
+		matches, err := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: candidate.ContainerID, Key: managedServiceLabel, Value: serviceID})
 		if err != nil {
 			return "", err
 		}
@@ -223,13 +223,13 @@ func runtimeContainerVariables() (map[string]string, error) {
 	return map[string]string{"REDEVEN_RUNTIME_UID": current.Uid, "REDEVEN_RUNTIME_GID": current.Gid, "REDEVEN_RUNTIME_TIMEZONE": timezone}, nil
 }
 
-func containerCreateRequest(service *pfregistry.ManagedService, spec TemplateSpec, pinnedImage string, mounts []containers.ContainerMount, environment []string) containers.ContainerCreateRequest {
-	request := containers.ContainerCreateRequest{
-		Engine: containers.EngineDocker, Name: customContainerName(service.ServiceID), Image: pinnedImage,
+func containerCreateRequest(service *pfregistry.ManagedService, spec TemplateSpec, pinnedImage string, mounts []containerengine.ContainerMount, environment []string) containerengine.ContainerCreateRequest {
+	request := containerengine.ContainerCreateRequest{
+		Engine: containerengine.EngineDocker, Name: customContainerName(service.ServiceID), Image: pinnedImage,
 		Command: append([]string(nil), spec.Container.Command...), Env: append([]string(nil), environment...),
 		Labels: map[string]string{managedServiceLabel: service.ServiceID}, RestartPolicy: "no", NetworkMode: "bridge",
-		Ports:  []containers.ContainerPortPublish{{ContainerPort: spec.Endpoint.ContainerPort, HostPort: service.RuntimePort, HostIP: "127.0.0.1", Protocol: "tcp"}},
-		Mounts: append([]containers.ContainerMount(nil), mounts...), CPUCount: spec.Container.CPUs, MemoryBytes: spec.Container.MemoryBytes,
+		Ports:  []containerengine.ContainerPortPublish{{ContainerPort: spec.Endpoint.ContainerPort, HostPort: service.RuntimePort, HostIP: "127.0.0.1", Protocol: "tcp"}},
+		Mounts: append([]containerengine.ContainerMount(nil), mounts...), CPUCount: spec.Container.CPUs, MemoryBytes: spec.Container.MemoryBytes,
 		PIDsLimit: effectivePIDsLimit(spec.Container.PIDsLimit),
 	}
 	if len(spec.Container.Entrypoint) == 1 {
@@ -283,7 +283,7 @@ func (d *containerTemplateDriver) markerPath(service *pfregistry.ManagedService)
 	return filepath.Join(d.manager.stateDir, "families", service.ServiceFamilyID, "container-volumes.json")
 }
 
-func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *pfregistry.ManagedService, specs []ContainerMountSpec, createVolumes bool) ([]containers.ContainerMount, error) {
+func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *pfregistry.ManagedService, specs []ContainerMountSpec, createVolumes bool) ([]containerengine.ContainerMount, error) {
 	marker, err := d.loadVolumeSet(service)
 	if err != nil {
 		return nil, err
@@ -292,35 +292,35 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 	for _, volume := range marker.Volumes {
 		volumeByName[volume.Name] = volume
 	}
-	result := make([]containers.ContainerMount, 0, len(specs))
+	result := make([]containerengine.ContainerMount, 0, len(specs))
 	changed := false
 	for index, mount := range specs {
 		switch mount.Type {
 		case "workspace":
-			result = append(result, containers.ContainerMount{Type: containers.MountTypeBind, Source: service.WorkspacePath, Target: mount.Target, ReadOnly: mount.ReadOnly})
+			result = append(result, containerengine.ContainerMount{Type: containerengine.MountTypeBind, Source: service.WorkspacePath, Target: mount.Target, ReadOnly: mount.ReadOnly})
 		case "bind":
 			resolved, err := d.manager.scope.Resolve(mount.Source, filesystemscope.ResolveOptions{RequireExisting: true, ForWrite: !mount.ReadOnly})
 			if err != nil {
 				return nil, serviceError("TEMPLATE_MOUNT_UNAVAILABLE", "A custom container bind mount is outside the Environment's allowed paths.", 400, false, err)
 			}
-			result = append(result, containers.ContainerMount{Type: containers.MountTypeBind, Source: resolved.RealAbs, Target: mount.Target, ReadOnly: mount.ReadOnly})
+			result = append(result, containerengine.ContainerMount{Type: containerengine.MountTypeBind, Source: resolved.RealAbs, Target: mount.Target, ReadOnly: mount.ReadOnly})
 		case "tmpfs":
-			result = append(result, containers.ContainerMount{Type: containers.MountTypeTmpfs, Target: mount.Target, TmpfsOptions: []string{"rw", "noexec", "nosuid", "nodev", "size=536870912"}})
+			result = append(result, containerengine.ContainerMount{Type: containerengine.MountTypeTmpfs, Target: mount.Target, TmpfsOptions: []string{"rw", "noexec", "nosuid", "nodev", "size=536870912"}})
 		case "volume":
 			name := fmt.Sprintf("redeven-mws-data-%s-%d", resourceNameSuffix(service.ServiceFamilyID), index)
 			identity, ok := volumeByName[name]
 			if ok {
-				inspected, err := d.adapter.InspectVolume(ctx, containers.VolumeInspectRequest{Engine: containers.EngineDocker, Name: name})
+				inspected, err := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: name})
 				if err != nil || inspected.CreatedAtUnixMs != identity.CreatedAtUnixMs {
 					return nil, serviceError("DATA_IDENTITY_MISMATCH", "A retained template data volume is missing or has changed identity.", 409, false, err)
 				}
 			} else if createVolumes {
-				created, err := d.adapter.CreateVolume(ctx, containers.VolumeCreateRequest{Engine: containers.EngineDocker, Name: name})
+				created, err := d.adapter.CreateVolume(ctx, containerengine.VolumeCreateRequest{Engine: containerengine.EngineDocker, Name: name})
 				if err != nil {
 					return nil, serviceError("DATA_VOLUME_CREATE_FAILED", "A template data volume could not be created.", 502, true, err)
 				}
 				if created.CreatedAtUnixMs <= 0 {
-					created, err = d.adapter.InspectVolume(ctx, containers.VolumeInspectRequest{Engine: containers.EngineDocker, Name: name})
+					created, err = d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: name})
 					if err != nil {
 						return nil, err
 					}
@@ -335,7 +335,7 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 			} else {
 				return nil, serviceError("DATA_IDENTITY_MISSING", "A retained template data volume identity is missing.", 409, false, nil)
 			}
-			result = append(result, containers.ContainerMount{Type: containers.MountTypeVolume, Source: name, Target: mount.Target, ReadOnly: mount.ReadOnly})
+			result = append(result, containerengine.ContainerMount{Type: containerengine.MountTypeVolume, Source: name, Target: mount.Target, ReadOnly: mount.ReadOnly})
 		default:
 			return nil, serviceError("TEMPLATE_MOUNT_REJECTED", "A custom container mount type is invalid.", 400, false, nil)
 		}
@@ -387,12 +387,12 @@ func (d *containerTemplateDriver) verifyExactContainer(ctx context.Context, serv
 	if strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return serviceError("CONTAINER_IDENTITY_MISSING", "The managed template container identity is missing.", 409, false, nil)
 	}
-	response, err := d.adapter.Inspect(ctx, containers.ContainerInspectRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil {
 		return serviceError("CONTAINER_IDENTITY_MISSING", "The exact managed template container no longer exists.", 409, false, err)
 	}
 	container := response.Container
-	labelMatches, labelErr := d.adapter.ContainerMatchesLabel(ctx, containers.ContainerLabelMatchRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity, Key: managedServiceLabel, Value: service.ServiceID})
+	labelMatches, labelErr := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, Key: managedServiceLabel, Value: service.ServiceID})
 	if labelErr != nil || container.ContainerID != service.RuntimeIdentity || container.Name != customContainerName(service.ServiceID) || container.Image.Reference != service.ArtifactReference || !container.Image.DigestPinned || !labelMatches {
 		return serviceError("CONTAINER_IDENTITY_MISMATCH", "The exact managed template container identity or image has changed.", 409, false, labelErr)
 	}
@@ -425,12 +425,12 @@ func (d *containerTemplateDriver) verifyExactContainer(ctx context.Context, serv
 	return nil
 }
 
-func mountSourceMatches(expected containers.ContainerMount, actual containers.MountSummary) bool {
+func mountSourceMatches(expected containerengine.ContainerMount, actual containerengine.MountSummary) bool {
 	return mountSourceMatchesForHost(expected, actual, runtime.GOOS)
 }
 
-func mountSourceMatchesForHost(expected containers.ContainerMount, actual containers.MountSummary, hostOS string) bool {
-	if expected.Type != containers.MountTypeBind || hostOS != "darwin" {
+func mountSourceMatchesForHost(expected containerengine.ContainerMount, actual containerengine.MountSummary, hostOS string) bool {
+	if expected.Type != containerengine.MountTypeBind || hostOS != "darwin" {
 		return actual.Source == expected.Source
 	}
 	expectedSource := filepath.Clean(expected.Source)
@@ -441,7 +441,7 @@ func mountSourceMatchesForHost(expected containers.ContainerMount, actual contai
 	return actualSource == expectedSource || actualSource == filepath.Join("/host_mnt", expectedSource)
 }
 
-func containerRuntimeMatchesProfile(runtime containers.RuntimeSummary, profile string, pidsLimit int) bool {
+func containerRuntimeMatchesProfile(runtime containerengine.RuntimeSummary, profile string, pidsLimit int) bool {
 	if runtime.Privileged || runtime.NetworkMode != "bridge" || !privateNamespaceMode(runtime.PIDMode) || !privateNamespaceMode(runtime.IPCMode) || len(runtime.CapAdd) != 0 || len(runtime.Devices) != 0 {
 		return false
 	}
@@ -474,14 +474,14 @@ func (d *containerTemplateDriver) Start(ctx context.Context, service *pfregistry
 	if err := d.verifyExactContainer(ctx, service, spec); err != nil {
 		return "", err
 	}
-	response, err := d.adapter.Inspect(ctx, containers.ContainerInspectRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil {
 		return "", err
 	}
-	if response.Container.State == containers.ContainerStateRunning {
+	if response.Container.State == containerengine.ContainerStateRunning {
 		return service.RuntimeIdentity, nil
 	}
-	started, err := d.adapter.Start(ctx, containers.ContainerStartRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	started, err := d.adapter.Start(ctx, containerengine.ContainerStartRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil || !started.Completed || started.ContainerID != service.RuntimeIdentity {
 		return "", serviceError("START_FAILED", "The exact managed template container could not be started.", 502, true, err)
 	}
@@ -499,14 +499,14 @@ func (d *containerTemplateDriver) Stop(ctx context.Context, service *pfregistry.
 	if err := d.verifyExactContainer(ctx, service, spec); err != nil {
 		return err
 	}
-	response, err := d.adapter.Inspect(ctx, containers.ContainerInspectRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil {
 		return err
 	}
-	if response.Container.State != containers.ContainerStateRunning && response.Container.State != containers.ContainerStateRestarting && response.Container.State != containers.ContainerStatePaused {
+	if response.Container.State != containerengine.ContainerStateRunning && response.Container.State != containerengine.ContainerStateRestarting && response.Container.State != containerengine.ContainerStatePaused {
 		return nil
 	}
-	stopped, err := d.adapter.Stop(ctx, containers.ContainerActionRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity, TimeoutSec: 10})
+	stopped, err := d.adapter.Stop(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, TimeoutSec: 10})
 	if err != nil || !stopped.Completed || stopped.ContainerID != service.RuntimeIdentity {
 		return serviceError("STOP_FAILED", "The exact managed template container could not be stopped.", 502, true, err)
 	}
@@ -520,7 +520,7 @@ func (d *containerTemplateDriver) removeExactContainer(ctx context.Context, serv
 	if err := d.Stop(ctx, service); err != nil {
 		return err
 	}
-	removed, err := d.adapter.Remove(ctx, containers.ContainerActionRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	removed, err := d.adapter.Remove(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil || !removed.Completed || removed.ContainerID != service.RuntimeIdentity {
 		return serviceError("CONTAINER_REMOVE_FAILED", "The exact managed template container could not be removed.", 502, true, err)
 	}
@@ -539,11 +539,11 @@ func (d *containerTemplateDriver) Uninstall(ctx context.Context, service *pfregi
 		return err
 	}
 	for _, identity := range marker.Volumes {
-		volume, err := d.adapter.InspectVolume(ctx, containers.VolumeInspectRequest{Engine: containers.EngineDocker, Name: identity.Name})
+		volume, err := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: identity.Name})
 		if err != nil || volume.CreatedAtUnixMs != identity.CreatedAtUnixMs {
 			return serviceError("DATA_IDENTITY_MISMATCH", "Redeven will not delete a template data volume whose identity has changed.", 409, false, err)
 		}
-		if err := d.adapter.RemoveVolume(ctx, containers.VolumeRemoveRequest{Engine: containers.EngineDocker, Name: identity.Name}); err != nil {
+		if err := d.adapter.RemoveVolume(ctx, containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: identity.Name}); err != nil {
 			return serviceError("DATA_REMOVE_FAILED", "A template data volume could not be deleted.", 502, true, err)
 		}
 	}
@@ -565,7 +565,7 @@ func (d *containerTemplateDriver) Logs(ctx context.Context, service *pfregistry.
 	if err := d.verifyExactContainer(ctx, service, spec); err != nil {
 		return nil, err
 	}
-	result, err := d.adapter.TailLogs(ctx, containers.LogsTailRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity, TailLines: tail})
+	result, err := d.adapter.TailLogs(ctx, containerengine.LogsTailRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, TailLines: tail})
 	if err != nil {
 		return nil, err
 	}

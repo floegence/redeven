@@ -13,12 +13,13 @@ import (
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
-	"github.com/floegence/redeven/internal/capabilities/containers"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codeapp/registry"
 	"github.com/floegence/redeven/internal/codeapp/ui"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/containerengine"
+	"github.com/floegence/redeven/internal/containerresource"
 	"github.com/floegence/redeven/internal/diagnostics"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -96,16 +97,17 @@ type Service struct {
 	codePortMin int
 	codePortMax int
 
-	reg     *registry.Registry
-	pf      *portforward.Service
-	managed *managedwebservice.Manager
-	runner  *codeserver.Runner
-	runtime *codeserver.RuntimeManager
-	notes   *notes.Service
-	layouts *workbenchlayout.Service
-	aiReady *aiReadinessController
-	reads   *threadreadstate.Store
-	appSrv  *appserver.Server
+	reg        *registry.Registry
+	pf         *portforward.Service
+	managed    *managedwebservice.Manager
+	containers *containerresource.Service
+	runner     *codeserver.Runner
+	runtime    *codeserver.RuntimeManager
+	notes      *notes.Service
+	layouts    *workbenchlayout.Service
+	aiReady    *aiReadinessController
+	reads      *threadreadstate.Store
+	appSrv     *appserver.Server
 
 	pluginIntegration *redevpluginintegration.Integration
 
@@ -116,7 +118,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	containerAdapter, err := containers.NewAdapter(containers.NewCLIClient())
+	containerAdapter, err := containerengine.NewAdapter(containerengine.NewCLIClient())
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +195,28 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		return nil, err
 	}
+	containerResourceSvc, err := containerresource.Open(containerresource.Options{
+		DatabasePath: filepath.Join(stateAbs, "apps", "containers", "container_resources.sqlite"),
+		Engine:       containerAdapter,
+		ResolveManagedOwner: func(ctx context.Context, engine containerengine.Engine, endpointID containerengine.EndpointID, kind containerresource.ResourceKind, identity string) (*containerresource.ManagedOwner, error) {
+			owner, err := managedSvc.ContainerResourceOwner(ctx, engine, endpointID, managedwebservice.ContainerResourceKind(kind), identity)
+			if err != nil || owner == nil {
+				return nil, err
+			}
+			return &containerresource.ManagedOwner{Kind: owner.Kind, ServiceID: owner.ServiceID, Name: owner.Name}, nil
+		},
+	})
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		return nil, err
+	}
+	containerResourcesOwned := true
+	defer func() {
+		if containerResourcesOwned {
+			_ = containerResourceSvc.Close()
+		}
+	}()
 
 	portMin, portMax := normalizePortRange(opts.CodeServerPortMin, opts.CodeServerPortMax)
 	reconnectionGrace := time.Duration(0)
@@ -226,6 +250,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		reg:          reg,
 		pf:           pfSvc,
 		managed:      managedSvc,
+		containers:   containerResourceSvc,
 		runner:       runner,
 		runtime:      runtimeMgr,
 	}
@@ -322,7 +347,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ResolveSessionMeta: resolvePluginPlatformSessionMeta(opts),
 		Audit:              opts.Audit,
 		Diagnostics:        opts.Diagnostics,
-		Containers:         containerAdapter,
 		RuntimeAuthority:   opts.PluginRuntimeAuthority,
 		PluginMarket:       pluginMarket,
 	})
@@ -346,6 +370,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		Backend:                 svc,
 		PortForward:             pfSvc,
 		ManagedWebServices:      managedSvc,
+		ContainerResources:      containerResourceSvc,
 		AIServiceProvider:       aiReady,
 		Notes:                   notesSvc,
 		WorkbenchLayout:         workbenchLayoutSvc,
@@ -398,6 +423,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
 	aiReady.Start()
 	managedSvc.Start(context.Background())
+	containerResourcesOwned = false
 
 	return svc, nil
 }
@@ -411,6 +437,9 @@ func (s *Service) Close() error {
 	}
 	if s.runner != nil {
 		_ = s.runner.StopAll()
+	}
+	if s.containers != nil {
+		_ = s.containers.Close()
 	}
 	if s.managed != nil {
 		_ = s.managed.Close()

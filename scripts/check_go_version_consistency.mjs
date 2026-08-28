@@ -33,13 +33,6 @@ export function validateRepository(root, { checkRuntime = true } = {}) {
   validateWorkflow(errors, root, ".github/workflows/ci-check.yml");
   validateWorkflow(errors, root, ".github/workflows/release.yml");
 
-  const capabilityCheck = readText(root, "scripts/check_containers_v4_release_capability.sh");
-  if (!capabilityCheck.includes(`GOTOOLCHAIN=go${version}+auto`)) {
-    errors.push(
-      `scripts/check_containers_v4_release_capability.sh: GOTOOLCHAIN must be go${version}+auto`,
-    );
-  }
-
   const readmes = readdirSync(root)
     .filter((name) => /^README(?:\.[A-Za-z]{2}(?:-[A-Za-z]{2})?)?\.md$/u.test(name))
     .sort();

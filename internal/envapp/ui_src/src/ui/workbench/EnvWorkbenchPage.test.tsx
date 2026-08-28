@@ -3907,7 +3907,7 @@ describe('EnvWorkbenchPage', () => {
     await flushMicrotasks();
 
     const target = {
-      pluginID: 'io.redeven.containers',
+      pluginID: 'io.example.metrics',
       pluginInstanceID: 'instance-containers',
       surfaceID: 'containers',
       displayName: 'Containers',
@@ -3969,7 +3969,7 @@ describe('EnvWorkbenchPage', () => {
     await flushMicrotasks();
 
     const target = {
-      pluginID: 'io.redeven.containers',
+      pluginID: 'io.example.metrics',
       pluginInstanceID: 'instance-containers',
       surfaceID: 'containers',
       displayName: 'Containers',
@@ -3988,7 +3988,7 @@ describe('EnvWorkbenchPage', () => {
       state: {
         kind: 'plugin',
         plugin_instance_id: 'instance-containers',
-        plugin_id: 'io.redeven.containers',
+        plugin_id: 'io.example.metrics',
         surface_id: 'containers',
         display_name: 'Containers',
         expected_management_revision: 7,
@@ -4048,7 +4048,7 @@ describe('EnvWorkbenchPage', () => {
       state: {
         kind: 'plugin',
         plugin_instance_id: 'instance-containers',
-        plugin_id: 'io.redeven.containers',
+        plugin_id: 'io.example.metrics',
         surface_id: 'containers',
         display_name: 'Containers',
         expected_management_revision: 7,
@@ -4109,7 +4109,7 @@ describe('EnvWorkbenchPage', () => {
         state: {
           kind: 'plugin',
           plugin_instance_id: 'instance-containers',
-          plugin_id: 'io.redeven.containers',
+          plugin_id: 'io.example.metrics',
           surface_id: 'containers',
           display_name: 'Containers old',
           expected_management_revision: 7,
@@ -4151,7 +4151,7 @@ describe('EnvWorkbenchPage', () => {
       state: {
         kind: 'plugin',
         plugin_instance_id: 'instance-containers',
-        plugin_id: 'io.redeven.containers',
+        plugin_id: 'io.example.metrics',
         surface_id: 'containers',
         display_name: 'Containers current',
         expected_management_revision: 8,
@@ -4175,7 +4175,7 @@ describe('EnvWorkbenchPage', () => {
       state: {
         kind: 'plugin',
         plugin_instance_id: 'instance-containers',
-        plugin_id: 'io.redeven.containers',
+        plugin_id: 'io.example.metrics',
         surface_id: 'containers',
         display_name: 'Containers',
         expected_management_revision: 7,
@@ -4221,7 +4221,7 @@ describe('EnvWorkbenchPage', () => {
     await flushMicrotasks();
 
     const target = {
-      pluginID: 'io.redeven.containers',
+      pluginID: 'io.example.metrics',
       pluginInstanceID: 'instance-containers',
       surfaceID: 'containers',
       displayName: 'Containers',

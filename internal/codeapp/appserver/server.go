@@ -31,6 +31,7 @@ import (
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/containerresource"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	runtimefs "github.com/floegence/redeven/internal/fs"
@@ -56,6 +57,7 @@ type Options struct {
 	Backend                 Backend
 	PortForward             PortForwardBackend
 	ManagedWebServices      managedwebservice.Backend
+	ContainerResources      *containerresource.Service
 	AIServiceProvider       AIServiceProvider
 	Notes                   *notes.Service
 	WorkbenchLayout         *workbenchlayout.Service
@@ -214,6 +216,7 @@ type Server struct {
 	backend    Backend
 	pf         PortForwardBackend
 	managed    managedwebservice.Backend
+	containers *containerresource.Service
 	aiProvider AIServiceProvider
 	notes      *notes.Service
 	layouts    *workbenchlayout.Service
@@ -369,6 +372,7 @@ func New(opts Options) (*Server, error) {
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
 		managed:                 opts.ManagedWebServices,
+		containers:              opts.ContainerResources,
 		aiProvider:              opts.AIServiceProvider,
 		notes:                   opts.Notes,
 		layouts:                 opts.WorkbenchLayout,
@@ -1975,6 +1979,7 @@ const (
 	requiredPermissionExecute
 	requiredPermissionAdmin
 	requiredPermissionFull
+	requiredPermissionReadExecute
 )
 
 func requireSessionPermission(w http.ResponseWriter, meta *session.Meta, perm requiredPermission) bool {
@@ -2002,6 +2007,11 @@ func requireSessionPermission(w http.ResponseWriter, meta *session.Meta, perm re
 	case requiredPermissionFull:
 		if !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read/write/execute permission denied"})
+			return false
+		}
+	case requiredPermissionReadExecute:
+		if !meta.CanRead || !meta.CanExecute {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read/execute permission denied"})
 			return false
 		}
 	default:
@@ -2425,6 +2435,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if g.handleManagedWebServicesAPI(w, r) {
+		return
+	}
+	if g.handleContainerResourcesAPI(w, r) {
 		return
 	}
 	var aiSvc *ai.Service

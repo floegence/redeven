@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -29,7 +29,7 @@ type ManagerOptions struct {
 	StateDir   string
 	Registry   *pfregistry.Registry
 	Scope      *filesystemscope.Registry
-	Containers *containers.Adapter
+	Containers *containerengine.Adapter
 }
 
 type Manager struct {
@@ -37,7 +37,7 @@ type Manager struct {
 	stateDir      string
 	registry      *pfregistry.Registry
 	scope         *filesystemscope.Registry
-	containers    *containers.Adapter
+	containers    *containerengine.Adapter
 	downloads     *packageDownloadClient
 	nativeRuntime *nativeDriver
 	native        deploymentDriver
@@ -244,7 +244,7 @@ func (m *Manager) dockerAvailability(ctx context.Context) (bool, string, string)
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	status, err := m.containers.Status(probeCtx, containers.StatusRequest{Engine: containers.EngineDocker})
+	status, err := m.containers.Status(probeCtx, containerengine.StatusRequest{Engine: containerengine.EngineDocker})
 	if err != nil || !status.Available {
 		return false, "DOCKER_UNAVAILABLE", "Docker is not available or its daemon cannot be reached."
 	}
@@ -272,7 +272,7 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			return nil, err
 		}
 		name, description := m.serviceDisplayMetadata(ctx, service)
-		view := ServiceView{ManagedService: service, Name: name, Description: description, ActiveOperation: active}
+		view := ServiceView{ManagedService: service, Name: name, Description: description, ActiveOperation: active, ContainerResource: containerResourceLink(service)}
 		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
 			view.BrandIcon, view.LocalizationKey = definition.BrandIcon, definition.LocalizationKey
 			if service.TemplateSource == "builtin" && Deployment(service.Deployment) == DeploymentContainer && definition.Revision > service.TemplateRevision {

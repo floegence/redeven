@@ -48,7 +48,6 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 		AgentHomeDir:     t.TempDir(),
 		PermissionPolicy: permissionPolicy,
 		RuntimePath:      runtimePath,
-		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
 		ResolveSessionMeta: func(got string) (*session.Meta, bool) {
 			return meta, got == channelID
 		},

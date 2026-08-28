@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/auditlog"
-	"github.com/floegence/redeven/internal/capabilities/containers"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/pluginmarket"
@@ -34,20 +33,16 @@ type Options struct {
 	ResolveSessionMeta   func(channelID string) (*session.Meta, bool)
 	Audit                *auditlog.Store
 	Diagnostics          *diagnostics.Store
-	Containers           *containers.Adapter
 	RuntimeAuthority     *RuntimeProcessAuthority
 	PluginMarket         *pluginmarket.Service
-	newReleaseModule     func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
 }
 
 type Integration struct {
 	handler              http.Handler
 	host                 *host.Host
-	capabilities         *containersCapabilityAdapter
 	runtimeAuthority     *RuntimeProcessAuthority
 	marketSnapshot       *pluginmarket.Snapshot
 	marketService        *pluginmarket.Service
-	releaseProvider      *officialReleaseProvider
 	marketErr            error
 	marketMu             sync.RWMutex
 	marketRefreshMu      sync.Mutex
@@ -86,9 +81,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	if err := opts.PermissionPolicy.Validate(); err != nil {
 		return nil, err
 	}
-	if err := opts.Containers.Validate(); err != nil {
-		return nil, err
-	}
 	packageTrustVerifier, err := newPackageTrustVerifier()
 	if err != nil {
 		return nil, err
@@ -104,56 +96,13 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 
 	var closers []func() error
 	closeOnError := func() { _ = closeAll(closers) }
-	// Release assets have a short-lived fetch cache. Host-owned external package
-	// inspections are configured below and live only under external-inspections.
-	releaseStage, err := externalsource.NewStageStore(filepath.Join(root, "release-artifacts"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, releaseStage.Close)
-	releaseFetcher, err := externalsource.NewFetcher(externalsource.FetcherOptions{
-		Stage: releaseStage, SourceID: "redeven.official-release",
-	})
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	var releaseModule *host.ReleaseModule
-	var closeReleaseTrust func() error
 	var marketSnapshot *pluginmarket.Snapshot
-	var releaseProvider *officialReleaseProvider
 	var marketErr error
-	if opts.newReleaseModule != nil {
-		releaseModule, _, closeReleaseTrust, err = opts.newReleaseModule(filepath.Join(root, "trust"))
-	} else if opts.PluginMarket != nil {
-		releaseModule, releaseProvider, err = newOfficialReleaseModulePending(releaseFetcher)
-		if err == nil {
-			snapshot, ok := opts.PluginMarket.CachedSnapshot()
-			if ok {
-				var release pluginmarket.LatestRelease
-				release, marketErr = snapshot.LatestRelease(officialContainersPluginID, officialReleaseChannel)
-				if marketErr == nil {
-					if releaseProvider != nil {
-						marketErr = releaseProvider.setRelease(release)
-					}
-					if marketErr == nil {
-						releaseProvider, _ = releaseModule.ReleaseArtifactResolver.(*officialReleaseProvider)
-					}
-				}
-				if marketErr == nil {
-					frozen := snapshot.Clone()
-					marketSnapshot = &frozen
-				}
-			}
+	if opts.PluginMarket != nil {
+		if snapshot, ok := opts.PluginMarket.CachedSnapshot(); ok {
+			frozen := snapshot.Clone()
+			marketSnapshot = &frozen
 		}
-	}
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	if closeReleaseTrust != nil {
-		closers = append(closers, closeReleaseTrust)
 	}
 
 	observabilityStore, err := rpobservability.NewSQLiteStore(ctx, filepath.Join(root, "observability.sqlite"))
@@ -188,12 +137,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		closeOnError()
 		return nil, err
 	}
-	capabilities, capabilityAdapter, err := newContainersCapabilityRegistry(opts.Containers, observability)
-	if err != nil {
-		_ = assetStore.Close()
-		closeOnError()
-		return nil, err
-	}
 	connectivityBroker := connectivity.NewMemoryBroker()
 	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{})
 	runtimeModule, err := newOfficialRuntimeModule(ctx, runtimeModuleDependencies{
@@ -201,7 +144,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		ExecutionRoot: filepath.Join(root, "runtime-exec"),
 	})
 	if err != nil {
-		_ = capabilityAdapter.Close()
 		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
@@ -218,15 +160,13 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			Diagnostics:          observability,
 			Assets:               assetStore,
 		},
-		Release: releaseModule,
 		Runtime: runtimeModule,
 		IO:      ioModule,
 		Connectivity: &host.ConnectivityModule{
 			Broker:          connectivityBroker,
 			NetworkExecutor: networkExecutor,
 		},
-		Secrets:    &host.SecretsModule{Store: secretStore},
-		Capability: &host.CapabilityModule{Registry: capabilities},
+		Secrets: &host.SecretsModule{Store: secretStore},
 		ExternalPackage: &host.ExternalPackageModule{
 			SignatureAssessor: packageTrustVerifier,
 			SourceID:          "redeven.external-package",
@@ -252,11 +192,9 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	integration := &Integration{
 		handler:          handler,
 		host:             h,
-		capabilities:     capabilityAdapter,
 		runtimeAuthority: opts.RuntimeAuthority,
 		marketSnapshot:   marketSnapshot,
 		marketService:    opts.PluginMarket,
-		releaseProvider:  releaseProvider,
 		marketErr:        marketErr,
 		closers:          closers,
 	}
@@ -381,21 +319,6 @@ func (i *Integration) refreshMarket(ctx context.Context) (pluginmarket.Snapshot,
 		i.marketMu.Unlock()
 		return pluginmarket.Snapshot{}, err
 	}
-	if i.releaseProvider != nil {
-		release, releaseErr := snapshot.LatestRelease(officialContainersPluginID, officialReleaseChannel)
-		if releaseErr != nil {
-			i.marketMu.Lock()
-			i.marketErr = releaseErr
-			i.marketMu.Unlock()
-			return pluginmarket.Snapshot{}, releaseErr
-		}
-		if releaseErr = i.releaseProvider.setRelease(release); releaseErr != nil {
-			i.marketMu.Lock()
-			i.marketErr = releaseErr
-			i.marketMu.Unlock()
-			return pluginmarket.Snapshot{}, releaseErr
-		}
-	}
 	frozen := snapshot.Clone()
 	i.marketMu.Lock()
 	i.marketSnapshot = &frozen
@@ -498,9 +421,6 @@ func (i *Integration) Close() error {
 	}
 	if marketRefreshDone != nil {
 		<-marketRefreshDone
-	}
-	if i.capabilities != nil {
-		out = errors.Join(out, i.capabilities.Close())
 	}
 	if i.host != nil {
 		out = errors.Join(out, i.host.Close())

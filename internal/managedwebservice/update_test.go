@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
@@ -191,7 +191,7 @@ func newContainerUpdateTestManager(t *testing.T, state string) (*Manager, *pfreg
 	}
 	t.Cleanup(func() { _ = registry.Close() })
 	scope, stateDir := newManagedServiceTestScope(t)
-	adapter, err := containers.NewAdapter(catalogDockerEngineClient{})
+	adapter, err := containerengine.NewAdapter(catalogDockerEngineClient{})
 	if err != nil {
 		t.Fatal(err)
 	}

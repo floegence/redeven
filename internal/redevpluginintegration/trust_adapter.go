@@ -13,9 +13,8 @@ import (
 )
 
 const (
-	officialPublisherID        = "com.redeven.official"
-	officialContainersPluginID = "com.redeven.official.containers"
-	officialSigningKeyID       = "redeven_official_signing_2026_08"
+	officialPublisherID  = "com.redeven.official"
+	officialSigningKeyID = "redeven_official_signing_2026_08"
 )
 
 // strictPackageTrustVerifier delegates the complete local-import and release
@@ -52,9 +51,6 @@ func (k officialSigningKeyring) LookupPackageSigningKey(_ context.Context, req t
 		return trust.SigningKey{}, trust.ErrKeyNotFound
 	}
 	if req.PublisherID != "" && req.PublisherID != officialPublisherID {
-		return trust.SigningKey{}, trust.ErrKeyNotFound
-	}
-	if req.PluginID != "" && req.PluginID != officialContainersPluginID {
 		return trust.SigningKey{}, trust.ErrKeyNotFound
 	}
 	return trust.SigningKey{

@@ -73,6 +73,16 @@ export function ActivityBarPortsIcon(props: { class?: string }) {
   );
 }
 
+export function ActivityBarContainersIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
+      <path d="m12 3.8 7 3.5-7 3.5-7-3.5 7-3.5Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".78" stroke-width="1.35" stroke-linejoin="round" />
+      <path d="m5 11.2 7 3.5 7-3.5M5 15.1l7 3.5 7-3.5" stroke="currentColor" stroke-opacity=".78" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M5 7.3v7.8M19 7.3v7.8" stroke="currentColor" stroke-opacity=".42" stroke-width="1.2" stroke-linecap="round" />
+    </svg>
+  );
+}
+
 export function ActivityBarSwitchIcon(props: { class?: string }) {
   return (
     <svg

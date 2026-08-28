@@ -363,6 +363,7 @@
       "codespaces": "Codespaces",
       "browserEditor": "Browser Editor",
       "webServices": "Web服务",
+      "containers": "容器",
       "flower": "Flower"
     },
     "topbar": {
@@ -722,6 +723,10 @@
       "ports": {
         "label": "Web服务",
         "defaultTitle": "Web服务"
+      },
+      "containers": {
+        "label": "容器",
+        "defaultTitle": "容器"
       },
       "flower": {
         "label": "Flower",
@@ -2833,6 +2838,29 @@
       "missingEnvContext": "缺少环境上下文。请从控制平面重新打开。"
     }
   },
+  "containers": {
+    "title": "容器",
+    "description": "查看并安全管理此环境中的 Docker 和 Podman 资源。",
+    "engine": "容器引擎",
+    "endpoint": "引擎端点",
+    "resourceNavigation": "容器资源",
+    "loading": "正在加载容器资源…",
+    "views": { "containers": "容器", "images": "镜像", "volumes": "卷", "compose-projects": "Compose 项目", "pods": "Pod" },
+    "status": { "connected": "已连接", "unavailable": "不可用" },
+    "columns": { "name": "名称", "status": "状态", "details": "详情" },
+    "empty": { "title": "未找到资源", "description": "此端点当前没有该类别的资源。" },
+    "actions": { "refresh": "刷新", "start": "启动", "stop": "停止", "restart": "重启", "pause": "暂停", "resume": "恢复", "kill": "强制终止", "remove": "删除", "down": "停止并移除", "tag": "添加标签", "prune": "清理未使用项", "cancel": "取消", "close": "关闭", "review": "审查", "run": "执行操作" },
+    "create": { "title": "创建资源", "tagTitle": "添加镜像标签", "advanced": "运行设置", "container": "创建容器", "image": "拉取镜像", "volume": "创建卷", "pod": "创建 Pod" },
+    "fields": { "name": "名称", "image": "镜像", "driver": "驱动", "tag": "新标签", "command": "命令", "restartPolicy": "重启策略", "cpus": "CPU", "memory": "内存 (MiB)" },
+    "inspector": { "title": "资源详情", "details": "详情", "logs": "日志", "stats": "统计" },
+    "stats": { "cpu": "CPU", "memory": "内存", "networkIn": "网络接收", "networkOut": "网络发送" },
+    "operations": { "title": "操作", "description": "已审计的容器操作及其当前状态。", "empty": "暂无容器操作。" },
+    "managed": { "badge": "由 Web 服务管理", "title": "由 Web 服务管理", "description": "“{name}”拥有此资源，其生命周期在此受到保护。", "openService": "打开 Web 服务" },
+    "confirm": { "title": "确认高风险操作", "warning": "此操作可能永久删除或中断资源。", "typeName": "准确输入“{name}”以继续。" },
+    "review": { "title": "审查操作", "operation": "操作" },
+    "permissions": { "read": "查看容器资源需要读取权限。", "admin": "此高风险操作需要管理员权限。" },
+    "notifications": { "inventoryChangedTitle": "资源清单已变化", "inventoryChangedMessage": "所选资源已不可用。", "preflightFailedTitle": "预检失败", "operationFailedTitle": "操作失败", "operationCompleteTitle": "操作完成", "operationCompleteMessage": "已刷新权威资源清单。", "logsFailedTitle": "日志不可用" }
+  },
   "webServices": {
     "title": "Web服务",
     "description": "在隔离的 Desktop 窗口或当前最安全的可用路由中，打开监听于当前环境回环接口的 HTTP 服务。",
@@ -4411,20 +4439,20 @@
       "permissionNotGranted": "未授予",
       "permission": {
         "read": {
-          "label": "查看容器",
-          "description": "读取引擎状态、容器详情与日志，以及操作预检信息。"
+          "label": "读取数据",
+          "description": "读取此插件提供的数据和状态。"
         },
         "execute": {
-          "label": "操作容器",
-          "description": "在完成必要确认后启动、停止和重启容器。"
+          "label": "执行操作",
+          "description": "在完成必要确认后执行此插件提供的操作。"
         },
         "delete": {
-          "label": "删除容器",
-          "description": "移除容器。这是一项用于破坏性操作的可选权限。"
+          "label": "删除数据",
+          "description": "通过此插件删除数据。这是一项可选的破坏性权限。"
         },
-        "images_write": {
-          "label": "写入镜像",
-          "description": "将容器镜像拉取到所选引擎。"
+        "write": {
+          "label": "写入数据",
+          "description": "通过此插件创建或更改数据。"
         },
         "other": {
           "label": "插件权限",

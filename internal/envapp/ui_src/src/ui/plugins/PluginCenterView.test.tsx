@@ -5,7 +5,7 @@ import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
-import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
+import { EXAMPLE_PLUGIN_RELEASE_REF } from './examplePluginRelease.test-fixture';
 import {
   OFFICIAL_PLUGIN_CATALOG_SEED,
   OFFICIAL_PLUGIN_MARKET_DETAIL,
@@ -25,24 +25,24 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const containersPlugin = {
-  inventoryKey: 'catalog:containers',
-  pluginID: 'com.redeven.official.containers',
-  displayName: 'Containers',
-  description: 'Manage Docker and Podman resources.',
+const metricsPlugin = {
+  inventoryKey: 'catalog:metrics',
+  pluginID: 'com.example.metrics',
+  displayName: 'Metrics',
+  description: 'Show neutral runtime metrics.',
   iconFallback: 'generic',
   category: 'infrastructure',
-  searchKeywords: ['docker', 'podman'],
+  searchKeywords: ['metrics', 'monitoring'],
   publisher: 'Redeven',
   lifecycleState: 'not_installed',
   trustBadge: 'official',
   pinned: false,
   officialCatalog: {
-    pluginID: 'com.redeven.official.containers',
-    publisherID: 'com.redeven.official',
-    pluginInstanceID: 'plugini_redeven_official_containers',
-    displayName: 'Containers',
-    description: 'Manage Docker and Podman resources.',
+    pluginID: 'com.example.metrics',
+    publisherID: 'com.example',
+    pluginInstanceID: 'plugini_redeven_official_metrics',
+    displayName: 'Metrics',
+    description: 'Show neutral runtime metrics.',
     publisher: 'Redeven',
     latestVersion: '2.0.0',
     stableVersion: '2.0.0',
@@ -51,11 +51,11 @@ const containersPlugin = {
     rolloutState: 'stable',
     iconFallback: 'generic',
     category: 'infrastructure',
-    searchKeywords: ['docker', 'podman'],
-    trustedSigningKeyIDs: ['redeven_official_signing_2026_08'],
+    searchKeywords: ['metrics', 'monitoring'],
+    trustedSigningKeyIDs: ['example_signing_key_2026'],
     installPreview: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.installPreview,
     distribution: {
-      releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
+      releaseRef: EXAMPLE_PLUGIN_RELEASE_REF,
       installSource: {
         sourceKind: 'package_url',
         url: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.distribution.installSource.url,
@@ -65,9 +65,9 @@ const containersPlugin = {
 } satisfies PluginInventoryProjection['items'][number];
 
 const databasePlugin = {
-  ...containersPlugin,
+  ...metricsPlugin,
   inventoryKey: 'catalog:database',
-  pluginID: 'com.redeven.official.database',
+  pluginID: 'com.example.database',
   displayName: 'Database Tools',
   description: 'Inspect local database connections.',
   iconFallback: 'database',
@@ -77,26 +77,26 @@ const databasePlugin = {
 } satisfies PluginInventoryProjection['items'][number];
 
 const projection: PluginInventoryProjection = {
-  items: [containersPlugin, databasePlugin],
+  items: [metricsPlugin, databasePlugin],
 };
 
-const containersInstallCommand = {
+const metricsInstallCommand = {
   type: 'install' as const,
-  pluginID: containersPlugin.pluginID,
+  pluginID: metricsPlugin.pluginID,
   source: 'official_catalog' as const,
-  pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-  releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
-  releaseIdentityDigest: containersPlugin.officialCatalog.installPreview!.release_identity_digest,
-  manifestSHA256: containersPlugin.officialCatalog.installPreview!.manifest_sha256,
-  contractSetSHA256: containersPlugin.officialCatalog.installPreview!.contract_set_sha256,
-  summarySHA256: containersPlugin.officialCatalog.installPreview!.summary_sha256,
+  pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
+  releaseRef: metricsPlugin.officialCatalog.installPreview!.release_ref,
+  releaseIdentityDigest: metricsPlugin.officialCatalog.installPreview!.release_identity_digest,
+  manifestSHA256: metricsPlugin.officialCatalog.installPreview!.manifest_sha256,
+  contractSetSHA256: metricsPlugin.officialCatalog.installPreview!.contract_set_sha256,
+  summarySHA256: metricsPlugin.officialCatalog.installPreview!.summary_sha256,
 };
 
-function containersPermissionProjection(granted = false): PluginInventoryProjection {
+function metricsPermissionProjection(granted = false): PluginInventoryProjection {
   return {
     items: [{
-      ...containersPlugin,
-      pluginInstanceID: 'plugininst_containers',
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
       version: '2.0.0',
       managementRevision: 7,
       canDisable: true,
@@ -105,11 +105,11 @@ function containersPermissionProjection(granted = false): PluginInventoryProject
       authorization: {
         grants: [],
         permissions: [{
-          permissionID: 'containers.read',
+          permissionID: 'metrics.read',
           group: 'read',
           requiredToOpen: true,
-          methods: ['containers.status'],
-          requiredToOpenMethods: ['containers.status'],
+          methods: ['metrics.status'],
+          requiredToOpenMethods: ['metrics.status'],
           granted,
           deniedByGrant: false,
           blockedByPolicy: false,
@@ -133,7 +133,7 @@ function findDocumentButton(label: string): HTMLButtonElement {
   return button;
 }
 
-function openInventoryDetails(mount: HTMLElement, inventoryKey = 'catalog:containers'): HTMLButtonElement {
+function openInventoryDetails(mount: HTMLElement, inventoryKey = 'catalog:metrics'): HTMLButtonElement {
   const item = mount.querySelector<HTMLButtonElement>(`[data-plugin-center-item="${inventoryKey}"]`);
   if (!item) throw new Error(`Plugin Center item not found: ${inventoryKey}`);
   item.click();
@@ -261,7 +261,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={false}
         onCommand={onCommand}
         onRefresh={vi.fn()}
@@ -270,8 +270,8 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const details = mount.querySelector('[data-plugin-center-item="catalog:containers"]') as HTMLButtonElement;
-    const install = mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement;
+    const details = mount.querySelector('[data-plugin-center-item="catalog:metrics"]') as HTMLButtonElement;
+    const install = mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement;
     expect(details).not.toBeNull();
     expect(install.textContent).toContain('Install');
     expect(install.closest('article')?.querySelector('.h-12.w-12')).not.toBeNull();
@@ -281,7 +281,7 @@ describe('PluginCenterView', () => {
     expect(onCommand).not.toHaveBeenCalled();
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
-    expect(onCommand).toHaveBeenCalledWith(containersInstallCommand, expect.any(AbortSignal));
+    expect(onCommand).toHaveBeenCalledWith(metricsInstallCommand, expect.any(AbortSignal));
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
@@ -289,8 +289,8 @@ describe('PluginCenterView', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const installed = {
-      ...containersPlugin,
-      pluginInstanceID: 'plugininst_containers',
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
       version: '1.9.0',
       managementRevision: 23,
       lifecycleState: 'disabled' as const,
@@ -306,7 +306,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const card = mount.querySelector('[data-plugin-directory-card="catalog:containers"]');
+    const card = mount.querySelector('[data-plugin-directory-card="catalog:metrics"]');
     expect(card?.textContent).toContain('v1.9.0');
     expect(card?.textContent).not.toContain('v2.0.0');
   });
@@ -315,15 +315,15 @@ describe('PluginCenterView', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const installed = {
-      ...containersPlugin,
-      pluginInstanceID: 'plugininst_containers',
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
       version: '2.0.0',
       managementRevision: 23,
       lifecycleState: 'enabled' as const,
       defaultLaunchTarget: {
-        pluginID: containersPlugin.pluginID,
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.dashboard',
+        pluginID: metricsPlugin.pluginID,
+        pluginInstanceID: 'plugininst_metrics',
+        surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 23,
         preferredPlacement: 'activity' as const,
       },
@@ -339,29 +339,29 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-card-menu="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-card-menu="catalog:metrics"]') as HTMLButtonElement).click();
     await Promise.resolve();
 
     expect(findDocumentButton('Open')).not.toBeNull();
     expect(findDocumentButton('Open in Workbench')).not.toBeNull();
     findDocumentButton('View plugin details').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
   });
 
   it('keeps disabled card actions aligned with the lifecycle state', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const disabled = {
-      ...containersPlugin,
-      pluginInstanceID: 'plugininst_containers',
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
       version: '2.0.0',
       managementRevision: 23,
       lifecycleState: 'disabled' as const,
       defaultLaunchTarget: {
-        pluginID: containersPlugin.pluginID,
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.dashboard',
+        pluginID: metricsPlugin.pluginID,
+        pluginInstanceID: 'plugininst_metrics',
+        surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 23,
         preferredPlacement: 'activity' as const,
       },
@@ -378,7 +378,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const card = mount.querySelector('[data-plugin-center-card-menu="catalog:containers"]') as HTMLButtonElement;
+    const card = mount.querySelector('[data-plugin-center-card-menu="catalog:metrics"]') as HTMLButtonElement;
     card.click();
     await Promise.resolve();
     expect([...document.querySelectorAll('[role="menu"]')].some((menu) => menu.textContent?.includes('Open in Activity'))).toBe(false);
@@ -391,17 +391,17 @@ describe('PluginCenterView', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const blocked = {
-      ...containersPlugin,
-      pluginInstanceID: 'plugininst_containers',
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
       version: '2.0.0',
       managementRevision: 23,
       lifecycleState: 'needs_attention' as const,
       trustBadge: 'blocked' as const,
       attentionReason: 'trust_unavailable' as const,
       defaultLaunchTarget: {
-        pluginID: containersPlugin.pluginID,
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.dashboard',
+        pluginID: metricsPlugin.pluginID,
+        pluginInstanceID: 'plugininst_metrics',
+        surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 23,
         preferredPlacement: 'activity' as const,
       },
@@ -418,12 +418,12 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const primary = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]');
+    const primary = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:metrics"]');
     expect(primary?.textContent).toContain('View trust details');
     primary?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(onCommand).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'open_surface' }), expect.anything());
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
   });
 
   it('does not use market presentation when an installed record has no host presentation', async () => {
@@ -432,11 +432,11 @@ describe('PluginCenterView', () => {
     dispose = render(() => (
       <PluginCenterView
         projection={{ items: [{
-          ...containersPlugin,
+          ...metricsPlugin,
           displayName: 'Installed Name',
           description: 'Installed summary',
           publisher: 'Installed Publisher',
-          pluginInstanceID: 'plugininst_containers',
+          pluginInstanceID: 'plugininst_metrics',
           version: '2.0.0',
           lifecycleState: 'disabled',
         }] }}
@@ -448,12 +448,12 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-item="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-item="catalog:metrics"]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const details = mount.querySelector('[data-plugin-center-details]')!;
     expect(details.querySelector('[data-plugin-center-detail-heading]')?.textContent).toContain('Installed Name');
     expect(details.textContent).toContain('Installed summary');
-    expect(details.textContent).not.toContain('Manage Docker and Podman resources.');
+    expect(details.textContent).not.toContain('Show neutral runtime metrics.');
   });
 
   it('loads complete market author content only after an uninstalled plugin is selected', async () => {
@@ -461,7 +461,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     const onLoadMarketDetail = vi.fn(async () => OFFICIAL_PLUGIN_MARKET_DETAIL);
     const marketItem = {
-      ...containersPlugin,
+      ...metricsPlugin,
       officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
     } satisfies PluginInventoryProjection['items'][number];
     dispose = render(() => (
@@ -481,14 +481,14 @@ describe('PluginCenterView', () => {
     openInventoryDetails(mount);
 
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledWith(
-      'com.redeven.official.containers',
+      'com.example.metrics',
       OFFICIAL_PLUGIN_CATALOG_SEED[0]!.marketGeneration,
       expect.any(AbortSignal),
     ));
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-author-description]')).not.toBeNull());
     const author = mount.querySelector<HTMLElement>('[data-plugin-author-content]')!;
     expect(author.querySelector('[lang="en-US"]')).not.toBeNull();
-    expect(author.textContent).toContain('Manage Docker and Podman containers, images, volumes, logs, and statistics');
+    expect(author.textContent).toContain('Shows neutral runtime metrics for general plugin platform tests.');
     expect(mount.querySelector('[data-plugin-author-highlights]')).not.toBeNull();
   });
 
@@ -497,7 +497,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({
       items: [{
-        ...containersPlugin,
+        ...metricsPlugin,
         officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
       }],
     });
@@ -525,7 +525,7 @@ describe('PluginCenterView', () => {
     generation += 1;
     setCurrentProjection({
       items: [{
-        ...containersPlugin,
+        ...metricsPlugin,
         officialCatalog: {
           ...OFFICIAL_PLUGIN_CATALOG_SEED[0]!,
           marketGeneration: generation,
@@ -541,8 +541,8 @@ describe('PluginCenterView', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const onLoadMarketDetail = vi.fn(async (): Promise<PluginMarketDetail> => ({
-      plugin_id: 'com.redeven.official.containers',
-      publisher_id: 'com.redeven.official',
+      plugin_id: 'com.example.metrics',
+      publisher_id: 'com.example',
       presentation: { default_locale: 'en-US', locales: [] },
       categories: ['infrastructure'],
       channels: ['stable'],
@@ -553,7 +553,7 @@ describe('PluginCenterView', () => {
     }));
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={false}
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
@@ -567,8 +567,8 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(mount.textContent).toContain('The plugin catalog is unavailable'));
     expect(mount.querySelector('[data-plugin-author-description]')).toBeNull();
-    expect(mount.textContent).toContain('Manage Docker and Podman resources.');
-    expect(mount.querySelector('[data-plugin-center-install="catalog:containers"]')).not.toBeNull();
+    expect(mount.textContent).toContain('Show neutral runtime metrics.');
+    expect(mount.querySelector('[data-plugin-center-install="catalog:metrics"]')).not.toBeNull();
     expect(findDocumentButton('Retry')).not.toBeNull();
   });
 
@@ -578,7 +578,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={loading()}
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
@@ -599,8 +599,8 @@ describe('PluginCenterView', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const updateItem = {
-      ...containersPlugin,
-      pluginInstanceID: 'plugininst_containers',
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
       version: '1.9.0',
       managementRevision: 13,
       lifecycleState: 'update_available' as const,
@@ -617,8 +617,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     (mount.querySelector('#plugin-center-tab-updates') as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(mount.querySelector('[data-plugin-center-update="catalog:containers"]')).not.toBeNull());
-    const update = mount.querySelector('[data-plugin-center-update="catalog:containers"]') as HTMLButtonElement;
+    await vi.waitFor(() => expect(mount.querySelector('[data-plugin-center-update="catalog:metrics"]')).not.toBeNull());
+    const update = mount.querySelector('[data-plugin-center-update="catalog:metrics"]') as HTMLButtonElement;
     expect(update.textContent).toContain('Review update');
     expect(update.closest('article')?.className).toContain('border-t-2');
     expect(mount.querySelector('[data-plugin-center-list]')?.className).toContain('grid');
@@ -626,8 +626,8 @@ describe('PluginCenterView', () => {
 
   it('keeps the detail primary action and overflow menu in one action row', () => {
     const updateItem = {
-      ...containersPlugin,
-      pluginInstanceID: 'plugininst_containers',
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
       version: '1.9.0',
       managementRevision: 13,
       lifecycleState: 'update_available' as const,
@@ -639,7 +639,7 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={{ items: [updateItem] }}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -658,10 +658,10 @@ describe('PluginCenterView', () => {
   });
 
   it('offers both open destinations from the detail overflow for a runnable update', () => {
-    const target = { pluginID: 'com.redeven.official.containers', pluginInstanceID: 'plugininst_containers', surfaceID: 'containers.dashboard', expectedManagementRevision: 13, preferredPlacement: 'activity' as const };
+    const target = { pluginID: 'com.example.metrics', pluginInstanceID: 'plugininst_metrics', surfaceID: 'metrics.dashboard', expectedManagementRevision: 13, preferredPlacement: 'activity' as const };
     const updateItem = {
-      ...containersPlugin,
-      pluginInstanceID: 'plugininst_containers',
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
       version: '1.9.0',
       managementRevision: 13,
       lifecycleState: 'update_available' as const,
@@ -674,7 +674,7 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={{ items: [updateItem] }}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -693,9 +693,9 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -721,15 +721,15 @@ describe('PluginCenterView', () => {
   });
 
   it('groups required and optional permissions without changing switch semantics', () => {
-    const permissionProjection = containersPermissionProjection();
+    const permissionProjection = metricsPermissionProjection();
     permissionProjection.items[0].authorization!.permissions = [
       ...permissionProjection.items[0].authorization!.permissions,
       {
         ...permissionProjection.items[0].authorization!.permissions[0],
-        permissionID: 'containers.delete',
+        permissionID: 'metrics.delete',
         group: 'delete',
         requiredToOpen: false,
-        methods: ['containers.delete'],
+        methods: ['metrics.delete'],
         requiredToOpenMethods: [],
       },
     ];
@@ -739,7 +739,7 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={permissionProjection}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -747,8 +747,8 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect(mount.querySelector('[data-plugin-permission-group="required"] [data-plugin-permission="containers.read"]')).not.toBeNull();
-    expect(mount.querySelector('[data-plugin-permission-group="optional"] [data-plugin-permission="containers.delete"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-permission-group="required"] [data-plugin-permission="metrics.read"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-permission-group="optional"] [data-plugin-permission="metrics.delete"]')).not.toBeNull();
     expect(mount.querySelectorAll('[data-plugin-permission] [role="switch"]')).toHaveLength(2);
   });
 
@@ -757,7 +757,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={false}
         canManagePlugins
         canOpenPluginSurfaces
@@ -791,7 +791,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const installed = containersPermissionProjection().items[0]!;
+    const installed = metricsPermissionProjection().items[0]!;
     setCurrentProjection({
       items: [{
         ...installed,
@@ -830,7 +830,7 @@ describe('PluginCenterView', () => {
     expect(mount.textContent).toContain('Installed');
     expect(mount.textContent).toContain('Discover');
     expect(mount.textContent).toContain('Updates');
-    expect(mount.textContent).toContain('Containers');
+    expect(mount.textContent).toContain('Metrics');
     expect(mount.textContent).not.toMatch(/Developer|Install from URL|Install from file|unsigned|marketplace/i);
     (mount.querySelector('[data-plugin-center-close]') as HTMLButtonElement).click();
     expect(onClose).toHaveBeenCalledOnce();
@@ -840,12 +840,12 @@ describe('PluginCenterView', () => {
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
 
     expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).not.toBeNull();
-    expect(mount.querySelector('[data-plugin-center-item="catalog:containers"]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="catalog:metrics"]')).toBeNull();
 
     search.value = '';
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (mount.querySelector('[data-plugin-center-category="infrastructure"]') as HTMLButtonElement).click();
-    expect(mount.querySelector('[data-plugin-center-item="catalog:containers"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="catalog:metrics"]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).toBeNull();
   });
 
@@ -894,7 +894,7 @@ describe('PluginCenterView', () => {
 
     const alert = mount.querySelector('[data-plugin-center-error]');
     expect(alert?.textContent).toContain('The plugin catalog is unavailable');
-    expect(mount.querySelector('[data-plugin-center-item="catalog:containers"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="catalog:metrics"]')).not.toBeNull();
     (alert?.querySelector('button') as HTMLButtonElement).click();
     expect(onRefresh).toHaveBeenCalledOnce();
   });
@@ -931,18 +931,18 @@ describe('PluginCenterView', () => {
       trustBadge: 'community',
     } satisfies PluginInventoryProjection['items'][number];
     const externalUnsigned = {
-      ...containersPlugin,
-      inventoryKey: 'instance:unsigned-containers',
-      pluginInstanceID: 'unsigned-containers',
+      ...metricsPlugin,
+      inventoryKey: 'instance:unsigned-metrics',
+      pluginInstanceID: 'unsigned-metrics',
       managementRevision: 4,
       lifecycleState: 'needs_attention',
       trustBadge: 'unsigned',
       officialCatalog: undefined,
     } satisfies PluginInventoryProjection['items'][number];
     const officialInstalled = {
-      ...containersPlugin,
-      inventoryKey: 'instance:official-containers',
-      pluginInstanceID: 'official-containers',
+      ...metricsPlugin,
+      inventoryKey: 'instance:official-metrics',
+      pluginInstanceID: 'official-metrics',
       managementRevision: 7,
       lifecycleState: 'enabled',
     } satisfies PluginInventoryProjection['items'][number];
@@ -971,8 +971,8 @@ describe('PluginCenterView', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    expect(mount.querySelector('[data-plugin-center-item="instance:unsigned-containers"]')).not.toBeNull();
-    expect(mount.querySelector('[data-plugin-center-item="instance:official-containers"]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="instance:unsigned-metrics"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="instance:official-metrics"]')).toBeNull();
     expect(mount.querySelector('[data-plugin-center-item="instance:community-database"]')).toBeNull();
   });
 
@@ -1023,8 +1023,8 @@ describe('PluginCenterView', () => {
     const installedProjection: PluginInventoryProjection = {
       items: [
         {
-          ...containersPlugin,
-          pluginInstanceID: 'plugininst_containers',
+          ...metricsPlugin,
+          pluginInstanceID: 'plugininst_metrics',
           version: '2.0.0',
           managementRevision: 7,
           lifecycleState: 'disabled',
@@ -1040,7 +1040,7 @@ describe('PluginCenterView', () => {
         projection={installedProjection}
         loading={false}
         error={null}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -1048,19 +1048,19 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
   });
 
   it('consumes an exact shell selection once so inventory refresh does not reopen closed details', async () => {
-    const [currentProjection, setCurrentProjection] = createSignal(containersPermissionProjection());
+    const [currentProjection, setCurrentProjection] = createSignal(metricsPermissionProjection());
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
         projection={currentProjection()}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         focusRequest={1}
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
@@ -1089,9 +1089,9 @@ describe('PluginCenterView', () => {
 
     dispose = render(() => (
       <PluginCenterView
-        projection={containersPermissionProjection()}
+        projection={metricsPermissionProjection()}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         focusRequest={1}
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
@@ -1104,7 +1104,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     const heading = mount.querySelector<HTMLHeadingElement>('[data-plugin-center-detail-heading]')!;
     expect(document.activeElement).toBe(heading);
-    expect(heading.textContent).toBe('Containers');
+    expect(heading.textContent).toBe('Metrics');
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
   });
 
@@ -1117,9 +1117,9 @@ describe('PluginCenterView', () => {
 
     dispose = render(() => (
       <PluginCenterView
-        projection={containersPermissionProjection()}
+        projection={metricsPermissionProjection()}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         focusRequest={focusRequest()}
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
@@ -1151,7 +1151,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={containersPermissionProjection(true)}
+        projection={metricsPermissionProjection(true)}
         loading={false}
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
@@ -1160,7 +1160,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const item = mount.querySelector<HTMLButtonElement>('[data-plugin-center-item="catalog:containers"]')!;
+    const item = mount.querySelector<HTMLButtonElement>('[data-plugin-center-item="catalog:metrics"]')!;
     item.click();
     await Promise.resolve();
     await Promise.resolve();
@@ -1171,7 +1171,7 @@ describe('PluginCenterView', () => {
 
     const search = mount.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
     search.focus();
-    search.value = 'containers';
+    search.value = 'metrics';
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await Promise.resolve();
     await Promise.resolve();
@@ -1227,8 +1227,8 @@ describe('PluginCenterView', () => {
       document.body.append(mount);
       const issueProjection: PluginInventoryProjection = {
         items: [{
-          ...containersPlugin,
-          pluginInstanceID: 'plugininst_containers',
+          ...metricsPlugin,
+          pluginInstanceID: 'plugininst_metrics',
           version: '2.0.0',
           managementRevision: 7,
           lifecycleState: 'needs_attention',
@@ -1240,7 +1240,7 @@ describe('PluginCenterView', () => {
         <PluginCenterView
           projection={issueProjection}
           loading={false}
-          selectedInventoryKey="catalog:containers"
+          selectedInventoryKey="catalog:metrics"
           onCommand={vi.fn()}
           onRefresh={vi.fn()}
           canManagePlugins
@@ -1273,7 +1273,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     const backgroundProjection: PluginInventoryProjection = {
       items: [{
-        ...containersPlugin,
+        ...metricsPlugin,
         pluginInstanceID: 'plugininst_background',
         managementRevision: 9,
         lifecycleState: 'enabled',
@@ -1284,7 +1284,7 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={backgroundProjection}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -1313,7 +1313,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={false}
         onCommand={onCommand}
         onRefresh={vi.fn()}
@@ -1322,24 +1322,24 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const install = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!;
+    const install = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:metrics"]')!;
     install.click();
     await Promise.resolve();
     const review = document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')!;
     expect(review).not.toBeNull();
-    expect(review.textContent).toContain('Containers');
+    expect(review.textContent).toContain('Metrics');
     expect(review.textContent).toContain('2.0.0');
     expect(review.textContent).not.toContain('sha256:');
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
-    expect(onCommand).toHaveBeenCalledWith(containersInstallCommand, expect.any(AbortSignal));
+    expect(onCommand).toHaveBeenCalledWith(metricsInstallCommand, expect.any(AbortSignal));
   });
 
   it('opens an actionable loading dialog immediately when the market preview is missing', async () => {
     const missingPreview = {
-      ...containersPlugin,
+      ...metricsPlugin,
       officialCatalog: {
-        ...containersPlugin.officialCatalog,
+        ...metricsPlugin.officialCatalog,
         installPreview: undefined,
       },
     };
@@ -1347,7 +1347,7 @@ describe('PluginCenterView', () => {
     let completeRefresh: (() => void) | undefined;
     const onRefresh = vi.fn(() => new Promise<void>((resolve) => {
       completeRefresh = () => {
-        setCurrentProjection({ items: [containersPlugin] });
+        setCurrentProjection({ items: [metricsPlugin] });
         resolve();
       };
     }));
@@ -1364,7 +1364,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await Promise.resolve();
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(document.querySelector('[data-plugin-install-preview-loading]')).not.toBeNull();
@@ -1375,7 +1375,7 @@ describe('PluginCenterView', () => {
     (previewDialog.querySelector('button') as HTMLButtonElement).click();
     await Promise.resolve();
     expect(document.querySelector('[data-plugin-install-preview-loading]')).toBeNull();
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await Promise.resolve();
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(document.querySelector('[data-plugin-install-preview-loading]')).not.toBeNull();
@@ -1389,9 +1389,9 @@ describe('PluginCenterView', () => {
 
   it('fills a missing preview with one market detail request without refreshing Host inventory', async () => {
     const missingPreview = {
-      ...containersPlugin,
+      ...metricsPlugin,
       officialCatalog: {
-        ...containersPlugin.officialCatalog,
+        ...metricsPlugin.officialCatalog,
         installPreview: undefined,
       },
     };
@@ -1411,10 +1411,10 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledOnce());
     expect(onLoadMarketDetail).toHaveBeenCalledWith(
-      containersPlugin.pluginID,
+      metricsPlugin.pluginID,
       0,
       expect.any(AbortSignal),
     );
@@ -1424,9 +1424,9 @@ describe('PluginCenterView', () => {
 
   it('uses the current market release when the cached catalog version is stale', async () => {
     const missingPreview = {
-      ...containersPlugin,
+      ...metricsPlugin,
       officialCatalog: {
-        ...containersPlugin.officialCatalog,
+        ...metricsPlugin.officialCatalog,
         latestVersion: '4.4.4',
         stableVersion: '4.4.4',
         installPreview: undefined,
@@ -1458,7 +1458,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('[data-plugin-install-review-confirm]')].at(-1)).not.toBeUndefined());
     await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.9'));
     [...document.querySelectorAll<HTMLButtonElement>('[data-plugin-install-review-confirm]')].at(-1)?.click();
@@ -1470,9 +1470,9 @@ describe('PluginCenterView', () => {
 
   it('keeps a failed preview refresh inside one actionable dialog', async () => {
     const missingPreview = {
-      ...containersPlugin,
+      ...metricsPlugin,
       officialCatalog: {
-        ...containersPlugin.officialCatalog,
+        ...metricsPlugin.officialCatalog,
         installPreview: undefined,
       },
     };
@@ -1490,7 +1490,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector('[data-plugin-install-preview-error]')?.textContent).toContain('plugin catalog is unavailable');
     expect(document.querySelectorAll('[data-plugin-install-preview-retry]')).toHaveLength(1);
@@ -1505,17 +1505,17 @@ describe('PluginCenterView', () => {
         projection={projection}
         loading={false}
         installOperations={[{
-          pluginID: containersPlugin.pluginID,
-          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          pluginID: metricsPlugin.pluginID,
+          pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
           observation: 'watching',
           execution: {
-            execution_id: 'release_install_containers', plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            execution_id: 'release_install_metrics', plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
             kind: 'operation', status: 'running', cursor: 3, cancelable: false,
             created_at: '2026-08-22T00:00:00Z', updated_at: '2026-08-22T00:00:01Z',
           },
           progress: [
-            { task_id: 'release_install_containers', request_id: 'request', stage: 'download', status: 'completed' },
-            { task_id: 'release_install_containers', request_id: 'request', stage: 'verify', status: 'running' },
+            { task_id: 'release_install_metrics', request_id: 'request', stage: 'download', status: 'completed' },
+            { task_id: 'release_install_metrics', request_id: 'request', stage: 'verify', status: 'running' },
           ],
         }]}
         onCommand={vi.fn()}
@@ -1538,8 +1538,8 @@ describe('PluginCenterView', () => {
         projection={projection}
         loading={false}
         installOperations={[{
-          pluginID: containersPlugin.pluginID,
-          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          pluginID: metricsPlugin.pluginID,
+          pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
           observation: 'finalizing',
           progress: [],
         }]}
@@ -1550,7 +1550,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const target = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!;
+    const target = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:metrics"]')!;
     const other = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:database"]')!;
     expect(target.textContent).toContain('Finalizing installation...');
     expect(target.disabled).toBe(true);
@@ -1566,12 +1566,12 @@ describe('PluginCenterView', () => {
         projection={projection}
         loading={false}
         installOperations={[{
-          pluginID: containersPlugin.pluginID,
-          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          pluginID: metricsPlugin.pluginID,
+          pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
           observation: 'watching',
           execution: {
-            execution_id: 'release_install_containers',
-            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            execution_id: 'release_install_metrics',
+            plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
             kind: 'operation',
             status: 'running',
             cursor: 1,
@@ -1580,7 +1580,7 @@ describe('PluginCenterView', () => {
             updated_at: '2026-08-05T08:00:01Z',
           },
           progress: [{
-            task_id: 'release_install_containers',
+            task_id: 'release_install_metrics',
             request_id: 'request_1',
             stage: 'download',
             status: 'running',
@@ -1595,7 +1595,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const target = mount.querySelector('[data-plugin-directory-card="catalog:containers"]')!;
+    const target = mount.querySelector('[data-plugin-directory-card="catalog:metrics"]')!;
     const other = mount.querySelector('[data-plugin-directory-card="catalog:database"]')!;
     const progress = target.querySelector<HTMLElement>('[data-plugin-install-progress]')!;
     expect(target.querySelector('[data-plugin-install-stage="download"]')?.getAttribute('data-plugin-install-stage-status')).toBe('running');
@@ -1619,12 +1619,12 @@ describe('PluginCenterView', () => {
         projection={projection}
         loading={false}
         installOperations={[{
-          pluginID: containersPlugin.pluginID,
-          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          pluginID: metricsPlugin.pluginID,
+          pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
           observation: 'watching',
           execution: {
-            execution_id: 'release_install_containers',
-            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            execution_id: 'release_install_metrics',
+            plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
             kind: 'operation',
             status: 'failed',
             cursor: 1,
@@ -1649,18 +1649,18 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('The plugin release could not be reached');
     expect(status.textContent).not.toContain('PLUGIN_RELEASE_NETWORK');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onRetryInstall).toHaveBeenCalledWith(metricsPlugin.officialCatalog.pluginInstanceID);
   });
 
   it('does not duplicate a coordinator error when an authoritative install failure is present', async () => {
     const onCommand = vi.fn(async () => undefined);
     const failedOperation = {
-      pluginID: containersPlugin.pluginID,
-      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+      pluginID: metricsPlugin.pluginID,
+      pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
       observation: 'watching' as const,
       execution: {
-        execution_id: 'release_install_containers',
-        plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+        execution_id: 'release_install_metrics',
+        plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
         kind: 'operation' as const,
         status: 'failed' as const,
         cursor: 1,
@@ -1677,7 +1677,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={false}
         installOperations={[failedOperation]}
         onCommand={onCommand}
@@ -1687,7 +1687,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await Promise.resolve();
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
@@ -1705,14 +1705,14 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={projection}
         loading={false}
-        selectedInventoryKey={containersPlugin.inventoryKey}
+        selectedInventoryKey={metricsPlugin.inventoryKey}
         installOperations={[{
-          pluginID: containersPlugin.pluginID,
-          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          pluginID: metricsPlugin.pluginID,
+          pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
           observation: 'watching',
           execution: {
-            execution_id: 'release_install_containers',
-            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            execution_id: 'release_install_metrics',
+            plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
             kind: 'operation',
             status: 'failed',
             cursor: 1,
@@ -1744,19 +1744,19 @@ describe('PluginCenterView', () => {
 
     (document.querySelector('[data-plugin-retained-data-confirm]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onDiscardRetainedDataAndRetry).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onDiscardRetainedDataAndRetry).toHaveBeenCalledWith(metricsPlugin.officialCatalog.pluginInstanceID);
   });
 
   it('turns a same-session review-again action back into an exact confirmation', async () => {
     const onReviewOfficialInstall = vi.fn();
     const onCommand = vi.fn(async () => undefined);
     const failedOperation = {
-      pluginID: containersPlugin.pluginID,
-      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+      pluginID: metricsPlugin.pluginID,
+      pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
       observation: 'failed' as const,
       execution: {
-        execution_id: 'release_install_containers',
-        plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+        execution_id: 'release_install_metrics',
+        plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
         kind: 'operation' as const,
         status: 'failed' as const,
         cursor: 1,
@@ -1773,7 +1773,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={false}
         installOperations={[failedOperation]}
         onReviewOfficialInstall={onReviewOfficialInstall}
@@ -1784,28 +1784,28 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await Promise.resolve();
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
     onReviewOfficialInstall.mockClear();
     (document.querySelector('[data-plugin-install-review-again]') as HTMLButtonElement).click();
 
-    expect(onReviewOfficialInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onReviewOfficialInstall).toHaveBeenCalledWith(metricsPlugin.officialCatalog.pluginInstanceID);
     expect(document.querySelector('[data-plugin-install-review-confirm]')).not.toBeNull();
   });
 
   it('does not reopen a background install dialog after the user closes it', async () => {
-    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [containersPlugin] });
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [metricsPlugin] });
     const [operations, setOperations] = createSignal<readonly any[]>([]);
     const onCommand = vi.fn(async () => {
       setOperations([{
-        pluginID: containersPlugin.pluginID,
-        pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+        pluginID: metricsPlugin.pluginID,
+        pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
         observation: 'watching',
         execution: {
-          execution_id: 'release_install_containers',
-          plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+          execution_id: 'release_install_metrics',
+          plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
           kind: 'operation', status: 'running', cursor: 0, cancelable: false,
           created_at: '2026-08-05T08:00:00Z', updated_at: '2026-08-05T08:00:01Z',
         },
@@ -1826,17 +1826,17 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await Promise.resolve();
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
     const dialog = document.querySelector('[data-plugin-install-review-dialog]')?.closest('[role="dialog"]') as HTMLElement;
     (dialog.querySelector('button') as HTMLButtonElement).click();
     setCurrentProjection({ items: [{
-      ...containersPlugin,
-      inventoryKey: `instance:${containersPlugin.officialCatalog.pluginInstanceID}`,
-      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-      version: containersPlugin.officialCatalog.latestVersion,
+      ...metricsPlugin,
+      inventoryKey: `instance:${metricsPlugin.officialCatalog.pluginInstanceID}`,
+      pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
+      version: metricsPlugin.officialCatalog.latestVersion,
       managementRevision: 1,
       lifecycleState: 'enabled',
     }] });
@@ -1847,7 +1847,7 @@ describe('PluginCenterView', () => {
   });
 
   it('keeps the completion dialog on the current installed state and opens the plugin directly', async () => {
-    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [containersPlugin] });
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [metricsPlugin] });
     const onCommand = vi.fn(async () => undefined);
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -1862,22 +1862,22 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement).click();
     await Promise.resolve();
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
     const installed = {
-      ...containersPlugin,
-      inventoryKey: `instance:${containersPlugin.officialCatalog.pluginInstanceID}`,
-      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-      version: containersPlugin.officialCatalog.latestVersion,
+      ...metricsPlugin,
+      inventoryKey: `instance:${metricsPlugin.officialCatalog.pluginInstanceID}`,
+      pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
+      version: metricsPlugin.officialCatalog.latestVersion,
       managementRevision: 7,
       lifecycleState: 'needs_attention' as const,
       attentionReason: 'permission_required' as const,
       defaultLaunchTarget: {
-        pluginID: containersPlugin.pluginID,
-        pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-        surfaceID: 'containers.dashboard',
+        pluginID: metricsPlugin.pluginID,
+        pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
+        surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
         preferredPlacement: 'activity' as const,
       },
@@ -1897,8 +1897,8 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     expect(onCommand).toHaveBeenLastCalledWith(expect.objectContaining({
       type: 'open_surface',
-      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-      surfaceID: 'containers.dashboard',
+      pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
+      surfaceID: 'metrics.dashboard',
     }), expect.any(AbortSignal));
     expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
   });
@@ -1912,12 +1912,12 @@ describe('PluginCenterView', () => {
         projection={projection}
         loading={false}
         installOperations={[{
-          pluginID: containersPlugin.pluginID,
-          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          pluginID: metricsPlugin.pluginID,
+          pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
           observation: 'watching',
           execution: {
-            execution_id: 'release_install_containers',
-            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            execution_id: 'release_install_metrics',
+            plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
             kind: 'operation',
             status: 'failed',
             cursor: 1,
@@ -1942,7 +1942,7 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('did not respond in time');
     expect(status.textContent?.toLowerCase()).not.toContain('permission');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onRetryInstall).toHaveBeenCalledWith(metricsPlugin.officialCatalog.pluginInstanceID);
   });
 
   it('keeps a committed installation distinct when inventory refresh needs retrying', () => {
@@ -1951,15 +1951,15 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containersPlugin] }}
+        projection={{ items: [metricsPlugin] }}
         loading={false}
         installOperations={[{
-          pluginID: containersPlugin.pluginID,
-          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          pluginID: metricsPlugin.pluginID,
+          pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
           observation: 'refresh_failed',
           execution: {
-            execution_id: 'release_install_containers',
-            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            execution_id: 'release_install_metrics',
+            plugin_instance_id: metricsPlugin.officialCatalog.pluginInstanceID,
             kind: 'operation',
             status: 'completed',
             cursor: 1,
@@ -1983,7 +1983,7 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('installed, but Plugin Center could not refresh');
     expect(status.textContent).not.toContain('installation failed');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onRetryInstall).toHaveBeenCalledWith(metricsPlugin.officialCatalog.pluginInstanceID);
   });
 
   it('lets read-only users open surfaces while keeping management actions disabled', async () => {
@@ -1991,16 +1991,16 @@ describe('PluginCenterView', () => {
     const installedProjection: PluginInventoryProjection = {
       items: [
         {
-          ...containersPlugin,
-          pluginInstanceID: 'plugininst_containers',
+          ...metricsPlugin,
+          pluginInstanceID: 'plugininst_metrics',
           version: '2.0.0',
           managementRevision: 7,
           canDisable: true,
           lifecycleState: 'enabled',
           defaultLaunchTarget: {
-            pluginID: 'com.redeven.official.containers',
-            pluginInstanceID: 'plugininst_containers',
-            surfaceID: 'containers.dashboard',
+            pluginID: 'com.example.metrics',
+            pluginInstanceID: 'plugininst_metrics',
+            surfaceID: 'metrics.dashboard',
             expectedManagementRevision: 7,
             preferredPlacement: 'activity',
           },
@@ -2049,8 +2049,8 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
     const installedProjection: PluginInventoryProjection = {
       items: [{
-        ...containersPlugin,
-        pluginInstanceID: 'plugininst_containers',
+        ...metricsPlugin,
+        pluginInstanceID: 'plugininst_metrics',
         managementRevision: 7,
         canDisable: true,
         lifecycleState: 'needs_attention',
@@ -2083,10 +2083,10 @@ describe('PluginCenterView', () => {
 
     dispose = render(() => (
       <PluginCenterView
-        projection={containersPermissionProjection()}
+        projection={metricsPermissionProjection()}
         loading={false}
         error={null}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -2094,7 +2094,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const permissionSwitch = mount.querySelector('[data-plugin-permission="containers.read"] [role="switch"]') as HTMLButtonElement;
+    const permissionSwitch = mount.querySelector('[data-plugin-permission="metrics.read"] [role="switch"]') as HTMLButtonElement;
     expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
 
     permissionSwitch.click();
@@ -2114,8 +2114,8 @@ describe('PluginCenterView', () => {
 
     expect(onCommand).toHaveBeenCalledWith({
       type: 'grant_permission',
-      pluginInstanceID: 'plugininst_containers',
-      permissionID: 'containers.read',
+      pluginInstanceID: 'plugininst_metrics',
+      permissionID: 'metrics.read',
       expectedPolicyRevision: 3,
       expectedManagementRevision: 7,
       expectedRevokeEpoch: 2,
@@ -2124,7 +2124,7 @@ describe('PluginCenterView', () => {
   });
 
   it('names the actual plugin in permission disclosure and confirmation', async () => {
-    const externalProjection = containersPermissionProjection();
+    const externalProjection = metricsPermissionProjection();
     externalProjection.items[0] = {
       ...externalProjection.items[0],
       inventoryKey: 'instance:plugininst_toolbox',
@@ -2149,14 +2149,14 @@ describe('PluginCenterView', () => {
     ), mount);
 
     expect(mount.textContent).toContain('Example Toolbox permissions');
-    (mount.querySelector('[data-plugin-permission="containers.read"] [role="switch"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-permission="metrics.read"] [role="switch"]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.body.textContent).toContain('Grant View containers to Example Toolbox?');
-    expect(document.body.textContent).not.toContain('Grant View containers to Containers?');
+    expect(document.body.textContent).toContain('Grant Read data to Example Toolbox?');
+    expect(document.body.textContent).not.toContain('Grant Read data to Metrics?');
   });
 
   it('distinguishes generic permission IDs in switches and confirmation', async () => {
-    const externalProjection = containersPermissionProjection();
+    const externalProjection = metricsPermissionProjection();
     const base = externalProjection.items[0];
     externalProjection.items[0] = {
       ...base,
@@ -2214,7 +2214,7 @@ describe('PluginCenterView', () => {
   });
 
   it('explains why a policy-managed optional permission cannot be granted', () => {
-    const policyProjection = containersPermissionProjection();
+    const policyProjection = metricsPermissionProjection();
     const item = policyProjection.items[0];
     policyProjection.items[0] = {
       ...item,
@@ -2234,7 +2234,7 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={policyProjection}
         loading={false}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -2242,7 +2242,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const permission = mount.querySelector<HTMLElement>('[data-plugin-permission="containers.read"]')!;
+    const permission = mount.querySelector<HTMLElement>('[data-plugin-permission="metrics.read"]')!;
     expect(permission.textContent).toContain('Optional');
     expect(permission.textContent).toContain('Managed by policy');
     expect(permission.textContent).toContain('cannot be granted under the current environment policy');
@@ -2258,10 +2258,10 @@ describe('PluginCenterView', () => {
 
     dispose = render(() => (
       <PluginCenterView
-        projection={containersPermissionProjection()}
+        projection={metricsPermissionProjection()}
         loading={false}
         error={null}
-        selectedInventoryKey="catalog:containers"
+        selectedInventoryKey="catalog:metrics"
         onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -2269,7 +2269,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const permissionSwitch = mount.querySelector('[data-plugin-permission="containers.read"] [role="switch"]') as HTMLButtonElement;
+    const permissionSwitch = mount.querySelector('[data-plugin-permission="metrics.read"] [role="switch"]') as HTMLButtonElement;
     permissionSwitch.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     findDocumentButton('Grant').click();
@@ -2285,15 +2285,15 @@ describe('PluginCenterView', () => {
     const installedProjection: PluginInventoryProjection = {
       items: [
         {
-          ...containersPlugin,
-          pluginInstanceID: 'plugininst_containers',
+          ...metricsPlugin,
+          pluginInstanceID: 'plugininst_metrics',
           version: '2.0.0',
           managementRevision: 11,
           lifecycleState: 'enabled',
           defaultLaunchTarget: {
-            pluginID: 'com.redeven.official.containers',
-            pluginInstanceID: 'plugininst_containers',
-            surfaceID: 'containers.dashboard',
+            pluginID: 'com.example.metrics',
+            pluginInstanceID: 'plugininst_metrics',
+            surfaceID: 'metrics.dashboard',
             expectedManagementRevision: 11,
             preferredPlacement: 'activity',
           },
@@ -2321,9 +2321,9 @@ describe('PluginCenterView', () => {
     open.click();
     expect(onCommand).toHaveBeenCalledWith({
       type: 'open_surface',
-      pluginID: 'com.redeven.official.containers',
-      pluginInstanceID: 'plugininst_containers',
-      surfaceID: 'containers.dashboard',
+      pluginID: 'com.example.metrics',
+      pluginInstanceID: 'plugininst_metrics',
+      surfaceID: 'metrics.dashboard',
       expectedManagementRevision: 11,
       placement: 'activity',
       keepPluginCenter: true,
@@ -2337,18 +2337,18 @@ describe('PluginCenterView', () => {
       ...inspection,
       intent: {
         action: 'update' as const,
-        plugin_instance_id: 'plugininst_containers',
+        plugin_instance_id: 'plugininst_metrics',
         expected_management_revision: 13,
       },
-      plugin_id: containersPlugin.pluginID,
-      publisher_id: containersPlugin.officialCatalog.publisherID,
+      plugin_id: metricsPlugin.pluginID,
+      publisher_id: metricsPlugin.officialCatalog.publisherID,
       version: '2.0.0',
     }));
     const updatesProjection: PluginInventoryProjection = {
       items: [
         {
-          ...containersPlugin,
-          pluginInstanceID: 'plugininst_containers',
+          ...metricsPlugin,
+          pluginInstanceID: 'plugininst_metrics',
           version: '1.9.0',
           managementRevision: 13,
           lifecycleState: 'update_available',
@@ -2383,7 +2383,7 @@ describe('PluginCenterView', () => {
       url: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.distribution.installSource.url,
       intent: {
         action: 'update',
-        plugin_instance_id: 'plugininst_containers',
+        plugin_instance_id: 'plugininst_metrics',
         expected_management_revision: 13,
       },
     }, expect.any(AbortSignal));
@@ -2400,18 +2400,18 @@ describe('PluginCenterView', () => {
       expires_at: '2099-08-08T12:00:00Z',
       intent: {
         action: 'update' as const,
-        plugin_instance_id: 'plugininst_containers',
+        plugin_instance_id: 'plugininst_metrics',
         expected_management_revision: 13,
       },
-      plugin_id: containersPlugin.pluginID,
-      publisher_id: containersPlugin.officialCatalog.publisherID,
+      plugin_id: metricsPlugin.pluginID,
+      publisher_id: metricsPlugin.officialCatalog.publisherID,
       version: '2.0.0',
       signature_assessment: { ...inspection.signature_assessment, state: 'verified' as const },
     }));
     const updatesProjection: PluginInventoryProjection = {
       items: [{
-        ...containersPlugin,
-        pluginInstanceID: 'plugininst_containers',
+        ...metricsPlugin,
+        pluginInstanceID: 'plugininst_metrics',
         version: '1.9.0',
         managementRevision: 13,
         lifecycleState: 'update_available',
@@ -2442,8 +2442,8 @@ describe('PluginCenterView', () => {
 
     expect(onCommand).toHaveBeenCalledWith({
       type: 'update',
-      pluginID: containersPlugin.pluginID,
-      pluginInstanceID: 'plugininst_containers',
+      pluginID: metricsPlugin.pluginID,
+      pluginInstanceID: 'plugininst_metrics',
       targetVersion: '2.0.0',
       expectedManagementRevision: 13,
     }, expect.any(AbortSignal));
@@ -2454,8 +2454,8 @@ describe('PluginCenterView', () => {
     const needsAttentionProjection: PluginInventoryProjection = {
       items: [
         {
-          ...containersPlugin,
-          pluginInstanceID: 'plugininst_containers',
+          ...metricsPlugin,
+          pluginInstanceID: 'plugininst_metrics',
           version: '2.0.0',
           managementRevision: 17,
           lifecycleState: 'needs_attention',
@@ -2467,8 +2467,8 @@ describe('PluginCenterView', () => {
     const updatesProjection: PluginInventoryProjection = {
       items: [
         {
-          ...containersPlugin,
-          pluginInstanceID: 'plugininst_containers',
+          ...metricsPlugin,
+          pluginInstanceID: 'plugininst_metrics',
           version: '1.9.0',
           managementRevision: 19,
           lifecycleState: 'update_available',
@@ -2570,13 +2570,13 @@ describe('PluginCenterView', () => {
 
   it('keeps enabled surfaces closed and exposes an explicit retry after runtime recovery fails', () => {
     const onRetryRuntimeRecovery = vi.fn();
-    const enabledProjection = containersPermissionProjection(true);
+    const enabledProjection = metricsPermissionProjection(true);
     enabledProjection.items[0] = {
       ...enabledProjection.items[0],
       defaultLaunchTarget: {
-        pluginID: 'com.redeven.official.containers',
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.dashboard',
+        pluginID: 'com.example.metrics',
+        pluginInstanceID: 'plugininst_metrics',
+        surfaceID: 'metrics.dashboard',
         preferredPlacement: 'activity',
         expectedManagementRevision: 7,
       },
@@ -2612,33 +2612,33 @@ describe('PluginCenterView', () => {
     expect(onRetryRuntimeRecovery).toHaveBeenCalledOnce();
     expect(retry?.disabled).toBe(true);
 
-    const open = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]');
+    const open = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:metrics"]');
     expect(open?.textContent).toContain('Open');
     expect(open?.disabled).toBe(true);
   });
 
   it('keeps Host-authorized actions available while presenting recovery status', async () => {
     const onCommand = vi.fn();
-    const enabledProjection = containersPermissionProjection(true);
-    const containers = {
+    const enabledProjection = metricsPermissionProjection(true);
+    const metrics = {
       ...enabledProjection.items[0],
       defaultLaunchTarget: {
-        pluginID: 'com.redeven.official.containers',
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.dashboard',
+        pluginID: 'com.example.metrics',
+        pluginInstanceID: 'plugininst_metrics',
+        surfaceID: 'metrics.dashboard',
         preferredPlacement: 'activity',
         expectedManagementRevision: 7,
       },
     } as const;
     const database = {
-      ...containers,
+      ...metrics,
       inventoryKey: 'catalog:database',
-      pluginID: 'com.redeven.official.database',
+      pluginID: 'com.example.database',
       pluginInstanceID: 'plugininst_database',
       displayName: 'Database Tools',
       defaultLaunchTarget: {
-        ...containers.defaultLaunchTarget,
-        pluginID: 'com.redeven.official.database',
+        ...metrics.defaultLaunchTarget,
+        pluginID: 'com.example.database',
         pluginInstanceID: 'plugininst_database',
         surfaceID: 'database.dashboard',
       },
@@ -2649,13 +2649,13 @@ describe('PluginCenterView', () => {
 
     dispose = render(() => (
       <PluginCenterView
-        projection={{ items: [containers, database] }}
+        projection={{ items: [metrics, database] }}
         loading={false}
         error={null}
         canManagePlugins
         canOpenPluginSurfaces
         runtimeRecoveryByInstanceID={{
-          plugininst_containers: { state: 'ready' },
+          plugininst_metrics: { state: 'ready' },
           plugininst_database: { state: 'recovering' },
         }}
         onRetryRuntimeRecovery={vi.fn()}
@@ -2664,7 +2664,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const readyOpen = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]');
+    const readyOpen = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:metrics"]');
     const recoveringOpen = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:database"]');
     expect(readyOpen?.disabled).toBe(false);
     expect(recoveringOpen?.disabled).toBe(false);
@@ -2677,7 +2677,7 @@ describe('PluginCenterView', () => {
     expect(onCommand).toHaveBeenCalledTimes(2);
     expect(onCommand.mock.calls[0]?.[0]).toMatchObject({
       type: 'open_surface',
-      pluginInstanceID: 'plugininst_containers',
+      pluginInstanceID: 'plugininst_metrics',
     });
     expect(onCommand.mock.calls[1]?.[0]).toMatchObject({
       type: 'open_surface',
@@ -2688,13 +2688,13 @@ describe('PluginCenterView', () => {
   it('presents typed revoked recovery guidance without suggesting a blind retry', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
-    const enabledProjection = containersPermissionProjection(true);
+    const enabledProjection = metricsPermissionProjection(true);
     enabledProjection.items[0] = {
       ...enabledProjection.items[0],
       defaultLaunchTarget: {
-        pluginID: 'com.redeven.official.containers',
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.dashboard',
+        pluginID: 'com.example.metrics',
+        pluginInstanceID: 'plugininst_metrics',
+        surfaceID: 'metrics.dashboard',
         preferredPlacement: 'activity',
         expectedManagementRevision: 7,
       },
@@ -2724,18 +2724,18 @@ describe('PluginCenterView', () => {
     expect(recovery?.textContent).toContain('This plugin release is no longer trusted.');
     expect(recovery?.textContent).toContain('Reinstall the plugin from a trusted source');
     expect(recovery?.textContent).not.toContain('then retry runtime recovery');
-    expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]')?.disabled).toBe(true);
+    expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:metrics"]')?.disabled).toBe(true);
   });
 
   it('presents a bounded recovery timeout with one explicit retry and keeps Open disabled', () => {
     const onRetryRuntimeRecovery = vi.fn();
-    const enabledProjection = containersPermissionProjection(true);
+    const enabledProjection = metricsPermissionProjection(true);
     enabledProjection.items[0] = {
       ...enabledProjection.items[0],
       defaultLaunchTarget: {
-        pluginID: 'com.redeven.official.containers',
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.dashboard',
+        pluginID: 'com.example.metrics',
+        pluginInstanceID: 'plugininst_metrics',
+        surfaceID: 'metrics.dashboard',
         preferredPlacement: 'activity',
         expectedManagementRevision: 7,
       },
@@ -2770,7 +2770,7 @@ describe('PluginCenterView', () => {
     retry?.click();
     expect(onRetryRuntimeRecovery).toHaveBeenCalledOnce();
     expect(retry?.disabled).toBe(true);
-    expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]')?.disabled).toBe(true);
+    expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:metrics"]')?.disabled).toBe(true);
   });
 
   it('explains that plugin surfaces remain unavailable while runtime recovery is active', () => {
@@ -2779,7 +2779,7 @@ describe('PluginCenterView', () => {
 
     dispose = render(() => (
       <PluginCenterView
-        projection={containersPermissionProjection(true)}
+        projection={metricsPermissionProjection(true)}
         loading={false}
         error={null}
         canManagePlugins
@@ -2798,14 +2798,14 @@ describe('PluginCenterView', () => {
   });
 
   it('uses the combined authorization state instead of a stale enabled lifecycle', () => {
-    const staleProjection = containersPermissionProjection(false);
+    const staleProjection = metricsPermissionProjection(false);
     staleProjection.items[0] = {
       ...staleProjection.items[0],
       lifecycleState: 'enabled',
       defaultLaunchTarget: {
-        pluginID: 'com.redeven.official.containers',
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.dashboard',
+        pluginID: 'com.example.metrics',
+        pluginInstanceID: 'plugininst_metrics',
+        surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
         preferredPlacement: 'activity',
       },
@@ -2833,8 +2833,8 @@ describe('PluginCenterView', () => {
     const onCommand = vi.fn();
     const installedProjection: PluginInventoryProjection = {
       items: [{
-        ...containersPlugin,
-        pluginInstanceID: 'plugininst_containers',
+        ...metricsPlugin,
+        pluginInstanceID: 'plugininst_metrics',
         version: '2.0.0',
         managementRevision: 23,
         lifecycleState: 'disabled',
@@ -2869,7 +2869,7 @@ describe('PluginCenterView', () => {
 
     expect(onCommand).toHaveBeenCalledWith({
       type: 'uninstall',
-      pluginInstanceID: 'plugininst_containers',
+      pluginInstanceID: 'plugininst_metrics',
       expectedManagementRevision: 23,
       dataRetention: 'delete_data',
     }, expect.any(AbortSignal));
@@ -2879,8 +2879,8 @@ describe('PluginCenterView', () => {
     const onCommand = vi.fn();
     const installedProjection: PluginInventoryProjection = {
       items: [{
-        ...containersPlugin,
-        pluginInstanceID: 'plugininst_containers',
+        ...metricsPlugin,
+        pluginInstanceID: 'plugininst_metrics',
         version: '2.0.0',
         managementRevision: 23,
         lifecycleState: 'disabled',
@@ -2919,7 +2919,7 @@ describe('PluginCenterView', () => {
     (document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).click();
     expect(onCommand).toHaveBeenCalledWith({
       type: 'uninstall',
-      pluginInstanceID: 'plugininst_containers',
+      pluginInstanceID: 'plugininst_metrics',
       expectedManagementRevision: 23,
       dataRetention: 'keep_data',
     }, expect.any(AbortSignal));
@@ -2961,8 +2961,8 @@ describe('PluginCenterView', () => {
 
     const installedProjection: PluginInventoryProjection = {
       items: [{
-        ...containersPlugin,
-        pluginInstanceID: 'plugininst_containers',
+        ...metricsPlugin,
+        pluginInstanceID: 'plugininst_metrics',
         version: '2.0.0',
         managementRevision: 7,
         canDisable: true,
@@ -3001,7 +3001,7 @@ describe('PluginCenterView', () => {
 
   it('selects same-plugin-id instances independently by inventory key', () => {
     const first = {
-      ...containersPlugin,
+      ...metricsPlugin,
       inventoryKey: 'instance:plugini_toolbox_alpha',
       pluginID: 'com.example.toolbox',
       pluginInstanceID: 'plugini_toolbox_alpha',
@@ -3026,7 +3026,7 @@ describe('PluginCenterView', () => {
     document.body.append(mount);
 
     const matchingCatalog = {
-      ...containersPlugin,
+      ...metricsPlugin,
       inventoryKey: 'catalog:toolbox',
       pluginID: 'com.example.toolbox',
       displayName: 'Toolbox Catalog',
@@ -3063,7 +3063,7 @@ describe('PluginCenterView', () => {
     const inspected = externalInspectionForCenter();
     const committed = externalCommitForCenter(inspected);
     const alpha = {
-      ...containersPermissionProjection().items[0],
+      ...metricsPermissionProjection().items[0],
       inventoryKey: 'instance:toolbox-alpha',
       pluginID: 'com.example.toolbox',
       pluginInstanceID: 'toolbox-alpha',
@@ -3077,7 +3077,7 @@ describe('PluginCenterView', () => {
       officialCatalog: undefined,
     } satisfies PluginInventoryProjection['items'][number];
     const beta = {
-      ...containersPermissionProjection().items[0],
+      ...metricsPermissionProjection().items[0],
       inventoryKey: 'instance:plugini_external_beta',
       pluginID: 'com.example.toolbox',
       pluginInstanceID: 'plugini_external_beta',
@@ -3138,7 +3138,7 @@ describe('PluginCenterView', () => {
 
   it('preserves an exact shell detail request when retained filters exclude it', async () => {
     const alpha = {
-      ...containersPlugin,
+      ...metricsPlugin,
       inventoryKey: 'instance:toolbox-alpha',
       pluginID: 'com.example.toolbox',
       pluginInstanceID: 'toolbox-alpha',

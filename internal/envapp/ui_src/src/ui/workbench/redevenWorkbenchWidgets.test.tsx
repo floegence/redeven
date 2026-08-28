@@ -40,7 +40,7 @@ const workbenchMocks = vi.hoisted(() => ({
   pluginSurfaceState: vi.fn(() => ({
     kind: 'plugin' as const,
     plugin_instance_id: 'instance-containers',
-    plugin_id: 'io.redeven.containers',
+    plugin_id: 'io.example.metrics',
     surface_id: 'containers',
     display_name: 'Containers',
     expected_management_revision: 7,
@@ -184,6 +184,7 @@ describe('redevenWorkbenchWidgets default geometry', () => {
       'redeven.plugin': { width: 1120, height: 760 },
       'redeven.monitor': { width: 1040, height: 800 },
       'redeven.codespaces': { width: 1040, height: 660 },
+      'redeven.containers': { width: 1120, height: 720 },
       'redeven.ports': { width: 1000, height: 620 },
       'redeven.ai': { width: 1200, height: 760 },
     });
@@ -377,7 +378,7 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
 
     expect(pluginSurfaceMocks.render).toHaveBeenCalledWith(expect.objectContaining({
       target: {
-        pluginID: 'io.redeven.containers',
+        pluginID: 'io.example.metrics',
         pluginInstanceID: 'instance-containers',
         surfaceID: 'containers',
         displayName: 'Containers',

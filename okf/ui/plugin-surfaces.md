@@ -380,9 +380,8 @@ never a second install action.
 ## Permissions and policy
 
 Plugin Center joins installed records, active grants, Host permission
-requirements, and security policy. Official Containers explains its four
-permission groups; missing required read access blocks open with a permission
-explanation rather than a Docker error.
+requirements, and security policy. Missing required access blocks only the
+affected plugin open or capability call and presents a permission explanation.
 
 Generic requirements come from the released Host projection of the active
 version's verified capability contracts, not manifest claims. Only an environment

@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
@@ -56,7 +56,7 @@ type retainedDockerVolume struct {
 }
 
 type dockerDriver struct {
-	adapter  *containers.Adapter
+	adapter  *containerengine.Adapter
 	stateDir string
 }
 
@@ -79,7 +79,7 @@ func (d *dockerDriver) Install(ctx context.Context, service *pfregistry.ManagedS
 		service.RuntimeIdentity = ""
 	}
 	progress("pulling", 2)
-	pulled, err := d.adapter.PullImage(ctx, containers.ImagePullRequest{Engine: containers.EngineDocker, ImageRef: pinnedImage})
+	pulled, err := d.adapter.PullImage(ctx, containerengine.ImagePullRequest{Engine: containerengine.EngineDocker, ImageRef: pinnedImage})
 	if err != nil || !pulled.Completed || !pulled.Image.DigestPinned {
 		return "", "", serviceError("IMAGE_PULL_FAILED", "The audited DeepSeek Harness image could not be pulled by digest.", 503, true, err)
 	}
@@ -105,16 +105,16 @@ func (d *dockerDriver) Install(ctx context.Context, service *pfregistry.ManagedS
 	return created.ContainerID, pinnedImage, nil
 }
 
-func hardenedDockerCreateRequest(service *pfregistry.ManagedService, pinnedImage, volumeName string) containers.ContainerCreateRequest {
-	return containers.ContainerCreateRequest{
-		Engine: containers.EngineDocker, Name: dockerContainerName(service.ServiceID), Image: pinnedImage, RestartPolicy: "no", NetworkMode: "bridge",
+func hardenedDockerCreateRequest(service *pfregistry.ManagedService, pinnedImage, volumeName string) containerengine.ContainerCreateRequest {
+	return containerengine.ContainerCreateRequest{
+		Engine: containerengine.EngineDocker, Name: dockerContainerName(service.ServiceID), Image: pinnedImage, RestartPolicy: "no", NetworkMode: "bridge",
 		Env:    []string{"DSH_DESKTOP_ENABLED=0", "DSH_HOME=/home/node/.dsh", "HOME=/workspace"},
 		Labels: map[string]string{managedServiceLabel: service.ServiceID},
-		Ports:  []containers.ContainerPortPublish{{ContainerPort: 3080, HostPort: service.RuntimePort, HostIP: "127.0.0.1", Protocol: "tcp"}},
-		Mounts: []containers.ContainerMount{
-			{Type: containers.MountTypeVolume, Source: volumeName, Target: "/home/node/.dsh"},
-			{Type: containers.MountTypeBind, Source: service.WorkspacePath, Target: "/workspace"},
-			{Type: containers.MountTypeTmpfs, Target: "/tmp", TmpfsOptions: []string{"rw", "noexec", "nosuid", "nodev", "size=536870912"}},
+		Ports:  []containerengine.ContainerPortPublish{{ContainerPort: 3080, HostPort: service.RuntimePort, HostIP: "127.0.0.1", Protocol: "tcp"}},
+		Mounts: []containerengine.ContainerMount{
+			{Type: containerengine.MountTypeVolume, Source: volumeName, Target: "/home/node/.dsh"},
+			{Type: containerengine.MountTypeBind, Source: service.WorkspacePath, Target: "/workspace"},
+			{Type: containerengine.MountTypeTmpfs, Target: "/tmp", TmpfsOptions: []string{"rw", "noexec", "nosuid", "nodev", "size=536870912"}},
 		},
 		CapDrop: []string{"ALL"}, ReadOnlyRoot: true, SecurityOpts: []string{"no-new-privileges:true"}, PIDsLimit: 512, ShmSizeBytes: 1024 * 1024 * 1024, User: "1000:1000",
 	}
@@ -134,7 +134,7 @@ func (d *dockerDriver) ensureDataVolume(ctx context.Context, service *pfregistry
 		if err := decodeStrictJSON(raw, &marker); err != nil || !strings.HasPrefix(marker.Name, "redeven-dsh-data-") || marker.CreatedAtUnixMs <= 0 {
 			return "", serviceError("DATA_IDENTITY_INVALID", "The retained Docker data identity is invalid.", 409, false, err)
 		}
-		volume, err := d.adapter.InspectVolume(ctx, containers.VolumeInspectRequest{Engine: containers.EngineDocker, Name: marker.Name})
+		volume, err := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: marker.Name})
 		if err != nil {
 			return "", serviceError("DATA_VOLUME_MISSING", "The retained DeepSeek Harness data volume is missing.", 409, false, err)
 		}
@@ -146,12 +146,12 @@ func (d *dockerDriver) ensureDataVolume(ctx context.Context, service *pfregistry
 		return "", err
 	}
 	name := "redeven-dsh-data-" + strings.TrimPrefix(service.ServiceID, "mws_")
-	volume, err := d.adapter.CreateVolume(ctx, containers.VolumeCreateRequest{Engine: containers.EngineDocker, Name: name})
+	volume, err := d.adapter.CreateVolume(ctx, containerengine.VolumeCreateRequest{Engine: containerengine.EngineDocker, Name: name})
 	if err != nil {
 		return "", serviceError("DATA_VOLUME_CREATE_FAILED", "The DeepSeek Harness data volume could not be created.", 502, true, err)
 	}
 	if volume.CreatedAtUnixMs <= 0 {
-		inspected, inspectErr := d.adapter.InspectVolume(ctx, containers.VolumeInspectRequest{Engine: containers.EngineDocker, Name: name})
+		inspected, inspectErr := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: name})
 		if inspectErr != nil {
 			return "", inspectErr
 		}
@@ -180,12 +180,12 @@ func (d *dockerDriver) verifyExactContainer(ctx context.Context, service *pfregi
 	if strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return serviceError("CONTAINER_IDENTITY_MISSING", "The managed container identity is missing.", 409, false, nil)
 	}
-	response, err := d.adapter.Inspect(ctx, containers.ContainerInspectRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil {
 		return serviceError("CONTAINER_IDENTITY_MISSING", "The exact managed container no longer exists.", 409, false, err)
 	}
 	container := response.Container
-	labelMatches, labelErr := d.adapter.ContainerMatchesLabel(ctx, containers.ContainerLabelMatchRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity, Key: managedServiceLabel, Value: service.ServiceID})
+	labelMatches, labelErr := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, Key: managedServiceLabel, Value: service.ServiceID})
 	if labelErr != nil {
 		return serviceError("CONTAINER_IDENTITY_MISSING", "The exact managed container could not be verified.", 409, false, labelErr)
 	}
@@ -206,14 +206,14 @@ func (d *dockerDriver) Start(ctx context.Context, service *pfregistry.ManagedSer
 	if err := d.verifyExactContainer(ctx, service, service.ArtifactReference); err != nil {
 		return "", err
 	}
-	response, err := d.adapter.Inspect(ctx, containers.ContainerInspectRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil {
 		return "", err
 	}
-	if response.Container.State == containers.ContainerStateRunning {
+	if response.Container.State == containerengine.ContainerStateRunning {
 		return service.RuntimeIdentity, nil
 	}
-	started, err := d.adapter.Start(ctx, containers.ContainerStartRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	started, err := d.adapter.Start(ctx, containerengine.ContainerStartRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil || !started.Completed || started.ContainerID != service.RuntimeIdentity {
 		return "", serviceError("START_FAILED", "The exact managed Docker container could not be started.", 502, true, err)
 	}
@@ -231,14 +231,14 @@ func (d *dockerDriver) Stop(ctx context.Context, service *pfregistry.ManagedServ
 	if err := d.verifyExactContainer(ctx, service, service.ArtifactReference); err != nil {
 		return err
 	}
-	response, err := d.adapter.Inspect(ctx, containers.ContainerInspectRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil {
 		return err
 	}
-	if response.Container.State != containers.ContainerStateRunning && response.Container.State != containers.ContainerStateRestarting && response.Container.State != containers.ContainerStatePaused {
+	if response.Container.State != containerengine.ContainerStateRunning && response.Container.State != containerengine.ContainerStateRestarting && response.Container.State != containerengine.ContainerStatePaused {
 		return nil
 	}
-	stopped, err := d.adapter.Stop(ctx, containers.ContainerActionRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity, TimeoutSec: 10})
+	stopped, err := d.adapter.Stop(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, TimeoutSec: 10})
 	if err != nil || !stopped.Completed || stopped.ContainerID != service.RuntimeIdentity {
 		return serviceError("STOP_FAILED", "The exact managed Docker container could not be stopped.", 502, true, err)
 	}
@@ -255,7 +255,7 @@ func (d *dockerDriver) removeExactContainer(ctx context.Context, service *pfregi
 	if err := d.Stop(ctx, service); err != nil {
 		return err
 	}
-	removed, err := d.adapter.Remove(ctx, containers.ContainerActionRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity})
+	removed, err := d.adapter.Remove(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 	if err != nil || !removed.Completed || removed.ContainerID != service.RuntimeIdentity {
 		return serviceError("CONTAINER_REMOVE_FAILED", "The exact managed Docker container could not be removed.", 502, true, err)
 	}
@@ -281,11 +281,11 @@ func (d *dockerDriver) Uninstall(ctx context.Context, service *pfregistry.Manage
 	if err := decodeStrictJSON(raw, &marker); err != nil {
 		return serviceError("DATA_IDENTITY_INVALID", "The retained Docker data identity is invalid.", 409, false, err)
 	}
-	volume, err := d.adapter.InspectVolume(ctx, containers.VolumeInspectRequest{Engine: containers.EngineDocker, Name: marker.Name})
+	volume, err := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: marker.Name})
 	if err != nil || volume.CreatedAtUnixMs != marker.CreatedAtUnixMs {
 		return serviceError("DATA_IDENTITY_MISMATCH", "Redeven will not delete a Docker volume whose identity has changed.", 409, false, err)
 	}
-	if err := d.adapter.RemoveVolume(ctx, containers.VolumeRemoveRequest{Engine: containers.EngineDocker, Name: marker.Name}); err != nil {
+	if err := d.adapter.RemoveVolume(ctx, containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: marker.Name}); err != nil {
 		return serviceError("DATA_REMOVE_FAILED", "The DeepSeek Harness data volume could not be deleted.", 502, true, err)
 	}
 	return os.Remove(markerPath)
@@ -298,7 +298,7 @@ func (d *dockerDriver) Logs(ctx context.Context, service *pfregistry.ManagedServ
 	if err := d.verifyExactContainer(ctx, service, service.ArtifactReference); err != nil {
 		return nil, err
 	}
-	result, err := d.adapter.TailLogs(ctx, containers.LogsTailRequest{Engine: containers.EngineDocker, ContainerID: service.RuntimeIdentity, TailLines: tail})
+	result, err := d.adapter.TailLogs(ctx, containerengine.LogsTailRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, TailLines: tail})
 	if err != nil {
 		return nil, err
 	}

@@ -543,7 +543,7 @@ unchanged. Plugin names, publisher names, summaries, descriptions, highlights,
 keywords, surface labels, and setting labels come from the signed manifest
 presentation catalog. Redeven resolves BCP 47 locales through the released
 ReDevPlugin resolver and must not add an English fallback, duplicate parser,
-Containers-specific author copy, or plugin-id presentation branch.
+product-specific author copy, or plugin-id presentation branch.
 
 Official signed-release review reads only the current validated market snapshot.
 The snapshot carries presentation, declared permissions, the exact release
@@ -561,7 +561,7 @@ reconnect observation, and inventory refresh after a committed installation.
 Closing Plugin Center or losing its observer must not cancel the Host Execution,
 create a new request id, replay installation, or turn transport/internal failures
 into permission denials. Redeven must not add an execution store, lifecycle state
-machine, package verifier, or Containers-specific install path. When start
+machine, package verifier, or product-specific install path. When start
 response delivery is unknown, Redeven retries with the same request id and exact
 market digests so Host idempotency recovers the existing operation. A market-
 declaration mismatch refreshes the market before a new attempt. Confirmed
@@ -727,7 +727,7 @@ code:
   alternate WASM executor, custom IPC protocol, or host-local hot path for plugin
   storage/network calls.
 - Redeven business code begins at adapter registration. Concrete capabilities
-  such as containers, files, shells, cloud services, database access, vault
+  such as files, shells, cloud services, database access, vault
   access, session mapping, and product audit presentation are Redeven logic only
   after the request has passed ReDevPlugin identity, lifecycle, permission,
   confirmation, token, lease/quota, revocation, and audit context construction.
@@ -911,12 +911,13 @@ load plugin UI outside sandboxed ReDevPlugin surfaces, execute native plugin
 backends, or call Redeven business adapters without the ReDevPlugin permission,
 confirmation, token, lease, audit, and lifecycle chain.
 
-Containers, if exposed as an official plugin experience, are Redeven business
-capabilities. The container capability adapter lives in Redeven, is registered
-with `redevplugin`, and must still pass through ReDevPlugin permission,
-confirmation, token, lease, audit, and lifecycle contracts. Containers are not a
-plugin runtime mechanism and must not be used as a way to run third-party plugin
-backends.
+Containers are a Redeven-native product capability, not a ReDevPlugin
+capability or an official plugin experience. Native container inventory and
+operations must pass through the Redeven-owned `containerresource` service and
+its permission, preflight, lock, audit, cancellation, and reconciliation
+contracts. The shared `containerengine` package is the single Docker/Podman
+execution boundary for native Containers and Web Services; it must not be used
+to run third-party plugin backends.
 
 Flower-generated plugin flows are Redeven product orchestration over
 ReDevPlugin primitives. Flower may draft plugin source, call released
@@ -979,7 +980,7 @@ Use this checklist when reviewing any Redeven plugin integration change:
   platform-management handlers must be released ReDevPlugin handlers or thin
   wrappers around them. Do not create Redeven-local endpoint semantics that are
   not present in the ReDevPlugin contract.
-- Redeven may register business capability adapters such as containers, files,
+- Redeven may register business capability adapters such as files,
   shell, cloud, or database access. Each adapter must receive a request context
   that has already passed ReDevPlugin identity, permission, confirmation,
   lease/token, quota, and audit checks.

@@ -109,10 +109,10 @@ vi.mock('./PluginSurfaceFrame', () => ({
 }));
 
 const target: PluginSurfaceLaunchTarget = {
-  pluginID: 'com.redeven.official.containers',
-  pluginInstanceID: 'plugini_redeven_official_containers',
-  surfaceID: 'containers.dashboard',
-  displayName: 'Containers',
+  pluginID: 'com.example.metrics',
+  pluginInstanceID: 'plugini_redeven_official_metrics',
+  surfaceID: 'metrics.dashboard',
+  displayName: 'Metrics',
   expectedManagementRevision: 7,
   preferredPlacement: 'activity',
 };
@@ -170,7 +170,7 @@ describe('ActivityPluginSurfaceWindow', () => {
     const iframe = mount.querySelector('iframe');
     expect(surface.getAttribute('role')).toBe('dialog');
     expect(surface.getAttribute('aria-modal')).toBe('true');
-    expect(surface.getAttribute('aria-label')).toBe('Containers - containers.dashboard');
+    expect(surface.getAttribute('aria-label')).toBe('Metrics - metrics.dashboard');
     expect(surface.getAttribute('data-redeven-plugin-activity-window')).toBe('true');
     expect(surface.classList.contains('redeven-plugin-activity-window')).toBe(false);
     expect(mount.querySelector('[data-floating-interaction-surface]')?.classList)

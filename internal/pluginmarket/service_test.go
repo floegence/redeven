@@ -21,23 +21,23 @@ import (
 
 const validCatalogResponse = `{
   "data": [{
-    "plugin_id": "com.redeven.official.containers",
+    "plugin_id": "com.example.metrics",
     "publisher_id": "com.redeven.official",
     "presentation": {
       "default_locale": "en-US",
       "icon": {
-        "url": "/v1/plugins/com.redeven.official.containers/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
+        "url": "/v1/plugins/com.example.metrics/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
         "media_type": "image/png",
         "width": 512,
         "height": 512,
         "sha256": "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1"
       },
       "locales": [
-        {"locale": "en-US", "name": "Containers", "publisher_name": "Redeven Official", "summary": "Manage Docker and Podman resources.", "keywords": ["containers", "Docker"]},
-        {"locale": "zh-CN", "name": "容器", "publisher_name": "Redeven 官方", "summary": "管理 Docker 和 Podman 资源。", "keywords": ["容器", "Docker"]}
+        {"locale": "en-US", "name": "Metrics", "publisher_name": "Redeven Official", "summary": "Collect and display service metrics.", "keywords": ["metrics", "monitoring"]},
+        {"locale": "zh-CN", "name": "指标", "publisher_name": "Redeven 官方", "summary": "收集并展示服务指标。", "keywords": ["指标", "监控"]}
       ]
     },
-    "categories": ["infrastructure"],
+    "categories": ["monitoring"],
     "channels": ["stable"],
     "latest": {"channel": "stable", "version": "4.0.0", "availability_status": "visible"}
   }],
@@ -46,7 +46,7 @@ const validCatalogResponse = `{
 
 const validLatestResponse = `{
   "data": {
-    "plugin_id": "com.redeven.official.containers",
+    "plugin_id": "com.example.metrics",
     "channel": "stable",
     "version": "4.0.0",
     "source": {
@@ -60,15 +60,15 @@ const validLatestResponse = `{
     },
     "asset": {
       "asset_id": 497702097,
-      "name": "containers-4.0.0.redevplugin",
-      "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/containers-4.0.0.redevplugin",
+      "name": "metrics-4.0.0.redevplugin",
+      "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/metrics-4.0.0.redevplugin",
       "size": 409266,
       "sha256": "3dd8cc3fc30c347d6276b88ece0913ad8f15cd762704e7902ba6290351bb5e3c"
     },
     "release_ref": {
       "asset_id": 497702092,
-      "name": "containers-4.0.0.release-ref.json",
-      "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/containers-4.0.0.release-ref.json",
+      "name": "metrics-4.0.0.release-ref.json",
+      "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/metrics-4.0.0.release-ref.json",
       "size": 13225,
       "sha256": "47c919f9f629132ecd3a4f852df0d3d129167307a188b9ae3cdb4113d3eddbdb"
     },
@@ -81,10 +81,10 @@ const validLatestResponse = `{
       "release_ref": {
         "source_id": "redeven_official",
         "channel": "stable",
-        "release_metadata_ref": "plugins/com.redeven.official/com.redeven.official.containers/4.0.0/release.json",
+        "release_metadata_ref": "plugins/com.redeven.official/com.example.metrics/4.0.0/release.json",
         "release_metadata_sha256": "921d7a2ca42e8faf52a26f2b0ca7768e62317c2d0859ceea5858cce218d2dadd",
         "publisher_id": "com.redeven.official",
-        "plugin_id": "com.redeven.official.containers",
+        "plugin_id": "com.example.metrics",
         "version": "4.0.0",
         "expected_hashes": {
           "package_sha256": "sha256:8bc0bf9dc43c2f183e532e3f0d4d5921d3d103d40d6aca918958b3337563359a",
@@ -99,14 +99,14 @@ const validLatestResponse = `{
       },
       "files": [
         {
-          "locator": "plugins/com.redeven.official/com.redeven.official.containers/4.0.0/package.redevplugin",
-          "asset_name": "containers-4.0.0.redevplugin",
+          "locator": "plugins/com.redeven.official/com.example.metrics/4.0.0/package.redevplugin",
+          "asset_name": "metrics-4.0.0.redevplugin",
           "sha256": "3dd8cc3fc30c347d6276b88ece0913ad8f15cd762704e7902ba6290351bb5e3c",
           "size": 409266
         },
         {
-          "locator": "plugins/com.redeven.official/com.redeven.official.containers/4.0.0/release.json",
-          "asset_name": "containers-4.0.0.release.json",
+          "locator": "plugins/com.redeven.official/com.example.metrics/4.0.0/release.json",
+          "asset_name": "metrics-4.0.0.release.json",
           "sha256": "921d7a2ca42e8faf52a26f2b0ca7768e62317c2d0859ceea5858cce218d2dadd",
           "size": 3026
         },
@@ -120,18 +120,18 @@ const validLatestResponse = `{
     },
     "transport_assets": [
       {
-        "locator": "plugins/com.redeven.official/com.redeven.official.containers/4.0.0/package.redevplugin",
+        "locator": "plugins/com.redeven.official/com.example.metrics/4.0.0/package.redevplugin",
         "asset_id": 497702097,
-        "name": "containers-4.0.0.redevplugin",
-        "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/containers-4.0.0.redevplugin",
+        "name": "metrics-4.0.0.redevplugin",
+        "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/metrics-4.0.0.redevplugin",
         "size": 409266,
         "sha256": "3dd8cc3fc30c347d6276b88ece0913ad8f15cd762704e7902ba6290351bb5e3c"
       },
       {
-        "locator": "plugins/com.redeven.official/com.redeven.official.containers/4.0.0/release.json",
+        "locator": "plugins/com.redeven.official/com.example.metrics/4.0.0/release.json",
         "asset_id": 497702096,
-        "name": "containers-4.0.0.release.json",
-        "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/containers-4.0.0.release.json",
+        "name": "metrics-4.0.0.release.json",
+        "url": "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.0/metrics-4.0.0.release.json",
         "size": 3026,
         "sha256": "921d7a2ca42e8faf52a26f2b0ca7768e62317c2d0859ceea5858cce218d2dadd"
       },
@@ -153,20 +153,20 @@ const validLatestResponse = `{
 
 const validDetailResponse = `{
   "data": {
-    "plugin_id": "com.redeven.official.containers",
+    "plugin_id": "com.example.metrics",
     "publisher_id": "com.redeven.official",
     "presentation": {
       "default_locale": "en-US",
       "icon": {
-        "url": "/v1/plugins/com.redeven.official.containers/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
+        "url": "/v1/plugins/com.example.metrics/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
         "media_type": "image/png",
         "width": 512,
         "height": 512,
         "sha256": "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1"
       },
-      "locales": [{"locale": "en-US", "name": "Containers", "publisher_name": "Redeven Official", "summary": "Manage Docker and Podman resources.", "description": ["Manage containers."], "highlights": ["Inspect logs."], "keywords": ["containers"]}]
+      "locales": [{"locale": "en-US", "name": "Metrics", "publisher_name": "Redeven Official", "summary": "Collect and display service metrics.", "description": ["Display endpoint metrics."], "highlights": ["Compare metric history."], "keywords": ["metrics"]}]
     },
-    "categories": ["infrastructure"],
+    "categories": ["monitoring"],
     "channels": ["stable"],
     "repository": {"provider": "github", "repository_id": 1289352675, "owner": "floegence", "name": "redeven-official-plugins", "url": "https://github.com/floegence/redeven-official-plugins"},
     "compatibility": {"min_redeven_version": "1.0.0", "min_redevplugin_version": "0.7.1"},
@@ -229,7 +229,7 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 				t.Fatalf("catalog compatibility query = %q", request.URL.RawQuery)
 			}
 			return response(http.StatusOK, validCatalogResponse, http.Header{"Etag": {`"catalog-g7"`}}), nil
-		case "/v1/plugins/com.redeven.official.containers/latest":
+		case "/v1/plugins/com.example.metrics/latest":
 			return response(http.StatusOK, validLatestResponse, nil), nil
 		default:
 			return response(http.StatusNotFound, `{}`, nil), nil
@@ -308,7 +308,7 @@ func TestServiceFetchesLatestReleasesWithBoundedConcurrency(t *testing.T) {
 		activeMu.Lock()
 		active--
 		activeMu.Unlock()
-		body := strings.ReplaceAll(validLatestResponse, "com.redeven.official.containers", pluginID)
+		body := strings.ReplaceAll(validLatestResponse, "com.example.metrics", pluginID)
 		return response(http.StatusOK, body, nil), nil
 	})
 	service, err := NewService(ServiceOptions{
@@ -318,7 +318,7 @@ func TestServiceFetchesLatestReleasesWithBoundedConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plugins := []CatalogPlugin{{PluginID: "com.redeven.official.containers"}, {PluginID: "com.redeven.official.toolbox"}}
+	plugins := []CatalogPlugin{{PluginID: "com.example.metrics"}, {PluginID: "com.redeven.official.toolbox"}}
 	requests := []latestFetchRequest{
 		{index: 0, pluginID: plugins[0].PluginID, channel: "stable", version: "4.0.0"},
 		{index: 1, pluginID: plugins[1].PluginID, channel: "stable", version: "4.0.0"},
@@ -347,7 +347,7 @@ func TestServiceDetailReturnsMarketGeneration(t *testing.T) {
 		Origin:    "https://plugins.redeven.com",
 		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			if request.URL.Path != "/v1/plugins/com.redeven.official.containers" {
+			if request.URL.Path != "/v1/plugins/com.example.metrics" {
 				return response(http.StatusNotFound, `{}`, nil), nil
 			}
 			return response(http.StatusOK, validDetailResponse, nil), nil
@@ -356,11 +356,11 @@ func TestServiceDetailReturnsMarketGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	detail, generation, err := service.Detail(context.Background(), "com.redeven.official.containers")
+	detail, generation, err := service.Detail(context.Background(), "com.example.metrics")
 	if err != nil {
 		t.Fatalf("Detail() error = %v", err)
 	}
-	if generation != 41 || detail.PluginID != "com.redeven.official.containers" {
+	if generation != 41 || detail.PluginID != "com.example.metrics" {
 		t.Fatalf("detail = %#v, generation = %d", detail, generation)
 	}
 	if detail.Presentation.Icon == nil || detail.Presentation.Icon.SHA256 != "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1" {
@@ -381,7 +381,7 @@ func TestServiceDetailRejectsStaleGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	if _, generation, err := service.Detail(context.Background(), "com.redeven.official.containers"); !errors.Is(err, ErrInvalidResponse) || generation != -1 {
+	if _, generation, err := service.Detail(context.Background(), "com.example.metrics"); !errors.Is(err, ErrInvalidResponse) || generation != -1 {
 		t.Fatalf("Detail() error = %v, generation = %d", err, generation)
 	}
 }
@@ -391,7 +391,7 @@ func TestServiceIconReturnsEvidenceBoundBytes(t *testing.T) {
 	data := []byte("verified market icon")
 	digest := fmt.Sprintf("%x", sha256.Sum256(data))
 	icon := PresentationIcon{
-		URL:       "/v1/plugins/com.redeven.official.containers/icon?sha256=" + digest,
+		URL:       "/v1/plugins/com.example.metrics/icon?sha256=" + digest,
 		MediaType: "image/png",
 		Width:     128,
 		Height:    128,
@@ -401,7 +401,7 @@ func TestServiceIconReturnsEvidenceBoundBytes(t *testing.T) {
 		Origin:    "https://plugins.redeven.com",
 		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-			if request.URL.Path != "/v1/plugins/com.redeven.official.containers/icon" || request.URL.Query().Get("sha256") != digest {
+			if request.URL.Path != "/v1/plugins/com.example.metrics/icon" || request.URL.Query().Get("sha256") != digest {
 				t.Fatalf("request URL = %s", request.URL)
 			}
 			return response(http.StatusOK, string(data), http.Header{"Content-Type": {"image/png"}}), nil
@@ -410,7 +410,7 @@ func TestServiceIconReturnsEvidenceBoundBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	asset, err := service.Icon(context.Background(), "com.redeven.official.containers", icon)
+	asset, err := service.Icon(context.Background(), "com.example.metrics", icon)
 	if err != nil {
 		t.Fatalf("Icon() error = %v", err)
 	}
@@ -424,7 +424,7 @@ func TestServiceIconRejectsUnverifiedResponses(t *testing.T) {
 	data := []byte("verified market icon")
 	digest := fmt.Sprintf("%x", sha256.Sum256(data))
 	icon := PresentationIcon{
-		URL:       "/v1/plugins/com.redeven.official.containers/icon?sha256=" + digest,
+		URL:       "/v1/plugins/com.example.metrics/icon?sha256=" + digest,
 		MediaType: "image/png",
 		Width:     128,
 		Height:    128,
@@ -461,7 +461,7 @@ func TestServiceIconRejectsUnverifiedResponses(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := service.Icon(context.Background(), "com.redeven.official.containers", icon); !errors.Is(err, ErrInvalidResponse) {
+			if _, err := service.Icon(context.Background(), "com.example.metrics", icon); !errors.Is(err, ErrInvalidResponse) {
 				t.Fatalf("Icon() error = %v, want ErrInvalidResponse", err)
 			}
 		})
@@ -509,7 +509,7 @@ func TestServiceRejectsUnknownFieldsWithoutReplacingCache(t *testing.T) {
 func TestServiceRejectsNonCanonicalOrDuplicatePresentation(t *testing.T) {
 	t.Parallel()
 	invalid := strings.ReplaceAll(validCatalogResponse, `"en-US"`, `"en-us"`)
-	invalid = strings.Replace(invalid, `"keywords": ["containers", "Docker"]`, `"keywords": ["containers", "CONTAINERS"]`, 1)
+	invalid = strings.Replace(invalid, `"keywords": ["metrics", "monitoring"]`, `"keywords": ["metrics", "METRICS"]`, 1)
 	service, err := NewService(ServiceOptions{
 		Origin:    "https://plugins.redeven.com",
 		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
@@ -604,7 +604,7 @@ func TestLatestReleaseBuildsCompleteRemoteProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	release, err := service.LatestRelease(context.Background(), "com.redeven.official.containers", "stable")
+	release, err := service.LatestRelease(context.Background(), "com.example.metrics", "stable")
 	if err != nil {
 		t.Fatalf("LatestRelease() error = %v", err)
 	}

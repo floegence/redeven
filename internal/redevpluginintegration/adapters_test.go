@@ -532,7 +532,6 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		"secrets.sqlite",
 		"external-inspections",
 		"plugin-data",
-		"release-artifacts",
 		"assets",
 	} {
 		if _, err := os.Stat(filepath.Join(stateDir, rel)); err != nil {
@@ -556,7 +555,6 @@ func ownerScopeTestOptions(t *testing.T, stateDir string) Options {
 		StateDir:           stateDir,
 		PermissionPolicy:   testPermissionPolicy(t, "execute_read"),
 		RuntimePath:        testRuntimePath(t, stateDir),
-		Containers:         mustContainersAdapter(t, &capabilityEngineClient{}),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	}
 }
@@ -567,7 +565,6 @@ func TestNewRejectsNonCanonicalRuntimePath(t *testing.T) {
 		StateDir:           stateDir,
 		PermissionPolicy:   testPermissionPolicy(t, "execute_read"),
 		RuntimePath:        "redevplugin-runtime",
-		Containers:         mustContainersAdapter(t, &capabilityEngineClient{}),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	})
 	if err == nil || !strings.Contains(err.Error(), "absolute canonical path") {
@@ -693,28 +690,28 @@ func TestMarketIconUsesVerifiedSnapshotWithoutRefreshingCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	icon := &pluginmarket.PresentationIcon{
-		URL:       "/v1/plugins/com.redeven.official.containers/icon?sha256=" + digest,
+		URL:       "/v1/plugins/com.example.metrics/icon?sha256=" + digest,
 		MediaType: "image/png",
 		Width:     512,
 		Height:    512,
 		SHA256:    digest,
 	}
 	snapshot := pluginmarket.Snapshot{Plugins: []pluginmarket.CatalogPlugin{{
-		PluginID: "com.redeven.official.containers",
+		PluginID: "com.example.metrics",
 		Presentation: pluginmarket.PresentationCompact{
 			Icon: icon,
 		},
 	}}}
 	integration := &Integration{marketSnapshot: &snapshot, marketService: market}
 
-	asset, err := integration.MarketIcon(context.Background(), "com.redeven.official.containers", digest)
+	asset, err := integration.MarketIcon(context.Background(), "com.example.metrics", digest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(asset.Data) != string(data) || asset.SHA256 != digest || asset.MediaType != "image/png" {
 		t.Fatalf("MarketIcon() = %#v", asset)
 	}
-	if len(requestedPaths) != 1 || requestedPaths[0] != "/v1/plugins/com.redeven.official.containers/icon" {
+	if len(requestedPaths) != 1 || requestedPaths[0] != "/v1/plugins/com.example.metrics/icon" {
 		t.Fatalf("MarketIcon() requests = %v, want icon only", requestedPaths)
 	}
 }
@@ -726,21 +723,6 @@ func TestNewRejectsMissingPermissionPolicy(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("New() unexpectedly accepted a missing permission policy")
-	}
-}
-
-func TestNewRejectsMissingContainerAdapterBeforeCreatingState(t *testing.T) {
-	stateDir := filepath.Join(t.TempDir(), "not-created")
-	_, err := New(context.Background(), Options{
-		StateDir:           stateDir,
-		PermissionPolicy:   testPermissionPolicy(t, "execute_read"),
-		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
-	})
-	if err == nil || !strings.Contains(err.Error(), "container engine client is required") {
-		t.Fatalf("New() container adapter error = %v", err)
-	}
-	if _, statErr := os.Stat(stateDir); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("invalid adapter created persistent state: %v", statErr)
 	}
 }
 

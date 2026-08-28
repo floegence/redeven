@@ -363,6 +363,7 @@
       "codespaces": "Codespaces",
       "browserEditor": "Browser Editor",
       "webServices": "Services web",
+      "containers": "Conteneurs",
       "flower": "Flower"
     },
     "topbar": {
@@ -722,6 +723,10 @@
       "ports": {
         "label": "Services web",
         "defaultTitle": "Services web"
+      },
+      "containers": {
+        "label": "Conteneurs",
+        "defaultTitle": "Conteneurs"
       },
       "flower": {
         "label": "Flower",
@@ -2833,6 +2838,29 @@
       "missingEnvContext": "Contexte d'environnement manquant. Veuillez rouvrir depuis le plan de contrôle."
     }
   },
+  "containers": {
+    "title": "Conteneurs",
+    "description": "Consultez et gérez en toute sécurité les ressources Docker et Podman de cet environnement.",
+    "engine": "Moteur de conteneurs",
+    "endpoint": "Point de terminaison du moteur",
+    "resourceNavigation": "Ressources de conteneurs",
+    "loading": "Chargement des ressources de conteneurs…",
+    "views": { "containers": "Conteneurs", "images": "Images", "volumes": "Volumes", "compose-projects": "Projets Compose", "pods": "Pods" },
+    "status": { "connected": "Connecté", "unavailable": "Indisponible" },
+    "columns": { "name": "Nom", "status": "État", "details": "Détails" },
+    "empty": { "title": "Aucune ressource trouvée", "description": "Ce point de terminaison n’expose actuellement aucune ressource de cette catégorie." },
+    "actions": { "refresh": "Actualiser", "start": "Démarrer", "stop": "Arrêter", "restart": "Redémarrer", "pause": "Suspendre", "resume": "Reprendre", "kill": "Forcer l’arrêt", "remove": "Supprimer", "down": "Arrêter et supprimer", "tag": "Ajouter une étiquette", "prune": "Nettoyer les inutilisés", "cancel": "Annuler", "close": "Fermer", "review": "Vérifier", "run": "Exécuter l’opération" },
+    "create": { "title": "Créer une ressource", "tagTitle": "Ajouter une étiquette d’image", "advanced": "Paramètres d’exécution", "container": "Créer un conteneur", "image": "Récupérer une image", "volume": "Créer un volume", "pod": "Créer un pod" },
+    "fields": { "name": "Nom", "image": "Image", "driver": "Pilote", "tag": "Nouvelle étiquette", "command": "Commande", "restartPolicy": "Politique de redémarrage", "cpus": "CPU", "memory": "Mémoire (Mio)" },
+    "inspector": { "title": "Détails de la ressource", "details": "Détails", "logs": "Journaux", "stats": "Statistiques" },
+    "stats": { "cpu": "CPU", "memory": "Mémoire", "networkIn": "Réseau entrant", "networkOut": "Réseau sortant" },
+    "operations": { "title": "Opérations", "description": "Opérations de conteneurs auditées et leur état actuel.", "empty": "Aucune opération de conteneur pour le moment." },
+    "managed": { "badge": "Géré par Web Services", "title": "Géré par Web Services", "description": "« {name} » possède cette ressource. Son cycle de vie est protégé ici.", "openService": "Ouvrir le Web Service" },
+    "confirm": { "title": "Confirmer l’opération à haut risque", "warning": "Cette opération peut supprimer définitivement ou interrompre des ressources.", "typeName": "Saisissez exactement « {name} » pour continuer." },
+    "review": { "title": "Vérifier l’opération", "operation": "Opération" },
+    "permissions": { "read": "L’autorisation de lecture est requise pour afficher les ressources de conteneurs.", "admin": "L’autorisation d’administration est requise pour cette opération à haut risque." },
+    "notifications": { "inventoryChangedTitle": "Inventaire modifié", "inventoryChangedMessage": "La ressource sélectionnée n’est plus disponible.", "preflightFailedTitle": "Échec de la vérification préalable", "operationFailedTitle": "Échec de l’opération", "operationCompleteTitle": "Opération terminée", "operationCompleteMessage": "L’inventaire de référence a été actualisé.", "logsFailedTitle": "Journaux indisponibles" }
+  },
   "webServices": {
     "title": "Services web",
     "description": "Ouvrez les services HTTP à l’écoute sur l’interface de bouclage de cet environnement dans une fenêtre Desktop isolée ou via la route disponible la plus sûre.",
@@ -4411,20 +4439,20 @@
       "permissionNotGranted": "Non accordée",
       "permission": {
         "read": {
-          "label": "Afficher les conteneurs",
-          "description": "Consulter l’état du moteur, les détails et journaux des conteneurs, ainsi que les informations de vérification préalable des opérations."
+          "label": "Lire les données",
+          "description": "Lire les données et l’état exposés par ce plugin."
         },
         "execute": {
-          "label": "Gérer les conteneurs",
-          "description": "Démarrer, arrêter et redémarrer les conteneurs après les confirmations requises."
+          "label": "Exécuter des opérations",
+          "description": "Exécuter les opérations exposées par ce plugin après les confirmations requises."
         },
         "delete": {
-          "label": "Supprimer des conteneurs",
-          "description": "Supprimer des conteneurs. Cette autorisation facultative permet une action destructive."
+          "label": "Supprimer des données",
+          "description": "Supprimer des données via ce plugin. Cette autorisation facultative est destructive."
         },
-        "images_write": {
-          "label": "Importer des images",
-          "description": "Récupérer des images de conteneur dans le moteur sélectionné."
+        "write": {
+          "label": "Écrire des données",
+          "description": "Créer ou modifier des données via ce plugin."
         },
         "other": {
           "label": "Autorisation du plugin",

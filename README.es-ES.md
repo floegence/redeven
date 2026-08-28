@@ -121,6 +121,7 @@ Ejecuta `redeven help run` para consultar otros modos de ejecución y la protecc
 | Monitor | Vistas de CPU, memoria, disco, red y procesos procedentes del entorno de ejecución del endpoint. |
 | Browser Editor | Sesiones del editor en el navegador configuradas explícitamente por Desktop y aisladas por espacio de trabajo. |
 | Servicios web | Registro de servicios y acceso con reenvío de puertos administrados por el entorno de ejecución, sin túneles SSH escritos a mano. |
+| Containers | Gestión nativa de contenedores Docker y Podman, imágenes, volúmenes, Compose Projects y Pods, con registros, estadísticas y protección de propiedad de los servicios web. |
 | Flower | Superficies de IA opcionales que usan herramientas validadas por el entorno de ejecución y configuración local del modelo y del host. |
 | Desktop | Iniciador nativo para entornos locales, entornos alojados en Redeven Cloud, entornos inicializados mediante SSH y entornos de Local UI guardados. |
 

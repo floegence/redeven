@@ -59,7 +59,7 @@ const viewportCases = [
   { width: 1440, height: 900 },
 ] as const;
 
-const containersHostPresentation = {
+const metricsHostPresentation = {
   default_locale: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.plugins[0]!.presentation.default_locale,
   locales: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.plugins[0]!.presentation.locales.map((locale) => ({
     locale: locale.locale,
@@ -69,7 +69,7 @@ const containersHostPresentation = {
     description: [locale.summary],
     highlights: [locale.keywords.join(', ')],
     keywords: [...locale.keywords],
-    surfaces: [{ surface_id: 'containers.dashboard', label: locale.name }],
+    surfaces: [{ surface_id: 'metrics.dashboard', label: locale.name }],
     settings: [],
   })),
 };
@@ -83,11 +83,11 @@ const updateDialogViewportCases = [
   { width: 1440, height: 900 },
 ] as const;
 
-const containersItem: PluginInventoryItem = {
-  inventoryKey: 'instance:containers',
-  pluginID: 'com.redeven.official.containers',
-  pluginInstanceID: 'plugini_redeven_official_containers',
-  displayName: 'Containers',
+const metricsItem: PluginInventoryItem = {
+  inventoryKey: 'instance:metrics',
+  pluginID: 'com.example.metrics',
+  pluginInstanceID: 'plugini_redeven_official_metrics',
+  displayName: 'Metrics',
   description: 'Manage Docker and Podman resources without leaving the current environment.',
   iconFallback: 'generic',
   category: 'infrastructure',
@@ -99,23 +99,23 @@ const containersItem: PluginInventoryItem = {
   lifecycleState: 'enabled',
   trustBadge: 'official',
   pinned: true,
-  presentation: containersHostPresentation,
+  presentation: metricsHostPresentation,
   defaultLaunchTarget: {
-    pluginID: 'com.redeven.official.containers',
-    pluginInstanceID: 'plugini_redeven_official_containers',
-    surfaceID: 'containers.dashboard',
-    displayName: 'Containers',
+    pluginID: 'com.example.metrics',
+    pluginInstanceID: 'plugini_redeven_official_metrics',
+    surfaceID: 'metrics.dashboard',
+    displayName: 'Metrics',
     expectedManagementRevision: 7,
     preferredPlacement: 'activity',
   },
   authorization: {
     grants: [],
     permissions: [{
-      permissionID: 'containers.read',
+      permissionID: 'metrics.read',
       group: 'read',
       requiredToOpen: true,
-      methods: ['containers.status'],
-      requiredToOpenMethods: ['containers.status'],
+      methods: ['metrics.status'],
+      requiredToOpenMethods: ['metrics.status'],
       granted: true,
       deniedByGrant: false,
       blockedByPolicy: false,
@@ -147,18 +147,18 @@ const toolboxItem: PluginInventoryItem = {
   pinned: false,
 };
 
-const projection: PluginInventoryProjection = { items: [containersItem, toolboxItem] };
+const projection: PluginInventoryProjection = { items: [metricsItem, toolboxItem] };
 const panelModel: PluginPanelModel = {
   loading: false,
   tiles: [
-    { kind: 'plugin', item: containersItem, action: 'open_surface' },
+    { kind: 'plugin', item: metricsItem, action: 'open_surface' },
     { kind: 'plugin', item: toolboxItem, action: 'open_details' },
     { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
   ],
 };
 
 const updateDialogItem: PluginInventoryItem = {
-  ...containersItem,
+  ...metricsItem,
   version: '4.0.0',
   managementRevision: 18,
   lifecycleState: 'update_available',
@@ -170,7 +170,7 @@ const updateDialogItem: PluginInventoryItem = {
   },
   officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
   defaultLaunchTarget: {
-    ...containersItem.defaultLaunchTarget!,
+    ...metricsItem.defaultLaunchTarget!,
     expectedManagementRevision: 18,
   },
 };
@@ -355,7 +355,7 @@ async function mountLocalizedPluginCenter(locale: RedevenLocale): Promise<HTMLEl
   const host = fixedHost();
   const localizedProjection: PluginInventoryProjection = {
     items: [{
-      ...containersItem,
+      ...metricsItem,
       officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
       lifecycleState: 'needs_attention',
       attentionReason: 'runtime_missing',
@@ -463,17 +463,17 @@ function mountPinnedActivityMenu(): { host: HTMLElement; onSelectInformation: Re
       />
       <ActivityBar
         items={[{
-          id: 'plugin-containers',
+          id: 'plugin-metrics',
           icon: Icon,
-          label: 'Containers',
+          label: 'Metrics',
           onContextMenu: setRequest,
         }]}
-        activeId="plugin-containers"
+        activeId="plugin-metrics"
         onActiveChange={() => undefined}
       />
       <PluginPinContextMenu
         request={request()}
-        ariaLabel="Containers actions"
+        ariaLabel="Metrics actions"
         informationLabel="Plugin information"
         pinLabel="Unpin from Activity Bar"
         onClose={() => setRequest(null)}
@@ -644,7 +644,7 @@ function mountActivityWindow(): HTMLElement {
     <LayoutProvider>
       <ActivityPluginSurfaceWindow
         instanceID="activity_browser_plugin"
-        target={containersItem.defaultLaunchTarget!}
+        target={metricsItem.defaultLaunchTarget!}
         coordinator={browserCoordinator()}
         confirmationQueue={queue}
         visible
@@ -666,7 +666,7 @@ function mountConfirmationDialog(): HTMLElement {
   const controller = new AbortController();
   const intent: PluginConfirmationIntent = {
     requestId: 'request_browser_confirmation',
-    method: 'containers.delete',
+    method: 'metrics.delete',
     params: { container_id: 'api' },
     requestHash: 'sha256:request-browser-confirmation',
     planHash: 'sha256:plan-browser-confirmation',
@@ -681,10 +681,10 @@ function mountConfirmationDialog(): HTMLElement {
     signal: controller.signal,
   };
   void queue.createHandler({
-    pluginID: containersItem.pluginID,
-    displayName: containersItem.displayName,
-    pluginInstanceID: containersItem.pluginInstanceID!,
-    surfaceID: containersItem.defaultLaunchTarget!.surfaceID,
+    pluginID: metricsItem.pluginID,
+    displayName: metricsItem.displayName,
+    pluginInstanceID: metricsItem.pluginInstanceID!,
+    surfaceID: metricsItem.defaultLaunchTarget!.surfaceID,
     canConfirm: () => true,
   })(intent);
   disposers.push(render(() => <PluginConfirmationDialog queue={queue} />, host));
@@ -753,7 +753,7 @@ describe('plugin management browser geometry and interaction', () => {
   it('keeps the pinned Activity plugin menu above plugin content with compact file-menu sizing', async () => {
     const mounted = mountPinnedActivityMenu();
     const host = mounted.host;
-    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Containers"]')!;
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="Metrics"]')!;
     trigger.dispatchEvent(new MouseEvent('contextmenu', {
       bubbles: true,
       cancelable: true,
@@ -931,9 +931,9 @@ describe('plugin management browser geometry and interaction', () => {
       mounted.setOpen(true);
       await settle();
 
-      const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:containers"]');
+      const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:metrics"]');
       expect(tile).not.toBeNull();
-      expect(tile?.textContent).toContain('Containers');
+      expect(tile?.textContent).toContain('Metrics');
       expect(getComputedStyle(tile!).opacity).not.toBe('0');
       expect(document.body.textContent).not.toContain('Loading plugins...');
       expect(document.querySelector('[role="status"]')).toBeNull();
@@ -949,7 +949,7 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
     await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
 
-    const tile = document.querySelector<HTMLElement>('[data-plugin-panel-tile="instance:containers"]')!;
+    const tile = document.querySelector<HTMLElement>('[data-plugin-panel-tile="instance:metrics"]')!;
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     const badge = tile.querySelector<HTMLElement>('[data-plugin-update-badge]')!;
     const tileRect = tile.getBoundingClientRect();
@@ -972,7 +972,7 @@ describe('plugin management browser geometry and interaction', () => {
     const view = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
     const shell = host.querySelector<HTMLElement>('[data-plugin-center-shell]')!;
     const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
-    const item = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!;
+    const item = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!;
     expectInsideViewport(view, viewport);
     expectNoHorizontalOverflow(view);
     expectNoHorizontalOverflow(shell);
@@ -1025,7 +1025,7 @@ describe('plugin management browser geometry and interaction', () => {
     document.documentElement.classList.add('dark');
     const host = mountPluginCenter();
     await settle();
-    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
     await settle();
 
     const view = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
@@ -1040,10 +1040,10 @@ describe('plugin management browser geometry and interaction', () => {
     const host = await mountLocalizedPluginCenter('zh-CN');
     await settle();
 
-    const card = host.querySelector<HTMLElement>('[data-plugin-directory-card="instance:containers"]')!;
+    const card = host.querySelector<HTMLElement>('[data-plugin-directory-card="instance:metrics"]')!;
     expect(card.querySelector('[data-plugin-center-item] [lang="zh-CN"]')).not.toBeNull();
     expect(card.querySelector('[data-plugin-center-item] [dir="auto"]')).not.toBeNull();
-    const primary = card.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="instance:containers"]')!;
+    const primary = card.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="instance:metrics"]')!;
     const label = primary.querySelector<HTMLElement>('[data-plugin-center-card-primary-label]')!;
     const actions = card.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;
     const initialHeight = primary.getBoundingClientRect().height;
@@ -1052,7 +1052,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
     expectNoHorizontalOverflow(actions);
 
-    card.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    card.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
     await settle();
 
     expect(card.getAttribute('aria-current')).toBe('true');
@@ -1066,9 +1066,9 @@ describe('plugin management browser geometry and interaction', () => {
     const host = mountPluginCenter();
     await settle();
 
-    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!.closest('article')!;
+    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
     expect(card.getBoundingClientRect().height).toBeLessThanOrEqual(240);
-    host.querySelector<HTMLButtonElement>('[data-plugin-center-card-menu="instance:containers"]')!.click();
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-card-menu="instance:metrics"]')!.click();
     await settle();
 
     const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
@@ -1080,7 +1080,7 @@ describe('plugin management browser geometry and interaction', () => {
       .find((button) => button.textContent?.trim() === 'View plugin details')!;
     detailsAction.click();
     await settle();
-    expect(host.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
+    expect(host.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
   });
 
   it('opens a filter from the keyboard and restores focus when dismissed', async () => {
@@ -1135,7 +1135,7 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
-    const item = host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!;
+    const item = host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!;
     expect(getComputedStyle(master).display).not.toBe('none');
     expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expectTouchTarget(item);
@@ -1178,18 +1178,18 @@ describe('plugin management browser geometry and interaction', () => {
     const host = mountPluginCenter();
     await settle();
     const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
-    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
     await settle();
     expect(getComputedStyle(master).display).toBe('none');
 
     const search = host.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
-    await userEvent.fill(search, 'containers');
+    await userEvent.fill(search, 'metrics');
     await settle();
     expect(getComputedStyle(master).display).not.toBe('none');
     expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(document.activeElement).toBe(search);
 
-    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
     await settle();
     const discover = host.querySelector<HTMLButtonElement>('#plugin-center-tab-discover')!;
     discover.click();
@@ -1211,7 +1211,7 @@ describe('plugin management browser geometry and interaction', () => {
       expectInsideViewport(view, { width: 320, height: 720 });
       expectNoHorizontalOverflow(view);
       expectNoHorizontalOverflow(host.querySelector<HTMLElement>('[data-plugin-center-shell]')!);
-      const item = host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!;
+      const item = host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!;
       expect(item.querySelector(`[lang="${locale}"]`)).not.toBeNull();
       expectTouchTargets([
         host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!,
@@ -1233,7 +1233,7 @@ describe('plugin management browser geometry and interaction', () => {
     const navigation = mountPluginCenterNavigation();
     await settle();
 
-    navigation.openDetails('instance:containers');
+    navigation.openDetails('instance:metrics');
     await settle();
     const master = navigation.host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
     const details = navigation.host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
@@ -1247,7 +1247,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(getComputedStyle(master).display).not.toBe('none');
     expect(navigation.host.querySelector('[data-plugin-center-details]')).toBeNull();
 
-    navigation.openDetails('instance:containers');
+    navigation.openDetails('instance:metrics');
     await settle();
     const reopenedDetails = navigation.host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
     const reopenedBack = navigation.host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
@@ -1265,10 +1265,10 @@ describe('plugin management browser geometry and interaction', () => {
     staleTrigger.focus();
     expect(document.activeElement).toBe(staleTrigger);
 
-    navigation.openDetails('instance:containers');
+    navigation.openDetails('instance:metrics');
     await settle();
     const heading = navigation.host.querySelector<HTMLHeadingElement>('[data-plugin-center-detail-heading]')!;
-    expect(heading.textContent).toBe('Containers');
+    expect(heading.textContent).toBe('Metrics');
     expect(document.activeElement).toBe(heading);
   });
 
@@ -1482,10 +1482,10 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
-    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!.closest('article')!;
+    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
     expect(getComputedStyle(card).animationName).toBe('none');
     expect(getComputedStyle(card).transitionDuration).toBe('0s');
-    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
     await Promise.resolve();
     const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
     expect(getComputedStyle(details).display).not.toBe('none');
@@ -1500,7 +1500,7 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const root = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
-    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!.closest('article')!;
+    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
     const icon = card.querySelector<HTMLElement>('.redeven-plugin-directory-card-icon')!;
     expect(getComputedStyle(root).animationName).toBe('animate-in');
     expect(getComputedStyle(root).animationDuration).toBe('0.2s');
@@ -1520,7 +1520,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(hoveredIconTransform.m11).toBeLessThan(1.03);
     await expectScreenshotHasPixelVariance();
 
-    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
     await Promise.resolve();
     expect(card.getAttribute('aria-current')).toBe('true');
     expect(getComputedStyle(card).boxShadow).not.toBe('none');

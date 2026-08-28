@@ -6,19 +6,19 @@ import {
   ApprovedInstallInventoryRefreshError,
   completeApprovedOfficialInstall,
 } from './pluginApprovedInstallSetup';
-import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
+import { EXAMPLE_PLUGIN_RELEASE_REF } from './examplePluginRelease.test-fixture';
 import type { PluginInventoryItem, PluginInventoryProjection } from './pluginTypes';
 
-const pluginInstanceID = 'plugini_redeven_official_containers';
-const pluginID = 'com.redeven.official.containers';
+const pluginInstanceID = 'plugini_redeven_official_metrics';
+const pluginID = 'com.example.metrics';
 const installCommand = {
   type: 'install' as const,
   pluginID,
   source: 'official_catalog' as const,
   pluginInstanceID,
-  releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
+  releaseRef: EXAMPLE_PLUGIN_RELEASE_REF,
   releaseIdentityDigest: 'sha256:' + 'a'.repeat(64),
-  manifestSHA256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.manifest_sha256,
+  manifestSHA256: EXAMPLE_PLUGIN_RELEASE_REF.expected_hashes.manifest_sha256,
   contractSetSHA256: 'sha256:' + 'b'.repeat(64),
   summarySHA256: 'sha256:' + 'c'.repeat(64),
 };
@@ -72,8 +72,8 @@ function approvalInventory(granted: boolean): PluginInventoryProjection {
     inventoryKey: `instance:${pluginInstanceID}`,
     pluginID,
     pluginInstanceID,
-    displayName: 'Containers',
-    description: 'Containers',
+    displayName: 'Metrics',
+    description: 'Metrics',
     iconFallback: 'generic',
     category: 'other',
     searchKeywords: [],
@@ -86,14 +86,14 @@ function approvalInventory(granted: boolean): PluginInventoryProjection {
     defaultLaunchTarget: granted ? {
       pluginID,
       pluginInstanceID,
-      surfaceID: 'containers.dashboard',
+      surfaceID: 'metrics.dashboard',
       expectedManagementRevision: 11,
       preferredPlacement: 'activity',
     } : undefined,
     authorization: {
       grants: [],
       permissions: ['read', 'execute', 'logs', 'admin'].map((suffix) => ({
-        permissionID: `containers.${suffix}`,
+        permissionID: `metrics.${suffix}`,
         group: suffix === 'read' ? 'read' as const : 'execute' as const,
         requiredToOpen: true,
         methods: [],

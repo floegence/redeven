@@ -158,7 +158,7 @@ export type PluginAuthorPresentation = PluginRecord['presentation'];
 
 export type OfficialPluginPermission = {
   permissionID: string;
-  group: 'read' | 'execute' | 'delete' | 'images_write' | 'other';
+  group: 'read' | 'execute' | 'delete' | 'write' | 'other';
   requiredToOpen: boolean;
   methods: readonly string[];
   requiredToOpenMethods?: readonly string[];
