@@ -1,4 +1,4 @@
-import type { BrowserWindow } from 'electron';
+import type { BrowserWindow, WebContents } from 'electron';
 
 export type DesktopTrackedWindow = Readonly<{
   browserWindow: BrowserWindow;
@@ -9,10 +9,20 @@ export type DesktopClosedWindowSnapshot = Readonly<{
   webContentsID: number;
 }>;
 
+export type DesktopWebContentsIdentity = Readonly<{
+  webContentsID: number;
+}>;
+
 export function trackBrowserWindow(browserWindow: BrowserWindow): DesktopTrackedWindow {
   return {
     browserWindow,
     webContentsID: browserWindow.webContents.id,
+  };
+}
+
+export function snapshotWebContentsIdentity(webContents: WebContents): DesktopWebContentsIdentity {
+  return {
+    webContentsID: webContents.id,
   };
 }
 
