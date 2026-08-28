@@ -290,8 +290,25 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(toolRow.textContent).toContain('weather_gd.py');
     expect(toolRow.textContent).not.toContain('operation write');
     expect(toolRow.textContent).not.toContain('display name');
+    expect(toolRow.querySelector('button.flower-activity-inline-button')).toBeNull();
     expect(runtime.textContent).toContain('Using a tool');
 
+    const completedToolActivity = {
+      ...toolActivity,
+      status: 'success',
+      presentation: {
+        ...toolActivity.presentation,
+        chips: [],
+        payload: {
+          operation: 'write',
+          display_name: 'weather_gd.py',
+          change_type: 'create',
+          additions: 49,
+          deletions: 0,
+          unified_diff: '--- /dev/null\n+++ b/weather_gd.py\n@@ -0,0 +1,49 @@\n+def main():\n+    return "sunny"',
+        },
+      },
+    };
     const assistantCurrent = (version: number, text: string): FlowerLiveStreamEnvelope => ({
       schema_version: 1,
       kind: 'thread.batch',
@@ -301,13 +318,21 @@ describe('Flower final thread cache and workspace transport', () => {
         items: [
           { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
           { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
-          { id: 'tool:continued', turn_id: newTurnID, ordinal: 3, kind: 'tool', activity: { ...toolActivity, status: 'success' } },
+          { id: 'tool:continued', turn_id: newTurnID, ordinal: 3, kind: 'tool', activity: completedToolActivity },
           { id: 'assistant:continued', turn_id: newTurnID, ordinal: 4, kind: 'assistant', text, live: true },
         ],
       },
     });
     stream.push(assistantCurrent(6, 'Weather data'));
     await waitFor(() => runtime.textContent?.includes('Weather data') === true);
+    await waitFor(() => toolRow.querySelector('.flower-activity-inline-change-stats')?.textContent?.includes('+49') === true);
+    expect(toolRow.querySelector('.flower-activity-inline-change-stats')?.textContent).toContain('-0');
+    expect(toolRow.textContent).not.toContain('display name');
+    (toolRow.querySelector('button.flower-activity-inline-button') as HTMLButtonElement).click();
+    await waitFor(() => toolRow.querySelector('.flower-activity-file-diff-unified') !== null);
+    expect(toolRow.querySelector('.flower-activity-file-diff-unified')?.textContent).toContain('def main():');
+    expect(toolRow.textContent).not.toContain('No textual diff');
+    expect(toolRow.textContent).not.toContain('create');
     expect(runtime.textContent).toContain('Writing the reply');
     stream.push(assistantCurrent(7, 'Weather data is ready'));
     await waitFor(() => runtime.textContent?.includes('Weather data is ready') === true);

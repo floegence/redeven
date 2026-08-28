@@ -1449,20 +1449,58 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 		return value
 	case fltools.ActivityRendererFile:
 		return fltools.FileActivityPayload{
-			Path:      firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["file_path"])),
-			Operation: operation, Status: status, Summary: summary,
-			SizeBytes: readInt64Field(payload, "size_bytes"), Error: activityError(),
+			Path:                  firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["file_path"])),
+			Operation:             operation,
+			Status:                status,
+			Summary:               summary,
+			SizeBytes:             readInt64Field(payload, "size_bytes"),
+			DisplayName:           strings.TrimSpace(anyToString(payload["display_name"])),
+			Content:               anyToString(payload["content"]),
+			LineOffset:            readIntField(payload, "line_offset"),
+			LineCount:             readIntField(payload, "line_count"),
+			TotalLines:            readIntField(payload, "total_lines"),
+			ChangeType:            strings.TrimSpace(anyToString(payload["change_type"])),
+			Additions:             readIntField(payload, "additions"),
+			Deletions:             readIntField(payload, "deletions"),
+			UnifiedDiff:           anyToString(payload["unified_diff"]),
+			DiffUnavailableReason: strings.TrimSpace(anyToString(payload["diff_unavailable_reason"])),
+			Truncated:             readBoolField(payload, "truncated"),
+			Error:                 activityError(),
 		}
 	case fltools.ActivityRendererPatch:
-		path := firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["file_path"]), anyToString(payload["new_path"]), anyToString(payload["old_path"]))
-		diff := firstNonEmptyString(anyToString(payload["diff"]), anyToString(payload["unified_diff"]))
-		if mutations := toAnySlice(payload["mutations"]); len(mutations) > 0 {
-			if mutation, ok := mutations[0].(map[string]any); ok {
-				path = firstNonEmptyString(path, anyToString(mutation["file_path"]), anyToString(mutation["new_path"]), anyToString(mutation["old_path"]))
-				diff = firstNonEmptyString(diff, anyToString(mutation["unified_diff"]), anyToString(mutation["diff"]))
+		mutations := make(fltools.FileMutationActivityPayloads, 0, len(toAnySlice(payload["mutations"])))
+		for _, value := range toAnySlice(payload["mutations"]) {
+			record, ok := value.(map[string]any)
+			if !ok {
+				continue
 			}
+			mutations = append(mutations, fltools.FileMutationActivityPayload{
+				DisplayName:           strings.TrimSpace(anyToString(record["display_name"])),
+				ChangeType:            strings.TrimSpace(anyToString(record["change_type"])),
+				Additions:             readIntField(record, "additions"),
+				Deletions:             readIntField(record, "deletions"),
+				UnifiedDiff:           anyToString(record["unified_diff"]),
+				DiffUnavailableReason: strings.TrimSpace(anyToString(record["diff_unavailable_reason"])),
+				Truncated:             readBoolField(record, "truncated"),
+			})
 		}
-		return fltools.PatchActivityPayload{Path: path, Diff: diff, Status: status, Summary: summary, Error: activityError()}
+		var typedMutations *fltools.FileMutationActivityPayloads
+		if len(mutations) > 0 {
+			typedMutations = &mutations
+		}
+		return fltools.PatchActivityPayload{
+			Status:           status,
+			Summary:          summary,
+			FilesChanged:     readIntField(payload, "files_changed"),
+			Hunks:            readIntField(payload, "hunks"),
+			Additions:        readIntField(payload, "additions"),
+			Deletions:        readIntField(payload, "deletions"),
+			InputFormat:      strings.TrimSpace(anyToString(payload["input_format"])),
+			NormalizedFormat: strings.TrimSpace(anyToString(payload["normalized_format"])),
+			Mutations:        typedMutations,
+			Truncated:        readBoolField(payload, "truncated"),
+			Error:            activityError(),
+		}
 	case fltools.ActivityRendererWebSearch:
 		results := make([]fltools.WebSearchActivityResult, 0)
 		for _, item := range toAnySlice(payload["results"]) {

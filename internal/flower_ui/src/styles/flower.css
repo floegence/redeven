@@ -5133,6 +5133,18 @@ html.dark .flower-component-shell {
   line-height: 1.25;
 }
 
+.flower-activity-inline-change-stats {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: currentColor;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
 .flower-activity-inline-duration {
   color: currentColor;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;

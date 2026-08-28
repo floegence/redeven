@@ -998,11 +998,10 @@ describe('presentFlowerActivityItem', () => {
       tool_name: 'file.read',
       renderer: 'file',
       label: 'app.ts#dcbdf9b8c27f#e1703606242a',
-      target_refs: [{ kind: 'file', label: 'app.ts#dcbdf9b8c27f' }],
+      target_refs: [{ kind: 'file_action:read_app', label: 'app.ts#dcbdf9b8c27f' }],
       payload: {
         operation: 'read',
         display_name: 'app.ts',
-        file_action_id: 'read_app',
         content: 'const value = 1;\n',
         line_offset: 7,
         line_count: 1,
@@ -1059,10 +1058,10 @@ describe('presentFlowerActivityItem', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'file.write',
       renderer: 'file',
+      target_refs: [{ kind: 'file_action:edit_app', label: 'app.ts' }],
       payload: {
         operation: 'write',
         display_name: 'app.ts',
-        file_action_id: 'edit_app',
         change_type: 'update',
         additions: 1,
         deletions: 1,
@@ -1072,6 +1071,7 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.label).toBe('Edit app.ts');
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: 'app.ts' });
+    expect(presentation.changeStats).toEqual({ additions: 1, deletions: 1 });
     expect(presentation.detailLines.some((line) => line.value.includes('unified_diff') || line.value.includes('file_path'))).toBe(false);
     expect(presentation.detailBlocks).toEqual([{
       kind: 'file_diff',
@@ -1114,6 +1114,8 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.label).toBe('Edit weather_gd.py');
     expect(presentation.meta).toBe('');
+    expect(presentation.changeStats).toBeUndefined();
+    expect(presentation.detailBlocks).toEqual([]);
   });
 
   it('renders file error details even when a file detail block is present', () => {
@@ -1122,10 +1124,10 @@ describe('presentFlowerActivityItem', () => {
       renderer: 'file',
       status: 'error',
       label: 'app.ts',
+      target_refs: [{ kind: 'file_action:read_app', label: 'app.ts' }],
       payload: {
         operation: 'read',
         display_name: 'app.ts',
-        file_action_id: 'read_app',
         content: 'partial\n',
         line_offset: 1,
         line_count: 1,
@@ -1152,12 +1154,15 @@ describe('presentFlowerActivityItem', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'apply_patch',
       renderer: 'patch',
+      target_refs: [
+        { kind: 'file_action:edit_app', label: 'app.ts' },
+        { kind: 'file_action:delete_old', label: 'old.ts' },
+      ],
       payload: {
         operation: 'apply_patch',
         mutations: [
           {
             display_name: 'app.ts',
-            file_action_id: 'edit_app',
             change_type: 'update',
             additions: 1,
             deletions: 1,
@@ -1165,7 +1170,6 @@ describe('presentFlowerActivityItem', () => {
           },
           {
             display_name: 'old.ts',
-            file_action_id: 'delete_old',
             change_type: 'delete',
             deletions: 1,
             unified_diff: '--- a/src/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-remove',
@@ -1177,6 +1181,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('Edit 2 files');
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: '2 files' });
     expect(presentation.primaryAction).toBeUndefined();
+    expect(presentation.changeStats).toEqual({ additions: 1, deletions: 2 });
     expect(presentation.detailLines.some((line) => line.value.includes('patch'))).toBe(false);
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'file_diff',
@@ -1200,12 +1205,12 @@ describe('presentFlowerActivityItem', () => {
       tool_name: 'apply_patch',
       renderer: 'patch',
       status: 'error',
+      target_refs: [{ kind: 'file_action:edit_app', label: 'app.ts' }],
       payload: {
         operation: 'apply_patch',
         status: 'error',
         mutations: [{
           display_name: 'app.ts',
-          file_action_id: 'edit_app',
           change_type: 'update',
           unified_diff: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
         }],
@@ -1230,11 +1235,11 @@ describe('presentFlowerActivityItem', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'apply_patch',
       renderer: 'patch',
+      target_refs: [{ kind: 'file_action:delete_old', label: 'old.ts' }],
       payload: {
         operation: 'apply_patch',
         mutations: [{
           display_name: 'old.ts',
-          file_action_id: 'delete_old',
           change_type: 'delete',
           unified_diff: '--- a/src/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-remove',
         }],

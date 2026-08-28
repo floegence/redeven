@@ -718,7 +718,7 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 	case fltools.ActivityRendererTerminal:
 		return stringSet("command", "description", "process_id", "execution_location", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "started_at_ms", "ended_at_ms", "exit_code", "duration_ms", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererFile:
-		return stringSet("operation", "display_name", "file_action_id", "content", "line_offset", "line_count", "total_lines", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated", "summary", "details", "status", "error", "content_ref")
+		return stringSet("operation", "display_name", "content", "line_offset", "line_count", "total_lines", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererPatch:
 		return stringSet("operation", "files_changed", "hunks", "additions", "deletions", "input_format", "normalized_format", "mutations", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererTodos:
@@ -762,7 +762,7 @@ func activitySubagentsCountAllowedKeys() map[string]struct{} {
 }
 
 func activityFileMutationAllowedKeys() map[string]struct{} {
-	return stringSet("display_name", "file_action_id", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated")
+	return stringSet("display_name", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated")
 }
 
 func stringSet(values ...string) map[string]struct{} {

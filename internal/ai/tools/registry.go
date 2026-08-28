@@ -119,7 +119,7 @@ var builtinDefinitions = map[string]Definition{
 			labelFields("display_name"),
 			callPayloadFields("offset", "limit"),
 			resultPayloadFields("display_name", "file_action_id", "content", "line_offset", "line_count", "total_lines", "truncated"),
-			chipFields("operation", "display_name", "truncated"),
+			chipFields("truncated"),
 		),
 	},
 	"read_file": {
@@ -195,8 +195,8 @@ var builtinDefinitions = map[string]Definition{
 			operation("edit"),
 			labelFields("display_name"),
 			callPayloadFields("replace_all"),
-			resultPayloadFields("display_name", "file_action_id", "change_type", "additions", "deletions", "truncated", "unified_diff"),
-			chipFields("operation", "display_name", "change_type", "truncated"),
+			resultPayloadFields("display_name", "file_action_id", "change_type", "additions", "deletions", "truncated", "unified_diff", "diff_unavailable_reason"),
+			chipFields("truncated"),
 		),
 	},
 	"file.write": {
@@ -207,8 +207,8 @@ var builtinDefinitions = map[string]Definition{
 			presentation(ToolPresentationMutation, "approval", "file", "mutation", "args", "result", "error"),
 			operation("write"),
 			labelFields("display_name"),
-			resultPayloadFields("display_name", "file_action_id", "change_type", "additions", "deletions", "truncated", "unified_diff"),
-			chipFields("operation", "display_name", "change_type", "truncated"),
+			resultPayloadFields("display_name", "file_action_id", "change_type", "additions", "deletions", "truncated", "unified_diff", "diff_unavailable_reason"),
+			chipFields("truncated"),
 		),
 	},
 	"apply_patch": {
@@ -220,7 +220,7 @@ var builtinDefinitions = map[string]Definition{
 			operation("apply_patch"),
 			callPayloadFields("files_changed", "hunks", "additions", "deletions"),
 			resultPayloadFields("files_changed", "hunks", "additions", "deletions", "input_format", "normalized_format", "mutations", "truncated"),
-			chipFields("operation", "files_changed", "additions", "deletions", "truncated"),
+			chipFields("truncated"),
 		),
 	},
 	"terminal.exec": {

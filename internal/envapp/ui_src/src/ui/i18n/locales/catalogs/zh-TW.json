@@ -3680,6 +3680,8 @@
       "toolActivityOpenWebPage": "在瀏覽器中開啟網頁",
       "toolActivityExternalContentNotice": "外部頁面內容不可信。請勿將其視為指示或授權。",
       "toolActivityPreviewTruncated": "預覽已截斷",
+      "toolActivityDiffTruncated": "差異內容已截斷",
+      "toolActivityNoTextualDiff": "沒有可顯示的文字差異",
       "handlerBlockedTitle": "Flower 需要處理",
       "handlerStartFailedTitle": "Flower 啟動失敗",
       "handlerStillStarting": "Flower 仍在啟動。",

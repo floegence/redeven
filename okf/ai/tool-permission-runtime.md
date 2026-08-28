@@ -58,7 +58,7 @@ Target provenance is part of the tool contract, not a UI hint. Flower must not i
 - `redeven:internal/ai/permission_snapshot.go:27` - Run-local snapshots bind exact surface and canonical owner identity without durable lifecycle storage.
 - `redeven:internal/ai/floret_effect_authorization.go:115` - Dispatch revalidates current policy and transfers one invocation-bound proof.
 - `redeven:internal/ai/floret_approval_command_integration_test.go` - Published-runtime integration covers canonical approval and fail-closed correction.
-- `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - The Web Fetch renderer consumes only Floret Activity data, using `target_refs` solely for old records whose payload was lost.
+- `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Explicit renderer presenters consume typed Floret Activity data and use target references only for authorized product actions.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - The collapsed card shows the requested URL with one status-aware indicator, using Searching for active and successful fetches and the shared alert for failures; the existing row status also scopes the running title sweep, and expansion lazily renders response metadata and the bounded preview without fetching or reconstructing content.
 - `redeven:internal/flower_ui/src/styles/flower.css` - The running-state selector owns the title-only sweep and removes it for reduced-motion and forced-colors presentation.
 - `redeven:internal/flower_ui/src/WebFetchSearchingOrb.tsx` - The product adapter drives the published `thinking-orbs` Searching engine, pauses completed and offscreen rows, and respects reduced motion.

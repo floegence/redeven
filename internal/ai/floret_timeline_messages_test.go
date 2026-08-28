@@ -159,7 +159,11 @@ func TestTypedTimelineDoesNotConsumeDeprecatedGlobalDrafts(t *testing.T) {
 
 func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.T) {
 	t.Parallel()
-	pathPayload := fltools.FileActivityPayload{Path: "/workspace/private.md", Operation: "write", Status: "success", Summary: "updated"}
+	pathPayload := fltools.FileActivityPayload{
+		Path: "/workspace/private.md", Operation: "write", Status: "success", Summary: "updated",
+		DisplayName: "private.md", ChangeType: "update", Additions: 2, Deletions: 1,
+		UnifiedDiff: "--- a/private.md\n+++ b/private.md\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+	}
 	activity := &observation.ActivityItem{
 		ItemID: "activity:file-write", ToolID: "file-write", ToolName: "file.write",
 		Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
@@ -188,7 +192,7 @@ func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.
 		t.Fatalf("payload type=%T, want file payload", view.Items[0].Activity.Presentation.Payload)
 	}
 	payload := view.Items[0].Activity.Presentation.Payload.(fltools.FileActivityPayload)
-	if payload.Path != "" || payload.Operation != "write" || payload.Status != "success" {
+	if payload.Path != "" || payload.Operation != "write" || payload.Status != "success" || payload.DisplayName != "private.md" || payload.ChangeType != "update" || payload.Additions != 2 || payload.Deletions != 1 || payload.UnifiedDiff == "" {
 		t.Fatalf("public file payload=%+v", payload)
 	}
 	if len(view.Items[0].Activity.Presentation.TargetRefs) != 1 || view.Items[0].Activity.Presentation.TargetRefs[0].Path != "" {
