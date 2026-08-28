@@ -199,7 +199,7 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     })).toMatchObject({
       state: 'provider_environment_occupied',
       can_connect: false,
-      message: 'Demo Environment already has an online runtime through the provider. Disconnect that runtime before connecting another runtime.',
+      message: 'Demo Environment already has an online Runtime through Redeven Cloud. Disconnect that Runtime before connecting another Runtime.',
     });
   });
 

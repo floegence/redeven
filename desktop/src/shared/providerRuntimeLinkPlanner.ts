@@ -53,23 +53,23 @@ function planMessage(
     case 'target_ready':
       return `${runtimeLabel} is ready to connect to ${providerEnvironment.label}.`;
     case 'target_not_running':
-      return `${runtimeLabel} is not running. Start it from this runtime card before connecting it to a provider.`;
+      return `${runtimeLabel} is not running. Start it from this Runtime card before connecting it to Redeven Cloud.`;
     case 'runtime_control_missing':
       return `${runtimeLabel} does not expose Desktop runtime-control. Restart it from Desktop, then connect again.`;
     case 'provider_link_unsupported':
-      return `${runtimeLabel} does not support provider linking. Restart it with the current Desktop runtime, then connect again.`;
+      return `${runtimeLabel} does not support Redeven Cloud linking. Restart it with the current Desktop Runtime, then connect again.`;
     case 'already_linked':
       return `${runtimeLabel} is already connected to ${providerEnvironment.label}.`;
     case 'provider_environment_occupied':
       return providerEnvironment.occupancy.state === 'occupied_by_known_runtime' && providerEnvironment.occupancy.runtime_label
         ? `${providerEnvironment.label} is already connected to ${providerEnvironment.occupancy.runtime_label}. Disconnect it from that runtime card before connecting another runtime.`
-        : `${providerEnvironment.label} already has an online runtime through the provider. Disconnect that runtime before connecting another runtime.`;
+        : `${providerEnvironment.label} already has an online Runtime through Redeven Cloud. Disconnect that Runtime before connecting another Runtime.`;
     case 'linked_elsewhere':
-      return `${runtimeLabel} is connected to another provider Environment. Disconnect it before connecting this provider.`;
+      return `${runtimeLabel} is connected to another Redeven Cloud Environment. Disconnect it before connecting this Environment.`;
     case 'blocked_active_work':
-      return `${runtimeLabel} has active provider work. Disconnect or finish that work before changing provider links.`;
+      return `${runtimeLabel} has active Redeven Cloud work. Disconnect or finish that work before changing Redeven Cloud links.`;
     case 'blocked_runtime':
-      return `${runtimeLabel} cannot accept provider linking in its current state.`;
+      return `${runtimeLabel} cannot accept Redeven Cloud linking in its current state.`;
   }
 }
 

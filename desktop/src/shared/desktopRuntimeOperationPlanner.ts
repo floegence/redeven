@@ -99,7 +99,7 @@ export function buildDesktopRuntimeOperationPlans(
       ...hidden,
       open: desktopRuntimeOperationPlan('open', input.openable ? 'available' : 'blocked', 'provider_tunnel', {
         reasonCode: input.openable ? undefined : 'provider_route_unavailable',
-        message: input.openable ? undefined : 'Refresh provider status before opening this environment.',
+        message: input.openable ? undefined : 'Refresh Redeven Cloud status before opening this environment.',
       }),
       refresh: desktopRuntimeOperationPlan('refresh', 'available', 'provider_tunnel'),
     };

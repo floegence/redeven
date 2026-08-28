@@ -2429,7 +2429,7 @@ describe('desktopWelcomeState', () => {
         control_plane_sync_state: 'ready',
         remote_route_state: 'offline',
         remote_catalog_freshness: 'fresh',
-        remote_state_reason: 'The provider currently reports this environment as offline.',
+        remote_state_reason: 'Redeven Cloud currently reports this Environment as offline.',
         open_local_session_key: undefined,
       }),
     ]));
@@ -2829,7 +2829,7 @@ describe('desktopWelcomeState', () => {
       },
     );
 
-    expect(issue.title).toBe('Trust the provider certificate');
+    expect(issue.title).toBe('Trust the Redeven Cloud certificate');
     expect(issue.title_key).toBe('issue.providerTlsUntrustedTitle');
     expect(issue.diagnostics_copy).toContain('provider origin: https://dev.redeven.test');
     expect(issue.diagnostics_copy).toContain('http status: 502');

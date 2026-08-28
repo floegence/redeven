@@ -6,6 +6,7 @@ import type {
 } from '../shared/desktopLauncherIPC';
 import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
 import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import { isRedevenCloudOrigin, type RedevenCloudOriginPolicy } from '../shared/redevenCloud';
 import type { DesktopControlPlaneSyncState } from '../shared/providerEnvironmentState';
 import {
   runtimeServiceAllowsOpenAttempt,
@@ -119,17 +120,25 @@ const ICON_ENV_ID = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53M
 
 export const ICON_ENDPOINTS = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjIuNSIgY3k9IjEwLjUiIHI9IjEuOCIvPjxjaXJjbGUgY3g9IjEzLjUiIGN5PSIxMC41IiByPSIxLjgiLz48Y2lyY2xlIGN4PSI4IiBjeT0iMi41IiByPSIxLjgiLz48cGF0aCBkPSJNNCA5bDMtNSIvPjxwYXRoIGQ9Ik0xMiA5TDkgNCIvPjwvc3ZnPgo=';
 
+const DESKTOP_WELCOME_VIEW_MODEL_IMPORT_META = import.meta as ImportMeta & {
+  readonly env?: Readonly<{ DEV?: boolean }>;
+};
+const DESKTOP_WELCOME_REDEVEN_CLOUD_POLICY: RedevenCloudOriginPolicy = {
+  allow_development: DESKTOP_WELCOME_VIEW_MODEL_IMPORT_META.env?.DEV === true,
+};
+
 export const FACT_LABEL_ICONS: Record<string, string> = {
   'RUNS ON': ICON_RUNS_ON,
   CONTAINER: ICON_CONTAINER,
   VERSION: ICON_VERSION,
-  PROVIDER: ICON_PROVIDER,
+  'REDEVEN CLOUD': ICON_PROVIDER,
+  'CONTROL PLANE': ICON_PROVIDER,
   'LOCAL LINK': ICON_LOCAL_LINK,
   'ENV ID': ICON_ENV_ID,
 };
 
 export type EnvironmentCardModel = Readonly<{
-  kind_label: 'Local' | 'Provider' | 'Gateway' | 'Redeven URL' | 'SSH Host';
+  kind_label: 'Local' | 'Redeven Cloud' | 'Gateway' | 'Redeven URL' | 'SSH Host';
   status_label: string;
   status_tone: EnvironmentCardTone;
   runtime_started_label: string;
@@ -470,7 +479,7 @@ export function environmentKindLabel(environment: DesktopEnvironmentEntry): Envi
     case 'ssh_environment':
       return 'SSH Host';
     case 'provider_environment':
-      return 'Provider';
+      return 'Redeven Cloud';
     case 'gateway_environment':
       return 'Gateway';
     case 'local_environment':
@@ -487,7 +496,7 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
   if (explicitSource) {
     switch (environment.environment_source?.kind) {
       case 'provider':
-        return `Provider: ${explicitSource}`;
+        return `Redeven Cloud: ${explicitSource}`;
       case 'gateway':
         return `Gateway: ${explicitSource}`;
       case 'local':
@@ -500,7 +509,7 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
     case 'local':
       return 'Local Environment';
     case 'provider':
-      return 'Provider';
+      return 'Redeven Cloud';
     case 'gateway':
       return `Gateway: ${compact(environment.gateway_label) || 'Gateway'}`;
     case 'saved':
@@ -612,7 +621,8 @@ const ENVIRONMENT_CARD_FACT_ORDER = [
   'RUNS ON',
   'CONTAINER',
   'VERSION',
-  'PROVIDER',
+  'REDEVEN CLOUD',
+  'CONTROL PLANE',
   'LOCAL LINK',
   'ENV ID',
 ] as const;
@@ -627,7 +637,23 @@ function orderEnvironmentCardFacts(
 }
 
 function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string {
+  if (isRedevenCloudOrigin(environment.provider_origin ?? '', DESKTOP_WELCOME_REDEVEN_CLOUD_POLICY)) {
+    return 'Redeven Cloud';
+  }
   return compact(environment.control_plane_label) || compact(environment.provider_origin);
+}
+
+export function runtimeHasUnsupportedLegacyControlPlaneLink(
+  environment: DesktopEnvironmentEntry,
+): boolean {
+  const target = environment.provider_runtime_link_target;
+  const providerOrigin = compact(target?.provider_origin);
+  return Boolean(
+    target
+    && target.provider_connection_state !== 'unlinked'
+    && providerOrigin !== ''
+    && !isRedevenCloudOrigin(providerOrigin, DESKTOP_WELCOME_REDEVEN_CLOUD_POLICY),
+  );
 }
 
 function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
@@ -635,7 +661,7 @@ function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
     return 'This device';
   }
   if (environment.kind === 'provider_environment') {
-    return 'Provider remote';
+    return 'Redeven Cloud remote';
   }
   if (environment.kind === 'gateway_environment') {
     return compact(environment.gateway_environment_origin?.label)
@@ -765,8 +791,11 @@ function providerEnvironmentIDFact(environment: DesktopEnvironmentEntry): Enviro
 }
 
 function providerFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel | null {
+  if (runtimeHasUnsupportedLegacyControlPlaneLink(environment)) {
+    return buildEnvironmentCardFact('CONTROL PLANE', 'Unsupported legacy control-plane link');
+  }
   const value = controlPlaneDisplayLabel(environment);
-  return value === '' ? null : buildEnvironmentCardFact('PROVIDER', value);
+  return value === '' ? null : buildEnvironmentCardFact('REDEVEN CLOUD', value);
 }
 
 export function buildEnvironmentCardFactsModel(
@@ -1339,15 +1368,33 @@ function runtimeProviderLinkMenuAction(
   if (!target) {
     return {
       id: 'connect_provider_runtime',
-      label: 'Connect to provider...',
+      label: 'Connect to Redeven Cloud...',
       label_key: 'environmentAction.connectToProviderEllipsis',
       action: {
         intent: 'connect_provider_runtime',
-        label: 'Connect to provider...',
+        label: 'Connect to Redeven Cloud...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         enabled: false,
         variant: 'outline',
-        disabled_reason: 'Choose an available Provider Environment before connecting this runtime.',
+        disabled_reason: 'Choose an available Redeven Cloud Environment before connecting this runtime.',
+      },
+    };
+  }
+  if (runtimeHasUnsupportedLegacyControlPlaneLink(environment)) {
+    const canDisconnect = target.can_disconnect_provider
+      || target.provider_connection_state === 'connected'
+      || target.provider_connection_state === 'disconnecting';
+    return {
+      id: 'disconnect_provider_runtime',
+      label: 'Disconnect legacy control-plane link',
+      label_key: 'environmentAction.disconnectLegacyControlPlane',
+      action: {
+        intent: 'disconnect_provider_runtime',
+        label: 'Disconnect legacy control-plane link',
+        label_key: 'environmentAction.disconnectLegacyControlPlane',
+        enabled: canDisconnect,
+        variant: 'outline',
+        ...(!canDisconnect ? { disabled_reason: 'The legacy control-plane link cannot be disconnected in its current state.' } : {}),
       },
     };
   }
@@ -1355,11 +1402,11 @@ function runtimeProviderLinkMenuAction(
     case 'connected':
       return {
         id: 'disconnect_provider_runtime',
-        label: 'Disconnect from provider',
+        label: 'Disconnect from Redeven Cloud',
         label_key: 'environmentAction.disconnectFromProvider',
         action: {
           intent: 'disconnect_provider_runtime',
-          label: 'Disconnect from provider',
+          label: 'Disconnect from Redeven Cloud',
           label_key: 'environmentAction.disconnectFromProvider',
           enabled: true,
           variant: 'outline',
@@ -1368,25 +1415,25 @@ function runtimeProviderLinkMenuAction(
     case 'connecting':
       return {
         id: 'connect_provider_runtime',
-        label: 'Connect to provider...',
+        label: 'Connect to Redeven Cloud...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
           intent: 'connect_provider_runtime',
-          label: 'Connect to provider...',
+          label: 'Connect to Redeven Cloud...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
           variant: 'outline',
-          disabled_reason: 'A Provider connection operation is already running.',
+          disabled_reason: 'A Redeven Cloud connection operation is already running.',
         },
       };
     case 'disconnecting':
       return {
         id: 'disconnect_provider_runtime',
-        label: 'Disconnect from provider',
+        label: 'Disconnect from Redeven Cloud',
         label_key: 'environmentAction.disconnectFromProvider',
         action: {
           intent: 'disconnect_provider_runtime',
-          label: 'Disconnect from provider',
+          label: 'Disconnect from Redeven Cloud',
           label_key: 'environmentAction.disconnectFromProvider',
           enabled: true,
           variant: 'outline',
@@ -1396,11 +1443,11 @@ function runtimeProviderLinkMenuAction(
       if (target.can_disconnect_provider) {
         return {
           id: 'disconnect_provider_runtime',
-          label: 'Disconnect from provider',
+          label: 'Disconnect from Redeven Cloud',
           label_key: 'environmentAction.disconnectFromProvider',
           action: {
             intent: 'disconnect_provider_runtime',
-            label: 'Disconnect from provider',
+            label: 'Disconnect from Redeven Cloud',
             label_key: 'environmentAction.disconnectFromProvider',
             enabled: true,
             variant: 'outline',
@@ -1409,36 +1456,36 @@ function runtimeProviderLinkMenuAction(
       }
       return {
         id: 'connect_provider_runtime',
-        label: 'Connect to provider...',
+        label: 'Connect to Redeven Cloud...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
           intent: 'connect_provider_runtime',
-          label: 'Connect to provider...',
+          label: 'Connect to Redeven Cloud...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
           variant: 'outline',
-          disabled_reason: 'Provider link needs attention.',
+          disabled_reason: 'Redeven Cloud link needs attention.',
         },
       };
     case 'unsupported':
       return {
         id: 'connect_provider_runtime',
-        label: 'Connect to provider...',
+        label: 'Connect to Redeven Cloud...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
           intent: 'connect_provider_runtime',
-          label: 'Connect to provider...',
+          label: 'Connect to Redeven Cloud...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
           variant: 'outline',
-          disabled_reason: 'Choose an available Provider Environment before connecting this runtime.',
+          disabled_reason: 'Choose an available Redeven Cloud Environment before connecting this runtime.',
         },
       };
     case 'unlinked':
       break;
   }
   const canConnect = runtimeProviderLinkCanConnect(environment, target);
-  const label = 'Connect to provider...';
+  const label = 'Connect to Redeven Cloud...';
   return {
     id: 'connect_provider_runtime',
     label,
@@ -1449,7 +1496,7 @@ function runtimeProviderLinkMenuAction(
       label_key: 'environmentAction.connectToProviderEllipsis',
       enabled: canConnect,
       variant: 'outline',
-      ...(!canConnect ? { disabled_reason: 'Choose an available Provider Environment before connecting this runtime.' } : {}),
+      ...(!canConnect ? { disabled_reason: 'Choose an available Redeven Cloud Environment before connecting this runtime.' } : {}),
     },
   };
 }
@@ -1603,7 +1650,7 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   }
   if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
     const refreshPlan = environment.runtime_operations.refresh;
-    const refreshLabel = environment.kind === 'provider_environment' ? 'Refresh provider status' : 'Refresh runtime status';
+    const refreshLabel = environment.kind === 'provider_environment' ? 'Refresh Redeven Cloud status' : 'Refresh runtime status';
     items.push({
       id: 'refresh_runtime',
       label: refreshLabel,
@@ -1659,7 +1706,7 @@ function primaryGuidanceActionLabel(action: EnvironmentActionModel): string {
     case 'restart_runtime':
       return 'Restart runtime';
     case 'connect_provider_runtime':
-      return 'Connect to provider';
+      return 'Connect to Redeven Cloud';
     default:
       return 'Continue';
   }
@@ -1799,7 +1846,7 @@ function blockedPrimaryActionTitle(
   action: EnvironmentActionModel,
 ): string {
   if (action.intent === 'connect_provider_runtime') {
-    return 'Connect to provider to continue';
+    return 'Connect to Redeven Cloud to continue';
   }
   if (action.intent === 'update_runtime') {
     return 'Update the runtime to continue';
@@ -1817,7 +1864,7 @@ function blockedPrimaryActionDetail(
   action: EnvironmentActionModel,
 ): string {
   if (action.intent === 'connect_provider_runtime') {
-    return 'Connect this runtime to a provider Environment first. Open stays separate and becomes available after the link is ready.';
+    return 'Connect this runtime to a Redeven Cloud Environment first. Open stays separate and becomes available after the link is ready.';
   }
   if (action.intent === 'update_runtime') {
     if (environment.managed_runtime_placement?.kind === 'container_process') {
@@ -1927,7 +1974,7 @@ function primaryActionOverlay(
     return {
       kind: 'tooltip',
       tone: 'warning',
-      message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
+      message: 'Desktop needs fresh Redeven Cloud authorization before it can open or connect this Redeven Cloud Environment.',
     };
   }
   if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
@@ -1940,18 +1987,18 @@ function primaryActionOverlay(
       tone: 'warning',
       eyebrow: 'Remote route unavailable',
       title: providerRemoteLooksOffline(environment)
-        ? 'Provider reports offline'
+        ? 'Redeven Cloud reports offline'
         : environment.remote_route_state === 'provider_unreachable'
-          ? 'Provider is unreachable'
+          ? 'Redeven Cloud is unreachable'
           : environment.remote_route_state === 'provider_invalid'
-            ? 'Provider response is invalid'
+            ? 'Redeven Cloud response is invalid'
             : environment.remote_route_state === 'removed'
               ? 'Environment removed'
               : environment.remote_route_state === 'stale'
-                ? 'Provider status is stale'
-                : 'Refresh provider status',
+                ? 'Redeven Cloud status is stale'
+                : 'Refresh Redeven Cloud status',
       detail: environment.remote_state_reason
-        || 'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.',
+        || 'Remote open is not ready yet. Open stays separate from runtime start and Redeven Cloud link actions.',
       actions: refreshAction ? [refreshAction] : [],
     };
   }
@@ -2118,7 +2165,7 @@ export function buildControlPlaneStatusModel(
       return {
         label: 'Checking',
         tone: 'primary',
-        detail: 'Refreshing the latest environment status from this provider.',
+        detail: 'Refreshing the latest environment status from Redeven Cloud.',
       };
     case 'auth_required':
       return {
@@ -2130,32 +2177,32 @@ export function buildControlPlaneStatusModel(
       return {
         label: 'Sync failed',
         tone: 'warning',
-        detail: controlPlane.last_sync_error_message || 'Desktop could not reach this provider.',
+        detail: controlPlane.last_sync_error_message || 'Desktop could not reach Redeven Cloud.',
       };
     case 'provider_invalid':
       return {
         label: 'Invalid response',
         tone: 'warning',
-        detail: controlPlane.last_sync_error_message || 'This provider returned an invalid response.',
+        detail: controlPlane.last_sync_error_message || 'Redeven Cloud returned an invalid response.',
       };
     case 'sync_error':
       return {
         label: 'Sync failed',
         tone: 'warning',
-        detail: controlPlane.last_sync_error_message || 'Desktop could not refresh this provider.',
+        detail: controlPlane.last_sync_error_message || 'Desktop could not refresh Redeven Cloud.',
       };
     default:
       if (controlPlane.catalog_freshness === 'stale') {
         return {
           label: 'Status stale',
           tone: 'warning',
-          detail: 'The last provider sync is getting old. Refresh to confirm the latest environment status.',
+          detail: 'The last Redeven Cloud sync is getting old. Refresh to confirm the latest environment status.',
         };
       }
       return {
         label: 'Authorized',
         tone: 'success',
-        detail: 'Desktop has active provider authorization and a fresh environment catalog.',
+        detail: 'Desktop has active Redeven Cloud authorization and a fresh environment catalog.',
       };
   }
 }
@@ -2167,7 +2214,7 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
   if (environment.kind === 'provider_environment') {
     return [
       {
-        label: 'Provider',
+        label: 'Redeven Cloud',
         value: environment.provider_origin ?? '',
         monospace: true,
       },
@@ -2248,9 +2295,9 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
     const targetPrimary = remoteEndpoint
       || compact(environment.local_ui_url)
       || compact(environment.secondary_text)
-      || 'Provider environment';
+      || 'Redeven Cloud environment';
     return {
-      kind_label: 'Provider',
+      kind_label: 'Redeven Cloud',
       status_label: displayState.status_label,
       status_tone: displayState.status_tone,
       runtime_started_label: displayState.runtime_started_label,

@@ -65,6 +65,7 @@ import {
   migrateDesktopEnvironmentRegistrations,
   type DesktopEnvironmentRegistrationMigrationJournal,
 } from './desktopEnvironmentRegistrationMigration';
+import { isRedevenCloudOrigin, type RedevenCloudOriginPolicy } from '../shared/redevenCloud';
 
 export type DesktopSavedEnvironment = Readonly<{
   id: string;
@@ -106,6 +107,14 @@ export type DesktopPreferences = Readonly<{
   default_flower_runtime_target_id: DesktopRuntimeTargetID | null;
   control_plane_refresh_tokens: Readonly<Record<string, string>>;
   control_planes: readonly DesktopSavedControlPlane[];
+}>;
+
+export type DesktopRedevenCloudRestrictionResult = Readonly<{
+  preferences: DesktopPreferences;
+  changed: boolean;
+  removed_control_plane_count: number;
+  removed_provider_environment_count: number;
+  cleared_local_provider_binding: boolean;
 }>;
 
 export type DesktopPreferencesPaths = Readonly<{
@@ -1796,6 +1805,63 @@ export function deleteSavedControlPlane(
         !providerEnvironmentBelongsToControlPlane(environment, normalizedProviderOrigin, providerID)
       )),
     ),
+  };
+}
+
+export function restrictDesktopPreferencesToRedevenCloud(
+  preferences: DesktopPreferences,
+  policy: RedevenCloudOriginPolicy,
+): DesktopRedevenCloudRestrictionResult {
+  const controlPlanes = preferences.control_planes.filter((controlPlane) => (
+    isRedevenCloudOrigin(controlPlane.provider.provider_origin, policy)
+  ));
+  const providerEnvironments = preferences.provider_environments.filter((environment) => (
+    isRedevenCloudOrigin(environment.provider_origin, policy)
+  ));
+  const retainedControlPlaneKeys = new Set(controlPlanes.map((controlPlane) => desktopControlPlaneKey(
+    controlPlane.provider.provider_origin,
+    controlPlane.provider.provider_id,
+  )));
+  const controlPlaneRefreshTokens = Object.fromEntries(
+    Object.entries(preferences.control_plane_refresh_tokens).filter(([key]) => retainedControlPlaneKeys.has(key)),
+  );
+  const currentProviderBinding = preferences.local_environment.current_provider_binding;
+  const clearLocalProviderBinding = Boolean(
+    currentProviderBinding
+    && !isRedevenCloudOrigin(currentProviderBinding.provider_origin, policy),
+  );
+  const changed = (
+    controlPlanes.length !== preferences.control_planes.length
+    || providerEnvironments.length !== preferences.provider_environments.length
+    || Object.keys(controlPlaneRefreshTokens).length !== Object.keys(preferences.control_plane_refresh_tokens).length
+    || clearLocalProviderBinding
+  );
+  if (!changed) {
+    return {
+      preferences,
+      changed: false,
+      removed_control_plane_count: 0,
+      removed_provider_environment_count: 0,
+      cleared_local_provider_binding: false,
+    };
+  }
+  return {
+    preferences: {
+      ...preferences,
+      local_environment: clearLocalProviderBinding
+        ? {
+            ...preferences.local_environment,
+            current_provider_binding: undefined,
+          }
+        : preferences.local_environment,
+      control_plane_refresh_tokens: controlPlaneRefreshTokens,
+      control_planes: controlPlanes,
+      provider_environments: providerEnvironments,
+    },
+    changed: true,
+    removed_control_plane_count: preferences.control_planes.length - controlPlanes.length,
+    removed_provider_environment_count: preferences.provider_environments.length - providerEnvironments.length,
+    cleared_local_provider_binding: clearLocalProviderBinding,
   };
 }
 

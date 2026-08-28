@@ -72,12 +72,12 @@ Redeven 是一个单文件二进制程序，可将您的电脑和服务器汇集
 ### Desktop 应用
 
 1. 从 [GitHub Releases](https://github.com/floegence/redeven/releases) 下载 Redeven Desktop。公开发布目前提供 macOS 和 Linux 安装包。在启用代码签名和签名更新验证前，Windows 11 x64 仅提供内部 WSL 认证构建。
-2. 打开应用。在 macOS 或 Linux 上，可选择本地、Provider、SSH 主机或已保存的 URL；在 Windows 上，请在环境中心注册一个已初始化的 WSL 2 发行版。Desktop 不提供原生本地环境、Windows 运行时或本机容器运行时。
+2. 打开应用。在 macOS 或 Linux 上，可选择本地、Redeven Cloud、SSH 主机或已保存的 URL；在 Windows 上，请在环境中心注册一个已初始化的 WSL 2 发行版。Desktop 不提供原生本地环境、Windows 运行时或本机容器运行时。
 3. 开始工作，工作区会自动在浏览器中打开。
 
 每个已注册的发行版都是独立的 WSL 环境。Desktop 会将匹配的 Linux x64 运行时传输到该发行版用户的 `~/.redeven`；它不会安装或管理 WSL，不使用 `/mnt/c`，也不依赖 `systemd`。退出、更新或卸载 Desktop 不会停止 WSL 运行时或删除其数据。如需停止，请使用对应环境的“停止”操作。
 
-对于远程计算机：Desktop 可以通过 SSH 自动安装匹配的 Redeven 版本，并在您选择后，将该托管 SSH 运行时明确连接到 provider 环境。无需在远程主机上手动设置。
+对于远程计算机：Desktop 可以通过 SSH 自动安装匹配的 Redeven 版本，并在您选择后，将该托管 SSH 运行时明确连接到 Redeven Cloud 环境。无需在远程主机上手动设置。
 
 <!-- readme-section:cli -->
 <a id="cli"></a>
@@ -122,7 +122,7 @@ redeven run
 | Browser Editor | 由 Desktop 明确设置、按工作区隔离的浏览器编辑器会话。 |
 | Web 服务 | 由运行时管理的服务注册和端口转发访问，无需手写 SSH 隧道。 |
 | Flower | 可选的 AI 界面，使用经运行时验证的工具及本地模型和主机配置。 |
-| Desktop | 用于本地环境、provider 托管环境、通过 SSH 引导的环境和已保存 Local UI 环境的原生启动器。 |
+| Desktop | 用于本地环境、Redeven Cloud 托管环境、通过 SSH 引导的环境和已保存 Local UI 环境的原生启动器。 |
 
 <!-- readme-section:security -->
 <a id="security"></a>
@@ -145,7 +145,7 @@ Redeven 以能力为先，但运行时仍然是信任边界，因为它实际掌
 
 Redeven 在 [OKF v0.1](okf/index.md) 中维护仓库知识。OKF 语料由当前源代码层面的行为生成，并嵌入运行时供 `okf.search` 使用。
 
-机器可读的 provider 集成接口位于 [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml)。在 OKF 之外，维护中的 Markdown 被明确限制为 `AGENTS.md`、`THIRD_PARTY_NOTICES.md`、权威英文 `README.md`，以及在 `assets/readme/locales.json` 中声明的受支持 `README.<locale>.md` 翻译。
+机器可读的 RCPP Provider 集成接口位于 [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml)。在 OKF 之外，维护中的 Markdown 被明确限制为 `AGENTS.md`、`THIRD_PARTY_NOTICES.md`、权威英文 `README.md`，以及在 `assets/readme/locales.json` 中声明的受支持 `README.<locale>.md` 翻译。
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

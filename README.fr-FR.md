@@ -72,12 +72,12 @@ Deux méthodes sont disponibles : Desktop, recommandé à la plupart des utilisa
 ### Application Desktop
 
 1. Téléchargez Redeven Desktop depuis [GitHub Releases](https://github.com/floegence/redeven/releases). Les versions publiques proposent actuellement des programmes d'installation macOS et Linux. Windows 11 x64 reste une version interne de certification WSL tant que la signature du code et la vérification des mises à jour signées ne sont pas activées.
-2. Ouvrez l'application. Sous macOS ou Linux, choisissez un environnement local, Provider, un hôte SSH ou une URL enregistrée. Sous Windows, enregistrez une distribution WSL 2 initialisée dans le centre des environnements. Desktop ne fournit pas d'environnement local natif, d'environnement d'exécution Windows ni d'environnement d'exécution de conteneur local.
+2. Ouvrez l'application. Sous macOS ou Linux, choisissez un environnement local, Redeven Cloud, un hôte SSH ou une URL enregistrée. Sous Windows, enregistrez une distribution WSL 2 initialisée dans le centre des environnements. Desktop ne fournit pas d'environnement local natif, d'environnement d'exécution Windows ni d'environnement d'exécution de conteneur local.
 3. Commencez à travailler : l'espace de travail s'ouvre automatiquement dans votre navigateur.
 
 Chaque distribution enregistrée constitue un environnement WSL distinct. Desktop transfère l'environnement d'exécution Linux x64 correspondant vers `~/.redeven` de l'utilisateur de la distribution. Il n'installe ni ne gère WSL, n'utilise pas `/mnt/c` et ne dépend pas de `systemd`. Quitter, mettre à jour ou désinstaller Desktop n'arrête pas l'environnement d'exécution WSL et ne supprime pas ses données. Utilisez l'action Arrêter de cet environnement pour l'arrêter.
 
-Pour les machines distantes, Desktop peut installer automatiquement la version correspondante de Redeven via SSH, puis connecter explicitement cet environnement d'exécution SSH géré à un environnement provider lorsque vous le demandez. Aucune configuration manuelle n'est nécessaire sur l'hôte distant.
+Pour les machines distantes, Desktop peut installer automatiquement la version correspondante de Redeven via SSH, puis connecter explicitement cet environnement d'exécution SSH géré à un environnement Redeven Cloud lorsque vous le demandez. Aucune configuration manuelle n'est nécessaire sur l'hôte distant.
 
 <!-- readme-section:cli -->
 <a id="cli"></a>
@@ -122,7 +122,7 @@ Pour découvrir les autres modes d'exécution et la protection locale facultativ
 | Browser Editor | Sessions d'éditeur dans le navigateur, configurées explicitement par Desktop et isolées par espace de travail. |
 | Services web | Enregistrement de services et accès par redirection de ports gérés par l'environnement d'exécution, sans tunnel SSH écrit à la main. |
 | Flower | Surfaces d'IA facultatives utilisant des outils validés par l'environnement d'exécution et une configuration locale du modèle et de l'hôte. |
-| Desktop | Lanceur natif pour les environnements locaux, les environnements hébergés par un provider, ceux initialisés via SSH et les environnements Local UI enregistrés. |
+| Desktop | Lanceur natif pour les environnements locaux, les environnements hébergés par Redeven Cloud, ceux initialisés via SSH et les environnements Local UI enregistrés. |
 
 <!-- readme-section:security -->
 <a id="security"></a>
@@ -145,7 +145,7 @@ Redeven met les fonctionnalités au premier plan, mais l'environnement d'exécut
 
 Redeven conserve les connaissances maintenues du dépôt dans [OKF v0.1](okf/index.md). Le corpus OKF est produit à partir du comportement actuel du code source et intégré à l'environnement d'exécution pour `okf.search`.
 
-L'interface d'intégration provider, lisible par machine, se trouve dans [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). En dehors d'OKF, les fichiers Markdown maintenus sont volontairement limités à `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, au fichier canonique `README.md` et aux traductions `README.<locale>.md` prises en charge et déclarées dans `assets/readme/locales.json`.
+L'interface d'intégration RCPP Provider, lisible par machine, se trouve dans [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). En dehors d'OKF, les fichiers Markdown maintenus sont volontairement limités à `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, au fichier canonique `README.md` et aux traductions `README.<locale>.md` prises en charge et déclarées dans `assets/readme/locales.json`.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

@@ -1,4 +1,5 @@
 export const REDEVEN_I18N_PROTECTED_TERMS = [
+  'Redeven Cloud',
   'Redeven',
   'Redeven Desktop',
   'Flower',

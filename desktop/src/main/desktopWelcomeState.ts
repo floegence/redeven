@@ -252,18 +252,18 @@ export function buildControlPlaneIssue(
     })(),
     title: (() => {
       if (code === 'control_plane_invalid') {
-        return 'Provider configuration is invalid';
+        return 'Redeven Cloud configuration is invalid';
       }
       if (code === 'provider_tls_untrusted') {
-        return 'Trust the provider certificate';
+        return 'Trust the Redeven Cloud certificate';
       }
       if (code === 'provider_dns_failed' || code === 'provider_connection_failed' || code === 'provider_timeout') {
-        return 'Provider is unreachable';
+        return 'Redeven Cloud is unreachable';
       }
       if (code === 'provider_invalid_json' || code === 'provider_invalid_response') {
-        return 'Provider returned an invalid response';
+        return 'Redeven Cloud returned an invalid response';
       }
-      return 'Unable to use that provider';
+      return 'Unable to use Redeven Cloud';
     })(),
     message,
     diagnostics_copy: diagnosticsLines([
@@ -770,15 +770,15 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
   const blockedReason = (() => {
     switch (blockedReasonCode) {
       case 'target_not_running':
-        return 'Start this runtime before connecting it to a provider.';
+        return 'Start this runtime before connecting it to Redeven Cloud.';
       case 'runtime_control_missing':
         return runtimeControlStatus.state === 'missing'
           ? runtimeControlStatus.message
           : 'Restart this runtime from Desktop so runtime-control can be prepared.';
       case 'provider_link_unsupported':
-        return 'Restart this runtime with the current Desktop runtime before connecting it to a provider.';
+        return 'Restart this runtime with the current Desktop Runtime before connecting it to Redeven Cloud.';
       case 'provider_link_busy':
-        return 'Provider-link is already changing state for this runtime.';
+        return 'The Redeven Cloud link is already changing state for this Runtime.';
       default:
         return '';
     }
@@ -1137,7 +1137,7 @@ function localEnvironmentRemoteRouteDetails(
       providerEnvironment: null,
       remoteRouteState: 'auth_required',
       remoteCatalogFreshness: 'unknown',
-      remoteStateReason: 'Reconnect this provider in Desktop to restore remote access.',
+      remoteStateReason: 'Reconnect Redeven Cloud in Desktop to restore remote access.',
     };
   }
 
@@ -1161,17 +1161,17 @@ function localEnvironmentRemoteRouteDetails(
       case 'ready':
         return 'Remote Desktop is ready.';
       case 'offline':
-        return 'The provider currently reports this environment as offline.';
+        return 'Redeven Cloud currently reports this Environment as offline.';
       case 'stale':
-        return 'Remote status is stale. Refresh the provider to confirm the current state.';
+        return 'Remote status is stale. Refresh Redeven Cloud to confirm the current state.';
       case 'removed':
-        return 'This environment is no longer published by the provider.';
+        return 'This Environment is no longer published by Redeven Cloud.';
       case 'auth_required':
-        return 'Reconnect this provider in Desktop to restore access.';
+        return 'Reconnect Redeven Cloud in Desktop to restore access.';
       case 'provider_unreachable':
-        return 'Desktop could not refresh this provider from this device.';
+        return 'Desktop could not refresh Redeven Cloud from this device.';
       case 'provider_invalid':
-        return 'The provider returned an invalid response while Desktop refreshed status.';
+        return 'Redeven Cloud returned an invalid response while Desktop refreshed status.';
       default:
         return 'Remote status is not yet confirmed.';
     }
@@ -1363,17 +1363,17 @@ function providerRemoteStateReason(remoteRouteState: DesktopProviderRemoteRouteS
     case 'ready':
       return 'Remote Desktop is ready.';
     case 'offline':
-      return 'The provider currently reports this environment as offline.';
+      return 'Redeven Cloud currently reports this Environment as offline.';
     case 'stale':
-      return 'Remote status is stale. Refresh the provider to confirm the current state.';
+      return 'Remote status is stale. Refresh Redeven Cloud to confirm the current state.';
     case 'removed':
-      return 'This environment is no longer published by the provider.';
+      return 'This Environment is no longer published by Redeven Cloud.';
     case 'auth_required':
-      return 'Reconnect this provider in Desktop to restore remote access.';
+      return 'Reconnect Redeven Cloud in Desktop to restore remote access.';
     case 'provider_unreachable':
-      return 'Desktop could not refresh this provider from this device.';
+      return 'Desktop could not refresh Redeven Cloud from this device.';
     case 'provider_invalid':
-      return 'The provider returned an invalid response while Desktop refreshed status.';
+      return 'Redeven Cloud returned an invalid response while Desktop refreshed status.';
     default:
       return 'Remote status is not yet confirmed.';
   }

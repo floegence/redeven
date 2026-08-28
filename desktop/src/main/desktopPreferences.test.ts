@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeDesktopControlPlaneProvider,
 } from '../shared/controlPlaneProvider';
+import { REDEVEN_CLOUD_ORIGIN } from '../shared/redevenCloud';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import { localEnvironmentAccess } from '../shared/desktopLocalEnvironmentState';
 import { migrateDesktopEnvironmentRegistrations } from './desktopEnvironmentRegistrationMigration';
@@ -14,6 +15,7 @@ import {
   testDesktopPreferences,
   testLocalAccess,
   testLocalEnvironment,
+  testProviderBoundLocalEnvironment,
   testProviderEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
@@ -34,6 +36,7 @@ import {
   markSavedRuntimeTargetUsed,
   normalizeSavedRuntimeTargets,
   rememberProviderEnvironmentUse,
+  restrictDesktopPreferencesToRedevenCloud,
   saveDesktopPreferences,
   setLocalEnvironmentPinned,
   setDefaultFlowerRuntimeTarget,
@@ -1727,6 +1730,119 @@ describe('desktopPreferences', () => {
       }),
     ]);
     expect(next.local_environment.id).toBe('local');
+  });
+
+  it('removes only unsupported local control-plane state for packaged Redeven Cloud', () => {
+    const officialProvider = buildTestControlPlaneProvider(REDEVEN_CLOUD_ORIGIN);
+    const customProvider = buildTestControlPlaneProvider('https://other.example.invalid');
+    const officialEnvironment = testProviderEnvironment(REDEVEN_CLOUD_ORIGIN, 'env_cloud');
+    const customEnvironment = testProviderEnvironment('https://other.example.invalid', 'env_custom');
+    const preferences = testDesktopPreferences({
+      local_environment: testProviderBoundLocalEnvironment('https://other.example.invalid', 'env_custom'),
+      saved_environments: [{
+        id: 'https://saved.example.invalid/',
+        label: 'Saved URL',
+        local_ui_url: 'https://saved.example.invalid/',
+        pinned: true,
+        auto_runtime_probe_enabled: true,
+        created_at_ms: 10,
+        last_used_at_ms: 20,
+      }],
+      saved_runtime_targets: [{
+        schema_version: 1,
+        id: 'ssh:host:devbox:redeven-cloud',
+        label: 'SSH devbox',
+        host_access: {
+          kind: 'ssh_host',
+          ssh: {
+            ssh_destination: 'devbox',
+            ssh_port: 22,
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: 10,
+          },
+        },
+        placement: {
+          kind: 'host_process',
+          runtime_root: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+        },
+        pinned: false,
+        auto_runtime_probe_enabled: true,
+        created_at_ms: 10,
+        updated_at_ms: 20,
+        last_used_at_ms: 20,
+      }],
+      provider_environments: [officialEnvironment, customEnvironment],
+      control_plane_refresh_tokens: {
+        [`${REDEVEN_CLOUD_ORIGIN}|example_control_plane`]: 'cloud-token',
+        'https://other.example.invalid|example_control_plane': 'custom-token',
+        'https://orphan.example.invalid|example_control_plane': 'orphan-token',
+      },
+      control_planes: [{
+        provider: officialProvider,
+        account: buildTestControlPlaneAccount(officialProvider),
+        display_label: 'Redeven Cloud',
+        last_synced_at_ms: 100,
+      }, {
+        provider: customProvider,
+        account: buildTestControlPlaneAccount(customProvider),
+        display_label: 'Custom Control Plane',
+        last_synced_at_ms: 200,
+      }],
+    });
+
+    const result = restrictDesktopPreferencesToRedevenCloud(preferences, { allow_development: false });
+
+    expect(result).toMatchObject({
+      changed: true,
+      removed_control_plane_count: 1,
+      removed_provider_environment_count: 1,
+      cleared_local_provider_binding: true,
+    });
+    expect(result.preferences.control_planes).toEqual([
+      expect.objectContaining({ provider: expect.objectContaining({ provider_origin: REDEVEN_CLOUD_ORIGIN }) }),
+    ]);
+    expect(result.preferences.provider_environments).toEqual([
+      expect.objectContaining({ id: officialEnvironment.id }),
+    ]);
+    expect(result.preferences.control_plane_refresh_tokens).toEqual({
+      [`${REDEVEN_CLOUD_ORIGIN}|example_control_plane`]: 'cloud-token',
+    });
+    expect(result.preferences.local_environment.current_provider_binding).toBeUndefined();
+    expect(result.preferences.saved_environments).toEqual(preferences.saved_environments);
+    expect(result.preferences.saved_runtime_targets).toEqual(preferences.saved_runtime_targets);
+    expect(restrictDesktopPreferencesToRedevenCloud(result.preferences, { allow_development: false })).toEqual({
+      preferences: result.preferences,
+      changed: false,
+      removed_control_plane_count: 0,
+      removed_provider_environment_count: 0,
+      cleared_local_provider_binding: false,
+    });
+  });
+
+  it('retains the fixed test control plane only in development policy', () => {
+    const provider = buildTestControlPlaneProvider('https://redeven.test');
+    const preferences = testDesktopPreferences({
+      control_planes: [{
+        provider,
+        account: buildTestControlPlaneAccount(provider),
+        display_label: 'Redeven Cloud Test',
+        last_synced_at_ms: 100,
+      }],
+      control_plane_refresh_tokens: {
+        'https://redeven.test|example_control_plane': 'test-token',
+      },
+      provider_environments: [testProviderEnvironment('https://redeven.test', 'env_test')],
+    });
+
+    expect(restrictDesktopPreferencesToRedevenCloud(preferences, { allow_development: true })).toEqual({
+      preferences,
+      changed: false,
+      removed_control_plane_count: 0,
+      removed_provider_environment_count: 0,
+      cleared_local_provider_binding: false,
+    });
   });
 
   it('tracks provider-card pin and last-used metadata separately from the Local Environment', () => {

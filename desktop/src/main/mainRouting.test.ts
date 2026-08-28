@@ -233,6 +233,48 @@ describe('main routing', () => {
     expect(mainSrc).toContain("return focusEnvironmentWindow(request.session_key);");
   });
 
+  it('enforces Redeven Cloud origins at authorization and callback persistence boundaries', () => {
+    const mainSrc = readMainSource();
+    const start = mainSrc.slice(
+      mainSrc.indexOf('async function startControlPlaneAuthorization('),
+      mainSrc.indexOf('async function saveAuthorizedControlPlane('),
+    );
+    const save = mainSrc.slice(
+      mainSrc.indexOf('async function saveAuthorizedControlPlane('),
+      mainSrc.indexOf('async function syncSavedControlPlaneAccount('),
+    );
+    const deepLink = mainSrc.slice(
+      mainSrc.indexOf('async function handleDesktopDeepLink('),
+      mainSrc.indexOf('function registerDesktopProtocolClient('),
+    );
+    const completeDeepLink = mainSrc.slice(
+      mainSrc.indexOf('async function completeControlPlaneAuthorizationFromDeepLink('),
+      mainSrc.indexOf('async function handleDesktopDeepLink('),
+    );
+
+    expect(start).toContain('requireRedevenCloudOrigin(args.providerOrigin, policy)');
+    expect(start).toContain('requireRedevenCloudOrigin(provider.provider_origin, policy)');
+    expect(save).toContain('requireRedevenCloudOrigin(providerOrigin, policy)');
+    expect(save).toContain('requireRedevenCloudOrigin(provider.provider_origin, policy)');
+    expect(deepLink).toContain('completeControlPlaneAuthorizationFromDeepLink(request)');
+    expect(completeDeepLink).toContain('saveAuthorizedControlPlane(');
+  });
+
+  it('cleans unsupported local control-plane state without remote or Runtime side effects', () => {
+    const mainSrc = readMainSource();
+    const load = mainSrc.slice(
+      mainSrc.indexOf('async function loadDesktopPreferencesCached('),
+      mainSrc.indexOf('function syncOpenSessionTargetsWithPreferences('),
+    );
+
+    expect(load).toContain('restrictDesktopPreferencesToRedevenCloud(');
+    expect(load).toContain('await saveDesktopPreferences(');
+    expect(load).toContain("code: 'redeven_cloud_local_cleanup'");
+    expect(load).not.toContain('revoke');
+    expect(load).not.toContain('disconnect');
+    expect(load).not.toContain('closeSession');
+  });
+
   it('scopes transport recovery IPC to the sending Desktop session', () => {
     const mainSrc = readMainSource();
     const handlerStart = mainSrc.indexOf('ipcMain.on(DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL');

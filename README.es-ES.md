@@ -72,12 +72,12 @@ Hay dos formas de empezar: Desktop, recomendado para la mayoría de usuarios, o 
 ### Aplicación Desktop
 
 1. Descarga Redeven Desktop desde [GitHub Releases](https://github.com/floegence/redeven/releases). Las versiones públicas ofrecen actualmente instaladores para macOS y Linux. Windows 11 x64 seguirá siendo una compilación interna de certificación WSL hasta que se habiliten la firma de código y la verificación de actualizaciones firmadas.
-2. Abre la aplicación. En macOS o Linux, elige un entorno local, Provider, un host SSH o una URL guardada. En Windows, registra una distribución WSL 2 inicializada en el centro de entornos. Desktop no proporciona un entorno local nativo, un entorno de ejecución de Windows ni un entorno de ejecución de contenedor local.
+2. Abre la aplicación. En macOS o Linux, elige un entorno local, Redeven Cloud, un host SSH o una URL guardada. En Windows, registra una distribución WSL 2 inicializada en el centro de entornos. Desktop no proporciona un entorno local nativo, un entorno de ejecución de Windows ni un entorno de ejecución de contenedor local.
 3. Empieza a trabajar: el espacio de trabajo se abre automáticamente en el navegador.
 
 Cada distribución registrada es un entorno WSL independiente. Desktop transfiere el entorno de ejecución Linux x64 correspondiente al directorio `~/.redeven` del usuario de la distribución. No instala ni administra WSL, no usa `/mnt/c` ni depende de `systemd`. Cerrar, actualizar o desinstalar Desktop no detiene el entorno de ejecución WSL ni elimina sus datos. Usa la acción Detener del entorno cuando quieras detenerlo.
 
-Para equipos remotos, Desktop puede instalar automáticamente la versión correspondiente de Redeven mediante SSH y, cuando lo elijas, conectar explícitamente ese entorno de ejecución SSH administrado a un entorno de provider. No es necesario configurar manualmente el host remoto.
+Para equipos remotos, Desktop puede instalar automáticamente la versión correspondiente de Redeven mediante SSH y, cuando lo elijas, conectar explícitamente ese entorno de ejecución SSH administrado a un entorno de Redeven Cloud. No es necesario configurar manualmente el host remoto.
 
 <!-- readme-section:cli -->
 <a id="cli"></a>
@@ -122,7 +122,7 @@ Ejecuta `redeven help run` para consultar otros modos de ejecución y la protecc
 | Browser Editor | Sesiones del editor en el navegador configuradas explícitamente por Desktop y aisladas por espacio de trabajo. |
 | Servicios web | Registro de servicios y acceso con reenvío de puertos administrados por el entorno de ejecución, sin túneles SSH escritos a mano. |
 | Flower | Superficies de IA opcionales que usan herramientas validadas por el entorno de ejecución y configuración local del modelo y del host. |
-| Desktop | Iniciador nativo para entornos locales, entornos alojados por un provider, entornos inicializados mediante SSH y entornos de Local UI guardados. |
+| Desktop | Iniciador nativo para entornos locales, entornos alojados en Redeven Cloud, entornos inicializados mediante SSH y entornos de Local UI guardados. |
 
 <!-- readme-section:security -->
 <a id="security"></a>
@@ -145,7 +145,7 @@ Redeven da prioridad a las funciones, pero el entorno de ejecución sigue siendo
 
 Redeven mantiene el conocimiento del repositorio en [OKF v0.1](okf/index.md). El corpus de OKF se genera a partir del comportamiento actual del código fuente y se integra en el entorno de ejecución para `okf.search`.
 
-La superficie de integración con provider legible por máquinas se encuentra en [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Fuera de OKF, los archivos Markdown mantenidos se limitan deliberadamente a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, el archivo canónico `README.md` y las traducciones compatibles `README.<locale>.md` declaradas en `assets/readme/locales.json`.
+La superficie de integración RCPP Provider legible por máquinas se encuentra en [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Fuera de OKF, los archivos Markdown mantenidos se limitan deliberadamente a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, el archivo canónico `README.md` y las traducciones compatibles `README.<locale>.md` declaradas en `assets/readme/locales.json`.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>
