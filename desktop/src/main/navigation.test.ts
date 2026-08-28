@@ -7,6 +7,8 @@ import {
   isCodespaceURLForCodeSpace,
   isPortForwardURLForForward,
   resolveWebServiceBrowserAddress,
+  routeWebServiceTargetRequest,
+  webServiceBrowserExternalURL,
   webServiceBrowserDisplayURL,
 } from './navigation';
 import { isLoopbackHost } from './localUIURL';
@@ -111,6 +113,61 @@ describe('navigation', () => {
     )).toBe(false);
   });
 
+  it('maps the exact loopback service scope into its isolated Desktop origin', () => {
+    const route = 'http://pf-demo.localhost:43123/';
+    expect(routeWebServiceTargetRequest(
+      'http://127.0.0.1:3000/assets/app.js?rev=1',
+      route,
+      'http://localhost:3000/',
+      'demo',
+    )).toBe('http://pf-demo.localhost:43123/assets/app.js?rev=1');
+    expect(routeWebServiceTargetRequest(
+      'ws://127.42.0.9:3000/plugins/live',
+      route,
+      'http://localhost:3000/',
+      'demo',
+    )).toBe('ws://pf-demo.localhost:43123/plugins/live');
+    expect(routeWebServiceTargetRequest(
+      'http://localhost:3000/pf/demo',
+      route,
+      'http://127.0.0.1:3000/',
+      'demo',
+    )).toBe('http://pf-demo.localhost:43123/pf/demo');
+  });
+
+  it('does not map remote, cross-port, cross-protocol, or external requests', () => {
+    expect(routeWebServiceTargetRequest(
+      'http://localhost:3001/assets/app.js',
+      'http://pf-demo.localhost:43123/',
+      'http://localhost:3000/',
+      'demo',
+    )).toBeNull();
+    expect(routeWebServiceTargetRequest(
+      'https://localhost:3000/assets/app.js',
+      'http://pf-demo.localhost:43123/',
+      'http://localhost:3000/',
+      'demo',
+    )).toBeNull();
+    expect(routeWebServiceTargetRequest(
+      'https://pf-demo.sg.redeven.online/assets/app.js',
+      'https://pf-demo.sg.redeven.online/',
+      'http://localhost:3000/',
+      'demo',
+    )).toBeNull();
+    expect(routeWebServiceTargetRequest(
+      'https://cdn.example.com/app.js',
+      'http://pf-demo.localhost:43123/',
+      'http://localhost:3000/',
+      'demo',
+    )).toBeNull();
+    expect(routeWebServiceTargetRequest(
+      'file:///tmp/app.js',
+      'http://pf-demo.localhost:43123/',
+      'http://localhost:3000/',
+      'demo',
+    )).toBeNull();
+  });
+
   it('resolves browser address input inside the exact Web Service route', () => {
     expect(resolveWebServiceBrowserAddress(
       '/docs?q=1#api',
@@ -179,6 +236,19 @@ describe('navigation', () => {
       'http://localhost:3000/',
       'demo',
     )).toBe('http://localhost:3000/');
+  });
+
+  it('opens the public pf route only when leaving the isolated Desktop window', () => {
+    expect(webServiceBrowserExternalURL(
+      'http://pf-demo.localhost:43123/docs?q=1#api',
+      'http://127.0.0.1:23998/',
+      'demo',
+    )).toBe('http://127.0.0.1:23998/pf/demo/docs?q=1#api');
+    expect(webServiceBrowserExternalURL(
+      'https://pf-demo.sg.redeven.online/docs',
+      'https://env-demo.sg.redeven.online/',
+      'demo',
+    )).toBe('https://pf-demo.sg.redeven.online/docs');
   });
 
   it('rejects browser address input outside the current forward', () => {

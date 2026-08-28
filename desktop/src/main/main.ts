@@ -244,7 +244,7 @@ import {
   shouldFailDesktopSessionMainDocument,
   type DesktopSessionTransport,
 } from './desktopSessionTransport';
-import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress, webServiceBrowserDisplayURL } from './navigation';
+import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress, routeWebServiceTargetRequest, webServiceBrowserDisplayURL, webServiceBrowserExternalURL } from './navigation';
 import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
 import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
@@ -8277,14 +8277,21 @@ function openCodespaceWindowFromShell(
 async function prepareWebServiceWindowPartition(
   sessionRecord: DesktopSessionRecord,
   partition: string,
+  forwardID: string,
 ): Promise<void> {
   const webSession = session.fromPartition(partition);
-  installDesktopDiagnosticsHooks(webSession);
+  installDesktopDiagnosticsHooks(webSession, forwardID);
   await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });
 }
 
 function clearWebServiceWindowPartition(partition: string): void {
   const webSession = session.fromPartition(partition);
+  webSession.webRequest.onBeforeRequest(null);
+  webSession.webRequest.onBeforeSendHeaders(null);
+  webSession.webRequest.onHeadersReceived(null);
+  webSession.webRequest.onCompleted(null);
+  webSession.webRequest.onErrorOccurred(null);
+  desktopDiagnosticsHookSessions.delete(webSession);
   void Promise.all([
     webSession.clearStorageData(),
     webSession.clearCache(),
@@ -8359,7 +8366,6 @@ function createWebServiceBrowserController(
       const current = sessionRecord.web_service_windows.get(request.forward_id);
       if (current?.webContentsID !== closedWindow.webContentsID) return;
       sessionRecord.web_service_windows.delete(request.forward_id);
-      webSession.webRequest.onHeadersReceived(null);
       if (!contentView.webContents.isDestroyed()) contentView.webContents.close();
       clearWebServiceWindowPartition(partition);
     },
@@ -8486,7 +8492,10 @@ function createWebServiceBrowserController(
         toggleDevTools();
         return { ok: true };
       case 'open_external': {
-        const targetURL = pendingExternalURL || unavailableRequestURL || requestedURL || request.url;
+        const currentRouteURL = unavailableRequestURL || requestedURL || request.url;
+        const targetURL = pendingExternalURL
+          || webServiceBrowserExternalURL(currentRouteURL, sessionRecord.startup.local_ui_url, request.forward_id)
+          || currentRouteURL;
         try {
           await openExternalURL(targetURL);
           pendingExternalURL = '';
@@ -8505,6 +8514,7 @@ function createWebServiceBrowserController(
 
   const allowTargetNavigation = (targetURL: string): boolean => (
     isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)
+    || routeWebServiceTargetRequest(targetURL, request.url, request.target_url, request.forward_id) !== null
   );
   const markRequestedNavigation = (targetURL: string): void => {
     requestedURL = targetURL;
@@ -8600,6 +8610,16 @@ function createWebServiceBrowserController(
   win.webContents.on('before-input-event', handleDevToolsShortcut);
   contentView.webContents.on('before-input-event', handleDevToolsShortcut);
 
+  webSession.webRequest.onBeforeRequest((details, callback) => {
+    const redirectURL = routeWebServiceTargetRequest(
+      details.url,
+      request.url,
+      request.target_url,
+      request.forward_id,
+    );
+    callback(redirectURL ? { redirectURL } : {});
+  });
+
   webSession.webRequest.onHeadersReceived((details, callback) => {
     const isTargetDocument = details.webContentsId !== undefined
       && electronWebContents.fromId(details.webContentsId) === contentView.webContents;
@@ -8662,7 +8682,7 @@ async function openWebServiceWindowFromShell(
 
   const partition = sessionWebServicePartition(sessionRecord.session_key, request.forward_id);
   try {
-    await prepareWebServiceWindowPartition(sessionRecord, partition);
+    await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id);
   } catch {
     return {
       ok: false,
@@ -16944,7 +16964,7 @@ function sessionRecordForWebContentsID(webContentsID: number): DesktopSessionRec
   return sessionsByKey.get(sessionKey) ?? null;
 }
 
-function installDesktopDiagnosticsHooks(webSession: Session): void {
+function installDesktopDiagnosticsHooks(webSession: Session, webServiceForwardID?: string): void {
   if (desktopDiagnosticsHookSessions.has(webSession)) {
     return;
   }
@@ -16966,6 +16986,7 @@ function installDesktopDiagnosticsHooks(webSession: Session): void {
       sessionRecord.startup,
       details.url,
       diagnosticHeaders ?? details.requestHeaders as Record<string, string | string[]>,
+      webServiceForwardID ? { webServiceForwardID } : {},
     );
     callback({ requestHeaders });
   });

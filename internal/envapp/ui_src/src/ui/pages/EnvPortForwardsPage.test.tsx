@@ -311,9 +311,32 @@ describe('web service route helpers', () => {
         renderer_storage_scope_id: 'ssh:devbox',
         target_kind: 'ssh_environment',
         target_route: 'remote_desktop',
+        document_transport: 'desktop_private_bridge_v2',
       },
       browserLocation,
     }).kind).toBe('local_proxy');
+  });
+
+  it('uses a root-mounted private origin for an isolated Desktop window', () => {
+    expect(resolveWebServiceOpenRoute({
+      forwardID: 'forward-1',
+      targetURL: 'http://127.0.0.1:3000',
+      appPath: '/docs?tab=api#intro',
+      localRuntime,
+      desktopContext: {
+        local_environment_id: 'ssh:devbox',
+        renderer_storage_scope_id: 'ssh:devbox',
+        target_kind: 'ssh_environment',
+        target_route: 'remote_desktop',
+        document_transport: 'desktop_private_bridge_v2',
+      },
+      browserLocation: new URL('http://127.0.0.1:43123/_redeven_proxy/env') as any,
+      preferIsolatedDesktop: true,
+    })).toEqual({
+      kind: 'local_proxy',
+      url: 'http://pf-forward-1.localhost:43123/docs?tab=api#intro',
+      label: 'Local proxy',
+    });
   });
 
   it('uses the secure tunnel when the page is not in Local UI mode', () => {

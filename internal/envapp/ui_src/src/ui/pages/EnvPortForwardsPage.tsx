@@ -349,10 +349,20 @@ function normalizeAppPath(value: string | undefined): string {
   return raw.startsWith('/') ? raw : `/${raw}`;
 }
 
-function localWebServiceProxyURL(forwardID: string, appPath: string, locationLike: BrowserLocationLike): string {
+function localWebServiceProxyURL(
+  forwardID: string,
+  appPath: string,
+  locationLike: BrowserLocationLike,
+  isolatedDesktop: boolean,
+): string {
   const navigation = new URL(normalizeAppPath(appPath), 'http://redeven.invalid');
-  const base = new URL(`/pf/${encodeURIComponent(forwardID)}/`, locationLike.origin || locationLike.href);
-  base.pathname += navigation.pathname.replace(/^\//u, '');
+  const base = new URL(locationLike.origin || locationLike.href);
+  if (isolatedDesktop) {
+    base.hostname = `pf-${forwardID}.localhost`;
+    base.pathname = navigation.pathname;
+  } else {
+    base.pathname = `/pf/${encodeURIComponent(forwardID)}/${navigation.pathname.replace(/^\//u, '')}`;
+  }
   base.search = navigation.search;
   base.hash = navigation.hash;
   return base.toString();
@@ -374,6 +384,8 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
 
   const locationLike = args.browserLocation ?? window.location;
   const targetURL = parseSupportedWebServiceTarget(args.targetURL);
+  const isolatedDesktop = args.preferIsolatedDesktop === true
+    && args.desktopContext?.document_transport === 'desktop_private_bridge_v2';
   if (
     targetURL
     && !args.preferIsolatedDesktop
@@ -388,7 +400,16 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
     };
   }
 
-  return { kind: 'local_proxy', url: localWebServiceProxyURL(forwardID, normalizeAppPath(args.appPath), locationLike), label: 'Local proxy' };
+  return {
+    kind: 'local_proxy',
+    url: localWebServiceProxyURL(
+      forwardID,
+      normalizeAppPath(args.appPath),
+      locationLike,
+      isolatedDesktop,
+    ),
+    label: 'Local proxy',
+  };
 }
 
 // ============================================================================

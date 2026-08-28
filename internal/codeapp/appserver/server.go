@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/netip"
 	"net/url"
 	"os"
 	"path"
@@ -277,6 +278,7 @@ type localUIRoute struct {
 	kind            localUIRouteKind
 	codeSpaceID     string
 	forwardID       string
+	proxyBasePath   string
 	pluginChannelID string
 }
 
@@ -301,6 +303,15 @@ func WithLocalUICodeSpaceRoute(r *http.Request, codeSpaceID string) *http.Reques
 }
 
 func WithLocalUIPortForwardRoute(r *http.Request, forwardID string) *http.Request {
+	id := strings.TrimSpace(forwardID)
+	return withLocalUIRoute(r, localUIRoute{
+		kind:          localUIRoutePortForward,
+		forwardID:     id,
+		proxyBasePath: "/pf/" + id,
+	})
+}
+
+func WithLocalUIPortForwardOrigin(r *http.Request, forwardID string) *http.Request {
 	return withLocalUIRoute(r, localUIRoute{
 		kind:      localUIRoutePortForward,
 		forwardID: strings.TrimSpace(forwardID),
@@ -5765,11 +5776,7 @@ func localPortForwardBasePath(r *http.Request) string {
 	if !ok || route.kind != localUIRoutePortForward {
 		return ""
 	}
-	forwardID := strings.TrimSpace(route.forwardID)
-	if forwardID == "" {
-		return ""
-	}
-	return "/pf/" + forwardID
+	return strings.TrimRight(strings.TrimSpace(route.proxyBasePath), "/")
 }
 
 func codespaceRequestRootPath(r *http.Request) string {
@@ -6200,23 +6207,7 @@ func rewriteLocationToProxy(location string, target *url.URL, proxyBasePath stri
 		return location
 	}
 
-	targetHost := strings.ToLower(strings.TrimSpace(target.Hostname()))
-	targetPort := strings.TrimSpace(target.Port())
-	if targetPort == "" {
-		targetPort = defaultPortForScheme(strings.ToLower(strings.TrimSpace(target.Scheme)))
-	}
-
-	locHost := strings.ToLower(strings.TrimSpace(u.Hostname()))
-	locPort := strings.TrimSpace(u.Port())
-	if locPort == "" {
-		scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
-		if scheme == "" {
-			scheme = strings.ToLower(strings.TrimSpace(target.Scheme))
-		}
-		locPort = defaultPortForScheme(scheme)
-	}
-
-	if locHost != targetHost || (targetPort != "" && locPort != "" && locPort != targetPort) {
+	if !samePortForwardTargetOrigin(u, target) {
 		return location
 	}
 
@@ -6233,6 +6224,46 @@ func rewriteLocationToProxy(location string, target *url.URL, proxyBasePath stri
 		path += "#" + u.Fragment
 	}
 	return joinProxyBasePath(proxyBasePath, path)
+}
+
+func samePortForwardTargetOrigin(candidate *url.URL, target *url.URL) bool {
+	if candidate == nil || target == nil {
+		return false
+	}
+	targetScheme := strings.ToLower(strings.TrimSpace(target.Scheme))
+	candidateScheme := strings.ToLower(strings.TrimSpace(candidate.Scheme))
+	if candidateScheme == "" {
+		candidateScheme = targetScheme
+	}
+	if (targetScheme != "http" && targetScheme != "https") || candidateScheme != targetScheme {
+		return false
+	}
+	targetPort := strings.TrimSpace(target.Port())
+	if targetPort == "" {
+		targetPort = defaultPortForScheme(targetScheme)
+	}
+	candidatePort := strings.TrimSpace(candidate.Port())
+	if candidatePort == "" {
+		candidatePort = defaultPortForScheme(candidateScheme)
+	}
+	if targetPort == "" || candidatePort != targetPort {
+		return false
+	}
+	targetHost := strings.ToLower(strings.TrimSpace(target.Hostname()))
+	candidateHost := strings.ToLower(strings.TrimSpace(candidate.Hostname()))
+	if targetHost == candidateHost {
+		return true
+	}
+	return isPortForwardLoopbackHostname(targetHost) && isPortForwardLoopbackHostname(candidateHost)
+}
+
+func isPortForwardLoopbackHostname(hostname string) bool {
+	host := strings.TrimSpace(strings.ToLower(hostname))
+	if host == "localhost" {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.Zone() == "" && !addr.Is4In6() && addr.IsLoopback()
 }
 
 func defaultPortForScheme(scheme string) string {
@@ -6288,16 +6319,20 @@ func rewriteHTMLOrigins(html string, target *url.URL, externalHTTPBase string, e
 	}
 
 	out := html
+	targetScheme := strings.ToLower(strings.TrimSpace(target.Scheme))
+	targetWSScheme := "ws"
+	if targetScheme == "https" {
+		targetWSScheme = "wss"
+	}
 	for _, h := range hosts {
 		if h == "" {
 			continue
 		}
-		out = strings.ReplaceAll(out, "http://"+h, extHTTPBase)
-		out = strings.ReplaceAll(out, "https://"+h, extHTTPBase)
-		out = strings.ReplaceAll(out, "ws://"+h, extWSBase)
-		out = strings.ReplaceAll(out, "wss://"+h, extWSBase)
+		out = strings.ReplaceAll(out, targetScheme+"://"+h, extHTTPBase)
+		out = strings.ReplaceAll(out, targetWSScheme+"://"+h, extWSBase)
 		if extProtocolRelativeBase != "" {
-			out = strings.ReplaceAll(out, "//"+h, extProtocolRelativeBase)
+			protocolRelativePattern := regexp.MustCompile(`(^|[^:])//` + regexp.QuoteMeta(h))
+			out = protocolRelativePattern.ReplaceAllString(out, `${1}`+extProtocolRelativeBase)
 		}
 	}
 	return out
