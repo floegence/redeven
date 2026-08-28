@@ -30,13 +30,17 @@ function icon(name: string) {
 }
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  Activity: icon('activity'),
   AlertTriangle: icon('alert'),
+  Database: icon('database'),
   FileText: icon('file'),
   Layers: icon('layers'),
+  Package: icon('package'),
   Pause: icon('pause'),
   Play: icon('play'),
   Plus: icon('plus'),
   Refresh: icon('refresh'),
+  Search: icon('search'),
   Stop: icon('stop'),
   Trash: icon('trash'),
   X: icon('x'),
@@ -44,7 +48,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => <button type="button" class={props.class} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
-  Input: (props: any) => <input class={props.class} value={props.value} onInput={props.onInput} />,
+  Input: (props: any) => <input class={props.class} value={props.value} placeholder={props.placeholder} aria-label={props['aria-label']} onInput={props.onInput} />,
   Tag: (props: any) => <span>{props.children}</span>,
 }));
 
@@ -59,6 +63,9 @@ vi.mock('../primitives/EnvAppDrawer', () => ({
 vi.mock('../i18n', () => ({
   useI18n: () => ({
     t: (key: string, values?: Record<string, unknown>) => values?.name ? `${key}:${values.name}` : key,
+    formatDateTime: (value: number) => `date:${value}`,
+    formatRelativeTime: (value: number) => `relative:${value}`,
+    formatNumber: (value: number) => String(value),
   }),
 }));
 
@@ -144,10 +151,71 @@ describe('native Containers page', () => {
 
     expect(host.querySelector('[data-container-page]')?.getAttribute('data-variant')).toBe('workbench');
     expect(host.querySelector('table')).not.toBeNull();
-    expect(host.querySelector('.md\\:hidden button')).not.toBeNull();
+    expect(host.querySelector('[data-container-mobile-list] button')).not.toBeNull();
     expect(host.querySelectorAll('.container-touch-target').length).toBeGreaterThan(3);
     expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary');
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:widget-1')).toBe(true);
+  });
+
+  it('makes a large inventory scannable and presents structured resource details', async () => {
+    harness.listResources.mockResolvedValue([
+      {
+        container_id: 'container-1',
+        name: 'Managed API',
+        image: { reference: 'ghcr.io/redeven/api:latest' },
+        state: 'running',
+        health: 'healthy',
+        group_name: 'redeven-stack',
+        created_at_unix_ms: 1_700_000_000_000,
+        management: { managed: true, owner: { kind: 'web_service', service_id: 'service-1', name: 'API' } },
+      },
+      {
+        container_id: 'container-2',
+        name: 'Build worker',
+        image: { reference: 'debian:stable' },
+        state: 'exited',
+        management: { managed: false },
+      },
+    ]);
+    harness.resourceDetails.mockResolvedValue({
+      container_id: 'container-2',
+      name: 'Build worker',
+      image: { reference: 'debian:stable' },
+      state: 'exited',
+      runtime: { network_mode: 'bridge', restart_policy: 'no', privileged: false, read_only_root: true },
+      ports: [{ protocol: 'tcp', host_ip: '127.0.0.1', host_port: 8080, port: 80 }],
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    expect(host.querySelector('[data-container-summary]')?.textContent).toContain('containers.filters.active');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.image');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.ownership');
+    expect(host.textContent).toContain('containers.states.running');
+
+    const search = host.querySelector<HTMLInputElement>('input[aria-label="containers.search.label"]');
+    expect(search).not.toBeNull();
+    search!.value = 'worker';
+    search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await settle();
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(host.querySelector('tbody')?.textContent).toContain('Build worker');
+
+    search!.value = '';
+    search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const inactiveFilter = Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent === 'containers.filters.inactive');
+    inactiveFilter?.click();
+    await settle();
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(host.querySelector('tbody')?.textContent).toContain('Build worker');
+
+    (host.querySelector('tbody tr') as HTMLElement).click();
+    await settle();
+    expect(host.querySelector('[data-container-detail-grid]')?.textContent).toContain('containers.inspector.networkMode');
+    expect(host.querySelector('[data-container-technical-details]')).not.toBeNull();
   });
 
   it('keeps a Web Services-managed resource read-only and links to its owner', async () => {
@@ -165,6 +233,40 @@ describe('native Containers page', () => {
     openService?.click();
     expect(harness.goActivity).toHaveBeenCalledWith('ports');
     expect(harness.storageWrites).toContainEqual({ key: 'webServices:focus', value: { version: 1, serviceID: 'service-1' } });
+  });
+
+  it('uses resource-specific columns for images, volumes, Compose projects, and pods', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve({
+      containers: [{ container_id: 'container-1', name: 'API', state: 'running', management: { managed: false } }],
+      images: [{ id: 'image-1', reference: 'nginx:latest', tags: ['nginx:latest'], size_bytes: 1024, referenced_containers: 1 }],
+      volumes: [{ name: 'data', driver: 'local', scope: 'local', referenced_containers: 1, management: { managed: false } }],
+      'compose-projects': [{ project_id: 'project-1', name: 'Stack', status: 'running', service_count: 2, container_count: 2, running_count: 2, management: { managed: false } }],
+      pods: [{ pod_id: 'pod-1', name: 'Application', status: 'running', container_count: 3, running_count: 2, created_at_unix_ms: 1_700_000_000_000 }],
+    }[nextView] ?? []));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    const openView = async (label: string) => {
+      Array.from(host.querySelectorAll<HTMLButtonElement>('nav button')).find((button) => button.textContent?.includes(label))?.click();
+      await settle();
+    };
+    await openView('containers.views.images');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.size');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.tags');
+    await openView('containers.views.volumes');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.driver');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.ownership');
+    await openView('containers.views.compose-projects');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.running');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.services');
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find((button) => button.textContent === 'podman')?.click();
+    await settle();
+    await openView('containers.views.pods');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.created');
+    expect(host.querySelector('tbody')?.textContent).toContain('Application');
   });
 
   it('degrades mutation controls when the session lacks Write and Admin', async () => {
