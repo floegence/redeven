@@ -60,12 +60,13 @@ describe('Flower activity running sheen', () => {
     const css = flowerStyles();
     const previewRule = cssRule(css, '.flower-activity-web-fetch-preview');
     const linkRule = cssRule(css, '.flower-activity-web-fetch-open');
-    const iconRule = cssRule(css, '.flower-activity-web-fetch-title-icon');
+    const iconRule = cssRule(css, '.flower-activity-web-fetch-searching-orb');
 
     expect(previewRule).toContain('max-height: 15rem');
     expect(previewRule).toContain('overflow: auto');
     expect(linkRule).toContain('cursor: pointer');
-    expect(iconRule).toContain('width: 0.875rem');
+    expect(iconRule).toContain('width: 1.25rem');
+    expect(iconRule).toContain('height: 1.25rem');
   });
 
   it('uses a compact transform-only loader without a layout-triggering row sheen', () => {

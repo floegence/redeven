@@ -69,6 +69,7 @@ main() {
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/flower/FlowerAttachmentLane.test.tsx \
+      src/ui/flower/WebFetchSearchingOrb.test.tsx \
       src/ui/flower/aiReadiness.test.ts \
       src/ui/flower/aiReadinessPresentation.test.ts \
       src/ui/flower/activityDisclosure.test.ts \

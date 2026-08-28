@@ -397,6 +397,74 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(okfToggle.getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('uses one Searching orb for running and completed Web Fetch rows', async () => {
+    const threadID = 'thread-web-fetch-searching-orb';
+    const turnID = 'turn-web-fetch-searching-orb';
+    const webFetchThread = thread({
+      thread_id: threadID,
+      title: 'Web Fetch indicator',
+      status: 'running',
+      active_run_id: turnID,
+      messages: [{
+        id: 'web-fetch-activity-message',
+        turn_id: turnID,
+        role: 'assistant',
+        content: '',
+        status: 'complete',
+        created_at_ms: 10,
+        blocks: [activityTimeline({
+          thread_id: threadID,
+          run_id: turnID,
+          turn_id: turnID,
+          status: 'running',
+          items: [
+            activityItem({
+              item_id: 'web-fetch-running',
+              tool_id: 'web-fetch-running',
+              tool_name: 'web_fetch',
+              renderer: 'web_fetch',
+              status: 'running',
+              label: 'Web fetch · https://example.test/running',
+              payload: { url: 'https://example.test/running' },
+            }),
+            activityItem({
+              item_id: 'web-fetch-complete',
+              tool_id: 'web-fetch-complete',
+              tool_name: 'web_fetch',
+              renderer: 'web_fetch',
+              status: 'success',
+              label: 'Web fetch · https://example.test/complete',
+              payload: { url: 'https://example.test/complete' },
+            }),
+          ],
+        })],
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [webFetchThread]),
+      loadThread: vi.fn(async () => liveBootstrap(webFetchThread, 10)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-activity-web-fetch-searching-orb').length === 2);
+
+    const runningRow = runtime.querySelector('[data-flower-activity-item-id="web-fetch-running"]') as HTMLElement;
+    const completeRow = runtime.querySelector('[data-flower-activity-item-id="web-fetch-complete"]') as HTMLElement;
+    const runningOrb = runningRow.querySelector('.flower-activity-web-fetch-searching-orb') as HTMLCanvasElement;
+    const completeOrb = completeRow.querySelector('.flower-activity-web-fetch-searching-orb') as HTMLCanvasElement;
+
+    expect(runningRow.querySelectorAll('.flower-activity-inline-icon > *')).toHaveLength(1);
+    expect(completeRow.querySelectorAll('.flower-activity-inline-icon > *')).toHaveLength(1);
+    expect(runningRow.querySelector('.flower-activity-inline-title svg')).toBeNull();
+    expect(completeRow.querySelector('.flower-activity-inline-title svg')).toBeNull();
+    expect(runningOrb.dataset.running).toBe('true');
+    expect(completeOrb.dataset.running).toBe('false');
+    expect(runningOrb.width).toBeGreaterThanOrEqual(20);
+    expect(completeOrb.width).toBeGreaterThanOrEqual(20);
+  });
+
   it('uses semantic terminal titles and omits empty terminal disclosures', async () => {
     const threadID = 'thread-terminal-semantic-presentation';
     const terminalThread = thread({
