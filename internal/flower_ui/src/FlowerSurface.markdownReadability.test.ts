@@ -20,6 +20,21 @@ function cssRule(css: string, selector: string): string {
 }
 
 describe('Flower markdown readability', () => {
+  it('owns message wrapping above bubbles and thinking disclosures', () => {
+    const css = flowerStyles();
+    const blockStackRule = cssRule(css, '.flower-message-block-stack');
+    const bubbleRule = cssRule(css, '.flower-message-bubble');
+    const codeBlockRule = cssRule(css, '.flower-chat-md-code-block');
+
+    expect(blockStackRule).toContain('word-break: break-word');
+    expect(blockStackRule).toContain('overflow-wrap: anywhere');
+    expect(bubbleRule).not.toContain('word-break:');
+    expect(bubbleRule).not.toContain('overflow-wrap:');
+    expect(codeBlockRule).toContain('overflow-x: auto');
+    expect(codeBlockRule).toContain('word-break: normal');
+    expect(codeBlockRule).toContain('overflow-wrap: normal');
+  });
+
   it('keeps assistant markdown on a wider reading rhythm', () => {
     const css = flowerStyles();
 

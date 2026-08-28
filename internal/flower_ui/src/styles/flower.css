@@ -2890,8 +2890,6 @@ html.dark .flower-component-shell {
   font-size: 0.875rem;
   line-height: 1.65;
   letter-spacing: 0;
-  word-break: break-word;
-  overflow-wrap: anywhere;
   user-select: text;
 }
 
@@ -4269,6 +4267,8 @@ html.dark .flower-component-shell {
   min-width: 0;
   flex-direction: column;
   gap: 0.375rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .flower-message-block-stack-user {
