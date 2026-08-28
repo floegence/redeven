@@ -654,12 +654,12 @@ describe('EnvPortForwardsPage', () => {
     expect(drawer.textContent).toContain('Save template');
   });
 
-  it('starts deployment from the template dedicated workspace instead of the home root', async () => {
+  it('uses a space-free recommended workspace and preserves a custom path with spaces', async () => {
     const template = {
       template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment',
       source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true,
       deployments: [{ deployment: 'native', available: true }],
-      default_workspace_path: '/Users/demo/Redeven Workspaces/Managed Services/DeepSeek Harness',
+      default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness',
       workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
     };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -708,13 +708,13 @@ describe('EnvPortForwardsPage', () => {
         template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'Unlocalized Ubuntu desktop', description: 'Unlocalized Ubuntu description',
         brand_icon: 'interactive-desktop', localization_key: 'linuxserverWebtopUbuntuKDE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         version: '654ea8e3-ls177', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
-        default_workspace_path: '/Users/demo/Redeven Workspaces/Managed Services/LinuxServer Webtop - Ubuntu KDE', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
       },
       {
         template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'linuxserver-webtop-debian-xfce', name: 'Unlocalized Debian desktop', description: 'Unlocalized Debian description',
         brand_icon: 'interactive-desktop', localization_key: 'linuxserverWebtopDebianXFCE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         version: '7c4ebdc9-ls209', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
-        default_workspace_path: '/Users/demo/Redeven Workspaces/Managed Services/LinuxServer Webtop - Debian XFCE', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-debian-xfce', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
       },
     ];
     let createBody: Record<string, any> | null = null;
@@ -772,7 +772,7 @@ describe('EnvPortForwardsPage', () => {
     const service = {
       service_id: 'mws-webtop', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde',
       name: 'Unlocalized Webtop', description: 'Unlocalized description', localization_key: 'linuxserverWebtopUbuntuKDE', brand_icon: 'interactive-desktop', deployment: 'container',
-      workspace_path: '/Users/demo/Redeven Workspaces/Managed Services/LinuxServer Webtop - Ubuntu KDE', version: '654ea8e3-ls176', target_version: '654ea8e3-ls177', target_revision: 2,
+      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls176', target_version: '654ea8e3-ls177', target_revision: 2,
       update_available: true, update_notices: [updateNotice], desired_state: 'running', observed_state: 'running', forward_id: 'managed-webtop', runtime_port: 32100,
     };
     let operationBody: Record<string, any> | null = null;

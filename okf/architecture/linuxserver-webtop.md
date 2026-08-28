@@ -16,7 +16,7 @@ timestamp: 2026-08-27T00:00:00Z
 
 ## Reviewed templates
 
-The Runtime exposes **LinuxServer Webtop · Ubuntu KDE** at `654ea8e3-ls177` and **LinuxServer Webtop · Debian XFCE** at `7c4ebdc9-ls209`. Their official `lscr.io/linuxserver/webtop` amd64 and arm64 image digests are compiled into the built-in registry. Each has its own template and service-family identity, `/config` volume, and recommended directory below `Redeven Workspaces/Managed Services`, so both may run together. Redeven never resolves `latest`, copies a brand image, or treats upstream labels as runtime authority.
+The Runtime exposes **LinuxServer Webtop · Ubuntu KDE** at `654ea8e3-ls177` and **LinuxServer Webtop · Debian XFCE** at `7c4ebdc9-ls209`. Their official `lscr.io/linuxserver/webtop` amd64 and arm64 image digests are compiled into the built-in registry. Each has its own template and service-family identity, `/config` volume, and space-free recommended directory at `Redeven/workspaces/managed-services/<service-family-id>` below the writable root, so both may run together. A user-selected writable workspace may still contain spaces. Redeven never resolves `latest`, copies a brand image, or treats upstream labels as runtime authority.
 
 Catalog identity, source, order, neutral desktop icon, localized copy, notice, and runtime specification are declarative fields from that registry. Renderer code only projects them. Installation and update accept `accepted_notice_revisions`; the Runtime requires the current revision of `interactive-desktop-root-and-network` and rejects missing, stale, or unknown values. The warning states that anyone authorized to open the desktop can gain root inside its container and that the container has outbound network access.
 

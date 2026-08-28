@@ -61,9 +61,12 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(canonicalHome, "Redeven Workspaces", "Managed Services", "DeepSeek Harness")
+	want := filepath.Join(canonicalHome, "Redeven", "workspaces", "managed-services", DeepSeekHarnessTemplateID)
 	if hostTemplate.DefaultWorkspacePath != want || containerTemplate.DefaultWorkspacePath != want {
 		t.Fatalf("default workspaces = %q, %q; want %q", hostTemplate.DefaultWorkspacePath, containerTemplate.DefaultWorkspacePath, want)
+	}
+	if strings.Contains(filepath.Clean(strings.TrimPrefix(want, canonicalHome)), " ") {
+		t.Fatalf("generated workspace suffix contains spaces: %q", want)
 	}
 	if hostTemplate.DefaultWorkspacePath == home {
 		t.Fatal("managed service defaulted to the whole home directory")

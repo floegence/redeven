@@ -20,7 +20,6 @@ const (
 type builtInTemplateDefinition struct {
 	TemplateID       string
 	ServiceFamilyID  string
-	DirectoryName    string
 	Name             string
 	Description      string
 	Version          string
@@ -40,28 +39,28 @@ type builtInTemplateDefinition struct {
 func builtInTemplateDefinitions() []builtInTemplateDefinition {
 	return []builtInTemplateDefinition{
 		{
-			TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessTemplateID, DirectoryName: "DeepSeek Harness",
+			TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessTemplateID,
 			Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessHost", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
 			Deployment: DeploymentNative, Revision: 1, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
 			Notices: deepSeekHarnessNotices(false),
 		},
 		{
-			TemplateID: DeepSeekHarnessContainerTemplateID, ServiceFamilyID: DeepSeekHarnessTemplateID, DirectoryName: "DeepSeek Harness",
+			TemplateID: DeepSeekHarnessContainerTemplateID, ServiceFamilyID: DeepSeekHarnessTemplateID,
 			Name: "DeepSeek Harness · Container", Description: "Run the reviewed community DeepSeek Harness image in Docker.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessContainer", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
 			DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Deployment: DeploymentDocker, ContainerMode: "single",
 			Revision: 1, SortOrder: 20, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, Notices: deepSeekHarnessNotices(true),
 		},
 		{
-			TemplateID: WebtopUbuntuKDETemplateID, ServiceFamilyID: WebtopUbuntuKDETemplateID, DirectoryName: "LinuxServer Webtop - Ubuntu KDE",
+			TemplateID: WebtopUbuntuKDETemplateID, ServiceFamilyID: WebtopUbuntuKDETemplateID,
 			Name: "LinuxServer Webtop · Ubuntu KDE", Description: "Run an Ubuntu KDE desktop in an isolated Docker container.", Version: webtopUbuntuKDEVersion,
 			LocalizationKey: "linuxserverWebtopUbuntuKDE", BrandIcon: BrandIconInteractiveDesktop, SourceURL: webtopSourceURL,
 			Deployment: DeploymentContainer, ContainerMode: "single", Revision: 1, SortOrder: 30, DiskBytes: 6 * 1024 * 1024 * 1024,
 			Notices: webtopNotices(),
 		},
 		{
-			TemplateID: WebtopDebianXFCETemplateID, ServiceFamilyID: WebtopDebianXFCETemplateID, DirectoryName: "LinuxServer Webtop - Debian XFCE",
+			TemplateID: WebtopDebianXFCETemplateID, ServiceFamilyID: WebtopDebianXFCETemplateID,
 			Name: "LinuxServer Webtop · Debian XFCE", Description: "Run a Debian XFCE desktop in an isolated Docker container.", Version: webtopDebianXFCEVersion,
 			LocalizationKey: "linuxserverWebtopDebianXFCE", BrandIcon: BrandIconInteractiveDesktop, SourceURL: webtopSourceURL,
 			Deployment: DeploymentContainer, ContainerMode: "single", Revision: 1, SortOrder: 40, DiskBytes: 6 * 1024 * 1024 * 1024,
@@ -78,15 +77,6 @@ func builtInTemplateDefinitionByID(templateID string) (builtInTemplateDefinition
 		}
 	}
 	return builtInTemplateDefinition{}, false
-}
-
-func builtInFamilyDirectoryName(serviceFamilyID string) string {
-	for _, definition := range builtInTemplateDefinitions() {
-		if definition.ServiceFamilyID == serviceFamilyID {
-			return definition.DirectoryName
-		}
-	}
-	return strings.TrimSpace(serviceFamilyID)
 }
 
 func deepSeekHarnessNotices(includeCommunityImage bool) []TemplateNotice {

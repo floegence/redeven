@@ -99,9 +99,14 @@ func TestCatalogIncludesIndependentWebtopTemplatesWithDeclarativeSafety(t *testi
 			}
 		}
 	}
-	if !strings.HasSuffix(ubuntu.DefaultWorkspacePath, filepath.Join("Managed Services", "LinuxServer Webtop - Ubuntu KDE")) ||
-		!strings.HasSuffix(debian.DefaultWorkspacePath, filepath.Join("Managed Services", "LinuxServer Webtop - Debian XFCE")) {
+	if !strings.HasSuffix(ubuntu.DefaultWorkspacePath, filepath.Join("Redeven", "workspaces", "managed-services", WebtopUbuntuKDETemplateID)) ||
+		!strings.HasSuffix(debian.DefaultWorkspacePath, filepath.Join("Redeven", "workspaces", "managed-services", WebtopDebianXFCETemplateID)) {
 		t.Fatalf("Webtop workspaces = %q, %q", ubuntu.DefaultWorkspacePath, debian.DefaultWorkspacePath)
+	}
+	for _, workspace := range []string{ubuntu.DefaultWorkspacePath, debian.DefaultWorkspacePath} {
+		if strings.Contains(workspace, " ") {
+			t.Fatalf("generated Webtop workspace contains spaces: %q", workspace)
+		}
 	}
 	ubuntuIndex, debianIndex := templateIndexByID(templates, ubuntu.TemplateID), templateIndexByID(templates, debian.TemplateID)
 	if ubuntuIndex < 0 || debianIndex != ubuntuIndex+1 {
