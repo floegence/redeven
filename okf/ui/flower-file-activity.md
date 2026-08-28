@@ -47,7 +47,6 @@ recomputes a diff merely to populate a historical row.
 
 # Evidence
 
-- `floret:tools/activity.go` - Typed file and patch Activity payload contracts.
 - `redeven:internal/ai/floret_tools.go` - One result-to-Floret payload mapping preserves reads and all ordered mutations.
 - `redeven:internal/ai/activity_file_actions.go` - Public Activity sanitization removes private paths and transient action IDs.
 - `redeven:internal/ai/activity_timeline_test.go` - Read, mutation, patch, target-reference, and chip coverage.
