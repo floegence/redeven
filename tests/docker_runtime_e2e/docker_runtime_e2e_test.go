@@ -229,7 +229,7 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	}
 }
 
-func TestDockerUbuntuPlaintextNetworkExposure(t *testing.T) {
+func TestDockerUbuntuTLSNetworkExposure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
@@ -325,7 +325,7 @@ func TestDockerUbuntuPlaintextNetworkExposure(t *testing.T) {
 		t.Fatalf("network helper did not reject Host/direct-session attacks: %#v", result.NetworkCheck)
 	}
 	if result.NetworkCheck.AccessStatus.Exposure.Scope != runtimemanagement.LocalUIExposureScopeNetwork ||
-		result.NetworkCheck.AccessStatus.Exposure.Transport != runtimemanagement.LocalUITransportPlaintext ||
+		result.NetworkCheck.AccessStatus.Exposure.Transport != runtimemanagement.LocalUITransportTLS ||
 		!result.NetworkCheck.AccessStatus.Exposure.PasswordRequired || !result.NetworkCheck.AccessStatus.PasswordRequired ||
 		result.NetworkCheck.AccessStatus.Unlocked {
 		t.Fatalf("unexpected public access status: %#v", result.NetworkCheck.AccessStatus)
