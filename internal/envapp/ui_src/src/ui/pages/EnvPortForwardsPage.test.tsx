@@ -656,6 +656,8 @@ describe('EnvPortForwardsPage', () => {
     expect(collection?.contains(search ?? null)).toBe(true);
     expect(collection?.contains(grid ?? null)).toBe(true);
     expect(search?.className).toContain('w-full');
+    expect(search?.className).toContain('lg:grid-cols-2');
+    expect(grid?.className).toContain('lg:grid-cols-2');
     expect(card?.className).toContain('h-full');
     expect(workspace?.className).toContain('truncate');
     expect(actions?.className).toContain('grid-cols-2');

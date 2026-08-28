@@ -1806,22 +1806,24 @@ export function EnvPortForwardsPage() {
           <div class="mx-auto w-full max-w-6xl space-y-3" data-testid="web-services-collection">
             {/* Search bar - only show when there are services */}
             <Show when={unmanagedForwards().length > 0 || managedState().length > 0}>
-              <div class="relative w-full" data-testid="web-services-search">
-                <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input
-                  value={searchQuery()}
-                  onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                  placeholder={i18n.t('webServices.search.placeholder')}
-                  size="sm"
-                  class="h-9 w-full pl-9 pr-9"
-                />
-                <Show when={searchQuery()}>
-                  <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="absolute right-0.5 top-1/2 h-8 -translate-y-1/2 px-2" aria-label={i18n.t('webServices.search.clear')}>
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                    </svg>
-                  </Button>
-                </Show>
+              <div class="grid w-full grid-cols-1 gap-4 lg:grid-cols-2" data-testid="web-services-search">
+                <div class="relative min-w-0">
+                  <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input
+                    value={searchQuery()}
+                    onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                    placeholder={i18n.t('webServices.search.placeholder')}
+                    size="sm"
+                    class="h-9 w-full pl-9 pr-9"
+                  />
+                  <Show when={searchQuery()}>
+                    <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="absolute right-0.5 top-1/2 h-8 -translate-y-1/2 px-2" aria-label={i18n.t('webServices.search.clear')}>
+                      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                    </Button>
+                  </Show>
+                </div>
               </div>
             </Show>
 
@@ -1862,7 +1864,7 @@ export function EnvPortForwardsPage() {
                     <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button>
                   </div>
                 }>
-                  <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="unified-web-services-grid">
+                  <div class="grid grid-cols-1 gap-4 lg:grid-cols-2" data-testid="unified-web-services-grid">
                     <For each={filteredManagedServices()}>{(service) => (
                       <ManagedServiceCard service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
                     )}</For>
