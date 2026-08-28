@@ -1,40 +1,44 @@
 import type { Component } from 'solid-js';
 import { Show, createEffect, createSignal } from 'solid-js';
 
-import type { FlowerModelIOStatus } from '../contracts/flowerSurfaceContracts';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { trimString } from '../flowerSurfaceModel';
 
-export type FlowerModelStatusIndicatorProps = Readonly<{
-  status: FlowerModelIOStatus | null;
+export type FlowerProgressIndicatorState = Readonly<{
+  kind: string;
+  runID: string;
+}>;
+
+export type FlowerProgressIndicatorProps = Readonly<{
+  progress: FlowerProgressIndicatorState | null;
   label: string;
   threadID: string;
   activeRunID?: string;
   running: boolean;
 }>;
 
-export const FlowerModelStatusIndicator: Component<FlowerModelStatusIndicatorProps> = (props) => {
-  const [displayedStatus, setDisplayedStatus] = createSignal<FlowerModelIOStatus | null>(null);
+export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = (props) => {
+  const [displayedProgress, setDisplayedProgress] = createSignal<FlowerProgressIndicatorState | null>(null);
   const [displayedLabel, setDisplayedLabel] = createSignal('');
   const [displayedRunID, setDisplayedRunID] = createSignal('');
   let displayedThreadIDValue = '';
   let displayedRunIDValue = '';
   let updateSequence = 0;
 
-  const clearDisplayedStatus = () => {
+  const clearDisplayedProgress = () => {
     updateSequence += 1;
     displayedThreadIDValue = '';
     displayedRunIDValue = '';
-    setDisplayedStatus(null);
+    setDisplayedProgress(null);
     setDisplayedLabel('');
     setDisplayedRunID('');
   };
 
   createEffect(() => {
-    const status = props.status;
+    const progress = props.progress;
     const threadID = trimString(props.threadID);
     const activeRunID = trimString(props.activeRunID);
-    const runID = trimString(status?.run_id) || activeRunID;
+    const runID = trimString(progress?.runID) || activeRunID;
     const previousThreadID = displayedThreadIDValue;
     const previousRunID = displayedRunIDValue;
     const runChanged = Boolean(
@@ -47,22 +51,22 @@ export const FlowerModelStatusIndicator: Component<FlowerModelStatusIndicatorPro
       && previousRunID !== runID,
     );
 
-    if (!props.running || !status || !threadID || !runID) {
-      if (props.running && !status && previousThreadID === threadID && previousRunID === runID && previousRunID) return;
-      clearDisplayedStatus();
+    if (!props.running || !progress || !threadID || !runID) {
+      if (props.running && !progress && previousThreadID === threadID && previousRunID === runID && previousRunID) return;
+      clearDisplayedProgress();
       return;
     }
 
     if (runChanged) {
-      clearDisplayedStatus();
+      clearDisplayedProgress();
       const sequence = updateSequence;
       queueMicrotask(() => {
         if (sequence !== updateSequence) return;
-        const currentStatus = props.status;
+        const currentProgress = props.progress;
         const currentThreadID = trimString(props.threadID);
-        const currentRunID = trimString(currentStatus?.run_id) || trimString(props.activeRunID);
-        if (!props.running || !currentStatus || currentThreadID !== threadID || currentRunID !== runID) return;
-        setDisplayedStatus(currentStatus);
+        const currentRunID = trimString(currentProgress?.runID) || trimString(props.activeRunID);
+        if (!props.running || !currentProgress || currentThreadID !== threadID || currentRunID !== runID) return;
+        setDisplayedProgress(currentProgress);
         setDisplayedLabel(props.label.replace(/\.\.\.$/, ''));
         displayedThreadIDValue = threadID;
         displayedRunIDValue = runID;
@@ -72,7 +76,7 @@ export const FlowerModelStatusIndicator: Component<FlowerModelStatusIndicatorPro
     }
 
     updateSequence += 1;
-    setDisplayedStatus(status);
+    setDisplayedProgress(progress);
     setDisplayedLabel(props.label.replace(/\.\.\.$/, ''));
     displayedThreadIDValue = threadID;
     displayedRunIDValue = runID;
@@ -80,12 +84,12 @@ export const FlowerModelStatusIndicator: Component<FlowerModelStatusIndicatorPro
   });
 
   return (
-    <Show when={displayedStatus()}>
-      {(status) => (
+    <Show when={displayedProgress()}>
+      {(progress) => (
         <div
           class="flower-model-status-indicator"
-          data-model-io-phase={status().phase}
-          data-model-status-run-id={displayedRunID()}
+          data-flower-progress-kind={progress().kind}
+          data-flower-progress-run-id={displayedRunID()}
         >
           <span class="flower-model-status-flower" aria-hidden="true">
             <FlowerIcon class="flower-model-status-flower-icon" />

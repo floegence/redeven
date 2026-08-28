@@ -145,6 +145,8 @@
       "modelStatusPreparing": "モデルリクエストを準備中...",
       "modelStatusWaitingResponse": "モデルの応答を待っています...",
       "modelStatusStreaming": "思考中...",
+      "liveProgressTool": "ツールを実行中",
+      "liveProgressOutput": "返信を出力中",
       "modelStatusRetrying": "モデルリクエストを再試行中...",
       "modelStatusFinalizing": "返信を整理中...",
       "contextIndicatorLabel": "コンテキスト",

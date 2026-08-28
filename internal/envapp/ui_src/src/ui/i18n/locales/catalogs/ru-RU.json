@@ -3840,6 +3840,8 @@
       "modelStatusPreparing": "Подготовка запроса к модели...",
       "modelStatusWaitingResponse": "Ожидание ответа модели...",
       "modelStatusStreaming": "Думает...",
+      "liveProgressTool": "Выполняется инструмент",
+      "liveProgressOutput": "Формируется ответ",
       "modelStatusRetrying": "Повтор запроса к модели...",
       "modelStatusFinalizing": "Завершение ответа...",
       "contextIndicatorLabel": "Контекст",

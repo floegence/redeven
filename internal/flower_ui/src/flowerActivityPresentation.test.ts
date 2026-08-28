@@ -1095,6 +1095,27 @@ describe('presentFlowerActivityItem', () => {
     }]);
   });
 
+  it('does not repeat file protocol fields beside the user-facing title', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'file.write',
+      renderer: 'file',
+      label: 'weather_gd.py',
+      chips: [
+        { kind: 'operation', label: 'operation', value: 'write' },
+        { kind: 'display_name', label: 'display name', value: 'weather_gd.py' },
+        { kind: 'change_type', label: 'create' },
+      ],
+      payload: {
+        operation: 'write',
+        display_name: 'weather_gd.py',
+        change_type: 'create',
+      },
+    }));
+
+    expect(presentation.label).toBe('Edit weather_gd.py');
+    expect(presentation.meta).toBe('');
+  });
+
   it('renders file error details even when a file detail block is present', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'file.read',

@@ -23,7 +23,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.working_dir).toBe('/');
     expect(result.status).toBe('running');
     expect(result.messages.map((message) => message.content)).toEqual(['hello']);
-    expect(result.model_io_status).toMatchObject({ phase: 'streaming', run_id: 'turn-a' });
+    expect(result.model_io_status).toBeNull();
   });
 
   it('clears the derived model status after the runtime settles', () => {

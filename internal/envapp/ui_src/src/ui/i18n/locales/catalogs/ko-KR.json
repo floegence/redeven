@@ -3744,6 +3744,8 @@
       "modelStatusPreparing": "모델 요청을 준비 중...",
       "modelStatusWaitingResponse": "모델 응답을 기다리는 중...",
       "modelStatusStreaming": "생각 중...",
+      "liveProgressTool": "도구 실행 중",
+      "liveProgressOutput": "답변 작성 중",
       "modelStatusRetrying": "모델 요청을 다시 시도 중...",
       "modelStatusFinalizing": "답변을 정리 중...",
       "contextIndicatorLabel": "컨텍스트",

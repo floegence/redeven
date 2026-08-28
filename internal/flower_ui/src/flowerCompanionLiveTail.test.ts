@@ -4,23 +4,22 @@ import type {
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
-  FlowerModelIOPhase,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerCompanionLiveTail } from './flowerCompanionLiveTail';
+import type { FlowerLiveProgressKind } from './flowerLiveProgress';
 
-const labels: Record<FlowerModelIOPhase, string> = {
-  preparing: 'Preparing model request...',
-  waiting_response: 'Waiting for model response...',
-  streaming: 'Thinking...',
-  retrying: 'Retrying model request...',
-  finalizing: 'Finalizing response...',
+const labels: Record<FlowerLiveProgressKind, string> = {
+  waiting: 'Waiting for model response...',
+  thinking: 'Thinking...',
+  tool: 'Using a tool',
+  output: 'Writing the reply',
 };
 
 function message(overrides: Partial<FlowerChatMessage> = {}): FlowerChatMessage {
   return {
     id: 'assistant-live',
-    run_id: 'run-live',
+    turn_id: 'run-live',
     role: 'assistant',
     content: '',
     status: 'streaming',
@@ -85,34 +84,31 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
   };
 }
 
-const label = (phase: FlowerModelIOPhase) => labels[phase];
+const label = (kind: FlowerLiveProgressKind) => labels[kind];
 
 describe('projectFlowerCompanionLiveTail', () => {
   it('shows the waiting state instead of stale active-run output before a response arrives', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'waiting_response', run_id: 'run-live', updated_at_ms: 3 },
       messages: [message({ content: 'Previous model step' })],
     }), label)).toMatchObject({ kind: 'status', text: 'Waiting for model response...' });
   });
 
-  it('shows thinking while streaming has not produced a visible block', () => {
+  it('shows waiting while an active turn has not produced a live item', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
       messages: [message()],
-    }), label)).toMatchObject({ kind: 'status', text: 'Thinking...' });
+    }), label)).toMatchObject({ kind: 'status', text: 'Waiting for model response...' });
   });
 
   it('does not expose raw thinking content', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
-      messages: [message({ blocks: [{ type: 'thinking', content: 'Private chain of thought' }] })],
+      messages: [message({ live: true, blocks: [{ type: 'thinking', content: 'Private chain of thought' }] })],
     }), label)).toMatchObject({ kind: 'status', text: 'Thinking...' });
   });
 
   it('projects the latest single-line assistant output from the active run', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
       messages: [message({
+        live: true,
         blocks: [{ type: 'markdown', content: 'Inspecting the layout.\n\nThe latest content stays visible.' }],
       })],
     }), label)).toMatchObject({
@@ -123,10 +119,10 @@ describe('projectFlowerCompanionLiveTail', () => {
 
   it('accepts typed-current assistant output owned by the active turn', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
       messages: [message({
         run_id: undefined,
         turn_id: 'run-live',
+        live: true,
         content: 'Typed current output remains visible.',
       })],
     }), label)).toMatchObject({
@@ -137,7 +133,6 @@ describe('projectFlowerCompanionLiveTail', () => {
 
   it('projects the latest tool presentation instead of an internal tool name', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
       messages: [message({ blocks: [activityBlock([activityItem()])] })],
     }), label)).toMatchObject({ kind: 'tool', text: 'Run command' });
   });
@@ -145,7 +140,6 @@ describe('projectFlowerCompanionLiveTail', () => {
   it('keeps the beginning of a long tool summary for ordinary end ellipsis', () => {
     const prefix = 'Inspect files from the workspace root: ';
     const projected = projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
       messages: [message({ blocks: [activityBlock([activityItem({
         tool_name: 'custom.tool',
         renderer: 'structured',
@@ -161,39 +155,35 @@ describe('projectFlowerCompanionLiveTail', () => {
 
   it('ignores user content and assistant output from an earlier run', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
       messages: [
-        message({ id: 'assistant-old', run_id: 'run-old', content: 'Old answer', status: 'complete' }),
-        message({ id: 'user-live', role: 'user', run_id: 'run-live', content: 'User request' }),
+        message({ id: 'assistant-old', turn_id: 'run-old', live: true, content: 'Old answer', status: 'streaming' }),
+        message({ id: 'user-live', role: 'user', turn_id: 'run-live', content: 'User request' }),
       ],
-    }), label)).toMatchObject({ kind: 'status', text: 'Thinking...' });
+    }), label)).toMatchObject({ kind: 'status', text: 'Waiting for model response...' });
   });
 
   it('rejects runless streaming output instead of guessing its run ownership', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
-      messages: [message({ run_id: undefined, live: true, active_cursor: true, content: 'Unbound output' })],
-    }), label)).toMatchObject({ kind: 'status', text: 'Thinking...' });
+      messages: [message({ run_id: undefined, turn_id: undefined, live: true, active_cursor: true, content: 'Unbound output' })],
+    }), label)).toMatchObject({ kind: 'status', text: 'Waiting for model response...' });
   });
 
-  it('ignores a stale model status from another run', () => {
+  it('ignores the retired main-thread model status field', () => {
     expect(projectFlowerCompanionLiveTail(thread({
       model_io_status: { phase: 'waiting_response', run_id: 'run-old', updated_at_ms: 3 },
-      messages: [message({ content: 'Current run output' })],
+      messages: [message({ live: true, content: 'Current run output' })],
     }), label)).toMatchObject({ kind: 'output', text: 'Current run output' });
   });
 
-  it('keeps the final output visible while the response is finalizing', () => {
+  it('does not claim sealed output is still streaming', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'finalizing', run_id: 'run-live', updated_at_ms: 3 },
       messages: [message({ content: 'The checks are complete.' })],
-    }), label)).toMatchObject({ kind: 'output', text: 'The checks are complete.' });
+    }), label)).toMatchObject({ kind: 'status', text: 'Waiting for model response...' });
   });
 
   it('bounds layout work while preserving the newest Unicode output tail', () => {
     const projected = projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
-      messages: [message({ content: `${'discard-me '.repeat(100)}${'new '.repeat(100)}latest response ending` })],
+      messages: [message({ live: true, content: `${'discard-me '.repeat(100)}${'new '.repeat(100)}latest response ending` })],
     }), label);
 
     expect(Array.from(projected?.text ?? '')).toHaveLength(320);
@@ -203,14 +193,15 @@ describe('projectFlowerCompanionLiveTail', () => {
 
   it('keeps output identity stable across rolling-window updates and changes it at block boundaries', () => {
     const first = projectFlowerCompanionLiveTail(thread({
-      messages: [message({ id: 'message-live', content: 'a'.repeat(400) })],
+      messages: [message({ id: 'message-live', live: true, content: 'a'.repeat(400) })],
     }), label);
     const next = projectFlowerCompanionLiveTail(thread({
-      messages: [message({ id: 'message-live', content: `${'a'.repeat(400)}b` })],
+      messages: [message({ id: 'message-live', live: true, content: `${'a'.repeat(400)}b` })],
     }), label);
     const nextBlock = projectFlowerCompanionLiveTail(thread({
       messages: [message({
         id: 'message-live',
+        live: true,
         blocks: [
           { type: 'markdown', content: 'first' },
           { type: 'markdown', content: 'second' },

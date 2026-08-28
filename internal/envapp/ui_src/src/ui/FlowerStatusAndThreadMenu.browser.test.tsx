@@ -7,11 +7,10 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type {
-  FlowerModelIOStatus,
   FlowerThreadListItem,
   FlowerThreadReadStatus,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { FlowerModelStatusIndicator } from '../../../../flower_ui/src/chat/FlowerModelStatusIndicator';
+import { FlowerProgressIndicator, type FlowerProgressIndicatorState } from '../../../../flower_ui/src/chat/FlowerProgressIndicator';
 import { FlowerThreadList } from '../../../../flower_ui/src/threads/FlowerThreadList';
 
 const mediaCommands = commands as unknown as Readonly<{
@@ -74,15 +73,14 @@ describe('Flower status motion and thread menu', () => {
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const [status, setStatus] = createSignal<FlowerModelIOStatus>({
-      phase: 'waiting_response',
-      run_id: 'run-1',
-      updated_at_ms: 1,
+    const [progress, setProgress] = createSignal<FlowerProgressIndicatorState>({
+      kind: 'waiting',
+      runID: 'run-1',
     });
     const [label, setLabel] = createSignal('Thinking...');
     disposers.push(render(() => (
-      <FlowerModelStatusIndicator
-        status={status()}
+      <FlowerProgressIndicator
+        progress={progress()}
         label={label()}
         threadID="thread-1"
         activeRunID="run-1"
@@ -104,7 +102,7 @@ describe('Flower status motion and thread menu', () => {
     expect(getComputedStyle(flower).transform).not.toBe(firstTransform);
 
     batch(() => {
-      setStatus({ phase: 'streaming', run_id: 'run-1', updated_at_ms: 2 });
+      setProgress({ kind: 'output', runID: 'run-1' });
       setLabel('Replying...');
     });
     await nextFrame();

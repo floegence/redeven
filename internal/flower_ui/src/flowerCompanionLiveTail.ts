@@ -1,10 +1,7 @@
-import type {
-  FlowerActivityTimelineBlock,
-  FlowerChatMessage,
-  FlowerModelIOPhase,
-  FlowerThreadSnapshot,
-} from './contracts/flowerSurfaceContracts';
+import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import { presentFlowerActivityItem } from './flowerActivityPresentation';
+import { projectFlowerLiveProgress } from './flowerLiveProgress';
+import type { FlowerLiveProgressKind as ProjectedProgressKind } from './flowerLiveProgress';
 import { trimString } from './flowerSurfaceModel';
 
 export type FlowerCompanionProgressKind = 'status' | 'tool' | 'output' | 'error';
@@ -15,7 +12,7 @@ export type FlowerCompanionLiveTail = Readonly<{
   identity: string;
 }>;
 
-type ModelStatusLabel = (phase: FlowerModelIOPhase) => string;
+type LiveProgressLabel = (kind: ProjectedProgressKind) => string;
 const FLOWER_COMPANION_LIVE_TAIL_MAX_CHARACTERS = 320;
 
 function singleLine(value: string | null | undefined): string {
@@ -33,102 +30,28 @@ function singleLineHead(value: string | null | undefined): string {
   return Array.from(singleLine(value)).slice(0, FLOWER_COMPANION_LIVE_TAIL_MAX_CHARACTERS).join('');
 }
 
-function belongsToActiveRun(message: FlowerChatMessage, activeRunID: string): boolean {
-  // Typed current views own assistant output by turn_id. Older projected
-  // snapshots may still provide run_id, so accept either explicit identity
-  // without guessing from live/cursor presentation flags.
-  const messageRunID = trimString(message.run_id) || trimString(message.turn_id);
-  return messageRunID !== '' && messageRunID === activeRunID;
-}
-
-function latestToolLabel(block: FlowerActivityTimelineBlock): Readonly<{ itemID: string; text: string }> | null {
-  for (let index = block.items.length - 1; index >= 0; index -= 1) {
-    const item = block.items[index];
-    const label = singleLineHead(presentFlowerActivityItem(item, block.file_actions).label);
-    if (label) return { itemID: item.item_id, text: label };
-  }
-  return null;
-}
-
-function liveTailIdentity(
-  threadID: string,
-  runID: string,
-  messageID: string,
-  blockIdentity: string,
-): string {
-  return [threadID, runID, messageID, blockIdentity].join('\x1f');
-}
-
-function activeRunTail(thread: FlowerThreadSnapshot): FlowerCompanionLiveTail | null {
-  const activeRunID = trimString(thread.active_run_id);
-  if (!activeRunID) return null;
-
-  for (let messageIndex = thread.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    const message = thread.messages[messageIndex];
-    if (message.role !== 'assistant' || !belongsToActiveRun(message, activeRunID)) continue;
-
-    const blocks = message.blocks ?? [];
-    for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-      const block = blocks[blockIndex];
-      if (block.type === 'thinking') return null;
-      if (block.type === 'markdown' || block.type === 'text') {
-        const text = singleLineTail(block.content);
-        return text ? {
-          kind: 'output',
-          text,
-          identity: liveTailIdentity(thread.thread_id, activeRunID, message.id, `block:${blockIndex}`),
-        } : null;
-      }
-      if (block.type === 'activity-timeline') {
-        const tool = latestToolLabel(block);
-        return tool ? {
-          kind: 'tool',
-          text: tool.text,
-          identity: liveTailIdentity(thread.thread_id, activeRunID, message.id, `block:${blockIndex}:item:${tool.itemID}`),
-        } : null;
-      }
-    }
-
-    const text = singleLineTail(message.content);
-    return text ? {
-      kind: 'output',
-      text,
-      identity: liveTailIdentity(thread.thread_id, activeRunID, message.id, 'content'),
-    } : null;
-  }
-  return null;
-}
-
 export function projectFlowerCompanionLiveTail(
   thread: FlowerThreadSnapshot,
-  modelStatusLabel: ModelStatusLabel,
+  liveProgressLabel: LiveProgressLabel,
 ): FlowerCompanionLiveTail | null {
-  if (thread.status !== 'running') return null;
-
-  const activeRunID = trimString(thread.active_run_id);
-  const candidateModelStatus = thread.model_io_status ?? null;
-  const modelStatus = candidateModelStatus && trimString(candidateModelStatus.run_id) === activeRunID
-    ? candidateModelStatus
-    : null;
-  if (modelStatus && (
-    modelStatus.phase === 'preparing'
-    || modelStatus.phase === 'waiting_response'
-    || modelStatus.phase === 'retrying'
-  )) {
+  const progress = projectFlowerLiveProgress(thread);
+  if (!progress) return null;
+  if (progress.kind === 'output') {
+    const text = singleLineTail(progress.text);
+    return text ? { kind: 'output', text, identity: progress.identity } : null;
+  }
+  if (progress.kind === 'tool' && progress.tool) {
+    const { timeline, itemIndex } = progress.tool;
+    const item = timeline.items[itemIndex];
+    const text = singleLineHead(presentFlowerActivityItem(item, timeline.file_actions).label);
+    if (text) return { kind: 'tool', text, identity: progress.identity };
+  }
+  if (progress.kind === 'waiting' || progress.kind === 'thinking' || progress.kind === 'tool') {
     return {
       kind: 'status',
-      text: modelStatusLabel(modelStatus.phase),
-      identity: liveTailIdentity(thread.thread_id, activeRunID, 'model-status', modelStatus.phase),
+      text: liveProgressLabel(progress.kind),
+      identity: progress.identity,
     };
   }
-
-  const tail = activeRunTail(thread);
-  if (tail) return tail;
-
-  const fallbackPhase = modelStatus?.phase ?? 'waiting_response';
-  return {
-    kind: 'status',
-    text: modelStatusLabel(fallbackPhase),
-    identity: liveTailIdentity(thread.thread_id, activeRunID, 'model-status', fallbackPhase),
-  };
+  return null;
 }

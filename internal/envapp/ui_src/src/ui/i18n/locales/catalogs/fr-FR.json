@@ -3744,6 +3744,8 @@
       "modelStatusPreparing": "Préparation de la requête au modèle…",
       "modelStatusWaitingResponse": "Attente de la réponse du modèle...",
       "modelStatusStreaming": "Réflexion...",
+      "liveProgressTool": "Utilisation d’un outil",
+      "liveProgressOutput": "Rédaction de la réponse",
       "modelStatusRetrying": "Nouvelle tentative d’envoi de la requête au modèle…",
       "modelStatusFinalizing": "Finalisation de la réponse...",
       "contextIndicatorLabel": "Contexte",

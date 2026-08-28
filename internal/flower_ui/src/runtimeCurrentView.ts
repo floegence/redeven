@@ -384,15 +384,10 @@ export function applyFlowerRuntimeCurrentView(
     approval_pending_count: approvalCount,
     approval_actions: approvalActions,
     input_request: inputRequest,
-    model_io_status: current.activity === 'active' && approvalCount === 0 && !hasInput
-      ? {
-        phase: 'streaming',
-        ...(trim(current.turn_id) || trim(base.active_run_id)
-          ? { run_id: trim(current.turn_id) || trim(base.active_run_id) }
-          : {}),
-        updated_at_ms: Math.max(0, Math.floor(Number(base.updated_at_ms) || 0)),
-      }
-      : null,
+    // Typed current items are the sole main-thread progress authority. Floret
+    // does not expose provider I/O phases here, so activity must not be
+    // mislabeled as model streaming. SubAgent detail keeps its own status path.
+    model_io_status: null,
     queued_turn_count: queuedTurns.length,
     queued_turns: queuedTurns,
     messages,

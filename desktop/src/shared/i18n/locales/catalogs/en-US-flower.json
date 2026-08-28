@@ -145,6 +145,8 @@
     "modelStatusPreparing": "Preparing model request...",
     "modelStatusWaitingResponse": "Waiting for model response...",
     "modelStatusStreaming": "Thinking...",
+    "liveProgressTool": "Using a tool",
+    "liveProgressOutput": "Writing the reply",
     "modelStatusRetrying": "Retrying model request...",
     "modelStatusFinalizing": "Finalizing reply...",
     "contextIndicatorLabel": "Context",

@@ -41,6 +41,16 @@ cadence and publish immediately. The final current is always a complete Floret
 view; Flower never accumulates reasoning text or restores the retired block
 delta protocol.
 
+Flower derives one transient live-progress presentation from that typed current
+view. An active turn without a live item is waiting, not streaming; only a
+non-empty live thinking or assistant item may claim thinking or output, and an
+active Activity item owns the tool stage. The initial wait appears once after
+the accepted user message and is replaced by the first real item. Expanded
+chat, the bottom dock, and the collapsed companion consume this same projection.
+It is never persisted, never reads deprecated draft fields, and never creates a
+provider-phase, polling, or text-accumulation state machine. A newer turn ID and
+`view_version` replace the stopped turn, while late terminal views remain stale.
+
 Canonical Thread ownership is immutable product routing metadata. The runtime
 view pump resolves `thread_id -> endpoint_id` once and reuses that binding for
 later current views instead of querying SQLite for every provider token. The
@@ -111,6 +121,8 @@ so a provider update cannot flash empty or wait for transcript replacement.
 - `redeven:internal/flower_ui/src/liveTransport.ts` - Single connection and epoch fencing.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation and bounded view cache.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.
+- `redeven:internal/flower_ui/src/flowerLiveProgress.ts` - Single truthful current-turn progress projection for expanded and companion presentation.
+- `redeven:internal/flower_ui/src/flowerLiveProgress.test.ts` - Waiting, thinking, tool, output, terminal, and stopped-turn isolation coverage.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Retained Flower product placement across Activity and Workbench hosts.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Workbench host registration without a second Flower instance.
 - `redeven:internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts` - Single receiver and obsolete-path removal checks.
