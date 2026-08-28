@@ -3,9 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -53,22 +51,6 @@ func run(certificatePath, privateKeyPath, allowedOrigin string) error {
 	if err != nil {
 		return fmt.Errorf("load TLS identity: %w", err)
 	}
-	if len(certificate.Certificate) != 1 {
-		return errors.New("TLS identity must contain one leaf certificate")
-	}
-	leaf, err := x509.ParseCertificate(certificate.Certificate[0])
-	if err != nil {
-		return fmt.Errorf("parse TLS leaf: %w", err)
-	}
-	leafHash := sha256.Sum256(leaf.Raw)
-	pinPolicy, err := controlplane.PinPolicy(controlplane.CertificatePin{
-		SHA256:   leafHash,
-		NotAfter: leaf.NotAfter.UTC().Truncate(time.Second),
-	})
-	if err != nil {
-		return fmt.Errorf("create TLS pin policy: %w", err)
-	}
-
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
@@ -77,7 +59,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin string) error {
 
 	wssURL := "wss://" + listener.Addr().String() + flowersec.WebSocketDirectPath
 	endpoints, err := controlplane.NewEndpointSet(controlplane.EndpointConfig{
-		ID: "built-dist-wss", URL: wssURL, TLS: pinPolicy,
+		ID: "built-dist-wss", URL: wssURL, TLS: controlplane.CAPolicy(),
 	})
 	if err != nil {
 		return fmt.Errorf("create endpoint set: %w", err)

@@ -2,7 +2,8 @@
 
 import { createHash, X509Certificate } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { createServer } from 'node:http';
+import { createServer as createHTTPServer } from 'node:http';
+import { createServer as createHTTPSServer } from 'node:https';
 import { mkdtemp, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -411,6 +412,9 @@ function builtPluginInstalledPlugin() {
 }
 
 async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls = null, flowersecPeerFactory = startFlowersecV3SmokePeer } = {}) {
+  if (accessReady && (!tls?.certificate || !tls?.privateKey)) {
+    throw new Error('connected built Env App dist server requires an explicit TLS identity');
+  }
   let baseURL = '';
   let installedPlugin = null;
   let releaseInstallExecution = null;
@@ -420,7 +424,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   let flowersecPeer = null;
   const lifecycleEvents = [];
   const artifactSpendRequests = [];
-  const server = createServer(async (request, response) => {
+  const requestHandler = async (request, response) => {
     try {
       const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
       if (requestURL.pathname === '/api/local/access/status') {
@@ -701,14 +705,17 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
       response.end(error instanceof Error ? error.message : 'not found');
     }
-  });
+  };
+  const server = accessReady
+    ? createHTTPSServer({ cert: tls.certificate, key: tls.privateKey }, requestHandler)
+    : createHTTPServer(requestHandler);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('built Env App dist server did not bind a TCP port');
-  baseURL = `http://127.0.0.1:${address.port}/`;
+  baseURL = `${accessReady ? 'https' : 'http'}://127.0.0.1:${address.port}/`;
   if (accessReady) {
     flowersecPeer = await flowersecPeerFactory({
       tls,
@@ -888,7 +895,16 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
   await trustBuiltDistWebTransport(page, tls);
   const pluginRequests = [];
   const pageErrors = [];
+  const consoleMessages = [];
+  const webSockets = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => consoleMessages.push({ type: message.type(), text: message.text() }));
+  page.on('websocket', (socket) => {
+    const trace = { url: socket.url(), events: ['created'] };
+    webSockets.push(trace);
+    socket.on('socketerror', (error) => trace.events.push(`error:${error}`));
+    socket.on('close', () => trace.events.push('closed'));
+  });
   page.on('request', (request) => {
     const requestPath = new URL(request.url()).pathname;
     if (requestPath.startsWith('/_redevplugin/api/plugins')) {
@@ -916,6 +932,9 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         bodyText: (await page.locator('body').innerText()).slice(0, 2_000),
         pageErrors,
         pluginRequests,
+        consoleMessages: consoleMessages.slice(-50),
+        lifecycleEvents: server.lifecycleEvents(),
+        webSockets,
       })}`, { cause: error });
     }
     const lifecycleEvents = server.lifecycleEvents();
