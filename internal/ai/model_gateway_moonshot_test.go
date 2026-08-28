@@ -258,6 +258,78 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 	}
 }
 
+func TestMoonshotProvider_PreservesUnknownToolNamesInStreamAndDirectResponses(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if anyBool(request["stream"]) {
+			f := w.(http.Flusher)
+			w.Header().Set("Content-Type", "text/event-stream")
+			writeOpenAISSEJSON(w, f, map[string]any{
+				"id": "chatcmpl_unknown_stream", "object": "chat.completion.chunk", "created": 126, "model": "kimi-k2.6",
+				"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
+					"role": "assistant", "tool_calls": []any{map[string]any{
+						"index": 0, "id": "call_unknown_stream", "type": "function",
+						"function": map[string]any{"name": "web_search", "arguments": `{"query":"weather"}`},
+					}},
+				}}},
+			})
+			writeOpenAISSEJSON(w, f, map[string]any{
+				"id": "chatcmpl_unknown_stream", "object": "chat.completion.chunk", "created": 126, "model": "kimi-k2.6",
+				"choices": []any{map[string]any{"index": 0, "finish_reason": "tool_calls", "delta": map[string]any{}}},
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "chatcmpl_unknown_direct", "object": "chat.completion", "created": 126, "model": "kimi-k2.6",
+			"choices": []any{map[string]any{
+				"index": 0, "finish_reason": "tool_calls",
+				"message": map[string]any{
+					"role": "assistant", "content": "",
+					"tool_calls": []any{map[string]any{
+						"id": "call_unknown_direct", "type": "function",
+						"function": map[string]any{"name": "web_search", "arguments": `{"query":"weather"}`},
+					}},
+				},
+			}},
+			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	provider, err := newProviderAdapter("moonshot", srv.URL+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+	request := ModelGatewayRequest{
+		Model:    "kimi-k2.6",
+		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
+		Tools:    []ToolDef{{Name: "terminal.exec", InputSchema: json.RawMessage(`{"type":"object"}`)}},
+	}
+	streamResult, err := provider.StreamTurn(context.Background(), request, nil)
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+	if len(streamResult.ToolCalls) != 1 || streamResult.ToolCalls[0].Name != "web_search" {
+		t.Fatalf("stream tool calls=%#v, want preserved web_search", streamResult.ToolCalls)
+	}
+
+	direct := provider.(directModelGateway)
+	directResult, err := direct.Turn(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(directResult.ToolCalls) != 1 || directResult.ToolCalls[0].Name != "web_search" {
+		t.Fatalf("direct tool calls=%#v, want preserved web_search", directResult.ToolCalls)
+	}
+}
+
 func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *testing.T) {
 	t.Parallel()
 
