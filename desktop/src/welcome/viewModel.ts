@@ -120,11 +120,8 @@ const ICON_ENV_ID = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53M
 
 export const ICON_ENDPOINTS = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjIuNSIgY3k9IjEwLjUiIHI9IjEuOCIvPjxjaXJjbGUgY3g9IjEzLjUiIGN5PSIxMC41IiByPSIxLjgiLz48Y2lyY2xlIGN4PSI4IiBjeT0iMi41IiByPSIxLjgiLz48cGF0aCBkPSJNNCA5bDMtNSIvPjxwYXRoIGQ9Ik0xMiA5TDkgNCIvPjwvc3ZnPgo=';
 
-const DESKTOP_WELCOME_VIEW_MODEL_IMPORT_META = import.meta as ImportMeta & {
-  readonly env?: Readonly<{ DEV?: boolean }>;
-};
 const DESKTOP_WELCOME_REDEVEN_CLOUD_POLICY: RedevenCloudOriginPolicy = {
-  allow_development: DESKTOP_WELCOME_VIEW_MODEL_IMPORT_META.env?.DEV === true,
+  allow_development: process.env.NODE_ENV !== 'production',
 };
 
 export const FACT_LABEL_ICONS: Record<string, string> = {
