@@ -233,7 +233,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		// json_schema requires an explicit schema. Avoid implicit downgrade here and let upper layers drive structured output.
 	}
 
-	aliases, err := newOpenAIProviderToolAliases(req.Tools, req.Messages)
+	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -275,7 +275,6 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		Args    map[string]any
 	}
 	partials := map[string]*partialCall{} // item_id -> partial
-	invalidProviderToolName := ""
 
 	emitStart := func(pc *partialCall) {
 		if pc == nil || pc.Started {
@@ -365,11 +364,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			if cid := strings.TrimSpace(item.CallID); cid != "" {
 				pc.CallID = cid
 			}
-			name := canonicalProviderToolName(item.Name, aliases)
-			if strings.TrimSpace(item.Name) != "" && name == "" {
-				invalidProviderToolName = strings.TrimSpace(item.Name)
-			}
-			if name != "" {
+			if name := canonicalProviderToolName(item.Name, aliases); name != "" {
 				pc.Name = name
 			}
 			emitStart(pc)
@@ -414,11 +409,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			if cid := strings.TrimSpace(item.CallID); cid != "" {
 				pc.CallID = cid
 			}
-			name := canonicalProviderToolName(item.Name, aliases)
-			if strings.TrimSpace(item.Name) != "" && name == "" {
-				invalidProviderToolName = strings.TrimSpace(item.Name)
-			}
-			if name != "" {
+			if name := canonicalProviderToolName(item.Name, aliases); name != "" {
 				pc.Name = name
 			}
 			if raw := strings.TrimSpace(item.Arguments); raw != "" && strings.TrimSpace(pc.ArgsRaw.String()) == "" {
@@ -433,9 +424,6 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	}
 	if err := stream.Err(); err != nil {
 		return ModelGatewayResult{}, err
-	}
-	if invalidProviderToolName != "" {
-		return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", invalidProviderToolName)
 	}
 	// Some OpenAI-compatible endpoints omit `response.completed` even when they have already
 	// streamed usable text or tool call deltas. Treat missing completion as a soft-failure
@@ -535,9 +523,6 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 				continue
 			}
 			toolName := canonicalProviderToolName(item.Name, aliases)
-			if toolName == "" {
-				return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", strings.TrimSpace(item.Name))
-			}
 			rawArgs := strings.TrimSpace(item.Arguments)
 			args := map[string]any{}
 			if rawArgs != "" {
@@ -587,7 +572,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	aliases, err := newOpenAIProviderToolAliases(req.Tools, req.Messages)
+	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -653,7 +638,6 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	}
 	partials := map[int64]*partialCall{}
 	order := make([]int64, 0, 2)
-	invalidProviderToolName := ""
 	getPartial := func(index int64) *partialCall {
 		if pc := partials[index]; pc != nil {
 			return pc
@@ -751,11 +735,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 				if id := strings.TrimSpace(tc.ID); id != "" {
 					pc.CallID = id
 				}
-				name := canonicalProviderToolName(tc.Function.Name, aliases)
-				if strings.TrimSpace(tc.Function.Name) != "" && name == "" {
-					invalidProviderToolName = strings.TrimSpace(tc.Function.Name)
-				}
-				if name != "" {
+				if name := canonicalProviderToolName(tc.Function.Name, aliases); name != "" {
 					pc.Name = name
 				}
 				if argsDelta := tc.Function.Arguments; argsDelta != "" {
@@ -769,9 +749,6 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	}
 	if err := stream.Err(); err != nil {
 		return ModelGatewayResult{}, err
-	}
-	if invalidProviderToolName != "" {
-		return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", invalidProviderToolName)
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -815,7 +792,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	aliases, err := newOpenAIProviderToolAliases(req.Tools, req.Messages)
+	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -884,7 +861,6 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 
 	partials := map[int64]*partialCall{}
 	order := make([]int64, 0, 2)
-	invalidProviderToolName := ""
 	getPartial := func(index int64) *partialCall {
 		if pc := partials[index]; pc != nil {
 			return pc
@@ -1006,11 +982,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 				if id := strings.TrimSpace(tc.ID); id != "" {
 					pc.CallID = id
 				}
-				name := canonicalProviderToolName(tc.Function.Name, aliases)
-				if strings.TrimSpace(tc.Function.Name) != "" && name == "" {
-					invalidProviderToolName = strings.TrimSpace(tc.Function.Name)
-				}
-				if name != "" {
+				if name := canonicalProviderToolName(tc.Function.Name, aliases); name != "" {
 					pc.Name = name
 				}
 				if argsDelta := tc.Function.Arguments; argsDelta != "" {
@@ -1024,9 +996,6 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	}
 	if err := stream.Err(); err != nil {
 		return ModelGatewayResult{}, err
-	}
-	if invalidProviderToolName != "" {
-		return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", invalidProviderToolName)
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -1070,7 +1039,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	aliases, err := newOpenAIProviderToolAliases(req.Tools, req.Messages)
+	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -1136,9 +1105,6 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	result.Reasoning = strings.TrimSpace(extractMoonshotReasoningJSON(choice.Message.RawJSON()))
 	for _, tc := range choice.Message.ToolCalls {
 		name := canonicalProviderToolName(tc.Function.Name, aliases)
-		if name == "" {
-			return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", strings.TrimSpace(tc.Function.Name))
-		}
 		args := map[string]any{}
 		rawArgs := strings.TrimSpace(tc.Function.Arguments)
 		if rawArgs != "" {
@@ -1440,10 +1406,9 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 					if callID == "" {
 						callID = fmt.Sprintf("assistant_call_%d", len(toolCalls)+1)
 					}
-					name := contentPartToolName(part)
-					name = aliases.wireName(name)
+					name := providerHistoryToolWireName(contentPartToolName(part), aliases)
 					if name == "" {
-						return nil, fmt.Errorf("assistant history references unregistered tool %q", strings.TrimSpace(part.ToolName))
+						return nil, errors.New("assistant history tool call is missing a name")
 					}
 					argsRaw := strings.TrimSpace(part.ArgsJSON)
 					if argsRaw == "" && len(part.JSON) > 0 {
@@ -1689,8 +1654,7 @@ func buildOpenAIInput(messages []Message, aliases providerToolAliases) (orespons
 				if callID == "" {
 					return
 				}
-				name := contentPartToolName(part)
-				name = aliases.wireName(name)
+				name := providerHistoryToolWireName(contentPartToolName(part), aliases)
 				if name == "" {
 					return
 				}
@@ -1795,13 +1759,6 @@ func buildOpenAIInput(messages []Message, aliases providerToolAliases) (orespons
 				}
 			}
 			flushMessage()
-		}
-	}
-	for _, msg := range messages {
-		for _, part := range msg.Content {
-			if strings.EqualFold(strings.TrimSpace(part.Type), "tool_call") && aliases.wireName(contentPartToolName(part)) == "" {
-				return nil, "", fmt.Errorf("assistant history references unregistered tool %q", contentPartToolName(part))
-			}
 		}
 	}
 	return items, instructions, nil
@@ -3082,7 +3039,7 @@ type providerToolAliases struct {
 	wireToCanonical map[string]string
 }
 
-func newOpenAIProviderToolAliases(defs []ToolDef, histories ...[]Message) (providerToolAliases, error) {
+func newOpenAIProviderToolAliases(defs []ToolDef) (providerToolAliases, error) {
 	aliases := providerToolAliases{
 		canonicalToWire: make(map[string]string, len(defs)),
 		wireToCanonical: make(map[string]string, len(defs)),
@@ -3107,18 +3064,6 @@ func newOpenAIProviderToolAliases(defs []ToolDef, histories ...[]Message) (provi
 	for _, def := range defs {
 		if err := register(def.Name); err != nil {
 			return providerToolAliases{}, err
-		}
-	}
-	for _, messages := range histories {
-		for _, msg := range messages {
-			for _, part := range msg.Content {
-				if !strings.EqualFold(strings.TrimSpace(part.Type), "tool_call") {
-					continue
-				}
-				if err := register(contentPartToolName(part)); err != nil {
-					return providerToolAliases{}, err
-				}
-			}
 		}
 	}
 	return aliases, nil
@@ -3180,7 +3125,25 @@ func openAIWireToolName(name string) string {
 }
 
 func canonicalProviderToolName(name string, aliases providerToolAliases) string {
-	return aliases.canonicalName(name)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if canonical := aliases.canonicalName(name); canonical != "" {
+		return canonical
+	}
+	return name
+}
+
+func providerHistoryToolWireName(name string, aliases providerToolAliases) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if wire := aliases.wireName(name); wire != "" {
+		return wire
+	}
+	return openAIWireToolName(name)
 }
 
 func toStringSlice(raw any) ([]string, bool) {

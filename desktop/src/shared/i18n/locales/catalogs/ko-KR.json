@@ -123,7 +123,7 @@
       "runErrorProviderModelUnavailable": "선택한 모델을 이 모델 제공업체에서 사용할 수 없습니다. Local AI Profile에서 다른 모델을 선택하세요.",
       "runErrorModelGatewayContractFailed": "모델 소스가 불완전한 도구 호출을 반환하여 도구를 실행하지 않았습니다. 다시 시도하거나 다른 모델을 선택하세요.",
       "runErrorFloretEngineFailed": "오케스트레이션 엔진이 실패했기 때문에 Flower가 이번 턴을 완료할 수 없습니다.",
-      "runErrorFloretControlContractFailed": "모델이 현재 런타임에서 지원되지 않는 도구를 요청했기 때문에 Flower가 이번 턴을 완료할 수 없습니다.",
+      "runErrorFloretControlContractFailed": "모델이 잘못된 상호작용 제어 신호를 반환하여 Flower가 이번 턴을 완료하지 못했습니다.",
       "runErrorFloretAuthorityConsistencyFailed": "커밋된 도구 결과를 검증할 수 없어 Flower가 이번 턴을 완료하지 못했습니다. 도구는 다시 실행되지 않습니다. 새 메시지를 보내 계속하세요.",
       "runErrorRuntimeRestarted": "이 답변이 완료되기 전에 로컬 실행 환경이 다시 시작되었습니다. 실행 환경이 준비되면 새 답변을 시작하세요.",
       "runtimeRestartedDivider": "Redeven 런타임이 다시 시작되었습니다",

@@ -44,7 +44,7 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "provider stream eof", err: errors.New("unexpected EOF"), want: runErrorCodeProviderStreamInterrupted},
 		{name: "typed model gateway contract", err: &modelGatewayContractError{ToolCallIndex: 0, MissingFields: []string{"args"}}, want: runErrorCodeModelGatewayContract},
 		{name: "historical model gateway contract", err: errors.New("Flower tool call requires id, name, and args"), want: runErrorCodeModelGatewayContract},
-		{name: "unregistered runtime tool", err: errors.New(`provider returned unregistered tool name "task_complete"`), want: runErrorCodeFloretControlContract},
+		{name: "unknown tool text preserves fallback", err: errors.New(`provider returned unregistered tool name "web_search"`), want: runErrorCodeFloretEngineFailed},
 		{name: "floret effect authorization rejection", err: errors.New("effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret wrapped effect authorization rejection", err: errors.New("floret effect is unauthorized: effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret active turn admission", err: errors.New("thread already has an active turn"), want: runErrorCodeFloretAdmissionBlocked},
@@ -105,13 +105,13 @@ func TestUserFacingRunErrorPresentsFloretAdmissionBlocked(t *testing.T) {
 func TestUserFacingRunErrorPresentsFloretControlContractFailure(t *testing.T) {
 	t.Parallel()
 
-	msg := userFacingRunError(runErrorCodeFloretControlContract, `provider returned unregistered tool name "task_complete"`)
+	msg := userFacingRunError(runErrorCodeFloretControlContract, "invalid control signal shape")
 	lower := strings.ToLower(msg)
-	if strings.Contains(lower, "task_complete") || strings.Contains(lower, "unregistered") {
+	if strings.Contains(lower, "shape") {
 		t.Fatalf("msg=%q exposed provider contract details", msg)
 	}
-	if !strings.Contains(lower, "unsupported") || !strings.Contains(lower, "tool") {
-		t.Fatalf("msg=%q, want unsupported-tool presentation", msg)
+	if !strings.Contains(lower, "invalid") || !strings.Contains(lower, "control signal") {
+		t.Fatalf("msg=%q, want interaction-control presentation", msg)
 	}
 }
 
@@ -171,9 +171,9 @@ func TestProjectFloretTurnFailureUsesTypedCanonicalCode(t *testing.T) {
 			name: "control contract",
 			failure: &flruntime.ThreadTurnFailure{
 				Code:    flruntime.ThreadTurnFailureControlError,
-				Message: `provider returned unregistered tool name "task_complete"`,
+				Message: "invalid control signal shape",
 			},
-			wantCode: runErrorCodeFloretControlContract, hiddenText: "task_complete",
+			wantCode: runErrorCodeFloretControlContract, hiddenText: "shape",
 		},
 		{
 			name: "legacy authority failure",

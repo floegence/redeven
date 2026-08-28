@@ -183,7 +183,7 @@ func TestOpenAIWireToolName_WebSearchAvoidsHostedCollision(t *testing.T) {
 	}
 }
 
-func TestCanonicalProviderToolName_OnlyMapsRegisteredAliases(t *testing.T) {
+func TestCanonicalProviderToolName_MapsRegisteredAliasesAndPreservesUnknownNames(t *testing.T) {
 	t.Parallel()
 
 	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "file.read"}})
@@ -193,8 +193,8 @@ func TestCanonicalProviderToolName_OnlyMapsRegisteredAliases(t *testing.T) {
 	if got := canonicalProviderToolName("file_read", aliases); got != "file.read" {
 		t.Fatalf("canonicalProviderToolName(file_read)=%q, want file.read", got)
 	}
-	if got := canonicalProviderToolName("terminal_read", aliases); got != "" {
-		t.Fatalf("canonicalProviderToolName(terminal_read)=%q, want empty unregistered name", got)
+	if got := canonicalProviderToolName("web_search", aliases); got != "web_search" {
+		t.Fatalf("canonicalProviderToolName(web_search)=%q, want preserved unknown name", got)
 	}
 }
 
@@ -333,7 +333,87 @@ func TestOpenAICompatibleResponses_TerminalReadToolAliasRoundTrip(t *testing.T) 
 	}
 }
 
-func TestOpenAICompatibleChat_RejectsUnregisteredWireToolName(t *testing.T) {
+func TestOpenAICompatibleResponses_PreservesUnregisteredWireToolName(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		f := w.(http.Flusher)
+		args := `{"query":"weather"}`
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.output_item.added", "output_index": 0,
+			"item": map[string]any{
+				"type": "function_call", "id": "fc_unknown", "call_id": "call_unknown", "name": "web_search", "arguments": args,
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.output_item.done", "output_index": 0,
+			"item": map[string]any{
+				"type": "function_call", "id": "fc_unknown", "call_id": "call_unknown", "name": "web_search", "arguments": args,
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id": "resp_unknown", "model": "gpt-5-mini", "status": "completed",
+				"usage": map[string]any{"input_tokens": 1, "output_tokens": 1},
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+	}))
+	t.Cleanup(srv.Close)
+
+	adapter, err := newProviderAdapter("openai", strings.TrimSuffix(srv.URL, "/")+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+	result, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
+		Model:    "gpt-5-mini",
+		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
+		Tools:    []ToolDef{{Name: "terminal.exec", InputSchema: json.RawMessage(`{"type":"object"}`)}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+	if len(result.ToolCalls) != 1 || result.ToolCalls[0].Name != "web_search" {
+		t.Fatalf("tool calls=%#v, want preserved web_search", result.ToolCalls)
+	}
+}
+
+func TestBuildOpenAIInput_ReplaysUnknownToolCallAndResult(t *testing.T) {
+	t.Parallel()
+
+	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.exec"}})
+	if err != nil {
+		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+	}
+	calls := []ToolCall{{ID: "call_unknown", Name: "web_search", Args: map[string]any{"query": "weather"}}}
+	history := []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}}
+	history = append(history, buildToolCallMessages(calls, "")...)
+	history = append(history, buildToolResultMessages([]ToolResult{{
+		ToolID: "call_unknown", ToolName: "web_search", Status: toolResultStatusError,
+		Summary: `ERROR: unknown tool "web_search"`,
+	}}, calls)...)
+
+	input, _, err := buildOpenAIInput(history, aliases)
+	if err != nil {
+		t.Fatalf("buildOpenAIInput: %v", err)
+	}
+	raw, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
+	}
+	if !strings.Contains(string(raw), `"name":"web_search"`) {
+		t.Fatalf("responses history did not preserve unknown tool name: %s", raw)
+	}
+	if !strings.Contains(string(raw), "unknown tool") || !strings.Contains(string(raw), "web_search") {
+		t.Fatalf("responses history did not preserve unknown-tool result: %s", raw)
+	}
+}
+
+func TestOpenAICompatibleChat_PreservesUnregisteredWireToolName(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -345,7 +425,7 @@ func TestOpenAICompatibleChat_RejectsUnregisteredWireToolName(t *testing.T) {
 			"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
 				"role": "assistant", "tool_calls": []any{map[string]any{
 					"index": 0, "id": "call_unknown_alias", "type": "function",
-					"function": map[string]any{"name": "terminal_read", "arguments": `{"process_id":"proc-1"}`},
+					"function": map[string]any{"name": "web_search", "arguments": `{"query":"weather"}`},
 				}},
 			}}},
 		})
@@ -363,7 +443,7 @@ func TestOpenAICompatibleChat_RejectsUnregisteredWireToolName(t *testing.T) {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
 	events := []StreamEvent{}
-	_, err = adapter.StreamTurn(context.Background(), ModelGatewayRequest{
+	result, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model:    "compat-model",
 		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "run"}}}},
 		Tools:    []ToolDef{{Name: "terminal.exec", InputSchema: json.RawMessage(`{"type":"object"}`)}},
@@ -372,11 +452,89 @@ func TestOpenAICompatibleChat_RejectsUnregisteredWireToolName(t *testing.T) {
 			events = append(events, event)
 		}
 	})
-	if err == nil || !strings.Contains(err.Error(), `unregistered tool name "terminal_read"`) {
-		t.Fatalf("StreamTurn error=%v", err)
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
 	}
-	if len(events) != 0 {
-		t.Fatalf("unregistered alias leaked stream events: %#v", events)
+	if len(result.ToolCalls) != 1 || result.ToolCalls[0].Name != "web_search" {
+		t.Fatalf("tool calls=%#v, want preserved web_search", result.ToolCalls)
+	}
+	if len(events) != 3 {
+		t.Fatalf("tool events=%#v, want start/delta/end", events)
+	}
+	for _, event := range events {
+		if event.ToolCall.Name != "web_search" {
+			t.Fatalf("tool event=%#v, want preserved web_search", event)
+		}
+	}
+}
+
+func TestOpenAICompatibleChat_ReplaysUnknownToolCallAndResult(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		messages, _ := request["messages"].([]any)
+		requestJSON, _ := json.Marshal(messages)
+		if !strings.Contains(string(requestJSON), `"name":"web_search"`) {
+			t.Fatalf("request did not preserve unknown assistant tool call: %s", requestJSON)
+		}
+		replayedUnknownResult := false
+		for _, item := range messages {
+			message, _ := item.(map[string]any)
+			if strings.TrimSpace(anyString(message["role"])) != "tool" {
+				continue
+			}
+			content := anyString(message["content"])
+			if strings.Contains(content, "unknown tool") && strings.Contains(content, "web_search") {
+				replayedUnknownResult = true
+				break
+			}
+		}
+		if !replayedUnknownResult {
+			t.Fatalf("request did not replay unknown-tool result: %s", requestJSON)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		f := w.(http.Flusher)
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id": "chatcmpl_replay_unknown", "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": "compat-model",
+			"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{"role": "assistant", "content": "continued"}}},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id": "chatcmpl_replay_unknown", "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": "compat-model",
+			"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "delta": map[string]any{}}},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+	}))
+	t.Cleanup(srv.Close)
+
+	history := []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}}
+	calls := []ToolCall{{ID: "call_unknown", Name: "web_search", Args: map[string]any{"query": "weather"}}}
+	history = append(history, buildToolCallMessages(calls, "")...)
+	history = append(history, buildToolResultMessages([]ToolResult{{
+		ToolID: "call_unknown", ToolName: "web_search", Status: toolResultStatusError,
+		Summary: `ERROR: unknown tool "web_search"`,
+	}}, calls)...)
+
+	adapter, err := newProviderAdapter("openai_compatible", strings.TrimSuffix(srv.URL, "/")+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+	result, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
+		Model:    "compat-model",
+		Messages: history,
+		Tools:    []ToolDef{{Name: "terminal.exec", InputSchema: json.RawMessage(`{"type":"object"}`)}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+	if result.Text != "continued" {
+		t.Fatalf("text=%q, want continued", result.Text)
 	}
 }
 

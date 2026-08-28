@@ -47,7 +47,7 @@ func userFacingRunError(code string, fallback string) string {
 	case runErrorCodeFloretEngineFailed:
 		return "Flower could not finish this turn because the orchestration engine failed."
 	case runErrorCodeFloretControlContract:
-		return "Flower could not finish this turn because the model requested an unsupported runtime tool."
+		return "Flower could not finish this turn because the model returned an invalid interaction control signal."
 	case runErrorCodeFloretAdmissionBlocked:
 		return "Flower could not start the next turn because the runtime still reports an active turn. Restart recovery did not complete, so the turn was not admitted."
 	case runErrorCodeFloretAuthorityConsistency:
@@ -114,8 +114,6 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return runErrorCodeProviderStreamInterrupted
 	case strings.Contains(text, "flower tool call requires id, name, and args") || strings.Contains(text, "model gateway result tool call"):
 		return runErrorCodeModelGatewayContract
-	case strings.Contains(text, "unregistered tool name"):
-		return runErrorCodeFloretControlContract
 	case strings.Contains(text, "thread already has an active turn"):
 		return runErrorCodeFloretAdmissionBlocked
 	case strings.Contains(text, "floret authority state is corrupt") || strings.Contains(text, "session tree authority state is corrupt"):

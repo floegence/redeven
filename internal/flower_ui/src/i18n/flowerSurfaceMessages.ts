@@ -119,7 +119,7 @@ export const flowerSurfaceEnUS = {
     runErrorProviderModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
     runErrorModelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
     runErrorFloretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
-    runErrorFloretControlContractFailed: 'Flower could not finish this turn because the model requested an unsupported runtime tool.',
+    runErrorFloretControlContractFailed: 'Flower could not finish this turn because the model returned an invalid interaction control signal.',
     runErrorFloretAuthorityConsistencyFailed: 'Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.',
     runErrorRuntimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     messageErrorTitle: 'Message failed',
