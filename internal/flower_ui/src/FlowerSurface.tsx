@@ -809,7 +809,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const liveTransport = createLiveTransport<FlowerLiveStreamEnvelope>();
   const companionRunTracker = new FlowerCompanionRunTracker();
   const [companionRunRevision, setCompanionRunRevision] = createSignal(0);
-  const [companionTerminalTransition, setCompanionTerminalTransition] = createSignal<FlowerCompanionTerminalTransition>();
+  const [companionRunReceipt, setCompanionRunReceipt] = createSignal<FlowerCompanionTerminalTransition>();
 	const outboxResendInFlight = new Set<string>();
 	const pendingAdmissionHandoffs = new Map<string, PendingAdmissionHandoff>();
 	let transportOutboxDisposed = false;
@@ -2480,7 +2480,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const presence = projectFlowerCompanionPresence(
       companionThreadItems(),
       !loadError(),
-      companionTerminalTransition(),
+      companionRunReceipt(),
     );
     const signature = JSON.stringify(presence);
     if (signature === lastCompanionPresenceSignature) return;
@@ -4226,7 +4226,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (accepted && envelope.kind === 'thread.batch') {
         const observation = companionRunTracker.observe(envelope.current);
         if (observation.changed) {
-          setCompanionTerminalTransition(observation.terminalTransition);
+          setCompanionRunReceipt(observation.terminalTransition);
           setCompanionRunRevision((revision) => revision + 1);
         }
       }

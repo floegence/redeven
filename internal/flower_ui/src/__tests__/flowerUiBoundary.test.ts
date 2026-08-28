@@ -131,7 +131,7 @@ describe('shared Flower UI boundary', () => {
     expect(cssSrc).not.toContain('flower-component-nav-item');
   });
 
-  it('derives companion presence only from the canonical thread cache', () => {
+  it('derives companion presence from canonical summaries and matching cached detail', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     for (const token of [
       'companionLiveThread',
@@ -143,7 +143,10 @@ describe('shared Flower UI boundary', () => {
       expect(surfaceSrc).not.toContain(token);
     }
     expect(surfaceSrc).toContain('const companionThreadItems = createMemo');
-    expect(surfaceSrc).toContain('const threadStateByID = new Map(threads()');
+    expect(surfaceSrc).toContain('return threads().map((summary) => {');
+    expect(surfaceSrc).toContain('const cache = threadCache();');
+    expect(surfaceSrc).toContain("detail?.status === 'running'");
+    expect(surfaceSrc).toContain('trimString(detail.active_run_id) === activeRunID');
   });
 
   it('keeps turn launching separate from the chat surface and removes draft injection contracts', () => {
