@@ -32,8 +32,13 @@ function icon(name: string) {
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Activity: icon('activity'),
   AlertTriangle: icon('alert'),
+  ArrowDown: icon('arrow-down'),
+  ArrowUp: icon('arrow-up'),
+  Cpu: icon('cpu'),
   Database: icon('database'),
+  ExternalLink: icon('external-link'),
   FileText: icon('file'),
+  Info: icon('info'),
   Layers: icon('layers'),
   Package: icon('package'),
   Pause: icon('pause'),
@@ -157,7 +162,7 @@ describe('native Containers page', () => {
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:widget-1')).toBe(true);
   });
 
-  it('makes a large inventory scannable and presents structured resource details', async () => {
+  it('makes a large inventory scannable without repeating identifiers or ownership text', async () => {
     harness.listResources.mockResolvedValue([
       {
         container_id: 'container-1',
@@ -191,9 +196,12 @@ describe('native Containers page', () => {
     await settle();
 
     expect(host.querySelector('[data-container-summary]')?.textContent).toContain('containers.filters.active');
+    expect(host.querySelector('.container-distribution__track')).not.toBeNull();
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.image');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.ownership');
+    expect(host.querySelectorAll('thead th')).toHaveLength(3);
     expect(host.textContent).toContain('containers.states.running');
+    expect(host.querySelector('tbody tr')?.textContent).not.toContain('container-1');
+    expect(host.querySelector('.container-managed-label')?.textContent).toBe('');
 
     const search = host.querySelector<HTMLInputElement>('input[aria-label="containers.search.label"]');
     expect(search).not.toBeNull();
@@ -205,8 +213,8 @@ describe('native Containers page', () => {
 
     search!.value = '';
     search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    const inactiveFilter = Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent === 'containers.filters.inactive');
+    const inactiveFilter = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-distribution__legend button'))
+      .find((button) => button.textContent?.includes('containers.filters.inactive'));
     inactiveFilter?.click();
     await settle();
     expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
@@ -226,8 +234,8 @@ describe('native Containers page', () => {
 
     (host.querySelector('tbody tr') as HTMLElement).click();
     await settle();
-    const openService = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'containers.managed.openService');
-    expect(openService).toBeDefined();
+    const openService = host.querySelector<HTMLButtonElement>('.container-managed-card');
+    expect(openService).not.toBeNull();
     expect(host.textContent).not.toContain('containers.actions.remove');
 
     openService?.click();
@@ -254,18 +262,18 @@ describe('native Containers page', () => {
     };
     await openView('containers.views.images');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.size');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.tags');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.usage');
     await openView('containers.views.volumes');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.driver');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.ownership');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.usage');
     await openView('containers.views.compose-projects');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.running');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.services');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.status');
 
     Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find((button) => button.textContent === 'podman')?.click();
     await settle();
     await openView('containers.views.pods');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.created');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.status');
     expect(host.querySelector('tbody')?.textContent).toContain('Application');
   });
 
