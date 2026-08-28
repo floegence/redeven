@@ -106,6 +106,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
 
     const card = document.querySelector<HTMLElement>('[data-testid="managed-service-card"]')!;
     const identity = card.querySelector<HTMLElement>('.service-template-identity')!;
+    const name = identity.querySelector<HTMLElement>('h3')!;
     const status = card.querySelector<HTMLElement>('[data-testid="managed-service-status"]')!;
     const workspace = card.querySelector<HTMLElement>('[data-testid="managed-service-workspace"]')!;
     const actions = card.querySelector<HTMLElement>('[data-testid="managed-service-actions"]')!;
@@ -117,6 +118,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(cardRect.width).toBeLessThanOrEqual(376);
     expect(cardRect.height).toBeLessThanOrEqual(132);
     expect(identityRect.right).toBeLessThanOrEqual(statusRect.left);
+    expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
     expect(workspace.scrollWidth).toBeGreaterThan(workspace.clientWidth);
     expect(workspace.getBoundingClientRect().height).toBeLessThanOrEqual(20);
     expect(actionButtons).toHaveLength(3);
