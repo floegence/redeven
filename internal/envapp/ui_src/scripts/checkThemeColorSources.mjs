@@ -204,18 +204,6 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
       || ['#504af4', '#3485ff', '#6336e7', '#6f69f7'].includes(value.toLowerCase()),
   ),
   exception(
-    'internal/envapp/ui_src/src/ui/chat/blocks/ImageBlock.tsx',
-    'media',
-    'The image lightbox backdrop is a media inspection surface.',
-    ({ value, lineSource }) => value === 'rgba(0, 0, 0, 0.8)' && lineSource.includes("'background-color'"),
-  ),
-  exception(
-    'internal/envapp/ui_src/src/ui/chat/chat.css',
-    'media',
-    'Image lightbox controls use a stable dark inspection chrome over arbitrary media.',
-    ({ lineSource }) => lineSource.includes('.chat-image-dialog-'),
-  ),
-  exception(
     'internal/envapp/ui_src/src/ui/file-preview/rendererRegistry.tsx',
     'media',
     'Video preview letterboxing stays black for faithful media presentation.',

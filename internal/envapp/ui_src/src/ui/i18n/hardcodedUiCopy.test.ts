@@ -48,9 +48,6 @@ const VISIBLE_ATTRIBUTES = new Set([
 
 const EXCEPTIONS: readonly Exception[] = [
   { file: 'src/ui/EnvAppShell.tsx', kind: 'alt', text: 'Redeven', reason: 'Protected product name used as the logo alternative text.' },
-  { file: 'src/ui/chat/input/ChatInput.tsx', kind: 'text', text: 'Enter', reason: 'Keyboard key label.' },
-  { file: 'src/ui/chat/input/ChatInput.tsx', kind: 'text', text: 'Shift+Enter', reason: 'Keyboard shortcut label.' },
-  { file: 'src/ui/chat/message/MessageAvatar.tsx', kind: 'expression', text: 'AI', reason: 'Standard artificial-intelligence acronym used in an avatar.' },
   { file: 'src/ui/debugConsole/DebugConsoleWindow.tsx', kind: 'text', text: 'collect_ui_metrics', reason: 'Raw event identifier shown by the diagnostic console.' },
   { file: 'src/ui/debugConsole/DebugConsoleWindow.tsx', kind: 'text', text: 'visible', reason: 'Raw lifecycle enum value in the diagnostic console.' },
   { file: 'src/ui/debugConsole/DebugConsoleWindow.tsx', kind: 'text', text: 'minimized', reason: 'Raw lifecycle enum value in the diagnostic console.' },

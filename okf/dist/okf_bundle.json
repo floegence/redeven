@@ -9697,7 +9697,7 @@
         "title": "Flower terminal activity presentation",
         "type": "UI Contract"
       },
-      "body_length": 9645,
+      "body_length": 9662,
       "summary": "Terminal activity is a renderer-first view over canonical Floret v5 Activity items, not a second process lifecycle. One presenter maps every `terminal.*` tool to a localized user action such as “Run command” or “Terminate command execution”; internal tool names are never a title fallback. The authored description stays in the compact row, while commands and output remain in optional detail. Approval state remains available to the actionable composer but never becomes ordinary activity presentation.",
       "sections": [
         {
@@ -9717,9 +9717,9 @@
       ],
       "evidence": [
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/chat/blocks/ShellBlock.tsx:0:the terminal shell block builds process read, write, and terminate requests from run and process ids.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/chat/blocks/ShellBlock.tsx",
-          "description": "The terminal shell block builds process read, write, and terminate requests from run and process ids."
+          "id": "redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:0:the env adapter maps authorized terminal output reads to the product api without owning process lifecycle.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts",
+          "description": "The Env adapter maps authorized terminal output reads to the product API without owning process lifecycle."
         },
         {
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:flower renders typed terminal activity detail and accessible execution status without approval presentation.",
@@ -11061,5 +11061,5 @@
       ]
     }
   ],
-  "source_sha256": "b1e224895a9e0539499db277fd4b44a5fdc5d742ce8404d8f0b02df9b2989078"
+  "source_sha256": "ff81cb985271b0fe4d399f72d205c7c1a6e51819bc31611a2d3d7b4266013c01"
 }
