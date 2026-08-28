@@ -1,9 +1,15 @@
 # Redeven OKF Update Log
 
+## 2026-08-28
+* **Static Web Fetch globe and Floret v5.0.10 adoption**: Web Fetch now uses
+  one product-owned globe icon. Floret no longer discovers, requests, or emits
+  page icons, and Redeven drops the deprecated icon field at its public Activity
+  boundary.
+
 ## 2026-08-27
 * **Readable Web Fetch Activity and Floret v5.0.9 adoption**: Flower now shows
-  the requested URL and passive site icon in the collapsed title, then lazily
-  renders response metadata and Floret's bounded content preview when expanded.
+  the requested URL in the collapsed title, then lazily renders response
+  metadata and Floret's bounded content preview when expanded.
   Old records fall back to `target_refs` and no longer expose an empty panel.
 * **Floret v5.0.8 provider-usage convergence**: Adopted the published fix that
   projects final provider usage through the attempt-scoped event envelope into

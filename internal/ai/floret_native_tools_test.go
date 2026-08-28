@@ -121,8 +121,8 @@ func TestWebFetchActivityProjectionKeepsPreviewAndDropsFullContent(t *testing.T)
 	if payload["content_preview"] != "# Preview" || payload["preview_truncated"] != true {
 		t.Fatalf("web_fetch Activity preview=%v", payload)
 	}
-	if _, exists := payload["site_icon"]; !exists {
-		t.Fatalf("web_fetch Activity icon=%v", payload)
+	if _, exists := payload["site_icon"]; exists {
+		t.Fatalf("web_fetch Activity retained deprecated page icon=%v", payload)
 	}
 	if _, exists := payload["content"]; exists {
 		t.Fatal("web_fetch Activity exposed content")

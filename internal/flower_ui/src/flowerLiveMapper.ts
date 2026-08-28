@@ -485,65 +485,9 @@ const structuredActivityRowFormats = new Set(['text', 'markdown', 'code']);
 const structuredActivityRowLimit = 200;
 const webFetchActivityPayloadKeys = new Set([
   'url', 'final_url', 'status_code', 'content_type', 'format', 'content_preview', 'preview_truncated',
-  'site_icon', 'bytes_read', 'truncated', 'status', 'error',
+  'bytes_read', 'truncated', 'status', 'error',
 ]);
-const webFetchActivityIconContentTypes = new Set([
-  'image/png', 'image/jpeg', 'image/webp', 'image/x-icon', 'image/vnd.microsoft.icon',
-]);
-const webFetchActivityIconMaxBytes = 8 * 1024;
 const webFetchActivityPreviewMaxCharacters = 2_000;
-
-function decodeStrictBase64(value: unknown, path: string): Uint8Array {
-  if (typeof value !== 'string' || value.length === 0 || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(value)) {
-    throw new Error(`Flower contract error: ${path} must be canonical Base64.`);
-  }
-  let decoded = '';
-  try {
-    decoded = globalThis.atob(value);
-  } catch {
-    throw new Error(`Flower contract error: ${path} must be canonical Base64.`);
-  }
-  if (globalThis.btoa(decoded) !== value) {
-    throw new Error(`Flower contract error: ${path} must be canonical Base64.`);
-  }
-  const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
-  if (bytes.length === 0 || bytes.length > webFetchActivityIconMaxBytes) {
-    throw new Error(`Flower contract error: ${path} exceeds ${webFetchActivityIconMaxBytes} bytes.`);
-  }
-  return bytes;
-}
-
-function webFetchActivityIconMatches(contentType: string, bytes: Uint8Array): boolean {
-  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
-    && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return contentType === 'image/png';
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return contentType === 'image/jpeg';
-  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
-    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return contentType === 'image/webp';
-  if (bytes.length >= 4 && bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0) {
-    return contentType === 'image/x-icon' || contentType === 'image/vnd.microsoft.icon';
-  }
-  return false;
-}
-
-function mapWebFetchActivityIcon(raw: unknown): Readonly<{ content_type: string; data: string }> {
-  const path = 'activity_item.presentation.payload.site_icon';
-  const icon = plainRecordValue(raw);
-  if (!icon) throw new Error(`Flower contract error: ${path} must be an object.`);
-  for (const key of Object.keys(icon)) {
-    if (key !== 'content_type' && key !== 'data') {
-      throw new Error(`Flower contract error: ${path}.${key} is not part of the site icon contract.`);
-    }
-  }
-  const contentType = trim(icon.content_type).toLowerCase();
-  if (!webFetchActivityIconContentTypes.has(contentType)) {
-    throw new Error(`Flower contract error: ${path}.content_type is unsupported.`);
-  }
-  const bytes = decodeStrictBase64(icon.data, `${path}.data`);
-  if (!webFetchActivityIconMatches(contentType, bytes)) {
-    throw new Error(`Flower contract error: ${path}.data does not match its content type.`);
-  }
-  return { content_type: contentType, data: String(icon.data) };
-}
 
 function mapStructuredActivityRows(raw: unknown): readonly Readonly<Record<string, string>>[] {
   if (!Array.isArray(raw)) {
@@ -593,10 +537,6 @@ function mapActivityPayload(raw: unknown, renderer?: FlowerActivityRenderer): Re
     }
     assertPublicActivityPayloadKey('activity_item.presentation.payload', safeKey);
     if (renderer === 'web_fetch') {
-      if (safeKey === 'site_icon') {
-        out[safeKey] = mapWebFetchActivityIcon(value);
-        continue;
-      }
       if (safeKey === 'content_preview') {
         if (typeof value !== 'string' || Array.from(value).length > webFetchActivityPreviewMaxCharacters) {
           throw new Error(`Flower contract error: activity_item.presentation.payload.content_preview exceeds ${webFetchActivityPreviewMaxCharacters} characters.`);

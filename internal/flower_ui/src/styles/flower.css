@@ -4997,30 +4997,10 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-web-fetch-title-icon {
-  position: relative;
-  display: inline-flex;
   width: 0.875rem;
   height: 0.875rem;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border-radius: 0.22rem;
-  background: color-mix(in srgb, var(--redeven-chat-muted) 16%, transparent);
   color: currentColor;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.54rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.flower-activity-web-fetch-title-icon img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: var(--background);
-  object-fit: contain;
 }
 
 .flower-activity-web-fetch-title-url {
