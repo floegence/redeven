@@ -17,7 +17,8 @@ describe('Flower composer draft host ownership', () => {
     expect(envShell).toContain('const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();');
     expect(envShell).toContain('onCleanup(() => flowerDraftCoordinator.dispose())');
     expect(envPage).toContain('draftCoordinator={props.draftCoordinator}');
-    expect(workbench).toContain('draftCoordinator={env.flowerDraftCoordinator!}');
+    expect(envShell).toContain('draftCoordinator={flowerDraftCoordinator}');
+    expect(workbench).toContain('env.setFlowerWorkbenchHost?.(target, true)');
     expect(desktop).toContain('draftCoordinator={flowerDraftCoordinator}');
     expect(desktop).toContain('const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();');
     expect(desktop).toContain('onCleanup(() => flowerDraftCoordinator.dispose())');
