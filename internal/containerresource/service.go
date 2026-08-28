@@ -196,7 +196,7 @@ func (s *Service) CreateOperation(ctx context.Context, req CreateOperationReques
 	if err != nil {
 		return Operation{}, err
 	}
-	if subtleString(req.RequestHash, decoded.preflight.RequestHash) == false || subtleString(req.PlanHash, decoded.preflight.PlanHash) == false {
+	if !subtleString(req.RequestHash, decoded.preflight.RequestHash) || !subtleString(req.PlanHash, decoded.preflight.PlanHash) {
 		return Operation{}, ErrPreflightStale
 	}
 	now := time.Now().UnixMilli()
