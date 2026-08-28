@@ -3156,7 +3156,7 @@
       "start": "起動",
       "stop": "停止",
       "restart": "再起動",
-      "retryInstall": "インストールを再試行",
+      "retryInstall": "再試行",
       "updateAvailable": "更新があります",
       "update": "更新",
       "updateTitle": "マネージドサービスを更新",

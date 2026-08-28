@@ -3156,7 +3156,7 @@
       "start": "啟動",
       "stop": "停止",
       "restart": "重新啟動",
-      "retryInstall": "重試安裝",
+      "retryInstall": "重試",
       "updateAvailable": "有可用更新",
       "update": "更新",
       "updateTitle": "更新受管理服務",
