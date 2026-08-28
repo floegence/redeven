@@ -1763,6 +1763,7 @@ export function EnvPortForwardsPage() {
               <h2 id="web-service-address-label" class="text-xs font-medium text-foreground">{i18n.t('webServices.address.label')}</h2>
             </div>
             <form
+              class="max-w-3xl"
               onSubmit={(event) => {
                 event.preventDefault();
                 void doOpenAddress();
@@ -1770,29 +1771,31 @@ export function EnvPortForwardsPage() {
               data-testid="web-service-address-form"
             >
               <div class="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  value={address()}
-                  onInput={(event) => {
-                    setAddress(event.currentTarget.value);
-                    setAddressValidationVisible(false);
-                  }}
-                  onBlur={() => {
-                    if (address().trim() && !isSupportedWebServiceTarget(address())) setAddressValidationVisible(true);
-                  }}
-                  placeholder={i18n.t('webServices.address.placeholder')}
-                  aria-label={i18n.t('webServices.address.label')}
-                  aria-invalid={addressValidationVisible() ? 'true' : undefined}
-                  aria-describedby="web-service-address-guidance"
-                  autocomplete="url"
-                  spellcheck={false}
-                  size="sm"
-                  class={cn(
-                    'h-10 min-w-0 flex-1 font-mono text-sm',
-                    addressValidationVisible() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
-                  )}
-                  disabled={!canExecute() || !!busyID()}
-                  data-testid="web-service-address-input"
-                />
+                <div class="min-w-0 flex-1" data-testid="web-service-address-input-shell">
+                  <Input
+                    value={address()}
+                    onInput={(event) => {
+                      setAddress(event.currentTarget.value);
+                      setAddressValidationVisible(false);
+                    }}
+                    onBlur={() => {
+                      if (address().trim() && !isSupportedWebServiceTarget(address())) setAddressValidationVisible(true);
+                    }}
+                    placeholder={i18n.t('webServices.address.placeholder')}
+                    aria-label={i18n.t('webServices.address.label')}
+                    aria-invalid={addressValidationVisible() ? 'true' : undefined}
+                    aria-describedby="web-service-address-guidance"
+                    autocomplete="url"
+                    spellcheck={false}
+                    size="sm"
+                    class={cn(
+                      'h-10 w-full font-mono text-sm',
+                      addressValidationVisible() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
+                    )}
+                    disabled={!canExecute() || !!busyID()}
+                    data-testid="web-service-address-input"
+                  />
+                </div>
                 <Button type="submit" size="sm" class="h-10 shrink-0 px-4" disabled={!canExecute() || !!busyID() || !address().trim()} data-testid="web-service-address-open">
                   <ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />
                   {i18n.t('webServices.actions.openAddress')}
