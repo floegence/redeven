@@ -648,7 +648,7 @@ function requiredNoticesAccepted(notices: readonly ManagedTemplateNotice[] | und
   return (notices ?? []).every((notice) => !notice.acknowledgement_required || accepted[notice.id]);
 }
 
-function ManagedTemplateNotices(props: {
+export function ManagedTemplateNotices(props: {
   notices: readonly ManagedTemplateNotice[];
   accepted: Readonly<Record<string, boolean>>;
   disabled: boolean;
@@ -669,7 +669,7 @@ function ManagedTemplateNotices(props: {
                 <div class="font-medium text-foreground">{copy().title}</div>
                 <p class="mt-1 leading-5 text-muted-foreground">{copy().description}</p>
                 <Show when={notice.acknowledgement_required}>
-                  <div class="mt-3 border-t border-warning/20 pt-3">
+                  <div class="mt-3 flex items-start border-t border-warning/20 pt-3">
                     <Checkbox
                       checked={Boolean(props.accepted[notice.id])}
                       onChange={(checked) => props.onAcceptedChange(notice.id, Boolean(checked))}
