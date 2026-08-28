@@ -1737,7 +1737,7 @@ export function EnvPortForwardsPage() {
         </div>
       </header>
 
-      <main class="min-h-0 flex-1 overflow-auto px-4 py-5 md:px-5">
+      <main {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-auto px-4 py-5 md:px-5">
         <div class="mx-auto w-full max-w-5xl space-y-6">
           <section aria-labelledby="web-service-address-label">
             <div class="mb-2 flex items-center gap-2">

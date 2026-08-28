@@ -54,7 +54,6 @@ const EXCEPTIONS: readonly Exception[] = [
   { file: 'src/ui/debugConsole/DebugConsoleWindow.tsx', kind: 'text', text: 'collect_ui_metrics', reason: 'Raw event identifier shown by the diagnostic console.' },
   { file: 'src/ui/debugConsole/DebugConsoleWindow.tsx', kind: 'text', text: 'visible', reason: 'Raw lifecycle enum value in the diagnostic console.' },
   { file: 'src/ui/debugConsole/DebugConsoleWindow.tsx', kind: 'text', text: 'minimized', reason: 'Raw lifecycle enum value in the diagnostic console.' },
-  { file: 'src/ui/pages/EnvPortForwardsPage.tsx', kind: 'text', text: 'ms', reason: 'Standard millisecond unit.' },
   { file: 'src/ui/pages/EnvContainersPage.tsx', kind: 'placeholder', text: 'ghcr.io/example/app:latest', reason: 'Literal OCI image reference example.' },
   { file: 'src/ui/pages/EnvContainersPage.tsx', kind: 'placeholder', text: 'docker.io/library/nginx:latest', reason: 'Literal OCI image reference example.' },
   { file: 'src/ui/pages/EnvContainersPage.tsx', kind: 'placeholder', text: 'example/app:release', reason: 'Literal OCI image reference example.' },
