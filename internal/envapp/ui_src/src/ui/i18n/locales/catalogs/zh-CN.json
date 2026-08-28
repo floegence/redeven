@@ -1498,10 +1498,6 @@
     "filterPlaceholder": "筛选文件",
     "viewList": "列表",
     "viewGrid": "网格",
-    "visibleCount": {
-      "one": "{count} 个可见",
-      "other": "{count} 个可见"
-    },
     "selectedCount": {
       "one": "{count} 个已选择",
       "other": "{count} 个已选择"

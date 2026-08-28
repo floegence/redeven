@@ -1498,10 +1498,6 @@
     "filterPlaceholder": "Filtrar archivos",
     "viewList": "Lista",
     "viewGrid": "Cuadrícula",
-    "visibleCount": {
-      "one": "{count} visible",
-      "other": "{count} visibles"
-    },
     "selectedCount": {
       "one": "{count} seleccionado",
       "other": "{count} seleccionado"

@@ -1498,10 +1498,6 @@
     "filterPlaceholder": "篩選檔案",
     "viewList": "清單",
     "viewGrid": "網格",
-    "visibleCount": {
-      "one": "{count} 可見",
-      "other": "{count} 可見"
-    },
     "selectedCount": {
       "one": "已選擇 {count} 個",
       "other": "{count} 已選"

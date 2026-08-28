@@ -1498,10 +1498,6 @@
     "filterPlaceholder": "Dateien filtern",
     "viewList": "Liste",
     "viewGrid": "Raster",
-    "visibleCount": {
-      "one": "{count} sichtbar",
-      "other": "{count} sichtbar"
-    },
     "selectedCount": {
       "one": "{count} ausgewählt",
       "other": "{count} ausgewählt"

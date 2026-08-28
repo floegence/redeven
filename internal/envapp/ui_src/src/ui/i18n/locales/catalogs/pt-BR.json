@@ -1498,10 +1498,6 @@
     "filterPlaceholder": "Filtrar arquivos",
     "viewList": "Lista",
     "viewGrid": "Grade",
-    "visibleCount": {
-      "one": "{count}",
-      "other": "visível {count}"
-    },
     "selectedCount": {
       "one": "visível {count}",
       "other": "selecionado {count}"

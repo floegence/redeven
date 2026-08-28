@@ -1498,10 +1498,6 @@
     "filterPlaceholder": "파일 필터",
     "viewList": "목록",
     "viewGrid": "그리드",
-    "visibleCount": {
-      "one": "{count}개 표시",
-      "other": "{count}개 표시"
-    },
     "selectedCount": {
       "one": "선택됨 {count}개",
       "other": "선택됨 {count}개"

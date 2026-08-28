@@ -380,6 +380,97 @@ describe('FileBrowserWorkspace interactions', () => {
     { id: 'file-readme', name: 'README.md', type: 'file', path: '/README.md' },
   ];
 
+  it('keeps the item count only in the shared status bar and collapses empty header feedback', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-status-bar"
+            instanceId="test-files-workspace-status-bar"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const statusBar = host.querySelector('[data-file-browser-status-bar="true"]') as HTMLElement | null;
+      expect(statusBar).toBeTruthy();
+      expect(statusBar?.textContent).toContain('2 items');
+      expect(statusBar?.textContent).toContain('/');
+      expect(statusBar?.lastElementChild?.className).toContain('sm:max-w-[45%]');
+      expect(countExactSpanText(host, '2 items')).toBe(1);
+      expect(host.textContent?.toLowerCase()).not.toContain('visible');
+      expect(host.querySelector('[data-testid="file-browser-header-status"]')).toBeNull();
+
+      for (const viewLabel of ['List', 'Grid']) {
+        const viewButton = Array.from(host.querySelectorAll('button'))
+          .find((node) => node.textContent?.trim() === viewLabel);
+        expect(viewButton, `expected ${viewLabel} view control`).toBeTruthy();
+        viewButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await flush();
+        expect(host.querySelectorAll('[data-file-browser-status-bar="true"]')).toHaveLength(1);
+        expect(countExactSpanText(host, '2 items')).toBe(1);
+      }
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps filter feedback above while the shared status bar owns the filtered item count', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-filter-status"
+            instanceId="test-files-workspace-filter-status"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const filterInput = host.querySelector('input[aria-label="Filter files"]') as HTMLInputElement | null;
+      expect(filterInput).toBeTruthy();
+      filterInput!.value = 'README';
+      filterInput!.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'README' }));
+      await flush();
+      await flush();
+
+      const headerStatus = host.querySelector('[data-testid="file-browser-header-status"]') as HTMLElement | null;
+      const statusBar = host.querySelector('[data-file-browser-status-bar="true"]') as HTMLElement | null;
+      expect(headerStatus?.textContent).toBe('Filter active');
+      expect(headerStatus?.querySelector('[aria-hidden="true"]')).toBeNull();
+      expect(statusBar?.textContent).toContain('1 item');
+      expect(statusBar?.textContent).toContain('Filtered view');
+      expect(statusBar?.textContent).toContain('/');
+      expect(host.textContent?.toLowerCase()).not.toContain('visible');
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps the Files/Git mode switch pinned in the shared sidebar shell', () => {
     let nextMode = '';
     const host = document.createElement('div');
@@ -811,6 +902,9 @@ describe('FileBrowserWorkspace interactions', () => {
       const pathInput = host.querySelector('input[aria-label="Go to path"]') as HTMLInputElement | null;
       expect(pathInput).toBeTruthy();
       expect(pathInput?.value).toBe('~/src');
+      const headerStatus = host.querySelector('[data-testid="file-browser-header-status"]') as HTMLElement | null;
+      expect(headerStatus?.textContent).toBe('Enter to open / Esc to cancel');
+      expect(headerStatus?.querySelector('[aria-hidden="true"]')).toBeNull();
     } finally {
       dispose();
     }
@@ -1138,6 +1232,9 @@ describe('FileBrowserWorkspace interactions', () => {
 
       expect(host.querySelector('input[aria-label="Go to path"]')).toBeTruthy();
       expect(host.textContent).toContain('Use "/" or "~" to enter a path.');
+      const headerStatus = host.querySelector('[data-testid="file-browser-header-status"]') as HTMLElement | null;
+      expect(headerStatus?.textContent).toBe('Use "/" or "~" to enter a path.');
+      expect(headerStatus?.querySelector('[aria-hidden="true"]')).toBeNull();
     } finally {
       dispose();
     }
@@ -2599,6 +2696,11 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(scrollIntoView).toHaveBeenCalled();
       expect(host.textContent).toContain('fresh.txt');
       expect(host.textContent).toContain('1 selected');
+      const headerStatus = host.querySelector('[data-testid="file-browser-header-status"]') as HTMLElement | null;
+      const statusBar = host.querySelector('[data-file-browser-status-bar="true"]') as HTMLElement | null;
+      expect(headerStatus?.textContent).toBe('1 selected');
+      expect(headerStatus?.querySelector('[aria-hidden="true"]')).toBeNull();
+      expect(statusBar?.textContent).toContain('1 selected');
       expect(consumed).toHaveBeenCalledWith('created-entry-1');
     } finally {
       dispose();
