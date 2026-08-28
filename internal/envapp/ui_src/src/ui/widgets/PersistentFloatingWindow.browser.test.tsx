@@ -1,11 +1,11 @@
 import '../../index.css';
 
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
-import { InfiniteCanvas } from '@floegence/floe-webapp-core/ui';
+import { Dialog, InfiniteCanvas } from '@floegence/floe-webapp-core/ui';
 
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 
@@ -120,6 +120,45 @@ function WorkbenchFloatingWindowHarness() {
   );
 }
 
+function ActivityFloatingWindowDialogHarness() {
+  const [dialogOpen, setDialogOpen] = createSignal(false);
+  const [underlayActionCount, setUnderlayActionCount] = createSignal(0);
+
+  return (
+    <Providers>
+      <button
+        type="button"
+        data-testid="dialog-underlay-action"
+        style={{ position: 'fixed', left: '16px', top: '16px' }}
+        onClick={() => setUnderlayActionCount((value) => value + 1)}
+      >
+        Underlay action
+      </button>
+      <output data-testid="dialog-underlay-action-count">{String(underlayActionCount())}</output>
+
+      <PersistentFloatingWindow
+        open
+        onOpenChange={() => undefined}
+        title="Activity helper"
+        persistenceKey="activity-dialog-floating-window-browser-test"
+        defaultPosition={{ x: 160, y: 120 }}
+        defaultSize={{ width: 420, height: 280 }}
+      >
+        <button type="button" data-testid="open-activity-dialog" onClick={() => setDialogOpen(true)}>
+          Open Activity dialog
+        </button>
+        <Dialog
+          open={dialogOpen()}
+          onOpenChange={setDialogOpen}
+          title="Activity floating dialog"
+        >
+          <button type="button">Dialog action</button>
+        </Dialog>
+      </PersistentFloatingWindow>
+    </Providers>
+  );
+}
+
 afterEach(() => {
   delete window.redevenDesktopWindowChrome;
   document.body.innerHTML = '';
@@ -131,6 +170,55 @@ beforeEach(async () => {
 });
 
 describe('PersistentFloatingWindow browser behavior', () => {
+  it('uses the global product modal boundary for nested Activity dialogs', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+    render(() => <ActivityFloatingWindowDialogHarness />, host);
+    await settle();
+
+    const trigger = document.querySelector('[data-testid="open-activity-dialog"]') as HTMLButtonElement;
+    await userEvent.click(trigger);
+    await settle();
+
+    const floatingRoot = document.querySelector(
+      '[data-floe-geometry-surface="floating-window"]'
+    ) as HTMLElement;
+    const overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]') as HTMLElement;
+    expect(floatingRoot.contains(overlayRoot)).toBe(false);
+    expect(overlayRoot.dataset.floeDialogMode).toBe('global');
+    expect(overlayRoot.style.zIndex).toBe('4000');
+
+    const underlay = document.querySelector('[data-testid="dialog-underlay-action"]') as HTMLElement;
+    const underlayRect = underlay.getBoundingClientRect();
+    const hitTarget = document.elementFromPoint(
+      underlayRect.left + underlayRect.width / 2,
+      underlayRect.top + underlayRect.height / 2,
+    ) as HTMLElement;
+    expect(hitTarget.closest('[data-floe-dialog-backdrop]')).not.toBeNull();
+    const hitTargetRect = hitTarget.getBoundingClientRect();
+    await userEvent.click(hitTarget, {
+      position: {
+        x: underlayRect.left + underlayRect.width / 2 - hitTargetRect.left,
+        y: underlayRect.top + underlayRect.height / 2 - hitTargetRect.top,
+      },
+    });
+
+    expect(document.querySelector('[data-testid="dialog-underlay-action-count"]')?.textContent).toBe('0');
+    expect(overlayRoot.dataset.floatingPresence).toBe('exiting');
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    await settle();
+    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    await userEvent.click(trigger);
+    await settle();
+    await userEvent.keyboard('{Escape}');
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+  });
+
   it('keeps desktop floating windows below the native titlebar safe area', async () => {
     window.redevenDesktopWindowChrome = {
       getSnapshot: () => ({

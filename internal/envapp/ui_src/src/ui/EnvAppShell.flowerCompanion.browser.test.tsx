@@ -7,6 +7,7 @@ import { Portal, render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CommandProvider, FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
+import { Dialog } from '@floegence/floe-webapp-core/ui';
 
 const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
@@ -39,6 +40,8 @@ const flowerLaunchTurnMock = vi.fn(async () => ({
   run_id: 'run-launched',
   kind: 'start' as const,
 }));
+const activityDialogUnderlayActionMock = vi.fn();
+const workbenchDialogUnderlayActionMock = vi.fn();
 
 let debugConsoleEnabled = false;
 type ProtocolSnapshotMock = Readonly<{
@@ -169,6 +172,7 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
   ActivityAppsMain: (props: any) => {
     const env = useContext(EnvContextMock);
     const filePreview = useContext(FilePreviewContextMock);
+    const [dialogOpen, setDialogOpen] = createSignal(false);
     return (
       <div
         data-testid="activity-body-content"
@@ -188,6 +192,21 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
         >
           Ask Flower
         </button>
+        <button
+          type="button"
+          data-testid="activity-page-dialog-trigger"
+          onClick={() => setDialogOpen(true)}
+        >
+          Open Activity page dialog
+        </button>
+        <Dialog
+          class="dialog-placement-browser-contract"
+          open={dialogOpen()}
+          onOpenChange={setDialogOpen}
+          title="Activity page dialog"
+        >
+          <button type="button">Activity page dialog action</button>
+        </Dialog>
         <button
           type="button"
           data-testid="activity-switch-workbench"
@@ -215,7 +234,13 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
         >
           Open Debug Console
         </button>
-        <button type="button" data-testid="outside-flower">Outside Flower</button>
+        <button
+          type="button"
+          data-testid="outside-flower"
+          onClick={activityDialogUnderlayActionMock}
+        >
+          Outside Flower
+        </button>
         <div role="menu" data-testid="outside-menu">
           <button type="button">Unrelated menu action</button>
         </div>
@@ -244,55 +269,63 @@ vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
   DisplayModePageShell: (props: any) => <div data-testid="display-mode-page-shell">{props.children}</div>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
-  Button: (props: any) => (
-    <button
-      type="button"
-      class={props.class}
-      data-testid={props['data-testid']}
-      aria-label={props['aria-label']}
-      onClick={props.onClick}
-    >
-      {props.children}
-    </button>
-  ),
-  ConfirmDialog: (props: any) => (
-    <Show when={props.open}>
-      <section role="alertdialog" aria-label={props.title}>
-        <h2>{props.title}</h2>
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>();
+  const RealDialog = actual.Dialog;
+  return {
+    ...actual,
+    Button: (props: any) => (
+      <button
+        type="button"
+        class={props.class}
+        data-testid={props['data-testid']}
+        aria-label={props['aria-label']}
+        onClick={props.onClick}
+      >
         {props.children}
-        <button type="button" onClick={() => props.onOpenChange?.(false)}>Cancel</button>
-        <button type="button" onClick={() => props.onConfirm?.()}>Confirm</button>
-      </section>
-    </Show>
-  ),
-  createFloatingPresence: (options: { open: () => boolean }) => ({
-    mounted: () => Boolean(options.open()),
-    exiting: () => false,
-    state: () => (options.open() ? 'entered' : 'exited'),
-  }),
-  Dialog: (props: any) => (
-    <Show when={props.open}>
-      <div role="dialog" aria-label={props.title}>
-        {props.children}
-        {props.footer}
-      </div>
-    </Show>
-  ),
-  Dropdown: (props: any) => <>{props.trigger}</>,
-  FloatingWindow: (props: any) => (
-    <Show when={props.open}>
-      <div data-floe-geometry-surface="floating-window" class={props.class}>
-        <div>{props.title}</div>
-        <div>{props.children}</div>
-        <div>{props.footer}</div>
-      </div>
-    </Show>
-  ),
-  SegmentedControl: () => <div />,
-  Tooltip: (props: any) => <>{props.children}</>,
-}));
+      </button>
+    ),
+    ConfirmDialog: (props: any) => (
+      <Show when={props.open}>
+        <section role="alertdialog" aria-label={props.title}>
+          <h2>{props.title}</h2>
+          {props.children}
+          <button type="button" onClick={() => props.onOpenChange?.(false)}>Cancel</button>
+          <button type="button" onClick={() => props.onConfirm?.()}>Confirm</button>
+        </section>
+      </Show>
+    ),
+    createFloatingPresence: (options: { open: () => boolean }) => ({
+      mounted: () => Boolean(options.open()),
+      exiting: () => false,
+      state: () => (options.open() ? 'entered' : 'exited'),
+    }),
+    Dialog: (props: any) => (
+      String(props.class ?? '').includes('dialog-placement-browser-contract')
+        ? <RealDialog {...props} />
+        : (
+            <Show when={props.open}>
+              <div role="dialog" aria-label={props.title}>
+                {props.children}
+                {props.footer}
+              </div>
+            </Show>
+          )
+    ),
+    Dropdown: (props: any) => <>{props.trigger}</>,
+    FloatingWindow: (props: any) => (
+      <Show when={props.open}>
+        <div data-floe-geometry-surface="floating-window" class={props.class}>
+          <div>{props.title}</div>
+          <div>{props.children}</div>
+          <div>{props.footer}</div>
+        </div>
+      </Show>
+    ),
+    SegmentedControl: () => <div />,
+    Tooltip: (props: any) => <>{props.children}</>,
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/icons')>();
@@ -493,7 +526,11 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
     onCleanup(() => env.setFlowerWorkbenchHost?.(flowerHost(), false));
     return (
       <div>
-        <div ref={setFlowerHost} data-testid="workbench-flower-host" />
+        <div
+          ref={setFlowerHost}
+          data-testid="workbench-flower-host"
+          style={{ position: 'relative', width: '480px', height: '360px' }}
+        />
         <button
           type="button"
           data-testid="workbench-switch-activity"
@@ -542,6 +579,13 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
         >
           Ask Flower
         </button>
+        <button
+          type="button"
+          data-testid="workbench-dialog-underlay-action"
+          onClick={workbenchDialogUnderlayActionMock}
+        >
+          Other Workbench action
+        </button>
         <div data-testid="workbench-preview-activation">
           {env.workbenchFilePreviewActivation?.()?.item?.path ?? ''}
         </div>
@@ -588,6 +632,7 @@ vi.mock('./pages/EnvAIPage', () => ({
     const [submitting, setSubmitting] = createSignal(false);
     const [composerText, setComposerText] = createSignal('');
     const [presence, setPresence] = createSignal(activityFlowerPresence);
+    const [dialogOpen, setDialogOpen] = createSignal(false);
     publishActivityFlowerPresence = setPresence;
     createEffect(() => {
       props.onPresenceChange?.(presence());
@@ -603,6 +648,17 @@ vi.mock('./pages/EnvAIPage', () => ({
         data-focus-request-scope={props.focusRequestScope}
         data-flower-turn-submitting={String(submitting())}
       >
+        <button type="button" data-testid="flower-dialog-trigger" onClick={() => setDialogOpen(true)}>
+          Open Flower dialog
+        </button>
+        <Dialog
+          class="dialog-placement-browser-contract"
+          open={dialogOpen()}
+          onOpenChange={setDialogOpen}
+          title="Flower dialog"
+        >
+          <button type="button">Flower dialog action</button>
+        </Dialog>
         <div data-testid="env-ai-focused-thread">{env.aiThreadFocusRequest?.()?.thread_id ?? ''}</div>
         <div data-testid="activity-flower-focused-thread">{props.focusThreadRequest?.thread_id ?? ''}</div>
         <div data-testid="activity-flower-focus-request">{props.focusThreadRequest?.request_id ?? ''}</div>
@@ -1410,6 +1466,44 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(envAIPageMountSequence).toBe(1);
   });
 
+  it('uses the global product modal boundary for ordinary Activity page dialogs', async () => {
+    await page.viewport(1280, 800);
+    await mountShell();
+    const trigger = document.querySelector('[data-testid="activity-page-dialog-trigger"]');
+    const activityUnderlay = document.querySelector('[data-testid="outside-flower"]');
+    if (!(trigger instanceof HTMLButtonElement) || !(activityUnderlay instanceof HTMLButtonElement)) {
+      throw new Error('Activity page Dialog harness did not mount.');
+    }
+
+    await userEvent.click(trigger);
+    await flushAsync();
+    const overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
+    if (!(overlayRoot instanceof HTMLElement)) throw new Error('Activity page Dialog did not open.');
+    expect(overlayRoot.dataset.floeDialogMode).toBe('global');
+    expect(overlayRoot.style.zIndex).toBe('4000');
+
+    const underlayRect = activityUnderlay.getBoundingClientRect();
+    const hitTarget = document.elementFromPoint(
+      underlayRect.left + underlayRect.width / 2,
+      underlayRect.top + underlayRect.height / 2,
+    );
+    if (!(hitTarget instanceof HTMLElement)) throw new Error('Activity page Dialog backdrop is not hittable.');
+    expect(hitTarget.closest('[data-floe-dialog-backdrop]')).not.toBeNull();
+    const hitTargetRect = hitTarget.getBoundingClientRect();
+    await userEvent.click(hitTarget, {
+      position: {
+        x: underlayRect.left + underlayRect.width / 2 - hitTargetRect.left,
+        y: underlayRect.top + underlayRect.height / 2 - hitTargetRect.top,
+      },
+    });
+    expect(activityDialogUnderlayActionMock).not.toHaveBeenCalled();
+
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    await settleFrames(2);
+    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('moves the same Flower surface into and out of the Workbench host', async () => {
     await page.viewport(1280, 800);
     const fixture = await mountShell();
@@ -1440,6 +1534,87 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(fixture.product.isConnected).toBe(true);
     expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
     expect(envAIPageMountSequence).toBe(1);
+  });
+
+  it('maps retained Flower dialogs to the active display-mode boundary', async () => {
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    const trigger = document.querySelector('[data-testid="flower-dialog-trigger"]');
+    const activityUnderlay = document.querySelector('[data-testid="outside-flower"]');
+    if (!(trigger instanceof HTMLButtonElement) || !(activityUnderlay instanceof HTMLButtonElement)) {
+      throw new Error('Flower dialog harness did not mount.');
+    }
+
+    await userEvent.click(trigger);
+    await flushAsync();
+
+    let overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
+    if (!(overlayRoot instanceof HTMLElement)) throw new Error('Activity Flower dialog did not open.');
+    expect(fixture.product.contains(overlayRoot)).toBe(false);
+    expect(overlayRoot.dataset.floeDialogMode).toBe('global');
+    expect(overlayRoot.style.zIndex).toBe('4000');
+
+    const activityUnderlayRect = activityUnderlay.getBoundingClientRect();
+    const activityHitTarget = document.elementFromPoint(
+      activityUnderlayRect.left + activityUnderlayRect.width / 2,
+      activityUnderlayRect.top + activityUnderlayRect.height / 2,
+    );
+    if (!(activityHitTarget instanceof HTMLElement)) throw new Error('Activity Dialog backdrop is not hittable.');
+    expect(activityHitTarget.closest('[data-floe-dialog-backdrop]')).not.toBeNull();
+    const activityHitTargetRect = activityHitTarget.getBoundingClientRect();
+    await userEvent.click(activityHitTarget, {
+      position: {
+        x: activityUnderlayRect.left + activityUnderlayRect.width / 2 - activityHitTargetRect.left,
+        y: activityUnderlayRect.top + activityUnderlayRect.height / 2 - activityHitTargetRect.top,
+      },
+    });
+    expect(activityDialogUnderlayActionMock).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+
+    const switchWorkbench = document.querySelector('[data-testid="activity-switch-workbench"]');
+    if (!(switchWorkbench instanceof HTMLButtonElement)) throw new Error('Workbench switch did not mount.');
+    await userEvent.click(switchWorkbench);
+    await flushAsync();
+
+    await userEvent.click(trigger);
+    await flushAsync();
+    overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
+    if (!(overlayRoot instanceof HTMLElement)) throw new Error('Workbench Flower dialog did not open.');
+    expect(fixture.product.contains(overlayRoot)).toBe(true);
+    expect(overlayRoot.dataset.floeDialogMode).toBe('surface');
+    expect(overlayRoot.style.zIndex).toBe('');
+
+    const workbenchUnderlay = document.querySelector('[data-testid="workbench-dialog-underlay-action"]');
+    if (!(workbenchUnderlay instanceof HTMLButtonElement)) {
+      throw new Error('Workbench Dialog underlay action did not mount.');
+    }
+    await userEvent.click(workbenchUnderlay);
+    expect(workbenchDialogUnderlayActionMock).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBe(overlayRoot);
+
+    const localBackdrop = overlayRoot.querySelector('[data-floe-dialog-backdrop]');
+    if (!(localBackdrop instanceof HTMLElement)) throw new Error('Workbench Dialog backdrop did not mount.');
+    await userEvent.click(localBackdrop, { position: { x: 8, y: 8 } });
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+
+    await userEvent.click(trigger);
+    await flushAsync();
+    const switchActivity = document.querySelector('[data-testid="workbench-switch-activity"]');
+    if (!(switchActivity instanceof HTMLButtonElement)) throw new Error('Activity switch did not mount.');
+    await userEvent.click(switchActivity);
+    await flushAsync();
+
+    overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
+    if (!(overlayRoot instanceof HTMLElement)) throw new Error('Retained Flower dialog was lost.');
+    expect(fixture.product.contains(overlayRoot)).toBe(false);
+    expect(overlayRoot.dataset.floeDialogMode).toBe('global');
+    expect(overlayRoot.style.zIndex).toBe('4000');
+
+    await userEvent.keyboard('{Escape}');
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
   });
 
   it('mounts Flower directly into Workbench before Activity has rendered', async () => {
