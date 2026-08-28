@@ -142,6 +142,8 @@ export const flowerSurfaceEnUS = {
     modelStatusStreaming: 'Thinking...',
     modelStatusRetrying: 'Retrying model request...',
     modelStatusFinalizing: 'Finalizing reply...',
+    liveProgressTool: 'Using a tool',
+    liveProgressOutput: 'Writing the reply',
     contextIndicatorLabel: 'Context',
     contextIndicatorStable: 'Stable',
     contextIndicatorNearThreshold: 'Near limit',

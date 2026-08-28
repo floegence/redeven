@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const stylesPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'styles', 'flower.css');
 const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
-const modelStatusIndicatorPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerModelStatusIndicator.tsx');
+const progressIndicatorPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerProgressIndicator.tsx');
 const contextIndicatorPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerComposerContextIndicator.tsx');
 
 function flowerStyles(): string {
@@ -18,8 +18,8 @@ function surfaceSource(): string {
   return fs.readFileSync(surfacePath, 'utf8');
 }
 
-function modelStatusIndicatorSource(): string {
-  return fs.readFileSync(modelStatusIndicatorPath, 'utf8');
+function progressIndicatorSource(): string {
+  return fs.readFileSync(progressIndicatorPath, 'utf8');
 }
 
 function contextIndicatorSource(): string {
@@ -42,7 +42,7 @@ function cssRuleStartingWith(css: string, selector: string): string {
   return css.slice(start, end + 2);
 }
 
-describe('Flower model status indicator', () => {
+describe('Flower progress indicator', () => {
   it('uses readable localized dock text with a decorative left-to-right shimmer', () => {
     const css = flowerStyles();
     const laneRule = cssRule(css, '.flower-model-status-lane');
@@ -51,7 +51,7 @@ describe('Flower model status indicator', () => {
     const flowerIconRule = cssRule(css, '.flower-model-status-flower-icon');
     const textRule = cssRule(css, '.flower-model-status-text');
     const shimmerRule = cssRule(css, '.flower-model-status-text::after');
-    const src = modelStatusIndicatorSource();
+    const src = progressIndicatorSource();
     const indicatorMarkupIndex = src.indexOf('class="flower-model-status-indicator"');
     const flowerMarkupIndex = src.indexOf('class="flower-model-status-flower"', indicatorMarkupIndex);
     const textMarkupIndex = src.indexOf('class="flower-model-status-text"', flowerMarkupIndex);

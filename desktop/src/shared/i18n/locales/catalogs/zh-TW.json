@@ -145,6 +145,8 @@
       "modelStatusPreparing": "正在準備模型請求...",
       "modelStatusWaitingResponse": "正在等待模型回應...",
       "modelStatusStreaming": "正在思考...",
+      "liveProgressTool": "正在執行工具",
+      "liveProgressOutput": "正在輸出回覆",
       "modelStatusRetrying": "正在重試模型請求...",
       "modelStatusFinalizing": "正在整理回覆...",
       "contextIndicatorLabel": "上下文",

@@ -377,6 +377,8 @@ export type FlowerSurfaceCopy = Readonly<{
       retrying: string;
       finalizing: string;
     }>;
+    liveProgressTool: string;
+    liveProgressOutput: string;
     contextIndicator: Readonly<{
       label: string;
       stable: string;
@@ -631,6 +633,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       retrying: 'Retrying model request...',
       finalizing: 'Finalizing reply...',
     },
+    liveProgressTool: 'Using a tool',
+    liveProgressOutput: 'Writing the reply',
     contextIndicator: {
       label: 'Context',
       stable: 'Stable',

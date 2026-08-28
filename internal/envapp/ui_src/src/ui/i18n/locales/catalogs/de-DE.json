@@ -3744,6 +3744,8 @@
       "modelStatusPreparing": "Modellanfrage wird vorbereitet...",
       "modelStatusWaitingResponse": "Warten auf Modellantwort...",
       "modelStatusStreaming": "Denkt nach...",
+      "liveProgressTool": "Werkzeug wird ausgeführt",
+      "liveProgressOutput": "Antwort wird geschrieben",
       "modelStatusRetrying": "Modellanfrage wird erneut versucht...",
       "modelStatusFinalizing": "Antwort wird vorbereitet...",
       "contextIndicatorLabel": "Kontext",

@@ -10,6 +10,8 @@ import type {
 import { flowerActivityIdentity } from './flowerActivityIdentity';
 import { trimString } from './flowerSurfaceModel';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
+import { projectFlowerLiveProgress } from './flowerLiveProgress';
+import type { FlowerLiveProgress } from './flowerLiveProgress';
 
 export type FlowerRenderableMessageBlock =
   | Readonly<{
@@ -69,6 +71,11 @@ export type FlowerTimelineEntry =
     type: 'error';
     key: string;
     error: FlowerThreadError;
+  }>
+  | Readonly<{
+    type: 'live_progress';
+    key: string;
+    progress: FlowerLiveProgress;
   }>;
 
 export function flowerTimelineHasUserRejectedTool(entries: readonly FlowerTimelineEntry[]): boolean {
@@ -457,6 +464,14 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
       key: `queued-turn:${thread.thread_id}:${queueID}`,
       turn,
       blocks,
+    });
+  }
+  const liveProgress = projectFlowerLiveProgress(thread);
+  if (liveProgress?.kind === 'waiting' && liveProgress.initialWait) {
+    entries.push({
+      type: 'live_progress',
+      key: `live-progress:${thread.thread_id}:${liveProgress.runID}`,
+      progress: liveProgress,
     });
   }
   if (thread.status === 'waiting_user' && thread.input_request) {

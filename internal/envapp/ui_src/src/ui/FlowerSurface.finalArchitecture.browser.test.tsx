@@ -167,6 +167,156 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => runtime.textContent?.includes('Final workspace explanation') === true);
   });
 
+  it('keeps stop then continue on one stream and presents each truthful live stage', async () => {
+    const threadID = 'thread-stop-continue-progress';
+    const oldTurnID = 'turn-stopped';
+    const newTurnID = 'turn-continued';
+    const runningThread = thread({
+      thread_id: threadID,
+      title: 'Stop then continue',
+      status: 'running',
+      active_run_id: oldTurnID,
+      messages: [{
+        id: 'user:stopped', turn_id: oldTurnID, role: 'user', content: 'Start the task',
+        status: 'complete', created_at_ms: 1,
+      }],
+    });
+    const stream = controlledWorkspaceStream([{
+      schema_version: 1,
+      kind: 'ready',
+      summaries: [runningThread],
+    }]);
+    const connectLiveStream = vi.fn(stream.connect);
+    const stopThread = vi.fn(async () => undefined);
+    const loadThread = vi.fn(async () => liveBootstrap(runningThread, 1));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread,
+      stopThread,
+      connectLiveStream,
+    });
+
+    await waitFor(() => runtime.querySelector(`[data-thread-id="${threadID}"] button`) !== null);
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-flower-primary-action="stop"]') !== null);
+    (runtime.querySelector('[data-flower-primary-action="stop"]') as HTMLButtonElement).click();
+    await waitFor(() => stopThread.mock.calls.length === 1);
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID, view_version: 2, activity: 'idle', turn_id: oldTurnID, last_outcome: 'cancelled',
+        items: [{ id: 'user:stopped', turn_id: oldTurnID, ordinal: 1, kind: 'user', text: 'Start the task' }],
+      },
+    });
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID, view_version: 3, activity: 'active', turn_id: newTurnID,
+        items: [
+          { id: 'user:stopped', turn_id: oldTurnID, ordinal: 1, kind: 'user', text: 'Start the task' },
+          { id: 'user:continued', turn_id: newTurnID, ordinal: 2, kind: 'user', text: '请继续' },
+          { id: 'assistant:continued', turn_id: newTurnID, ordinal: 3, kind: 'assistant', text: '', live: true },
+        ],
+      },
+    });
+    await waitFor(() => runtime.querySelector('[data-flower-live-progress-run-id="turn-continued"]') !== null);
+    expect(runtime.querySelector('.flower-live-progress-placeholder')).not.toBeNull();
+    expect(runtime.textContent).toContain('Waiting for model response');
+
+    // A late terminal view from the stopped turn cannot replace the newer turn.
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID, view_version: 2, activity: 'idle', turn_id: oldTurnID, last_outcome: 'cancelled',
+        items: [{ id: 'user:stopped', turn_id: oldTurnID, ordinal: 1, kind: 'user', text: 'Start the task' }],
+      },
+    });
+    await waitFor(() => runtime.textContent?.includes('请继续') === true);
+    expect(runtime.querySelector('[data-flower-live-progress-run-id="turn-continued"]')).not.toBeNull();
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID, view_version: 4, activity: 'active', turn_id: newTurnID,
+        items: [
+          { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
+          { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step', live: true },
+        ],
+      },
+    });
+    await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting the next step') === true);
+    expect(runtime.querySelector('.flower-live-progress-placeholder')).toBeNull();
+    expect(runtime.textContent).toContain('Thinking');
+
+    const toolActivity = {
+      item_id: 'tool:continued', tool_id: 'tool:continued', tool_name: 'file.write', kind: 'tool',
+      status: 'running', severity: 'normal', needs_attention: false, requires_approval: false,
+      presentation: {
+        label: 'weather_gd.py', renderer: 'file',
+        chips: [
+          { kind: 'operation', label: 'operation', value: 'write' },
+          { kind: 'display_name', label: 'display name', value: 'weather_gd.py' },
+          { kind: 'change_type', label: 'create' },
+        ],
+        payload: { operation: 'write', display_name: 'weather_gd.py', change_type: 'create' },
+      },
+    };
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID, view_version: 5, activity: 'active', turn_id: newTurnID,
+        items: [
+          { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
+          { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
+          { id: 'tool:continued', turn_id: newTurnID, ordinal: 3, kind: 'tool', activity: toolActivity },
+        ],
+      },
+    });
+    await waitFor(() => runtime.querySelector('[data-flower-activity-item-id="tool:continued"]') !== null);
+    const toolRow = runtime.querySelector('[data-flower-activity-item-id="tool:continued"]') as HTMLElement;
+    expect(toolRow.textContent).toContain('Edit');
+    expect(toolRow.textContent).toContain('weather_gd.py');
+    expect(toolRow.textContent).not.toContain('operation write');
+    expect(toolRow.textContent).not.toContain('display name');
+    expect(runtime.textContent).toContain('Using a tool');
+
+    const assistantCurrent = (version: number, text: string): FlowerLiveStreamEnvelope => ({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID, view_version: version, activity: 'active', turn_id: newTurnID,
+        items: [
+          { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
+          { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
+          { id: 'tool:continued', turn_id: newTurnID, ordinal: 3, kind: 'tool', activity: { ...toolActivity, status: 'success' } },
+          { id: 'assistant:continued', turn_id: newTurnID, ordinal: 4, kind: 'assistant', text, live: true },
+        ],
+      },
+    });
+    stream.push(assistantCurrent(6, 'Weather data'));
+    await waitFor(() => runtime.textContent?.includes('Weather data') === true);
+    expect(runtime.textContent).toContain('Writing the reply');
+    stream.push(assistantCurrent(7, 'Weather data is ready'));
+    await waitFor(() => runtime.textContent?.includes('Weather data is ready') === true);
+
+    expect(stopThread).toHaveBeenCalledTimes(1);
+    expect(connectLiveStream).toHaveBeenCalledTimes(1);
+    expect(loadThread).toHaveBeenCalledTimes(1);
+  });
+
   it('shows list loading state until an authoritative empty response arrives', async () => {
     const listResponse = deferred<ReturnType<typeof thread>[]>();
     const runtime = renderSurfaceWithAdapter({

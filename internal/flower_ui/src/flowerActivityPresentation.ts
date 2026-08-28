@@ -453,6 +453,8 @@ function displayNameFromPayload(payload: Readonly<Record<string, unknown>> | und
   return displayFileName(label);
 }
 
+const FILE_TITLE_CHIP_KINDS = new Set(['operation', 'display_name', 'change_type']);
+
 function actionFromPayload(
   payload: Readonly<Record<string, unknown>> | undefined,
   verb: 'Read' | 'Edit' | 'Delete',
@@ -483,19 +485,20 @@ function titleText(title: FlowerActivityTitle): string {
   }
 }
 
-function chipText(item: FlowerActivityItem): readonly string[] {
+function chipText(item: FlowerActivityItem, hiddenKinds?: ReadonlySet<string>): readonly string[] {
   return (item.chips ?? []).map((chip) => {
+    if (hiddenKinds?.has(trimString(chip.kind))) return '';
     const label = trimString(chip.label);
     const value = trimString(chip.value);
     return value ? `${label} ${value}` : label;
   }).filter(Boolean);
 }
 
-function metaForItem(item: FlowerActivityItem): string {
+function metaForItem(item: FlowerActivityItem, hiddenChipKinds?: ReadonlySet<string>): string {
   const desc = trimString(item.description);
   const parts = [
     ...(isApprovalLifecycleText(desc) ? [] : [desc]),
-    ...chipText(item),
+    ...chipText(item, hiddenChipKinds),
   ].filter(Boolean);
   return Array.from(new Set(parts)).join(' · ');
 }
@@ -1004,7 +1007,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, verb === 'Read' ? '' : metaForItem(item)),
+    meta: metaWithError(item, verb === 'Read' ? '' : metaForItem(item, FILE_TITLE_CHIP_KINDS)),
     primaryAction: action,
     detailLines: statusLines,
     detailBlocks,
@@ -1028,7 +1031,7 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, [diffStatsMeta(files), metaForItem(item)].filter(Boolean).join(' · ')),
+    meta: metaWithError(item, [diffStatsMeta(files), metaForItem(item, FILE_TITLE_CHIP_KINDS)].filter(Boolean).join(' · ')),
     ...(files.length === 1 ? { primaryAction: files[0].action } : {}),
     detailLines: statusLines,
     detailBlocks,

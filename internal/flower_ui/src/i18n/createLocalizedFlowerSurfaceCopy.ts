@@ -235,6 +235,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         retrying: t(i18n, k('chat.modelStatusRetrying')),
         finalizing: t(i18n, k('chat.modelStatusFinalizing')),
       },
+      liveProgressTool: t(i18n, k('chat.liveProgressTool')),
+      liveProgressOutput: t(i18n, k('chat.liveProgressOutput')),
       contextIndicator: {
         label: t(i18n, k('chat.contextIndicatorLabel')),
         stable: t(i18n, k('chat.contextIndicatorStable')),
