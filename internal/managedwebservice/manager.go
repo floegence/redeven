@@ -213,8 +213,7 @@ func (m *Manager) defaultWorkspacePath(serviceFamilyID string) (string, error) {
 	if selectedRoot == "" {
 		return "", serviceError("WORKSPACE_UNAVAILABLE", "The Environment does not expose a writable root for managed-service workspaces.", 409, false, nil)
 	}
-	directoryName := builtInFamilyDirectoryName(serviceFamilyID)
-	return filepath.Join(selectedRoot, "Redeven Workspaces", "Managed Services", directoryName), nil
+	return filepath.Join(selectedRoot, "Redeven", "workspaces", "managed-services", serviceFamilyID), nil
 }
 
 func (m *Manager) prepareDefaultWorkspace(serviceFamilyID string) (string, error) {
