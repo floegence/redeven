@@ -18,16 +18,18 @@ describe('LauncherOperationRegistry', () => {
       title: 'Starting',
       detail: 'Starting runtime.',
     });
-    expect(() => registry.create({
-      operation_key: 'runtime-a',
-      action: 'stop_environment_runtime',
-      active_progress_surface: 'runtime_lifecycle',
-      subject_kind: 'local_environment',
-      subject_id: 'local',
-      phase: 'stopping',
-      title: 'Stopping',
-      detail: 'Stopping runtime.',
-    })).toThrow(LauncherOperationConflictError);
+    expect(() =>
+      registry.create({
+        operation_key: 'runtime-a',
+        action: 'stop_environment_runtime',
+        active_progress_surface: 'runtime_lifecycle',
+        subject_kind: 'local_environment',
+        subject_id: 'local',
+        phase: 'stopping',
+        title: 'Stopping',
+        detail: 'Stopping runtime.',
+      }),
+    ).toThrow(LauncherOperationConflictError);
   });
 
   it('treats needs_confirmation as terminal and releases the operation key', () => {
@@ -42,24 +44,31 @@ describe('LauncherOperationRegistry', () => {
       title: 'Checking Runtime processes',
       detail: 'Desktop is checking Runtime processes.',
     });
-    registry.finishCurrentAttempt(operation.operation_key, {
-      action: operation.action,
-      started_at_unix_ms: operation.started_at_unix_ms,
-    }, 'needs_confirmation', {
-      title: 'Runtime operation confirmation required',
-      detail: 'Review the verified Runtime processes.',
-    });
+    registry.finishCurrentAttempt(
+      operation.operation_key,
+      {
+        action: operation.action,
+        started_at_unix_ms: operation.started_at_unix_ms,
+      },
+      'needs_confirmation',
+      {
+        title: 'Runtime operation confirmation required',
+        detail: 'Review the verified Runtime processes.',
+      },
+    );
     expect(registry.get(operation.operation_key)?.status).toBe('needs_confirmation');
-    expect(() => registry.create({
-      operation_key: operation.operation_key,
-      action: 'restart_environment_runtime',
-      active_progress_surface: 'runtime_lifecycle',
-      subject_kind: 'local_environment',
-      subject_id: 'local',
-      phase: 'checking_existing_runtime',
-      title: 'Checking Runtime',
-      detail: 'Desktop is checking the Runtime.',
-    })).not.toThrow();
+    expect(() =>
+      registry.create({
+        operation_key: operation.operation_key,
+        action: 'restart_environment_runtime',
+        active_progress_surface: 'runtime_lifecycle',
+        subject_kind: 'local_environment',
+        subject_id: 'local',
+        phase: 'checking_existing_runtime',
+        title: 'Checking Runtime',
+        detail: 'Desktop is checking the Runtime.',
+      }),
+    ).not.toThrow();
   });
 
   it('does not clear an unrelated explicit presentation key', () => {
@@ -80,18 +89,22 @@ describe('LauncherOperationRegistry', () => {
     const detailChanged = registry.update(operation.operation_key, {
       detail: 'Checking Gateway trust.',
     });
-    expect(detailChanged).toEqual(expect.objectContaining({
-      title_key: 'progress.checkingGateway',
-      detail_key: undefined,
-    }));
+    expect(detailChanged).toEqual(
+      expect.objectContaining({
+        title_key: 'progress.checkingGateway',
+        detail_key: undefined,
+      }),
+    );
 
     const titleChanged = registry.update(operation.operation_key, {
       title: 'Gateway checked',
     });
-    expect(titleChanged).toEqual(expect.objectContaining({
-      title_key: undefined,
-      detail_key: undefined,
-    }));
+    expect(titleChanged).toEqual(
+      expect.objectContaining({
+        title_key: undefined,
+        detail_key: undefined,
+      }),
+    );
   });
 
   it('preserves the renderer-owned attempt identity exactly', () => {
@@ -135,16 +148,18 @@ describe('LauncherOperationRegistry', () => {
       step_progress: reinstallTargetStepProgress('direct_channel_open'),
     });
 
-    expect(operation.step_progress?.steps.find((step) => step.id === 'direct_channel_open'))
-      .toEqual(expect.objectContaining({ started_at_unix_ms: 1_000 }));
+    expect(operation.step_progress?.steps.find((step) => step.id === 'direct_channel_open')).toEqual(
+      expect.objectContaining({ started_at_unix_ms: 1_000 }),
+    );
 
     now.mockReturnValue(6_000);
     registry.update(operation.operation_key, {
       detail: 'Desktop is still opening the direct channel.',
       step_progress: reinstallTargetStepProgress('direct_channel_open'),
     });
-    expect(registry.get(operation.operation_key)?.step_progress?.steps.find((step) => step.id === 'direct_channel_open'))
-      .toEqual(expect.objectContaining({ started_at_unix_ms: 1_000 }));
+    expect(
+      registry.get(operation.operation_key)?.step_progress?.steps.find((step) => step.id === 'direct_channel_open'),
+    ).toEqual(expect.objectContaining({ started_at_unix_ms: 1_000 }));
 
     now.mockReturnValue(9_000);
     registry.update(operation.operation_key, {
@@ -153,10 +168,12 @@ describe('LauncherOperationRegistry', () => {
       step_progress: reinstallTargetStepProgress('target_resolved'),
     });
     const progress = registry.progressItems()[0]?.step_progress;
-    expect(progress?.steps.find((step) => step.id === 'direct_channel_open'))
-      .toEqual(expect.objectContaining({ started_at_unix_ms: 1_000 }));
-    expect(progress?.steps.find((step) => step.id === 'target_resolved'))
-      .toEqual(expect.objectContaining({ started_at_unix_ms: 9_000 }));
+    expect(progress?.steps.find((step) => step.id === 'direct_channel_open')).toEqual(
+      expect.objectContaining({ started_at_unix_ms: 1_000 }),
+    );
+    expect(progress?.steps.find((step) => step.id === 'target_resolved')).toEqual(
+      expect.objectContaining({ started_at_unix_ms: 9_000 }),
+    );
   });
 
   it('derives presentation and cancellation only from the active surface', () => {
@@ -193,17 +210,21 @@ describe('LauncherOperationRegistry', () => {
       title: 'Opening environment',
       detail: 'Desktop resumed the parent Open workflow.',
     });
-    expect(open).toEqual(expect.objectContaining({
-      title_key: 'progress.titleCheckingRuntimeStatus',
-      detail_key: 'progress.detailCheckingRuntimeStatus',
-    }));
+    expect(open).toEqual(
+      expect.objectContaining({
+        title_key: 'progress.titleCheckingRuntimeStatus',
+        detail_key: 'progress.detailCheckingRuntimeStatus',
+      }),
+    );
 
     const canceled = registry.cancel(operation.operation_key, '');
-    expect(canceled).toEqual(expect.objectContaining({
-      phase: 'open_connection_canceling',
-      title_key: 'progress.titleStoppingOpen',
-      detail_key: 'progress.detailStoppingOpen',
-    }));
+    expect(canceled).toEqual(
+      expect.objectContaining({
+        phase: 'open_connection_canceling',
+        title_key: 'progress.titleStoppingOpen',
+        detail_key: 'progress.detailStoppingOpen',
+      }),
+    );
   });
 
   afterEach(() => {
@@ -315,9 +336,7 @@ describe('LauncherOperationRegistry', () => {
         phase: 'checking_container',
         targetID,
         targetLabel: 'Dev Container',
-        stepStates: [
-          { id: 'checking_container', status: 'running' },
-        ],
+        stepStates: [{ id: 'checking_container', status: 'running' }],
       }),
       cancelable: true,
       interrupt_label: 'Stop startup',
@@ -327,11 +346,13 @@ describe('LauncherOperationRegistry', () => {
     expect(registry.progressItems()).toHaveLength(1);
     expect(update.status).toBe('running');
     expect(update.action).toBe('update_environment_runtime');
-    expect(update.lifecycle_progress).toEqual(expect.objectContaining({
-      operation: 'update',
-      active_step_id: 'checking_container',
-      plan_state: 'executing',
-    }));
+    expect(update.lifecycle_progress).toEqual(
+      expect.objectContaining({
+        operation: 'update',
+        active_step_id: 'checking_container',
+        plan_state: 'executing',
+      }),
+    );
     expect(update.lifecycle_progress?.steps.map((step) => [step.id, step.status])).toEqual([
       ['checking_container', 'running'],
     ]);
@@ -385,14 +406,18 @@ describe('LauncherOperationRegistry', () => {
       detail: 'Desktop is starting the local runtime process.',
     });
 
-    expect(registry.get(operationKey)).toEqual(expect.objectContaining({
-      presentation_context: 'flower_warmup',
-      phase: 'starting_runtime_process',
-    }));
-    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
-      presentation_context: 'flower_warmup',
-      phase: 'starting_runtime_process',
-    }));
+    expect(registry.get(operationKey)).toEqual(
+      expect.objectContaining({
+        presentation_context: 'flower_warmup',
+        phase: 'starting_runtime_process',
+      }),
+    );
+    expect(registry.progressItems()[0]).toEqual(
+      expect.objectContaining({
+        presentation_context: 'flower_warmup',
+        phase: 'starting_runtime_process',
+      }),
+    );
     expect(changed).toEqual([
       `${operationKey}:flower_warmup:checking_existing_runtime`,
       `${operationKey}:flower_warmup:starting_runtime_process`,
@@ -454,46 +479,58 @@ describe('LauncherOperationRegistry', () => {
       started_at_unix_ms: second.started_at_unix_ms,
     };
 
-    expect(registry.updateCurrentAttempt(operationKey, staleAttempt, {
-      phase: 'checking_runtime_service',
-      title: 'Runtime ready',
-      detail: 'A stale ready check completed late.',
-      lifecycle_progress: runtimeLifecycleProgress({
-        location: 'local_host',
-        operation: 'start',
+    expect(
+      registry.updateCurrentAttempt(operationKey, staleAttempt, {
         phase: 'checking_runtime_service',
-        targetID: operationKey,
-        targetLabel: 'Dev',
+        title: 'Runtime ready',
+        detail: 'A stale ready check completed late.',
+        lifecycle_progress: runtimeLifecycleProgress({
+          location: 'local_host',
+          operation: 'start',
+          phase: 'checking_runtime_service',
+          targetID: operationKey,
+          targetLabel: 'Dev',
+        }),
       }),
-    })).toBeNull();
-    expect(registry.finishCurrentAttempt(operationKey, staleAttempt, 'succeeded', {
-      phase: 'runtime_ready',
-      title: 'Runtime ready',
-      detail: 'A stale ready check finished late.',
-    })).toBeNull();
+    ).toBeNull();
+    expect(
+      registry.finishCurrentAttempt(operationKey, staleAttempt, 'succeeded', {
+        phase: 'runtime_ready',
+        title: 'Runtime ready',
+        detail: 'A stale ready check finished late.',
+      }),
+    ).toBeNull();
 
     const current = registry.get(operationKey);
-    expect(current).toEqual(expect.objectContaining({
-      action: 'update_environment_runtime',
-      active_progress_surface: 'runtime_lifecycle',
-      started_at_unix_ms: second.started_at_unix_ms,
-      status: 'running',
-      phase: 'checking_existing_runtime',
-    }));
-    expect(current?.lifecycle_progress).toEqual(expect.objectContaining({
-      operation: 'update',
-      active_step_id: 'checking_existing_runtime',
-    }));
+    expect(current).toEqual(
+      expect.objectContaining({
+        action: 'update_environment_runtime',
+        active_progress_surface: 'runtime_lifecycle',
+        started_at_unix_ms: second.started_at_unix_ms,
+        status: 'running',
+        phase: 'checking_existing_runtime',
+      }),
+    );
+    expect(current?.lifecycle_progress).toEqual(
+      expect.objectContaining({
+        operation: 'update',
+        active_step_id: 'checking_existing_runtime',
+      }),
+    );
 
-    expect(registry.updateCurrentAttempt(operationKey, currentAttempt, {
-      phase: 'checking_runtime_service',
-      title: 'Checking service',
-      detail: 'The active update attempt is checking the runtime service.',
-    })).toEqual(expect.objectContaining({
-      action: 'update_environment_runtime',
-      active_progress_surface: 'runtime_lifecycle',
-      phase: 'checking_runtime_service',
-    }));
+    expect(
+      registry.updateCurrentAttempt(operationKey, currentAttempt, {
+        phase: 'checking_runtime_service',
+        title: 'Checking service',
+        detail: 'The active update attempt is checking the runtime service.',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        action: 'update_environment_runtime',
+        active_progress_surface: 'runtime_lifecycle',
+        phase: 'checking_runtime_service',
+      }),
+    );
   });
 
   it('gives same-key same-action attempts distinct identities within one millisecond', () => {
@@ -543,19 +580,27 @@ describe('LauncherOperationRegistry', () => {
     });
 
     expect(second.started_at_unix_ms).toBeGreaterThan(first.started_at_unix_ms);
-    expect(registry.updateCurrentAttempt(operationKey, {
-      action: first.action,
-      started_at_unix_ms: first.started_at_unix_ms,
-    }, {
-      phase: 'checking_runtime_service',
-      title: 'Runtime ready',
-      detail: 'A stale same-action update completed late.',
-    })).toBeNull();
-    expect(registry.get(operationKey)).toEqual(expect.objectContaining({
-      action: second.action,
-      started_at_unix_ms: second.started_at_unix_ms,
-      phase: 'checking_existing_runtime',
-    }));
+    expect(
+      registry.updateCurrentAttempt(
+        operationKey,
+        {
+          action: first.action,
+          started_at_unix_ms: first.started_at_unix_ms,
+        },
+        {
+          phase: 'checking_runtime_service',
+          title: 'Runtime ready',
+          detail: 'A stale same-action update completed late.',
+        },
+      ),
+    ).toBeNull();
+    expect(registry.get(operationKey)).toEqual(
+      expect.objectContaining({
+        action: second.action,
+        started_at_unix_ms: second.started_at_unix_ms,
+        phase: 'checking_existing_runtime',
+      }),
+    );
   });
 
   it('bumps subject generation on delete and marks matching operations stale', () => {
@@ -578,7 +623,11 @@ describe('LauncherOperationRegistry', () => {
           { id: 'checking_runtime_package', status: 'succeeded' },
           { id: 'detecting_platform', status: 'succeeded' },
           { id: 'preparing_runtime_package', status: 'succeeded' },
-          { id: 'installing_runtime_package', status: 'running', detail: 'Uploading.' },
+          {
+            id: 'installing_runtime_package',
+            status: 'running',
+            detail: 'Uploading.',
+          },
         ],
       }),
       cancelable: true,
@@ -592,16 +641,18 @@ describe('LauncherOperationRegistry', () => {
     });
 
     expect(touched).toHaveLength(1);
-    expect(touched[0]).toEqual(expect.objectContaining({
-      operation_key: operation.operation_key,
-      deleted_subject: true,
-      status: 'canceling',
-      lifecycle_progress: expect.objectContaining({
-        location: 'ssh_host',
-        phase: 'installing_runtime_package',
-        active_step_id: 'installing_runtime_package',
+    expect(touched[0]).toEqual(
+      expect.objectContaining({
+        operation_key: operation.operation_key,
+        deleted_subject: true,
+        status: 'canceling',
+        lifecycle_progress: expect.objectContaining({
+          location: 'ssh_host',
+          phase: 'installing_runtime_package',
+          active_step_id: 'installing_runtime_package',
+        }),
       }),
-    }));
+    );
     expect(touched[0]?.lifecycle_progress?.steps.map((step) => [step.id, step.status, step.detail ?? ''])).toEqual([
       ['checking_host', 'succeeded', ''],
       ['checking_runtime_package', 'succeeded', ''],
@@ -636,27 +687,105 @@ describe('LauncherOperationRegistry', () => {
     const canceled = registry.cancel(operation.operation_key, 'User canceled SSH startup.');
 
     expect(signal?.aborted).toBe(true);
-    expect(canceled).toEqual(expect.objectContaining({
-      status: 'canceling',
-      cancelable: false,
-      phase: 'runtime_lifecycle_canceling',
-      title: 'Stopping runtime startup',
-      lifecycle_progress: expect.objectContaining({
-        phase: 'checking_runtime_service',
-        active_step_id: 'checking_runtime_service',
+    expect(canceled).toEqual(
+      expect.objectContaining({
+        status: 'canceling',
+        cancelable: false,
+        phase: 'runtime_lifecycle_canceling',
+        title: 'Stopping runtime startup',
+        lifecycle_progress: expect.objectContaining({
+          phase: 'checking_runtime_service',
+          active_step_id: 'checking_runtime_service',
+        }),
+        interrupt_label: undefined,
+        interrupt_kind: undefined,
       }),
-      interrupt_label: undefined,
-      interrupt_kind: undefined,
-    }));
+    );
     registry.finish(operation.operation_key, 'canceled', {
       phase: 'canceled',
       title: 'Startup canceled',
       detail: 'Desktop stopped the SSH runtime startup.',
     });
-    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
-      status: 'canceled',
-      title: 'Startup canceled',
-    }));
+    expect(registry.progressItems()[0]).toEqual(
+      expect.objectContaining({
+        status: 'canceled',
+        title: 'Startup canceled',
+      }),
+    );
+  });
+
+  it.each([
+    {
+      action: 'update_environment_runtime' as const,
+      title: 'Canceling Runtime update',
+      titleKey: 'progress.titleStoppingRuntimeUpdate',
+      detailKey: 'progress.detailStoppingRuntimeUpdate',
+    },
+    {
+      action: 'restart_environment_runtime' as const,
+      title: 'Canceling Runtime restart',
+      titleKey: 'progress.titleStoppingRuntimeRestart',
+      detailKey: 'progress.detailStoppingRuntimeRestart',
+    },
+  ])('uses action-specific cancellation copy for $action', ({ action, title, titleKey, detailKey }) => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: `local:${action}`,
+      action,
+      active_progress_surface: 'runtime_lifecycle',
+      subject_kind: 'runtime_target',
+      subject_id: 'local:local',
+      environment_id: 'local',
+      phase: 'checking_existing_runtime',
+      title: 'Running lifecycle operation',
+      detail: 'Working.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        operation: action === 'update_environment_runtime' ? 'update' : 'restart',
+        phase: 'checking_existing_runtime',
+        targetLabel: 'Local Environment',
+      }),
+      cancelable: true,
+    });
+
+    expect(registry.cancel(operation.operation_key, 'Technical abort reason.')).toEqual(
+      expect.objectContaining({
+        status: 'canceling',
+        title,
+        title_key: titleKey,
+        detail_key: detailKey,
+      }),
+    );
+  });
+
+  it('keeps composite Runtime recovery cancellation on the parent Open timeline', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'ssh:los:open',
+      action: 'open_ssh_environment',
+      active_progress_surface: 'runtime_lifecycle',
+      subject_kind: 'runtime_target',
+      subject_id: 'ssh:los',
+      environment_id: 'los',
+      phase: 'checking_existing_runtime',
+      title: 'Updating Runtime',
+      detail: 'Desktop is updating the Runtime before opening.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_host',
+        operation: 'update',
+        phase: 'checking_existing_runtime',
+        targetLabel: 'los',
+      }),
+      cancelable: true,
+    });
+
+    expect(registry.cancel(operation.operation_key, 'Cancel Open.')).toEqual(
+      expect.objectContaining({
+        phase: 'open_connection_canceling',
+        title_key: 'progress.titleStoppingOpen',
+        detail_key: 'progress.detailStoppingOpen',
+      }),
+    );
   });
 
   it('does not abort an operation after it enters a non-cancelable mutation stage', () => {
@@ -680,11 +809,13 @@ describe('LauncherOperationRegistry', () => {
 
     expect(signal?.aborted).toBe(false);
     expect(canceled).toBeNull();
-    expect(registry.get(operation.operation_key)).toEqual(expect.objectContaining({
-      status: 'running',
-      cancelable: false,
-      deleted_subject: true,
-    }));
+    expect(registry.get(operation.operation_key)).toEqual(
+      expect.objectContaining({
+        status: 'running',
+        cancelable: false,
+        deleted_subject: true,
+      }),
+    );
   });
 
   it('carries structured failure presentation without rewriting it', () => {
@@ -705,11 +836,13 @@ describe('LauncherOperationRegistry', () => {
       severity: 'error' as const,
       title: 'SSH Connection Failed',
       summary: 'SSH connection to "dify" failed.',
-      diagnostics: [{
-        channel: 'control_stderr',
-        label: 'SSH command stderr',
-        text: 'ssh: Could not resolve hostname dify',
-      }],
+      diagnostics: [
+        {
+          channel: 'control_stderr',
+          label: 'SSH command stderr',
+          text: 'ssh: Could not resolve hostname dify',
+        },
+      ],
     };
 
     registry.finish(operation.operation_key, 'failed', {
@@ -746,19 +879,21 @@ describe('LauncherOperationRegistry', () => {
       phase: 'failed',
       title: 'Runtime update failed',
       detail: 'Desktop could not update the runtime.',
-      next_actions: [{
-        kind: 'dismiss',
-        operation_key: operation.operation_key,
-        label: 'Dismiss',
-      }],
+      next_actions: [
+        {
+          kind: 'dismiss',
+          operation_key: operation.operation_key,
+          label: 'Dismiss',
+        },
+      ],
     });
 
-    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
-      status: 'failed',
-      next_actions: expect.arrayContaining([
-        expect.objectContaining({ kind: 'dismiss' }),
-      ]),
-    }));
+    expect(registry.progressItems()[0]).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        next_actions: expect.arrayContaining([expect.objectContaining({ kind: 'dismiss' })]),
+      }),
+    );
   });
 
   it('preserves failed Open operation next actions in the durable progress contract', () => {
@@ -808,25 +943,49 @@ describe('LauncherOperationRegistry', () => {
       ],
     });
 
-    expect(registry.operations()[0]).toEqual(expect.objectContaining({
-      status: 'failed',
-      next_actions: [
-        expect.objectContaining({ kind: 'refresh_status', environment_id: 'local' }),
-        expect.objectContaining({ kind: 'copy_diagnostics', operation_key: operation.operation_key }),
-        expect.objectContaining({ kind: 'dismiss', operation_key: operation.operation_key }),
-      ],
-    }));
-    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
-      status: 'failed',
-      title_key: 'progress.openFailed',
-      detail_key: undefined,
-      open_progress: expect.objectContaining({ phase: 'checking_runtime_record' }),
-      next_actions: [
-        expect.objectContaining({ kind: 'refresh_status', environment_id: 'local' }),
-        expect.objectContaining({ kind: 'copy_diagnostics', operation_key: operation.operation_key }),
-        expect.objectContaining({ kind: 'dismiss', operation_key: operation.operation_key }),
-      ],
-    }));
+    expect(registry.operations()[0]).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        next_actions: [
+          expect.objectContaining({
+            kind: 'refresh_status',
+            environment_id: 'local',
+          }),
+          expect.objectContaining({
+            kind: 'copy_diagnostics',
+            operation_key: operation.operation_key,
+          }),
+          expect.objectContaining({
+            kind: 'dismiss',
+            operation_key: operation.operation_key,
+          }),
+        ],
+      }),
+    );
+    expect(registry.progressItems()[0]).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        title_key: 'progress.openFailed',
+        detail_key: undefined,
+        open_progress: expect.objectContaining({
+          phase: 'checking_runtime_record',
+        }),
+        next_actions: [
+          expect.objectContaining({
+            kind: 'refresh_status',
+            environment_id: 'local',
+          }),
+          expect.objectContaining({
+            kind: 'copy_diagnostics',
+            operation_key: operation.operation_key,
+          }),
+          expect.objectContaining({
+            kind: 'dismiss',
+            operation_key: operation.operation_key,
+          }),
+        ],
+      }),
+    );
   });
 
   it('retains the real Open step when an operation fails', () => {
@@ -857,16 +1016,18 @@ describe('LauncherOperationRegistry', () => {
       detail: 'The container was not found.',
     });
 
-    expect(failed).toEqual(expect.objectContaining({
-      status: 'failed',
-      title_key: 'progress.openFailed',
-      detail_key: undefined,
-      open_progress: expect.objectContaining({
-        phase: 'starting_container_bridge',
-        stage_index: 4,
-        stage_count: 10,
+    expect(failed).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        title_key: 'progress.openFailed',
+        detail_key: undefined,
+        open_progress: expect.objectContaining({
+          phase: 'starting_container_bridge',
+          stage_index: 4,
+          stage_count: 10,
+        }),
       }),
-    }));
+    );
   });
 
   it('does not relabel a failed Runtime operation as its last lifecycle step', () => {
@@ -921,17 +1082,19 @@ describe('LauncherOperationRegistry', () => {
       cancelable: true,
     });
 
-    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
-      operation_key: operation.operation_key,
-      action: 'open_provider_environment',
-      active_progress_surface: 'open',
-      subject_kind: 'provider_environment',
-      status: 'running',
-      open_progress: expect.objectContaining({
-        location: 'provider_remote',
-        phase: 'opening_window',
+    expect(registry.progressItems()[0]).toEqual(
+      expect.objectContaining({
+        operation_key: operation.operation_key,
+        action: 'open_provider_environment',
+        active_progress_surface: 'open',
+        subject_kind: 'provider_environment',
+        status: 'running',
+        open_progress: expect.objectContaining({
+          location: 'provider_remote',
+          phase: 'opening_window',
+        }),
       }),
-    }));
+    );
   });
 
   it('records launcher Open phase transitions and final elapsed time', () => {

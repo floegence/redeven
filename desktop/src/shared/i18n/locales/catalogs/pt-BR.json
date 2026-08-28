@@ -1638,6 +1638,8 @@
     "retryInitialization": "Tentar inicialização novamente",
     "reinstallRedevenWipeData": "Apagar os dados e reinstalar o Redeven",
     "reinstallRedevenKeepData": "Reinstalar o Redeven e manter os dados",
+    "blockedByActiveOperation": "{operation} está em andamento. Conclua ou cancele a operação antes de executar {action}.",
+    "waitForOperationAcceptance": "A operação atual está iniciando. Aguarde antes de executar {action}.",
     "disconnectLegacyControlPlane": "Desconectar vínculo legado do plano de controle"
   },
   "environmentFacts": {
@@ -1809,6 +1811,10 @@
     "detailCancelingDeletedConnection": "Desktop está interrompendo a tarefa de inicialização desta conexão excluída.",
     "titleStoppingRuntimeStartup": "Interrupção da inicialização do tempo de execução",
     "detailStoppingRuntimeStartup": "Desktop está interrompendo a inicialização do tempo de execução e limpando recursos já criados.",
+    "titleStoppingRuntimeUpdate": "Cancelando a atualização do ambiente de execução",
+    "detailStoppingRuntimeUpdate": "Desktop está cancelando a atualização do ambiente de execução e limpando os recursos já criados.",
+    "titleStoppingRuntimeRestart": "Cancelando a reinicialização do ambiente de execução",
+    "detailStoppingRuntimeRestart": "Desktop está cancelando a reinicialização do ambiente de execução e limpando os recursos já criados.",
     "titleStoppingOpen": "Interrompendo abertura",
     "detailStoppingOpen": "Desktop está interrompendo a configuração da conexão e limpando recursos locais já criados.",
     "titleStoppingOperation": "Interrompendo operação",

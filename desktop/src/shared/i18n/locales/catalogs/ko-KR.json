@@ -1634,6 +1634,8 @@
     "retryInitialization": "초기화 다시 시도",
     "reinstallRedevenWipeData": "데이터를 삭제하고 Redeven 재설치",
     "reinstallRedevenKeepData": "데이터를 보존하고 Redeven 재설치",
+    "blockedByActiveOperation": "{operation} 작업이 진행 중입니다. 완료하거나 취소한 후 {action} 작업을 실행하세요.",
+    "waitForOperationAcceptance": "현재 작업을 시작하고 있습니다. 잠시 후 {action} 작업을 실행하세요.",
     "disconnectLegacyControlPlane": "레거시 제어 플레인 연결 해제"
   },
   "environmentFacts": {
@@ -1805,6 +1807,10 @@
     "detailCancelingDeletedConnection": "Desktop이 삭제된 연결의 시작 작업을 중지하고 있습니다.",
     "titleStoppingRuntimeStartup": "런타임 시작 중지",
     "detailStoppingRuntimeStartup": "Desktop가 런타임 시작을 중지하고 이미 생성된 리소스를 정리하고 있습니다.",
+    "titleStoppingRuntimeUpdate": "런타임 업데이트 취소 중",
+    "detailStoppingRuntimeUpdate": "Desktop이 런타임 업데이트를 취소하고 이미 생성된 리소스를 정리하고 있습니다.",
+    "titleStoppingRuntimeRestart": "런타임 재시작 취소 중",
+    "detailStoppingRuntimeRestart": "Desktop이 런타임 재시작을 취소하고 이미 생성된 리소스를 정리하고 있습니다.",
     "titleStoppingOpen": "Open 중지 중",
     "detailStoppingOpen": "Desktop이 연결 설정을 중지하고 이미 생성된 로컬 리소스를 정리하고 있습니다.",
     "titleStoppingOperation": "작업 중지 중",

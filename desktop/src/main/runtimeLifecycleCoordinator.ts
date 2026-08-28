@@ -1,9 +1,6 @@
 import path from 'node:path';
 
-import {
-  type DesktopRuntimeHostAccess,
-  type DesktopRuntimePlacement,
-} from '../shared/desktopRuntimePlacement';
+import { type DesktopRuntimeHostAccess, type DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
 import { desktopSSHAuthority } from '../shared/desktopSSH';
 
 export type RuntimeLifecycleIntent = 'open' | 'start' | 'stop' | 'restart' | 'update' | 'refresh' | 'reinstall';
@@ -16,24 +13,27 @@ export type RuntimeLifecycleOperationSnapshot = Readonly<{
   started_at_unix_ms: number;
 }>;
 
-type ActiveRuntimeLifecycleOperation = RuntimeLifecycleOperationSnapshot & Readonly<{
-  token: symbol;
-  task: Promise<unknown>;
-  controller: AbortController;
-  detachInputSignal: () => void;
-}>;
+type ActiveRuntimeLifecycleOperation = RuntimeLifecycleOperationSnapshot &
+  Readonly<{
+    token: symbol;
+    task: Promise<unknown>;
+    controller: AbortController;
+    detachInputSignal: () => void;
+  }>;
 
 export class RuntimeLifecycleInProgressError extends Error {
   readonly code = 'runtime_lifecycle_in_progress';
 
   constructor(readonly active_operation: RuntimeLifecycleOperationSnapshot) {
-    super(active_operation.intent === 'stop'
-      ? 'The Runtime is stopping and cannot be started or opened until shutdown finishes.'
-      : active_operation.intent === 'reinstall'
-        ? 'Redeven is being reinstalled and cannot be started or opened until reinstall finishes.'
-        : active_operation.intent === 'open'
-          ? 'Desktop is opening this Runtime target. Wait for Open to finish before changing its lifecycle.'
-        : `Runtime lifecycle operation ${active_operation.intent} is already in progress.`);
+    super(
+      active_operation.intent === 'stop'
+        ? 'The Runtime is stopping and cannot be started or opened until shutdown finishes.'
+        : active_operation.intent === 'reinstall'
+          ? 'Redeven is being reinstalled and cannot be started or opened until reinstall finishes.'
+          : active_operation.intent === 'open'
+            ? 'Desktop is opening this Runtime target. Wait for Open to finish before changing its lifecycle.'
+            : `Runtime lifecycle operation ${active_operation.intent} is already in progress.`,
+    );
     this.name = 'RuntimeLifecycleInProgressError';
   }
 }
@@ -64,16 +64,13 @@ function normalizedTargetRoot(
     return path.resolve(targetRoot);
   }
   const normalized = path.posix.normalize(targetRoot);
-  const isResolvedDefaultRemoteRoot = normalized === '/root/.redeven'
-    || normalized === '/var/root/.redeven'
-    || /^\/(?:home|Users)\/[^/]+\/\.redeven$/u.test(normalized);
+  const isResolvedDefaultRemoteRoot =
+    normalized === '/root/.redeven' ||
+    normalized === '/var/root/.redeven' ||
+    /^\/(?:home|Users)\/[^/]+\/\.redeven$/u.test(normalized);
   if (
-    (hostAccess.kind !== 'local_host' || placement.kind === 'container_process')
-    && (
-      normalized === 'remote_default'
-      || normalized === '~/.redeven'
-      || isResolvedDefaultRemoteRoot
-    )
+    (hostAccess.kind !== 'local_host' || placement.kind === 'container_process') &&
+    (normalized === 'remote_default' || normalized === '~/.redeven' || isResolvedDefaultRemoteRoot)
   ) {
     // The remote account resolves all default-root spellings. Using one
     // A stable process-local target identity prevents aliases from creating
@@ -161,11 +158,33 @@ export class RuntimeLifecycleCoordinator {
       .sort((left, right) => left.started_at_unix_ms - right.started_at_unix_ms);
   }
 
+  operationOwner(operationKeyValue: string): RuntimeLifecycleOperationSnapshot | null {
+    const operationKey = required(operationKeyValue, 'Runtime lifecycle operation key');
+    const owners = [...this.activeByTargetKey.values()].filter((operation) => operation.operation_key === operationKey);
+    if (owners.length > 1) {
+      throw new Error(`Runtime lifecycle operation ${operationKey} has multiple authoritative owners.`);
+    }
+    return owners[0] ? this.snapshot(owners[0]) : null;
+  }
+
+  requireOperationOwner(operationKeyValue: string): RuntimeLifecycleOperationSnapshot {
+    const owner = this.operationOwner(operationKeyValue);
+    if (!owner) {
+      throw new Error(
+        `Active Runtime Launcher Operation ${required(operationKeyValue, 'Runtime lifecycle operation key')} has no authoritative lifecycle owner.`,
+      );
+    }
+    return owner;
+  }
+
   async waitForIdle(targetKeyValue: string, timeoutMs = 30_000): Promise<boolean> {
     const active = this.activeByTargetKey.get(required(targetKeyValue, 'Runtime lifecycle target key'));
     if (!active) return true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const completed = active.task.then(() => true, () => true);
+    const completed = active.task.then(
+      () => true,
+      () => true,
+    );
     const timedOut = new Promise<boolean>((resolve) => {
       timer = setTimeout(() => resolve(false), Math.max(1, timeoutMs));
     });
@@ -178,47 +197,23 @@ export class RuntimeLifecycleCoordinator {
     await Promise.allSettled([...this.activeByTargetKey.values()].map((operation) => operation.task));
   }
 
-  async runWhenReady<T>(input: Readonly<{
-    target_key: string;
-    fingerprint: string;
-    operation_key: string;
-    signal?: AbortSignal;
-    execute: (context: Readonly<{ joined_ready_mutation: boolean }>) => Promise<T>;
-  }>): Promise<T> {
-    const key = required(input.target_key, 'Runtime lifecycle target key');
-    let joinedReadyMutation = false;
-    for (;;) {
-      const active = this.activeByTargetKey.get(key);
-      if (active) {
-        if (active.intent === 'stop' || active.intent === 'reinstall') {
-          throw new RuntimeLifecycleInProgressError(this.snapshot(active));
-        }
-        if (active.intent === 'open') {
-          if (active.fingerprint === input.fingerprint) {
-            return active.task as Promise<T>;
-          }
-          throw new RuntimeLifecycleInProgressError(this.snapshot(active));
-        }
-        await active.task;
-        joinedReadyMutation = true;
-        continue;
-      }
-      try {
-        return await this.run({
-          target_key: key,
-          intent: 'open',
-          fingerprint: input.fingerprint,
-          operation_key: input.operation_key,
-          signal: input.signal,
-          execute: () => input.execute({ joined_ready_mutation: joinedReadyMutation }),
-        });
-      } catch (error) {
-        if (error instanceof RuntimeLifecycleInProgressError) {
-          continue;
-        }
-        throw error;
-      }
-    }
+  runOpen<T>(
+    input: Readonly<{
+      target_key: string;
+      fingerprint: string;
+      operation_key: string;
+      signal?: AbortSignal;
+      execute: (signal: AbortSignal) => Promise<T>;
+    }>,
+  ): Promise<T> {
+    return this.run({
+      target_key: input.target_key,
+      intent: 'open',
+      fingerprint: input.fingerprint,
+      operation_key: input.operation_key,
+      signal: input.signal,
+      execute: input.execute,
+    });
   }
 
   cancel(targetKeyValue: string, reason?: unknown): RuntimeLifecycleOperationSnapshot | null {
@@ -233,9 +228,8 @@ export class RuntimeLifecycleCoordinator {
   }
 
   cancelByOperationKey(operationKeyValue: string, reason?: unknown): RuntimeLifecycleOperationSnapshot | null {
-    const operationKey = required(operationKeyValue, 'Runtime lifecycle operation key');
-    const active = [...this.activeByTargetKey.values()].find((operation) => operation.operation_key === operationKey);
-    return active ? this.cancel(active.target_key, reason) : null;
+    const owner = this.operationOwner(operationKeyValue);
+    return owner ? this.cancel(owner.target_key, reason) : null;
   }
 
   async waitForReadyMutation(targetKeyValue: string): Promise<RuntimeLifecycleOperationSnapshot | null> {
@@ -251,15 +245,17 @@ export class RuntimeLifecycleCoordinator {
     return this.snapshot(active);
   }
 
-  run<T>(input: Readonly<{
-    target_key: string;
-    intent: RuntimeLifecycleIntent;
-    fingerprint: string;
-    operation_key: string;
-    signal?: AbortSignal;
-    timeout_ms?: number;
-    execute: (signal: AbortSignal) => Promise<T>;
-  }>): Promise<T> {
+  run<T>(
+    input: Readonly<{
+      target_key: string;
+      intent: RuntimeLifecycleIntent;
+      fingerprint: string;
+      operation_key: string;
+      signal?: AbortSignal;
+      timeout_ms?: number;
+      execute: (signal: AbortSignal) => Promise<T>;
+    }>,
+  ): Promise<T> {
     const key = required(input.target_key, 'Runtime lifecycle target key');
     const fingerprint = required(input.fingerprint, 'Runtime lifecycle fingerprint');
     const operationKey = required(input.operation_key, 'Runtime lifecycle operation key');
@@ -277,16 +273,19 @@ export class RuntimeLifecycleCoordinator {
     this.lastStartedAtUnixMs = startedAtUnixMs;
     const controller = new AbortController();
     const timeoutMs = Number(input.timeout_ms);
-    const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
-      ? setTimeout(() => {
-          if (!controller.signal.aborted) {
-            controller.abort(new DOMException('Runtime lifecycle operation timed out.', 'TimeoutError'));
-          }
-        }, timeoutMs)
-      : undefined;
+    const timeout =
+      Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? setTimeout(() => {
+            if (!controller.signal.aborted) {
+              controller.abort(new DOMException('Runtime lifecycle operation timed out.', 'TimeoutError'));
+            }
+          }, timeoutMs)
+        : undefined;
     const abortFromInput = () => {
       if (!controller.signal.aborted) {
-        controller.abort(input.signal?.reason ?? new DOMException('Runtime lifecycle operation was canceled.', 'AbortError'));
+        controller.abort(
+          input.signal?.reason ?? new DOMException('Runtime lifecycle operation was canceled.', 'AbortError'),
+        );
       }
     };
     input.signal?.addEventListener('abort', abortFromInput, { once: true });

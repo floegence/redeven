@@ -308,7 +308,6 @@ import {
   failEnvironmentGuidanceIntent,
   guidanceSessionKeepsPopoverOpen,
   guidanceSessionNotice,
-  guidanceSessionOwnsOpenFlowPanel,
   guidanceSessionShouldAutoDismiss,
   isEnvironmentGuidancePendingIntent,
   openEnvironmentGuidanceSession,
@@ -328,12 +327,11 @@ import {
   closeEnvironmentLifecycleDisclosure,
   createEnvironmentLifecycleAttempt,
   environmentActionStartsLifecycleDisclosure,
-  environmentLifecycleDisclosureForEnvironment,
   environmentLifecycleDisclosureHasPendingRequest,
   focusEnvironmentLifecycleDisclosure,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
-  visibleEnvironmentLifecycleProgress,
+  isEnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureState,
   type EnvironmentLifecycleAttempt,
@@ -346,7 +344,6 @@ import {
   type EnvironmentProgressPrimaryPresentation,
   environmentProgressPanelPrimaryAction,
   environmentProgressPrimaryPresentation,
-  selectEnvironmentPanelProgress,
 } from './environmentProgressPrimaryPresentation';
 import {
   buildEnvironmentFlowerContextAction,
@@ -355,21 +352,19 @@ import {
 import {
   busyStateForLauncherRequest,
   busyStateWithActionProgress,
-  busyStateBlocksEnvironmentAction,
+  environmentOperationState,
   reconcileBusyStateWithActionProgressSnapshot,
-  launcherProgressBlocksPrimaryAction,
   busyStateMatchesAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
   busyStateMatchesGateway,
   IDLE_LAUNCHER_BUSY_STATE,
-  selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
-  selectedSnapshotReinstallTargetProgressForEnvironment,
   progressForEnvironmentFocusRequest,
   selectedFlowerWarmupProgress,
   gatewaySourceMatchesRuntimeLifecycleProgress,
   type DesktopLauncherBusyState,
+  type EnvironmentOperationState,
 } from './launcherBusyState';
 import {
   buildGatewayActionPresentation,
@@ -691,7 +686,10 @@ function buildDesktopFloeConfig(i18n: DesktopI18n) {
   } as const;
 }
 
-const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; labelKey: DesktopTranslationKey }>[] = [
+const ENVIRONMENT_CENTER_TABS: readonly Readonly<{
+  value: EnvironmentCenterTab;
+  labelKey: DesktopTranslationKey;
+}>[] = [
   { value: 'environments', labelKey: 'environmentCenter.environmentsSection' },
   { value: 'control_planes', labelKey: 'desktop.provider' },
   { value: 'gateways', labelKey: 'environmentCenter.gatewaysSection' },
@@ -1009,7 +1007,9 @@ function localizedGatewaySourceCountText(i18n: DesktopI18n, value: string): stri
   if (!match) {
     return localizedGatewaySourceText(i18n, value);
   }
-  return i18n.t('environmentCenter.gatewaySummaryMany', { count: match[1] ?? '0' });
+  return i18n.t('environmentCenter.gatewaySummaryMany', {
+    count: match[1] ?? '0',
+  });
 }
 
 function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySourceActionModel): string {
@@ -1047,7 +1047,9 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
   }
   const workingOn = clean.match(/^Desktop is working on (.+)\.$/u);
   if (workingOn) {
-    return i18n.t('environmentCenter.gatewayPanelWorkingOnLabel', { label: workingOn[1] ?? '' });
+    return i18n.t('environmentCenter.gatewayPanelWorkingOnLabel', {
+      label: workingOn[1] ?? '',
+    });
   }
   const runAction = clean.match(/^Desktop will run (.+) for (.+)\.$/u);
   if (runAction) {
@@ -1544,15 +1546,21 @@ function environmentFlowerContextSummary(i18n: DesktopI18n, environment: Desktop
 function localizedFactValue(i18n: DesktopI18n, label: string, value: string): string {
   const connecting = value.match(/^Connecting through (.+)$/u);
   if (label === 'LOCAL LINK' && connecting) {
-    return i18n.t('environmentFacts.connectingThrough', { label: connecting[1] ?? '' });
+    return i18n.t('environmentFacts.connectingThrough', {
+      label: connecting[1] ?? '',
+    });
   }
   const disconnecting = value.match(/^Disconnecting from (.+)$/u);
   if (label === 'LOCAL LINK' && disconnecting) {
-    return i18n.t('environmentFacts.disconnectingFrom', { label: disconnecting[1] ?? '' });
+    return i18n.t('environmentFacts.disconnectingFrom', {
+      label: disconnecting[1] ?? '',
+    });
   }
   const needsAttention = value.match(/^(.+) needs attention$/u);
   if (label === 'LOCAL LINK' && needsAttention) {
-    return i18n.t('environmentFacts.runtimeNeedsAttention', { label: needsAttention[1] ?? '' });
+    return i18n.t('environmentFacts.runtimeNeedsAttention', {
+      label: needsAttention[1] ?? '',
+    });
   }
   if (label === 'VERSION') {
     return localizedStringByValue(i18n, value, {
@@ -1648,7 +1656,10 @@ function localizedRuntimeStartedLabel(i18n: DesktopI18n, value: string): string 
 
 function localizedRuntimeStartedRelativeTime(i18n: DesktopI18n, value: string): string {
   if (value === 'Just now') {
-    return i18n.formatRelativeTime(Date.now(), { numeric: 'auto', style: 'short' });
+    return i18n.formatRelativeTime(Date.now(), {
+      numeric: 'auto',
+      style: 'short',
+    });
   }
   const compactMatch = value.match(/^(\d+)([mhd]) ago$/u);
   if (!compactMatch) {
@@ -1698,7 +1709,9 @@ function localizedFactActionLabel(i18n: DesktopI18n, label: string): string {
 function localizedFactActionAriaLabel(i18n: DesktopI18n, label: string): string {
   const showLinked = label.match(/^Show linked runtime (.+)$/u);
   if (showLinked) {
-    return i18n.t('environmentFacts.showLinkedRuntime', { label: showLinked[1] ?? '' });
+    return i18n.t('environmentFacts.showLinkedRuntime', {
+      label: showLinked[1] ?? '',
+    });
   }
   return localizedCopyLabel(i18n, label) || localizedFactActionLabel(i18n, label);
 }
@@ -2382,7 +2395,9 @@ function describeLocalizedNextStartAddress(
       };
     case 'lan_ip_port':
       return {
-        primary: i18n.t('settings.portNumber', { port: model.next_start_address_display }),
+        primary: i18n.t('settings.portNumber', {
+          port: model.next_start_address_display,
+        }),
         primary_monospace: false,
         hint: i18n.t('settings.onLanIp'),
       };
@@ -2889,7 +2904,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [lifecycleProgressFocusRequest, setLifecycleProgressFocusRequest] = createSignal<LifecycleProgressFocusRequest | null>(null);
   const actionToastTimers = new Map<number, number>();
   const liveActionProgressTimers = new Map<string, number>();
-  const runtimeOpenContinuationByOperationKey = new Map<string, string>();
   let nextActionToastID = 0;
   let lifecycleProgressFocusRequestSequence = 0;
   let settingsErrorRef: HTMLElement | undefined;
@@ -3334,7 +3348,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function registerWSLDistribution(request: DesktopWSLRegisterRequest): Promise<DesktopWSLActionResponse> {
     const register = props.runtime.launcher.registerWSL;
     if (!register) {
-      return { ok: false, message: i18n().t('environmentCenter.wslUnavailable') };
+      return {
+        ok: false,
+        message: i18n().t('environmentCenter.wslUnavailable'),
+      };
     }
     const response = await register(request);
     await refreshSnapshot();
@@ -3344,7 +3361,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function setDefaultWSLEnvironment(request: DesktopWSLSetDefaultRequest): Promise<DesktopWSLActionResponse> {
     const setDefault = props.runtime.launcher.setDefaultWSL;
     if (!setDefault) {
-      return { ok: false, message: i18n().t('environmentCenter.wslUnavailable') };
+      return {
+        ok: false,
+        message: i18n().t('environmentCenter.wslUnavailable'),
+      };
     }
     const response = await setDefault(request);
     await refreshSnapshot();
@@ -4286,13 +4306,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     clearOperationProgressFocus(operationKey);
-    runtimeOpenContinuationByOperationKey.delete(operationKey);
     const result = await performLauncherAction({
       kind: 'cancel_launcher_operation',
       operation_key: operationKey,
     });
     if (result?.outcome === 'canceled_launcher_operation') {
-      showActionToast(progress.open_progress ? i18n().t('toast.openingStopping') : i18n().t('toast.runtimeStartupStopping'), 'info');
+      const cancellationTitleKey: DesktopTranslationKey =
+        progress.action === 'update_environment_runtime'
+          ? 'progress.titleStoppingRuntimeUpdate'
+          : progress.action === 'restart_environment_runtime'
+            ? 'progress.titleStoppingRuntimeRestart'
+            : progress.open_progress
+              ? 'progress.titleStoppingOpen'
+              : 'progress.titleStoppingRuntimeStartup';
+      showActionToast(i18n().t(cancellationTitleKey), 'info');
     }
   }
 
@@ -4302,7 +4329,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     clearOperationProgressFocus(operationKey);
-    runtimeOpenContinuationByOperationKey.delete(operationKey);
     if (operationKey.startsWith('ui:gateway:')) {
       setRetainedGatewayFailures((current) => current.filter((item) => trimString(item.operation_key) !== operationKey));
       return;
@@ -4506,7 +4532,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction(request, errorTarget);
     const started = result?.outcome === 'started_environment_runtime';
     if (started && options.announceSuccess !== false) {
-      showActionToast(i18n().t('environmentCenter.runtimeStartedToast', { label: environment.label }));
+      showActionToast(
+        i18n().t('environmentCenter.runtimeStartedToast', {
+          label: environment.label,
+        }),
+      );
     }
     return started;
   }
@@ -4518,7 +4548,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     let expectedOutcome: DesktopLauncherActionSuccess['outcome'] = 'started_environment_runtime';
     request = runtimeActionRequest(environment, 'start_environment_runtime');
     if (!request) {
-      return { ok: false, message: i18n().t('environmentCenter.resolveRuntimeTargetError') };
+      return {
+        ok: false,
+        message: i18n().t('environmentCenter.resolveRuntimeTargetError'),
+      };
     }
     const result = await performLauncherActionSilently(request);
     if (!result.ok || result.outcome === expectedOutcome) {
@@ -4529,38 +4562,30 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function updateEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel | undefined,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     attempt?: EnvironmentLifecycleAttempt,
   ): Promise<boolean> {
-    const operationKey = attempt?.operation_key ?? `${environment.id}:update_runtime`;
-    const continueOpen = action?.continue_open_after_completion === true;
-    if (continueOpen) {
-      runtimeOpenContinuationByOperationKey.set(operationKey, environment.id);
-    }
-    const finish = (updated: boolean): boolean => {
-      const pendingConfirmation = activeActionProgress().some((progress) => (
-        progress.operation_key === operationKey && progress.status === 'needs_confirmation'
-      ));
-      if (updated || !pendingConfirmation) {
-        runtimeOpenContinuationByOperationKey.delete(operationKey);
-      }
-      return updated;
-    };
     const request = runtimeActionRequest(environment, 'update_environment_runtime', {
       forceRuntimeUpdate: true,
       attempt,
     });
     if (!request) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
+      setErrorMessage(
+        errorTarget === 'settings' ? 'settings' : 'connect',
+        i18n().t('environmentCenter.resolveRuntimeTargetError'),
+      );
       return false;
     }
     const result = await performLauncherAction(request, errorTarget);
     const updated = result?.outcome === 'updated_environment_runtime';
     if (updated) {
-      showActionToast(i18n().t('environmentCenter.runtimeUpdatedToast', { label: environment.label }));
+      showActionToast(
+        i18n().t('environmentCenter.runtimeUpdatedToast', {
+          label: environment.label,
+        }),
+      );
     }
-    return finish(updated);
+    return updated;
   }
 
   async function restartEnvironmentRuntime(
@@ -4576,7 +4601,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction(request, errorTarget);
     const restarted = result?.outcome === 'restarted_environment_runtime';
     if (restarted) {
-      showActionToast(i18n().t('environmentCenter.runtimeRestartedToast', { label: environment.label }));
+      showActionToast(
+        i18n().t('environmentCenter.runtimeRestartedToast', {
+          label: environment.label,
+        }),
+      );
     }
     return restarted;
   }
@@ -4595,10 +4624,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const stopped = result?.outcome === 'stopped_environment_runtime';
     const canceled = result?.outcome === 'canceled_launcher_operation';
     if (stopped) {
-      showActionToast(i18n().t('environmentCenter.runtimeStoppedToast', { label: environment.label }));
+      showActionToast(
+        i18n().t('environmentCenter.runtimeStoppedToast', {
+          label: environment.label,
+        }),
+      );
     }
     if (canceled) {
-      showActionToast(i18n().t('environmentCenter.startupCanceledToast', { label: environment.label }), 'info');
+      showActionToast(
+        i18n().t('environmentCenter.startupCanceledToast', {
+          label: environment.label,
+        }),
+        'info',
+      );
     }
     return stopped || canceled;
   }
@@ -4637,7 +4675,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction(request, errorTarget);
     const refreshed = result?.outcome === 'refreshed_environment_runtime';
     if (refreshed && options.announceSuccess !== false) {
-      showActionToast(i18n().t('environmentCenter.runtimeStatusRefreshedToast', { label: environment.label }), 'info');
+      showActionToast(
+        i18n().t('environmentCenter.runtimeStatusRefreshedToast', {
+          label: environment.label,
+        }),
+        'info',
+      );
     }
     return refreshed;
   }
@@ -4761,7 +4804,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }, errorTarget);
     const connected = result?.outcome === 'connected_provider_runtime';
     if (connected) {
-      showActionToast(i18n().t('environmentCenter.connectedToProviderToast', { label: environment.label }), 'success');
+      showActionToast(
+        i18n().t('environmentCenter.connectedToProviderToast', {
+          label: environment.label,
+        }),
+        'success',
+      );
     }
     return connected;
   }
@@ -4867,7 +4915,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       };
     }
     if (!request) {
-      return { opened: false, message: i18n().t('environmentCenter.runtimeUnavailableNow') };
+      return {
+        opened: false,
+        message: i18n().t('environmentCenter.runtimeUnavailableNow'),
+      };
     }
     const result = await performLauncherActionSilently(request);
     if (!result.ok) {
@@ -4973,7 +5024,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     switch (action.intent) {
       case 'open':
       case 'focus':
-        return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget, action.route ?? 'auto');
+        return openEnvironment(
+          environment,
+          errorTarget === 'settings' ? 'connect' : errorTarget,
+          action.route ?? 'auto',
+        );
       case 'open_with_preflight':
       case 'initialize_and_open':
       case 'start_and_open':
@@ -4988,49 +5043,64 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'restart_runtime':
         return restartEnvironmentRuntime(environment, errorTarget, attempt);
       case 'update_runtime':
-        return updateEnvironmentRuntime(environment, action, errorTarget, attempt);
+        return updateEnvironmentRuntime(environment, errorTarget, attempt);
       case 'update_desktop': {
-        const result = await performLauncherAction({
-          kind: 'manage_desktop_update',
-          environment_id: environment.id,
-          label: environment.label,
-        }, errorTarget);
+        const result = await performLauncherAction(
+          {
+            kind: 'manage_desktop_update',
+            environment_id: environment.id,
+            label: environment.label,
+          },
+          errorTarget,
+        );
         if (result?.outcome !== 'opened_desktop_update_handoff') {
           return false;
         }
-        showActionToast(i18n().t('environmentCenter.desktopUpdateOpenedToast', { label: environment.label }), 'info');
+        showActionToast(
+          i18n().t('environmentCenter.desktopUpdateOpenedToast', {
+            label: environment.label,
+          }),
+          'info',
+        );
         return true;
       }
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget, { attempt });
       case 'reinstall_target':
         if (
-          environment.kind !== 'local_environment'
-          && !(environment.kind === 'ssh_environment'
-            && environment.managed_runtime_host_access
-            && environment.managed_runtime_placement)
+          environment.kind !== 'local_environment' &&
+          !(
+            environment.kind === 'ssh_environment' &&
+            environment.managed_runtime_host_access &&
+            environment.managed_runtime_placement
+          )
         ) {
           return false;
         }
         {
           if (action.operation_key && action.preflight_id) {
-            const result = await performLauncherAction({
-              kind: 'reinstall_target',
-              environment_id: environment.id,
-              preflight_id: action.preflight_id,
-              operation_key: action.operation_key,
-              mode: action.reinstall_mode ?? 'wipe_data',
-              impact_acknowledged: true,
-            }, errorTarget);
+            const result = await performLauncherAction(
+              {
+                kind: 'reinstall_target',
+                environment_id: environment.id,
+                preflight_id: action.preflight_id,
+                operation_key: action.operation_key,
+                mode: action.reinstall_mode ?? 'wipe_data',
+                impact_acknowledged: true,
+              },
+              errorTarget,
+            );
             bindReinstallOperationResult(result, bindOperation);
-            return result?.outcome === 'reinstalled_target'
-              || result?.outcome === 'reinstall_target_in_progress';
+            return result?.outcome === 'reinstalled_target' || result?.outcome === 'reinstall_target_in_progress';
           }
-          const result = await performLauncherAction({
-            kind: 'preview_reinstall_target',
-            environment_id: environment.id,
-            mode: action.reinstall_mode ?? 'wipe_data',
-          }, errorTarget);
+          const result = await performLauncherAction(
+            {
+              kind: 'preview_reinstall_target',
+              environment_id: environment.id,
+              mode: action.reinstall_mode ?? 'wipe_data',
+            },
+            errorTarget,
+          );
           bindReinstallOperationResult(result, bindOperation);
           return result?.outcome === 'previewed_reinstall_target';
         }
@@ -5042,7 +5112,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return true;
       case 'resolve_gateway':
         if (environment.kind === 'gateway_environment') {
-          const gateway = snapshot().gateway_sources.find((source) => source.gateway_id === (environment.gateway_id ?? ''));
+          const gateway = snapshot().gateway_sources.find(
+            (source) => source.gateway_id === (environment.gateway_id ?? ''),
+          );
           if (gateway) {
             openCreateGatewaySetup(gateway);
             return true;
@@ -5077,12 +5149,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return { close_panel: false, next_session: nextSession };
     };
     if (
-      (environment.kind === 'local_environment' || environment.kind === 'ssh_environment')
-      && (
-        action.intent === 'open_with_preflight'
-        || action.intent === 'initialize_and_open'
-        || action.intent === 'start_and_open'
-      )
+      (environment.kind === 'local_environment' || environment.kind === 'ssh_environment') &&
+      (action.intent === 'open_with_preflight' ||
+        action.intent === 'initialize_and_open' ||
+        action.intent === 'start_and_open')
     ) {
       const checking = advanceEnvironmentOpenFlowStage(currentSession, 'checking_access');
       publishSession(checking);
@@ -5103,9 +5173,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const startAndOpenEnvironment = async (
       state: EnvironmentGuidanceSessionState,
     ): Promise<EnvironmentGuidanceActionResolution> => {
-      const startFlowState = state?.pending_intent === 'initialize_and_open'
-        ? startEnvironmentGuidanceIntent(state, environment.id, 'start_and_open')
-        : state;
+      const startFlowState =
+        state?.pending_intent === 'initialize_and_open'
+          ? startEnvironmentGuidanceIntent(state, environment.id, 'start_and_open')
+          : state;
       const checking = advanceEnvironmentOpenFlowStage(startFlowState, 'checking_access');
       publishSession(checking);
       const reconciled = await reconcileEnvironmentOpenBeforeLifecycle({
@@ -5169,16 +5240,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       if (resolution.kind === 'guidance') {
         const guidanceAction: EnvironmentActionModel = {
-          intent: resolution.flow === 'initialize'
-            ? 'initialize_and_open'
-            : resolution.flow === 'start'
-              ? 'start_and_open'
-              : 'request_open_access',
-          label: resolution.flow === 'initialize'
-            ? i18n().t('environmentAction.initializeAndOpen')
-            : resolution.flow === 'start'
-              ? i18n().t('environmentAction.startAndOpen')
-              : i18n().t('environmentAction.requestAccess'),
+          intent:
+            resolution.flow === 'initialize'
+              ? 'initialize_and_open'
+              : resolution.flow === 'start'
+                ? 'start_and_open'
+                : 'request_open_access',
+          label:
+            resolution.flow === 'initialize'
+              ? i18n().t('environmentAction.initializeAndOpen')
+              : resolution.flow === 'start'
+                ? i18n().t('environmentAction.startAndOpen')
+                : i18n().t('environmentAction.requestAccess'),
           enabled: true,
           variant: 'default',
         };
@@ -5195,9 +5268,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       publishSession(checking);
       let initializationEnvironment = environment;
       try {
-        initializationEnvironment = await loadLatestEnvironmentEntry(environment.id) ?? environment;
+        initializationEnvironment = (await loadLatestEnvironmentEntry(environment.id)) ?? environment;
       } catch (error) {
-        return failOpenFlow(checking, getErrorMessage(error) || i18n().t('environmentOpenFlow.accessUnavailableDetail'));
+        return failOpenFlow(
+          checking,
+          getErrorMessage(error) || i18n().t('environmentOpenFlow.accessUnavailableDetail'),
+        );
       }
       const refreshedFlow = environmentOpenFlow(initializationEnvironment);
       if (refreshedFlow === 'request_access') {
@@ -5221,10 +5297,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return resolution.kind === 'opened'
           ? { close_panel: true, next_session: null }
           : failOpenFlow(
-            opening,
-            resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'),
-            resolution.recovery,
-          );
+              opening,
+              resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'),
+              resolution.recovery,
+            );
       }
       const requestingAccess = startEnvironmentGuidanceIntent(null, environment.id, 'request_open_access');
       return failOpenFlow(
@@ -5241,45 +5317,61 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
     if (action.intent === 'request_open_access') {
       if (environment.kind === 'provider_environment' && environment.provider_origin) {
-        const result = await performLauncherAction({
-          kind: 'start_control_plane_connect',
-          provider_origin: environment.provider_origin,
-          display_label: environment.label,
-        }, 'connect');
+        const result = await performLauncherAction(
+          {
+            kind: 'start_control_plane_connect',
+            provider_origin: environment.provider_origin,
+            display_label: environment.label,
+          },
+          'connect',
+        );
         return {
           close_panel: result?.outcome === 'started_control_plane_connect',
-          next_session: result?.outcome === 'started_control_plane_connect'
-            ? null
-            : failEnvironmentGuidanceIntent(currentSession, 'Redeven could not request access to this environment. Try again.'),
+          next_session:
+            result?.outcome === 'started_control_plane_connect'
+              ? null
+              : failEnvironmentGuidanceIntent(
+                  currentSession,
+                  'Redeven could not request access to this environment. Try again.',
+                ),
         };
       }
       if (environment.kind === 'gateway_environment') {
-        const gateway = snapshot().gateway_sources.find((source) => source.gateway_id === (environment.gateway_id ?? ''));
+        const gateway = snapshot().gateway_sources.find(
+          (source) => source.gateway_id === (environment.gateway_id ?? ''),
+        );
         if (gateway) {
           openCreateGatewaySetup(gateway);
           return { close_panel: true, next_session: null };
         }
       }
-      return failOpenFlow(currentSession, 'Access is not available for this environment yet. Check the connection and try again.');
+      return failOpenFlow(
+        currentSession,
+        'Access is not available for this environment yet. Check the connection and try again.',
+      );
     }
 
     if (
-      action.intent === 'start_runtime'
-      || action.intent === 'stop_runtime'
-      || action.intent === 'restart_runtime'
-      || action.intent === 'update_runtime'
+      action.intent === 'start_runtime' ||
+      action.intent === 'stop_runtime' ||
+      action.intent === 'restart_runtime' ||
+      action.intent === 'update_runtime'
     ) {
-      const completed = await triggerLocalEnvironmentAction(environment, action, 'connect', attempt);
-      if (completed && action.continue_open_after_completion) {
-        return runEnvironmentGuidanceAction(environment, {
-          intent: 'open_with_preflight',
-          label: i18n().t('environmentAction.open'),
-          enabled: true,
-          variant: 'default',
-        }, updateSession);
+      if (action.continue_open_after_completion) {
+        return runEnvironmentGuidanceAction(
+          environment,
+          {
+            intent: 'open_with_preflight',
+            label: i18n().t('environmentAction.open'),
+            enabled: true,
+            variant: 'default',
+          },
+          updateSession,
+        );
       }
+      const completed = await triggerLocalEnvironmentAction(environment, action, 'connect', attempt);
       return {
-        close_panel: true,
+        close_panel: completed,
         next_session: null,
       };
     }
@@ -5289,10 +5381,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!request) {
         return {
           close_panel: false,
-          next_session: failEnvironmentGuidanceIntent(
-            currentSession,
-            'Desktop could not resolve that runtime target.',
-          ),
+          next_session: failEnvironmentGuidanceIntent(currentSession, 'Desktop could not resolve that runtime target.'),
         };
       }
       const result = await performLauncherActionSilently(request);
@@ -5348,10 +5437,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       close_panel: completed,
       next_session: completed
         ? null
-        : failEnvironmentGuidanceIntent(
-          currentSession,
-          `Desktop could not complete "${action.label}".`,
-        ),
+        : failEnvironmentGuidanceIntent(currentSession, `Desktop could not complete "${action.label}".`),
     };
   }
 
@@ -5389,7 +5475,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       provider_id: controlPlane.provider.provider_id,
     });
     if (result?.outcome === 'refreshed_control_plane') {
-      showActionToast(i18n().t('toast.refreshedControlPlane', { label: controlPlaneName(controlPlane) }));
+      showActionToast(
+        i18n().t('toast.refreshedControlPlane', {
+          label: controlPlaneName(controlPlane),
+        }),
+      );
     }
   }
 
@@ -5539,7 +5629,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       const result = await performLauncherAction({
         kind: 'upsert_environment_registration',
         registration: {
-          registration_ref: { kind: 'saved_environment', id: trimString(request.environment_id) },
+            registration_ref: {
+              kind: 'saved_environment',
+              id: trimString(request.environment_id),
+            },
           label: trimString(request.label),
           external_local_ui_url: normalizedTargetURL,
           auto_runtime_probe_enabled: request.autoRuntimeProbeEnabled,
@@ -6619,7 +6712,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   label: deleteTarget()?.label ?? '',
                   gateway: deleteTarget()?.gateway_label ?? i18n().t('environmentCenter.thisGateway'),
                 })
-              : i18n().t('confirm.removeEnvironmentQuestion', { label: deleteTarget()?.label ?? '' })}
+              : i18n().t('confirm.removeEnvironmentQuestion', {
+                  label: deleteTarget()?.label ?? '',
+                })}
           </p>
           <p class="text-xs text-muted-foreground">
             <Show
@@ -6668,7 +6763,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       >
         <div class="space-y-2">
           <p class="text-sm">
-            {i18n().t('confirm.deleteGatewayQuestion', { label: deleteGatewayTarget()?.display_name ?? '' })}
+            {i18n().t('confirm.deleteGatewayQuestion', {
+              label: deleteGatewayTarget()?.display_name ?? '',
+            })}
           </p>
           <p class="text-xs text-muted-foreground">
             {i18n().t('confirm.deleteGatewayDescription')}
@@ -7251,7 +7348,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
       entry.provider_runtime_link_target?.id === runtimeTargetID
     ));
     return environment
-      ? props.i18n.t('environmentCenter.linkedRuntimeFilterWithLabel', { label: environment.label })
+      ? props.i18n.t('environmentCenter.linkedRuntimeFilterWithLabel', {
+          label: environment.label,
+        })
       : props.i18n.t('environmentCenter.linkedRuntimeFilter');
   });
   const activeNonCategoryFilterChipLabel = createMemo(() => {
@@ -7565,75 +7664,82 @@ function ConnectEnvironmentSurface(props: Readonly<{
   );
 }
 
-function EnvironmentCardsPanel(props: Readonly<{
-  i18n: DesktopI18n;
-  entries: readonly DesktopEnvironmentEntry[];
-  showQuickAddCards: boolean;
-  visibleCardCount: number;
-  layoutReferenceCardCount: number;
-  busyState: DesktopLauncherBusyState;
-  actionProgress: readonly DesktopLauncherActionProgress[];
-  lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
-  consumeLifecycleProgressFocusRequest: (requestID: number) => void;
-  openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
-  openEnvironment: (
-    environment: DesktopEnvironmentEntry,
-    errorTarget?: 'connect' | 'dialog',
-    route?: 'auto' | DesktopLocalEnvironmentStateRoute,
-  ) => Promise<boolean>;
-  runLocalEnvironmentAction: (
-    environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel,
-    errorTarget?: 'connect' | 'dialog' | 'settings',
-    attempt?: EnvironmentLifecycleAttempt,
-    bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
-  ) => Promise<boolean>;
-  refreshEnvironmentRuntime: (
-    environment: DesktopEnvironmentEntry,
-    errorTarget?: 'connect' | 'dialog' | 'settings',
-  ) => Promise<boolean>;
-  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
-  runEnvironmentGuidanceAction: (
-    environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel,
-    updateSession?: (state: EnvironmentGuidanceSessionState) => void,
-    attempt?: EnvironmentLifecycleAttempt,
-  ) => Promise<EnvironmentGuidanceActionResolution>;
-  runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-  runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
-  toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
-  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-  editEnvironment: (environment: DesktopEnvironmentEntry) => void;
-  deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
-  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-  dismissOperation: (progress: DesktopLauncherActionProgress) => void;
-  copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
-}>) {
+function EnvironmentCardsPanel(
+  props: Readonly<{
+    i18n: DesktopI18n;
+    entries: readonly DesktopEnvironmentEntry[];
+    showQuickAddCards: boolean;
+    visibleCardCount: number;
+    layoutReferenceCardCount: number;
+    busyState: DesktopLauncherBusyState;
+    actionProgress: readonly DesktopLauncherActionProgress[];
+    lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
+    consumeLifecycleProgressFocusRequest: (requestID: number) => void;
+    openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
+    openEnvironment: (
+      environment: DesktopEnvironmentEntry,
+      errorTarget?: 'connect' | 'dialog',
+      route?: 'auto' | DesktopLocalEnvironmentStateRoute,
+    ) => Promise<boolean>;
+    runLocalEnvironmentAction: (
+      environment: DesktopEnvironmentEntry,
+      action: EnvironmentActionModel,
+      errorTarget?: 'connect' | 'dialog' | 'settings',
+      attempt?: EnvironmentLifecycleAttempt,
+      bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
+    ) => Promise<boolean>;
+    refreshEnvironmentRuntime: (
+      environment: DesktopEnvironmentEntry,
+      errorTarget?: 'connect' | 'dialog' | 'settings',
+    ) => Promise<boolean>;
+    openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
+    runEnvironmentGuidanceAction: (
+      environment: DesktopEnvironmentEntry,
+      action: EnvironmentActionModel,
+      updateSession?: (state: EnvironmentGuidanceSessionState) => void,
+      attempt?: EnvironmentLifecycleAttempt,
+    ) => Promise<EnvironmentGuidanceActionResolution>;
+    runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
+    runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
+    toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
+    copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
+    editEnvironment: (environment: DesktopEnvironmentEntry) => void;
+    deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+    cancelOperation: (progress: DesktopLauncherActionProgress) => void;
+    dismissOperation: (progress: DesktopLauncherActionProgress) => void;
+    copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
+  }>,
+) {
   const [environmentLibraryElement, setEnvironmentLibraryElement] = createSignal<HTMLDivElement>();
   const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
   const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
-  const [activeEnvironmentOverlayState, setActiveEnvironmentOverlayState] = createSignal(closedEnvironmentLibraryOverlayState());
+  const [activeEnvironmentOverlayState, setActiveEnvironmentOverlayState] = createSignal(
+    closedEnvironmentLibraryOverlayState(),
+  );
   const [guidanceSessionState, setGuidanceSessionState] = createSignal<EnvironmentGuidanceSessionState>(null);
-  const [lifecycleDisclosureState, setLifecycleDisclosureState] = createSignal<EnvironmentLifecycleDisclosureState>(null);
+  const [lifecycleDisclosureState, setLifecycleDisclosureState] =
+    createSignal<EnvironmentLifecycleDisclosureState>(null);
   // Render cards by stable environment id so snapshot refreshes update data in place instead of remounting the card subtree.
   const projectedEntriesByID = createMemo(() => environmentLibraryEntryRecord(props.entries));
   const projectedEntryIDs = createMemo<readonly string[]>(() => props.entries.map((entry) => entry.id));
   const groupedEntryIDs = createMemo(() => splitPinnedEnvironmentEntryIDs(projectedEntryIDs(), projectedEntriesByID()));
   // Keep transient provider/search filters from collapsing the shared environment column system.
-  const layoutModel = createMemo(() => buildEnvironmentLibraryLayoutModel({
-    visible_card_count: props.visibleCardCount,
-    layout_reference_count: props.layoutReferenceCardCount,
-    container_width_px: environmentLibraryWidthPx(),
-    root_font_size_px: rootFontSizePx(),
-  }));
+  const layoutModel = createMemo(() =>
+    buildEnvironmentLibraryLayoutModel({
+      visible_card_count: props.visibleCardCount,
+      layout_reference_count: props.layoutReferenceCardCount,
+      container_width_px: environmentLibraryWidthPx(),
+      root_font_size_px: rootFontSizePx(),
+    }),
+  );
   const environmentGridStyle = createMemo<JSX.CSSProperties>(() => ({
     '--redeven-environment-grid-columns': String(layoutModel().column_count),
   }));
 
   createEffect(() => {
-    setLifecycleDisclosureState((current) => (
-      reconcileEnvironmentLifecycleDisclosure(current, props.entries, props.actionProgress)
-    ));
+    setLifecycleDisclosureState((current) =>
+      reconcileEnvironmentLifecycleDisclosure(current, props.entries, props.actionProgress),
+    );
   });
 
   createEffect(() => {
@@ -7642,29 +7748,20 @@ function EnvironmentCardsPanel(props: Readonly<{
       const lifecycleDisclosure = lifecycleDisclosureState();
       if (current.kind === 'lifecycle_progress') {
         const environment = props.entries.find((entry) => entry.id === current.environment_id);
-        const progressStillVisible = environment
-          ? selectedSnapshotOpenConnectionProgressForEnvironment(environment, props.actionProgress) !== null
-            || selectedSnapshotRuntimeLifecycleProgressForEnvironment(environment, props.actionProgress) !== null
-            || selectedSnapshotReinstallTargetProgressForEnvironment(environment, props.actionProgress) !== null
-            || busyStateMatchesEnvironment(props.busyState, environment.id, ['preview_reinstall_target', 'reinstall_target'])
-          : false;
-        const pendingDisclosureVisible = lifecycleDisclosure?.environment_id === current.environment_id
-          && lifecycleDisclosure.visibility === 'open'
-          && (
-            lifecycleDisclosure.last_progress !== undefined
-            || environmentLifecycleDisclosureHasPendingRequest(lifecycleDisclosure, props.busyState)
-          );
-        return (
-          pendingDisclosureVisible
-          || progressStillVisible
-          ? current
-          : closedEnvironmentLibraryOverlayState()
-        );
+        const operationState = environment
+          ? environmentOperationState(environment, props.actionProgress, props.busyState)
+          : null;
+        const progressStillVisible = operationState?.panelProgress !== null || operationState?.isSubmitting === true;
+        const pendingDisclosureVisible =
+          lifecycleDisclosure?.environment_id === current.environment_id &&
+          lifecycleDisclosure.visibility === 'open' &&
+          environmentLifecycleDisclosureHasPendingRequest(lifecycleDisclosure, props.busyState);
+        return pendingDisclosureVisible || progressStillVisible ? current : closedEnvironmentLibraryOverlayState();
       }
       if (
-        current.kind === 'primary_action_guidance'
-        && session?.environment_id === current.environment_id
-        && guidanceSessionKeepsPopoverOpen(session)
+        current.kind === 'primary_action_guidance' &&
+        session?.environment_id === current.environment_id &&
+        guidanceSessionKeepsPopoverOpen(session)
       ) {
         return current;
       }
@@ -7680,15 +7777,13 @@ function EnvironmentCardsPanel(props: Readonly<{
     }
     let clearHandle: number | undefined;
     const handle = window.setTimeout(() => {
-      setActiveEnvironmentOverlayState((current) => (
+      setActiveEnvironmentOverlayState((current) =>
         session
           ? closeEnvironmentLibraryOverlayState(current, 'primary_action_guidance', session.environment_id)
-          : current
-      ));
+          : current,
+      );
       clearHandle = window.setTimeout(() => {
-        setGuidanceSessionState((current) => (
-          current?.environment_id === session?.environment_id ? null : current
-        ));
+        setGuidanceSessionState((current) => (current?.environment_id === session?.environment_id ? null : current));
       }, GUIDANCE_SESSION_CLEAR_MS);
     }, GUIDANCE_SUCCESS_DISMISS_MS);
     onCleanup(() => {
@@ -7703,11 +7798,11 @@ function EnvironmentCardsPanel(props: Readonly<{
     if (open) {
       setLifecycleDisclosureState((current) => closeEnvironmentLifecycleDisclosure(current, environmentID));
     }
-    setActiveEnvironmentOverlayState((current) => (
+    setActiveEnvironmentOverlayState((current) =>
       open
         ? openEnvironmentLibraryOverlayState('runtime_menu', environmentID)
-        : closeEnvironmentLibraryOverlayState(current, 'runtime_menu', environmentID)
-    ));
+        : closeEnvironmentLibraryOverlayState(current, 'runtime_menu', environmentID),
+    );
   };
 
   const setPrimaryActionGuidanceOpen = (environmentID: string, open: boolean) => {
@@ -7729,31 +7824,28 @@ function EnvironmentCardsPanel(props: Readonly<{
   };
 
   const setLifecycleProgressOpen = (environmentID: string, open: boolean) => {
-    setActiveEnvironmentOverlayState((current) => (
+    setActiveEnvironmentOverlayState((current) =>
       open
         ? openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID)
-        : closeEnvironmentLibraryOverlayState(current, 'lifecycle_progress', environmentID)
-    ));
-    setLifecycleDisclosureState((current) => (
+        : closeEnvironmentLibraryOverlayState(current, 'lifecycle_progress', environmentID),
+    );
+    setLifecycleDisclosureState((current) =>
       open
         ? reopenEnvironmentLifecycleDisclosure(current, environmentID)
-        : closeEnvironmentLifecycleDisclosure(current, environmentID)
-    ));
+        : closeEnvironmentLifecycleDisclosure(current, environmentID),
+    );
   };
 
-  const abandonLifecycleProgressDisclosure = (
-    environmentID: string,
-    attempt: EnvironmentLifecycleAttempt,
-  ) => {
+  const abandonLifecycleProgressDisclosure = (environmentID: string, attempt: EnvironmentLifecycleAttempt) => {
     const current = lifecycleDisclosureState();
     const next = abandonEnvironmentLifecycleDisclosureAttempt(current, environmentID, attempt);
     if (next === current) {
       return;
     }
     setLifecycleDisclosureState(next);
-    setActiveEnvironmentOverlayState((overlay) => (
-      closeEnvironmentLibraryOverlayState(overlay, 'lifecycle_progress', environmentID)
-    ));
+    setActiveEnvironmentOverlayState((overlay) =>
+      closeEnvironmentLibraryOverlayState(overlay, 'lifecycle_progress', environmentID),
+    );
   };
 
   const bindLifecycleProgressDisclosure = (
@@ -7761,18 +7853,18 @@ function EnvironmentCardsPanel(props: Readonly<{
     attempt: EnvironmentLifecycleAttempt,
     operation: EnvironmentLifecycleAttempt,
   ) => {
-    setLifecycleDisclosureState((current) => (
-      bindEnvironmentLifecycleDisclosureOperation(current, environmentID, attempt, operation)
-    ));
+    setLifecycleDisclosureState((current) =>
+      bindEnvironmentLifecycleDisclosureOperation(current, environmentID, attempt, operation),
+    );
   };
 
   let handledLifecycleProgressFocusRequestID = 0;
   createEffect(() => {
     const request = props.lifecycleProgressFocusRequest;
     if (
-      !request
-      || request.subject_kind !== 'environment'
-      || request.request_id === handledLifecycleProgressFocusRequestID
+      !request ||
+      request.subject_kind !== 'environment' ||
+      request.request_id === handledLifecycleProgressFocusRequestID
     ) {
       return;
     }
@@ -7782,16 +7874,14 @@ function EnvironmentCardsPanel(props: Readonly<{
     }
     const progress = progressForEnvironmentFocusRequest(environment, props.actionProgress, request);
     if (
-      !progress
-      || trimString(progress.operation_key) !== request.operation_key
-      || (progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms
+      !progress ||
+      trimString(progress.operation_key) !== request.operation_key ||
+      (progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms
     ) {
       return;
     }
     handledLifecycleProgressFocusRequestID = request.request_id;
-    setLifecycleDisclosureState((current) => (
-      focusEnvironmentLifecycleDisclosure(current, environment.id, progress)
-    ));
+    setLifecycleDisclosureState((current) => focusEnvironmentLifecycleDisclosure(current, environment.id, progress));
     setLifecycleProgressOpen(environment.id, true);
     props.consumeLifecycleProgressFocusRequest(request.request_id);
   });
@@ -7801,12 +7891,10 @@ function EnvironmentCardsPanel(props: Readonly<{
     intent: EnvironmentLifecycleDisclosureIntent,
     attempt: EnvironmentLifecycleAttempt,
   ) => {
-    setGuidanceSessionState((current) => (
-      current?.environment_id === environmentID ? null : current
-    ));
-    setLifecycleDisclosureState((current) => (
-      beginEnvironmentLifecycleDisclosure(current, environmentID, intent, attempt)
-    ));
+    setGuidanceSessionState((current) => (current?.environment_id === environmentID ? null : current));
+    setLifecycleDisclosureState((current) =>
+      beginEnvironmentLifecycleDisclosure(current, environmentID, intent, attempt),
+    );
     setActiveEnvironmentOverlayState(openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID));
   };
 
@@ -7814,25 +7902,21 @@ function EnvironmentCardsPanel(props: Readonly<{
     if (open) {
       setLifecycleDisclosureState((current) => closeEnvironmentLifecycleDisclosure(current, environmentID));
     }
-    setActiveEnvironmentOverlayState((current) => (
+    setActiveEnvironmentOverlayState((current) =>
       open
         ? openEnvironmentLibraryOverlayState('endpoints', environmentID)
-        : closeEnvironmentLibraryOverlayState(current, 'endpoints', environmentID)
-    ));
+        : closeEnvironmentLibraryOverlayState(current, 'endpoints', environmentID),
+    );
   };
 
   const selectEndpointForQRCode = (environmentID: string, endpointValue: string) => {
     setActiveEnvironmentOverlayState(selectEnvironmentEndpointOverlayState(environmentID, endpointValue));
   };
 
-  const projectedEnvironment = (environmentID: string): DesktopEnvironmentEntry => projectedEntriesByID()[environmentID]!;
-  const guidanceSessionForEnvironment = (environmentID: string): EnvironmentGuidanceSessionState => (
-    guidanceSessionState()?.environment_id === environmentID ? guidanceSessionState() : null
-  );
-  const lifecycleDisclosureForEnvironment = (environmentID: string): EnvironmentLifecycleDisclosureState => (
-    environmentLifecycleDisclosureForEnvironment(lifecycleDisclosureState(), environmentID)
-  );
-
+  const projectedEnvironment = (environmentID: string): DesktopEnvironmentEntry =>
+    projectedEntriesByID()[environmentID]!;
+  const guidanceSessionForEnvironment = (environmentID: string): EnvironmentGuidanceSessionState =>
+    guidanceSessionState()?.environment_id === environmentID ? guidanceSessionState() : null;
   createEffect(() => {
     const element = environmentLibraryElement();
     if (!element) {
@@ -7846,9 +7930,8 @@ function EnvironmentCardsPanel(props: Readonly<{
 
     updateLayoutMetrics();
 
-    const resizeObserver = typeof ResizeObserver === 'undefined'
-      ? null
-      : new ResizeObserver(() => updateLayoutMetrics());
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => updateLayoutMetrics());
     resizeObserver?.observe(element);
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', updateLayoutMetrics);
@@ -7866,23 +7949,21 @@ function EnvironmentCardsPanel(props: Readonly<{
     <div class="space-y-3">
       <Show
         when={props.entries.length > 0 || props.showQuickAddCards}
-        fallback={(
-          <Motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
+        fallback={
+          <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
               <Search class="h-8 w-8 text-muted-foreground/50" />
               <div class="space-y-1">
-                <div class="text-sm font-medium text-foreground">{props.i18n.t('environmentCenter.noMatchingEnvironmentsTitle')}</div>
+                <div class="text-sm font-medium text-foreground">
+                  {props.i18n.t('environmentCenter.noMatchingEnvironmentsTitle')}
+                </div>
                 <div class="text-xs text-muted-foreground">
                   {props.i18n.t('environmentCenter.noMatchingEnvironmentsDescription')}
                 </div>
               </div>
             </div>
           </Motion.div>
-        )}
+        }
       >
         <div
           ref={setEnvironmentLibraryElement}
@@ -7899,17 +7980,35 @@ function EnvironmentCardsPanel(props: Readonly<{
                     environment={projectedEnvironment(environmentID)}
                     busyState={props.busyState}
                     actionProgress={props.actionProgress}
-                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environmentID)}
+                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(
+                      activeEnvironmentOverlayState(),
+                      'runtime_menu',
+                      environmentID,
+                    )}
                     onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
-                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
+                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(
+                      activeEnvironmentOverlayState(),
+                      'primary_action_guidance',
+                      environmentID,
+                    )}
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
-                    lifecycleProgressOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'lifecycle_progress', environmentID)}
+                    lifecycleProgressOpen={environmentLibraryOverlayOpenFor(
+                      activeEnvironmentOverlayState(),
+                      'lifecycle_progress',
+                      environmentID,
+                    )}
                     onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
-                    endpointPopoverOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'endpoints', environmentID)}
+                    endpointPopoverOpen={environmentLibraryOverlayOpenFor(
+                      activeEnvironmentOverlayState(),
+                      'endpoints',
+                      environmentID,
+                    )}
                     onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
-                    selectedEndpointValue={environmentEndpointOverlaySelectedValueFor(activeEnvironmentOverlayState(), environmentID)}
+                    selectedEndpointValue={environmentEndpointOverlaySelectedValueFor(
+                      activeEnvironmentOverlayState(),
+                      environmentID,
+                    )}
                     selectEndpointForQRCode={(endpointValue) => selectEndpointForQRCode(environmentID, endpointValue)}
-                    lifecycleDisclosure={lifecycleDisclosureForEnvironment(environmentID)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
@@ -7926,9 +8025,13 @@ function EnvironmentCardsPanel(props: Readonly<{
                     dismissOperation={props.dismissOperation}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
-                    beginLifecycleDisclosure={(intent, attempt) => beginLifecycleProgressDisclosure(environmentID, intent, attempt)}
+                    beginLifecycleDisclosure={(intent, attempt) =>
+                      beginLifecycleProgressDisclosure(environmentID, intent, attempt)
+                    }
                     abandonLifecycleDisclosure={(attempt) => abandonLifecycleProgressDisclosure(environmentID, attempt)}
-                    bindLifecycleDisclosure={(attempt, operation) => bindLifecycleProgressDisclosure(environmentID, attempt, operation)}
+                    bindLifecycleDisclosure={(attempt, operation) =>
+                      bindLifecycleProgressDisclosure(environmentID, attempt, operation)
+                    }
                   />
                 )}
               </For>
@@ -7936,7 +8039,11 @@ function EnvironmentCardsPanel(props: Readonly<{
           </Show>
           <Show when={groupedEntryIDs().regular_entry_ids.length > 0 || props.showQuickAddCards}>
             <EnvironmentLibrarySection
-              title={groupedEntryIDs().pinned_entry_ids.length > 0 ? props.i18n.t('environmentCenter.environmentsSection') : undefined}
+              title={
+                groupedEntryIDs().pinned_entry_ids.length > 0
+                  ? props.i18n.t('environmentCenter.environmentsSection')
+                  : undefined
+              }
             >
               <For each={groupedEntryIDs().regular_entry_ids}>
                 {(environmentID) => (
@@ -7945,17 +8052,35 @@ function EnvironmentCardsPanel(props: Readonly<{
                     environment={projectedEnvironment(environmentID)}
                     busyState={props.busyState}
                     actionProgress={props.actionProgress}
-                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environmentID)}
+                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(
+                      activeEnvironmentOverlayState(),
+                      'runtime_menu',
+                      environmentID,
+                    )}
                     onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
-                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
+                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(
+                      activeEnvironmentOverlayState(),
+                      'primary_action_guidance',
+                      environmentID,
+                    )}
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
-                    lifecycleProgressOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'lifecycle_progress', environmentID)}
+                    lifecycleProgressOpen={environmentLibraryOverlayOpenFor(
+                      activeEnvironmentOverlayState(),
+                      'lifecycle_progress',
+                      environmentID,
+                    )}
                     onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
-                    endpointPopoverOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'endpoints', environmentID)}
+                    endpointPopoverOpen={environmentLibraryOverlayOpenFor(
+                      activeEnvironmentOverlayState(),
+                      'endpoints',
+                      environmentID,
+                    )}
                     onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
-                    selectedEndpointValue={environmentEndpointOverlaySelectedValueFor(activeEnvironmentOverlayState(), environmentID)}
+                    selectedEndpointValue={environmentEndpointOverlaySelectedValueFor(
+                      activeEnvironmentOverlayState(),
+                      environmentID,
+                    )}
                     selectEndpointForQRCode={(endpointValue) => selectEndpointForQRCode(environmentID, endpointValue)}
-                    lifecycleDisclosure={lifecycleDisclosureForEnvironment(environmentID)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
@@ -7972,9 +8097,13 @@ function EnvironmentCardsPanel(props: Readonly<{
                     dismissOperation={props.dismissOperation}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
-                    beginLifecycleDisclosure={(intent, attempt) => beginLifecycleProgressDisclosure(environmentID, intent, attempt)}
+                    beginLifecycleDisclosure={(intent, attempt) =>
+                      beginLifecycleProgressDisclosure(environmentID, intent, attempt)
+                    }
                     abandonLifecycleDisclosure={(attempt) => abandonLifecycleProgressDisclosure(environmentID, attempt)}
-                    bindLifecycleDisclosure={(attempt, operation) => bindLifecycleProgressDisclosure(environmentID, attempt, operation)}
+                    bindLifecycleDisclosure={(attempt, operation) =>
+                      bindLifecycleProgressDisclosure(environmentID, attempt, operation)
+                    }
                   />
                 )}
               </For>
@@ -8134,7 +8263,9 @@ function ConsoleChipActionButton(props: Readonly<{
 }
 
 function cardFactIconMaskStyle(icon: string): JSX.CSSProperties {
-  return { '--redeven-card-fact-icon-mask': `url("${icon}")` } as JSX.CSSProperties;
+  return {
+    '--redeven-card-fact-icon-mask': `url("${icon}")`,
+  } as JSX.CSSProperties;
 }
 
 function qrCodeSvgDataUrl(value: string): string {
@@ -8371,7 +8502,9 @@ function EndpointsPopover(props: Readonly<{
         >
           <div
             class="redeven-endpoints-popover"
-            classList={{ 'redeven-endpoints-popover--expanded': selectedEndpoint() !== null }}
+            classList={{
+              'redeven-endpoints-popover--expanded': selectedEndpoint() !== null,
+            }}
           >
             <div class="redeven-endpoints-popover-header">
               <span class="redeven-endpoints-popover-title">{props.i18n.t('environmentCenter.endpoints')}</span>
@@ -8386,7 +8519,9 @@ function EndpointsPopover(props: Readonly<{
             </div>
             <div
               class="redeven-endpoints-popover-body"
-              classList={{ 'redeven-endpoints-popover-body--expanded': selectedEndpoint() !== null }}
+              classList={{
+                'redeven-endpoints-popover-body--expanded': selectedEndpoint() !== null,
+              }}
             >
               <div class="redeven-endpoints-popover-list">
                 <For each={props.endpoints}>
@@ -8493,48 +8628,31 @@ function EndpointQRCodePanel(props: Readonly<{
 
 function isEnvironmentActionBusy(
   action: EnvironmentActionModel,
+  operationState: EnvironmentOperationState,
   busyState: DesktopLauncherBusyState | undefined,
   environmentID: string,
-  runtimeLifecycleProgress?: DesktopLauncherActionProgress | null,
 ): boolean {
-  if (
-    (action.intent === 'start_runtime'
-      || action.intent === 'stop_runtime'
-      || action.intent === 'restart_runtime'
-      || action.intent === 'update_runtime')
-    && launcherProgressBlocksPrimaryAction(runtimeLifecycleProgress)
-  ) {
-    return true;
+  if (environmentActionUsesLifecycleOwner(action)) {
+    return operationState.actionsDisabled;
   }
   if (!busyState) {
     return false;
   }
   switch (action.intent) {
     case 'request_open_access':
-      return busyState.provider_origin !== ''
-        && busyState.provider_origin === action.provider_origin
-        && busyState.action === 'start_control_plane_connect';
-    case 'start_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['start_environment_runtime'], runtimeLifecycleProgress);
-    case 'restart_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['restart_environment_runtime'], runtimeLifecycleProgress);
-    case 'update_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update'], runtimeLifecycleProgress);
-    case 'reinstall_target':
-      return busyStateMatchesEnvironment(busyState, environmentID, ['reinstall_target']);
+      return (
+        busyState.provider_origin !== '' &&
+        busyState.provider_origin === action.provider_origin &&
+        busyState.action === 'start_control_plane_connect'
+      );
     case 'pair_gateway':
       return busyStateMatchesGateway(busyState, action.gateway_id ?? '', ['refresh_gateway']);
     case 'update_desktop':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['manage_desktop_update'], runtimeLifecycleProgress);
+      return busyStateMatchesEnvironment(busyState, environmentID, ['manage_desktop_update']);
     case 'connect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_runtime']);
     case 'disconnect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_provider_runtime']);
-    case 'stop_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['stop_environment_runtime'], runtimeLifecycleProgress);
-    case 'refresh_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['refresh_environment_runtime'], runtimeLifecycleProgress)
-        || busyStateMatchesAction(busyState, 'refresh_all_environment_runtimes');
     default:
       return false;
   }
@@ -9346,7 +9464,11 @@ function EnvironmentProgressPanel(props: Readonly<{
                 {(detail) => <span>{detail()}</span>}
               </Show>
               <Show when={activeStageElapsedSeconds() >= 5}>
-                <span>{props.i18n.t('progress.stageElapsed', { seconds: activeStageElapsedSeconds() })}</span>
+                <span>
+                  {props.i18n.t('progress.stageElapsed', {
+                    seconds: activeStageElapsedSeconds(),
+                  })}
+                </span>
               </Show>
             </div>
             {renderFailureNotice()}
@@ -9402,19 +9524,18 @@ function overlayStatusIconTone(tone: EnvironmentActionOverlayTone): 'warning' | 
   return tone;
 }
 
-function EnvironmentPrimaryActionPanel(props: Readonly<{
-  i18n: DesktopI18n;
-  overlay: Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>>;
-  environmentID: string;
-  busyState?: DesktopLauncherBusyState;
-  runtimeLifecycleProgress?: DesktopLauncherActionProgress | null;
-  reinstallTargetProgress?: DesktopLauncherActionProgress | null;
-  session: EnvironmentGuidanceSessionState;
-  onRunAction: (action: EnvironmentActionModel) => void;
-}>) {
-  const notice = createMemo(() => (
-    props.overlay.actions.length > 0 ? guidanceSessionNotice(props.session) : null
-  ));
+function EnvironmentPrimaryActionPanel(
+  props: Readonly<{
+    i18n: DesktopI18n;
+    overlay: Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>>;
+    environmentID: string;
+    busyState?: DesktopLauncherBusyState;
+    operationState: EnvironmentOperationState;
+    session: EnvironmentGuidanceSessionState;
+    onRunAction: (action: EnvironmentActionModel) => void;
+  }>,
+) {
+  const notice = createMemo(() => (props.overlay.actions.length > 0 ? guidanceSessionNotice(props.session) : null));
   const localizedNotice = createMemo(() => {
     const current = notice();
     if (!current) {
@@ -9425,9 +9546,7 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
       title: localizedOverlayTitle(props.i18n, current.title),
       detail: localizedRuntimeMessage(props.i18n, current.detail),
     };
-    return localized.title === props.overlay.title && localized.detail === props.overlay.detail
-      ? null
-      : localized;
+    return localized.title === props.overlay.title && localized.detail === props.overlay.detail ? null : localized;
   });
   const panelBusy = createMemo(() => props.session?.pending_intent !== null);
   const iconTone = createMemo(() => overlayStatusIconTone(props.overlay.tone));
@@ -9438,23 +9557,35 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
     }
     const active = props.session?.open_flow_stage ?? 'checking_access';
     const steps = [
-      { key: 'checking_access', label: props.i18n.t('environmentOpenFlow.checkAccess') },
-      ...(intent === 'open_with_preflight' ? [] : [
-      ...(intent === 'initialize_and_open'
-        ? [{ key: 'preparing_environment', label: props.i18n.t('environmentOpenFlow.prepareEnvironment') }]
-        : []),
-      { key: 'starting_environment', label: props.i18n.t('environmentOpenFlow.startEnvironment') },
-      { key: 'opening_workspace', label: props.i18n.t('environmentOpenFlow.openWorkspace') },
-      ]),
+      {
+        key: 'checking_access',
+        label: props.i18n.t('environmentOpenFlow.checkAccess'),
+      },
+      ...(intent === 'open_with_preflight'
+        ? []
+        : [
+            ...(intent === 'initialize_and_open'
+              ? [
+                  {
+                    key: 'preparing_environment',
+                    label: props.i18n.t('environmentOpenFlow.prepareEnvironment'),
+                  },
+                ]
+              : []),
+            {
+              key: 'starting_environment',
+              label: props.i18n.t('environmentOpenFlow.startEnvironment'),
+            },
+            {
+              key: 'opening_workspace',
+              label: props.i18n.t('environmentOpenFlow.openWorkspace'),
+            },
+          ]),
     ];
     const activeIndex = steps.findIndex((candidate) => candidate.key === active);
     return steps.map((step, index) => ({
       ...step,
-      state: index < activeIndex
-        ? 'done'
-        : step.key === active
-          ? 'active'
-          : 'pending',
+      state: index < activeIndex ? 'done' : step.key === active ? 'active' : 'pending',
     }));
   });
 
@@ -9481,7 +9612,10 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
         )}
       </Show>
       <Show when={openFlowSteps().length > 0}>
-        <div class="redeven-environment-progress__steps mt-3" aria-label={props.i18n.t('environmentOpenFlow.progressLabel')}>
+        <div
+          class="redeven-environment-progress__steps mt-3"
+          aria-label={props.i18n.t('environmentOpenFlow.progressLabel')}
+        >
           <Index each={openFlowSteps()}>
             {(step, index) => {
               const state = () => step().state;
@@ -9495,7 +9629,9 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
                     </Show>
                   </div>
                   <span class="min-w-0">
-                    <span class="redeven-environment-progress__step-label" data-state={state()}>{step().label}</span>
+                    <span class="redeven-environment-progress__step-label" data-state={state()}>
+                      {step().label}
+                    </span>
                   </span>
                 </div>
               );
@@ -9507,12 +9643,8 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
         <div class="redeven-action-popover__actions">
           <For each={props.overlay.actions}>
             {(item) => {
-              const loading = () => isEnvironmentActionBusy(
-                item.action,
-                props.busyState,
-                props.environmentID,
-                props.runtimeLifecycleProgress,
-              );
+              const loading = () =>
+                isEnvironmentActionBusy(item.action, props.operationState, props.busyState, props.environmentID);
               const isSecondary = item.emphasis === 'secondary';
               const secondaryIconOnly = () => isSecondary && props.overlay.actions.length > 1;
               const showsRefreshIcon = item.action.intent === 'refresh_runtime';
@@ -9521,7 +9653,11 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
                   <Button
                     size="sm"
                     variant={item.emphasis === 'primary' ? 'default' : 'outline'}
-                    class={secondaryIconOnly() ? 'aspect-square p-0' : cn('w-full justify-center', showsRefreshIcon && 'gap-1.5')}
+                    class={
+                      secondaryIconOnly()
+                        ? 'aspect-square p-0'
+                        : cn('w-full justify-center', showsRefreshIcon && 'gap-1.5')
+                    }
                     loading={loading()}
                     disabled={panelBusy() && !loading()}
                     onClick={() => props.onRunAction(item.action)}
@@ -9530,14 +9666,14 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
                   >
                     <Show
                       when={secondaryIconOnly()}
-                      fallback={(
+                      fallback={
                         <>
                           <Show when={showsRefreshIcon}>
                             <Refresh class="h-3.5 w-3.5" />
                           </Show>
                           {item.label}
                         </>
-                      )}
+                      }
                     >
                       <Refresh class="h-3.5 w-3.5" />
                     </Show>
@@ -9635,6 +9771,15 @@ function progressTriggerClassName(presentation: EnvironmentProgressPrimaryPresen
     : 'redeven-split-action-trigger--attention';
 }
 
+function environmentActionUsesLifecycleOwner(action: EnvironmentActionModel): boolean {
+  return (
+    isEnvironmentLifecycleDisclosureIntent(action.intent) ||
+    action.intent === 'open' ||
+    action.intent === 'open_with_preflight' ||
+    action.intent === 'start_and_open'
+  );
+}
+
 function localizedPrimaryProgressPresentation(
   i18n: DesktopI18n,
   presentation: EnvironmentProgressPrimaryPresentation | null,
@@ -9652,34 +9797,35 @@ function localizedPrimaryProgressPresentation(
   };
 }
 
-function EnvironmentSplitActionButton(props: Readonly<{
-  i18n: DesktopI18n;
-  presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
-  environmentID: string;
-  environmentLabel: string;
-  menuOpen: boolean;
-  onMenuOpenChange: (open: boolean) => void;
-  guidanceOpen: boolean;
-  onGuidanceOpenChange: (open: boolean) => void;
-  progressOpen: boolean;
-  onProgressOpenChange: (open: boolean) => void;
-  guidanceSession: EnvironmentGuidanceSessionState;
-  busyState?: DesktopLauncherBusyState;
-  loading?: boolean;
-  runtimeLifecycleProgress?: DesktopLauncherActionProgress | null;
-  reinstallTargetProgress?: DesktopLauncherActionProgress | null;
-  openConnectionProgress?: DesktopLauncherActionProgress | null;
-  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-  dismissOperation: (progress: DesktopLauncherActionProgress) => void;
-  copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
-  refreshEnvironmentRuntime: () => void;
-  runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-  onRunAction: (action: EnvironmentActionModel) => void;
-  onRunGuidanceAction: (action: EnvironmentActionModel) => void;
-}>) {
+function EnvironmentSplitActionButton(
+  props: Readonly<{
+    i18n: DesktopI18n;
+    presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
+    environmentID: string;
+    environmentLabel: string;
+    menuOpen: boolean;
+    onMenuOpenChange: (open: boolean) => void;
+    guidanceOpen: boolean;
+    onGuidanceOpenChange: (open: boolean) => void;
+    progressOpen: boolean;
+    onProgressOpenChange: (open: boolean) => void;
+    guidanceSession: EnvironmentGuidanceSessionState;
+    busyState?: DesktopLauncherBusyState;
+    operationState: EnvironmentOperationState;
+    cancelOperation: (progress: DesktopLauncherActionProgress) => void;
+    dismissOperation: (progress: DesktopLauncherActionProgress) => void;
+    copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
+    refreshEnvironmentRuntime: () => void;
+    runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
+    onRunAction: (action: EnvironmentActionModel) => void;
+    onRunGuidanceAction: (action: EnvironmentActionModel) => void;
+  }>,
+) {
   const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0);
   const guidanceNotice = createMemo(() => guidanceSessionNotice(props.guidanceSession));
-  const sessionPopoverOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | undefined>(() => {
+  const sessionPopoverOverlay = createMemo<
+    Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | undefined
+  >(() => {
     const notice = guidanceNotice();
     if (!notice) {
       return undefined;
@@ -9688,117 +9834,124 @@ function EnvironmentSplitActionButton(props: Readonly<{
     const retryIntent = props.guidanceSession?.retry_intent;
     const retryAction = recoveryAction
       ? {
-          label: recoveryAction === 'update_runtime'
-            ? props.i18n.t('environmentAction.updateRuntimeAndOpen')
-            : recoveryAction === 'update_desktop'
-              ? props.i18n.t('environmentAction.updateRedevenDesktop')
-              : props.i18n.t('environmentAction.refreshStatus'),
-          emphasis: 'primary' as const,
-          action: {
-            intent: recoveryAction,
-            label: recoveryAction === 'update_runtime'
+          label:
+            recoveryAction === 'update_runtime'
               ? props.i18n.t('environmentAction.updateRuntimeAndOpen')
               : recoveryAction === 'update_desktop'
                 ? props.i18n.t('environmentAction.updateRedevenDesktop')
                 : props.i18n.t('environmentAction.refreshStatus'),
+          emphasis: 'primary' as const,
+          action: {
+            intent: recoveryAction,
+            label:
+              recoveryAction === 'update_runtime'
+                ? props.i18n.t('environmentAction.updateRuntimeAndOpen')
+                : recoveryAction === 'update_desktop'
+                  ? props.i18n.t('environmentAction.updateRedevenDesktop')
+                  : props.i18n.t('environmentAction.refreshStatus'),
             enabled: true,
             variant: 'default' as const,
             ...(recoveryAction === 'update_runtime' ? { continue_open_after_completion: true } : {}),
           },
         }
       : retryIntent
-      ? {
-          label: retryIntent === 'request_open_access'
-            ? props.i18n.t('environmentAction.requestAccess')
-            : retryIntent === 'start_and_open'
-              ? props.i18n.t('environmentAction.startAndOpen')
-              : retryIntent === 'open_with_preflight'
-                ? props.i18n.t('environmentAction.open')
-              : props.i18n.t('environmentAction.retryInitialization'),
-          emphasis: 'primary' as const,
-          action: {
-            intent: retryIntent,
-            label: retryIntent === 'request_open_access'
-              ? props.i18n.t('environmentAction.requestAccess')
-              : retryIntent === 'start_and_open'
-                ? props.i18n.t('environmentAction.startAndOpen')
-                : retryIntent === 'open_with_preflight'
-                  ? props.i18n.t('environmentAction.open')
-                : props.i18n.t('environmentAction.retryInitialization'),
-            enabled: true,
-            variant: 'default' as const,
-          },
-        }
-      : null;
+        ? {
+            label:
+              retryIntent === 'request_open_access'
+                ? props.i18n.t('environmentAction.requestAccess')
+                : retryIntent === 'start_and_open'
+                  ? props.i18n.t('environmentAction.startAndOpen')
+                  : retryIntent === 'open_with_preflight'
+                    ? props.i18n.t('environmentAction.open')
+                    : props.i18n.t('environmentAction.retryInitialization'),
+            emphasis: 'primary' as const,
+            action: {
+              intent: retryIntent,
+              label:
+                retryIntent === 'request_open_access'
+                  ? props.i18n.t('environmentAction.requestAccess')
+                  : retryIntent === 'start_and_open'
+                    ? props.i18n.t('environmentAction.startAndOpen')
+                    : retryIntent === 'open_with_preflight'
+                      ? props.i18n.t('environmentAction.open')
+                      : props.i18n.t('environmentAction.retryInitialization'),
+              enabled: true,
+              variant: 'default' as const,
+            },
+          }
+        : null;
     return {
       kind: 'popover',
       tone: notice.tone === 'warning' ? 'warning' : 'neutral',
-      eyebrow: notice.tone === 'success' ? props.i18n.t('progress.ready') : notice.tone === 'error' ? props.i18n.t('progress.needsAttention') : props.i18n.t('progress.running'),
+      eyebrow:
+        notice.tone === 'success'
+          ? props.i18n.t('progress.ready')
+          : notice.tone === 'error'
+            ? props.i18n.t('progress.needsAttention')
+            : props.i18n.t('progress.running'),
       title: localizedOverlayTitle(props.i18n, notice.title),
       detail: localizedRuntimeMessage(props.i18n, notice.detail),
       actions: retryAction ? [retryAction] : [],
     };
   });
-  const primaryProgress = createMemo(() => props.openConnectionProgress ?? null);
-  const runtimeMenuProgress = createMemo(() => props.runtimeLifecycleProgress ?? null);
-  const panelProgress = createMemo(() => (
-    guidanceSessionOwnsOpenFlowPanel(props.guidanceSession)
-      ? null
-      : props.reinstallTargetProgress
-        ?? selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())
-  ));
+  const panelProgress = createMemo(() => props.operationState.panelProgress);
   const hasPanelProgress = createMemo(() => panelProgress() !== null);
   const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());
-  const primaryProgressPresentation = createMemo(() => localizedPrimaryProgressPresentation(
-    props.i18n,
-    environmentProgressPrimaryPresentation(panelProgress()),
-  ));
-  const primaryActionOverlay = createMemo(() => (
+  const primaryProgressPresentation = createMemo(() =>
+    localizedPrimaryProgressPresentation(props.i18n, environmentProgressPrimaryPresentation(panelProgress())),
+  );
+  const primaryActionOverlay = createMemo(() =>
     primaryProgressPresentation() || progressPanelVisible()
       ? undefined
-      : sessionPopoverOverlay() ?? props.presentation.primary_action_overlay
-  ));
-  const tooltipOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined>(() => {
+      : (sessionPopoverOverlay() ?? props.presentation.primary_action_overlay),
+  );
+  const tooltipOverlay = createMemo<
+    Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined
+  >(() => {
     const overlay = primaryActionOverlay();
     return overlay?.kind === 'tooltip' ? overlay : undefined;
   });
-  const popoverOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | undefined>(() => {
+  const popoverOverlay = createMemo<
+    Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | undefined
+  >(() => {
     const overlay = primaryActionOverlay();
     return overlay?.kind === 'popover' ? overlay : undefined;
   });
-  const primaryActionLoading = createMemo(() => (
-    props.presentation.primary_action.enabled && props.loading
-  ));
-  const blockedPrimaryActionDisabled = createMemo(() => (
-    popoverOverlay() !== undefined
-    && popoverOverlay()!.actions.length > 0
-    && !props.presentation.primary_action.enabled
-  ));
-  const primaryFallbackRunsAction = createMemo(() => (
-    props.presentation.primary_action.enabled
-    && (popoverOverlay() === undefined || popoverOverlay()?.actions.length === 0)
-  ));
-  const popoverOpen = createMemo(() => progressPanelVisible() || (props.guidanceOpen && popoverOverlay() !== undefined));
-  const shimmerBlocked = createMemo(() => (
-    primaryProgressPresentation() ? false : blockedPrimaryActionDisabled()
-  ));
-  const primaryButtonClass = createMemo(() => (
-    cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
-  ));
-  const renderPrimaryActionIcon = () => (
-    props.presentation.primary_action.intent === 'request_open_access'
-      ? <ShieldCheck class="mr-1 h-3.5 w-3.5" />
-      : null
+  const primaryActionLoading = createMemo(
+    () => props.presentation.primary_action.enabled && props.operationState.actionsDisabled,
   );
+  const blockedPrimaryActionDisabled = createMemo(
+    () =>
+      popoverOverlay() !== undefined &&
+      popoverOverlay()!.actions.length > 0 &&
+      !props.presentation.primary_action.enabled,
+  );
+  const primaryFallbackRunsAction = createMemo(
+    () =>
+      props.presentation.primary_action.enabled &&
+      (popoverOverlay() === undefined || popoverOverlay()?.actions.length === 0),
+  );
+  const popoverOpen = createMemo(
+    () => progressPanelVisible() || (props.guidanceOpen && popoverOverlay() !== undefined),
+  );
+  const shimmerBlocked = createMemo(() => (primaryProgressPresentation() ? false : blockedPrimaryActionDisabled()));
+  const primaryButtonClass = createMemo(() =>
+    cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0'),
+  );
+  const renderPrimaryActionIcon = () =>
+    props.presentation.primary_action.intent === 'request_open_access' ? (
+      <ShieldCheck class="mr-1 h-3.5 w-3.5" />
+    ) : null;
   const renderEnvironmentProgressTriggerIcon = (icon: 'play' | 'stop') => {
     const ProgressIcon = icon === 'stop' ? Stop : Play;
     return <ProgressIcon class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
   };
-  const renderEnvironmentProgressPresentationIcon = (presentation: EnvironmentProgressPrimaryPresentation) => (
-    presentation.kind === 'progress_trigger'
-      ? renderEnvironmentProgressTriggerIcon(presentation.icon)
-      : <AlertTriangle class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-  );
+  const renderEnvironmentProgressPresentationIcon = (presentation: EnvironmentProgressPrimaryPresentation) =>
+    presentation.kind === 'progress_trigger' ? (
+      renderEnvironmentProgressTriggerIcon(presentation.icon)
+    ) : (
+      <AlertTriangle class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+    );
   let rootRef: HTMLDivElement | undefined;
   let menuRef: HTMLDivElement | undefined;
   let menuFocusFrame = 0;
@@ -9876,17 +10029,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
       <div class="redeven-split-action-primary">
         <Show
           when={hasPanelProgress() || popoverOverlay()}
-          fallback={(
+          fallback={
             <Show when={tooltipOverlay()} fallback={renderPrimaryButton()}>
-              <DesktopTooltip
-                content={tooltipOverlay()!.message}
-                placement="top"
-                anchorClass="flex w-full"
-              >
+              <DesktopTooltip content={tooltipOverlay()!.message} placement="top" anchorClass="flex w-full">
                 {renderPrimaryButton()}
               </DesktopTooltip>
             </Show>
-          )}
+          }
         >
           <DesktopActionPopover
             open={popoverOpen()}
@@ -9900,11 +10049,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
               }
               props.onGuidanceOpenChange(open);
             }}
-            content={(
+            content={
               <div style={{ display: 'grid' }}>
                 <div
                   class="redeven-popover-panel-collapse"
-                  classList={{ 'redeven-popover-panel-collapse--open': !progressPanelVisible() }}
+                  classList={{
+                    'redeven-popover-panel-collapse--open': !progressPanelVisible(),
+                  }}
                 >
                   <div>
                     <Show when={popoverOverlay()}>
@@ -9914,7 +10065,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                           overlay={overlay()}
                           environmentID={props.environmentID}
                           busyState={props.busyState}
-                          runtimeLifecycleProgress={runtimeMenuProgress()}
+                          operationState={props.operationState}
                           session={props.guidanceSession}
                           onRunAction={(action) => {
                             closeMenu();
@@ -9927,7 +10078,9 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 </div>
                 <div
                   class="redeven-popover-panel-collapse"
-                  classList={{ 'redeven-popover-panel-collapse--open': progressPanelVisible() }}
+                  classList={{
+                    'redeven-popover-panel-collapse--open': progressPanelVisible(),
+                  }}
                 >
                   <div>
                     <Show when={panelProgress()}>
@@ -9936,7 +10089,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                           i18n={props.i18n}
                           progress={p()}
                           primaryAction={props.presentation.primary_action}
-                          primaryActionBusy={props.loading === true}
+                          primaryActionBusy={props.operationState.actionsDisabled}
                           cancelOperation={props.cancelOperation}
                           dismissOperation={(progress) => {
                             props.dismissOperation(progress);
@@ -9949,7 +10102,9 @@ function EnvironmentSplitActionButton(props: Readonly<{
                                 props.refreshEnvironmentRuntime();
                                 break;
                               case 'update_runtime': {
-                                const updateAction = props.presentation.menu_actions.find((item) => item.action.intent === 'update_runtime')?.action ?? {
+                                const updateAction = props.presentation.menu_actions.find(
+                                  (item) => item.action.intent === 'update_runtime',
+                                )?.action ?? {
                                   intent: 'update_runtime' as const,
                                   label: 'Update runtime',
                                   enabled: true,
@@ -10012,19 +10167,21 @@ function EnvironmentSplitActionButton(props: Readonly<{
                   </div>
                 </div>
               </div>
-            )}
+            }
             anchorClass="flex w-full"
             allowMainAxisOverflow={false}
             placementLock="top-inline-shift"
             popoverAriaLabel={
               progressPanelVisible()
-                ? (panelProgress() ? localizedProgressTitle(props.i18n, panelProgress()!) : props.i18n.t('progress.environmentProgress'))
+                ? panelProgress()
+                  ? localizedProgressTitle(props.i18n, panelProgress()!)
+                  : props.i18n.t('progress.environmentProgress')
                 : (popoverOverlay()?.title ?? '')
             }
           >
             <Show
               when={primaryProgressPresentation()}
-              fallback={(
+              fallback={
                 <Button
                   size="sm"
                   variant={props.presentation.primary_action.variant}
@@ -10032,12 +10189,18 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     primaryButtonClass(),
                     blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked',
                   )}
-                  style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-                  disabled={props.loading && primaryFallbackRunsAction()}
+                  style={{
+                    'min-width': 'var(--redeven-split-action-primary-min-width)',
+                  }}
+                  disabled={props.operationState.actionsDisabled && primaryFallbackRunsAction()}
                   aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
                   aria-haspopup={popoverOverlay() ? 'dialog' : undefined}
                   aria-expanded={popoverOverlay() ? props.guidanceOpen : undefined}
-                  aria-label={blockedPrimaryActionDisabled() ? blockedPrimaryActionTriggerLabel(props.i18n, props.presentation.primary_action.label) : undefined}
+                  aria-label={
+                    blockedPrimaryActionDisabled()
+                      ? blockedPrimaryActionTriggerLabel(props.i18n, props.presentation.primary_action.label)
+                      : undefined
+                  }
                   onClick={() => {
                     closeMenu();
                     if (primaryFallbackRunsAction()) {
@@ -10050,30 +10213,28 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     props.onGuidanceOpenChange(!props.guidanceOpen);
                   }}
                 >
-                  <Show
-                    when={blockedPrimaryActionDisabled()}
-                    fallback={props.presentation.primary_action.label}
-                  >
+                  <Show when={blockedPrimaryActionDisabled()} fallback={props.presentation.primary_action.label}>
                     <span class="redeven-split-action-trigger__content">
-                      {props.presentation.primary_action.intent === 'request_open_access'
-                        ? <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
-                        : <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}
+                      {props.presentation.primary_action.intent === 'request_open_access' ? (
+                        <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+                      ) : (
+                        <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+                      )}
                       <span>{props.presentation.primary_action.label}</span>
                     </span>
                   </Show>
                 </Button>
-              )}
+              }
             >
               {(presentation) => {
                 return (
                   <Button
                     size="sm"
                     variant={props.presentation.primary_action.variant}
-                    class={cn(
-                      primaryButtonClass(),
-                      progressTriggerClassName(presentation()),
-                    )}
-                    style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
+                    class={cn(primaryButtonClass(), progressTriggerClassName(presentation()))}
+                    style={{
+                      'min-width': 'var(--redeven-split-action-primary-min-width)',
+                    }}
                     aria-haspopup="dialog"
                     aria-expanded={props.progressOpen}
                     aria-label={presentation().ariaLabel}
@@ -10093,16 +10254,16 @@ function EnvironmentSplitActionButton(props: Readonly<{
           </DesktopActionPopover>
         </Show>
         <Presence>
-          <Show when={props.loading}>
+          <Show when={props.operationState.actionsDisabled}>
             <Motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
               class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-welcome-loading-shimmer-overlay'}
-              data-shimmer-surface={shimmerBlocked()
-                ? undefined
-                : welcomeLoadingShimmerSurface(props.presentation.primary_action.variant)}
+              data-shimmer-surface={
+                shimmerBlocked() ? undefined : welcomeLoadingShimmerSurface(props.presentation.primary_action.variant)
+              }
               aria-hidden="true"
             />
           </Show>
@@ -10138,37 +10299,62 @@ function EnvironmentSplitActionButton(props: Readonly<{
             {(item: EnvironmentActionMenuItemModel) => {
               const icon = () => splitMenuIcon(item.action.intent);
               const tone = () => splitMenuItemToneData(item.action.intent);
+              const disabledByOperation = () =>
+                props.operationState.actionsDisabled && environmentActionUsesLifecycleOwner(item.action);
+              const disabledReason = () => {
+                if (!item.action.enabled) {
+                  return item.action.disabled_reason;
+                }
+                if (!disabledByOperation()) {
+                  return undefined;
+                }
+                const activeProgress = props.operationState.activeProgress;
+                return activeProgress
+                  ? props.i18n.t('environmentAction.blockedByActiveOperation', {
+                      operation: localizedProgressTitle(props.i18n, activeProgress),
+                      action: item.label,
+                    })
+                  : props.i18n.t('environmentAction.waitForOperationAcceptance', {
+                      action: item.label,
+                    });
+              };
+              const disabled = () => !item.action.enabled || disabledByOperation();
               return (
                 <button
-                    type="button"
-                    role="menuitem"
-                    class="redeven-split-menu-item"
-                    data-tone={tone() || undefined}
-                    disabled={!item.action.enabled}
-                    title={!item.action.enabled ? item.action.disabled_reason : undefined}
-                    aria-describedby={!item.action.enabled && item.action.disabled_reason ? `${props.environmentID}-${item.id}-disabled-reason` : undefined}
-                    onClick={() => {
-                      closeMenu();
-                      props.onRunAction(item.action);
+                  type="button"
+                  role="menuitem"
+                  class="redeven-split-menu-item"
+                  data-tone={tone() || undefined}
+                  disabled={disabled()}
+                  title={disabledReason()}
+                  aria-describedby={
+                    disabled() && disabledReason() ? `${props.environmentID}-${item.id}-disabled-reason` : undefined
+                  }
+                  onClick={() => {
+                    if (disabled()) {
+                      return;
+                    }
+                    closeMenu();
+                    props.onRunAction(item.action);
+                  }}
+                >
+                  <Show when={icon()}>
+                    {(Icon) => {
+                      const MenuIcon = Icon();
+                      return (
+                        <span class="redeven-split-menu-item-icon">
+                          <MenuIcon />
+                        </span>
+                      );
                     }}
-                  >
-                    <Show when={icon()}>
-                      {(Icon) => {
-                        const MenuIcon = Icon();
-                        return (
-                          <span class="redeven-split-menu-item-icon">
-                            <MenuIcon />
-                          </span>
-                        );
-                      }}
-                    </Show>
-                    {item.label}
-                    <Show when={!item.action.enabled && item.action.disabled_reason}>
-                      <span id={`${props.environmentID}-${item.id}-disabled-reason`} class="sr-only">
-                        {item.action.disabled_reason}
-                      </span>
-                    </Show>
-                  </button>
+                  </Show>
+                  {item.label}
+                  <Show when={disabled() && disabledReason()}>
+                    <span id={`${props.environmentID}-${item.id}-disabled-reason`} class="sr-only">
+                      {disabledReason()}
+                    </span>
+                  </Show>
+                </button>
               );
             }}
           </For>
@@ -10211,66 +10397,64 @@ function QuickCreateConnectionCard(props: Readonly<{
   );
 }
 
-function EnvironmentConnectionCard(props: Readonly<{
-  i18n: DesktopI18n;
-  environment: DesktopEnvironmentEntry;
-  busyState: DesktopLauncherBusyState;
-  actionProgress: readonly DesktopLauncherActionProgress[];
-  runtimeMenuOpen: boolean;
-  onRuntimeMenuOpenChange: (open: boolean) => void;
-  primaryActionGuidanceOpen: boolean;
-  onPrimaryActionGuidanceOpenChange: (open: boolean) => void;
-  lifecycleProgressOpen: boolean;
-  onLifecycleProgressOpenChange: (open: boolean) => void;
-  endpointPopoverOpen: boolean;
-  onEndpointPopoverOpenChange: (open: boolean) => void;
-  selectedEndpointValue?: string;
-  selectEndpointForQRCode: (endpointValue: string) => void;
-  lifecycleDisclosure: EnvironmentLifecycleDisclosureState;
-  guidanceSession: EnvironmentGuidanceSessionState;
-  setGuidanceSession: (state: EnvironmentGuidanceSessionState) => void;
-  beginLifecycleDisclosure: (
-    intent: EnvironmentLifecycleDisclosureIntent,
-    attempt: EnvironmentLifecycleAttempt,
-  ) => void;
-  abandonLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt) => void;
-  bindLifecycleDisclosure: (
-    attempt: EnvironmentLifecycleAttempt,
-    operation: EnvironmentLifecycleAttempt,
-  ) => void;
-  openEnvironment: (
-    environment: DesktopEnvironmentEntry,
-    errorTarget?: 'connect' | 'dialog',
-    route?: 'auto' | DesktopLocalEnvironmentStateRoute,
-  ) => Promise<boolean>;
-  runLocalEnvironmentAction: (
-    environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel,
-    errorTarget?: 'connect' | 'dialog' | 'settings',
-    attempt?: EnvironmentLifecycleAttempt,
-    bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
-  ) => Promise<boolean>;
-  refreshEnvironmentRuntime: (
-    environment: DesktopEnvironmentEntry,
-    errorTarget?: 'connect' | 'dialog' | 'settings',
-  ) => Promise<boolean>;
-  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
-  runEnvironmentGuidanceAction: (
-    environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel,
-    updateSession?: (state: EnvironmentGuidanceSessionState) => void,
-    attempt?: EnvironmentLifecycleAttempt,
-  ) => Promise<EnvironmentGuidanceActionResolution>;
-  runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-  runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
-  toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
-  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
-  editEnvironment: (environment: DesktopEnvironmentEntry) => void;
-  deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
-  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
-  dismissOperation: (progress: DesktopLauncherActionProgress) => void;
-  copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
-}>) {
+function EnvironmentConnectionCard(
+  props: Readonly<{
+    i18n: DesktopI18n;
+    environment: DesktopEnvironmentEntry;
+    busyState: DesktopLauncherBusyState;
+    actionProgress: readonly DesktopLauncherActionProgress[];
+    runtimeMenuOpen: boolean;
+    onRuntimeMenuOpenChange: (open: boolean) => void;
+    primaryActionGuidanceOpen: boolean;
+    onPrimaryActionGuidanceOpenChange: (open: boolean) => void;
+    lifecycleProgressOpen: boolean;
+    onLifecycleProgressOpenChange: (open: boolean) => void;
+    endpointPopoverOpen: boolean;
+    onEndpointPopoverOpenChange: (open: boolean) => void;
+    selectedEndpointValue?: string;
+    selectEndpointForQRCode: (endpointValue: string) => void;
+    guidanceSession: EnvironmentGuidanceSessionState;
+    setGuidanceSession: (state: EnvironmentGuidanceSessionState) => void;
+    beginLifecycleDisclosure: (
+      intent: EnvironmentLifecycleDisclosureIntent,
+      attempt: EnvironmentLifecycleAttempt,
+    ) => void;
+    abandonLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt) => void;
+    bindLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt, operation: EnvironmentLifecycleAttempt) => void;
+    openEnvironment: (
+      environment: DesktopEnvironmentEntry,
+      errorTarget?: 'connect' | 'dialog',
+      route?: 'auto' | DesktopLocalEnvironmentStateRoute,
+    ) => Promise<boolean>;
+    runLocalEnvironmentAction: (
+      environment: DesktopEnvironmentEntry,
+      action: EnvironmentActionModel,
+      errorTarget?: 'connect' | 'dialog' | 'settings',
+      attempt?: EnvironmentLifecycleAttempt,
+      bindOperation?: (operation: EnvironmentLifecycleAttempt) => void,
+    ) => Promise<boolean>;
+    refreshEnvironmentRuntime: (
+      environment: DesktopEnvironmentEntry,
+      errorTarget?: 'connect' | 'dialog' | 'settings',
+    ) => Promise<boolean>;
+    openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
+    runEnvironmentGuidanceAction: (
+      environment: DesktopEnvironmentEntry,
+      action: EnvironmentActionModel,
+      updateSession?: (state: EnvironmentGuidanceSessionState) => void,
+      attempt?: EnvironmentLifecycleAttempt,
+    ) => Promise<EnvironmentGuidanceActionResolution>;
+    runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
+    runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
+    toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
+    copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
+    editEnvironment: (environment: DesktopEnvironmentEntry) => void;
+    deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+    cancelOperation: (progress: DesktopLauncherActionProgress) => void;
+    dismissOperation: (progress: DesktopLauncherActionProgress) => void;
+    copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
+  }>,
+) {
   const card = createMemo(() => {
     const model = buildEnvironmentCardModel(props.environment);
     return {
@@ -10280,111 +10464,27 @@ function EnvironmentConnectionCard(props: Readonly<{
       runtime_started_label: localizedRuntimeStartedLabel(props.i18n, model.runtime_started_label),
     };
   });
-  const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment).map((fact) => (
-    localizedEnvironmentFact(props.i18n, fact)
-  )));
+  const facts = createMemo(() =>
+    buildEnvironmentCardFactsModel(props.environment).map((fact) => localizedEnvironmentFact(props.i18n, fact)),
+  );
 
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
-  const environmentActionPresentation = createMemo(() => localizedEnvironmentActionPresentation(
-    props.i18n,
-    environmentActionModel().action_presentation,
-  ));
-  const runtimeLifecycleProgress = createMemo(() => (
-    selectedSnapshotRuntimeLifecycleProgressForEnvironment(props.environment, props.actionProgress)
-  ));
-  const reinstallTargetProgress = createMemo<DesktopLauncherActionProgress | null>(() => {
-    return selectedSnapshotReinstallTargetProgressForEnvironment(props.environment, props.actionProgress);
-  });
-  const openConnectionProgress = createMemo(() => (
-    selectedSnapshotOpenConnectionProgressForEnvironment(props.environment, props.actionProgress)
-  ));
-  const [rememberedOpenConnectionProgress, setRememberedOpenConnectionProgress] = createSignal<DesktopLauncherActionProgress | null>(null);
-  const visibleOpenConnectionProgress = createMemo(() => (
-    openConnectionProgress() ?? rememberedOpenConnectionProgress()
-  ));
-  createEffect(() => {
-    const progress = openConnectionProgress();
-    if (!progress?.open_progress) {
-      if (!props.lifecycleProgressOpen) {
-        setRememberedOpenConnectionProgress(null);
-      }
-      return;
-    }
-    if (progress.status === 'succeeded' || progress.status === 'canceled') {
-      if (props.lifecycleProgressOpen) {
-        setRememberedOpenConnectionProgress(progress);
-      }
-      return;
-    }
-    setRememberedOpenConnectionProgress(null);
-  });
-  createEffect(() => {
-    if (!props.lifecycleProgressOpen) {
-      setRememberedOpenConnectionProgress(null);
-    }
-  });
-  const visibleManagedLifecycleProgress = createMemo(() => visibleEnvironmentLifecycleProgress({
-    environment: props.environment,
-    selectedProgress: reinstallTargetProgress() ?? runtimeLifecycleProgress(),
-    disclosure: props.lifecycleDisclosure,
-    busyState: props.busyState,
-  }));
-  const visibleRuntimeLifecycleProgress = createMemo(() => (
-    visibleManagedLifecycleProgress()?.action === 'reinstall_target'
-      ? null
-      : visibleManagedLifecycleProgress()
-  ));
-  const visibleReinstallTargetProgress = createMemo(() => (
-    visibleManagedLifecycleProgress()?.action === 'reinstall_target'
-      ? visibleManagedLifecycleProgress()
-      : null
-  ));
+  const environmentActionPresentation = createMemo(() =>
+    localizedEnvironmentActionPresentation(props.i18n, environmentActionModel().action_presentation),
+  );
+  const operationState = createMemo(() =>
+    environmentOperationState(props.environment, props.actionProgress, props.busyState),
+  );
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
-  const windowBusyActions = [
-    'open_local_environment',
-    'open_provider_environment',
-    'open_remote_environment',
-    'open_ssh_environment',
-    'prepare_environment_open',
-    'focus_environment_window',
-  ] as const;
-  const runtimeBusyActions = [
-    'start_environment_runtime',
-    'restart_environment_runtime',
-    'update_environment_runtime',
-    'manage_desktop_update',
-    'stop_environment_runtime',
-    'refresh_environment_runtime',
-    'preview_reinstall_target',
-    'reinstall_target',
-  ] as const;
-  const isWindowActionBusy = createMemo(() => (
-    busyStateBlocksEnvironmentAction(
-      props.busyState,
-      props.environment.id,
-      windowBusyActions,
-      openConnectionProgress(),
-    )
-    || launcherProgressBlocksPrimaryAction(openConnectionProgress())
-  ));
-  const isRuntimeActionBusy = createMemo(() => (
-    busyStateBlocksEnvironmentAction(
-      props.busyState,
-      props.environment.id,
-      runtimeBusyActions,
-      runtimeLifecycleProgress(),
-    )
-    || busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')
-    || launcherProgressBlocksPrimaryAction(runtimeLifecycleProgress())
-    || launcherProgressBlocksPrimaryAction(reinstallTargetProgress())
-  ));
-  const isPinBusy = createMemo(() => (
+  const isPinBusy = createMemo(() =>
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
       'set_provider_environment_pinned',
       'set_environment_registration_pinned',
-    ])
-  ));
-  const isContainerRuntimeTarget = createMemo(() => props.environment.managed_runtime_placement?.kind === 'container_process');
+    ]),
+  );
+  const isContainerRuntimeTarget = createMemo(
+    () => props.environment.managed_runtime_placement?.kind === 'container_process',
+  );
   const deleteTitle = createMemo(() => props.i18n.t('environmentCenter.removeEnvironment'));
   const runOpenWithPreflight = async (action: EnvironmentActionModel): Promise<void> => {
     const nextSession = startEnvironmentGuidanceIntent(
@@ -10394,11 +10494,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     );
     props.onPrimaryActionGuidanceOpenChange(true);
     props.setGuidanceSession(nextSession);
-    const resolution = await props.runEnvironmentGuidanceAction(
-      props.environment,
-      action,
-      props.setGuidanceSession,
-    );
+    const resolution = await props.runEnvironmentGuidanceAction(props.environment, action, props.setGuidanceSession);
     props.setGuidanceSession(resolution.next_session);
     if (resolution.close_panel) {
       props.onPrimaryActionGuidanceOpenChange(false);
@@ -10406,26 +10502,34 @@ function EnvironmentConnectionCard(props: Readonly<{
   };
 
   return (
-    <Card class={cn(
-      'redeven-environment-card h-full overflow-hidden',
-      isCardOpen() && 'redeven-environment-card--open',
-    )}>
+    <Card
+      class={cn('redeven-environment-card h-full overflow-hidden', isCardOpen() && 'redeven-environment-card--open')}
+    >
       <CardHeader class="px-4 pb-2.5 pt-4">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <div class="mb-2 flex items-center gap-2">
-              <Tag variant={environmentKindTagVariant(props.environment.kind)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              <Tag
+                variant={environmentKindTagVariant(props.environment.kind)}
+                tone="soft"
+                size="sm"
+                class="cursor-default whitespace-nowrap"
+              >
                 {card().kind_label}
               </Tag>
-              <EnvironmentStatusIndicator tone={card().status_tone}>
-                {card().status_label}
-              </EnvironmentStatusIndicator>
+              <EnvironmentStatusIndicator tone={card().status_tone}>{card().status_label}</EnvironmentStatusIndicator>
             </div>
-            <CardTitle class="truncate text-sm font-semibold leading-5 tracking-[0.01em]" title={props.environment.label}>
+            <CardTitle
+              class="truncate text-sm font-semibold leading-5 tracking-[0.01em]"
+              title={props.environment.label}
+            >
               {props.environment.label}
             </CardTitle>
             <div class="mt-1.5 flex flex-wrap items-center">
-              <svg class="redeven-card-l-line" data-tone={card().status_tone} viewBox="0 0 12 20"><path d="M 1 0 L 1 10 L 11 10" /></svg><span class="redeven-card-runtime-chip">
+              <svg class="redeven-card-l-line" data-tone={card().status_tone} viewBox="0 0 12 20">
+                <path d="M 1 0 L 1 10 L 11 10" />
+              </svg>
+              <span class="redeven-card-runtime-chip">
                 <span class="redeven-card-runtime-chip__dot" aria-hidden="true" />
                 <span class="redeven-card-runtime-chip__text">{card().runtime_started_label}</span>
               </span>
@@ -10443,8 +10547,10 @@ function EnvironmentConnectionCard(props: Readonly<{
             <span>
               <ConsoleActionIconButton
                 title={props.i18n.t('environmentCenter.refreshRuntimeStatus')}
-                aria-label={props.i18n.t('environmentCenter.refreshRuntimeStatusForLabel', { label: props.environment.label })}
-                disabled={isRuntimeActionBusy()}
+                aria-label={props.i18n.t('environmentCenter.refreshRuntimeStatusForLabel', {
+                  label: props.environment.label,
+                })}
+                disabled={operationState().actionsDisabled}
                 onClick={() => {
                   void props.refreshEnvironmentRuntime(props.environment, 'connect');
                 }}
@@ -10453,12 +10559,21 @@ function EnvironmentConnectionCard(props: Readonly<{
               </ConsoleActionIconButton>
             </span>
           </DesktopTooltip>
-          <DesktopTooltip content={props.i18n.t('environmentCenter.askFlowerForLabel', { label: props.environment.label })} placement="top">
+          <DesktopTooltip
+            content={props.i18n.t('environmentCenter.askFlowerForLabel', {
+              label: props.environment.label,
+            })}
+            placement="top"
+          >
             <button
               type="button"
               class="redeven-environment-card__flower-button"
-              aria-label={props.i18n.t('environmentCenter.askFlowerForLabel', { label: props.environment.label })}
-              title={props.i18n.t('environmentCenter.askFlowerForLabel', { label: props.environment.label })}
+              aria-label={props.i18n.t('environmentCenter.askFlowerForLabel', {
+                label: props.environment.label,
+              })}
+              title={props.i18n.t('environmentCenter.askFlowerForLabel', {
+                label: props.environment.label,
+              })}
               onClick={(event) => {
                 event.stopPropagation();
                 const rect = event.currentTarget.getBoundingClientRect();
@@ -10504,10 +10619,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           onProgressOpenChange={props.onLifecycleProgressOpenChange}
           guidanceSession={props.guidanceSession}
           busyState={props.busyState}
-          loading={isWindowActionBusy() || isRuntimeActionBusy()}
-          runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}
-          reinstallTargetProgress={visibleReinstallTargetProgress()}
-          openConnectionProgress={visibleOpenConnectionProgress()}
+          operationState={operationState()}
           cancelOperation={props.cancelOperation}
           dismissOperation={props.dismissOperation}
           copyOperationDiagnostics={props.copyOperationDiagnostics}
@@ -10519,20 +10631,19 @@ function EnvironmentConnectionCard(props: Readonly<{
           }}
           onRunAction={(action) => {
             void (async () => {
-              const activeManagedOperation = reinstallTargetProgress() ?? visibleRuntimeLifecycleProgress();
-              if (
-                activeManagedOperation
-                && launcherProgressBlocksPrimaryAction(activeManagedOperation)
-                && (
-                  action.intent === 'start_runtime'
-                  || action.intent === 'stop_runtime'
-                  || action.intent === 'restart_runtime'
-                  || action.intent === 'update_runtime'
-                  || action.intent === 'refresh_runtime'
-                  || action.intent === 'reinstall_target'
-                )
-              ) {
-                props.onLifecycleProgressOpenChange(true);
+              if (operationState().actionsDisabled && environmentActionUsesLifecycleOwner(action)) {
+                if (operationState().activeProgress) {
+                  props.onLifecycleProgressOpenChange(true);
+                }
+                return;
+              }
+              if (action.continue_open_after_completion) {
+                await runOpenWithPreflight({
+                  intent: 'open_with_preflight',
+                  label: props.i18n.t('environmentAction.open'),
+                  enabled: true,
+                  variant: 'default',
+                });
                 return;
               }
               if (action.intent === 'update_desktop') {
@@ -10548,11 +10659,9 @@ function EnvironmentConnectionCard(props: Readonly<{
                 lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);
                 props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);
               } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
-                props.setGuidanceSession(startEnvironmentGuidanceIntent(
-                  props.guidanceSession,
-                  props.environment.id,
-                  action.intent,
-                ));
+                props.setGuidanceSession(
+                  startEnvironmentGuidanceIntent(props.guidanceSession, props.environment.id, action.intent),
+                );
                 props.onPrimaryActionGuidanceOpenChange(true);
               }
               const completed = await props.runLocalEnvironmentAction(
@@ -10567,15 +10676,6 @@ function EnvironmentConnectionCard(props: Readonly<{
               if (!completed && lifecycleAttempt) {
                 props.abandonLifecycleDisclosure(lifecycleAttempt);
               }
-              if (!completed || !action.continue_open_after_completion) {
-                return;
-              }
-              await runOpenWithPreflight({
-                intent: 'open_with_preflight',
-                label: 'Open',
-                enabled: true,
-                variant: 'default',
-              });
             })();
           }}
           onRunGuidanceAction={(action) => {
@@ -10585,11 +10685,9 @@ function EnvironmentConnectionCard(props: Readonly<{
                 lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);
                 props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);
               } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
-                props.setGuidanceSession(startEnvironmentGuidanceIntent(
-                  props.guidanceSession,
-                  props.environment.id,
-                  action.intent,
-                ));
+                props.setGuidanceSession(
+                  startEnvironmentGuidanceIntent(props.guidanceSession, props.environment.id, action.intent),
+                );
               }
               const resolution = await props.runEnvironmentGuidanceAction(
                 props.environment,
@@ -10607,14 +10705,28 @@ function EnvironmentConnectionCard(props: Readonly<{
         <div class="flex items-center gap-0.5">
           <Show when={props.environment.kind !== 'gateway_environment'}>
             <DesktopTooltip
-              content={props.environment.pinned ? props.i18n.t('environmentCenter.unpin') : props.i18n.t('environmentCenter.pin')}
+              content={
+                props.environment.pinned
+                  ? props.i18n.t('environmentCenter.unpin')
+                  : props.i18n.t('environmentCenter.pin')
+              }
               placement="top"
             >
               <ConsoleActionIconButton
-                title={props.environment.pinned ? props.i18n.t('environmentCenter.unpinEnvironment') : props.i18n.t('environmentCenter.pinEnvironment')}
-                aria-label={props.environment.pinned
-                  ? props.i18n.t('environmentCenter.unpinLabel', { label: props.environment.label })
-                  : props.i18n.t('environmentCenter.pinLabel', { label: props.environment.label })}
+                title={
+                  props.environment.pinned
+                    ? props.i18n.t('environmentCenter.unpinEnvironment')
+                    : props.i18n.t('environmentCenter.pinEnvironment')
+                }
+                aria-label={
+                  props.environment.pinned
+                    ? props.i18n.t('environmentCenter.unpinLabel', {
+                        label: props.environment.label,
+                      })
+                    : props.i18n.t('environmentCenter.pinLabel', {
+                        label: props.environment.label,
+                      })
+                }
                 active={props.environment.pinned}
                 disabled={isPinBusy()}
                 onClick={() => {
@@ -10626,19 +10738,22 @@ function EnvironmentConnectionCard(props: Readonly<{
             </DesktopTooltip>
           </Show>
           <Show when={props.environment.can_edit}>
-            <DesktopTooltip
-              content={props.i18n.t('common.settings')}
-              placement="top"
-            >
+            <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
               <ConsoleActionIconButton
-                title={isContainerRuntimeTarget()
-                  ? props.i18n.t('environmentCenter.runtimeTargetSettings')
-                  : props.environment.kind === 'local_environment'
-                    ? props.i18n.t('environmentCenter.environmentSettings')
-                    : props.i18n.t('environmentCenter.connectionSettings')}
-                aria-label={props.environment.kind === 'local_environment' && !isContainerRuntimeTarget()
-                  ? props.i18n.t('environmentCenter.settingsForLabel', { label: props.environment.label })
-                  : props.i18n.t('environmentCenter.connectionSettingsForLabel', { label: props.environment.label })}
+                title={
+                  isContainerRuntimeTarget()
+                    ? props.i18n.t('environmentCenter.runtimeTargetSettings')
+                    : props.environment.kind === 'local_environment'
+                      ? props.i18n.t('environmentCenter.environmentSettings')
+                      : props.i18n.t('environmentCenter.connectionSettings')
+                }
+                aria-label={
+                  props.environment.kind === 'local_environment' && !isContainerRuntimeTarget()
+                    ? props.i18n.t('environmentCenter.settingsForLabel', {
+                        label: props.environment.label,
+                      })
+                    : props.i18n.t('environmentCenter.connectionSettingsForLabel', { label: props.environment.label })
+                }
                 onClick={() => props.editEnvironment(props.environment)}
               >
                 <Settings class="h-3.5 w-3.5" />
@@ -10649,7 +10764,9 @@ function EnvironmentConnectionCard(props: Readonly<{
             <DesktopTooltip content={props.i18n.t('common.delete')} placement="top">
               <ConsoleActionIconButton
                 title={deleteTitle()}
-                aria-label={props.i18n.t('environmentCenter.removeLabel', { label: props.environment.label })}
+                aria-label={props.i18n.t('environmentCenter.removeLabel', {
+                  label: props.environment.label,
+                })}
                 danger
                 onClick={() => props.deleteEnvironment(props.environment)}
               >
@@ -10885,7 +11002,9 @@ function controlPlaneLocalHostCountTooltipContent(
         count: stats.open_count,
       })
     : runtimeLabel !== ''
-      ? i18n.t('environmentCenter.mostRecentProviderState', { state: runtimeLabel })
+        ? i18n.t('environmentCenter.mostRecentProviderState', {
+            state: runtimeLabel,
+          })
       : i18n.t('environmentCenter.noProviderRuntimeState');
 
   return (
@@ -10936,11 +11055,17 @@ function localizedProviderRuntimeLinkPlanMessage(
     case 'target_ready':
       return i18n.t('providerRuntimeLink.targetReady', { runtime: runtimeLabel, environment: providerEnvironment.label });
     case 'target_not_running':
-      return i18n.t('providerRuntimeLink.targetNotRunning', { runtime: runtimeLabel });
+      return i18n.t('providerRuntimeLink.targetNotRunning', {
+        runtime: runtimeLabel,
+      });
     case 'runtime_control_missing':
-      return i18n.t('providerRuntimeLink.runtimeControlMissing', { runtime: runtimeLabel });
+      return i18n.t('providerRuntimeLink.runtimeControlMissing', {
+        runtime: runtimeLabel,
+      });
     case 'provider_link_unsupported':
-      return i18n.t('providerRuntimeLink.providerLinkUnsupported', { runtime: runtimeLabel });
+      return i18n.t('providerRuntimeLink.providerLinkUnsupported', {
+        runtime: runtimeLabel,
+      });
     case 'already_linked':
       return i18n.t('providerRuntimeLink.alreadyLinked', { runtime: runtimeLabel, environment: providerEnvironment.label });
     case 'provider_environment_occupied':
@@ -10949,13 +11074,21 @@ function localizedProviderRuntimeLinkPlanMessage(
             environment: providerEnvironment.label,
             runtime: providerEnvironment.occupancy.runtime_label,
           })
-        : i18n.t('providerRuntimeLink.providerEnvironmentOccupiedUnknown', { environment: providerEnvironment.label });
+        : i18n.t('providerRuntimeLink.providerEnvironmentOccupiedUnknown', {
+            environment: providerEnvironment.label,
+          });
     case 'linked_elsewhere':
-      return i18n.t('providerRuntimeLink.linkedElsewhere', { runtime: runtimeLabel });
+      return i18n.t('providerRuntimeLink.linkedElsewhere', {
+        runtime: runtimeLabel,
+      });
     case 'blocked_active_work':
-      return i18n.t('providerRuntimeLink.blockedActiveWork', { runtime: runtimeLabel });
+      return i18n.t('providerRuntimeLink.blockedActiveWork', {
+        runtime: runtimeLabel,
+      });
     case 'blocked_runtime':
-      return i18n.t('providerRuntimeLink.blockedRuntime', { runtime: runtimeLabel });
+      return i18n.t('providerRuntimeLink.blockedRuntime', {
+        runtime: runtimeLabel,
+      });
   }
 }
 
@@ -13030,7 +13163,12 @@ function gatewaySourceActionBusy(
   return gatewayBusyStateBelongsToForegroundAction(busyState, gatewayID, foreground);
 }
 
-function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionModel['intent']; class?: string }>) {
+function GatewaySourceActionIcon(
+  props: Readonly<{
+    intent: GatewaySourceActionModel['intent'];
+    class?: string;
+  }>,
+) {
   const iconClass = () => props.class ?? 'mr-1 h-3.5 w-3.5';
   switch (props.intent) {
     case 'add_gateway_environment':
@@ -13187,8 +13325,14 @@ function SettingsApplyTimingControl(props: Readonly<{
             value={props.value}
             onChange={(value) => props.onChange(value as DesktopSettingsApplyTiming)}
             options={[
-              { value: 'next_start', label: props.i18n.t('settings.applyNextStart') },
-              { value: 'restart_now', label: props.i18n.t('settings.applyRestartNow') },
+              {
+                value: 'next_start',
+                label: props.i18n.t('settings.applyNextStart'),
+              },
+              {
+                value: 'restart_now',
+                label: props.i18n.t('settings.applyRestartNow'),
+              },
             ]}
             size="sm"
           />
@@ -14615,13 +14759,30 @@ function ConnectionDialog(props: Readonly<{
               value={connectionKind()}
               onChange={(value) => props.switchKind(value as ConnectionDialogKind)}
               options={[
-                { value: 'external_local_ui', label: props.i18n.t('connectionDialog.redevenUrl') },
-                { value: 'ssh_environment', label: props.i18n.t('connectionDialog.sshHost') },
+                {
+                  value: 'external_local_ui',
+                  label: props.i18n.t('connectionDialog.redevenUrl'),
+                },
+                {
+                  value: 'ssh_environment',
+                  label: props.i18n.t('connectionDialog.sshHost'),
+                },
                 ...(props.nativeContainerRuntime
-                  ? [{ value: 'local_container_runtime', label: props.i18n.t('connectionDialog.localContainer') }]
+                  ? [
+                      {
+                        value: 'local_container_runtime',
+                        label: props.i18n.t('connectionDialog.localContainer'),
+                      },
+                    ]
                   : []),
-                { value: 'ssh_container_runtime', label: props.i18n.t('connectionDialog.sshContainer') },
-                { value: 'gateway_url_profile', label: props.i18n.t('connectionDialog.throughGateway') },
+                {
+                  value: 'ssh_container_runtime',
+                  label: props.i18n.t('connectionDialog.sshContainer'),
+                },
+                {
+                  value: 'gateway_url_profile',
+                  label: props.i18n.t('connectionDialog.throughGateway'),
+                },
               ]}
               size="sm"
             />
@@ -15298,8 +15459,14 @@ function GatewaySetupDialog(props: Readonly<{
                     value={props.state?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE}
                     onChange={(value) => props.updateField('auth_mode', value)}
                     options={[
-                      { value: 'key_agent', label: props.i18n.t('connectionDialog.keyAgent') },
-                      { value: 'password', label: props.i18n.t('connectionDialog.passwordPrompt') },
+                        {
+                          value: 'key_agent',
+                          label: props.i18n.t('connectionDialog.keyAgent'),
+                        },
+                        {
+                          value: 'password',
+                          label: props.i18n.t('connectionDialog.passwordPrompt'),
+                        },
                     ]}
                     size="sm"
                   />
@@ -15341,7 +15508,12 @@ function GatewaySetupDialog(props: Readonly<{
                 <button
                   type="button"
                   class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left"
-                  onClick={() => setAdvancedState((current) => ({ ...current, open: !current.open }))}
+                      onClick={() =>
+                        setAdvancedState((current) => ({
+                          ...current,
+                          open: !current.open,
+                        }))
+                      }
                 >
                   <div>
                     <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.advanced')}</div>
