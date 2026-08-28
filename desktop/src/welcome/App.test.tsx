@@ -2119,7 +2119,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('CONTROL_PLANE_PROVIDER_PRESET_OPTIONS');
     expect(appSrc).toContain('provider_origin: REDEVEN_CLOUD_ORIGIN');
     expect(appSrc).toContain('provider_origin: REDEVEN_CLOUD_DEVELOPMENT_ORIGIN');
-    expect(appSrc).toContain("display_label: 'Redeven Cloud'");
     expect(appSrc).not.toContain('ControlPlaneOriginMode');
     expect(appSrc).not.toContain('preset_provider_origin');
     expect(appSrc).not.toContain('custom_provider_origin');
@@ -2152,6 +2151,28 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-provider-shelf__metric-header');
     expect(styles).toContain('@media (max-width: 36rem)');
     expect(appSrc).not.toContain('Remote access through Control Plane');
+  });
+
+  it('keeps the fixed Redeven Cloud confirmation flat while reserving selection chrome for development targets', () => {
+    const appSrc = readWelcomeSource();
+    const pickerStart = appSrc.indexOf('function OfficialProviderPicker');
+    const pickerEnd = appSrc.indexOf('function ControlPlaneDialog', pickerStart);
+    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
+    const dialogStart = pickerEnd;
+    const dialogEnd = appSrc.indexOf('function LocalUIPasswordField', dialogStart);
+    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
+
+    expect(pickerSrc).toContain('<Show when={canChooseTarget} fallback={(');
+    expect(pickerSrc).toContain('data-redeven-cloud-target="fixed"');
+    expect(pickerSrc).toContain('rounded-full bg-success');
+    expect(pickerSrc).toContain('aria-haspopup="listbox"');
+    expect(pickerSrc).toContain('<DesktopAnchoredListbox');
+    expect(dialogSrc).not.toContain('space-y-3 rounded-lg border border-border/70 bg-muted/20');
+    expect(dialogSrc).toContain('src={props.logoSrc}');
+    expect(dialogSrc).toContain("props.i18n.t('desktop.provider')");
+    expect(dialogSrc).toContain('class="w-full justify-center"');
+    expect(dialogSrc).not.toContain('footer={(');
+    expect(dialogSrc).toContain("data-floe-autofocus={CONTROL_PLANE_PROVIDER_PRESET_OPTIONS.length <= 1 ? 'true' : undefined}");
   });
 
   it('routes transient launcher failures through toasts instead of page-flow banners or issue cards', () => {

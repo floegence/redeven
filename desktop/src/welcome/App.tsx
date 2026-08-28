@@ -561,19 +561,16 @@ const DESKTOP_WELCOME_IMPORT_META = import.meta as ImportMeta & {
   }>;
 };
 type ControlPlaneProviderPresetOption = Readonly<{
-  display_label: string;
   domain: string;
   provider_origin: string;
 }>;
 const CONTROL_PLANE_PROVIDER_PRESET_OPTIONS: readonly ControlPlaneProviderPresetOption[] = [
   {
-    display_label: 'Redeven Cloud',
     domain: new URL(REDEVEN_CLOUD_ORIGIN).hostname,
     provider_origin: REDEVEN_CLOUD_ORIGIN,
   },
   ...(DESKTOP_WELCOME_IMPORT_META.env?.DEV === true
     ? [{
-        display_label: 'Redeven Cloud',
         domain: 'redeven.test',
         provider_origin: REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
       }]
@@ -2256,7 +2253,6 @@ function controlPlaneProviderPresetForOrigin(providerOrigin: string): ControlPla
 
 function defaultControlPlaneProviderPreset(): ControlPlaneProviderPresetOption {
   return CONTROL_PLANE_PROVIDER_PRESET_OPTIONS[0] ?? {
-    display_label: 'Redeven Cloud',
     domain: new URL(REDEVEN_CLOUD_ORIGIN).hostname,
     provider_origin: REDEVEN_CLOUD_ORIGIN,
   };
@@ -6590,6 +6586,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
       <ControlPlaneDialog
         i18n={i18n()}
+        logoSrc={headerLogoSrc()}
         state={controlPlaneDialogState()}
         error={controlPlaneDialogError()}
         busyState={busyState()}
@@ -15623,150 +15620,149 @@ function OfficialProviderPicker(props: Readonly<{
   }
 
   return (
-    <div
-      ref={rootRef}
-      class="space-y-1.5"
-      onFocusOut={(event) => {
-        if (containsTarget(event.relatedTarget)) {
-          return;
-        }
-        closeMenuSoon();
-      }}
-    >
-      <label for="control-plane-provider-picker" class="block text-xs font-medium text-foreground">
-        {props.i18n.t('connectionDialog.providerPreset')}
-      </label>
-      <button
-        ref={buttonRef}
-        id="control-plane-provider-picker"
-        type="button"
-        class={cn(
-          'group relative flex min-h-[4.75rem] w-full items-center justify-between gap-3 overflow-hidden rounded-lg border border-border/70 bg-background px-3.5 py-3 text-left shadow-sm',
-          canChooseTarget && 'cursor-pointer transition-all hover:-translate-y-px hover:border-ring/70 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        )}
-        aria-haspopup={canChooseTarget ? 'listbox' : undefined}
-        aria-expanded={open() ? 'true' : 'false'}
-        aria-controls={canChooseTarget ? 'control-plane-provider-options' : undefined}
-        aria-activedescendant={open() ? `control-plane-provider-option-${highlightedIndex()}` : undefined}
-        autofocus={props.autofocus}
-        onClick={() => {
-          if (!canChooseTarget) {
+    <Show when={canChooseTarget} fallback={(
+      <div
+        data-redeven-cloud-target="fixed"
+        class="mt-1 inline-flex items-center gap-2 text-xs text-muted-foreground"
+        aria-label={props.i18n.t('connectionDialog.providerPreset')}
+      >
+        <span aria-hidden="true" class="h-1.5 w-1.5 rounded-full bg-success" />
+        <span class="font-mono text-[11px]">{selectedProvider().domain}</span>
+      </div>
+    )}>
+      <div
+        ref={rootRef}
+        class="w-full space-y-1.5 text-left"
+        onFocusOut={(event) => {
+          if (containsTarget(event.relatedTarget)) {
             return;
           }
-          if (open()) {
-            setOpen(false);
-            return;
-          }
-          openMenu();
-        }}
-        onKeyDown={(event) => {
-          if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ')) {
-            event.preventDefault();
-            openMenu();
-            return;
-          }
-          if (!open()) {
-            return;
-          }
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            moveHighlight(1);
-          } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            moveHighlight(-1);
-          } else if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            const option = CONTROL_PLANE_PROVIDER_PRESET_OPTIONS[highlightedIndex()];
-            if (option) {
-              selectProvider(option);
-            }
-          } else if (event.key === 'Escape') {
-            event.preventDefault();
-            setOpen(false);
-          }
+          closeMenuSoon();
         }}
       >
-        <span class="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ring/60 to-transparent opacity-70" />
-        <span class="flex min-w-0 items-center gap-3">
-          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/40 text-foreground shadow-inner transition-colors group-hover:border-ring/50 group-hover:bg-accent/50">
-            <ShieldCheck class="h-4 w-4" />
-          </span>
-          <span class="min-w-0">
-            <span class="block truncate text-sm font-semibold tracking-normal text-foreground">{selectedProvider().domain}</span>
-            <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{selectedProvider().provider_origin}</span>
-          </span>
-        </span>
-        <span class="flex shrink-0 items-center gap-2">
-          <Tag variant="success" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-            {selectedProvider().display_label}
-          </Tag>
-          <Show when={canChooseTarget}>
-            <ChevronDown class={cn('h-4 w-4 text-muted-foreground transition-transform', open() && 'rotate-180')} />
-          </Show>
-        </span>
-      </button>
-      <Show when={open()}>
-        <DesktopAnchoredListbox
-          id="control-plane-provider-options"
-          anchorRef={buttonRef}
-          class="p-1.5 shadow-2xl"
-          maxHeight={220}
-          role="listbox"
-          open={open()}
-          onOverlayRef={(element) => {
-            listboxRef = element;
+        <label for="control-plane-provider-picker" class="block text-xs font-medium text-foreground">
+          {props.i18n.t('connectionDialog.providerPreset')}
+        </label>
+        <button
+          ref={buttonRef}
+          id="control-plane-provider-picker"
+          type="button"
+          class="group flex min-h-16 w-full cursor-pointer items-center justify-between gap-3 rounded-lg bg-muted/40 px-3.5 py-2.5 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-haspopup="listbox"
+          aria-expanded={open() ? 'true' : 'false'}
+          aria-controls="control-plane-provider-options"
+          aria-activedescendant={open() ? `control-plane-provider-option-${highlightedIndex()}` : undefined}
+          autofocus={props.autofocus}
+          data-floe-autofocus={props.autofocus ? 'true' : undefined}
+          onClick={() => {
+            if (open()) {
+              setOpen(false);
+              return;
+            }
+            openMenu();
+          }}
+          onKeyDown={(event) => {
+            if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault();
+              openMenu();
+              return;
+            }
+            if (!open()) {
+              return;
+            }
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              moveHighlight(1);
+            } else if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              moveHighlight(-1);
+            } else if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              const option = CONTROL_PLANE_PROVIDER_PRESET_OPTIONS[highlightedIndex()];
+              if (option) {
+                selectProvider(option);
+              }
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              setOpen(false);
+            }
           }}
         >
-          <div class="min-h-0 flex-1 overflow-auto">
-            <For each={CONTROL_PLANE_PROVIDER_PRESET_OPTIONS}>
-              {(option, index) => {
-                const selected = createMemo(() => selectedProvider().provider_origin === option.provider_origin);
-                const highlighted = createMemo(() => highlightedIndex() === index());
-                return (
-                  <button
-                    type="button"
-                    id={`control-plane-provider-option-${index()}`}
-                    role="option"
-                    tabIndex={-1}
-                    aria-selected={selected() ? 'true' : 'false'}
-                    class={cn(
-                      'flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-all',
-                      highlighted()
-                        ? 'bg-accent text-accent-foreground shadow-sm'
-                        : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                    )}
-                    onClick={() => selectProvider(option)}
-                    onMouseEnter={() => setHighlightedIndex(index())}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      selectProvider(option);
-                    }}
-                  >
-                    <span class="flex min-w-0 items-center gap-3">
-                      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-background/80">
-                        <Globe class="h-4 w-4" />
+          <span class="flex min-w-0 items-center gap-3">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <ShieldCheck class="h-4 w-4" />
+            </span>
+            <span class="min-w-0">
+              <span class="block truncate text-sm font-semibold tracking-normal text-foreground">{selectedProvider().domain}</span>
+              <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{selectedProvider().provider_origin}</span>
+            </span>
+          </span>
+          <ChevronDown class={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open() && 'rotate-180')} />
+        </button>
+        <Show when={open()}>
+          <DesktopAnchoredListbox
+            id="control-plane-provider-options"
+            anchorRef={buttonRef}
+            class="p-1.5 shadow-2xl"
+            maxHeight={220}
+            role="listbox"
+            open={open()}
+            onOverlayRef={(element) => {
+              listboxRef = element;
+            }}
+          >
+            <div class="min-h-0 flex-1 overflow-auto">
+              <For each={CONTROL_PLANE_PROVIDER_PRESET_OPTIONS}>
+                {(option, index) => {
+                  const selected = createMemo(() => selectedProvider().provider_origin === option.provider_origin);
+                  const highlighted = createMemo(() => highlightedIndex() === index());
+                  return (
+                    <button
+                      type="button"
+                      id={`control-plane-provider-option-${index()}`}
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={selected() ? 'true' : 'false'}
+                      class={cn(
+                        'flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-all',
+                        highlighted()
+                          ? 'bg-accent text-accent-foreground shadow-sm'
+                          : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                      )}
+                      onClick={() => selectProvider(option)}
+                      onMouseEnter={() => setHighlightedIndex(index())}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        selectProvider(option);
+                      }}
+                    >
+                      <span class="flex min-w-0 items-center gap-3">
+                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Globe class="h-4 w-4" />
+                        </span>
+                        <span class="min-w-0">
+                          <span class="block truncate text-sm font-semibold">{option.domain}</span>
+                          <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{option.provider_origin}</span>
+                        </span>
                       </span>
-                      <span class="min-w-0">
-                        <span class="block truncate text-sm font-semibold">{option.domain}</span>
-                        <span class="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">{option.provider_origin}</span>
-                      </span>
-                    </span>
-                    <Show when={selected()}>
-                      <Check class="h-4 w-4 shrink-0" />
-                    </Show>
-                  </button>
-                );
-              }}
-            </For>
-          </div>
-        </DesktopAnchoredListbox>
-      </Show>
-    </div>
+                      <Show when={selected()}>
+                        <Check class="h-4 w-4 shrink-0" />
+                      </Show>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </DesktopAnchoredListbox>
+        </Show>
+      </div>
+    </Show>
   );
 }
 
 function ControlPlaneDialog(props: Readonly<{
   i18n: DesktopI18n;
+  logoSrc: string;
   state: ControlPlaneDialogState;
   error: string;
   busyState: DesktopLauncherBusyState;
@@ -15783,14 +15779,44 @@ function ControlPlaneDialog(props: Readonly<{
       open={isOpen()}
       onOpenChange={props.onOpenChange}
       title={props.i18n.t('connectionDialog.addProviderTitle')}
-      footer={(
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
-            {props.i18n.t('common.cancel')}
-          </Button>
+      class="w-[min(27rem,calc(100vw-2rem))]"
+    >
+      <div class="px-3 pb-1 pt-2 text-center">
+        <div class="flex flex-col items-center">
+          <div class="relative isolate flex h-20 w-20 items-center justify-center">
+            <span aria-hidden="true" class="absolute inset-2 -z-10 rounded-full bg-primary/25 blur-2xl" />
+            <img
+              src={props.logoSrc}
+              alt=""
+              aria-hidden="true"
+              class="relative h-20 w-20 select-none"
+              draggable={false}
+            />
+          </div>
+          <div class="mt-3 text-lg font-semibold tracking-[-0.01em] text-foreground">
+            {props.i18n.t('desktop.provider')}
+          </div>
+          <OfficialProviderPicker
+            i18n={props.i18n}
+            providerOrigin={props.state?.provider_origin ?? REDEVEN_CLOUD_ORIGIN}
+            autofocus
+            onSelect={(providerOrigin) => props.updateField('provider_origin', providerOrigin)}
+          />
+          <p class="mt-5 max-w-[22rem] text-xs leading-5 text-muted-foreground">
+            {props.i18n.t('connectionDialog.providerAuthorizationHelp')}
+          </p>
+        </div>
+        <Show when={props.error}>
+          <div role="alert" class="mt-4 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-left text-xs text-destructive">
+            {props.error}
+          </div>
+        </Show>
+        <div class="mt-6 grid gap-1.5">
           <Button
             size="sm"
             variant="default"
+            class="w-full justify-center"
+            data-floe-autofocus={CONTROL_PLANE_PROVIDER_PRESET_OPTIONS.length <= 1 ? 'true' : undefined}
             disabled={!canContinue()}
             loading={busyStateMatchesAction(props.busyState, 'start_control_plane_connect')}
             onClick={() => {
@@ -15799,26 +15825,15 @@ function ControlPlaneDialog(props: Readonly<{
           >
             {props.i18n.t('connectionDialog.continueInBrowser')}
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="w-full justify-center text-muted-foreground"
+            onClick={() => props.onOpenChange(false)}
+          >
+            {props.i18n.t('common.cancel')}
+          </Button>
         </div>
-      )}
-    >
-      <div class="space-y-4">
-        <div class="space-y-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
-          <OfficialProviderPicker
-            i18n={props.i18n}
-            providerOrigin={props.state?.provider_origin ?? REDEVEN_CLOUD_ORIGIN}
-            autofocus
-            onSelect={(providerOrigin) => props.updateField('provider_origin', providerOrigin)}
-          />
-        </div>
-        <div class="text-xs text-muted-foreground">
-          {props.i18n.t('connectionDialog.providerAuthorizationHelp')}
-        </div>
-        <Show when={props.error}>
-          <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {props.error}
-          </div>
-        </Show>
       </div>
     </Dialog>
   );
