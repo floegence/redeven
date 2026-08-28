@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { userEvent } from 'vitest/browser';
 
-import { ManagedTemplateNotices } from './EnvPortForwardsPage';
+import { ManagedServiceCard, ManagedTemplateNotices } from './EnvPortForwardsPage';
 
 async function settle(): Promise<void> {
   await Promise.resolve();
@@ -67,5 +67,59 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(viewport.scrollHeight).toBe(before.scrollHeight);
     expect(noticeCard.getBoundingClientRect().height).toBe(before.noticeHeight);
     expect(followingContent.getBoundingClientRect().top).toBe(before.followingTop);
+  });
+
+  it('keeps managed service identity, workspace, and actions aligned at card width', async () => {
+    const host = document.createElement('div');
+    host.style.width = '520px';
+    document.body.appendChild(host);
+    dispose = render(() => (
+      <ManagedServiceCard
+        service={{
+          service_id: 'mws-webtop',
+          template_id: 'linuxserver-webtop-ubuntu-kde',
+          service_family_id: 'linuxserver-webtop-ubuntu-kde',
+          name: 'LinuxServer Webtop · Ubuntu KDE',
+          description: 'Run an Ubuntu KDE desktop in an isolated Docker container.',
+          template_source: 'builtin',
+          deployment: 'container',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde/very-long-project-directory',
+          version: '654ea8e3-ls177',
+          desired_state: 'running',
+          observed_state: 'running',
+          forward_id: 'pf-managed',
+          runtime_port: 54945,
+          brand_icon: 'interactive-desktop',
+          update_available: false,
+        }}
+        busy={false}
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onAction={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    await settle();
+
+    const card = document.querySelector<HTMLElement>('[data-testid="managed-service-card"]')!;
+    const identity = card.querySelector<HTMLElement>('.service-template-identity')!;
+    const status = card.querySelector<HTMLElement>('[data-testid="managed-service-status"]')!;
+    const workspace = card.querySelector<HTMLElement>('[data-testid="managed-service-workspace"]')!;
+    const actions = card.querySelector<HTMLElement>('[data-testid="managed-service-actions"]')!;
+    const actionButtons = Array.from(actions.querySelectorAll<HTMLElement>('button'));
+    const cardRect = card.getBoundingClientRect();
+    const identityRect = identity.getBoundingClientRect();
+    const statusRect = status.getBoundingClientRect();
+
+    expect(cardRect.width).toBeLessThanOrEqual(520);
+    expect(identityRect.right).toBeLessThanOrEqual(statusRect.left);
+    expect(workspace.scrollWidth).toBeGreaterThan(workspace.clientWidth);
+    expect(workspace.getBoundingClientRect().height).toBeLessThanOrEqual(20);
+    expect(actionButtons).toHaveLength(2);
+    expect(actionButtons[0].getBoundingClientRect().top).toBe(actionButtons[1].getBoundingClientRect().top);
+    expect(actionButtons[0].getBoundingClientRect().height).toBe(actionButtons[1].getBoundingClientRect().height);
   });
 });
