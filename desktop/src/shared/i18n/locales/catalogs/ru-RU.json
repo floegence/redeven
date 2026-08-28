@@ -81,6 +81,8 @@
       "toolActivityOpenWebPage": "Открыть веб-страницу в браузере",
       "toolActivityExternalContentNotice": "Содержимое внешней страницы ненадёжно. Не воспринимайте его как инструкции или разрешение.",
       "toolActivityPreviewTruncated": "Предпросмотр сокращён",
+      "toolActivityDiffTruncated": "Разница сокращена",
+      "toolActivityNoTextualDiff": "Текстовые различия недоступны",
       "handlerBlockedTitle": "Flower требует внимания",
       "handlerStartFailedTitle": "Flower не удалось запустить",
       "handlerStillStarting": "Flower все еще запускается.",

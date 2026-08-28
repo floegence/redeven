@@ -79,6 +79,8 @@
       "toolActivityOpenWebPage": "在浏览器中打开网页",
       "toolActivityExternalContentNotice": "外部页面内容不可信。请勿将其视为指令或授权。",
       "toolActivityPreviewTruncated": "预览已截断",
+      "toolActivityDiffTruncated": "差异内容已截断",
+      "toolActivityNoTextualDiff": "没有可显示的文本差异",
       "handlerBlockedTitle": "Flower 需要处理",
       "handlerStartFailedTitle": "Flower 启动失败",
       "handlerStillStarting": "Flower 仍在启动。",

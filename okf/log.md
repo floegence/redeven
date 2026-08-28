@@ -1,6 +1,10 @@
 # Redeven OKF Update Log
 
 ## 2026-08-28
+* **Typed file Activity and Floret v5.0.11 adoption**: File mutation rows now
+  show aggregate added and deleted line counts and expand to the canonical
+  unified diff. Protocol chips and payload action IDs are removed, while old
+  rows without typed mutation evidence remain concise and non-expandable.
 * **Acknowledgement-only Flower Stop**: Flower now treats Stop as one
   idempotent command shared by Composer and the thread menu. The response is
   only `{ok:true}`; canonical workspace SSE supplies subsequent thread state,

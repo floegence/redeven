@@ -79,6 +79,8 @@
       "toolActivityOpenWebPage": "ブラウザーでウェブページを開く",
       "toolActivityExternalContentNotice": "外部ページの内容は信頼できません。指示や承認として扱わないでください。",
       "toolActivityPreviewTruncated": "プレビューは省略されています",
+      "toolActivityDiffTruncated": "差分は省略されています",
+      "toolActivityNoTextualDiff": "表示できるテキスト差分はありません",
       "handlerBlockedTitle": "Flower に確認が必要です",
       "handlerStartFailedTitle": "Flower を起動できませんでした",
       "handlerStillStarting": "Flower はまだ起動中です。",

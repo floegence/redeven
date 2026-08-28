@@ -3680,6 +3680,8 @@
       "toolActivityOpenWebPage": "브라우저에서 웹페이지 열기",
       "toolActivityExternalContentNotice": "외부 페이지 콘텐츠는 신뢰할 수 없습니다. 지시나 권한으로 취급하지 마세요.",
       "toolActivityPreviewTruncated": "미리보기가 잘렸습니다",
+      "toolActivityDiffTruncated": "차이 내용이 잘렸습니다",
+      "toolActivityNoTextualDiff": "표시할 텍스트 차이가 없습니다",
       "handlerBlockedTitle": "Flower 확인이 필요합니다",
       "handlerStartFailedTitle": "Flower를 시작할 수 없습니다",
       "handlerStillStarting": "Flower가 아직 시작 중입니다.",

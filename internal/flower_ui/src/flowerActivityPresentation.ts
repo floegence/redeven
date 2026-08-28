@@ -258,6 +258,10 @@ export type FlowerActivityPresentation = Readonly<{
   label: string;
   title: FlowerActivityTitle;
   meta: string;
+  changeStats?: Readonly<{
+    additions: number;
+    deletions: number;
+  }>;
   primaryAction?: FlowerActivityFileAction;
   detailLines: readonly FlowerActivityDetailLine[];
   detailBlocks: readonly FlowerActivityDetailBlock[];
@@ -460,8 +464,8 @@ function actionFromPayload(
   verb: 'Read' | 'Edit' | 'Delete',
   label: string,
   fileActions?: FlowerActivityFileActions,
+  actionID = '',
 ): FlowerActivityFileAction {
-  const actionID = payloadValue(payload, 'file_action_id');
   const registered = actionID ? fileActions?.[actionID] : undefined;
   const displayName = displayFileName(registered?.display_name ?? '') || displayNameFromPayload(payload, label);
   return {
@@ -508,11 +512,11 @@ function metaWithError(item: FlowerActivityItem, base: string): string {
   return Array.from(new Set([base, error].filter(Boolean))).join(' · ');
 }
 
-function diffStatsMeta(files: readonly FlowerActivityDiffFile[]): string {
+function diffStats(files: readonly FlowerActivityDiffFile[]): FlowerActivityPresentation['changeStats'] {
+  if (files.length === 0) return undefined;
   const additions = files.reduce((total, file) => total + file.additions, 0);
   const deletions = files.reduce((total, file) => total + file.deletions, 0);
-  if (additions === 0 && deletions === 0) return '';
-  return `+${additions} / -${deletions}`;
+  return { additions, deletions };
 }
 
 function metaForTerminalItem(item: FlowerActivityItem): string {
@@ -933,10 +937,14 @@ function diffFileFromMutation(
   mutation: Readonly<Record<string, unknown>>,
   defaultDisplayName: string,
   fileActions?: FlowerActivityFileActions,
+  actionID = '',
 ): FlowerActivityDiffFile | null {
+  const hasMutationDetail = ['additions', 'deletions', 'unified_diff', 'diff_unavailable_reason']
+    .some((key) => mutation[key] !== undefined);
+  if (!hasMutationDetail) return null;
   const changeType = payloadValue(mutation, 'change_type') || operationFromPayload(item.payload) || 'update';
   const verb = fileVerbForOperation(changeType);
-  const action = actionFromPayload(mutation, verb, displayNameFromPayload(mutation, defaultDisplayName), fileActions);
+  const action = actionFromPayload(mutation, verb, displayNameFromPayload(mutation, defaultDisplayName), fileActions, actionID);
   const displayName = trimString(action.display_name) || defaultDisplayName;
   return {
     display_name: displayName,
@@ -952,11 +960,21 @@ function diffFileFromMutation(
   };
 }
 
+function fileActionIDs(item: FlowerActivityItem): readonly string[] {
+  return (item.target_refs ?? []).flatMap((target) => {
+    const kind = trimString(target.kind);
+    return kind.startsWith('file_action:') && kind.length > 'file_action:'.length
+      ? [kind.slice('file_action:'.length)]
+      : [];
+  });
+}
+
 function diffFilesFromPayload(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): readonly FlowerActivityDiffFile[] {
   const payload = item.payload ?? {};
   const defaultDisplayName = payloadValue(payload, 'display_name') || trimString(item.label);
   const mutationSource = asArray(payload.mutations).length > 0 ? asArray(payload.mutations) : [payload];
-  return mutationSource.map((entry) => diffFileFromMutation(item, asRecord(entry), defaultDisplayName, fileActions))
+  const actionIDs = fileActionIDs(item);
+  return mutationSource.map((entry, index) => diffFileFromMutation(item, asRecord(entry), defaultDisplayName, fileActions, actionIDs[index]))
     .filter((file): file is FlowerActivityDiffFile => file !== null && trimString(file.display_name) !== '');
 }
 
@@ -976,12 +994,13 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   const payload = item.payload ?? {};
   const operation = operationFromPayload(payload) || 'edit';
   const verb = fileVerbForOperation(operation);
-  const action = actionFromPayload(payload, verb, trimString(item.label), fileActions);
+  const action = actionFromPayload(payload, verb, trimString(item.label), fileActions, fileActionIDs(item)[0]);
   let displayName = action.display_name || trimString(item.label) || defaultLabelForItem(item);
   if (displayName === 'read_files') displayName = 'files';
   if (displayName === 'apply_patch') displayName = 'files';
   const title: FlowerActivityTitle = { kind: 'file', verb, display_name: displayName };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
+  let files: readonly FlowerActivityDiffFile[] = [];
   const errorBlock = errorDetailBlockForItem(item, payload);
   if (errorBlock) detailBlocks.push(errorBlock);
   if (verb === 'Read') {
@@ -995,7 +1014,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
       truncated: boolValue(payload.truncated),
     });
   } else {
-    const files = diffFilesFromPayload(item, fileActions);
+    files = diffFilesFromPayload(item, fileActions);
     if (files.length > 0) {
       detailBlocks.push({ kind: 'file_diff', files });
     }
@@ -1004,10 +1023,12 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   if (statusLines.length > 0) {
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
+  const changeStats = verb === 'Read' ? undefined : diffStats(files);
   return {
     label: titleText(title),
     title,
     meta: metaWithError(item, verb === 'Read' ? '' : metaForItem(item, FILE_TITLE_CHIP_KINDS)),
+    ...(changeStats ? { changeStats } : {}),
     primaryAction: action,
     detailLines: statusLines,
     detailBlocks,
@@ -1028,10 +1049,12 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
   if (statusLines.length > 0) {
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
+  const changeStats = diffStats(files);
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, [diffStatsMeta(files), metaForItem(item, FILE_TITLE_CHIP_KINDS)].filter(Boolean).join(' · ')),
+    meta: metaWithError(item, metaForItem(item, FILE_TITLE_CHIP_KINDS)),
+    ...(changeStats ? { changeStats } : {}),
     ...(files.length === 1 ? { primaryAction: files[0].action } : {}),
     detailLines: statusLines,
     detailBlocks,

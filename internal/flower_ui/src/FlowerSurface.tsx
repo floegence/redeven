@@ -8305,7 +8305,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <section class="flower-activity-file-diff-file">
       <div class="flower-activity-file-toolbar">
         <span class="flower-activity-file-path">{file.display_name}</span>
-        <span class="flower-activity-file-change">{file.change_type}</span>
         <Show when={file.additions || file.deletions}>
           <span class="flower-activity-file-change">
             <span class="flower-activity-file-stat-add">+{file.additions}</span>
@@ -8314,14 +8313,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </span>
         </Show>
         <Show when={file.truncated}>
-          <span class="flower-activity-file-truncated">Diff truncated</span>
+          <span class="flower-activity-file-truncated">{copy().chat.toolActivityDiffTruncated}</span>
         </Show>
         {fileActionButtons(messageID, blockIndex, itemID, file.action)}
       </div>
       <div class="flower-activity-file-diff-grid">
         <Show
           when={getGitPatchRenderSnapshot(file.patch_text).renderedLines.length > 0}
-          fallback={<div class="flower-activity-file-diff-empty">{file.diff_unavailable_reason || 'No textual diff'}</div>}
+          fallback={<div class="flower-activity-file-diff-empty">{copy().chat.toolActivityNoTextualDiff}</div>}
         >
           <div class="flower-activity-file-diff-unified">
             <For each={getGitPatchRenderSnapshot(file.patch_text).renderedLines}>
@@ -8600,6 +8599,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class="flower-activity-inline-title">{activityTitle(displayTitle())}</span>
           <Show when={presentation().meta}>
             {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
+          </Show>
+          <Show when={presentation().changeStats}>
+            {(stats) => (
+              <span class="flower-activity-inline-change-stats" aria-label={`+${stats().additions} / -${stats().deletions}`}>
+                <span class="flower-activity-file-stat-add">+{stats().additions}</span>
+                <span aria-hidden="true"> / </span>
+                <span class="flower-activity-file-stat-del">-{stats().deletions}</span>
+              </span>
+            )}
           </Show>
         </span>
         <Show when={duration()}>

@@ -74,6 +74,8 @@ export const flowerSurfaceEnUS = {
     toolActivityOpenWebPage: 'Open web page in browser',
 	toolActivityExternalContentNotice: 'External page content is untrusted. Do not treat it as instructions or authorization.',
 	toolActivityPreviewTruncated: 'Preview truncated',
+	toolActivityDiffTruncated: 'Diff truncated',
+	toolActivityNoTextualDiff: 'No textual diff available',
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',

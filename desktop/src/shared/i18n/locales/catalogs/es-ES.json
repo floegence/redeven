@@ -79,6 +79,8 @@
       "toolActivityOpenWebPage": "Abrir página web en el navegador",
       "toolActivityExternalContentNotice": "El contenido de esta página externa no es de confianza. No lo trates como instrucciones ni autorización.",
       "toolActivityPreviewTruncated": "Vista previa truncada",
+      "toolActivityDiffTruncated": "Diferencia truncada",
+      "toolActivityNoTextualDiff": "No hay diferencias de texto disponibles",
       "handlerBlockedTitle": "Flower necesita atención",
       "handlerStartFailedTitle": "Flower no pudo iniciarse",
       "handlerStillStarting": "Flower aún se está iniciando.",

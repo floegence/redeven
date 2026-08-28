@@ -404,6 +404,88 @@ func TestFloretActivityForSkillSuccessHasNoExpandableDetails(t *testing.T) {
 	}
 }
 
+func TestFloretFileActivitiesPreserveTypedReadAndMutationDetails(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		toolName string
+		data     any
+		assert   func(*testing.T, fltools.ActivityPayload)
+	}{
+		{
+			name:     "read",
+			toolName: "file.read",
+			data:     FileReadResult{FilePath: "/workspace/app.ts", DisplayName: "app.ts", Content: "const value = 1;\n", LineOffset: 7, LineCount: 1, TotalLines: 42, Truncated: true},
+			assert: func(t *testing.T, value fltools.ActivityPayload) {
+				payload, ok := value.(fltools.FileActivityPayload)
+				if !ok || payload.DisplayName != "app.ts" || payload.Content != "const value = 1;" || payload.LineOffset != 7 || payload.LineCount != 1 || payload.TotalLines != 42 || !payload.Truncated {
+					t.Fatalf("file read payload = %#v", value)
+				}
+			},
+		},
+		{
+			name:     "write",
+			toolName: "file.write",
+			data:     FileMutationResult{FilePath: "/workspace/weather_gd.py", DisplayName: "weather_gd.py", ChangeType: "create", Additions: 49, UnifiedDiff: "--- /dev/null\n+++ b/weather_gd.py\n@@ -0,0 +1,49 @@\n+line\n"},
+			assert: func(t *testing.T, value fltools.ActivityPayload) {
+				payload, ok := value.(fltools.FileActivityPayload)
+				if !ok || payload.DisplayName != "weather_gd.py" || payload.ChangeType != "create" || payload.Additions != 49 || payload.Deletions != 0 || payload.UnifiedDiff == "" {
+					t.Fatalf("file write payload = %#v", value)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := &run{}
+			presentation, err := floretActivityForToolResult(r, ToolResult{ToolID: "tool-file", ToolName: test.toolName, Status: toolResultStatusSuccess, Data: test.data})
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.assert(t, presentation.Payload)
+			if len(presentation.TargetRefs) != 1 || !strings.HasPrefix(presentation.TargetRefs[0].Kind, "file_action:") {
+				t.Fatalf("file target refs = %#v", presentation.TargetRefs)
+			}
+			for _, chip := range presentation.Chips {
+				if chip.Kind == "operation" || chip.Kind == "display_name" || chip.Kind == "change_type" {
+					t.Fatalf("file activity retained protocol chip %#v", chip)
+				}
+			}
+		})
+	}
+}
+
+func TestFloretPatchActivityPreservesAllTypedMutations(t *testing.T) {
+	t.Parallel()
+
+	presentation, err := floretActivityForToolResult(&run{}, ToolResult{
+		ToolID: "tool-patch", ToolName: "apply_patch", Status: toolResultStatusSuccess,
+		Data: ApplyPatchResult{
+			FilesChanged: 2, Hunks: 2, Additions: 2, Deletions: 1,
+			InputFormat: "apply_patch", NormalizedFormat: "unified_diff",
+			Mutations: []FileMutationResult{
+				{FilePath: "/workspace/app.ts", DisplayName: "app.ts", ChangeType: "update", Additions: 1, Deletions: 1, UnifiedDiff: "@@ -1 +1 @@\n-old\n+new\n"},
+				{FilePath: "/workspace/new.ts", DisplayName: "new.ts", ChangeType: "create", Additions: 1, UnifiedDiff: "@@ -0,0 +1 @@\n+new\n"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, ok := presentation.Payload.(fltools.PatchActivityPayload)
+	if !ok || payload.FilesChanged != 2 || payload.Additions != 2 || payload.Deletions != 1 || payload.Mutations == nil || len(*payload.Mutations) != 2 {
+		t.Fatalf("patch payload = %#v", presentation.Payload)
+	}
+	if (*payload.Mutations)[1].DisplayName != "new.ts" || (*payload.Mutations)[1].UnifiedDiff == "" {
+		t.Fatalf("patch mutations = %#v", *payload.Mutations)
+	}
+	if len(presentation.TargetRefs) != 2 {
+		t.Fatalf("patch target refs = %#v", presentation.TargetRefs)
+	}
+}
+
 func TestObservationActivityEventsDoNotPublishFlowerTimelineBlocks(t *testing.T) {
 	t.Parallel()
 
