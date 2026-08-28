@@ -503,19 +503,21 @@ function EmptyState(props: { onCreateClick: () => void; disabled?: boolean }) {
   );
 }
 
-function PortForwardRow(props: {
+const serviceRowGridClass = 'group grid min-h-16 min-w-0 grid-cols-[minmax(0,1fr)_13.5rem] items-center gap-x-4 gap-y-1.5 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/25 lg:grid-cols-[minmax(0,1.15fr)_minmax(10rem,0.72fr)_6rem_13.5rem]';
+const serviceRowActionsClass = 'col-start-2 row-start-1 grid w-[13.5rem] shrink-0 grid-cols-[4.75rem_4.75rem_2rem] items-center justify-end gap-2 lg:col-start-4';
+
+export function PortForwardRow(props: {
   forward: PortForward;
   busy: boolean;
   busyText?: string;
   onOpen: () => void;
   onDelete: () => void;
 }) {
-  const isHealthy = () => props.forward.health?.status === 'healthy';
   const i18n = useI18n();
 
   return (
     <div
-      class="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors duration-150 hover:bg-muted/25 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.7fr)_auto]"
+      class={serviceRowGridClass}
       data-testid="port-forward-row"
       data-forward-id={props.forward.forward_id}
     >
@@ -526,37 +528,29 @@ function PortForwardRow(props: {
         <div class="min-w-0">
           <div class="truncate text-sm font-semibold leading-5">{props.forward.name || i18n.t('webServices.card.fallbackName', { id: props.forward.forward_id })}</div>
           <div class="mt-0.5 truncate font-mono text-[11px] leading-4 text-muted-foreground" title={props.forward.target_url}>{props.forward.target_url}</div>
-          <Show when={props.forward.description}>
-            <div class="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/80">{props.forward.description}</div>
-          </Show>
         </div>
       </div>
 
-      <div class="col-span-2 flex min-w-0 items-center gap-3 text-[11px] text-muted-foreground md:col-span-1 md:block" data-testid="port-forward-activity">
+      <div class="col-start-1 row-start-2 min-w-0 truncate text-[11px] leading-5 text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="port-forward-secondary">
         <Tooltip content={fmtTime(props.forward.last_opened_at_unix_ms, i18n)} placement="top">
           <span class="cursor-default whitespace-nowrap">{i18n.t('webServices.fields.lastOpened')} · {fmtRelativeTime(props.forward.last_opened_at_unix_ms, i18n)}</span>
         </Tooltip>
-        <Show when={props.forward.health?.last_checked_at_unix_ms}>
-          <Tooltip content={fmtTime(props.forward.health?.last_checked_at_unix_ms ?? 0, i18n)} placement="top">
-            <span class="cursor-default whitespace-nowrap md:mt-1 md:block">{i18n.t('webServices.fields.lastCheck')} · {fmtRelativeTime(props.forward.health?.last_checked_at_unix_ms ?? 0, i18n)}</span>
-          </Tooltip>
-        </Show>
-        <Show when={isHealthy() && props.forward.health?.latency_ms}>
-          <span class="whitespace-nowrap md:mt-1 md:block">{i18n.t('webServices.fields.latency')} · <span class="font-mono">{props.forward.health?.latency_ms}ms</span></span>
-        </Show>
       </div>
 
-      <div class="col-start-2 row-start-1 flex shrink-0 items-center gap-2 md:col-start-3" data-testid="port-forward-actions">
-        <div class="mr-1 hidden min-w-[5.5rem] justify-end sm:flex"><HealthStatus health={props.forward.health} /></div>
-        <Tooltip content={props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top">
-          <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy} class="h-8 px-3">
+      <div class="col-start-2 row-start-2 flex min-w-0 justify-end lg:col-start-3 lg:row-start-1" data-testid="port-forward-status">
+        <HealthStatus health={props.forward.health} />
+      </div>
+
+      <div class={serviceRowActionsClass} data-testid="port-forward-actions">
+        <Tooltip content={props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="col-start-1 w-full">
+          <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy} class="h-8 w-full px-3">
             <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
               <InlineButtonSnakeLoading class="mr-1.5" />
             </Show>
             {i18n.t('webServices.actions.open')}
           </Button>
         </Tooltip>
-        <Tooltip content={i18n.t('webServices.actions.deleteServiceTooltip')} placement="top">
+        <Tooltip content={i18n.t('webServices.actions.deleteServiceTooltip')} placement="top" anchorClass="col-start-3">
           <Button
             size="sm"
             variant="ghost"
@@ -759,27 +753,27 @@ export function ManagedServiceRow(props: { service: ManagedService; busy: boolea
   };
   return (
     <div
-      class="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors duration-150 hover:bg-muted/25 md:grid-cols-[minmax(18rem,1fr)_minmax(10rem,0.65fr)_auto]"
+      class={serviceRowGridClass}
       data-testid="managed-service-row"
       data-managed-service-id={props.service.service_id}
     >
       <div class="min-w-0"><ServiceTemplateIdentity template={presentation()} compact /></div>
 
-      <div class="col-span-2 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground md:col-span-1" data-testid="managed-service-workspace-column">
-        <FolderOpen class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <div class="col-start-1 row-start-2 flex min-w-0 items-center text-[11px] text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="managed-service-secondary">
         <span class="truncate font-mono leading-5 text-foreground/70" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</span>
       </div>
 
-      <div class="col-start-2 row-start-1 flex shrink-0 items-center gap-2 md:col-start-3" data-testid="managed-service-actions">
-        <div class="mr-1 hidden min-w-[5.5rem] flex-col items-end gap-0.5 sm:flex" data-testid="managed-service-status">
-          <ServiceStatusIndicator
-            label={managedStatusLabel(props.service.observed_state, i18n)}
-            tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
-          />
-          <Show when={props.service.update_available}><span class="text-[10px] font-medium text-warning">{i18n.t('webServices.managed.updateAvailable')}</span></Show>
-        </div>
-        <Button size="sm" variant="default" class="h-8 px-3" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
-        <Button size="sm" variant="outline" class="h-8 px-3" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>{primaryLabel()}</Button>
+      <div class="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-0.5 lg:col-start-3 lg:row-start-1" data-testid="managed-service-status">
+        <ServiceStatusIndicator
+          label={managedStatusLabel(props.service.observed_state, i18n)}
+          tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
+        />
+        <Show when={props.service.update_available}><span class="text-[10px] font-medium text-warning">{i18n.t('webServices.managed.updateAvailable')}</span></Show>
+      </div>
+
+      <div class={serviceRowActionsClass} data-testid="managed-service-actions">
+        <Button size="sm" variant="default" class="h-8 w-full px-3" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
+        <Button size="sm" variant="outline" class="h-8 w-full px-3" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>{primaryLabel()}</Button>
         <Dropdown
           align="end"
           items={moreItems()}
@@ -798,7 +792,7 @@ export function ManagedServiceRow(props: { service: ManagedService; busy: boolea
           )}
         />
       </div>
-      <Show when={props.service.last_error_code}><p class="col-span-2 text-xs text-destructive md:col-span-3">{i18n.t('webServices.managed.stages.failed')}</p></Show>
+      <Show when={props.service.last_error_code}><p class="col-span-2 row-start-3 text-xs text-destructive lg:col-span-4 lg:row-start-2">{i18n.t('webServices.managed.stages.failed')}</p></Show>
     </div>
   );
 }
@@ -1718,18 +1712,6 @@ export function EnvPortForwardsPage() {
           <div class="ml-auto flex shrink-0 items-center gap-2">
             <Button
               size="sm"
-              variant="ghost"
-              onClick={() => { bumpRefresh(); void loadManaged(true); }}
-              disabled={!!busyID() || forwards.loading || managedLoading()}
-              aria-label={i18n.t('webServices.actions.refresh')}
-              aria-busy={forwardsRefreshing() ? 'true' : undefined}
-              title={i18n.t('webServices.actions.refresh')}
-              class="h-8 w-8 px-0"
-            >
-              <RefreshIcon class={cn('h-4 w-4', forwardsRefreshing() && 'animate-spin motion-reduce:animate-none')} />
-            </Button>
-            <Button
-              size="sm"
               variant="outline"
               onClick={openTemplateCatalog}
               disabled={managedLoading() || (permissionReady() && !canRead())}
@@ -1763,14 +1745,14 @@ export function EnvPortForwardsPage() {
               <h2 id="web-service-address-label" class="text-xs font-medium text-foreground">{i18n.t('webServices.address.label')}</h2>
             </div>
             <form
-              class="max-w-3xl"
+              class="w-full"
               onSubmit={(event) => {
                 event.preventDefault();
                 void doOpenAddress();
               }}
               data-testid="web-service-address-form"
             >
-              <div class="flex flex-col gap-2 sm:flex-row">
+              <div class="flex w-full flex-col gap-2 sm:flex-row">
                 <div class="min-w-0 flex-1" data-testid="web-service-address-input-shell">
                   <Input
                     value={address()}
@@ -1867,22 +1849,37 @@ export function EnvPortForwardsPage() {
                   <h2 id="web-services-collection-title" class="text-sm font-semibold tracking-tight">{i18n.t('webServices.collection.title')}</h2>
                   <span class="text-xs tabular-nums text-muted-foreground">{unmanagedForwards().length + managedState().length}</span>
                 </div>
-                <div class="relative min-w-0 sm:ml-auto sm:w-72" data-testid="web-services-search">
-                  <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input
-                    value={searchQuery()}
-                    onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                    placeholder={i18n.t('webServices.search.placeholder')}
+                <div class="flex min-w-0 items-center gap-2 sm:ml-auto" data-testid="web-services-toolbar-actions">
+                  <div class="relative min-w-0 sm:w-64" data-testid="web-services-search">
+                    <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                    <Input
+                      value={searchQuery()}
+                      onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                      placeholder={i18n.t('webServices.search.placeholder')}
+                      size="sm"
+                      class="h-9 w-full pl-9 pr-9"
+                    />
+                    <Show when={searchQuery()}>
+                      <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="absolute right-0.5 top-1/2 h-8 -translate-y-1/2 px-2" aria-label={i18n.t('webServices.search.clear')}>
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                      </Button>
+                    </Show>
+                  </div>
+                  <Button
                     size="sm"
-                    class="h-9 w-full pl-9 pr-9"
-                  />
-                  <Show when={searchQuery()}>
-                    <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="absolute right-0.5 top-1/2 h-8 -translate-y-1/2 px-2" aria-label={i18n.t('webServices.search.clear')}>
-                      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                      </svg>
-                    </Button>
-                  </Show>
+                    variant="ghost"
+                    onClick={() => { bumpRefresh(); void loadManaged(true); }}
+                    disabled={!!busyID() || forwards.loading || managedLoading()}
+                    aria-label={i18n.t('webServices.actions.refresh')}
+                    aria-busy={forwardsRefreshing() ? 'true' : undefined}
+                    title={i18n.t('webServices.actions.refresh')}
+                    class="h-9 w-9 shrink-0 px-0"
+                    data-testid="web-services-refresh"
+                  >
+                    <RefreshIcon class={cn('h-4 w-4', forwardsRefreshing() && 'animate-spin motion-reduce:animate-none')} />
+                  </Button>
                 </div>
               </div>
             </Show>
