@@ -75,7 +75,7 @@ export function CodespacesWorkbenchIcon(props: { class?: string }) {
       <CodespacesFoldedMark
         foldFill="var(--redeven-status-info)"
         foldOpacity=".82"
-        slashFill="color-mix(in oklch, var(--redeven-status-warning) 24%, #ffe14a 76%)"
+        slashFill="var(--redeven-status-warning)"
         slashOpacity="1"
         transform="translate(2.4 2.4) scale(1.8)"
       />
