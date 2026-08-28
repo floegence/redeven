@@ -182,9 +182,9 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.46.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.46.2 |  |
-| @floegence/floe-webapp-core | 0.46.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.46.2 |  |
-| @floegence/floe-webapp-protocol | 0.46.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.46.2 |  |
+| @floegence/floe-webapp-boot | 0.46.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.46.3 |  |
+| @floegence/floe-webapp-core | 0.46.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.46.3 |  |
+| @floegence/floe-webapp-protocol | 0.46.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.46.3 |  |
 | @floegence/floeterm-terminal-web | 0.18.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.18.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.18.0 package. |
 | @floegence/flowersec-core | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/3.2.0 |  |
 | @floegence/flowersec-node-native-darwin-arm64 | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/3.2.0 |  |
