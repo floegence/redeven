@@ -3,7 +3,7 @@ import './flower-feature.css';
 
 import { batch, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { commands, page } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type {
@@ -178,6 +178,8 @@ describe('Flower status motion and thread menu', () => {
     const select = card.querySelector('.flower-thread-card-select-button') as HTMLButtonElement;
     const indicator = card.querySelector('.flower-thread-card-approval-indicator') as HTMLElement;
     const menuButton = card.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
+    await userEvent.unhover(card);
+    await nextFrame();
     expect(select.getAttribute('aria-label')).toContain('Waiting for approval');
     expect(getComputedStyle(indicator).visibility).toBe('visible');
 
