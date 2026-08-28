@@ -559,6 +559,17 @@ describe('EnvPortForwardsPage', () => {
     expect(actions?.item((actions?.length ?? 1) - 1)?.textContent).toContain('Add Service');
   });
 
+  it('keeps the address launcher intentionally sized while allowing its input shell to fill the row', async () => {
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const form = host.querySelector<HTMLElement>('[data-testid="web-service-address-form"]');
+    const inputShell = host.querySelector<HTMLElement>('[data-testid="web-service-address-input-shell"]');
+
+    expect(form?.className).toContain('max-w-3xl');
+    expect(inputShell?.className).toContain('flex-1');
+  });
+
   it('shows a managed DeepSeek Harness card without duplicating its protected forward', async () => {
     envContextMocks.env = Object.assign(
       () => ({ name: 'Build host', permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
