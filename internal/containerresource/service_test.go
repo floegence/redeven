@@ -160,6 +160,22 @@ func newTestServiceWithClient(t *testing.T, client *fakeEngineClient, resolver M
 	return service
 }
 
+func TestStatsAddsAuthoritativeSampleTimestamp(t *testing.T) {
+	service := newTestService(t, nil)
+	before := time.Now().UnixMilli()
+	stats, err := service.Stats(context.Background(), containerengine.ContainerStatsWatchRequest{
+		Engine:      containerengine.EngineDocker,
+		ContainerID: "container-one",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now().UnixMilli()
+	if stats.SampledAtUnixMs < before || stats.SampledAtUnixMs > after {
+		t.Fatalf("sample timestamp = %d, want within [%d, %d]", stats.SampledAtUnixMs, before, after)
+	}
+}
+
 func createVolumeOperation(t *testing.T, service *Service, requestID, name string) Operation {
 	t.Helper()
 	raw := volumeRequest(t, name)

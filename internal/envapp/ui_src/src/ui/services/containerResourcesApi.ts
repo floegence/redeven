@@ -137,6 +137,7 @@ export type ContainerOperation = Readonly<{
 
 export type ContainerLogLine = Readonly<{ timestamp_unix_ms?: number; message: string }>;
 export type ContainerStats = Readonly<{
+	sampled_at_unix_ms?: number;
   container_id: string;
   cpu_percent: number;
   memory_bytes: number;

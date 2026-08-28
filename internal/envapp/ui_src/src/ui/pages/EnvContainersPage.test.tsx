@@ -24,6 +24,7 @@ const harness = vi.hoisted(() => ({
   listFiles: vi.fn(),
   readFile: vi.fn(),
   subscribeLogs: vi.fn(),
+  getStats: vi.fn(),
   subscribeStats: vi.fn(),
   subscribeCollectionStats: vi.fn(),
   preflight: vi.fn(),
@@ -71,6 +72,13 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => <button type="button" class={props.class} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
   Input: (props: any) => <input class={props.class} value={props.value} placeholder={props.placeholder} aria-label={props['aria-label']} onInput={props.onInput} />,
+  MonitoringChart: (props: any) => <div
+    class={props.class}
+    data-monitoring-chart
+    data-series={props.series.map((series: { name: string }) => series.name).join(',')}
+    data-series-colors={props.series.map((series: { color: string }) => series.color).join(',')}
+    data-y-max={props.yMax}
+  />,
   Tag: (props: any) => <span>{props.children}</span>,
 }));
 
@@ -118,7 +126,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   subscribeContainerStatsCollection: harness.subscribeCollectionStats,
   cancelContainerOperation: vi.fn(),
   createContainerOperation: vi.fn(),
-  getContainerStats: vi.fn(),
+  getContainerStats: harness.getStats,
   preflightContainerOperation: harness.preflight,
   subscribeContainerOperation: vi.fn(),
   tailContainerLogs: vi.fn(),
@@ -171,6 +179,15 @@ describe('native Containers page', () => {
     harness.listFiles.mockReset().mockResolvedValue({ path: '/', entries: [], truncated: false });
     harness.readFile.mockReset().mockResolvedValue(new Blob());
     harness.subscribeLogs.mockReset().mockResolvedValue(undefined);
+    harness.getStats.mockReset().mockResolvedValue({
+      sampled_at_unix_ms: 1_700_000_000_000,
+      container_id: 'container-1',
+      cpu_percent: 4.2,
+      memory_bytes: 268_435_456,
+      memory_limit: 1_073_741_824,
+      network_rx_bytes: 1_000,
+      network_tx_bytes: 500,
+    });
     harness.subscribeStats.mockReset().mockResolvedValue(undefined);
     harness.subscribeCollectionStats.mockReset().mockResolvedValue(undefined);
     harness.preflight.mockReset().mockResolvedValue({
@@ -298,6 +315,43 @@ describe('native Containers page', () => {
     host.querySelector<HTMLButtonElement>('button[aria-label="containers.detail.back"]')?.click();
     await settle();
     expect(host.querySelector<HTMLElement>('.container-inventory-scroll')?.scrollTop).toBe(240);
+  });
+
+  it('uses floe monitoring charts with truthful utilization scales and network rates', async () => {
+    harness.subscribeStats.mockImplementation(async (_identity, _engine, _endpoint, observe) => {
+      observe({
+        sampled_at_unix_ms: 1_700_000_001_000,
+        container_id: 'container-1',
+        cpu_percent: 104.8,
+        memory_bytes: 322_122_547,
+        memory_limit: 1_073_741_824,
+        network_rx_bytes: 3_048,
+        network_tx_bytes: 1_524,
+      });
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    (host.querySelector('tbody tr') as HTMLElement).click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.stats'))
+      ?.click();
+    await settle();
+
+    const charts = Array.from(host.querySelectorAll<HTMLElement>('[data-monitoring-chart]'));
+    expect(charts).toHaveLength(3);
+    expect(charts.map((chart) => chart.dataset.seriesColors)).toEqual([
+      'var(--redeven-runtime-monitor-cpu-line)',
+      'var(--redeven-runtime-monitor-memory-line)',
+      'var(--redeven-runtime-monitor-download-line),var(--redeven-runtime-monitor-upload-line)',
+    ]);
+    expect(charts[0].dataset.yMax).toBe('200');
+    expect(charts[1].dataset.yMax).toBe('50');
+    expect(host.querySelector('.container-monitor-panel--network')?.textContent).toContain('KB/s');
+    expect(host.querySelector('.container-sparkline')).toBeNull();
   });
 
   it('uses resource-specific columns for images, volumes, Compose projects, and pods', async () => {

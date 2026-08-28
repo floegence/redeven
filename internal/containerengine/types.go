@@ -233,12 +233,13 @@ type ImagePullResponse struct {
 }
 
 type ContainerStats struct {
-	ContainerID    string  `json:"container_id"`
-	CPUPercent     float64 `json:"cpu_percent"`
-	MemoryBytes    int64   `json:"memory_bytes"`
-	MemoryLimit    int64   `json:"memory_limit"`
-	NetworkRxBytes int64   `json:"network_rx_bytes"`
-	NetworkTxBytes int64   `json:"network_tx_bytes"`
+	SampledAtUnixMs int64   `json:"sampled_at_unix_ms,omitempty"`
+	ContainerID     string  `json:"container_id"`
+	CPUPercent      float64 `json:"cpu_percent"`
+	MemoryBytes     int64   `json:"memory_bytes"`
+	MemoryLimit     int64   `json:"memory_limit"`
+	NetworkRxBytes  int64   `json:"network_rx_bytes"`
+	NetworkTxBytes  int64   `json:"network_tx_bytes"`
 }
 
 type ContainerStatsWatchRequest struct {

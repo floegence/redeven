@@ -3,6 +3,7 @@ package containerresource
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/floegence/redeven/internal/containerengine"
 )
@@ -165,7 +166,12 @@ func (s *Service) Stats(ctx context.Context, req containerengine.ContainerStatsW
 	if err != nil {
 		return containerengine.ContainerStats{}, err
 	}
-	return s.engine.Stats(bound, req.Engine, req.ContainerID)
+	stats, err := s.engine.Stats(bound, req.Engine, req.ContainerID)
+	if err != nil {
+		return containerengine.ContainerStats{}, err
+	}
+	stats.SampledAtUnixMs = time.Now().UnixMilli()
+	return stats, nil
 }
 
 func (s *Service) StatsCollection(ctx context.Context, req containerengine.ContainerStatsCollectionRequest) (containerengine.ContainerStatsCollection, error) {

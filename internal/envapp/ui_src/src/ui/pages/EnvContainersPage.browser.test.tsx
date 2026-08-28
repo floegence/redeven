@@ -86,8 +86,11 @@ vi.mock('../services/containerResourcesApi', () => ({
   cancelContainerOperation: vi.fn(),
   createContainerOperation: vi.fn(),
   getContainerStats: vi.fn().mockResolvedValue({
+    sampled_at_unix_ms: 1_725_000_000_000,
+    container_id: 'e2c83fcda485',
     cpu_percent: 37.4,
     memory_bytes: 268_435_456,
+    memory_limit: 1_073_741_824,
     network_rx_bytes: 12_582_912,
     network_tx_bytes: 4_194_304,
   }),
@@ -95,7 +98,15 @@ vi.mock('../services/containerResourcesApi', () => ({
   subscribeContainerOperation: vi.fn(),
   subscribeContainerLogs: vi.fn().mockResolvedValue(undefined),
   subscribeContainerStats: vi.fn().mockImplementation(async (_identity: string, _engine: string, _endpoint: string, observe: (sample: unknown) => void) => {
-    observe({ container_id: 'e2c83fcda485', cpu_percent: 38.2, memory_bytes: 275_000_000, network_rx_bytes: 13_000_000, network_tx_bytes: 4_400_000 });
+    observe({
+      sampled_at_unix_ms: 1_725_000_001_000,
+      container_id: 'e2c83fcda485',
+      cpu_percent: 38.2,
+      memory_bytes: 275_000_000,
+      memory_limit: 1_073_741_824,
+      network_rx_bytes: 13_000_000,
+      network_tx_bytes: 4_400_000,
+    });
   }),
   subscribeContainerStatsCollection: vi.fn().mockImplementation(async (_engine: string, _endpoint: string, observe: (sample: unknown) => void) => {
     observe({ sampled_at_unix_ms: Date.now(), samples: [{ container_id: 'e2c83fcda485', cpu_percent: 38.2, memory_bytes: 275_000_000 }] });
@@ -169,7 +180,10 @@ describe('native Containers responsive product surface', () => {
     const statsTab = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Stats'))!;
     statsTab.click();
     await settle();
-    expect(detailPage.querySelectorAll('.container-sparkline')).toHaveLength(2);
+    expect(detailPage.querySelectorAll('.container-monitor-panel')).toHaveLength(3);
+    expect(detailPage.querySelectorAll('.container-monitor-chart .chart-svg')).toHaveLength(3);
+    expect(detailPage.querySelector('.container-sparkline')).toBeNull();
+    expect(detailPage.querySelector('.container-network-reading')?.textContent).toContain('/s');
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
@@ -194,6 +208,11 @@ describe('native Containers responsive product surface', () => {
     expect(rect.bottom).toBeLessThanOrEqual(viewport.height);
     const visibleButtons = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.getClientRects().length > 0);
     expect(visibleButtons.every((button) => button.getBoundingClientRect().height >= 44)).toBe(true);
+    const statsTab = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Stats'))!;
+    statsTab.click();
+    await settle();
+    expect(detailPage.querySelectorAll('.container-monitor-panel')).toHaveLength(3);
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 });
