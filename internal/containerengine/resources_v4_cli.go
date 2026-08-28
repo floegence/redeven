@@ -101,10 +101,10 @@ func (c *CLIClient) listDockerContexts(ctx context.Context) ([]EngineEndpoint, e
 		if invalidEndpointName(name) {
 			continue
 		}
-		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, name), Engine: EngineDocker, DisplayName: name, Default: item.Current, Remote: name != "default"})
+		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, name), Engine: EngineDocker, DisplayName: name, Default: item.Current, Remote: name != "default", Capabilities: endpointCapabilities(EngineDocker)})
 	}
 	if len(out) == 0 {
-		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, "default"), Engine: EngineDocker, DisplayName: "default", Default: true})
+		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, "default"), Engine: EngineDocker, DisplayName: "default", Default: true, Capabilities: endpointCapabilities(EngineDocker)})
 	}
 	ensureDefaultEndpoint(out)
 	return out, nil
@@ -126,13 +126,13 @@ func (c *CLIClient) listPodmanConnections(ctx context.Context) ([]EngineEndpoint
 			return nil, errors.New("Podman connection inventory is invalid")
 		}
 	}
-	out := []EngineEndpoint{{EndpointID: endpointID(EnginePodman, "local:"), Engine: EnginePodman, DisplayName: "local", Default: len(rows) == 0, Remote: false}}
+	out := []EngineEndpoint{{EndpointID: endpointID(EnginePodman, "local:"), Engine: EnginePodman, DisplayName: "local", Default: len(rows) == 0, Remote: false, Capabilities: endpointCapabilities(EnginePodman)}}
 	for _, item := range rows {
 		name := strings.TrimSpace(item.Name)
 		if invalidEndpointName(name) {
 			continue
 		}
-		out = append(out, EngineEndpoint{EndpointID: endpointID(EnginePodman, "connection:"+name), Engine: EnginePodman, DisplayName: name, Default: item.Default, Remote: true})
+		out = append(out, EngineEndpoint{EndpointID: endpointID(EnginePodman, "connection:"+name), Engine: EnginePodman, DisplayName: name, Default: item.Default, Remote: true, Capabilities: endpointCapabilities(EnginePodman)})
 	}
 	ensureDefaultEndpoint(out)
 	return out, nil

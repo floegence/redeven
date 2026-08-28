@@ -27,7 +27,10 @@ commands select the resolved connection explicitly. Redeven never changes the
 user's global engine selection.
 
 The engine supports endpoint status, containers, images, volumes, Docker
-Compose Projects, Podman Pods, bounded logs, statistics, and typed mutations.
+Compose Projects, Podman Pods, bounded logs, endpoint-wide statistics, safe
+resource reads, and typed mutations. Endpoint responses advertise collection
+statistics, container files, volume files, and Exec independently so the UI
+never presents an unsupported tool.
 Docker-only methods reject Podman targets and Podman-only methods reject Docker
 targets. Compose configuration paths and engine connection details remain
 private. Compose down never removes volumes implicitly.
@@ -57,9 +60,12 @@ or a bounded inventory snapshot. Unknown results remain explicit.
 
 The Local API is under `/_redeven_proxy/api/container-resources` and
 `/_redeven_proxy/api/container-resource-operations`. Read covers inventory,
-details, logs, statistics, operations, and streams. Lifecycle requires Read and
-Execute. Creation, pull, removal, and cleanup require Read, Write, and Execute.
-High-risk preflights additionally require Admin and exact-name confirmation.
+redacted details, logs, statistics, operations, and streams. Raw container
+Inspect and every file list, preview, or download require Read and Admin. Exec
+requires Read and Execute when a published Floeterm contract advertises it.
+Lifecycle requires Read and Execute. Creation, pull, removal, and cleanup
+require Read, Write, and Execute. High-risk preflights additionally require
+Admin and exact-name confirmation.
 Server-side enforcement is authoritative; disabled UI controls are only a
 presentation aid.
 
@@ -72,10 +78,21 @@ lifecycle implementations.
 
 ## Data and host safety
 
-DTOs expose only typed, redacted fields. They never return raw inspect output,
-environment values, arbitrary label values, credentials, socket paths,
-certificates, remote URLs, or Compose file paths. Public errors omit command
-arguments, stderr, raw output, tokens, URLs, and host paths.
+DTOs expose only typed, redacted fields. They never return environment values,
+arbitrary label values, credentials, socket paths, certificates, remote URLs,
+or Compose file paths. Raw container Inspect is one explicit Admin-only,
+on-demand exception: it uses `Cache-Control: no-store`, is not prefetched or
+persisted, and its payload cannot enter errors, audit detail, Operations, or
+application logs. Public errors omit command arguments, stderr, raw output,
+tokens, URLs, and host paths.
+
+Container files use the engine-native `container cp` tar stream. Podman volume
+files parse `volume export` as a bounded stream without buffering the full
+archive; Docker volume files are unavailable because Redeven
+does not inspect `/var/lib/docker` and does not create helper containers. Every
+path is absolute and canonical, `..` is rejected, archive paths and links must
+remain inside the export, and entry count, content bytes, command output, and
+execution time are bounded. File payloads are never written to product state.
 
 CLI execution uses explicit argv, bounded time, bounded output, and process
 group termination. Redeven does not elevate privileges, change socket
@@ -86,24 +103,29 @@ administrators remain responsible for engine access.
 
 Containers has a fixed Activity entry and a multi-instance
 `redeven.containers` Workbench component. Each instance persists engine,
-endpoint, and selected resource view independently. Desktop uses a compact
-master-detail workspace; mobile uses a resource selector, card list, and
-full-screen detail. One compact command bar keeps engine, endpoint health,
-refresh, Operations, and resource navigation stable without repeating endpoint
-metadata as prose. Each resource view leads with one interactive active/inactive
-distribution chart, search, and only the filters and primary creation action
-that affect the current inventory. The desktop inventory uses three
-type-specific columns and status color instead of boxed summary cards, generic
-details columns, long identifiers, or repeated ownership labels.
+endpoint, and selected resource view independently. One compact header owns
+engine, endpoint health, refresh, and Operations. Workbench hides the duplicate
+product title. Underlined resource tabs, a single toolbar, status color, icons,
+spacing, sortable type-specific columns, direct lifecycle actions, and an
+overflow menu replace overview cards, nested panels, repeated prose, and long
+identifiers. Column visibility is user-controlled. Metrics are off by default;
+when requested, one endpoint-wide SSE sample updates aggregate values and row
+metrics and stops as soon as its owning view closes.
 
-Selecting a resource opens an on-demand floating inspector; no empty inspector
-occupies the desktop before selection. Its header owns the selected name and
-lifecycle state, while the body shows each remaining health or runtime fact
-once. Managed ownership is one compact Web Services link. Redacted identity and
-wire data remain available only through an explicitly collapsed technical-
-details section; they are never the default product presentation. Container
-statistics use a CPU ring and compact traffic metrics. A shared Operations
-drawer keeps endpoint and target identity visible.
+Selecting a resource opens a component-local detail page, never a floating
+inspector. Returning preserves the list query, filter, sort, and scroll owner.
+Container details provide Overview, live searchable logs, redacted Inspect,
+mounts, capability-gated files and Exec, and bounded in-browser statistics.
+Image details provide Overview, sanitized layers, references, Run, Tag, and
+Delete without vulnerability or package-analysis placeholders. Volume details
+provide Overview, references, and capability-gated files. Compose Projects and
+Pods expose overview, members, lifecycle, and member navigation. Managed
+resources replace mutation controls with one Web Services link.
+
+Desktop uses a compact table, narrow Workbench hides secondary columns, and
+mobile uses cards plus a full-screen detail surface. Logs support timestamped
+search, follow/pause, wrapping, copy, current-buffer download, and browser full
+screen. A shared Operations drawer keeps endpoint and target identity visible.
 
 The UI provides structured create dialogs and a separate risk review before
 submission. It supports keyboard operation, 44 px touch targets, forced colors,
@@ -124,9 +146,11 @@ shown explicitly and cannot authorize destructive work.
 
 - `redeven:internal/containerengine/adapter.go` - Defines the shared typed engine boundary.
 - `redeven:internal/containerengine/resources_v4_cli.go` - Resolves opaque endpoints and constructs explicit Docker and Podman commands.
+- `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe native archive reads.
 - `redeven:internal/containerresource/service.go` - Owns strict preflight admission, operations, cancellation, and startup observation.
 - `redeven:internal/containerresource/schema.go` - Defines the Redeven-owned product database lineage.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Enforces native Local API routes and RWX/Admin permissions.
 - `redeven:internal/managedwebservice/container_resources.go` - Resolves protected Web Services ownership.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Implements the native responsive product surface.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Verifies desktop and narrow dedicated-detail layouts in Chromium.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Registers the multi-instance Workbench component.

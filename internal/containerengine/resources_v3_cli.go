@@ -170,7 +170,8 @@ func (c *CLIClient) ListImages(ctx context.Context, engine Engine) ([]ImageRecor
 		return nil, err
 	}
 	for index := range out {
-		out[index].ReferencedContainers = countImageReferences(out[index], containers)
+		out[index].UsedBy = imageReferences(out[index], containers)
+		out[index].ReferencedContainers = len(out[index].UsedBy)
 		out[index].ReferenceInspectionFailures = inspectionFailures
 	}
 	return out, nil
@@ -211,13 +212,25 @@ func (c *CLIClient) InspectImage(ctx context.Context, engine Engine, image strin
 		return ImageRecord{}, err
 	}
 	var docs []struct {
-		ID          string   `json:"Id"`
-		AltID       string   `json:"ID"`
-		RepoTags    []string `json:"RepoTags"`
-		RepoDigests []string `json:"RepoDigests"`
-		Digest      string   `json:"Digest"`
-		Size        int64    `json:"Size"`
-		Created     string   `json:"Created"`
+		ID           string   `json:"Id"`
+		AltID        string   `json:"ID"`
+		RepoTags     []string `json:"RepoTags"`
+		RepoDigests  []string `json:"RepoDigests"`
+		Digest       string   `json:"Digest"`
+		Size         int64    `json:"Size"`
+		Created      string   `json:"Created"`
+		OS           string   `json:"Os"`
+		OSAlt        string   `json:"OS"`
+		Architecture string   `json:"Architecture"`
+		Variant      string   `json:"Variant"`
+		RootFS       struct {
+			Layers []string `json:"Layers"`
+		} `json:"RootFS"`
+		Config struct {
+			WorkingDir   string         `json:"WorkingDir"`
+			User         string         `json:"User"`
+			ExposedPorts map[string]any `json:"ExposedPorts"`
+		} `json:"Config"`
 	}
 	if err := json.Unmarshal(raw, &docs); err != nil {
 		return ImageRecord{}, fmt.Errorf("parse image inspect: %w", err)
@@ -225,12 +238,23 @@ func (c *CLIClient) InspectImage(ctx context.Context, engine Engine, image strin
 	if len(docs) == 0 {
 		return ImageRecord{}, errors.New("parse image inspect: empty response")
 	}
-	item := ImageRecord{ID: firstNonEmpty(docs[0].ID, docs[0].AltID), Tags: docs[0].RepoTags, Digest: firstNonEmpty(firstDigest(docs[0].RepoDigests), docs[0].Digest), SizeBytes: docs[0].Size, CreatedAtUnixMs: parseTimeUnixMs(docs[0].Created), Reference: strings.TrimSpace(image)}
+	exposedPorts := make([]string, 0, len(docs[0].Config.ExposedPorts))
+	for value := range docs[0].Config.ExposedPorts {
+		exposedPorts = append(exposedPorts, cleanImageMetadata(value))
+	}
+	sort.Strings(exposedPorts)
+	item := ImageRecord{
+		ID: firstNonEmpty(docs[0].ID, docs[0].AltID), Tags: cleanImageMetadataList(docs[0].RepoTags), Digest: firstNonEmpty(firstDigest(docs[0].RepoDigests), docs[0].Digest),
+		SizeBytes: docs[0].Size, CreatedAtUnixMs: parseTimeUnixMs(docs[0].Created), Reference: strings.TrimSpace(image),
+		OS: firstNonEmpty(docs[0].OS, docs[0].OSAlt), Architecture: strings.TrimSpace(docs[0].Architecture), Variant: strings.TrimSpace(docs[0].Variant),
+		WorkingDir: strings.TrimSpace(docs[0].Config.WorkingDir), User: strings.TrimSpace(docs[0].Config.User), LayerCount: len(docs[0].RootFS.Layers), ExposedPorts: exposedPorts,
+	}
 	containers, inspectionFailures, err := c.inspectAllContainers(ctx, engine)
 	if err != nil {
 		return ImageRecord{}, err
 	}
-	item.ReferencedContainers = countImageReferences(item, containers)
+	item.UsedBy = imageReferences(item, containers)
+	item.ReferencedContainers = len(item.UsedBy)
 	item.ReferenceInspectionFailures = inspectionFailures
 	return item, nil
 }
@@ -368,7 +392,8 @@ func (c *CLIClient) ListVolumes(ctx context.Context, engine Engine) ([]VolumeRec
 		return nil, err
 	}
 	for index := range out {
-		out[index].ReferencedContainers = countVolumeReferences(out[index].Name, containers)
+		out[index].UsedBy = volumeReferences(out[index].Name, containers)
+		out[index].ReferencedContainers = len(out[index].UsedBy)
 		out[index].ReferenceInspectionFailures = inspectionFailures + metadataFailures
 	}
 	return out, nil
@@ -400,7 +425,8 @@ func (c *CLIClient) InspectVolume(ctx context.Context, engine Engine, name strin
 	if err != nil {
 		return VolumeRecord{}, err
 	}
-	item.ReferencedContainers = countVolumeReferences(item.Name, containers)
+	item.UsedBy = volumeReferences(item.Name, containers)
+	item.ReferencedContainers = len(item.UsedBy)
 	item.ReferenceInspectionFailures = inspectionFailures
 	return item, nil
 }
@@ -571,15 +597,18 @@ func (c *CLIClient) inspectAllContainers(ctx context.Context, engine Engine) ([]
 }
 
 func countImageReferences(image ImageRecord, containers []EngineContainer) int {
-	candidates := []string{image.ID, image.Reference, image.Digest}
-	candidates = append(candidates, image.Tags...)
-	count := 0
+	return len(imageReferences(image, containers))
+}
+
+func imageReferences(image ImageRecord, containers []EngineContainer) []ResourceReference {
+	candidates := append([]string{image.ID, image.Reference, image.Digest}, image.Tags...)
+	out := make([]ResourceReference, 0)
 	for _, container := range containers {
 		if anyImageIdentityMatches(candidates, container.Image.Reference, container.Image.Digest, container.Image.RuntimeID) {
-			count++
+			out = append(out, ResourceReference{ContainerID: container.ContainerID, Name: container.Name, State: container.State})
 		}
 	}
-	return count
+	return out
 }
 
 func anyImageIdentityMatches(candidates []string, values ...string) bool {
@@ -599,17 +628,21 @@ func anyImageIdentityMatches(candidates []string, values ...string) bool {
 }
 
 func countVolumeReferences(name string, containers []EngineContainer) int {
+	return len(volumeReferences(name, containers))
+}
+
+func volumeReferences(name string, containers []EngineContainer) []ResourceReference {
 	name = strings.TrimSpace(name)
-	count := 0
+	out := make([]ResourceReference, 0)
 	for _, container := range containers {
 		for _, mount := range container.Runtime.Mounts {
 			if mount.Type == MountTypeVolume && strings.TrimSpace(mount.Source) == name {
-				count++
+				out = append(out, ResourceReference{ContainerID: container.ContainerID, Name: container.Name, State: container.State})
 				break
 			}
 		}
 	}
-	return count
+	return out
 }
 func decodeJSONLines(raw []byte, out any) error {
 	text := strings.TrimSpace(string(raw))

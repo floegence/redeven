@@ -248,15 +248,34 @@ type ContainerStatsWatchRequest struct {
 	IntervalMS  int        `json:"interval_ms,omitempty"`
 }
 
+type ContainerStatsCollectionRequest struct {
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	IntervalMS int        `json:"interval_ms,omitempty"`
+}
+
+type ContainerStatsCollection struct {
+	SampledAtUnixMs int64            `json:"sampled_at_unix_ms"`
+	Samples         []ContainerStats `json:"samples"`
+}
+
 type ImageRecord struct {
-	ID                          string   `json:"id"`
-	Reference                   string   `json:"reference,omitempty"`
-	Digest                      string   `json:"digest,omitempty"`
-	Tags                        []string `json:"tags,omitempty"`
-	SizeBytes                   int64    `json:"size_bytes,omitempty"`
-	CreatedAtUnixMs             int64    `json:"created_at_unix_ms,omitempty"`
-	ReferencedContainers        int      `json:"referenced_containers"`
-	ReferenceInspectionFailures int      `json:"-"`
+	ID                          string              `json:"id"`
+	Reference                   string              `json:"reference,omitempty"`
+	Digest                      string              `json:"digest,omitempty"`
+	Tags                        []string            `json:"tags,omitempty"`
+	SizeBytes                   int64               `json:"size_bytes,omitempty"`
+	CreatedAtUnixMs             int64               `json:"created_at_unix_ms,omitempty"`
+	OS                          string              `json:"os,omitempty"`
+	Architecture                string              `json:"architecture,omitempty"`
+	Variant                     string              `json:"variant,omitempty"`
+	WorkingDir                  string              `json:"working_dir,omitempty"`
+	User                        string              `json:"user,omitempty"`
+	LayerCount                  int                 `json:"layer_count,omitempty"`
+	ExposedPorts                []string            `json:"exposed_ports,omitempty"`
+	UsedBy                      []ResourceReference `json:"used_by,omitempty"`
+	ReferencedContainers        int                 `json:"referenced_containers"`
+	ReferenceInspectionFailures int                 `json:"-"`
 }
 
 type ImageHistoryEntry struct {
@@ -266,12 +285,19 @@ type ImageHistoryEntry struct {
 }
 
 type VolumeRecord struct {
-	Name                        string `json:"name"`
-	Driver                      string `json:"driver,omitempty"`
-	Scope                       string `json:"scope,omitempty"`
-	CreatedAtUnixMs             int64  `json:"created_at_unix_ms,omitempty"`
-	ReferencedContainers        int    `json:"referenced_containers"`
-	ReferenceInspectionFailures int    `json:"-"`
+	Name                        string              `json:"name"`
+	Driver                      string              `json:"driver,omitempty"`
+	Scope                       string              `json:"scope,omitempty"`
+	CreatedAtUnixMs             int64               `json:"created_at_unix_ms,omitempty"`
+	UsedBy                      []ResourceReference `json:"used_by,omitempty"`
+	ReferencedContainers        int                 `json:"referenced_containers"`
+	ReferenceInspectionFailures int                 `json:"-"`
+}
+
+type ResourceReference struct {
+	ContainerID string         `json:"container_id"`
+	Name        string         `json:"name,omitempty"`
+	State       ContainerState `json:"state"`
 }
 
 type ResourcePlan struct {

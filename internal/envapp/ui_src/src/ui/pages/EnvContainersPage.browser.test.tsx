@@ -40,10 +40,12 @@ vi.mock('../services/containerResourcesApi', () => ({
   listContainerEndpoints: vi.fn().mockResolvedValue([{
     endpoint_id: 'desktop-linux', engine: 'docker', display_name: 'Desktop Linux', default: true,
     remote: false, available: true, engine_version: '27.3.1', rootless: false,
+    capabilities: { collection_stats: true, container_files: true, volume_files: false, exec: false },
   }]),
   getContainerEndpointStatus: vi.fn().mockResolvedValue({
     endpoint_id: 'desktop-linux', engine: 'docker', display_name: 'Desktop Linux', default: true,
     remote: false, available: true, engine_version: '27.3.1', rootless: false,
+    capabilities: { collection_stats: true, container_files: true, volume_files: false, exec: false },
   }),
   listContainerResources: vi.fn().mockResolvedValue([
     {
@@ -77,6 +79,10 @@ vi.mock('../services/containerResourcesApi', () => ({
     ports: [{ protocol: 'tcp', host_ip: '127.0.0.1', host_port: 4318, port: 4318 }],
   })),
   listContainerOperations: vi.fn().mockResolvedValue([]),
+  getContainerImageHistory: vi.fn().mockResolvedValue([]),
+  getRawContainerInspect: vi.fn().mockResolvedValue({}),
+  listContainerResourceFiles: vi.fn().mockResolvedValue({ path: '/', entries: [], truncated: false }),
+  readContainerResourceFile: vi.fn().mockResolvedValue(new Blob()),
   cancelContainerOperation: vi.fn(),
   createContainerOperation: vi.fn(),
   getContainerStats: vi.fn().mockResolvedValue({
@@ -87,6 +93,13 @@ vi.mock('../services/containerResourcesApi', () => ({
   }),
   preflightContainerOperation: vi.fn(),
   subscribeContainerOperation: vi.fn(),
+  subscribeContainerLogs: vi.fn().mockResolvedValue(undefined),
+  subscribeContainerStats: vi.fn().mockImplementation(async (_identity: string, _engine: string, _endpoint: string, observe: (sample: unknown) => void) => {
+    observe({ container_id: 'e2c83fcda485', cpu_percent: 38.2, memory_bytes: 275_000_000, network_rx_bytes: 13_000_000, network_tx_bytes: 4_400_000 });
+  }),
+  subscribeContainerStatsCollection: vi.fn().mockImplementation(async (_engine: string, _endpoint: string, observe: (sample: unknown) => void) => {
+    observe({ sampled_at_unix_ms: Date.now(), samples: [{ container_id: 'e2c83fcda485', cpu_percent: 38.2, memory_bytes: 275_000_000 }] });
+  }),
   tailContainerLogs: vi.fn(),
 }));
 
@@ -123,7 +136,7 @@ describe('native Containers responsive product surface', () => {
     await page.viewport(1280, 720);
   });
 
-  it('uses a visual status overview, borderless inventory, and on-demand details on desktop', async () => {
+  it('uses a flat sortable inventory and a dedicated detail page on desktop', async () => {
     await page.viewport(1440, 900);
     const mounted = mount();
     dispose = mounted.dispose;
@@ -131,12 +144,11 @@ describe('native Containers responsive product surface', () => {
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
     const table = root.querySelector<HTMLElement>('[data-container-resource-table]')!;
-    const distribution = root.querySelector<HTMLElement>('.container-distribution__track')!;
     const rows = Array.from(root.querySelectorAll<HTMLElement>('tbody tr'));
     expect(getComputedStyle(table).display).not.toBe('none');
-    expect(distribution.getBoundingClientRect().width).toBeGreaterThan(100);
+    expect(root.querySelector('.container-distribution__track')).toBeNull();
     expect(root.querySelector('.container-inspector')).toBeNull();
-    expect(root.querySelectorAll('thead th')).toHaveLength(3);
+    expect(root.querySelectorAll('thead th')).toHaveLength(5);
     expect(rows).toHaveLength(4);
     expect(rows[0].textContent).not.toContain('8bbf320351e557285fe1f143ee14a6d2334f24f5');
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
@@ -147,20 +159,17 @@ describe('native Containers responsive product surface', () => {
     rows[0].click();
     await settle();
 
-    const inspector = root.querySelector<HTMLElement>('.container-inspector')!;
-    const technical = inspector.querySelector<HTMLDetailsElement>('[data-container-technical-details]')!;
-    expect(inspector.getBoundingClientRect().width).toBeGreaterThanOrEqual(360);
-    expect(getComputedStyle(inspector).position).toBe('absolute');
-    expect(inspector.querySelector('.container-inspector__header')?.textContent).not.toContain('8bbf320351e557285fe1f143ee14a6d2334f24f5');
-    expect(inspector.querySelector('[data-container-detail-grid]')?.textContent).toContain('Network mode');
-    expect(technical.open).toBe(false);
+    const detailPage = root.querySelector<HTMLElement>('[data-container-detail-page]')!;
+    expect(detailPage).not.toBeNull();
+    expect(root.querySelector('.container-inspector')).toBeNull();
+    expect(detailPage.querySelector('.container-detail-identity')?.textContent).not.toContain('e2c83fcda4850de717be32128754ce4764efb434');
+    expect(detailPage.querySelector('[data-container-detail-grid]')?.textContent).toContain('Network mode');
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
 
-    const statsTab = Array.from(inspector.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Stats'))!;
+    const statsTab = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Stats'))!;
     statsTab.click();
     await settle();
-    const gauge = inspector.querySelector<HTMLElement>('.container-cpu-gauge')!;
-    expect(gauge.style.getPropertyValue('--container-cpu-usage')).not.toBe('');
+    expect(detailPage.querySelectorAll('.container-sparkline')).toHaveLength(2);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
@@ -178,12 +187,12 @@ describe('native Containers responsive product surface', () => {
     cards[0].click();
     await settle();
 
-    const inspector = root.querySelector<HTMLElement>('.container-inspector')!;
-    const rect = inspector.getBoundingClientRect();
+    const detailPage = root.querySelector<HTMLElement>('[data-container-detail-page]')!;
+    const rect = detailPage.getBoundingClientRect();
     expect(rect.left).toBeGreaterThanOrEqual(0);
     expect(rect.right).toBeLessThanOrEqual(viewport.width);
     expect(rect.bottom).toBeLessThanOrEqual(viewport.height);
-    const visibleButtons = Array.from(inspector.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.getClientRects().length > 0);
+    const visibleButtons = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.getClientRects().length > 0);
     expect(visibleButtons.every((button) => button.getBoundingClientRect().height >= 44)).toBe(true);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });

@@ -13,6 +13,12 @@ export type ContainerEndpoint = Readonly<{
   available: boolean;
   engine_version?: string;
   rootless?: boolean;
+	capabilities?: Readonly<{
+		collection_stats: boolean;
+		container_files: boolean;
+		volume_files: boolean;
+		exec: boolean;
+	}>;
 }>;
 
 export type ContainerManagement = Readonly<{
@@ -139,6 +145,32 @@ export type ContainerStats = Readonly<{
   network_tx_bytes: number;
 }>;
 
+export type ContainerStatsCollection = Readonly<{
+	sampled_at_unix_ms: number;
+	samples: readonly ContainerStats[];
+}>;
+
+export type ContainerImageHistoryEntry = Readonly<{
+	id?: string;
+	created_at_unix_ms?: number;
+	size_bytes?: number;
+}>;
+
+export type ContainerResourceFileEntry = Readonly<{
+	name: string;
+	path: string;
+	kind: 'directory' | 'file' | 'link';
+	size_bytes?: number;
+	mode?: string;
+	modified_at_unix_ms?: number;
+}>;
+
+export type ContainerResourceFileListing = Readonly<{
+	path: string;
+	entries: readonly ContainerResourceFileEntry[];
+	truncated: boolean;
+}>;
+
 function query(engine: ContainerEngine, endpointID: string, extras: Readonly<Record<string, string>> = {}): string {
   const params = new URLSearchParams({ engine, ...extras });
   if (endpointID) params.set('endpoint_id', endpointID);
@@ -205,6 +237,122 @@ export async function getContainerStats(
     `/_redeven_proxy/api/container-resources/containers/${encodeURIComponent(identity)}/stats?${query(engine, endpointID)}`,
     { method: 'GET' },
   );
+}
+
+export async function getContainerImageHistory(
+	identity: string,
+	engine: ContainerEngine,
+	endpointID: string,
+): Promise<ContainerImageHistoryEntry[]> {
+	const response = await fetchLocalApiJSON<{ history: ContainerImageHistoryEntry[] }>(
+		`/_redeven_proxy/api/container-resources/images/${encodeURIComponent(identity)}/history?${query(engine, endpointID)}`,
+		{ method: 'GET' },
+	);
+	return response.history ?? [];
+}
+
+export async function getRawContainerInspect(identity: string, engine: ContainerEngine, endpointID: string): Promise<unknown> {
+	return fetchLocalApiJSON<unknown>(
+		`/_redeven_proxy/api/container-resources/containers/${encodeURIComponent(identity)}/inspect/raw?${query(engine, endpointID)}`,
+		{ method: 'GET', cache: 'no-store' },
+	);
+}
+
+export async function listContainerResourceFiles(
+	view: 'containers' | 'volumes',
+	identity: string,
+	path: string,
+	engine: ContainerEngine,
+	endpointID: string,
+): Promise<ContainerResourceFileListing> {
+	return fetchLocalApiJSON<ContainerResourceFileListing>(
+		`/_redeven_proxy/api/container-resources/${view}/${encodeURIComponent(identity)}/files?${query(engine, endpointID, { path })}`,
+		{ method: 'GET', cache: 'no-store' },
+	);
+}
+
+export async function readContainerResourceFile(
+	view: 'containers' | 'volumes',
+	identity: string,
+	path: string,
+	engine: ContainerEngine,
+	endpointID: string,
+): Promise<Blob> {
+	const response = await fetchLocalApi(
+		`/_redeven_proxy/api/container-resources/${view}/${encodeURIComponent(identity)}/files/content?${query(engine, endpointID, { path })}`,
+		{ method: 'GET', cache: 'no-store' },
+	);
+	if (!response.ok) throw new Error('The resource file could not be read.');
+	return response.blob();
+}
+
+async function subscribeContainerSSE<T>(
+	url: string,
+	eventType: string,
+	onEvent: (event: T) => void,
+	signal: AbortSignal,
+): Promise<void> {
+	const response = await fetchLocalApi(url, { method: 'GET', headers: { Accept: 'text/event-stream' }, signal });
+	if (!response.ok || !response.body) throw new Error('The container stream is unavailable.');
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = '';
+	try {
+		for (;;) {
+			const result = await reader.read();
+			if (result.done) break;
+			buffer += decoder.decode(result.value, { stream: true });
+			const events = buffer.split(/\r?\n\r?\n/u);
+			buffer = events.pop() ?? '';
+			for (const event of events) {
+				const lines = event.split(/\r?\n/u);
+				const kind = lines.find((line) => line.startsWith('event:'))?.slice(6).trim();
+				if (kind !== eventType) continue;
+				const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
+				if (data) onEvent(JSON.parse(data) as T);
+			}
+		}
+	} finally {
+		await reader.cancel().catch(() => undefined);
+	}
+}
+
+export function subscribeContainerLogs(
+	identity: string,
+	engine: ContainerEngine,
+	endpointID: string,
+	onEvent: (line: ContainerLogLine) => void,
+	signal: AbortSignal,
+): Promise<void> {
+	return subscribeContainerSSE(
+		`/_redeven_proxy/api/container-resources/containers/${encodeURIComponent(identity)}/logs/events?${query(engine, endpointID, { tail: '400' })}`,
+		'log', onEvent, signal,
+	);
+}
+
+export function subscribeContainerStatsCollection(
+	engine: ContainerEngine,
+	endpointID: string,
+	onEvent: (stats: ContainerStatsCollection) => void,
+	signal: AbortSignal,
+): Promise<void> {
+	return subscribeContainerSSE(
+		`/_redeven_proxy/api/container-resources/containers/stats/events?${query(engine, endpointID, { interval_ms: '1500' })}`,
+		'stats', onEvent, signal,
+	);
+}
+
+export function subscribeContainerStats(
+	identity: string,
+	engine: ContainerEngine,
+	endpointID: string,
+	onEvent: (stats: ContainerStats) => void,
+	signal: AbortSignal,
+): Promise<void> {
+	return subscribeContainerSSE(
+		`/_redeven_proxy/api/container-resources/containers/${encodeURIComponent(identity)}/stats/events?${query(engine, endpointID, { interval_ms: '1000' })}`,
+		'stats', onEvent, signal,
+	);
 }
 
 export async function preflightContainerOperation(method: string, request: unknown): Promise<ContainerPreflight> {

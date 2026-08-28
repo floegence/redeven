@@ -11,14 +11,33 @@ import (
 var ErrEndpointNotFound = errors.New("container engine endpoint was not found")
 
 type EngineEndpoint struct {
-	EndpointID    EndpointID `json:"endpoint_id"`
-	Engine        Engine     `json:"engine"`
-	DisplayName   string     `json:"display_name"`
-	Default       bool       `json:"default"`
-	Remote        bool       `json:"remote"`
-	Available     bool       `json:"available"`
-	EngineVersion string     `json:"engine_version,omitempty"`
-	Rootless      *bool      `json:"rootless,omitempty"`
+	EndpointID    EndpointID           `json:"endpoint_id"`
+	Engine        Engine               `json:"engine"`
+	DisplayName   string               `json:"display_name"`
+	Default       bool                 `json:"default"`
+	Remote        bool                 `json:"remote"`
+	Available     bool                 `json:"available"`
+	EngineVersion string               `json:"engine_version,omitempty"`
+	Rootless      *bool                `json:"rootless,omitempty"`
+	Capabilities  EndpointCapabilities `json:"capabilities"`
+}
+
+type EndpointCapabilities struct {
+	CollectionStats bool `json:"collection_stats"`
+	ContainerFiles  bool `json:"container_files"`
+	VolumeFiles     bool `json:"volume_files"`
+	Exec            bool `json:"exec"`
+}
+
+func endpointCapabilities(engine Engine) EndpointCapabilities {
+	return EndpointCapabilities{
+		CollectionStats: engine == EngineDocker || engine == EnginePodman,
+		ContainerFiles:  engine == EngineDocker || engine == EnginePodman,
+		VolumeFiles:     engine == EnginePodman,
+		// Floeterm v0.18.0 does not expose per-session argv. Keep this false until
+		// Redeven can consume a published upstream session-command contract.
+		Exec: false,
+	}
 }
 
 type EndpointListRequest struct {
@@ -140,11 +159,15 @@ func (a *Adapter) BindEndpoint(ctx context.Context, engine Engine, endpointID En
 	binder, ok := a.client.(endpointBinder)
 	if !ok || interfaceIsNil(binder) {
 		if strings.TrimSpace(string(endpointID)) == "" {
-			return ctx, EngineEndpoint{Engine: engine, DisplayName: string(engine), Default: true}, nil
+			return ctx, EngineEndpoint{Engine: engine, DisplayName: string(engine), Default: true, Capabilities: endpointCapabilities(engine)}, nil
 		}
 		return nil, EngineEndpoint{}, ErrResourceCapabilityUnsupported
 	}
-	return binder.BindEndpoint(ctx, engine, endpointID)
+	bound, endpoint, err := binder.BindEndpoint(ctx, engine, endpointID)
+	if err == nil {
+		endpoint.Capabilities = endpointCapabilities(engine)
+	}
+	return bound, endpoint, err
 }
 
 func (a *Adapter) ListEndpoints(ctx context.Context, req EndpointListRequest) (EndpointListResponse, error) {
@@ -158,6 +181,9 @@ func (a *Adapter) ListEndpoints(ctx context.Context, req EndpointListRequest) (E
 	items, err := client.ListEndpoints(ctx, req.Engine)
 	if err != nil {
 		return EndpointListResponse{}, err
+	}
+	for index := range items {
+		items[index].Capabilities = endpointCapabilities(req.Engine)
 	}
 	return EndpointListResponse{Engine: req.Engine, Endpoints: items}, nil
 }
@@ -179,6 +205,7 @@ func (a *Adapter) EndpointStatus(ctx context.Context, req EndpointStatusRequest)
 			return endpoint, err
 		}
 	}
+	endpoint.Capabilities = endpointCapabilities(req.Engine)
 	return endpoint, nil
 }
 

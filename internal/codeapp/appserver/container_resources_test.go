@@ -1,7 +1,10 @@
 package appserver
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/containerresource"
 	"github.com/floegence/redeven/internal/session"
@@ -51,6 +55,45 @@ func (f *appserverContainerEngine) CreateContainer(context.Context, containereng
 
 func (f *appserverContainerEngine) Stats(context.Context, containerengine.Engine, string) (containerengine.ContainerStats, error) {
 	return containerengine.ContainerStats{}, nil
+}
+
+func (f *appserverContainerEngine) StatsMany(context.Context, containerengine.Engine) ([]containerengine.ContainerStats, error) {
+	return []containerengine.ContainerStats{{ContainerID: "container-one", CPUPercent: 1.5, MemoryBytes: 1024}}, nil
+}
+
+func (f *appserverContainerEngine) RawInspectContainer(context.Context, containerengine.Engine, string) (json.RawMessage, error) {
+	return json.RawMessage(`[{"Id":"container-one","Config":{"Secret":"raw-secret-value"}}]`), nil
+}
+
+func (f *appserverContainerEngine) ContainerArchive(_ context.Context, _ containerengine.Engine, _ string, requested string) ([]byte, error) {
+	if strings.HasSuffix(requested, ".txt") {
+		return appserverResourceArchive("token.txt", []byte("file-secret-value")), nil
+	}
+	return appserverResourceArchive("root/", []byte(nil), "root/token.txt", []byte("file-secret-value")), nil
+}
+
+func (f *appserverContainerEngine) VolumeArchive(context.Context, containerengine.Engine, string) ([]byte, error) {
+	return appserverResourceArchive("token.txt", []byte("volume-value")), nil
+}
+
+func appserverResourceArchive(values ...any) []byte {
+	var buffer bytes.Buffer
+	writer := tar.NewWriter(&buffer)
+	for index := 0; index+1 < len(values); index += 2 {
+		name := values[index].(string)
+		data := values[index+1].([]byte)
+		header := &tar.Header{Name: name, Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg}
+		if strings.HasSuffix(name, "/") {
+			header.Typeflag = tar.TypeDir
+			header.Size = 0
+		}
+		_ = writer.WriteHeader(header)
+		if len(data) > 0 {
+			_, _ = writer.Write(data)
+		}
+	}
+	_ = writer.Close()
+	return buffer.Bytes()
 }
 
 func (f *appserverContainerEngine) ListImages(context.Context, containerengine.Engine) ([]containerengine.ImageRecord, error) {
@@ -190,5 +233,58 @@ func TestContainerResourceAPIRejectsUnknownOuterAndInnerFields(t *testing.T) {
 	response = serveContainerAPI(t, server, channelID, http.MethodPost, containerResourcesAPIBase+"/preflights", inner)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "REQUEST_INVALID") {
 		t.Fatalf("unknown inner field status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestContainerResourceReadExtensionsEnforceAdminAndDoNotLeakAuditPayloads(t *testing.T) {
+	service := newContainerAPITestService(t)
+	channelID := "ch_container_read_extensions"
+	readOnly := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+
+	response := serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/container-one/inspect/raw?engine=docker", "")
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("read-only raw inspect status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/container-one/files?engine=docker&path=%2Fprivate", "")
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("read-only file list status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := &Server{containers: service, audit: auditStore, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true})}
+	response = serveContainerAPI(t, admin, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/container-one/inspect/raw?engine=docker", "")
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), "raw-secret-value") {
+		t.Fatalf("admin raw inspect status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
+	}
+	response = serveContainerAPI(t, admin, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/container-one/files/content?engine=docker&path=%2Fprivate%2Ftoken.txt", "")
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || response.Body.String() != "file-secret-value" {
+		t.Fatalf("admin file read status=%d headers=%v body=%q", response.Code, response.Header(), response.Body.String())
+	}
+
+	entries, err := auditStore.List(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawAudit, err := json.Marshal(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"raw-secret-value", "file-secret-value", "/private/token.txt"} {
+		if bytes.Contains(rawAudit, []byte(forbidden)) {
+			t.Fatalf("audit contains forbidden payload %q: %s", forbidden, rawAudit)
+		}
+	}
+}
+
+func TestContainerResourceCollectionStatsUsesOneEndpointSnapshot(t *testing.T) {
+	service := newContainerAPITestService(t)
+	channelID := "ch_container_collection_stats"
+	server := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+	response := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/stats?engine=docker", "")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"container_id":"container-one"`) || !strings.Contains(response.Body.String(), `"cpu_percent":1.5`) {
+		t.Fatalf("collection stats status=%d body=%s", response.Code, response.Body.String())
 	}
 }

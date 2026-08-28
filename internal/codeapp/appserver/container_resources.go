@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -164,6 +165,32 @@ func (g *Server) handleContainerCollection(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"containers": items}})
 		return true
 	}
+	if len(parts) == 2 && parts[1] == "stats" {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		stats, err := g.containers.StatsCollection(r.Context(), containerengine.ContainerStatsCollectionRequest{Engine: engine, EndpointID: endpointID})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: stats})
+		return true
+	}
+	if len(parts) == 3 && parts[1] == "stats" && parts[2] == "events" {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id", "interval_ms") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		interval, err := parseBoundedInt(r.URL.Query().Get("interval_ms"), 1500, 500, 10000)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.streamContainerStatsCollection(w, r, containerengine.ContainerStatsCollectionRequest{Engine: engine, EndpointID: endpointID, IntervalMS: interval})
+		return true
+	}
 	identity, err := decodeResourcePathSegment(parts[1])
 	if err != nil {
 		writeContainerResourceError(w, err)
@@ -240,6 +267,33 @@ func (g *Server) handleContainerCollection(w http.ResponseWriter, r *http.Reques
 		g.streamContainerStats(w, r, containerengine.ContainerStatsWatchRequest{Engine: engine, EndpointID: endpointID, ContainerID: identity, IntervalMS: interval})
 		return true
 	}
+	if len(parts) == 4 && parts[2] == "inspect" && parts[3] == "raw" {
+		if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		raw, err := g.containers.RawContainerInspect(r.Context(), containerengine.ContainerInspectRequest{Engine: engine, EndpointID: endpointID, ContainerID: identity})
+		detail := map[string]any{"engine": engine, "endpoint_id": endpointID, "resource_kind": "container", "resource_identity": truncateString(identity, 160)}
+		if err != nil {
+			g.appendAudit(meta, "container_resource_raw_inspect", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "container_resource_raw_inspect", "success", detail, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: raw})
+		return true
+	}
+	if len(parts) == 3 && parts[2] == "files" {
+		return g.handleContainerFiles(w, r, engine, endpointID, identity, false)
+	}
+	if len(parts) == 4 && parts[2] == "files" && parts[3] == "content" {
+		return g.handleContainerFiles(w, r, engine, endpointID, identity, true)
+	}
 	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 	return true
 }
@@ -286,7 +340,11 @@ func (g *Server) handleImageCollection(w http.ResponseWriter, r *http.Request, p
 }
 
 func (g *Server) handleVolumeCollection(w http.ResponseWriter, r *http.Request, parts []string, engine containerengine.Engine, endpointID containerengine.EndpointID) bool {
-	if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+	allowedQuery := []string{"engine", "endpoint_id"}
+	if len(parts) >= 3 && parts[2] == "files" {
+		allowedQuery = append(allowedQuery, "path")
+	}
+	if !containerQueryOnly(r.URL.Query(), allowedQuery...) {
 		writeContainerResourceError(w, containerresource.ErrInvalidRequest)
 		return true
 	}
@@ -312,6 +370,22 @@ func (g *Server) handleVolumeCollection(w http.ResponseWriter, r *http.Request, 
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: item})
 		return true
+	}
+	if len(parts) == 3 && parts[2] == "files" {
+		identity, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		return g.handleVolumeFiles(w, r, engine, endpointID, identity, false)
+	}
+	if len(parts) == 4 && parts[2] == "files" && parts[3] == "content" {
+		identity, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		return g.handleVolumeFiles(w, r, engine, endpointID, identity, true)
 	}
 	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 	return true
@@ -606,6 +680,110 @@ func (g *Server) streamContainerStats(w http.ResponseWriter, r *http.Request, re
 	}
 }
 
+func (g *Server) streamContainerStatsCollection(w http.ResponseWriter, r *http.Request, req containerengine.ContainerStatsCollectionRequest) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming is unavailable"})
+		return
+	}
+	setContainerSSEHeaders(w)
+	ticker := time.NewTicker(time.Duration(req.IntervalMS) * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		stats, err := g.containers.StatsCollection(r.Context(), req)
+		if err != nil {
+			_ = writeContainerSSE(w, "error", map[string]string{"code": publicContainerResourceCode(err), "message": publicContainerResourceMessage(err)})
+			flusher.Flush()
+			return
+		}
+		if err := writeContainerSSE(w, "stats", stats); err != nil {
+			return
+		}
+		flusher.Flush()
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (g *Server) handleContainerFiles(w http.ResponseWriter, r *http.Request, engine containerengine.Engine, endpointID containerengine.EndpointID, identity string, content bool) bool {
+	if !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id", "path") {
+		writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+		return true
+	}
+	meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+	if !ok {
+		return true
+	}
+	req := containerengine.ContainerFileRequest{Engine: engine, EndpointID: endpointID, ContainerID: identity, Path: r.URL.Query().Get("path")}
+	detail := map[string]any{"engine": engine, "endpoint_id": endpointID, "resource_kind": "container", "resource_identity": truncateString(identity, 160), "content": content}
+	w.Header().Set("Cache-Control", "no-store")
+	if content {
+		item, err := g.containers.ReadContainerFile(r.Context(), req)
+		if err != nil {
+			g.appendAudit(meta, "container_resource_file_read", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "container_resource_file_read", "success", detail, nil)
+		writeContainerFileContent(w, item)
+		return true
+	}
+	listing, err := g.containers.ListContainerFiles(r.Context(), req)
+	if err != nil {
+		g.appendAudit(meta, "container_resource_file_list", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+		writeContainerResourceError(w, err)
+		return true
+	}
+	g.appendAudit(meta, "container_resource_file_list", "success", detail, nil)
+	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: listing})
+	return true
+}
+
+func (g *Server) handleVolumeFiles(w http.ResponseWriter, r *http.Request, engine containerengine.Engine, endpointID containerengine.EndpointID, identity string, content bool) bool {
+	meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+	if !ok {
+		return true
+	}
+	req := containerengine.VolumeFileRequest{Engine: engine, EndpointID: endpointID, Name: identity, Path: r.URL.Query().Get("path")}
+	detail := map[string]any{"engine": engine, "endpoint_id": endpointID, "resource_kind": "volume", "resource_identity": truncateString(identity, 160), "content": content}
+	w.Header().Set("Cache-Control", "no-store")
+	if content {
+		item, err := g.containers.ReadVolumeFile(r.Context(), req)
+		if err != nil {
+			g.appendAudit(meta, "container_resource_file_read", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "container_resource_file_read", "success", detail, nil)
+		writeContainerFileContent(w, item)
+		return true
+	}
+	listing, err := g.containers.ListVolumeFiles(r.Context(), req)
+	if err != nil {
+		g.appendAudit(meta, "container_resource_file_list", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+		writeContainerResourceError(w, err)
+		return true
+	}
+	g.appendAudit(meta, "container_resource_file_list", "success", detail, nil)
+	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: listing})
+	return true
+}
+
+func writeContainerFileContent(w http.ResponseWriter, item containerengine.ResourceFileContent) {
+	mediaType := strings.TrimSpace(item.MediaType)
+	if mediaType == "" {
+		mediaType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mediaType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": item.Name}))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(item.Data)
+}
+
 func writeContainerSSE(w io.Writer, eventType string, payload any) error {
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -732,6 +910,8 @@ func parseBoundedInt64(raw string, fallback, minimum, maximum int64) (int64, err
 func writeContainerResourceError(w http.ResponseWriter, err error) {
 	status := http.StatusBadRequest
 	switch {
+	case errors.Is(err, containerengine.ErrResourceFileLimit), errors.Is(err, containerengine.ErrCommandOutputLimit):
+		status = http.StatusRequestEntityTooLarge
 	case errors.Is(err, containerresource.ErrOperationNotFound), errors.Is(err, containerengine.ErrContainerNotFound), errors.Is(err, containerengine.ErrImageNotFound), errors.Is(err, containerengine.ErrEndpointNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, containerresource.ErrManagedByWebService), errors.Is(err, containerengine.ErrPermissionDenied):
@@ -772,6 +952,8 @@ func publicContainerResourceCode(err error) string {
 		return "ENGINE_TIMEOUT"
 	case errors.Is(err, containerengine.ErrResourceCapabilityUnsupported):
 		return "CAPABILITY_UNSUPPORTED"
+	case errors.Is(err, containerengine.ErrResourceFileLimit), errors.Is(err, containerengine.ErrCommandOutputLimit):
+		return "RESOURCE_FILE_LIMIT"
 	case errors.Is(err, containerengine.ErrEngineUnavailable), errors.Is(err, containerengine.ErrCLIUnavailable), errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped):
 		return "ENGINE_UNAVAILABLE"
 	default:
@@ -805,6 +987,8 @@ func publicContainerResourceMessage(err error) string {
 		return "The container engine did not respond in time."
 	case "CAPABILITY_UNSUPPORTED":
 		return "This resource is not supported by the selected engine."
+	case "RESOURCE_FILE_LIMIT":
+		return "This file request exceeds the safe local processing limit."
 	case "ENGINE_UNAVAILABLE":
 		return "The selected container engine is unavailable."
 	default:
