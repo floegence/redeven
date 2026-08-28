@@ -287,7 +287,7 @@ func parseResourceArchiveExactContent(source io.Reader, requested string) (Resou
 		if name != requestedRelative {
 			continue
 		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		if !header.FileInfo().Mode().IsRegular() {
 			return ResourceFileContent{}, errors.New("resource file type is not readable")
 		}
 		if header.Size > maxResourceFileBytes {
