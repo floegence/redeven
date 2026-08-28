@@ -218,6 +218,9 @@ func TestService_OpenForwardSessionUsesRouteSafeAliasForLegacyPersistedID(t *tes
 	if opened.Forward.TargetURL != legacy.TargetURL {
 		t.Fatalf("TargetURL = %q, want %q", opened.Forward.TargetURL, legacy.TargetURL)
 	}
+	if touched, err := svc.TouchLastOpened(ctx, opened.Forward.ForwardID); err != nil || touched == nil {
+		t.Fatalf("TouchLastOpened alias = %#v, %v", touched, err)
+	}
 	persisted, err := svc.reg.GetForward(ctx, legacy.ForwardID)
 	if err != nil {
 		t.Fatalf("read legacy forward: %v", err)
