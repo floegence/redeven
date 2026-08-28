@@ -898,7 +898,12 @@ export function ManagedServiceRow(props: { service: ManagedService; busy: boolea
 
       <div class={serviceRowActionsClass} data-testid="managed-service-actions">
         <Button size="sm" variant="default" class="h-8 w-full px-3" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
-        <Button size="sm" variant="outline" class="h-8 w-full px-3" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>{primaryLabel()}</Button>
+        <Button size="sm" variant="outline" class="h-8 w-full whitespace-nowrap px-3" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}>
+          <Show when={running()} fallback={<Show when={!failed()}><Play class="mr-1.5 h-3.5 w-3.5" /></Show>}>
+            <Stop class="mr-1.5 h-3.5 w-3.5" />
+          </Show>
+          {primaryLabel()}
+        </Button>
         <Dropdown
           align="end"
           items={moreItems()}
@@ -917,7 +922,6 @@ export function ManagedServiceRow(props: { service: ManagedService; busy: boolea
           )}
         />
       </div>
-      <Show when={props.service.last_error_code}><p class="col-span-2 row-start-3 text-xs text-destructive lg:col-span-4 lg:row-start-2">{i18n.t('webServices.managed.stages.failed')}</p></Show>
     </div>
   );
 }

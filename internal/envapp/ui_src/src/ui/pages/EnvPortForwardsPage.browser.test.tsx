@@ -174,4 +174,54 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(new Set(actionButtons.map((button) => button.getBoundingClientRect().top)).size).toBe(1);
     expect(new Set(actionButtons.map((button) => button.getBoundingClientRect().height)).size).toBe(1);
   });
+
+  it('keeps a failed managed service dense and its retry action on one line', async () => {
+    await page.viewport(1200, 800);
+    const host = document.createElement('div');
+    host.style.width = '1024px';
+    document.body.appendChild(host);
+    dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-failed',
+          template_id: 'deepseek-harness-container',
+          service_family_id: 'deepseek-harness',
+          name: 'DeepSeek Harness',
+          description: 'Run DeepSeek Harness in an isolated container.',
+          template_source: 'builtin',
+          deployment: 'container',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness',
+          version: '0.1.1-rc.2',
+          desired_state: 'running',
+          observed_state: 'error',
+          forward_id: 'pf-failed',
+          runtime_port: 3000,
+          brand_icon: 'deepseek-harness',
+          last_error_code: 'IMAGE_PULL_FAILED',
+          update_available: false,
+        }}
+        busy={false}
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    await settle();
+
+    const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
+    const retryButton = Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Retry')!;
+
+    expect(retryButton).toBeTruthy();
+    expect(retryButton.querySelector('svg')).toBeNull();
+    expect(row.textContent).not.toContain('Failed');
+    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(72);
+    expect(getComputedStyle(retryButton).whiteSpace).toBe('nowrap');
+    expect(retryButton.scrollHeight).toBeLessThanOrEqual(retryButton.clientHeight);
+  });
 });

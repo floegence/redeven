@@ -3156,7 +3156,7 @@
       "start": "Iniciar",
       "stop": "Detener",
       "restart": "Reiniciar",
-      "retryInstall": "Reintentar instalación",
+      "retryInstall": "Reintentar",
       "updateAvailable": "Actualización disponible",
       "update": "Actualizar",
       "updateTitle": "Actualizar servicio administrado",

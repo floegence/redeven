@@ -445,6 +445,47 @@ describe('web service metadata and template validation', () => {
       host.remove();
     }
   });
+
+  it('keeps failed managed services on one row with one concise retry action', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const retry = vi.fn();
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-failed', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness',
+          name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'container',
+          workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
+          forward_id: 'pf-failed', runtime_port: 3000, last_error_code: 'IMAGE_PULL_FAILED', update_available: false,
+        }}
+        busy={false}
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={retry}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
+      const retryButton = Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Retry');
+
+      expect(retryButton).toBeTruthy();
+      expect(retryButton?.className).toContain('whitespace-nowrap');
+      expect(retryButton?.querySelector('[data-testid="restart-icon"]')).toBeNull();
+      expect(row.textContent).not.toContain('Failed');
+
+      retryButton?.click();
+      expect(retry).toHaveBeenCalledWith('retry_install');
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
 });
 
 describe('EnvPortForwardsPage', () => {

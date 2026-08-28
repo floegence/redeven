@@ -3075,7 +3075,7 @@ export const enUS = defineDictionary({
       start: 'Start',
       stop: 'Stop',
       restart: 'Restart',
-      retryInstall: 'Retry install',
+      retryInstall: 'Retry',
       updateAvailable: 'Update available',
       update: 'Update',
       updateTitle: 'Update managed service',
