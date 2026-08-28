@@ -69,7 +69,7 @@ describe('Flower activity running sheen', () => {
     expect(iconRule).toContain('height: 1.25rem');
   });
 
-  it('uses a compact transform-only loader without a layout-triggering row sheen', () => {
+  it('keeps the running sweep inside the title without restoring a row overlay', () => {
     const css = flowerStyles();
     const activityInlineRule = cssRule(css, '.flower-activity-inline');
     const buttonRule = cssRule(css, '.flower-activity-inline-button');
@@ -81,6 +81,7 @@ describe('Flower activity running sheen', () => {
     const detailRule = cssRule(css, '.flower-activity-inline-detail');
     const durationRule = cssRule(css, '.flower-activity-inline-duration');
     const runningTitleRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title');
+    const runningTitleSweepRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title::after');
     const runningButtonRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-button');
     const successButtonRule = cssRule(css, '.flower-activity-inline-row-success .flower-activity-inline-button');
     const failedIconRule = cssRule(css, '.flower-activity-inline-row-error .flower-activity-inline-icon');
@@ -102,6 +103,8 @@ describe('Flower activity running sheen', () => {
     expect(css).not.toContain('flower-activity-running-sheen');
     expect(css).not.toContain('.flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-button::before');
+    expect(titleRule).toContain('position: relative');
+    expect(titleRule).toContain('overflow: hidden');
     expect(titleRule).toContain('color: currentColor');
     expect(titleRule).toContain('font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace');
     expect(titleRule).toContain('font-weight: 560');
@@ -113,7 +116,23 @@ describe('Flower activity running sheen', () => {
     expect(durationRule).toContain('font-size: 0.6875rem');
     expect(durationRule).toContain('font-weight: 620');
     expect(runningTitleRule).toContain('font-weight: 600');
-    expect(runningTitleRule).toContain('text-shadow: 0 0 0.65rem color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent)');
+    expect(runningTitleRule).not.toContain('text-shadow');
+    expect(runningTitleSweepRule).toContain('position: absolute');
+    expect(runningTitleSweepRule).toContain('inset: 0');
+    expect(runningTitleSweepRule).toContain('background-size: 250% 100%');
+    expect(runningTitleSweepRule).toContain('color-mix(in srgb, var(--flower-chat-surface) 60%, transparent)');
+    expect(runningTitleSweepRule).toContain('pointer-events: none');
+    expect(runningTitleSweepRule).toContain('animation: flower-activity-title-sweep 2.6s ease-out infinite');
+    expect(runningTitleSweepRule).not.toContain('left:');
+    expect(css).toContain('@keyframes flower-activity-title-sweep');
+    expect(css).toContain('90%,\n  100% {\n    background-position: 0 0;\n  }');
+    expect(css).not.toContain('.flower-activity-inline-row-success .flower-activity-inline-title::after');
+    expect(css).not.toContain('.flower-activity-inline-row-error .flower-activity-inline-title::after');
+    expect(css).not.toContain('.flower-activity-inline-row-canceled .flower-activity-inline-title::after');
+    expect(css).not.toContain('.flower-activity-inline-row-pending .flower-activity-inline-title::after');
+    expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-title::after');
+    expect(css).toContain(".flower-activity-inline-row-running .flower-activity-inline-title::after {\n    content: none !important;");
+    expect(css).toContain("@media (forced-colors: active) {\n  .flower-activity-inline-row-running .flower-activity-inline-title::after {\n    content: none;");
     expect(runningButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-strong)');
     expect(successButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-complete)');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-error: var(--redeven-status-error-foreground)');
