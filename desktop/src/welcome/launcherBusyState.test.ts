@@ -21,6 +21,7 @@ import {
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
   busyStateWithActionProgress,
+  environmentOperationState,
   environmentMatchesActionProgress,
   environmentMatchesRuntimeLifecycleProgress,
   gatewayMatchesActionProgress,
@@ -252,6 +253,45 @@ describe('launcherBusyState', () => {
     )).toBe(currentConfirmation);
   });
 
+  it('focuses the authoritative Open operation when a lifecycle request conflicts', () => {
+    const environment = {
+      kind: 'ssh_environment' as const,
+      id: 'los',
+      managed_runtime_target_id: runtimeID('ssh:target'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    } as never;
+    const openProgress = {
+      ...localOpenActionProgress({
+        status: 'running',
+        phase: 'opening_window',
+        title: 'Opening environment',
+        operationKey: 'ssh:los:open',
+        startedAt: 300,
+        updatedAt: 320,
+      }),
+      action: 'open_ssh_environment' as const,
+      environment_id: 'los',
+      subject_kind: 'runtime_target' as const,
+      subject_id: 'ssh:target',
+      open_progress: buildOpenConnectionProgress({
+        location: 'ssh_host',
+        phase: 'opening_window',
+        environmentID: 'los',
+        environmentLabel: 'los',
+        targetID: 'ssh:target',
+        targetLabel: 'los',
+      }),
+    };
+
+    expect(
+      progressForEnvironmentFocusRequest(environment, [openProgress], {
+        operation_key: 'ssh:los:open',
+        started_at_unix_ms: 300,
+      }),
+    ).toBe(openProgress);
+  });
+
   it('maps environment-scoped requests to the matching environment id', () => {
     const state = busyStateForLauncherRequest({
       kind: 'refresh_environment_runtime',
@@ -440,14 +480,89 @@ describe('launcherBusyState', () => {
 
     expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'running' })).toBe(true);
     expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'canceling' })).toBe(true);
-    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'cleanup_running' })).toBe(true);
+    expect(
+      launcherProgressBlocksPrimaryAction({
+        ...progress,
+        status: 'cleanup_running',
+      }),
+    ).toBe(true);
 
     expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'succeeded' })).toBe(false);
     expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'failed' })).toBe(false);
     expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'canceled' })).toBe(false);
-    expect(launcherProgressBlocksPrimaryAction({ ...progress, status: 'cleanup_failed' })).toBe(false);
+    expect(
+      launcherProgressBlocksPrimaryAction({
+        ...progress,
+        status: 'cleanup_failed',
+      }),
+    ).toBe(false);
     expect(launcherProgressBlocksPrimaryAction(progress)).toBe(false);
     expect(launcherProgressBlocksPrimaryAction(null)).toBe(false);
+  });
+
+  it('derives one authoritative Env operation state from an active Open', () => {
+    const environment = {
+      kind: 'local_environment' as const,
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    } as never;
+    const openProgress = localOpenActionProgress({
+      status: 'running',
+      phase: 'opening_window',
+      title: 'Opening environment',
+      operationKey: 'local:host:local:open',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const staleRuntimeFailure = localRuntimeLifecycleActionProgress({
+      status: 'failed',
+      action: 'update_environment_runtime',
+      operation: 'update',
+      phase: 'checking_existing_runtime',
+      title: 'Update failed',
+      operationKey: 'local:update:old',
+      startedAt: 50,
+      updatedAt: 80,
+    });
+
+    expect(
+      environmentOperationState(environment, [staleRuntimeFailure, openProgress], IDLE_LAUNCHER_BUSY_STATE),
+    ).toMatchObject({
+      activeProgress: openProgress,
+      panelProgress: openProgress,
+      openProgress,
+      runtimeLifecycleProgress: staleRuntimeFailure,
+      isSubmitting: false,
+      actionsDisabled: true,
+    });
+  });
+
+  it('uses local busy state only before an Env operation snapshot is accepted', () => {
+    const environment = {
+      kind: 'local_environment' as const,
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    } as never;
+    const busyState = busyStateForLauncherRequest({
+      kind: 'update_environment_runtime',
+      environment_id: 'local',
+      label: 'Local Environment',
+    });
+
+    expect(environmentOperationState(environment, [], busyState)).toMatchObject({
+      activeProgress: null,
+      panelProgress: null,
+      isSubmitting: true,
+      actionsDisabled: true,
+    });
+    expect(environmentOperationState(environment, [], IDLE_LAUNCHER_BUSY_STATE)).toMatchObject({
+      isSubmitting: false,
+      actionsDisabled: false,
+    });
   });
 
   it('keeps retained terminal Open progress inspectable without blocking the primary action', () => {
@@ -1255,8 +1370,16 @@ describe('launcherBusyState', () => {
       stepProgress: {
         active_step_id: 'fetching_pairing_challenge',
         steps: [
-          { id: 'checking_gateway_service', label: 'Checking Gateway service', status: 'succeeded' },
-          { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', status: 'running' },
+          {
+            id: 'checking_gateway_service',
+            label: 'Checking Gateway service',
+            status: 'succeeded',
+          },
+          {
+            id: 'fetching_pairing_challenge',
+            label: 'Fetching pairing challenge',
+            status: 'running',
+          },
         ],
       },
     });
@@ -1270,8 +1393,16 @@ describe('launcherBusyState', () => {
       step_progress: {
         active_step_id: 'fetching_pairing_challenge',
         steps: [
-          { id: 'checking_gateway_service', label: 'Checking Gateway service', status: 'succeeded' },
-          { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', status: 'failed' },
+          {
+            id: 'checking_gateway_service',
+            label: 'Checking Gateway service',
+            status: 'succeeded',
+          },
+          {
+            id: 'fetching_pairing_challenge',
+            label: 'Fetching pairing challenge',
+            status: 'failed',
+          },
         ],
       },
     } satisfies DesktopLauncherActionProgress;

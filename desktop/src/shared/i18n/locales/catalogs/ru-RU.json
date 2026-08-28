@@ -1660,6 +1660,8 @@
     "retryInitialization": "Повторить инициализацию",
     "reinstallRedevenWipeData": "Удалить данные и переустановить Redeven",
     "reinstallRedevenKeepData": "Переустановить Redeven с сохранением данных",
+    "blockedByActiveOperation": "Выполняется операция «{operation}». Завершите или отмените её перед выполнением «{action}».",
+    "waitForOperationAcceptance": "Текущая операция запускается. Подождите перед выполнением «{action}».",
     "disconnectLegacyControlPlane": "Отключить устаревшую привязку к плоскости управления"
   },
   "environmentFacts": {
@@ -1831,6 +1833,10 @@
     "detailCancelingDeletedConnection": "Desktop останавливает задачу запуска для этого удаленного подключения.",
     "titleStoppingRuntimeStartup": "Остановка запуска среды выполнения",
     "detailStoppingRuntimeStartup": "Desktop останавливает запуск среды выполнения и очищает уже созданные ресурсы.",
+    "titleStoppingRuntimeUpdate": "Отмена обновления среды выполнения",
+    "detailStoppingRuntimeUpdate": "Desktop отменяет обновление среды выполнения и очищает уже созданные ресурсы.",
+    "titleStoppingRuntimeRestart": "Отмена перезапуска среды выполнения",
+    "detailStoppingRuntimeRestart": "Desktop отменяет перезапуск среды выполнения и очищает уже созданные ресурсы.",
     "titleStoppingOpen": "Остановка открытия",
     "detailStoppingOpen": "Desktop останавливает настройку подключения и очищает уже созданные локальные ресурсы.",
     "titleStoppingOperation": "Остановка операции",

@@ -5,6 +5,7 @@ import {
   runtimeLifecycleFingerprint,
   runtimeLifecycleTargetKey,
 } from './runtimeLifecycleCoordinator';
+import { LauncherOperationRegistry } from './launcherOperations';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -29,10 +30,9 @@ describe('RuntimeLifecycleCoordinator', () => {
     expect(key).toContain('local_host');
     expect(key).toContain('runtime-state');
     expect(normalizedKey).toBe(key);
-    expect(() => runtimeLifecycleTargetKey(
-      { kind: 'local_host' },
-      { kind: 'host_process', runtime_root: '' },
-    )).toThrow('Runtime target root is required');
+    expect(() => runtimeLifecycleTargetKey({ kind: 'local_host' }, { kind: 'host_process', runtime_root: '' })).toThrow(
+      'Runtime target root is required',
+    );
   });
 
   it('does not create a second owner when registrations disagree only about the state-root projection', () => {
@@ -121,7 +121,10 @@ describe('RuntimeLifecycleCoordinator', () => {
     const coordinator = new RuntimeLifecycleCoordinator();
     const gate = deferred<string>();
     const targetKey = 'runtime-a';
-    const fingerprint = runtimeLifecycleFingerprint({ intent: 'start', version: 'v1' });
+    const fingerprint = runtimeLifecycleFingerprint({
+      intent: 'start',
+      version: 'v1',
+    });
     const first = coordinator.run({
       target_key: targetKey,
       intent: 'start',
@@ -137,13 +140,15 @@ describe('RuntimeLifecycleCoordinator', () => {
       execute: async () => 'unexpected',
     });
     expect(duplicate).toBe(first);
-    await expect(coordinator.run({
-      target_key: targetKey,
-      intent: 'stop',
-      fingerprint: runtimeLifecycleFingerprint({ intent: 'stop' }),
-      operation_key: 'operation-a',
-      execute: async () => undefined,
-    })).rejects.toMatchObject({
+    await expect(
+      coordinator.run({
+        target_key: targetKey,
+        intent: 'stop',
+        fingerprint: runtimeLifecycleFingerprint({ intent: 'stop' }),
+        operation_key: 'operation-a',
+        execute: async () => undefined,
+      }),
+    ).rejects.toMatchObject({
       code: 'runtime_lifecycle_in_progress',
       active_operation: { intent: 'start', operation_key: 'operation-a' },
     });
@@ -153,15 +158,25 @@ describe('RuntimeLifecycleCoordinator', () => {
   });
 
   it('canonicalizes nested request parameters before comparing fingerprints', () => {
-    expect(runtimeLifecycleFingerprint({
-      intent: 'start',
-      placement: { runtime_root: '/opt/redeven', kind: 'host_process' },
-      host_access: { ssh: { ssh_port: 22, ssh_destination: 'devbox' }, kind: 'ssh_host' },
-    })).toBe(runtimeLifecycleFingerprint({
-      host_access: { kind: 'ssh_host', ssh: { ssh_destination: 'devbox', ssh_port: 22 } },
-      placement: { kind: 'host_process', runtime_root: '/opt/redeven' },
-      intent: 'start',
-    }));
+    expect(
+      runtimeLifecycleFingerprint({
+        intent: 'start',
+        placement: { runtime_root: '/opt/redeven', kind: 'host_process' },
+        host_access: {
+          ssh: { ssh_port: 22, ssh_destination: 'devbox' },
+          kind: 'ssh_host',
+        },
+      }),
+    ).toBe(
+      runtimeLifecycleFingerprint({
+        host_access: {
+          kind: 'ssh_host',
+          ssh: { ssh_destination: 'devbox', ssh_port: 22 },
+        },
+        placement: { kind: 'host_process', runtime_root: '/opt/redeven' },
+        intent: 'start',
+      }),
+    );
   });
 
   it('waits for ready-producing mutations but never waits through stop', async () => {
@@ -210,39 +225,69 @@ describe('RuntimeLifecycleCoordinator', () => {
     await reinstall;
   });
 
-  it('holds one stable Open owner after joining a readiness mutation', async () => {
+  it('rejects Open while a lifecycle mutation owns the target and never queues it', async () => {
     const coordinator = new RuntimeLifecycleCoordinator();
     const startGate = deferred<void>();
-    const openGate = deferred<string>();
     const start = coordinator.run({
       target_key: 'runtime-a',
-      intent: 'start',
-      fingerprint: 'start-v1',
-      operation_key: 'operation-start',
+      intent: 'update',
+      fingerprint: 'update-v1',
+      operation_key: 'operation-update',
       execute: () => startGate.promise,
     });
-    const open = coordinator.runWhenReady({
+    const executeOpen = vi.fn(async () => 'ready');
+    const open = coordinator.runOpen({
       target_key: 'runtime-a',
       fingerprint: 'open-v1',
       operation_key: 'operation-open',
-      execute: ({ joined_ready_mutation }) => {
-        expect(joined_ready_mutation).toBe(true);
-        return openGate.promise;
-      },
+      execute: executeOpen,
     });
+
+    await expect(open).rejects.toMatchObject({
+      code: 'runtime_lifecycle_in_progress',
+      active_operation: { intent: 'update', operation_key: 'operation-update' },
+    });
+    expect(executeOpen).not.toHaveBeenCalled();
+    expect(coordinator.operations()).toHaveLength(1);
+
     startGate.resolve();
     await start;
-    await vi.waitFor(() => expect(coordinator.active('runtime-a')).toMatchObject({ intent: 'open' }));
-    await expect(coordinator.run({
+    await Promise.resolve();
+    expect(executeOpen).not.toHaveBeenCalled();
+    expect(coordinator.active('runtime-a')).toBeNull();
+  });
+
+  it('keeps one Open owner and returns it to later lifecycle requests', async () => {
+    const coordinator = new RuntimeLifecycleCoordinator();
+    const openGate = deferred<string>();
+    const open = coordinator.runOpen({
       target_key: 'runtime-a',
-      intent: 'restart',
-      fingerprint: 'restart-v1',
-      operation_key: 'operation-restart',
-      execute: async () => undefined,
-    })).rejects.toMatchObject({
+      fingerprint: 'open-v1',
+      operation_key: 'operation-open',
+      execute: () => openGate.promise,
+    });
+    const duplicate = coordinator.runOpen({
+      target_key: 'runtime-a',
+      fingerprint: 'open-v1',
+      operation_key: 'operation-open-duplicate',
+      execute: async () => 'unexpected',
+    });
+
+    expect(duplicate).toBe(open);
+    await expect(
+      coordinator.run({
+        target_key: 'runtime-a',
+        intent: 'update',
+        fingerprint: 'update-v1',
+        operation_key: 'operation-update',
+        execute: async () => undefined,
+      }),
+    ).rejects.toMatchObject({
       code: 'runtime_lifecycle_in_progress',
       active_operation: { intent: 'open', operation_key: 'operation-open' },
     });
+    expect(coordinator.operations()).toHaveLength(1);
+
     openGate.resolve('ready');
     await expect(open).resolves.toBe('ready');
     expect(coordinator.active('runtime-a')).toBeNull();
@@ -288,7 +333,9 @@ describe('RuntimeLifecycleCoordinator', () => {
       execute: async (signal) => {
         try {
           await new Promise<void>((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+            signal.addEventListener('abort', () => reject(signal.reason), {
+              once: true,
+            });
           });
         } finally {
           await cleanupGate.promise;
@@ -298,16 +345,64 @@ describe('RuntimeLifecycleCoordinator', () => {
 
     coordinator.cancelByOperationKey('operation-a', new DOMException('Canceled.', 'AbortError'));
     expect(coordinator.active('runtime-a')).toMatchObject({ intent: 'start' });
-    await expect(coordinator.run({
-      target_key: 'runtime-a',
-      intent: 'stop',
-      fingerprint: 'stop-v1',
-      operation_key: 'operation-a',
-      execute: async () => undefined,
-    })).rejects.toMatchObject({ code: 'runtime_lifecycle_in_progress' });
+    await expect(
+      coordinator.run({
+        target_key: 'runtime-a',
+        intent: 'stop',
+        fingerprint: 'stop-v1',
+        operation_key: 'operation-a',
+        execute: async () => undefined,
+      }),
+    ).rejects.toMatchObject({ code: 'runtime_lifecycle_in_progress' });
 
     cleanupGate.resolve();
     await expect(task).rejects.toMatchObject({ name: 'AbortError' });
     expect(coordinator.active('runtime-a')).toBeNull();
+  });
+
+  it('requires every active Runtime Launcher Operation to have one coordinator owner', async () => {
+    const coordinator = new RuntimeLifecycleCoordinator();
+    const registry = new LauncherOperationRegistry();
+    const gate = deferred<void>();
+    const task = coordinator.run({
+      target_key: 'runtime-a',
+      intent: 'update',
+      fingerprint: 'update-v1',
+      operation_key: 'operation-update',
+      execute: async () => {
+        registry.create({
+          operation_key: 'operation-update',
+          action: 'update_environment_runtime',
+          subject_kind: 'runtime_target',
+          subject_id: 'runtime-a',
+          active_progress_surface: 'runtime_lifecycle',
+          phase: 'checking_existing_runtime',
+          title: 'Updating Runtime',
+          detail: 'Desktop is checking the Runtime.',
+          cancelable: true,
+        });
+        expect(coordinator.requireOperationOwner('operation-update')).toMatchObject({
+          intent: 'update',
+          operation_key: 'operation-update',
+        });
+        await gate.promise;
+      },
+    });
+
+    registry.create({
+      operation_key: 'operation-ghost',
+      action: 'update_environment_runtime',
+      subject_kind: 'runtime_target',
+      subject_id: 'runtime-ghost',
+      active_progress_surface: 'runtime_lifecycle',
+      phase: 'checking_existing_runtime',
+      title: 'Updating Runtime',
+      detail: 'Desktop is checking the Runtime.',
+      cancelable: true,
+    });
+    expect(() => coordinator.requireOperationOwner('operation-ghost')).toThrow('has no authoritative lifecycle owner');
+
+    gate.resolve();
+    await task;
   });
 });

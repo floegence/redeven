@@ -1634,6 +1634,8 @@
     "retryInitialization": "重試初始化",
     "reinstallRedevenWipeData": "抹除資料並重新安裝 Redeven",
     "reinstallRedevenKeepData": "保留資料並重新安裝 Redeven",
+    "blockedByActiveOperation": "「{operation}」正在進行。請先完成或取消，再執行「{action}」。",
+    "waitForOperationAcceptance": "目前操作正在開始，請稍候再執行「{action}」。",
     "disconnectLegacyControlPlane": "中斷舊控制平面綁定"
   },
   "environmentFacts": {
@@ -1805,6 +1807,10 @@
     "detailCancelingDeletedConnection": "Desktop 正在停止此已刪除連線的啟動任務。",
     "titleStoppingRuntimeStartup": "停止執行時啟動",
     "detailStoppingRuntimeStartup": "Desktop 正在停止運作時啟動並清除已建立的資源。",
+    "titleStoppingRuntimeUpdate": "正在取消執行環境更新",
+    "detailStoppingRuntimeUpdate": "Desktop 正在取消執行環境更新並清除已建立的資源。",
+    "titleStoppingRuntimeRestart": "正在取消執行環境重新啟動",
+    "detailStoppingRuntimeRestart": "Desktop 正在取消執行環境重新啟動並清除已建立的資源。",
     "titleStoppingOpen": "正在停止開啟",
     "detailStoppingOpen": "Desktop 正在停止連線設定並清理已建立的本機資源。",
     "titleStoppingOperation": "正在停止操作",

@@ -308,6 +308,40 @@ function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Rea
     };
   }
   if (snapshot.active_progress_surface === 'runtime_lifecycle') {
+    if (
+      snapshot.action === 'open_local_environment' ||
+      snapshot.action === 'open_provider_environment' ||
+      snapshot.action === 'open_gateway_environment' ||
+      snapshot.action === 'open_remote_environment' ||
+      snapshot.action === 'open_ssh_environment' ||
+      snapshot.action === 'prepare_environment_open'
+    ) {
+      return {
+        phase: 'open_connection_canceling',
+        title: 'Stopping open',
+        titleKey: 'progress.titleStoppingOpen',
+        detail: 'Desktop is stopping the connection setup and cleaning up local resources already created.',
+        detailKey: 'progress.detailStoppingOpen',
+      };
+    }
+    if (snapshot.action === 'update_environment_runtime') {
+      return {
+        phase: 'runtime_lifecycle_canceling',
+        title: 'Canceling Runtime update',
+        titleKey: 'progress.titleStoppingRuntimeUpdate',
+        detail: 'Desktop is canceling the Runtime update and cleaning up resources already created.',
+        detailKey: 'progress.detailStoppingRuntimeUpdate',
+      };
+    }
+    if (snapshot.action === 'restart_environment_runtime') {
+      return {
+        phase: 'runtime_lifecycle_canceling',
+        title: 'Canceling Runtime restart',
+        titleKey: 'progress.titleStoppingRuntimeRestart',
+        detail: 'Desktop is canceling the Runtime restart and cleaning up resources already created.',
+        detailKey: 'progress.detailStoppingRuntimeRestart',
+      };
+    }
     return {
       phase: 'runtime_lifecycle_canceling',
       title: 'Stopping runtime startup',
@@ -615,8 +649,8 @@ export class LauncherOperationRegistry {
       phase: cancelPhase.phase,
       title: cancelPhase.title,
       title_key: cancelPhase.titleKey,
-      detail: compact(reason) || cancelPhase.detail,
-      detail_key: compact(reason) ? undefined : cancelPhase.detailKey,
+      detail: cancelPhase.detail,
+      detail_key: cancelPhase.detailKey,
       ...(runtimeLifecycle ? { lifecycle_progress: runtimeLifecycle } : {}),
       ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
       cancelable: false,

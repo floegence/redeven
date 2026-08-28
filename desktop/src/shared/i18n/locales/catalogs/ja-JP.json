@@ -1634,6 +1634,8 @@
     "retryInitialization": "初期化を再試行",
     "reinstallRedevenWipeData": "データを消去して Redeven を再インストール",
     "reinstallRedevenKeepData": "データを保持して Redeven を再インストール",
+    "blockedByActiveOperation": "{operation} を実行中です。完了またはキャンセルしてから {action} を実行してください。",
+    "waitForOperationAcceptance": "現在の操作を開始しています。{action} を実行する前にお待ちください。",
     "disconnectLegacyControlPlane": "旧コントロールプレーンのリンクを解除"
   },
   "environmentFacts": {
@@ -1805,6 +1807,10 @@
     "detailCancelingDeletedConnection": "Desktop はこの削除済み接続の起動タスクを停止しています。",
     "titleStoppingRuntimeStartup": "ランタイムの起動を停止中",
     "detailStoppingRuntimeStartup": "Desktop は停止中ですランタイムの起動と、すでに作成されたリソースのクリーンアップ。",
+    "titleStoppingRuntimeUpdate": "ランタイムの更新をキャンセル中",
+    "detailStoppingRuntimeUpdate": "Desktop はランタイムの更新をキャンセルし、作成済みのリソースをクリーンアップしています。",
+    "titleStoppingRuntimeRestart": "ランタイムの再起動をキャンセル中",
+    "detailStoppingRuntimeRestart": "Desktop はランタイムの再起動をキャンセルし、作成済みのリソースをクリーンアップしています。",
     "titleStoppingOpen": "Open を停止中",
     "detailStoppingOpen": "Desktop は接続セットアップを停止し、作成済みローカルリソースをクリーンアップしています。",
     "titleStoppingOperation": "操作を停止中",
