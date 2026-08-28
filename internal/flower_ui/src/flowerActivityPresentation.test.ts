@@ -681,7 +681,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('sources');
   });
 
-  it('renders the requested URL, bounded preview, and embedded passive icon', () => {
+  it('renders the requested URL and bounded preview without page icon data', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'web_fetch',
       renderer: 'web_fetch',
@@ -694,7 +694,6 @@ describe('presentFlowerActivityItem', () => {
         format: 'markdown',
         content_preview: '# Preview\n\n[Safe link](https://example.test)',
         preview_truncated: true,
-        site_icon: { content_type: 'image/png', data: 'iVBORw0KGgo=' },
         bytes_read: 4096,
         truncated: true,
         content: 'must not reach activity UI',
@@ -705,7 +704,6 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.title).toEqual({
       kind: 'web_fetch',
       url: 'https://example.test/start',
-      site_icon_data_url: 'data:image/png;base64,iVBORw0KGgo=',
     });
     expect(presentation.detailBlocks).toEqual([{
       kind: 'web_fetch',
@@ -717,7 +715,6 @@ describe('presentFlowerActivityItem', () => {
         format: 'markdown',
         content_preview: '# Preview\n\n[Safe link](https://example.test)',
         preview_truncated: true,
-        site_icon_data_url: 'data:image/png;base64,iVBORw0KGgo=',
         bytes_read: 4096,
         truncated: true,
       },
@@ -733,7 +730,7 @@ describe('presentFlowerActivityItem', () => {
       payload: undefined,
       target_refs: [{ kind: 'url', label: 'example.test', uri: 'https://example.test/legacy' }],
     }));
-    expect(legacy.title).toEqual({ kind: 'web_fetch', url: 'https://example.test/legacy', site_icon_data_url: '' });
+    expect(legacy.title).toEqual({ kind: 'web_fetch', url: 'https://example.test/legacy' });
     expect(legacy.detailBlocks).toEqual([expect.objectContaining({
       kind: 'web_fetch',
       fetch: expect.objectContaining({ url: 'https://example.test/legacy' }),

@@ -1,9 +1,7 @@
 package ai
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -492,11 +490,6 @@ func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, 
 					out[key] = truncated
 				}
 				continue
-			case "site_icon":
-				if icon, ok := sanitizeWebFetchActivityIconValue(item); ok {
-					out[key] = icon
-				}
-				continue
 			}
 		}
 		out[key] = sanitizeActivityPublicValue(item)
@@ -505,42 +498,6 @@ func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, 
 		return nil, false
 	}
 	return out, true
-}
-
-func sanitizeWebFetchActivityIconValue(value any) (map[string]any, bool) {
-	record, ok := value.(map[string]any)
-	if !ok || len(record) != 2 {
-		return nil, false
-	}
-	contentType := activityMapString(record, "content_type")
-	encoded, ok := record["data"].(string)
-	if !ok || contentType == "" || len(encoded) > base64.StdEncoding.EncodedLen(8<<10) {
-		return nil, false
-	}
-	data, err := base64.StdEncoding.Strict().DecodeString(encoded)
-	if err != nil || len(data) == 0 || len(data) > 8<<10 || !webFetchActivityIconMatches(contentType, data) {
-		return nil, false
-	}
-	return map[string]any{
-		"content_type": contentType,
-		"data":         base64.StdEncoding.EncodeToString(data),
-	}, true
-}
-
-func webFetchActivityIconMatches(contentType string, data []byte) bool {
-	contentType = strings.ToLower(strings.TrimSpace(contentType))
-	switch {
-	case len(data) >= 8 && bytes.Equal(data[:8], []byte{'\x89', 'P', 'N', 'G', '\r', '\n', '\x1a', '\n'}):
-		return contentType == "image/png"
-	case len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff:
-		return contentType == "image/jpeg"
-	case len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP")):
-		return contentType == "image/webp"
-	case len(data) >= 4 && bytes.Equal(data[:4], []byte{0, 0, 1, 0}):
-		return contentType == "image/x-icon" || contentType == "image/vnd.microsoft.icon"
-	default:
-		return false
-	}
 }
 
 func sanitizeStructuredActivityRows(value any) []any {
@@ -769,7 +726,7 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 	case fltools.ActivityRendererWebSearch:
 		return stringSet("query", "provider", "count", "sources", "results", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererWebFetch:
-		return stringSet("url", "final_url", "status_code", "content_type", "format", "content_preview", "preview_truncated", "site_icon", "bytes_read", "truncated", "status", "error")
+		return stringSet("url", "final_url", "status_code", "content_type", "format", "content_preview", "preview_truncated", "bytes_read", "truncated", "status", "error")
 	case fltools.ActivityRendererQuestion:
 		return stringSet("prompt_id", "reason_code", "required_from_user", "questions", "answers", "contains_secret", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererCompletion:

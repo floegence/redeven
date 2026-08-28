@@ -52,6 +52,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(mountedDisclosure).toBeGreaterThan(detailDispatch);
     expect(detailRender).toBeGreaterThan(mountedDisclosure);
     expect(src).toContain('toolActivityExternalContentNotice');
+    expect(src).toContain('<Globe class="flower-activity-web-fetch-title-icon" aria-hidden="true" />');
+    expect(src).not.toContain('site_icon_data_url');
   });
 
   it('keeps non-markdown content on the plain text route', () => {

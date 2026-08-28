@@ -7530,29 +7530,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       );
     }
     if (title.kind === 'web_fetch') {
-      let fallback = 'W';
-      const safeURL = safeWebFetchURL(title.url);
-      if (safeURL) {
-        try {
-          fallback = Array.from(new URL(safeURL).hostname)[0]?.toUpperCase() || fallback;
-        } catch {
-          fallback = 'W';
-        }
-      }
       return (
         <>
-          <span class="flower-activity-web-fetch-title-icon" aria-hidden="true">
-            <span class="flower-activity-web-fetch-title-fallback">{fallback}</span>
-            <Show when={title.site_icon_data_url}>
-              {(source) => (
-                <img
-                  src={source()}
-                  alt=""
-                  onError={(event) => { event.currentTarget.style.display = 'none'; }}
-                />
-              )}
-            </Show>
-          </span>
+          <Globe class="flower-activity-web-fetch-title-icon" aria-hidden="true" />
           <strong class="flower-activity-inline-title-verb">Web fetch</strong>
           <span class="flower-activity-inline-title-target flower-activity-web-fetch-title-url" title={title.url}>{title.url}</span>
         </>

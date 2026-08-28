@@ -135,7 +135,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentPublicPayload(t *testin
 	}
 }
 
-func TestSanitizeActivityTimelineMessageJSONKeepsBoundedWebFetchPreviewAndIcon(t *testing.T) {
+func TestSanitizeActivityTimelineMessageJSONKeepsPreviewAndDropsPageIcon(t *testing.T) {
 	t.Parallel()
 
 	raw := `{
@@ -150,31 +150,14 @@ func TestSanitizeActivityTimelineMessageJSONKeepsBoundedWebFetchPreviewAndIcon(t
 		t.Fatal(err)
 	}
 	body := string(sanitized)
-	for _, required := range []string{`"content_preview":"# Preview"`, `"preview_truncated":true`, `"site_icon":{"content_type":"image/png","data":"iVBORw0KGgo="}`, `"url":"https://example.test/page"`} {
+	for _, required := range []string{`"content_preview":"# Preview"`, `"preview_truncated":true`, `"url":"https://example.test/page"`} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("web fetch public activity missing %q: %s", required, body)
 		}
 	}
-	for _, forbidden := range []string{`"content":"full body"`, `"body":"legacy body"`} {
+	for _, forbidden := range []string{`"content":"full body"`, `"body":"legacy body"`, `"site_icon"`} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("web fetch public activity contains %q: %s", forbidden, body)
-		}
-	}
-}
-
-func TestSanitizeWebFetchActivityIconRejectsInvalidData(t *testing.T) {
-	t.Parallel()
-
-	tests := []map[string]any{
-		{"content_type": "image/svg+xml", "data": "PHN2Zy8+"},
-		{"content_type": "image/png", "data": "not base64"},
-		{"content_type": "image/png", "data": "PHN2Zy8+"},
-		{"content_type": "image/png", "data": strings.Repeat("A", 12_000)},
-		{"content_type": "image/png", "data": "iVBORw0KGgo=", "url": "https://example.test/icon.png"},
-	}
-	for index, value := range tests {
-		if _, ok := sanitizeWebFetchActivityIconValue(value); ok {
-			t.Fatalf("invalid icon %d was accepted", index)
 		}
 	}
 }
