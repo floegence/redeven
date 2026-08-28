@@ -70,6 +70,7 @@ import {
   type VolumeInventoryItem,
 } from '../services/containerResourcesApi';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
+import { subscribeContainerResourceNavigation } from '../services/containerResourceNavigation';
 import { useI18n } from '../i18n';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useEnvContext } from './EnvContext';
@@ -410,6 +411,21 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   let logViewElement: HTMLDivElement | undefined;
   let inventoryScrollElement: HTMLDivElement | undefined;
   let storedInventoryScrollTop = 0;
+
+  onMount(() => {
+    if (compact(props.stateScope) && props.stateScope !== 'activity') return;
+    const unsubscribe = subscribeContainerResourceNavigation((request) => {
+      const next = sanitizePersistedState(request);
+      setEngine(next.engine);
+      setEndpointID(next.endpointID);
+      setView(next.view);
+      setSelectedIdentity(next.selectedIdentity);
+      setSearchQuery('');
+      setResourceFilter('all');
+      setDetailTab('overview');
+    });
+    onCleanup(unsubscribe);
+  });
 
   const permissions = createMemo(() => env.env()?.permissions);
   const canRead = createMemo(() => Boolean(permissions()?.can_read));

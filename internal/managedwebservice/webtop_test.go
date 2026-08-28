@@ -71,8 +71,12 @@ func TestCatalogIncludesIndependentWebtopTemplatesWithDeclarativeSafety(t *testi
 	if ubuntu.ServiceFamilyID == debian.ServiceFamilyID || ubuntu.ServiceFamilyID != WebtopUbuntuKDETemplateID || debian.ServiceFamilyID != WebtopDebianXFCETemplateID {
 		t.Fatalf("Webtop service families = %q, %q", ubuntu.ServiceFamilyID, debian.ServiceFamilyID)
 	}
-	for _, template := range []*Template{ubuntu, debian} {
-		if template.BrandIcon != BrandIconInteractiveDesktop || template.LocalizationKey == "" || template.SourceURL != webtopSourceURL || !template.Available {
+	for _, testCase := range []struct {
+		template *Template
+		brand    string
+	}{{template: ubuntu, brand: BrandIconUbuntu}, {template: debian, brand: BrandIconDebian}} {
+		template := testCase.template
+		if template.BrandIcon != testCase.brand || template.LocalizationKey == "" || template.SourceURL != webtopSourceURL || !template.Available {
 			t.Fatalf("Webtop catalog metadata = %+v", template)
 		}
 		if len(template.Notices) != 1 || !template.Notices[0].AcknowledgementRequired || template.Notices[0].Revision != 1 {

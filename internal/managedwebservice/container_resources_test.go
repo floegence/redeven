@@ -8,7 +8,7 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-func TestContainerResourceLinkUsesAuthoritativeRuntimeIdentity(t *testing.T) {
+func TestContainerResourceLinksUseAuthoritativeRuntimeIdentityAndArtifact(t *testing.T) {
 	tests := []struct {
 		name       string
 		service    pfregistry.ManagedService
@@ -23,16 +23,26 @@ func TestContainerResourceLinkUsesAuthoritativeRuntimeIdentity(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			link := containerResourceLink(test.service)
+			links := containerResourceLinks(test.service)
 			if !test.wantLinked {
-				if link != nil {
-					t.Fatalf("containerResourceLink() = %#v, want nil", link)
+				if len(links) != 0 {
+					t.Fatalf("containerResourceLinks() = %#v, want none", links)
 				}
 				return
 			}
-			if link == nil || link.Engine != "docker" || link.View != test.wantView || link.Identity != test.wantID {
-				t.Fatalf("containerResourceLink() = %#v", link)
+			if len(links) != 1 || links[0].Engine != "docker" || links[0].View != test.wantView || links[0].Identity != test.wantID {
+				t.Fatalf("containerResourceLinks() = %#v", links)
 			}
 		})
+	}
+
+	image := "ghcr.io/example/service@sha256:" + strings.Repeat("b", 64)
+	links := containerResourceLinks(pfregistry.ManagedService{
+		Deployment:        string(DeploymentContainer),
+		RuntimeIdentity:   "ctr-123",
+		ArtifactReference: image,
+	})
+	if len(links) != 2 || links[0].Kind != "container" || links[1].Kind != "image" || links[1].View != "images" || links[1].Identity != image {
+		t.Fatalf("containerResourceLinks() = %#v", links)
 	}
 }

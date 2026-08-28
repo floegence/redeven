@@ -229,6 +229,17 @@ test('brand exceptions require both the exact path and authored SVG use', () => 
     'internal/flower_ui/src/FlowerSurface.tsx',
     THEME_COLOR_EXCEPTIONS,
   ).length, 1);
+  const distributionPath = 'internal/envapp/ui_src/src/ui/icons/DistributionBrandLogos.tsx';
+  assert.deepEqual(findThemeColorViolations(
+    '<path fill="#E95420" />\n<path fill="#A81D33" />',
+    distributionPath,
+    THEME_COLOR_EXCEPTIONS,
+  ), []);
+  assert.equal(findThemeColorViolations(
+    '<div style={{ color: "#E95420" }} />',
+    distributionPath,
+    THEME_COLOR_EXCEPTIONS,
+  ).length, 1);
 });
 
 test('terminal preview exceptions require exact ANSI fields inside the preview function', () => {

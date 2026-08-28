@@ -55,14 +55,14 @@ func builtInTemplateDefinitions() []builtInTemplateDefinition {
 		{
 			TemplateID: WebtopUbuntuKDETemplateID, ServiceFamilyID: WebtopUbuntuKDETemplateID,
 			Name: "LinuxServer Webtop · Ubuntu KDE", Description: "Run an Ubuntu KDE desktop in an isolated Docker container.", Version: webtopUbuntuKDEVersion,
-			LocalizationKey: "linuxserverWebtopUbuntuKDE", BrandIcon: BrandIconInteractiveDesktop, SourceURL: webtopSourceURL,
+			LocalizationKey: "linuxserverWebtopUbuntuKDE", BrandIcon: BrandIconUbuntu, SourceURL: webtopSourceURL,
 			Deployment: DeploymentContainer, ContainerMode: "single", Revision: 1, SortOrder: 30, DiskBytes: 6 * 1024 * 1024 * 1024,
 			Notices: webtopNotices(),
 		},
 		{
 			TemplateID: WebtopDebianXFCETemplateID, ServiceFamilyID: WebtopDebianXFCETemplateID,
 			Name: "LinuxServer Webtop · Debian XFCE", Description: "Run a Debian XFCE desktop in an isolated Docker container.", Version: webtopDebianXFCEVersion,
-			LocalizationKey: "linuxserverWebtopDebianXFCE", BrandIcon: BrandIconInteractiveDesktop, SourceURL: webtopSourceURL,
+			LocalizationKey: "linuxserverWebtopDebianXFCE", BrandIcon: BrandIconDebian, SourceURL: webtopSourceURL,
 			Deployment: DeploymentContainer, ContainerMode: "single", Revision: 1, SortOrder: 40, DiskBytes: 6 * 1024 * 1024 * 1024,
 			Notices: webtopNotices(),
 		},

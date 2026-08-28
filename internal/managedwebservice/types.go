@@ -17,8 +17,9 @@ const (
 )
 
 const (
-	BrandIconDeepSeekHarness    = "deepseek-harness"
-	BrandIconInteractiveDesktop = "interactive-desktop"
+	BrandIconDeepSeekHarness = "deepseek-harness"
+	BrandIconUbuntu          = "ubuntu"
+	BrandIconDebian          = "debian"
 
 	ContainerRuntimeProfileRestricted         = "restricted"
 	ContainerRuntimeProfileInteractiveDesktop = "interactive_desktop"
@@ -207,19 +208,20 @@ type CreateResult struct {
 
 type ServiceView struct {
 	pfregistry.ManagedService
-	Name              string                       `json:"name"`
-	Description       string                       `json:"description,omitempty"`
-	BrandIcon         string                       `json:"brand_icon,omitempty"`
-	LocalizationKey   string                       `json:"localization_key,omitempty"`
-	UpdateAvailable   bool                         `json:"update_available"`
-	TargetRevision    int64                        `json:"target_revision,omitempty"`
-	TargetVersion     string                       `json:"target_version,omitempty"`
-	UpdateNotices     []TemplateNotice             `json:"update_notices,omitempty"`
-	ActiveOperation   *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
-	ContainerResource *ContainerResourceLink       `json:"container_resource,omitempty"`
+	Name               string                       `json:"name"`
+	Description        string                       `json:"description,omitempty"`
+	BrandIcon          string                       `json:"brand_icon,omitempty"`
+	LocalizationKey    string                       `json:"localization_key,omitempty"`
+	UpdateAvailable    bool                         `json:"update_available"`
+	TargetRevision     int64                        `json:"target_revision,omitempty"`
+	TargetVersion      string                       `json:"target_version,omitempty"`
+	UpdateNotices      []TemplateNotice             `json:"update_notices,omitempty"`
+	ActiveOperation    *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
+	ContainerResources []ContainerResourceLink      `json:"container_resources,omitempty"`
 }
 
 type ContainerResourceLink struct {
+	Kind       string `json:"kind"`
 	Engine     string `json:"engine"`
 	EndpointID string `json:"endpoint_id,omitempty"`
 	View       string `json:"view"`

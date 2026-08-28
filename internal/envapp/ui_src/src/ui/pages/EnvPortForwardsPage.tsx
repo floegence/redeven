@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
   Button,
@@ -28,7 +28,8 @@ import {
 } from '../services/desktopSessionContext';
 import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
 import { fetchLocalApi, fetchLocalApiJSON } from '../services/localApi';
-import { readUIStorageJSON, removeUIStorageItem, writeUIStorageJSON } from '../services/uiStorage';
+import { readUIStorageJSON, removeUIStorageItem } from '../services/uiStorage';
+import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
@@ -47,6 +48,7 @@ import {
   type ServiceTemplateKind,
   type ServiceTemplatePresentation,
 } from './ServiceTemplateCatalog';
+import { ManagedServiceShapingOrb } from './ManagedServiceShapingOrb';
 import {
   desktopShellWebServiceWindowOpenAvailable,
   openWebServiceWindowInDesktopShell,
@@ -82,6 +84,11 @@ type ForwardSession = Readonly<{
   ephemeral: boolean;
 }>;
 
+type ForwardMetadataTarget = Readonly<
+  | { mode: 'save'; session: ForwardSession }
+  | { mode: 'edit'; forward: PortForward }
+>;
+
 type ManagedService = Readonly<{
   service_id: string;
   template_id: string;
@@ -105,16 +112,19 @@ type ManagedService = Readonly<{
   target_version?: string;
   update_notices?: ReadonlyArray<ManagedTemplateNotice>;
   active_operation?: ManagedOperation;
-  container_resource?: Readonly<{
+  container_resources?: ReadonlyArray<Readonly<{
+    kind: 'container' | 'image' | 'compose_project';
     engine: 'docker';
     endpoint_id?: string;
-    view: 'containers' | 'compose-projects';
+    view: 'containers' | 'images' | 'compose-projects';
     identity: string;
-  }>;
+  }>>;
 }>;
 
+type ManagedContainerResource = NonNullable<ManagedService['container_resources']>[number];
+
 type ManagedDeployment = 'native' | 'docker' | 'host' | 'container' | 'compose';
-type ManagedBrandIcon = 'deepseek-harness' | 'interactive-desktop';
+type ManagedBrandIcon = 'deepseek-harness' | 'ubuntu' | 'debian';
 type ManagedTemplateNotice = Readonly<{
   id: string;
   revision: number;
@@ -167,7 +177,7 @@ type ManagedCatalogTemplate = Readonly<{
 type ManagedOperation = Readonly<{ operation_id: string; service_id: string; state: string; stage: string; progress_current: number; progress_total: number; error_message?: string }>;
 type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
 type TemplateDrawerView = 'catalog' | 'install' | 'editor';
-type TemplateEditorDraft = {
+export type TemplateEditorDraft = {
   templateID?: string;
   name: string;
   description: string;
@@ -189,6 +199,56 @@ type TemplateEditorDraft = {
   mainService: string;
   originalSpec?: ManagedTemplateSpec;
 };
+
+export type TemplateEditorField = 'name' | 'description' | 'version' | 'path' | 'healthPath' | 'startScript' | 'image' | 'containerPort' | 'environment' | 'mainService' | 'composeYAML';
+export type TemplateEditorError = 'required' | 'nameInvalid' | 'descriptionTooLong' | 'versionTooLong' | 'pathInvalid' | 'portInvalid' | 'imageInvalid' | 'environmentInvalid' | 'serviceNameInvalid';
+
+function containsASCIIControl(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+}
+
+export function validateTemplateDraft(draft: TemplateEditorDraft): Partial<Record<TemplateEditorField, TemplateEditorError>> {
+  const errors: Partial<Record<TemplateEditorField, TemplateEditorError>> = {};
+  const name = draft.name.trim();
+  if (!name) errors.name = 'required';
+  else if (Array.from(name).length > 80 || containsASCIIControl(name)) errors.name = 'nameInvalid';
+  if (draft.description.length > 1000) errors.description = 'descriptionTooLong';
+  if (draft.version.length > 80) errors.version = 'versionTooLong';
+  if (draft.path.trim() && !draft.path.trim().startsWith('/')) errors.path = 'pathInvalid';
+  if (draft.healthPath.trim() && !draft.healthPath.trim().startsWith('/')) errors.healthPath = 'pathInvalid';
+
+  if (draft.kind === 'host' && !draft.startScript.trim()) errors.startScript = 'required';
+  if (draft.kind === 'container') {
+    const image = draft.image.trim();
+    if (!image) errors.image = 'required';
+    else if (image.length > 512 || /\s/u.test(image) || containsASCIIControl(image)) errors.image = 'imageInvalid';
+    if (!validTemplateEnvironment(draft.environment)) errors.environment = 'environmentInvalid';
+  }
+  if (draft.kind !== 'host') {
+    const port = Number(draft.containerPort);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) errors.containerPort = 'portInvalid';
+  }
+  if (draft.kind === 'compose') {
+    const service = draft.mainService.trim();
+    if (!service) errors.mainService = 'required';
+    else if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/u.test(service)) errors.mainService = 'serviceNameInvalid';
+    if (!draft.composeYAML.trim()) errors.composeYAML = 'required';
+  }
+  return errors;
+}
+
+function validTemplateEnvironment(raw: string): boolean {
+  for (const line of raw.split(/\r?\n/u)) {
+    if (!line.trim()) continue;
+    const separator = line.indexOf('=');
+    if (separator <= 0 || !/^[A-Z][A-Z0-9_]{0,63}$/u.test(line.slice(0, separator).trim())) return false;
+    if (containsASCIIControl(line.slice(separator + 1))) return false;
+  }
+  return true;
+}
 
 function emptyTemplateDraft(kind: 'host' | 'container' | 'compose'): TemplateEditorDraft {
   return {
@@ -236,6 +296,30 @@ function parseTemplateEnvironment(raw: string): Record<string, string> {
     result[line.slice(0, separator).trim()] = line.slice(separator + 1);
   }
   return result;
+}
+
+function templateEditorErrorMessage(error: TemplateEditorError | undefined, i18n: WebServicesI18n): string {
+  if (!error) return '';
+  return i18n.t(`webServices.managed.validation.${error}` as EnvAppTranslationKey);
+}
+
+function TemplateEditorLabel(props: Readonly<{ for: string; label: string; required?: boolean }>) {
+  return (
+    <label class="mb-1 block text-xs font-medium" for={props.for}>
+      {props.label}<Show when={props.required}> <span class="text-destructive" aria-hidden="true">*</span></Show>
+    </label>
+  );
+}
+
+function TemplateEditorGuidance(props: Readonly<{
+  id: string;
+  help: string;
+  error?: TemplateEditorError;
+  visible: boolean;
+}>) {
+  const i18n = useI18n();
+  const message = () => props.visible && props.error ? templateEditorErrorMessage(props.error, i18n) : props.help;
+  return <p id={props.id} class={cn('mt-1 min-h-4 text-[11px] leading-4', props.visible && props.error ? 'text-destructive' : 'text-muted-foreground')}>{message()}</p>;
 }
 
 function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string) {
@@ -532,6 +616,7 @@ export function PortForwardRow(props: {
   busy: boolean;
   busyText?: string;
   onOpen: () => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const i18n = useI18n();
@@ -569,6 +654,18 @@ export function PortForwardRow(props: {
               <InlineButtonSnakeLoading class="mr-1.5" />
             </Show>
             {i18n.t('webServices.actions.open')}
+          </Button>
+        </Tooltip>
+        <Tooltip content={i18n.t('webServices.actions.editServiceTooltip')} placement="top" anchorClass="col-start-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={props.onEdit}
+            disabled={props.busy}
+            class="h-8 w-8 px-0 text-muted-foreground hover:text-foreground"
+            aria-label={i18n.t('webServices.actions.editServiceTooltip')}
+          >
+            <Pencil class="h-3.5 w-3.5" />
           </Button>
         </Tooltip>
         <Tooltip content={i18n.t('webServices.actions.deleteServiceTooltip')} placement="top" anchorClass="col-start-3">
@@ -732,7 +829,7 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
   };
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenContainers?: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
@@ -740,10 +837,14 @@ export function ManagedServiceRow(props: { service: ManagedService; busy: boolea
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
   const moreItems = (): DropdownItem[] => [
-    ...(props.onOpenContainers ? [{
-      id: 'containers',
-      label: i18n.t('shell.nav.containers'),
-    }] : []),
+    ...(props.service.container_resources ?? []).map((resource) => ({
+      id: `resource:${resource.kind}`,
+      label: resource.kind === 'image'
+        ? i18n.t('containers.views.images')
+        : resource.kind === 'compose_project'
+          ? i18n.t('containers.views.compose-projects')
+          : i18n.t('containers.views.containers'),
+    })),
     ...(props.service.update_available ? [{
       id: 'update',
       label: i18n.t('webServices.managed.update'),
@@ -766,7 +867,10 @@ export function ManagedServiceRow(props: { service: ManagedService; busy: boolea
     },
   ];
   const selectMoreItem = (id: string) => {
-    if (id === 'containers') props.onOpenContainers?.();
+    if (id.startsWith('resource:')) {
+      const resource = props.service.container_resources?.find((item) => `resource:${item.kind}` === id);
+      if (resource) props.onOpenResource(resource);
+    }
     else if (id === 'update') props.onUpdate();
     else if (id === 'restart') props.onAction('restart');
     else if (id === 'logs') props.onLogs();
@@ -844,13 +948,17 @@ export function CreateForwardDialog(props: {
 
   const handleCreate = () => {
     const targetVal = target().trim();
-    if (!targetVal || !isSupportedWebServiceTarget(targetVal)) return;
+    if (!targetVal || !isSupportedWebServiceTarget(targetVal) || !name().trim()) return;
     props.onCreate(targetVal, name().trim(), description().trim());
   };
 
   const isValid = () => {
     const val = target().trim();
-    return val.length > 0 && isSupportedWebServiceTarget(val);
+    return val.length > 0
+      && isSupportedWebServiceTarget(val)
+      && name().trim().length > 0
+      && Array.from(name().trim()).length <= 64
+      && Array.from(description().trim()).length <= 256;
   };
 
   const showScopeRestriction = () => target().trim().length > 0 && !isSupportedWebServiceTarget(target());
@@ -919,20 +1027,118 @@ export function CreateForwardDialog(props: {
           </div>
         </div>
         <div>
-          <label class="block text-xs font-medium mb-1">{i18n.t('webServices.fields.name')}</label>
-          <Input value={name()} onInput={(e) => setName(e.currentTarget.value)} placeholder={i18n.t('webServices.dialog.namePlaceholder')} size="sm" class="w-full" />
+          <label class="block text-xs font-medium mb-1">{i18n.t('webServices.fields.name')} <span class="text-destructive">*</span></label>
+          <Input value={name()} maxlength={64} onInput={(e) => setName(e.currentTarget.value)} placeholder={i18n.t('webServices.dialog.namePlaceholder')} size="sm" class="w-full" />
           <p class="text-[11px] text-muted-foreground mt-1">{i18n.t('webServices.dialog.nameHelp')}</p>
         </div>
         <div>
           <label class="block text-xs font-medium mb-1">{i18n.t('webServices.fields.description')}</label>
           <Input
             value={description()}
+            maxlength={256}
             onInput={(e) => setDescription(e.currentTarget.value)}
             placeholder={i18n.t('webServices.dialog.descriptionPlaceholder')}
             size="sm"
             class="w-full"
           />
           <p class="text-[11px] text-muted-foreground mt-1">{i18n.t('webServices.dialog.descriptionHelp')}</p>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+export function ForwardMetadataDialog(props: Readonly<{
+  open: boolean;
+  mode: 'save' | 'edit';
+  editorKey: string;
+  initialName: string;
+  initialDescription: string;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (name: string, description: string) => void;
+}>) {
+  const i18n = useI18n();
+  const [name, setName] = createSignal('');
+  const [description, setDescription] = createSignal('');
+  const [validationVisible, setValidationVisible] = createSignal(false);
+  let loadedKey = '';
+
+  createEffect(() => {
+    if (!props.open) {
+      loadedKey = '';
+      return;
+    }
+    const nextKey = `${props.mode}:${props.editorKey}`;
+    if (loadedKey === nextKey) return;
+    loadedKey = nextKey;
+    setName(props.initialName);
+    setDescription(props.initialDescription);
+    setValidationVisible(false);
+  });
+
+  const nameError = () => {
+    const value = name().trim();
+    if (!value) return i18n.t('webServices.dialog.nameRequired');
+    if (Array.from(value).length > 64) return i18n.t('webServices.dialog.nameTooLong');
+    return '';
+  };
+  const descriptionError = () => Array.from(description().trim()).length > 256
+    ? i18n.t('webServices.dialog.descriptionTooLong')
+    : '';
+  const submit = () => {
+    setValidationVisible(true);
+    if (nameError() || descriptionError()) return;
+    props.onSubmit(name().trim(), description().trim());
+  };
+
+  return (
+    <Dialog
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title={props.mode === 'save' ? i18n.t('webServices.dialog.saveTitle') : i18n.t('webServices.dialog.editTitle')}
+      footer={(
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)} disabled={props.loading}>{i18n.t('webServices.actions.cancel')}</Button>
+          <Button size="sm" variant="default" onClick={submit} disabled={props.loading}>
+            <Show when={props.loading}><InlineButtonSnakeLoading class="mr-1.5" /></Show>
+            {props.mode === 'save' ? i18n.t('webServices.actions.saveService') : i18n.t('webServices.actions.saveChanges')}
+          </Button>
+        </div>
+      )}
+    >
+      <div class="space-y-4" data-testid="web-service-metadata-dialog">
+        <div>
+          <label class="mb-1 block text-xs font-medium" for="web-service-metadata-name">{i18n.t('webServices.fields.name')} <span class="text-destructive">*</span></label>
+          <Input
+            id="web-service-metadata-name"
+            value={name()}
+            maxlength={64}
+            onInput={(event) => setName(event.currentTarget.value)}
+            placeholder={i18n.t('webServices.dialog.namePlaceholder')}
+            aria-invalid={validationVisible() && Boolean(nameError()) ? 'true' : undefined}
+            aria-describedby="web-service-metadata-name-guidance"
+            autofocus
+          />
+          <p id="web-service-metadata-name-guidance" class={cn('mt-1 min-h-4 text-[11px]', validationVisible() && nameError() ? 'text-destructive' : 'text-muted-foreground')}>
+            {validationVisible() && nameError() ? nameError() : i18n.t('webServices.dialog.nameHelp')}
+          </p>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium" for="web-service-metadata-description">{i18n.t('webServices.fields.description')}</label>
+          <Textarea
+            id="web-service-metadata-description"
+            value={description()}
+            maxlength={256}
+            rows={3}
+            onInput={(event) => setDescription(event.currentTarget.value)}
+            placeholder={i18n.t('webServices.dialog.descriptionPlaceholder')}
+            aria-invalid={validationVisible() && Boolean(descriptionError()) ? 'true' : undefined}
+            aria-describedby="web-service-metadata-description-guidance"
+          />
+          <p id="web-service-metadata-description-guidance" class={cn('mt-1 min-h-4 text-[11px]', validationVisible() && descriptionError() ? 'text-destructive' : 'text-muted-foreground')}>
+            {validationVisible() && descriptionError() ? descriptionError() : i18n.t('webServices.dialog.descriptionHelp')}
+          </p>
         </div>
       </div>
     </Dialog>
@@ -1045,7 +1251,8 @@ export function EnvPortForwardsPage() {
   const [address, setAddress] = createSignal('');
   const [addressValidationVisible, setAddressValidationVisible] = createSignal(false);
   const [recentSession, setRecentSession] = createSignal<ForwardSession | null>(null);
-  const [savingSession, setSavingSession] = createSignal(false);
+  const [forwardMetadataTarget, setForwardMetadataTarget] = createSignal<ForwardMetadataTarget | null>(null);
+  const [forwardMetadataSaving, setForwardMetadataSaving] = createSignal(false);
 
   // Web services resource
   const [refreshSeq, setRefreshSeq] = createSignal(0);
@@ -1081,6 +1288,7 @@ export function EnvPortForwardsPage() {
   const [selectedTemplateID, setSelectedTemplateID] = createSignal<string | null>(null);
   const [installNoticeAcceptances, setInstallNoticeAcceptances] = createSignal<Record<string, boolean>>({});
   const [templateDraft, setTemplateDraft] = createSignal<TemplateEditorDraft | null>(null);
+  const [templateValidationVisible, setTemplateValidationVisible] = createSignal(false);
   const [templateSaving, setTemplateSaving] = createSignal(false);
   const [templateDuplicate, setTemplateDuplicate] = createSignal<ManagedCatalogTemplate | null>(null);
   const [templateDuplicateName, setTemplateDuplicateName] = createSignal('');
@@ -1146,15 +1354,12 @@ export function EnvPortForwardsPage() {
     } finally { setManagedLoading(false); }
   };
 
-  const openManagedContainerResource = (service: ManagedService) => {
-    const link = service.container_resource;
-    if (!link) return;
-    writeUIStorageJSON('containers:activity', {
-      version: 1,
+  const openManagedContainerResource = (link: ManagedContainerResource) => {
+    requestContainerResourceNavigation({
       engine: link.engine,
-      endpointID: link.endpoint_id ?? '',
+      endpointID: link.endpoint_id,
       view: link.view,
-      selectedIdentity: link.identity,
+      identity: link.identity,
     });
     ctx.goActivity('containers');
   };
@@ -1388,6 +1593,7 @@ export function EnvPortForwardsPage() {
     setTemplateDrawerView('catalog');
     setSelectedTemplateID(null);
     setTemplateDraft(null);
+    setTemplateValidationVisible(false);
     setInstallNoticeAcceptances({});
     setTemplateDrawerOpen(true);
   };
@@ -1402,6 +1608,7 @@ export function EnvPortForwardsPage() {
 
   const beginTemplateCreate = (kind: 'host' | 'container' | 'compose') => {
     setTemplateDraft(emptyTemplateDraft(kind));
+    setTemplateValidationVisible(false);
     setTemplateDrawerView('editor');
   };
 
@@ -1414,12 +1621,25 @@ export function EnvPortForwardsPage() {
   const beginTemplateEdit = (template: ManagedCatalogTemplate) => {
     if (!template.editable) return;
     setTemplateDraft(draftFromTemplate(template));
+    setTemplateValidationVisible(false);
     setTemplateDrawerView('editor');
   };
+
+  const templateDraftErrors = createMemo(() => {
+    const draft = templateDraft();
+    return draft ? validateTemplateDraft(draft) : {};
+  });
 
   const saveTemplate = async () => {
     const draft = templateDraft();
     if (!draft || !canManageManagedService()) return;
+    const errors = validateTemplateDraft(draft);
+    const firstInvalidField = (Object.keys(errors) as TemplateEditorField[])[0];
+    if (firstInvalidField) {
+      setTemplateValidationVisible(true);
+      queueMicrotask(() => document.querySelector<HTMLElement>(`[data-template-field="${firstInvalidField}"]`)?.focus());
+      return;
+    }
     setTemplateSaving(true);
     try {
       const body = templateRequestFromDraft(draft, managedRequestID());
@@ -1430,6 +1650,7 @@ export function EnvPortForwardsPage() {
       }
       await loadManaged(true);
       setTemplateDraft(null);
+      setTemplateValidationVisible(false);
       setTemplateDrawerView('catalog');
       notify.success(i18n.t('webServices.managed.templateSaved'), i18n.t('webServices.managed.templateSavedMessage'));
     } catch (error) {
@@ -1695,24 +1916,48 @@ export function EnvPortForwardsPage() {
     );
   };
 
-  const doSaveRecentSession = async () => {
-    const current = recentSession();
-    if (!current?.ephemeral || savingSession()) return;
-    setSavingSession(true);
+  const doSaveRecentSession = async (session: ForwardSession, name: string, description: string) => {
+    if (!session.ephemeral || forwardMetadataSaving()) return;
+    setForwardMetadataSaving(true);
     try {
-      const name = new URL(current.forward.target_url).host;
-      const forward = await fetchLocalApiJSON<PortForward>(`/_redeven_proxy/api/forward-sessions/${encodeURIComponent(current.forward.forward_id)}/save`, {
+      const forward = await fetchLocalApiJSON<PortForward>(`/_redeven_proxy/api/forward-sessions/${encodeURIComponent(session.forward.forward_id)}/save`, {
         method: 'POST',
-        body: JSON.stringify({ name, description: '' }),
+        body: JSON.stringify({ name, description }),
       });
-      setRecentSession({ ...current, forward, ephemeral: false });
+      setRecentSession({ ...session, forward, ephemeral: false });
+      setForwardMetadataTarget(null);
       bumpRefresh();
       notify.success(i18n.t('webServices.notifications.sessionSavedTitle'), i18n.t('webServices.notifications.sessionSavedMessage', { name }));
     } catch (error) {
       notify.error(i18n.t('webServices.notifications.failedToSaveTitle'), error instanceof Error ? error.message : String(error));
     } finally {
-      setSavingSession(false);
+      setForwardMetadataSaving(false);
     }
+  };
+
+  const doUpdateForwardMetadata = async (forward: PortForward, name: string, description: string) => {
+    if (forwardMetadataSaving()) return;
+    setForwardMetadataSaving(true);
+    try {
+      await fetchLocalApiJSON<PortForward>(`/_redeven_proxy/api/forwards/${encodeURIComponent(forward.forward_id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name, description }),
+      });
+      setForwardMetadataTarget(null);
+      bumpRefresh();
+      notify.success(i18n.t('webServices.notifications.serviceUpdatedTitle'), i18n.t('webServices.notifications.serviceUpdatedMessage', { name }));
+    } catch (error) {
+      notify.error(i18n.t('webServices.notifications.failedToUpdateTitle'), error instanceof Error ? error.message : String(error));
+    } finally {
+      setForwardMetadataSaving(false);
+    }
+  };
+
+  const submitForwardMetadata = (name: string, description: string) => {
+    const target = forwardMetadataTarget();
+    if (!target) return;
+    if (target.mode === 'save') void doSaveRecentSession(target.session, name, description);
+    else void doUpdateForwardMetadata(target.forward, name, description);
   };
 
   // Find the service being deleted for the confirmation dialog
@@ -1720,6 +1965,26 @@ export function EnvPortForwardsPage() {
     const id = deleteID();
     if (!id) return null;
     return forwards()?.find((f) => f.forward_id === id) ?? null;
+  });
+
+  const forwardMetadataDialog = createMemo(() => {
+    const target = forwardMetadataTarget();
+    if (!target) return null;
+    if (target.mode === 'save') {
+      const forward = target.session.forward;
+      return {
+        mode: target.mode,
+        editorKey: forward.forward_id,
+        initialName: forward.name || new URL(forward.target_url).host,
+        initialDescription: forward.description,
+      } as const;
+    }
+    return {
+      mode: target.mode,
+      editorKey: target.forward.forward_id,
+      initialName: target.forward.name,
+      initialDescription: target.forward.description,
+    } as const;
   });
 
   return (
@@ -1840,9 +2105,9 @@ export function EnvPortForwardsPage() {
                       <Tag variant="neutral" tone="soft" size="sm">{i18n.t('webServices.session.temporary')}</Tag>
                       <span class="truncate font-mono text-xs text-foreground">{session.forward.target_url}{session.app_path === '/' ? '' : session.app_path}</span>
                     </div>
-                    <Button type="button" size="sm" variant="ghost" class="h-8 shrink-0" onClick={() => void doSaveRecentSession()} disabled={savingSession()}>
+                    <Button type="button" size="sm" variant="ghost" class="h-8 shrink-0" onClick={() => setForwardMetadataTarget({ mode: 'save', session })} disabled={forwardMetadataSaving()}>
                       <Save class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                      {savingSession() ? i18n.t('webServices.actions.saving') : i18n.t('webServices.actions.saveService')}
+                      {i18n.t('webServices.actions.saveService')}
                     </Button>
                   </div>
                 )}
@@ -1943,10 +2208,10 @@ export function EnvPortForwardsPage() {
                   }>
                     <div class={cn('overflow-hidden rounded-xl border divide-y', redevenSurfaceRoleClass('panel'))} data-testid="unified-web-services-list">
                       <For each={filteredManagedServices()}>{(service) => (
-                        <ManagedServiceRow service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onOpenContainers={service.container_resource ? () => openManagedContainerResource(service) : undefined} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
+                        <ManagedServiceRow service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onOpenResource={openManagedContainerResource} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
                       )}</For>
                       <For each={filteredForwards()}>{(forward) => (
-                        <PortForwardRow forward={forward} busy={busyID() === forward.forward_id} busyText={busyID() === forward.forward_id ? busyText() : undefined} onOpen={() => void doOpen(forward)} onDelete={() => setDeleteID(forward.forward_id)} />
+                        <PortForwardRow forward={forward} busy={busyID() === forward.forward_id} busyText={busyID() === forward.forward_id ? busyText() : undefined} onOpen={() => void doOpen(forward)} onEdit={() => setForwardMetadataTarget({ mode: 'edit', forward })} onDelete={() => setDeleteID(forward.forward_id)} />
                       )}</For>
                     </div>
                   </Show>
@@ -1955,7 +2220,7 @@ export function EnvPortForwardsPage() {
               <Show when={managedLoadError()}><p class="mt-3 text-xs text-warning">{i18n.t('webServices.errors.loadFailedPrefix')}</p></Show>
               <Show when={managedOperation()} keyed>{(operation) => (
                 <div class="mt-3 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite">
-                  <Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show>
+                  <Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><ManagedServiceShapingOrb /></Show>
                   <span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span>
                   <Show when={['pending', 'running', 'cancelling'].includes(operation.state)}><Button size="sm" variant="ghost" onClick={() => void cancelManagedOperation()} disabled={operation.state === 'cancelling' || !canManageManagedService()}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show>
                 </div>
@@ -1967,16 +2232,26 @@ export function EnvPortForwardsPage() {
 
       {/* Create dialog */}
       <CreateForwardDialog open={createOpen()} loading={createLoading()} onOpenChange={setCreateOpen} onCreate={doCreate} />
+      <ForwardMetadataDialog
+        open={Boolean(forwardMetadataDialog())}
+        mode={forwardMetadataDialog()?.mode ?? 'edit'}
+        editorKey={forwardMetadataDialog()?.editorKey ?? ''}
+        initialName={forwardMetadataDialog()?.initialName ?? ''}
+        initialDescription={forwardMetadataDialog()?.initialDescription ?? ''}
+        loading={forwardMetadataSaving()}
+        onOpenChange={(open) => { if (!open && !forwardMetadataSaving()) setForwardMetadataTarget(null); }}
+        onSubmit={submitForwardMetadata}
+      />
 
       <EnvAppDrawer
         open={templateDrawerOpen()}
         class="service-template-explorer-drawer"
-        onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) { setTemplateDrawerOpen(open); if (!open) setInstallNoticeAcceptances({}); } }}
+        onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) { setTemplateDrawerOpen(open); if (!open) { setInstallNoticeAcceptances({}); setTemplateValidationVisible(false); } } }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
         footer={templateDrawerView() === 'catalog' ? undefined : (
           <div class="flex w-full items-center justify-between gap-2">
-            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setInstallNoticeAcceptances({}); }} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); }} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             <div class="ml-auto flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => setTemplateDrawerOpen(false)} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
@@ -1985,7 +2260,7 @@ export function EnvPortForwardsPage() {
                 </Show>
               </Show>
               <Show when={templateDrawerView() === 'editor'}>
-                <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !templateDraft()?.name.trim()}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</Button>
+                <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</Button>
               </Show>
             </div>
           </div>
@@ -2094,88 +2369,131 @@ export function EnvPortForwardsPage() {
                 />
               </Show>
               <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
-              <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
+              <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><ManagedServiceShapingOrb /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
             </div>
           )}</Show>
 
-          <Show when={templateDrawerView() === 'editor' && templateDraft()} keyed>{(draft) => (
-            <div class="service-template-editor space-y-5">
-              <div class="rounded-md border border-warning/25 bg-warning/[0.05] p-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.customTemplateSafety')}</div>
-              <section class="service-template-editor__section">
-                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.templateBasics')}</h3>
-                <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={draft.name} maxlength={80} onInput={(event) => setTemplateDraft({ ...draft, name: event.currentTarget.value })} /></div>
-                  <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateVersion')}</label><Input value={draft.version} maxlength={80} onInput={(event) => setTemplateDraft({ ...draft, version: event.currentTarget.value })} /></div>
-                </div>
-                <div class="mt-3"><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateDescriptionLabel')}</label><Textarea value={draft.description} maxlength={1000} onInput={(event) => setTemplateDraft({ ...draft, description: event.currentTarget.value })} rows={2} /></div>
-              </section>
-
-              <section class="service-template-editor__section">
-                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.endpointSettings')}</h3>
-                <div class="mt-3 grid gap-3 sm:grid-cols-[180px_1fr_1fr]">
-                  <div>
-                    <div class="mb-1 text-xs font-medium">{i18n.t('webServices.managed.webScheme')}</div>
-                    <div class="service-template-scheme-picker grid h-9 grid-cols-2 gap-1 rounded-md p-1" role="radiogroup" aria-label={i18n.t('webServices.managed.webScheme')}>
-                      <For each={['http', 'https'] as const}>{(scheme) => (
-                        <button
-                          type="button"
-                          role="radio"
-                          aria-checked={draft.scheme === scheme}
-                          class="service-template-scheme-picker__option rounded px-2 text-xs font-semibold uppercase"
-                          onClick={() => setTemplateDraft({ ...draft, scheme })}
-                        >
-                          {scheme}
-                        </button>
-                      )}</For>
+          <Show when={templateDrawerView() === 'editor' && templateDraft()}>{(currentDraft) => {
+            const draft = () => currentDraft() as TemplateEditorDraft;
+            const error = (field: TemplateEditorField) => templateDraftErrors()[field];
+            const invalid = (field: TemplateEditorField) => templateValidationVisible() && Boolean(error(field));
+            const update = (patch: Partial<TemplateEditorDraft>) => setTemplateDraft({ ...draft(), ...patch });
+            return (
+              <div class="service-template-editor space-y-5">
+                <div class="rounded-lg border border-warning/25 bg-warning/[0.05] px-3.5 py-3 text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.customTemplateSafety')}</div>
+                <section class="service-template-editor__section">
+                  <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.templateBasics')}</h3>
+                  <div class="mt-3 grid gap-x-4 gap-y-3 sm:grid-cols-2">
+                    <div>
+                      <TemplateEditorLabel for="template-editor-name" label={i18n.t('webServices.managed.templateName')} required />
+                      <Input id="template-editor-name" data-template-field="name" value={draft().name} maxlength={80} placeholder={i18n.t('webServices.managed.placeholders.templateName')} aria-invalid={invalid('name') ? 'true' : undefined} aria-describedby="template-editor-name-help" onInput={(event) => update({ name: event.currentTarget.value })} />
+                      <TemplateEditorGuidance id="template-editor-name-help" help={i18n.t('webServices.managed.help.templateName')} error={error('name')} visible={templateValidationVisible()} />
+                    </div>
+                    <div>
+                      <TemplateEditorLabel for="template-editor-version" label={i18n.t('webServices.managed.templateVersion')} />
+                      <Input id="template-editor-version" data-template-field="version" value={draft().version} maxlength={80} placeholder={i18n.t('webServices.managed.placeholders.templateVersion')} aria-invalid={invalid('version') ? 'true' : undefined} aria-describedby="template-editor-version-help" onInput={(event) => update({ version: event.currentTarget.value })} />
+                      <TemplateEditorGuidance id="template-editor-version-help" help={i18n.t('webServices.managed.help.templateVersion')} error={error('version')} visible={templateValidationVisible()} />
                     </div>
                   </div>
-                  <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.webPath')}</label><Input value={draft.path} onInput={(event) => setTemplateDraft({ ...draft, path: event.currentTarget.value })} class="font-mono" /></div>
-                  <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.healthPath')}</label><Input value={draft.healthPath} onInput={(event) => setTemplateDraft({ ...draft, healthPath: event.currentTarget.value })} class="font-mono" /></div>
-                </div>
-              </section>
+                  <div class="mt-3">
+                    <TemplateEditorLabel for="template-editor-description" label={i18n.t('webServices.managed.templateDescriptionLabel')} />
+                    <Textarea id="template-editor-description" data-template-field="description" value={draft().description} maxlength={1000} rows={3} placeholder={i18n.t('webServices.managed.placeholders.templateDescription')} aria-invalid={invalid('description') ? 'true' : undefined} aria-describedby="template-editor-description-help" onInput={(event) => update({ description: event.currentTarget.value })} />
+                    <TemplateEditorGuidance id="template-editor-description-help" help={i18n.t('webServices.managed.help.templateDescription')} error={error('description')} visible={templateValidationVisible()} />
+                  </div>
+                </section>
 
-              <section class="service-template-editor__section">
-                <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.serviceRuntimeSettings')}</h3>
-                <Show when={draft.kind === 'host'}>
-                  <p class="mt-2 text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.hostScriptNote')}</p>
-                  <div class="mt-3"><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.startScript')}</label><Textarea value={draft.startScript} onInput={(event) => setTemplateDraft({ ...draft, startScript: event.currentTarget.value })} rows={7} class="font-mono text-xs" /></div>
-                  <details class="service-template-editor__advanced mt-3" open={Boolean(draft.installScript || draft.stopScript || draft.uninstallScript)}>
-                    <summary class="py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.optionalLifecycleScripts')}</summary>
-                    <div class="space-y-3 pb-1 pt-2">
-                      <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.installScript')}</label><Textarea value={draft.installScript} onInput={(event) => setTemplateDraft({ ...draft, installScript: event.currentTarget.value })} rows={5} class="font-mono text-xs" /></div>
-                      <div class="grid gap-3 sm:grid-cols-2">
-                        <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.stopScript')}</label><Textarea value={draft.stopScript} onInput={(event) => setTemplateDraft({ ...draft, stopScript: event.currentTarget.value })} rows={4} class="font-mono text-xs" /></div>
-                        <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.uninstallScript')}</label><Textarea value={draft.uninstallScript} onInput={(event) => setTemplateDraft({ ...draft, uninstallScript: event.currentTarget.value })} rows={4} class="font-mono text-xs" /></div>
+                <section class="service-template-editor__section">
+                  <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.endpointSettings')}</h3>
+                  <div class="mt-3 grid gap-x-4 gap-y-3 sm:grid-cols-[180px_1fr_1fr]">
+                    <div>
+                      <div class="mb-1 text-xs font-medium">{i18n.t('webServices.managed.webScheme')} <span class="text-destructive" aria-hidden="true">*</span></div>
+                      <div class="service-template-scheme-picker grid h-9 grid-cols-2 gap-1 rounded-md p-1" role="radiogroup" aria-label={i18n.t('webServices.managed.webScheme')}>
+                        <For each={['http', 'https'] as const}>{(scheme) => <button type="button" role="radio" aria-checked={draft().scheme === scheme} class="service-template-scheme-picker__option cursor-pointer rounded px-2 text-xs font-semibold uppercase" onClick={() => update({ scheme })}>{scheme}</button>}</For>
+                      </div>
+                      <TemplateEditorGuidance id="template-editor-scheme-help" help={i18n.t('webServices.managed.help.webScheme')} visible={false} />
+                    </div>
+                    <div>
+                      <TemplateEditorLabel for="template-editor-path" label={i18n.t('webServices.managed.webPath')} />
+                      <Input id="template-editor-path" data-template-field="path" value={draft().path} placeholder={i18n.t('webServices.managed.placeholders.webPath')} class="font-mono" aria-invalid={invalid('path') ? 'true' : undefined} aria-describedby="template-editor-path-help" onInput={(event) => update({ path: event.currentTarget.value })} />
+                      <TemplateEditorGuidance id="template-editor-path-help" help={i18n.t('webServices.managed.help.webPath')} error={error('path')} visible={templateValidationVisible()} />
+                    </div>
+                    <div>
+                      <TemplateEditorLabel for="template-editor-health-path" label={i18n.t('webServices.managed.healthPath')} />
+                      <Input id="template-editor-health-path" data-template-field="healthPath" value={draft().healthPath} placeholder={i18n.t('webServices.managed.placeholders.healthPath')} class="font-mono" aria-invalid={invalid('healthPath') ? 'true' : undefined} aria-describedby="template-editor-health-path-help" onInput={(event) => update({ healthPath: event.currentTarget.value })} />
+                      <TemplateEditorGuidance id="template-editor-health-path-help" help={i18n.t('webServices.managed.help.healthPath')} error={error('healthPath')} visible={templateValidationVisible()} />
+                    </div>
+                  </div>
+                </section>
+
+                <section class="service-template-editor__section">
+                  <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.serviceRuntimeSettings')}</h3>
+                  <Show when={draft().kind === 'host'}>
+                    <p class="mt-2 text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.hostScriptNote')}</p>
+                    <div class="mt-3">
+                      <TemplateEditorLabel for="template-editor-start-script" label={i18n.t('webServices.managed.startScript')} required />
+                      <Textarea id="template-editor-start-script" data-template-field="startScript" value={draft().startScript} rows={7} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.startScript')} aria-invalid={invalid('startScript') ? 'true' : undefined} aria-describedby="template-editor-start-script-help" onInput={(event) => update({ startScript: event.currentTarget.value })} />
+                      <TemplateEditorGuidance id="template-editor-start-script-help" help={i18n.t('webServices.managed.help.startScript')} error={error('startScript')} visible={templateValidationVisible()} />
+                    </div>
+                    <details class="service-template-editor__advanced mt-3" open={Boolean(draft().installScript || draft().stopScript || draft().uninstallScript)}>
+                      <summary class="cursor-pointer py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.optionalLifecycleScripts')}</summary>
+                      <div class="space-y-3 pb-1 pt-2">
+                        <div><TemplateEditorLabel for="template-editor-install-script" label={i18n.t('webServices.managed.installScript')} /><Textarea id="template-editor-install-script" value={draft().installScript} rows={5} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.installScript')} onInput={(event) => update({ installScript: event.currentTarget.value })} /></div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                          <div><TemplateEditorLabel for="template-editor-stop-script" label={i18n.t('webServices.managed.stopScript')} /><Textarea id="template-editor-stop-script" value={draft().stopScript} rows={4} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.stopScript')} onInput={(event) => update({ stopScript: event.currentTarget.value })} /></div>
+                          <div><TemplateEditorLabel for="template-editor-uninstall-script" label={i18n.t('webServices.managed.uninstallScript')} /><Textarea id="template-editor-uninstall-script" value={draft().uninstallScript} rows={4} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.uninstallScript')} onInput={(event) => update({ uninstallScript: event.currentTarget.value })} /></div>
+                        </div>
+                      </div>
+                    </details>
+                  </Show>
+
+                  <Show when={draft().kind === 'container'}>
+                    <div class="mt-3 grid gap-x-4 gap-y-3 sm:grid-cols-[1fr_160px]">
+                      <div>
+                        <TemplateEditorLabel for="template-editor-image" label={i18n.t('webServices.managed.containerImage')} required />
+                        <Input id="template-editor-image" data-template-field="image" value={draft().image} class="font-mono" placeholder={i18n.t('webServices.managed.placeholders.containerImage')} aria-invalid={invalid('image') ? 'true' : undefined} aria-describedby="template-editor-image-help" onInput={(event) => update({ image: event.currentTarget.value })} />
+                        <TemplateEditorGuidance id="template-editor-image-help" help={i18n.t('webServices.managed.help.containerImage')} error={error('image')} visible={templateValidationVisible()} />
+                      </div>
+                      <div>
+                        <TemplateEditorLabel for="template-editor-port" label={i18n.t('webServices.managed.containerPort')} required />
+                        <Input id="template-editor-port" data-template-field="containerPort" type="number" min="1" max="65535" value={draft().containerPort} placeholder={i18n.t('webServices.managed.placeholders.containerPort')} inputmode="numeric" aria-invalid={invalid('containerPort') ? 'true' : undefined} aria-describedby="template-editor-port-help" onInput={(event) => update({ containerPort: event.currentTarget.value })} />
+                        <TemplateEditorGuidance id="template-editor-port-help" help={i18n.t('webServices.managed.help.containerPort')} error={error('containerPort')} visible={templateValidationVisible()} />
                       </div>
                     </div>
-                  </details>
-                </Show>
-                <Show when={draft.kind === 'container'}>
-                  <div class="mt-3 grid gap-3 sm:grid-cols-[1fr_160px]">
-                    <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerImage')}</label><Input value={draft.image} onInput={(event) => setTemplateDraft({ ...draft, image: event.currentTarget.value })} class="font-mono" /></div>
-                    <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerPort')}</label><Input type="number" min="1" max="65535" value={draft.containerPort} onInput={(event) => setTemplateDraft({ ...draft, containerPort: event.currentTarget.value })} inputmode="numeric" /></div>
-                  </div>
-                  <details class="service-template-editor__advanced mt-3" open={Boolean(draft.entrypoint || draft.command || draft.environment)}>
-                    <summary class="py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.optionalContainerSettings')}</summary>
-                    <div class="space-y-3 pb-1 pt-2">
-                      <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.entrypoint')}</label><Input value={draft.entrypoint} onInput={(event) => setTemplateDraft({ ...draft, entrypoint: event.currentTarget.value })} class="font-mono" /></div>
-                      <div class="grid gap-3 sm:grid-cols-2">
-                        <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.commandArguments')}</label><Textarea value={draft.command} onInput={(event) => setTemplateDraft({ ...draft, command: event.currentTarget.value })} rows={6} class="font-mono text-xs" /></div>
-                        <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.environmentVariables')}</label><Textarea value={draft.environment} onInput={(event) => setTemplateDraft({ ...draft, environment: event.currentTarget.value })} rows={6} class="font-mono text-xs" /></div>
+                    <details class="service-template-editor__advanced mt-3" open={Boolean(draft().entrypoint || draft().command || draft().environment)}>
+                      <summary class="cursor-pointer py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.optionalContainerSettings')}</summary>
+                      <div class="space-y-3 pb-1 pt-2">
+                        <div><TemplateEditorLabel for="template-editor-entrypoint" label={i18n.t('webServices.managed.entrypoint')} /><Input id="template-editor-entrypoint" value={draft().entrypoint} class="font-mono" placeholder={i18n.t('webServices.managed.placeholders.entrypoint')} onInput={(event) => update({ entrypoint: event.currentTarget.value })} /></div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                          <div><TemplateEditorLabel for="template-editor-command" label={i18n.t('webServices.managed.commandArguments')} /><Textarea id="template-editor-command" value={draft().command} rows={5} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.commandArguments')} onInput={(event) => update({ command: event.currentTarget.value })} /></div>
+                          <div><TemplateEditorLabel for="template-editor-environment" label={i18n.t('webServices.managed.environmentVariables')} /><Textarea id="template-editor-environment" data-template-field="environment" value={draft().environment} rows={5} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.environmentVariables')} aria-invalid={invalid('environment') ? 'true' : undefined} aria-describedby="template-editor-environment-help" onInput={(event) => update({ environment: event.currentTarget.value })} /><TemplateEditorGuidance id="template-editor-environment-help" help={i18n.t('webServices.managed.help.environmentVariables')} error={error('environment')} visible={templateValidationVisible()} /></div>
+                        </div>
+                      </div>
+                    </details>
+                  </Show>
+
+                  <Show when={draft().kind === 'compose'}>
+                    <div class="mt-3 grid gap-x-4 gap-y-3 sm:grid-cols-[1fr_180px]">
+                      <div>
+                        <TemplateEditorLabel for="template-editor-main-service" label={i18n.t('webServices.managed.composeMainService')} required />
+                        <Input id="template-editor-main-service" data-template-field="mainService" value={draft().mainService} placeholder={i18n.t('webServices.managed.placeholders.composeMainService')} aria-invalid={invalid('mainService') ? 'true' : undefined} aria-describedby="template-editor-main-service-help" onInput={(event) => update({ mainService: event.currentTarget.value })} />
+                        <TemplateEditorGuidance id="template-editor-main-service-help" help={i18n.t('webServices.managed.help.composeMainService')} error={error('mainService')} visible={templateValidationVisible()} />
+                      </div>
+                      <div>
+                        <TemplateEditorLabel for="template-editor-compose-port" label={i18n.t('webServices.managed.containerPort')} required />
+                        <Input id="template-editor-compose-port" data-template-field="containerPort" type="number" min="1" max="65535" value={draft().containerPort} placeholder={i18n.t('webServices.managed.placeholders.containerPort')} inputmode="numeric" aria-invalid={invalid('containerPort') ? 'true' : undefined} aria-describedby="template-editor-compose-port-help" onInput={(event) => update({ containerPort: event.currentTarget.value })} />
+                        <TemplateEditorGuidance id="template-editor-compose-port-help" help={i18n.t('webServices.managed.help.containerPort')} error={error('containerPort')} visible={templateValidationVisible()} />
                       </div>
                     </div>
-                  </details>
-                </Show>
-                <Show when={draft.kind === 'compose'}>
-                  <div class="mt-3 grid gap-3 sm:grid-cols-[1fr_180px]">
-                    <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.composeMainService')}</label><Input value={draft.mainService} onInput={(event) => setTemplateDraft({ ...draft, mainService: event.currentTarget.value })} /></div>
-                    <div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.containerPort')}</label><Input type="number" min="1" max="65535" value={draft.containerPort} onInput={(event) => setTemplateDraft({ ...draft, containerPort: event.currentTarget.value })} inputmode="numeric" /></div>
-                  </div>
-                  <div class="mt-3"><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.composeYAML')}</label><Textarea value={draft.composeYAML} onInput={(event) => setTemplateDraft({ ...draft, composeYAML: event.currentTarget.value })} rows={18} class="font-mono text-xs" /></div>
-                </Show>
-              </section>
-            </div>
-          )}</Show>
+                    <div class="mt-3">
+                      <TemplateEditorLabel for="template-editor-compose-yaml" label={i18n.t('webServices.managed.composeYAML')} required />
+                      <Textarea id="template-editor-compose-yaml" data-template-field="composeYAML" value={draft().composeYAML} rows={14} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.composeYAML')} aria-invalid={invalid('composeYAML') ? 'true' : undefined} aria-describedby="template-editor-compose-yaml-help" onInput={(event) => update({ composeYAML: event.currentTarget.value })} />
+                      <TemplateEditorGuidance id="template-editor-compose-yaml-help" help={i18n.t('webServices.managed.help.composeYAML')} error={error('composeYAML')} visible={templateValidationVisible()} />
+                    </div>
+                  </Show>
+                </section>
+              </div>
+            );
+          }}</Show>
         </div>
       </EnvAppDrawer>
 
@@ -2234,7 +2552,7 @@ export function EnvPortForwardsPage() {
                   onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
                 />
               </Show>
-              <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
+              <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><ManagedServiceShapingOrb /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
             </div>
           );
         }}</Show>
