@@ -72,12 +72,12 @@ Two paths to get started: Desktop (recommended for most users) or CLI.
 ### Desktop App
 
 1. Download Redeven Desktop from [GitHub Releases](https://github.com/floegence/redeven/releases). Public releases currently provide macOS and Linux installers. Windows 11 x64 remains an internal WSL certification build until code signing and signed update verification are enabled.
-2. Open the app. On macOS or Linux, choose Local, Provider, SSH Host, or a saved URL. On Windows, register an initialized WSL 2 distribution in the Environment Center; Desktop provides no native Local Environment, Windows Runtime, or local container Runtime.
+2. Open the app. On macOS or Linux, choose Local, Redeven Cloud, SSH Host, or a saved URL. On Windows, register an initialized WSL 2 distribution in the Environment Center; Desktop provides no native Local Environment, Windows Runtime, or local container Runtime.
 3. Start working — the workspace opens in your browser automatically.
 
 Each registered distribution is a separate WSL Environment. Desktop transfers its matching Linux x64 Runtime to the distribution user's `~/.redeven`; it does not install or manage WSL, use `/mnt/c`, or require `systemd`. Quitting, updating, or uninstalling Desktop does not stop the WSL Runtime or delete its data. Use Stop on that Environment when you want to stop it.
 
-For remote machines: Desktop can auto-install the matching Redeven release over SSH, then explicitly connect that managed SSH runtime to a provider Environment when you choose to. No manual setup on the remote host.
+For remote machines: Desktop can auto-install the matching Redeven release over SSH, then explicitly connect that managed SSH runtime to a Redeven Cloud Environment when you choose to. No manual setup on the remote host.
 
 <!-- readme-section:cli -->
 <a id="cli"></a>
@@ -122,7 +122,7 @@ Run `redeven help run` for other run modes and optional local password protectio
 | Browser Editor | Browser editor sessions set up explicitly by Desktop, isolated per workspace. |
 | Web Services | Runtime-managed service registration and port-forward access without hand-written SSH tunnels. |
 | Flower | Optional AI surfaces that use runtime-validated tools and local model/host configuration. |
-| Desktop | Native launcher for local, provider-hosted, SSH-bootstrapped, and saved Local UI environments. |
+| Desktop | Native launcher for local, Redeven Cloud-hosted, SSH-bootstrapped, and saved Local UI environments. |
 
 <!-- readme-section:security -->
 <a id="security"></a>
@@ -145,7 +145,7 @@ Redeven leads with capability, but the runtime is still the trust boundary becau
 
 Redeven keeps maintained repository knowledge in [OKF v0.1](okf/index.md). The OKF corpus is generated from current source-level behavior and is embedded into the runtime for `okf.search`.
 
-Machine-readable provider integration surface lives in [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Outside OKF, maintained Markdown is intentionally limited to `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, the canonical `README.md`, and the supported `README.<locale>.md` translations declared in `assets/readme/locales.json`.
+The machine-readable RCPP Provider integration surface lives in [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Outside OKF, maintained Markdown is intentionally limited to `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, the canonical `README.md`, and the supported `README.<locale>.md` translations declared in `assets/readme/locales.json`.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

@@ -218,8 +218,8 @@ describe('environmentGuidanceSession', () => {
       pending_intent: null,
       feedback: {
         tone: 'warning',
-        title: 'Refresh provider status',
-        detail: 'Reconnect this provider in Desktop to restore remote access.',
+        title: 'Refresh Redeven Cloud status',
+        detail: 'Reconnect Redeven Cloud in Desktop to restore remote access.',
       },
     }));
   });

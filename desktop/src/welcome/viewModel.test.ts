@@ -1141,7 +1141,7 @@ describe('buildEnvironmentCardModel', () => {
       target_primary: 'http://localhost:23998/',
     }));
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
-      kind_label: 'Provider',
+      kind_label: 'Redeven Cloud',
       status_label: 'READY',
       target_primary: 'https://dev.redeven.test/env/env_demo',
       target_secondary: '',
@@ -1166,13 +1166,13 @@ describe('buildEnvironmentCardModel', () => {
       defaultFact('VERSION', 'v1.4.2'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
-      defaultFact('RUNS ON', 'Provider remote', {
+      defaultFact('RUNS ON', 'Redeven Cloud remote', {
         endpoints: [
           { label: 'PROVIDER', value: 'https://dev.redeven.test/env/env_demo', monospace: true, copy_label: 'Copy environment URL' },
         ],
       }),
       placeholderFact('VERSION', 'UNKNOWN'),
-      defaultFact('PROVIDER', 'Demo Control Plane'),
+      defaultFact('REDEVEN CLOUD', 'Redeven Cloud'),
       defaultFact('LOCAL LINK', 'No managed runtime linked'),
       defaultFact('ENV ID', 'env_demo', { copy_value: true }),
     ]);
@@ -2292,14 +2292,14 @@ describe('buildEnvironmentCardModel', () => {
           kind: 'popover',
           tone: 'warning',
           eyebrow: 'Remote route unavailable',
-          title: 'Provider reports offline',
-          detail: 'The provider currently reports this environment as offline.',
+          title: 'Redeven Cloud reports offline',
+          detail: 'Redeven Cloud currently reports this Environment as offline.',
           actions: [{
             label: 'Refresh status',
             emphasis: 'secondary',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh provider status',
+              label: 'Refresh Redeven Cloud status',
               enabled: true,
               variant: 'outline',
             },
@@ -2309,10 +2309,10 @@ describe('buildEnvironmentCardModel', () => {
         menu_actions: [
           {
             id: 'refresh_runtime',
-            label: 'Refresh provider status',
+            label: 'Refresh Redeven Cloud status',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh provider status',
+              label: 'Refresh Redeven Cloud status',
               enabled: true,
               variant: 'outline',
             },
@@ -2400,7 +2400,7 @@ describe('buildEnvironmentCardModel', () => {
       action_presentation: {
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Refresh provider status',
+          title: 'Refresh Redeven Cloud status',
           detail: 'Remote status is not yet confirmed.',
           actions: [{
             label: 'Refresh status',
@@ -2449,7 +2449,7 @@ describe('buildEnvironmentCardModel', () => {
         ],
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Provider reports offline',
+          title: 'Redeven Cloud reports offline',
         },
       },
     });
@@ -2457,11 +2457,11 @@ describe('buildEnvironmentCardModel', () => {
       action_presentation: {
         menu_actions: expect.arrayContaining([{
           id: 'connect_provider_runtime',
-          label: 'Connect to provider...',
+          label: 'Connect to Redeven Cloud...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           action: {
             intent: 'connect_provider_runtime',
-            label: 'Connect to provider...',
+            label: 'Connect to Redeven Cloud...',
             label_key: 'environmentAction.connectToProviderEllipsis',
             enabled: true,
             variant: 'outline',
@@ -2554,11 +2554,11 @@ describe('buildEnvironmentCardModel', () => {
       action_presentation: {
         menu_actions: expect.arrayContaining([{
           id: 'disconnect_provider_runtime',
-          label: 'Disconnect from provider',
+          label: 'Disconnect from Redeven Cloud',
           label_key: 'environmentAction.disconnectFromProvider',
           action: {
             intent: 'disconnect_provider_runtime',
-            label: 'Disconnect from provider',
+            label: 'Disconnect from Redeven Cloud',
             label_key: 'environmentAction.disconnectFromProvider',
             enabled: true,
             variant: 'outline',
@@ -2628,11 +2628,11 @@ describe('buildEnvironmentCardModel', () => {
       action_presentation: {
         menu_actions: expect.arrayContaining([{
           id: 'disconnect_provider_runtime',
-          label: 'Disconnect from provider',
+          label: 'Disconnect from Redeven Cloud',
           label_key: 'environmentAction.disconnectFromProvider',
           action: {
             intent: 'disconnect_provider_runtime',
-            label: 'Disconnect from provider',
+            label: 'Disconnect from Redeven Cloud',
             label_key: 'environmentAction.disconnectFromProvider',
             enabled: true,
             variant: 'outline',
@@ -2670,10 +2670,10 @@ describe('buildEnvironmentCardModel', () => {
         menu_actions: [
           {
             id: 'refresh_runtime',
-            label: 'Refresh provider status',
+            label: 'Refresh Redeven Cloud status',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh provider status',
+              label: 'Refresh Redeven Cloud status',
               enabled: true,
               variant: 'outline',
             },
@@ -2781,7 +2781,7 @@ describe('buildEnvironmentCardModel', () => {
         },
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Provider reports offline',
+          title: 'Redeven Cloud reports offline',
         },
       },
     });
@@ -2919,14 +2919,14 @@ describe('buildEnvironmentCardModel', () => {
           kind: 'popover',
           tone: 'warning',
           eyebrow: 'Remote route unavailable',
-          title: 'Provider reports offline',
-          detail: 'The provider currently reports this environment as offline.',
+          title: 'Redeven Cloud reports offline',
+          detail: 'Redeven Cloud currently reports this Environment as offline.',
           actions: [{
             label: 'Refresh status',
             emphasis: 'secondary',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh provider status',
+              label: 'Refresh Redeven Cloud status',
               enabled: true,
               variant: 'outline',
             },
@@ -2936,10 +2936,10 @@ describe('buildEnvironmentCardModel', () => {
         menu_actions: [
           {
             id: 'refresh_runtime',
-            label: 'Refresh provider status',
+            label: 'Refresh Redeven Cloud status',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh provider status',
+              label: 'Refresh Redeven Cloud status',
               enabled: true,
               variant: 'outline',
             },
@@ -2992,10 +2992,10 @@ describe('buildEnvironmentCardModel', () => {
         menu_actions: [
           {
             id: 'refresh_runtime',
-            label: 'Refresh provider status',
+            label: 'Refresh Redeven Cloud status',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh provider status',
+              label: 'Refresh Redeven Cloud status',
               enabled: true,
               variant: 'outline',
             },

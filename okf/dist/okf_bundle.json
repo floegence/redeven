@@ -1167,7 +1167,7 @@
               "provider",
               "runtime"
             ],
-            "summary": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.",
+            "summary": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. `Provider` is the protocol and engineering term; the supported Desktop product surface presents this control plane as `Redeven Cloud`. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.",
             "section_count": 2
           }
         ]
@@ -7619,7 +7619,7 @@
         "provider",
         "runtime"
       ],
-      "timestamp": "2026-08-24T00:00:00Z",
+      "timestamp": "2026-08-28T00:00:00Z",
       "frontmatter": {
         "description": "Provider discovery, health, open-session, Runtime link, and access authorization contract.",
         "tags": [
@@ -7630,19 +7630,19 @@
           "provider",
           "runtime"
         ],
-        "timestamp": "2026-08-24T00:00:00Z",
+        "timestamp": "2026-08-28T00:00:00Z",
         "title": "RCPP v3 provider API",
         "type": "Protocol Contract"
       },
-      "body_length": 2917,
-      "summary": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.",
+      "body_length": 4868,
+      "summary": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. `Provider` is the protocol and engineering term; the supported Desktop product surface presents this control plane as `Redeven Cloud`. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Discovery and access\n\nProvider exposes discovery, Environment list, health, Desktop open-session, Runtime link authorization/exchange, and the authorization needed to forward normal requests. Open-session is access-only and never carries a process-management instruction. Runtime link establishes the scoped Provider-to-Runtime access relationship; it does not enroll a lifecycle supervisor.\n\nEnvironment list responses describe identity, availability, health, and access routes. They do not contain `runtime_management`, lifecycle permissions, permits, target generations, bindings, relay state, supervisor freshness, or operation projections. Health is an access observation and cannot make Provider a lifecycle coordinator.\n\n## Authorization boundary\n\nProvider authenticates the user and grants access to an Environment or Runtime link. It never receives Desktop SSH credentials, container credentials, a Runtime installation root, or a Runtime package. It cannot turn a Gateway access endpoint into a management channel.\n\nDesktop may show Provider Connect or Disconnect for a directly managed Runtime target. That action links access identity only. All Runtime lifecycle actions continue through the target's Local, SSH, or container channel and remain available independently of Provider health.\n\nThe retired Runtime management routes, permits, enrollment challenge/exchange, supervisor heartbeat, poll/respond transport, bindings, relays, cluster state, and authorization audit have no supported schema or compatibility shell. Because those contracts were not deployed, their migrations are removed rather than retained as dead production paths.",
-          "char_count": 1654
+          "body": "## Discovery and access\n\nProvider exposes discovery, Environment list, health, Desktop open-session, Runtime link authorization/exchange, and the authorization needed to forward normal requests. Open-session is access-only and never carries a process-management instruction. Runtime link establishes the scoped Provider-to-Runtime access relationship; it does not enroll a lifecycle supervisor.\n\nEnvironment list responses describe identity, availability, health, and access routes. They do not contain `runtime_management`, lifecycle permissions, permits, target generations, bindings, relay state, supervisor freshness, or operation projections. Health is an access observation and cannot make Provider a lifecycle coordinator.\n\n## Authorization boundary\n\nProvider authenticates the user and grants access to an Environment or Runtime link. It never receives Desktop SSH credentials, container credentials, a Runtime installation root, or a Runtime package. It cannot turn a Gateway access endpoint into a management channel.\n\nDesktop may show Provider Connect or Disconnect for a directly managed Runtime target. That action links access identity only. All Runtime lifecycle actions continue through the target's Local, SSH, or container channel and remain available independently of Provider health.\n\nThe retired Runtime management routes, permits, enrollment challenge/exchange, supervisor heartbeat, poll/respond transport, bindings, relays, cluster state, and authorization audit have no supported schema or compatibility shell. Because those contracts were not deployed, their migrations are removed rather than retained as dead production paths.\n\n## Desktop product and origin boundary\n\nReleased Desktop builds accept only the canonical production Redeven Cloud HTTPS origin defined by the shared origin policy. Development builds may additionally accept `https://redeven.test`; no build accepts an arbitrary custom control-plane URL. Welcome uses the fixed `Redeven Cloud` name and offers only the origins allowed by that build. The main process repeats the same check before starting browser authorization and before saving an authorization result, so Launcher IPC and deep links cannot widen the product boundary.\n\nOn upgrade, Desktop removes unsupported control-plane accounts, refresh tokens, cached Provider Environments, and matching Desktop-local binding snapshots before Environment synchronization or window restoration. This migration is idempotent and must persist successfully before normal startup continues. It does not revoke remote authorization, close sessions, or disconnect a Runtime-side link.\n\nIf a Runtime later reports an unsupported legacy control-plane link, Desktop identifies it as an unsupported legacy link rather than Redeven Cloud. Redeven Cloud open, refresh, and new-link actions stay unavailable; direct Runtime lifecycle actions remain independent, and the only control-plane recovery action is a user-initiated disconnect of that legacy link.",
+          "char_count": 2988
         },
         {
           "id": "boundaries",
@@ -7672,13 +7672,37 @@
           "description": "Separates Provider cards from direct Runtime operation targets."
         },
         {
+          "id": "redeven:desktop/src/shared/redevenCloud.ts:1:authoritative released and development redeven cloud origin policy.",
+          "source": "redeven:desktop/src/shared/redevenCloud.ts",
+          "line": 1,
+          "description": "Authoritative released and development Redeven Cloud origin policy."
+        },
+        {
+          "id": "redeven:desktop/src/main/desktopPreferences.ts:1808:idempotent desktop-local cleanup of unsupported saved control-plane state.",
+          "source": "redeven:desktop/src/main/desktopPreferences.ts",
+          "line": 1808,
+          "description": "Idempotent Desktop-local cleanup of unsupported saved control-plane state."
+        },
+        {
+          "id": "redeven:desktop/src/main/main.ts:4003:startup persistence and authorization-boundary enforcement.",
+          "source": "redeven:desktop/src/main/main.ts",
+          "line": 4003,
+          "description": "Startup persistence and authorization-boundary enforcement."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/viewModel.ts:646:unsupported legacy runtime-link presentation and manual recovery boundary.",
+          "source": "redeven:desktop/src/welcome/viewModel.ts",
+          "line": 646,
+          "description": "Unsupported legacy Runtime-link presentation and manual recovery boundary."
+        },
+        {
           "id": "spec/openapi/gateway-v2.yaml:1:gateway access-only protocol surface.",
           "source": "spec/openapi/gateway-v2.yaml",
           "line": 1,
           "description": "Gateway access-only protocol surface."
         }
       ],
-      "snippet": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management c",
+      "snippet": "RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. `Provider` is the protocol and engineering term; the supported Desktop product surface presents thi",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -10727,5 +10751,5 @@
       ]
     }
   ],
-  "source_sha256": "87b75de96270d2d441ab6e57849250ae3d72774f3846f222fcbd46ea370d56a8"
+  "source_sha256": "c7a29cdf3626eb27478bb75ae6b5c222c3d5bda65ceb43da7b4f3f5b75c5b822"
 }

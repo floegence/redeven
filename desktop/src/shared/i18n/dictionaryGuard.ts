@@ -8,6 +8,7 @@ import { isPluralMessage, type PluralMessage, type TranslationLeaf, type Transla
 import {
   countRedevenI18nFixedEnglishTermForms,
   REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES,
+  REDEVEN_I18N_MODEL_PROVIDER_ENGLISH_TERM_FAMILY,
   REDEVEN_I18N_MODEL_PROVIDER_LOCALIZED_PATH_PREFIXES,
 } from './terminology';
 
@@ -262,17 +263,18 @@ export function validateDictionaryLocalizedModelProviderTerms(
       continue;
     }
     const targetText = messageStrings(targetRow.value).join('\n');
-    for (const family of REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES) {
-      const targetCounts = countRedevenI18nFixedEnglishTermForms(targetText, family);
-      for (const form of family.forms) {
-        const actual = targetCounts[form] ?? 0;
-        if (actual > 0) {
-          issues.push({
-            locale,
-            path: targetRow.path,
-            message: `Model-provider term form "${form}" must be localized in this product surface.`,
-          });
-        }
+    const targetCounts = countRedevenI18nFixedEnglishTermForms(
+      targetText,
+      REDEVEN_I18N_MODEL_PROVIDER_ENGLISH_TERM_FAMILY,
+    );
+    for (const form of REDEVEN_I18N_MODEL_PROVIDER_ENGLISH_TERM_FAMILY.forms) {
+      const actual = targetCounts[form] ?? 0;
+      if (actual > 0) {
+        issues.push({
+          locale,
+          path: targetRow.path,
+          message: `Model-provider term form "${form}" must be localized in this product surface.`,
+        });
       }
     }
   }

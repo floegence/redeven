@@ -72,12 +72,12 @@ Redeven は、コンピューターとサーバーを 1 つのブラウザータ
 ### Desktop アプリ
 
 1. [GitHub Releases](https://github.com/floegence/redeven/releases) から Redeven Desktop をダウンロードします。公開リリースでは現在、macOS と Linux のインストーラーを提供しています。コード署名と署名済み更新の検証が有効になるまで、Windows 11 x64 は内部 WSL 認証ビルドのみです。
-2. アプリを開きます。macOS または Linux では、ローカル、Provider、SSH ホスト、または保存済み URL を選択できます。Windows では、環境センターで初期化済みの WSL 2 ディストリビューションを登録します。Desktop はネイティブのローカル環境、Windows ランタイム、ローカルコンテナーのランタイムを提供しません。
+2. アプリを開きます。macOS または Linux では、ローカル、Redeven Cloud、SSH ホスト、または保存済み URL を選択できます。Windows では、環境センターで初期化済みの WSL 2 ディストリビューションを登録します。Desktop はネイティブのローカル環境、Windows ランタイム、ローカルコンテナーのランタイムを提供しません。
 3. 作業を開始します。ワークスペースはブラウザーで自動的に開きます。
 
 登録した各ディストリビューションは、個別の WSL 環境です。Desktop は対応する Linux x64 ランタイムをディストリビューション利用者の `~/.redeven` に転送します。WSL のインストールや管理、`/mnt/c` の使用、`systemd` への依存は行いません。Desktop を終了、更新、またはアンインストールしても、WSL ランタイムの停止やデータ削除は行われません。停止する場合は、該当する環境の停止操作を使用してください。
 
-リモートマシンでは、Desktop が SSH 経由で対応する Redeven リリースを自動インストールできます。必要に応じて、その管理対象 SSH ランタイムを provider 環境へ明示的に接続できます。リモートホストで手動設定を行う必要はありません。
+リモートマシンでは、Desktop が SSH 経由で対応する Redeven リリースを自動インストールできます。必要に応じて、その管理対象 SSH ランタイムを Redeven Cloud 環境へ明示的に接続できます。リモートホストで手動設定を行う必要はありません。
 
 <!-- readme-section:cli -->
 <a id="cli"></a>
@@ -122,7 +122,7 @@ Linux では、エクスポートした公開証明書を、実際に使用す�
 | Browser Editor | Desktop が明示的にセットアップし、ワークスペースごとに分離されたブラウザーエディターセッション。 |
 | Web サービス | 手書きの SSH トンネルを使わずに、ランタイム管理のサービス登録とポートフォワーディングによるアクセス。 |
 | Flower | ランタイムで検証されたツールと、ローカルのモデルおよびホスト設定を使用する、必要に応じて利用できる AI サーフェス。 |
-| Desktop | ローカル環境、provider でホストされた環境、SSH でブートストラップした環境、保存済みの Local UI 環境に対応するネイティブランチャー。 |
+| Desktop | ローカル環境、Redeven Cloud でホストされた環境、SSH でブートストラップした環境、保存済みの Local UI 環境に対応するネイティブランチャー。 |
 
 <!-- readme-section:security -->
 <a id="security"></a>
@@ -145,7 +145,7 @@ Redeven は機能を前面に出しますが、実際のホストを管理する
 
 Redeven は、保守対象のリポジトリ知識を [OKF v0.1](okf/index.md) に集約しています。OKF コーパスは現在のソースレベルの動作から生成され、`okf.search` 用にランタイムへ埋め込まれます。
 
-機械可読な provider 統合サーフェスは [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml) にあります。OKF 以外で保守する Markdown は、`AGENTS.md`、`THIRD_PARTY_NOTICES.md`、正本の `README.md`、および `assets/readme/locales.json` で宣言された対応 `README.<locale>.md` 翻訳に限定されます。
+機械可読な RCPP Provider 統合サーフェスは [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml) にあります。OKF 以外で保守する Markdown は、`AGENTS.md`、`THIRD_PARTY_NOTICES.md`、正本の `README.md`、および `assets/readme/locales.json` で宣言された対応 `README.<locale>.md` 翻訳に限定されます。
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

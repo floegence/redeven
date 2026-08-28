@@ -72,12 +72,12 @@ Es gibt zwei Wege für den Einstieg: Desktop, empfohlen für die meisten Benutze
 ### Desktop-App
 
 1. Lade Redeven Desktop über [GitHub Releases](https://github.com/floegence/redeven/releases) herunter. Öffentliche Releases enthalten derzeit Installer für macOS und Linux. Windows 11 x64 bleibt ein interner WSL-Zertifizierungsbuild, bis Codesignierung und die Prüfung signierter Updates aktiviert sind.
-2. Öffne die App. Unter macOS oder Linux kannst du eine lokale Umgebung, Provider, einen SSH-Host oder eine gespeicherte URL wählen. Unter Windows registrierst du im Umgebungscenter eine initialisierte WSL 2-Distribution. Desktop stellt keine native lokale Umgebung, Windows-Laufzeitumgebung oder lokale Container-Laufzeitumgebung bereit.
+2. Öffne die App. Unter macOS oder Linux kannst du eine lokale Umgebung, Redeven Cloud, einen SSH-Host oder eine gespeicherte URL wählen. Unter Windows registrierst du im Umgebungscenter eine initialisierte WSL 2-Distribution. Desktop stellt keine native lokale Umgebung, Windows-Laufzeitumgebung oder lokale Container-Laufzeitumgebung bereit.
 3. Beginne mit der Arbeit. Der Arbeitsbereich öffnet sich automatisch im Browser.
 
 Jede registrierte Distribution ist eine eigene WSL-Umgebung. Desktop überträgt die passende Linux-x64-Laufzeitumgebung nach `~/.redeven` des Distributionsbenutzers. Es installiert oder verwaltet WSL nicht, verwendet `/mnt/c` nicht und benötigt kein `systemd`. Das Beenden, Aktualisieren oder Deinstallieren von Desktop stoppt die WSL-Laufzeitumgebung nicht und löscht ihre Daten nicht. Verwende zum Beenden die Stopp-Aktion der jeweiligen Umgebung.
 
-Für entfernte Rechner kann Desktop die passende Redeven-Version automatisch über SSH installieren. Anschließend verbindet Desktop die verwaltete SSH-Laufzeit auf deine ausdrückliche Auswahl hin mit einer provider-Umgebung. Auf dem entfernten Host ist keine manuelle Einrichtung erforderlich.
+Für entfernte Rechner kann Desktop die passende Redeven-Version automatisch über SSH installieren. Anschließend verbindet Desktop die verwaltete SSH-Laufzeit auf deine ausdrückliche Auswahl hin mit einer Redeven Cloud-Umgebung. Auf dem entfernten Host ist keine manuelle Einrichtung erforderlich.
 
 <!-- readme-section:cli -->
 <a id="cli"></a>
@@ -122,7 +122,7 @@ Weitere Ausführungsmodi und den optionalen lokalen Passwortschutz beschreibt `r
 | Browser Editor | Von Desktop ausdrücklich eingerichtete und nach Arbeitsbereich isolierte Browser-Editor-Sitzungen. |
 | Webdienste | Von der Laufzeit verwaltete Dienstregistrierung und Portweiterleitung ohne manuell erstellte SSH-Tunnel. |
 | Flower | Optionale KI-Oberflächen mit von der Laufzeit geprüften Werkzeugen und lokaler Modell- und Hostkonfiguration. |
-| Desktop | Nativer Starter für lokale, bei einem provider gehostete, per SSH initialisierte und gespeicherte Local UI-Umgebungen. |
+| Desktop | Nativer Starter für lokale, in Redeven Cloud gehostete, per SSH initialisierte und gespeicherte Local UI-Umgebungen. |
 
 <!-- readme-section:security -->
 <a id="security"></a>
@@ -145,7 +145,7 @@ Redeven stellt Funktionen in den Vordergrund. Die Laufzeit bleibt dennoch die Ve
 
 Redeven pflegt sein Repository-Wissen in [OKF v0.1](okf/index.md). Der OKF-Korpus wird aus dem aktuellen Verhalten des Quellcodes erzeugt und für `okf.search` in die Laufzeit eingebettet.
 
-Die maschinenlesbare Oberfläche für provider-Integrationen befindet sich in [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Außerhalb von OKF ist gepflegtes Markdown bewusst auf `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, die maßgebliche `README.md` und die in `assets/readme/locales.json` deklarierten unterstützten Übersetzungen `README.<locale>.md` beschränkt.
+Die maschinenlesbare RCPP Provider-Integrationsoberfläche befindet sich in [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Außerhalb von OKF ist gepflegtes Markdown bewusst auf `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, die maßgebliche `README.md` und die in `assets/readme/locales.json` deklarierten unterstützten Übersetzungen `README.<locale>.md` beschränkt.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

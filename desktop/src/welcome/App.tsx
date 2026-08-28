@@ -107,6 +107,10 @@ import {
 } from '../shared/desktopLauncherIPC';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
+  REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
+  REDEVEN_CLOUD_ORIGIN,
+} from '../shared/redevenCloud';
+import {
   desktopProviderEnvironmentRuntimeLabel,
   desktopProviderOnlineEnvironmentCount,
 } from '../shared/providerEnvironmentState';
@@ -263,7 +267,7 @@ import {
 } from './DesktopThemePicker';
 import { rovingRadioIndexForKey } from './rovingRadioGroup';
 import { RuntimeStatusOrb } from './RuntimeStatusOrb';
-import { desktopControlPlaneKey, suggestControlPlaneDisplayLabel } from '../shared/controlPlaneProvider';
+import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
 import {
   DESKTOP_ACTION_TOAST_LIMIT,
   queueDesktopActionToast,
@@ -540,15 +544,8 @@ type ContainerBackedConnectionDialogState = RuntimeContainerConnectionDialogStat
 type SSHPasswordConnectionDialogState = SSHBackedConnectionDialogState;
 type SSHPasswordDraftState = SSHPasswordConnectionDialogState | GatewaySetupDialogState;
 
-type ControlPlaneOriginMode = 'preset' | 'custom';
-
 type ControlPlaneDialogState = Readonly<{
-  origin_mode: ControlPlaneOriginMode;
-  display_label: string;
-  display_label_touched: boolean;
   provider_origin: string;
-  preset_provider_origin: string;
-  custom_provider_origin: string;
 }> | null;
 
 type EnvironmentGuidanceActionResolution = Readonly<{
@@ -558,12 +555,6 @@ type EnvironmentGuidanceActionResolution = Readonly<{
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
-const OFFICIAL_PROVIDER_DOMAIN_PARTS = ['redeven', 'com'] as const;
-const OFFICIAL_PROVIDER_DOMAIN = OFFICIAL_PROVIDER_DOMAIN_PARTS.join('.');
-const DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN = `https://${OFFICIAL_PROVIDER_DOMAIN}`;
-const DEVELOPMENT_PROVIDER_DOMAIN_PARTS = ['redeven', 'test'] as const;
-const DEVELOPMENT_PROVIDER_DOMAIN = DEVELOPMENT_PROVIDER_DOMAIN_PARTS.join('.');
-const DEVELOPMENT_CONTROL_PLANE_PROVIDER_ORIGIN = `https://${DEVELOPMENT_PROVIDER_DOMAIN}`;
 const DESKTOP_WELCOME_IMPORT_META = import.meta as ImportMeta & {
   readonly env?: Readonly<{
     DEV?: boolean;
@@ -576,15 +567,15 @@ type ControlPlaneProviderPresetOption = Readonly<{
 }>;
 const CONTROL_PLANE_PROVIDER_PRESET_OPTIONS: readonly ControlPlaneProviderPresetOption[] = [
   {
-    display_label: 'Redeven',
-    domain: OFFICIAL_PROVIDER_DOMAIN,
-    provider_origin: DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN,
+    display_label: 'Redeven Cloud',
+    domain: new URL(REDEVEN_CLOUD_ORIGIN).hostname,
+    provider_origin: REDEVEN_CLOUD_ORIGIN,
   },
   ...(DESKTOP_WELCOME_IMPORT_META.env?.DEV === true
     ? [{
-        display_label: 'Redeven Test',
-        domain: DEVELOPMENT_PROVIDER_DOMAIN,
-        provider_origin: DEVELOPMENT_CONTROL_PLANE_PROVIDER_ORIGIN,
+        display_label: 'Redeven Cloud',
+        domain: 'redeven.test',
+        provider_origin: REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
       }]
     : []),
 ];
@@ -852,6 +843,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     'REMOTE OFFLINE': 'environmentStatus.remoteOffline',
     'SYNC FAILED': 'environmentStatus.syncFailed',
     'INVALID PROVIDER': 'environmentStatus.invalidProvider',
+    'INVALID REDEVEN CLOUD': 'environmentStatus.invalidProvider',
     REMOVED: 'environmentStatus.removed',
     'REFRESH NEEDED': 'environmentStatus.refreshNeeded',
     'RUNTIME OFFLINE': 'environmentStatus.runtimeOffline',
@@ -1274,8 +1266,10 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Runtime lock metadata is present but no live runtime is reachable.': 'runtimeMessage.runtimeLockMetadataStale',
     'Runtime status could not be verified.': 'runtimeMessage.runtimeStatusCouldNotBeVerified',
     'Start this runtime before connecting it to a provider.': 'runtimeMessage.startRuntimeBeforeProvider',
+    'Start this runtime before connecting it to Redeven Cloud.': 'runtimeMessage.startRuntimeBeforeProvider',
     'Start this runtime before opening it.': 'runtimeMessage.startRuntimeBeforeOpening',
     'Restart this runtime from Desktop so runtime-control can be prepared.': 'runtimeMessage.restartRuntimeForRuntimeControl',
+    'Restart this runtime with the current Desktop Runtime before connecting it to Redeven Cloud.': 'runtimeMessage.restartRuntimeForRuntimeControl',
     'Runtime-control is not available for this runtime.': 'runtimeMessage.runtimeControlUnavailable',
     'Open this runtime to prepare the Desktop bridge and provider connection.': 'runtimeMessage.openRuntimePrepareProviderConnection',
     'Update this runtime before continuing.': 'runtimeMessage.updateRuntimeBeforeContinuing',
@@ -1288,6 +1282,7 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.': 'runtimeMessage.envAppShellUnavailableRuntimeBuild',
     'Active work may be interrupted. Confirm before changing this runtime.': 'runtimeMessage.confirmActiveWorkBeforeChangingRuntime',
     'Refresh provider status before opening this environment.': 'runtimeMessage.refreshProviderStatusBeforeOpening',
+    'Refresh Redeven Cloud status before opening this environment.': 'runtimeMessage.refreshProviderStatusBeforeOpening',
     'This Local UI target is unavailable right now.': 'runtimeMessage.localUiTargetUnavailable',
     'Runtime is not ready to open yet.': 'runtimeMessage.runtimeNotReadyToOpenYet',
     'Runtime readiness is not available yet.': 'runtimeMessage.runtimeReadinessUnavailable',
@@ -1298,13 +1293,17 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Desktop will wait for the Environment App to finish preparing.': 'runtimeMessage.desktopWaitEnvironmentAppPreparing',
     'Desktop will try opening this runtime and report upgrade guidance if the runtime rejects the connection.': 'runtimeMessage.desktopTryOpenRuntimeReportUpgrade',
     'Provider link needs attention.': 'runtimeMessage.providerLinkNeedsAttentionDetail',
+    'The Redeven Cloud link is already changing state for this Runtime.': 'runtimeMessage.providerLinkNeedsAttentionDetail',
     'Provider link is unavailable for this runtime.': 'runtimeMessage.providerLinkUnavailableDetail',
     'Choose an available Provider Environment before connecting this runtime.': 'runtimeMessage.providerLinkConnectUnavailableDetail',
+    'The legacy control-plane link cannot be disconnected in its current state.': 'runtimeMessage.legacyControlPlaneDisconnectUnavailableDetail',
     'Runtime is offline or unavailable right now. Start it from its source, then refresh status.': 'runtimeMessage.runtimeOfflineRefresh',
     'Desktop needs fresh provider authorization before it can open or connect this provider Environment.': 'runtimeMessage.providerAuthRequired',
+    'Desktop needs fresh Redeven Cloud authorization before it can open or connect this Redeven Cloud Environment.': 'runtimeMessage.providerAuthRequired',
     'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.': 'runtimeMessage.remoteOpenNotReady',
     'Desktop has not checked this runtime yet. Refresh status now, or start the runtime when you already know it is offline.': 'runtimeMessage.statusNotCheckedDetail',
     'Connect this runtime to a provider Environment first. Open stays separate and becomes available after the link is ready.': 'runtimeMessage.connectProviderFirst',
+    'Connect this runtime to a Redeven Cloud Environment first. Open stays separate and becomes available after the link is ready.': 'runtimeMessage.connectProviderFirst',
     'Open becomes available after Desktop updates the runtime package in this running container and the runtime reports ready.': 'runtimeMessage.updateContainerRuntimeReady',
     'Open becomes available after Desktop updates the runtime on this SSH host and it reports ready.': 'runtimeMessage.updateSshRuntimeReady',
     'Open becomes available after Desktop completes the runtime update and it reports ready.': 'runtimeMessage.updateRuntimeReady',
@@ -1341,12 +1340,25 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Redeven could not request access to this environment. Try again.': 'environmentOpenFlow.accessRequestFailedDetail',
     'Access is not available for this environment yet. Check the connection and try again.': 'environmentOpenFlow.accessUnavailableDetail',
     'Refreshing the latest environment status from this provider.': 'runtimeMessage.providerRefreshingDetail',
+    'Refreshing the latest environment status from Redeven Cloud.': 'runtimeMessage.providerRefreshingDetail',
     'Desktop authorization expired. Reconnect in your browser to refresh environments again.': 'runtimeMessage.providerAuthorizationExpiredDetail',
     'Desktop could not reach this provider.': 'runtimeMessage.providerReachFailedDetail',
+    'Desktop could not reach Redeven Cloud.': 'runtimeMessage.providerReachFailedDetail',
     'This provider returned an invalid response.': 'runtimeMessage.providerInvalidResponseDetail',
+    'Redeven Cloud returned an invalid response.': 'runtimeMessage.providerInvalidResponseDetail',
     'Desktop could not refresh this provider.': 'runtimeMessage.providerRefreshFailedDetail',
+    'Desktop could not refresh Redeven Cloud.': 'runtimeMessage.providerRefreshFailedDetail',
+    'Redeven Cloud currently reports this Environment as offline.': 'toast.environmentOffline',
+    'Remote status is stale. Refresh Redeven Cloud to confirm the current state.': 'toast.environmentStatusStale',
+    'This Environment is no longer published by Redeven Cloud.': 'runtimeMessage.environmentRemoved',
+    'Reconnect Redeven Cloud in Desktop to restore access.': 'runtimeMessage.providerAuthRequired',
+    'Reconnect Redeven Cloud in Desktop to restore remote access.': 'runtimeMessage.providerAuthRequired',
+    'Desktop could not refresh Redeven Cloud from this device.': 'runtimeMessage.providerReachFailedDetail',
+    'Redeven Cloud returned an invalid response while Desktop refreshed status.': 'runtimeMessage.providerInvalidResponseDetail',
     'The last provider sync is getting old. Refresh to confirm the latest environment status.': 'runtimeMessage.providerStatusStaleDetail',
+    'The last Redeven Cloud sync is getting old. Refresh to confirm the latest environment status.': 'runtimeMessage.providerStatusStaleDetail',
     'Desktop has active provider authorization and a fresh environment catalog.': 'runtimeMessage.providerAuthorizedDetail',
+    'Desktop has active Redeven Cloud authorization and a fresh environment catalog.': 'runtimeMessage.providerAuthorizedDetail',
   });
 }
 
@@ -1402,6 +1414,7 @@ function localizedOverlayTitle(i18n: DesktopI18n, title: string): string {
     'Needs attention': 'progress.needsAttention',
     'Runtime offline': 'runtimeMessage.runtimeOfflineTitle',
     'Connect to provider to continue': 'runtimeMessage.connectProviderTitle',
+    'Connect to Redeven Cloud to continue': 'runtimeMessage.connectProviderTitle',
     'Provider link failed': 'runtimeMessage.providerLinkFailedTitle',
     'Provider unlink failed': 'runtimeMessage.providerUnlinkFailedTitle',
     'Status refresh failed': 'runtimeMessage.statusRefreshFailedTitle',
@@ -1432,11 +1445,16 @@ function localizedOverlayTitle(i18n: DesktopI18n, title: string): string {
     'Redeven Desktop update required': 'runtimeMessage.desktopUpdateRequired',
     'Runtime cannot open yet': 'runtimeMessage.runtimeCannotOpenYet',
     'Provider reports offline': 'runtimeMessage.providerReportsOffline',
+    'Redeven Cloud reports offline': 'runtimeMessage.providerReportsOffline',
     'Provider is unreachable': 'runtimeMessage.providerUnreachable',
+    'Redeven Cloud is unreachable': 'runtimeMessage.providerUnreachable',
     'Provider response is invalid': 'runtimeMessage.providerResponseInvalid',
+    'Redeven Cloud response is invalid': 'runtimeMessage.providerResponseInvalid',
     'Environment removed': 'runtimeMessage.environmentRemoved',
     'Provider status is stale': 'runtimeMessage.providerStatusStale',
+    'Redeven Cloud status is stale': 'runtimeMessage.providerStatusStale',
     'Refresh provider status': 'environmentAction.refreshProviderStatus',
+    'Refresh Redeven Cloud status': 'environmentAction.refreshProviderStatus',
     'Refresh status to continue': 'runtimeMessage.refreshStatusTitle',
     'Runtime still needs attention': 'runtimeMessage.runtimeStillNeedsAttention',
   });
@@ -1496,10 +1514,11 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
     'RUNS ON': 'environmentFacts.runsOn',
     CONTAINER: 'environmentFacts.container',
     VERSION: 'environmentFacts.version',
-    PROVIDER: 'environmentFacts.provider',
+    'REDEVEN CLOUD': 'environmentFacts.provider',
+    'CONTROL PLANE': 'environmentFacts.controlPlane',
     'LOCAL LINK': 'environmentFacts.localLink',
     'ENV ID': 'environmentFacts.environmentId',
-    Provider: 'environmentFacts.provider',
+    'Redeven Cloud': 'environmentFacts.provider',
     Gateway: 'environmentCenter.gatewaysSection',
     'Runtime root': 'environmentFacts.runtimeRoot',
     Bootstrap: 'environmentFacts.bootstrap',
@@ -1544,9 +1563,10 @@ function localizedFactValue(i18n: DesktopI18n, label: string, value: string): st
       Unknown: 'environmentFacts.unknown',
     });
   }
-  if (label === 'PROVIDER') {
+  if (label === 'REDEVEN CLOUD' || label === 'CONTROL PLANE') {
     return localizedStringByValue(i18n, value, {
       None: 'environmentFacts.none',
+      'Unsupported legacy control-plane link': 'environmentFacts.unsupportedLegacyControlPlaneLink',
     });
   }
   if (label === 'ENV ID') {
@@ -1564,6 +1584,7 @@ function localizedFactValue(i18n: DesktopI18n, label: string, value: string): st
     return localizedStringByValue(i18n, value, {
       'This device': 'environmentFacts.thisDevice',
       'Provider remote': 'environmentFacts.providerRemote',
+      'Redeven Cloud remote': 'environmentFacts.providerRemote',
       'LAN host': 'environmentFacts.lanHost',
       'Remote host': 'environmentFacts.remoteHost',
       'Unknown host': 'environmentFacts.unknownHost',
@@ -1580,6 +1601,7 @@ function localizedFactValue(i18n: DesktopI18n, label: string, value: string): st
     return localizedStringByValue(i18n, value, {
       'Local environment': 'environmentFacts.localEnvironment',
       'Provider environment': 'environmentFacts.providerEnvironment',
+      'Redeven Cloud environment': 'environmentFacts.providerEnvironment',
     });
   }
   if (value === '' && label !== 'CONTAINER') {
@@ -1886,7 +1908,8 @@ function issueToastTone(issue: DesktopWelcomeIssue): DesktopActionToastTone {
 }
 
 function controlPlaneName(controlPlane: DesktopControlPlaneSummary): string {
-  return trimString(controlPlane.display_label) || controlPlane.provider.display_name;
+  void controlPlane;
+  return 'Redeven Cloud';
 }
 
 function environmentRuntimeServiceSnapshot(
@@ -2233,55 +2256,20 @@ function controlPlaneProviderPresetForOrigin(providerOrigin: string): ControlPla
 
 function defaultControlPlaneProviderPreset(): ControlPlaneProviderPresetOption {
   return CONTROL_PLANE_PROVIDER_PRESET_OPTIONS[0] ?? {
-    display_label: 'Redeven',
-    domain: OFFICIAL_PROVIDER_DOMAIN,
-    provider_origin: DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN,
+    display_label: 'Redeven Cloud',
+    domain: new URL(REDEVEN_CLOUD_ORIGIN).hostname,
+    provider_origin: REDEVEN_CLOUD_ORIGIN,
   };
-}
-
-function suggestControlPlaneProviderName(providerOrigin: string): string {
-  return controlPlaneProviderPresetForOrigin(providerOrigin)?.display_label
-    ?? suggestControlPlaneDisplayLabel(providerOrigin);
-}
-
-function syncControlPlaneDisplayLabel(
-  state: Exclude<ControlPlaneDialogState, null>,
-  providerOrigin: string,
-): Pick<Exclude<ControlPlaneDialogState, null>, 'display_label'> {
-  return {
-    display_label: state.display_label_touched
-      ? state.display_label
-      : suggestControlPlaneProviderName(providerOrigin),
-  };
-}
-
-function resolvedControlPlaneProviderName(state: Exclude<ControlPlaneDialogState, null>): string {
-  const clean = trimString(state.display_label);
-  return clean === '' ? suggestControlPlaneProviderName(state.provider_origin) : clean;
 }
 
 function createControlPlaneDialogState(
   overrides: Partial<Exclude<ControlPlaneDialogState, null>> = {},
 ): Exclude<ControlPlaneDialogState, null> {
   const requestedProviderOrigin = trimString(overrides.provider_origin);
-  const requestedPreset = controlPlaneProviderPresetForOrigin(requestedProviderOrigin);
   const defaultPreset = defaultControlPlaneProviderPreset();
-  const originMode = overrides.origin_mode
-    ?? (requestedProviderOrigin !== '' && !requestedPreset ? 'custom' : 'preset');
-  const presetProviderOrigin = trimString(overrides.preset_provider_origin)
-    || requestedPreset?.provider_origin
-    || defaultPreset.provider_origin;
-  const customProviderOrigin = trimString(overrides.custom_provider_origin)
-    || (requestedProviderOrigin !== '' && !requestedPreset ? requestedProviderOrigin : '');
-  const providerOrigin = originMode === 'custom' ? customProviderOrigin : presetProviderOrigin;
-  const displayLabel = trimString(overrides.display_label);
   return {
-    origin_mode: originMode,
-    provider_origin: providerOrigin,
-    preset_provider_origin: presetProviderOrigin,
-    custom_provider_origin: customProviderOrigin,
-    display_label: displayLabel || suggestControlPlaneProviderName(providerOrigin),
-    display_label_touched: overrides.display_label_touched === true,
+    provider_origin: controlPlaneProviderPresetForOrigin(requestedProviderOrigin)?.provider_origin
+      ?? defaultPreset.provider_origin,
   };
 }
 
@@ -4067,57 +4055,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateControlPlaneDialogField(
-    name: 'display_label' | 'display_label_auto' | 'provider_origin' | 'origin_mode',
+    name: 'provider_origin',
     value: string,
   ): void {
+    void name;
     setControlPlaneDialogState((current) => {
       if (!current) {
         return current;
       }
-      if (name === 'display_label_auto') {
-        return {
-          ...current,
-          display_label: suggestControlPlaneProviderName(current.provider_origin),
-          display_label_touched: false,
-        };
-      }
-      if (name === 'display_label') {
-        return {
-          ...current,
-          display_label: value,
-          display_label_touched: true,
-        };
-      }
-      if (name === 'origin_mode') {
-        const nextOriginMode: ControlPlaneOriginMode = value === 'custom' ? 'custom' : 'preset';
-        const nextPresetProviderOrigin = current.preset_provider_origin || defaultControlPlaneProviderPreset().provider_origin;
-        const nextProviderOrigin = nextOriginMode === 'custom'
-          ? current.custom_provider_origin
-          : nextPresetProviderOrigin;
-        return {
-          ...current,
-          origin_mode: nextOriginMode,
-          provider_origin: nextProviderOrigin,
-          preset_provider_origin: nextPresetProviderOrigin,
-          ...syncControlPlaneDisplayLabel(current, nextProviderOrigin),
-        };
-      }
-      const nextProviderOrigin = value;
-      const nextPresetProviderOrigin = current.origin_mode === 'preset'
-        ? (controlPlaneProviderPresetForOrigin(nextProviderOrigin)?.provider_origin ?? defaultControlPlaneProviderPreset().provider_origin)
-        : current.preset_provider_origin;
-      const nextCustomProviderOrigin = current.origin_mode === 'custom'
-        ? nextProviderOrigin
-        : current.custom_provider_origin;
       return {
         ...current,
-        provider_origin: current.origin_mode === 'preset' ? nextPresetProviderOrigin : nextProviderOrigin,
-        preset_provider_origin: nextPresetProviderOrigin,
-        custom_provider_origin: nextCustomProviderOrigin,
-        ...syncControlPlaneDisplayLabel(
-          current,
-          current.origin_mode === 'preset' ? nextPresetProviderOrigin : nextProviderOrigin,
-        ),
+        provider_origin: controlPlaneProviderPresetForOrigin(value)?.provider_origin
+          ?? defaultControlPlaneProviderPreset().provider_origin,
       };
     });
   }
@@ -5418,7 +5367,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction({
       kind: 'start_control_plane_connect',
       provider_origin: trimString(state.provider_origin),
-      display_label: resolvedControlPlaneProviderName(state),
+      display_label: 'Redeven Cloud',
     }, 'control_plane_dialog');
     if (result?.outcome === 'started_control_plane_connect') {
       closeControlPlaneDialog();
@@ -5430,7 +5379,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction({
       kind: 'start_control_plane_connect',
       provider_origin: controlPlane.provider.provider_origin,
-      display_label: controlPlane.display_label,
+      display_label: 'Redeven Cloud',
     });
     if (result?.outcome === 'started_control_plane_connect') {
       showActionToast(i18n().t('environmentCenter.continueBrowserReconnectNamedProvider', { label: controlPlaneName(controlPlane) }), 'info');
@@ -15606,6 +15555,7 @@ function OfficialProviderPicker(props: Readonly<{
   onSelect: (providerOrigin: string) => void;
   autofocus?: boolean;
 }>) {
+  const canChooseTarget = CONTROL_PLANE_PROVIDER_PRESET_OPTIONS.length > 1;
   const [open, setOpen] = createSignal(false);
   const [highlightedIndex, setHighlightedIndex] = createSignal(0);
   let closeTimer: number | undefined;
@@ -15644,6 +15594,9 @@ function OfficialProviderPicker(props: Readonly<{
   }
 
   function openMenu(): void {
+    if (!canChooseTarget) {
+      return;
+    }
     if (closeTimer !== undefined) {
       window.clearTimeout(closeTimer);
       closeTimer = undefined;
@@ -15687,13 +15640,19 @@ function OfficialProviderPicker(props: Readonly<{
         ref={buttonRef}
         id="control-plane-provider-picker"
         type="button"
-        class="group relative flex min-h-[4.75rem] w-full cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-lg border border-border/70 bg-background px-3.5 py-3 text-left shadow-sm transition-all hover:-translate-y-px hover:border-ring/70 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        aria-haspopup="listbox"
+        class={cn(
+          'group relative flex min-h-[4.75rem] w-full items-center justify-between gap-3 overflow-hidden rounded-lg border border-border/70 bg-background px-3.5 py-3 text-left shadow-sm',
+          canChooseTarget && 'cursor-pointer transition-all hover:-translate-y-px hover:border-ring/70 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        )}
+        aria-haspopup={canChooseTarget ? 'listbox' : undefined}
         aria-expanded={open() ? 'true' : 'false'}
-        aria-controls="control-plane-provider-options"
+        aria-controls={canChooseTarget ? 'control-plane-provider-options' : undefined}
         aria-activedescendant={open() ? `control-plane-provider-option-${highlightedIndex()}` : undefined}
         autofocus={props.autofocus}
         onClick={() => {
+          if (!canChooseTarget) {
+            return;
+          }
           if (open()) {
             setOpen(false);
             return;
@@ -15741,7 +15700,9 @@ function OfficialProviderPicker(props: Readonly<{
           <Tag variant="success" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
             {selectedProvider().display_label}
           </Tag>
-          <ChevronDown class={cn('h-4 w-4 text-muted-foreground transition-transform', open() && 'rotate-180')} />
+          <Show when={canChooseTarget}>
+            <ChevronDown class={cn('h-4 w-4 text-muted-foreground transition-transform', open() && 'rotate-180')} />
+          </Show>
         </span>
       </button>
       <Show when={open()}>
@@ -15810,22 +15771,13 @@ function ControlPlaneDialog(props: Readonly<{
   error: string;
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
-  updateField: (name: 'display_label' | 'display_label_auto' | 'provider_origin' | 'origin_mode', value: string) => void;
+  updateField: (name: 'provider_origin', value: string) => void;
   onConnect: () => Promise<void>;
 }>) {
   // See ConnectionDialog: memoize the open boolean so that identity churn in
   // `props.state` never re-triggers the overlay-mask focus trap mid-typing.
   const isOpen = createMemo(() => props.state !== null);
-  const originMode = createMemo(() => props.state?.origin_mode ?? 'preset');
-  const canContinue = createMemo(() => (
-    trimString(props.state?.provider_origin) !== ''
-    && (props.state ? resolvedControlPlaneProviderName(props.state) !== '' : false)
-  ));
-  const providerNameModeLabel = createMemo(() => (
-    props.state?.display_label_touched
-      ? props.i18n.t('connectionDialog.providerNameCustom')
-      : props.i18n.t('connectionDialog.providerNameAuto')
-  ));
+  const canContinue = createMemo(() => trimString(props.state?.provider_origin) !== '');
   return (
     <Dialog
       open={isOpen()}
@@ -15852,71 +15804,11 @@ function ControlPlaneDialog(props: Readonly<{
     >
       <div class="space-y-4">
         <div class="space-y-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
-          <div class="space-y-1.5">
-            <label id="control-plane-origin-mode-label" class="block text-xs font-medium text-foreground">
-              {props.i18n.t('desktop.controlPlane')}
-            </label>
-            <SegmentedControl
-              value={originMode()}
-              onChange={(value) => props.updateField('origin_mode', value)}
-              options={[
-                { value: 'preset', label: props.i18n.t('connectionDialog.providerOriginPreset') },
-                { value: 'custom', label: props.i18n.t('connectionDialog.providerOriginCustom') },
-              ]}
-              size="sm"
-            />
-          </div>
-          <Show
-            when={originMode() === 'custom'}
-            fallback={(
-              <OfficialProviderPicker
-                i18n={props.i18n}
-                providerOrigin={props.state?.preset_provider_origin ?? DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN}
-                autofocus
-                onSelect={(providerOrigin) => props.updateField('provider_origin', providerOrigin)}
-              />
-            )}
-          >
-            <div class="space-y-1.5">
-              <label for="control-plane-custom-origin" class="block text-xs font-medium text-foreground">
-                {props.i18n.t('connectionDialog.providerCustomUrl')}
-              </label>
-              <Input
-                id="control-plane-custom-origin"
-                value={props.state?.custom_provider_origin ?? ''}
-                onInput={(event) => props.updateField('provider_origin', event.currentTarget.value)}
-                placeholder="https://control.example.com"
-                size="sm"
-                class="w-full"
-                spellcheck={false}
-                autofocus
-              />
-              <div class="text-[11px] leading-5 text-muted-foreground">
-                {props.i18n.t('connectionDialog.providerCustomUrlHelp')}
-              </div>
-            </div>
-          </Show>
-        </div>
-        <div class="space-y-1.5">
-          <div class="flex items-center justify-between gap-2">
-            <label for="control-plane-label" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.providerName')}</label>
-            <Tag variant={props.state?.display_label_touched ? 'primary' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {providerNameModeLabel()}
-            </Tag>
-          </div>
-          <Input
-            id="control-plane-label"
-            value={props.state?.display_label ?? ''}
-            onInput={(event) => props.updateField('display_label', event.currentTarget.value)}
-            onBlur={() => {
-              if (trimString(props.state?.display_label) === '') {
-                props.updateField('display_label_auto', '');
-              }
-            }}
-            placeholder={suggestControlPlaneProviderName(props.state?.provider_origin ?? '') || OFFICIAL_PROVIDER_DOMAIN}
-            size="sm"
-            class="w-full"
-            spellcheck={false}
+          <OfficialProviderPicker
+            i18n={props.i18n}
+            providerOrigin={props.state?.provider_origin ?? REDEVEN_CLOUD_ORIGIN}
+            autofocus
+            onSelect={(providerOrigin) => props.updateField('provider_origin', providerOrigin)}
           />
         </div>
         <div class="text-xs text-muted-foreground">

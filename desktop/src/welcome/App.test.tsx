@@ -25,11 +25,13 @@ import {
 } from './launcherBusyState';
 import {
   buildDesktopWelcomeShellViewModel,
+  buildEnvironmentCardFactsModel,
   buildProviderBackedEnvironmentActionModel,
   environmentLibraryCount,
   filterEnvironmentLibrary,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
   PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
+  runtimeHasUnsupportedLegacyControlPlaneLink,
   shellStatus,
 } from './viewModel';
 
@@ -212,6 +214,54 @@ describe('DesktopWelcomeShell', () => {
       tone: 'disconnected',
       label: '没有打开环境窗口',
     });
+  });
+
+  it('offers only manual disconnect recovery for an unsupported legacy control-plane link', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      surface: 'connect_environment',
+    });
+    const local = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(local).toBeDefined();
+    const legacy = {
+      ...local!,
+      provider_origin: 'https://legacy.example.invalid',
+      control_plane_label: 'Legacy Control Plane',
+      provider_runtime_link_target: {
+        id: 'local:local' as const,
+        kind: 'local_environment' as const,
+        environment_id: local!.id,
+        label: local!.label,
+        runtime_key: 'local',
+        runtime_url: 'http://127.0.0.1:23998',
+        runtime_running: true,
+        runtime_openable: true,
+        runtime_control_status: { state: 'available' as const },
+        provider_connection_state: 'connected' as const,
+        provider_link_state: 'linked' as const,
+        provider_origin: 'https://legacy.example.invalid',
+        provider_id: 'legacy',
+        env_public_id: 'env_legacy',
+        can_connect_provider: false,
+        can_disconnect_provider: true,
+      },
+    };
+
+    expect(runtimeHasUnsupportedLegacyControlPlaneLink(legacy)).toBe(true);
+    expect(buildEnvironmentCardFactsModel(legacy)).toContainEqual(expect.objectContaining({
+      label: 'CONTROL PLANE',
+      value: 'Unsupported legacy control-plane link',
+    }));
+    const actions = buildProviderBackedEnvironmentActionModel(legacy).action_presentation.menu_actions;
+    expect(actions).toContainEqual(expect.objectContaining({
+      id: 'disconnect_provider_runtime',
+      label_key: 'environmentAction.disconnectLegacyControlPlane',
+      action: expect.objectContaining({
+        intent: 'disconnect_provider_runtime',
+        enabled: true,
+      }),
+    }));
+    expect(actions.some((item) => item.action.intent === 'connect_provider_runtime')).toBe(false);
   });
 
   it('keeps the outer Flower entry icon-only while chat creation lives inside the shared surface', () => {
@@ -2057,7 +2107,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toContain('@keyframes redeven-bottom-bar-dot-breathe-warning');
   });
 
-  it('includes Control Plane management copy inside the launcher source', () => {
+  it('brands the fixed control-plane targets as Redeven Cloud', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
@@ -2066,26 +2116,20 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('environmentCenter.viewEnvironments')");
     expect(appSrc).not.toContain('All Sources');
     expect(appSrc).toContain('Local');
-    expect(appSrc).toContain('control-plane-label');
     expect(appSrc).toContain('CONTROL_PLANE_PROVIDER_PRESET_OPTIONS');
-    expect(appSrc).toContain("OFFICIAL_PROVIDER_DOMAIN_PARTS = ['redeven', 'com']");
-    expect(appSrc).toContain("DEVELOPMENT_PROVIDER_DOMAIN_PARTS = ['redeven', 'test']");
-    expect(appSrc).toContain("origin_mode: ControlPlaneOriginMode");
-    expect(appSrc).toContain('preset_provider_origin: string');
-    expect(appSrc).toContain('custom_provider_origin: string');
-    expect(appSrc).toContain('domain: OFFICIAL_PROVIDER_DOMAIN');
-    expect(appSrc).toContain('provider_origin: DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN');
-    expect(appSrc).toContain("props.i18n.t('desktop.controlPlane')");
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.providerOriginPreset')");
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.providerOriginCustom')");
+    expect(appSrc).toContain('provider_origin: REDEVEN_CLOUD_ORIGIN');
+    expect(appSrc).toContain('provider_origin: REDEVEN_CLOUD_DEVELOPMENT_ORIGIN');
+    expect(appSrc).toContain("display_label: 'Redeven Cloud'");
+    expect(appSrc).not.toContain('ControlPlaneOriginMode');
+    expect(appSrc).not.toContain('preset_provider_origin');
+    expect(appSrc).not.toContain('custom_provider_origin');
     expect(appSrc).toContain('control-plane-provider-picker');
     expect(appSrc).toContain('control-plane-provider-options');
-    expect(appSrc).toContain('control-plane-custom-origin');
+    expect(appSrc).not.toContain('control-plane-custom-origin');
     expect(appSrc).toContain('<OfficialProviderPicker');
-    expect(appSrc).toContain('suggestControlPlaneProviderName');
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.providerNameAuto')");
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.providerNameCustom')");
-    expect(appSrc.indexOf('control-plane-origin-mode-label')).toBeLessThan(appSrc.indexOf('control-plane-label'));
+    expect(appSrc).not.toContain('suggestControlPlaneProviderName');
+    expect(appSrc).not.toContain("props.i18n.t('connectionDialog.providerName')");
+    expect(appSrc).not.toContain("props.i18n.t('connectionDialog.providerOriginCustom')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.continueInBrowser')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.providerAuthorizationHelp')");
     expect(appSrc).not.toContain('id="control-plane-origin"');

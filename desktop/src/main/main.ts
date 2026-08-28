@@ -80,6 +80,7 @@ import {
   loadDesktopPreferences,
   rememberLocalEnvironmentUse,
   rememberProviderEnvironmentUse,
+  restrictDesktopPreferencesToRedevenCloud,
   markSavedEnvironmentUsed,
   markSavedRuntimeTargetUsed,
   saveDesktopPreferences,
@@ -98,6 +99,10 @@ import {
   type DesktopSavedControlPlane,
   type DesktopSavedRuntimeTarget,
 } from './desktopPreferences';
+import {
+  requireRedevenCloudOrigin,
+  type RedevenCloudOriginPolicy,
+} from '../shared/redevenCloud';
 import {
   discoverDesktopWSLDistributions,
   probeDesktopWSLDistribution,
@@ -937,6 +942,7 @@ let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' | 'update_i
 let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopPreferencesLoadPromise: Promise<DesktopPreferences> | null = null;
 let desktopPreferencesMutationTail: Promise<void> = Promise.resolve();
+let redevenCloudCleanupIssue: DesktopWelcomeIssue | null = null;
 const desktopPlatformCapabilities = resolveDesktopPlatformCapabilities(process.platform);
 let desktopWSLDiscoverySnapshot: DesktopWSLDiscoverySnapshot | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
@@ -3220,6 +3226,12 @@ function preferencesCodec() {
   return createSafeStorageSecretCodec(safeStorage);
 }
 
+function desktopRedevenCloudOriginPolicy(): RedevenCloudOriginPolicy {
+  return {
+    allow_development: !app.isPackaged,
+  };
+}
+
 function gatewayStore(): GatewayStore {
   if (!gatewayStoreCache) {
     gatewayStoreCache = new GatewayStore(defaultGatewayStorePath(preferencesPaths().stateRoot));
@@ -3988,8 +4000,30 @@ async function loadDesktopPreferencesCached(): Promise<DesktopPreferences> {
     desktopPreferencesLoadPromise = (async () => {
       const paths = preferencesPaths();
       const loaded = await loadDesktopPreferences(paths, preferencesCodec());
-      desktopPreferencesCache = loaded;
-      return loaded;
+      const restriction = restrictDesktopPreferencesToRedevenCloud(
+        loaded,
+        desktopRedevenCloudOriginPolicy(),
+      );
+      if (restriction.changed) {
+        await saveDesktopPreferences(paths, restriction.preferences, preferencesCodec());
+        const removedSummary = [
+          `${restriction.removed_control_plane_count} control plane account(s)`,
+          `${restriction.removed_provider_environment_count} cached environment(s)`,
+          restriction.cleared_local_provider_binding ? '1 local binding snapshot' : '0 local binding snapshots',
+        ].join(', ');
+        redevenCloudCleanupIssue = {
+          scope: 'startup',
+          code: 'redeven_cloud_local_cleanup',
+          title: 'Redeven Cloud update',
+          title_key: 'issue.redevenCloudCleanupTitle',
+          message: 'Saved custom control-plane data was removed from Desktop. Existing Runtime-side links were not changed.',
+          message_key: 'issue.redevenCloudCleanupMessage',
+          diagnostics_copy: `status: completed\ncode: redeven_cloud_local_cleanup\nremoved: ${removedSummary}`,
+          target_url: '',
+        };
+      }
+      desktopPreferencesCache = restriction.preferences;
+      return restriction.preferences;
     })().finally(() => {
       desktopPreferencesLoadPromise = null;
     });
@@ -11865,7 +11899,10 @@ async function startControlPlaneAuthorization(args: Readonly<{
   label?: string;
   displayLabel?: string;
 }>): Promise<PendingControlPlaneAuthorization> {
-  const provider = await fetchProviderDiscovery(args.providerOrigin);
+  const policy = desktopRedevenCloudOriginPolicy();
+  const providerOrigin = requireRedevenCloudOrigin(args.providerOrigin, policy);
+  const provider = await fetchProviderDiscovery(providerOrigin);
+  requireRedevenCloudOrigin(provider.provider_origin, policy);
   const expectedProviderID = compact(args.expectedProviderID);
   if (expectedProviderID !== '' && provider.provider_id !== expectedProviderID) {
     throw new Error(`Provider ID mismatch: expected ${expectedProviderID}, got ${provider.provider_id}.`);
@@ -11894,7 +11931,10 @@ async function saveAuthorizedControlPlane(
   preferences: DesktopPreferences;
   controlPlane: DesktopSavedControlPlane;
 }>> {
-  const provider = await fetchProviderDiscovery(providerOrigin);
+  const policy = desktopRedevenCloudOriginPolicy();
+  const normalizedProviderOrigin = requireRedevenCloudOrigin(providerOrigin, policy);
+  const provider = await fetchProviderDiscovery(normalizedProviderOrigin);
+  requireRedevenCloudOrigin(provider.provider_origin, policy);
   const cleanExpectedProviderID = String(expectedProviderID ?? '').trim();
   if (cleanExpectedProviderID !== '' && provider.provider_id !== cleanExpectedProviderID) {
     throw new Error(`Provider ID mismatch: expected ${cleanExpectedProviderID}, got ${provider.provider_id}.`);
@@ -17796,6 +17836,13 @@ if (!app.requestSingleInstanceLock()) {
         return;
       }
       const startupPreferences = await loadDesktopPreferencesCached();
+      if (redevenCloudCleanupIssue) {
+        setLauncherViewState({
+          surface: 'connect_environment',
+          entryReason: 'app_launch',
+          issue: redevenCloudCleanupIssue,
+        });
+      }
       if (desktopPlatformCapabilities.wsl_environment) {
         await refreshDesktopWSLDiscovery();
       }

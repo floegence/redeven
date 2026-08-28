@@ -72,12 +72,12 @@ Redeven 是單一二進位檔，可將您的電腦與伺服器集中到一個瀏
 ### Desktop 應用程式
 
 1. 從 [GitHub Releases](https://github.com/floegence/redeven/releases) 下載 Redeven Desktop。公開發佈目前提供 macOS 與 Linux 安裝程式。在啟用程式碼簽署與已簽署更新驗證前，Windows 11 x64 僅提供內部 WSL 認證組建。
-2. 開啟應用程式。在 macOS 或 Linux 上，可選擇本機、Provider、SSH 主機或已儲存的 URL；在 Windows 上，請在環境中心註冊一個已初始化的 WSL 2 發行版。Desktop 不提供原生本機環境、Windows 執行環境或本機容器執行環境。
+2. 開啟應用程式。在 macOS 或 Linux 上，可選擇本機、Redeven Cloud、SSH 主機或已儲存的 URL；在 Windows 上，請在環境中心註冊一個已初始化的 WSL 2 發行版。Desktop 不提供原生本機環境、Windows 執行環境或本機容器執行環境。
 3. 開始工作，工作區會自動在瀏覽器中開啟。
 
 每個已註冊的發行版都是獨立的 WSL 環境。Desktop 會將相符的 Linux x64 執行環境傳輸到該發行版使用者的 `~/.redeven`；它不會安裝或管理 WSL、不使用 `/mnt/c`，也不依賴 `systemd`。結束、更新或解除安裝 Desktop 不會停止 WSL 執行環境或刪除其資料。如需停止，請使用對應環境的「停止」操作。
 
-對於遠端電腦：Desktop 可以透過 SSH 自動安裝相符的 Redeven 版本，並在您選擇後，將該受管理的 SSH 執行階段明確連線至 provider 環境。遠端主機不需要手動設定。
+對於遠端電腦：Desktop 可以透過 SSH 自動安裝相符的 Redeven 版本，並在您選擇後，將該受管理的 SSH 執行階段明確連線至 Redeven Cloud 環境。遠端主機不需要手動設定。
 
 <!-- readme-section:cli -->
 <a id="cli"></a>
@@ -122,7 +122,7 @@ redeven run
 | Browser Editor | 由 Desktop 明確設定、依工作區隔離的瀏覽器編輯器工作階段。 |
 | Web 服務 | 由執行階段管理的服務註冊與連接埠轉送存取，不必手動編寫 SSH 通道。 |
 | Flower | 選用的 AI 介面，使用經執行階段驗證的工具及本機模型和主機設定。 |
-| Desktop | 用於本機環境、provider 託管環境、透過 SSH 引導初始化的環境及已儲存 Local UI 環境的原生啟動器。 |
+| Desktop | 用於本機環境、Redeven Cloud 託管環境、透過 SSH 引導初始化的環境及已儲存 Local UI 環境的原生啟動器。 |
 
 <!-- readme-section:security -->
 <a id="security"></a>
@@ -145,7 +145,7 @@ Redeven 以能力為核心，但執行階段仍是信任邊界，因為它實際
 
 Redeven 在 [OKF v0.1](okf/index.md) 中維護儲存庫知識。OKF 語料由目前原始碼層級的行為產生，並嵌入執行階段供 `okf.search` 使用。
 
-機器可讀的 provider 整合介面位於 [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml)。在 OKF 之外，維護中的 Markdown 明確限定為 `AGENTS.md`、`THIRD_PARTY_NOTICES.md`、權威英文 `README.md`，以及在 `assets/readme/locales.json` 中宣告的受支援 `README.<locale>.md` 翻譯。
+機器可讀的 RCPP Provider 整合介面位於 [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml)。在 OKF 之外，維護中的 Markdown 明確限定為 `AGENTS.md`、`THIRD_PARTY_NOTICES.md`、權威英文 `README.md`，以及在 `assets/readme/locales.json` 中宣告的受支援 `README.<locale>.md` 翻譯。
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

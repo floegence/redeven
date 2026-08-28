@@ -3,11 +3,11 @@ type: Protocol Contract
 title: RCPP v3 provider API
 description: Provider discovery, health, open-session, Runtime link, and access authorization contract.
 tags: [protocol, provider, openapi, desktop, runtime, access]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 # Summary
 
-RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.
+RCPP v3 lets Desktop discover Provider Environments, read access health, open an authorized session, and link a Runtime for Provider access. `Provider` is the protocol and engineering term; the supported Desktop product surface presents this control plane as `Redeven Cloud`. Provider is not a Runtime lifecycle owner: its Environment response carries no Runtime management capability, and it issues no Start, Stop, Restart, Update, Reinstall, enrollment, supervisor, or artifact authority. A removed lifecycle request fails as unsupported or not found without a compatibility fallback.
 
 # Contract
 
@@ -25,6 +25,14 @@ Desktop may show Provider Connect or Disconnect for a directly managed Runtime t
 
 The retired Runtime management routes, permits, enrollment challenge/exchange, supervisor heartbeat, poll/respond transport, bindings, relays, cluster state, and authorization audit have no supported schema or compatibility shell. Because those contracts were not deployed, their migrations are removed rather than retained as dead production paths.
 
+## Desktop product and origin boundary
+
+Released Desktop builds accept only the canonical production Redeven Cloud HTTPS origin defined by the shared origin policy. Development builds may additionally accept `https://redeven.test`; no build accepts an arbitrary custom control-plane URL. Welcome uses the fixed `Redeven Cloud` name and offers only the origins allowed by that build. The main process repeats the same check before starting browser authorization and before saving an authorization result, so Launcher IPC and deep links cannot widen the product boundary.
+
+On upgrade, Desktop removes unsupported control-plane accounts, refresh tokens, cached Provider Environments, and matching Desktop-local binding snapshots before Environment synchronization or window restoration. This migration is idempotent and must persist successfully before normal startup continues. It does not revoke remote authorization, close sessions, or disconnect a Runtime-side link.
+
+If a Runtime later reports an unsupported legacy control-plane link, Desktop identifies it as an unsupported legacy link rather than Redeven Cloud. Redeven Cloud open, refresh, and new-link actions stay unavailable; direct Runtime lifecycle actions remain independent, and the only control-plane recovery action is a user-initiated disconnect of that legacy link.
+
 # Boundaries
 
 RCPP v3 does not mirror Desktop Launcher Operations or Gateway state. Provider may route requests to Runtime directly or through an optional Gateway, but it cannot start or repair the destination. An Environment with Provider or Gateway access but no direct Desktop management channel remains access-only.
@@ -34,4 +42,8 @@ RCPP v3 does not mirror Desktop Launcher Operations or Gateway state. Provider m
 - `redeven:desktop/src/main/controlPlaneProviderClient.ts:1` - Desktop Provider discovery, health, open-session, and Runtime-link adapter.
 - `redeven:desktop/src/shared/controlPlaneProvider.ts:1` - Access-only Provider DTOs exposed to Desktop.
 - `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Separates Provider cards from direct Runtime operation targets.
+- `redeven:desktop/src/shared/redevenCloud.ts:1` - Authoritative released and development Redeven Cloud origin policy.
+- `redeven:desktop/src/main/desktopPreferences.ts:1808` - Idempotent Desktop-local cleanup of unsupported saved control-plane state.
+- `redeven:desktop/src/main/main.ts:4003` - Startup persistence and authorization-boundary enforcement.
+- `redeven:desktop/src/welcome/viewModel.ts:646` - Unsupported legacy Runtime-link presentation and manual recovery boundary.
 - `spec/openapi/gateway-v2.yaml:1` - Gateway access-only protocol surface.

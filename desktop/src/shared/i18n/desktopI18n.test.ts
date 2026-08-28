@@ -10,6 +10,7 @@ import {
   REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES,
   REDEVEN_I18N_FORBIDDEN_GENERIC_ENGLISH_TERMS,
   REDEVEN_I18N_LOCALE_TERMINOLOGY,
+  REDEVEN_I18N_MODEL_PROVIDER_ENGLISH_TERM_FAMILY,
   REDEVEN_I18N_PROTECTED_TERMS,
   REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST,
   REDEVEN_I18N_ZH_TW_FORBIDDEN_SIMPLIFIED_CHARACTERS,
@@ -263,7 +264,7 @@ describe('Desktop shared i18n dictionaries', () => {
     }
   });
 
-  it('rejects translated, recased, or renumbered fixed English terms while preserving code literals', () => {
+  it('does not treat the internal Provider protocol term as fixed Welcome copy', () => {
     const source: TranslationTree = {
       environmentCenter: {
         translated: 'Connect Provider',
@@ -279,11 +280,7 @@ describe('Desktop shared i18n dictionaries', () => {
       },
     };
 
-    expect(validateDictionaryFixedEnglishTerms('zh-CN', source, target)).toEqual([
-      expect.objectContaining({ path: 'environmentCenter.translated', message: expect.stringContaining('"Provider" count mismatch') }),
-      expect.objectContaining({ path: 'environmentCenter.plural', message: expect.stringContaining('"Provider" count mismatch') }),
-      expect.objectContaining({ path: 'environmentCenter.plural', message: expect.stringContaining('"providers" count mismatch') }),
-    ]);
+    expect(validateDictionaryFixedEnglishTerms('zh-CN', source, target)).toEqual([]);
   });
 
   it('requires Flower model-provider terminology to stay localized while ignoring code literals', () => {
@@ -384,21 +381,20 @@ describe('Desktop shared i18n dictionaries', () => {
     }
     expect(new Set(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term)).size).toBe(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.length);
     expect(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.every((entry) => entry.reason.trim().length > 0)).toBe(true);
-    expect(REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES).toEqual([
-      expect.objectContaining({
-        canonical: 'Provider',
-        forms: ['Provider', 'Providers', 'provider', 'providers'],
-        pathPrefixes: expect.arrayContaining(['environmentCenter.']),
-      }),
-    ]);
+    expect(REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES).toEqual([]);
     expect(REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES.every((family) => family.reason.trim().length > 0)).toBe(true);
+    expect(REDEVEN_I18N_MODEL_PROVIDER_ENGLISH_TERM_FAMILY).toEqual(expect.objectContaining({
+      canonical: 'model provider',
+      forms: ['Provider', 'Providers', 'provider', 'providers'],
+      pathPrefixes: ['flowerSurface.'],
+    }));
   });
 
   it('keeps non-English dictionaries assignable to a widened message shape', () => {
     const zhCN: DesktopTranslationShape = DESKTOP_I18N_DICTIONARIES['zh-CN'];
     expect(zhCN.common.open).toBe('打开');
     expect(zhCN.environmentFacts.runsOn).toBe('运行于');
-    expect(zhCN.environmentFacts.provider).toBe('Provider');
+    expect(zhCN.environmentFacts.provider).toBe('Redeven Cloud');
     expect(zhCN.flowerSurface.settings.addProvider).toBe('添加模型提供商');
     expect(zhCN.environmentFacts.sshHost).toBe('SSH主机');
     expect(zhCN.environmentFacts.startedAt).toBe('已启动 {time}');
@@ -558,6 +554,22 @@ describe('Desktop shared i18n dictionaries', () => {
       locale: 'xx-TEST',
       path: 'desktop.localUI',
       message: 'Protected term "Local UI" must remain unchanged.',
+    });
+  });
+
+  it('keeps the Redeven Cloud product name unchanged in localized Welcome copy', () => {
+    const unsafe = {
+      ...enUS,
+      desktop: {
+        ...enUS.desktop,
+        provider: 'Redeven 云',
+      },
+    } satisfies DesktopTranslationShape;
+
+    expect(validateDictionaryProtectedTerms('xx-TEST', enUS, unsafe)).toContainEqual({
+      locale: 'xx-TEST',
+      path: 'desktop.provider',
+      message: 'Protected term "Redeven Cloud" must remain unchanged.',
     });
   });
 

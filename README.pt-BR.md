@@ -72,12 +72,12 @@ Há dois caminhos para começar: Desktop, recomendado para a maioria dos usuári
 ### Aplicativo Desktop
 
 1. Baixe o Redeven Desktop em [GitHub Releases](https://github.com/floegence/redeven/releases). As versões públicas oferecem atualmente instaladores para macOS e Linux. O Windows 11 x64 permanece como uma compilação interna de certificação WSL até que a assinatura de código e a verificação de atualizações assinadas sejam ativadas.
-2. Abra o aplicativo. No macOS ou Linux, escolha um ambiente local, Provider, host SSH ou uma URL salva. No Windows, registre uma distribuição WSL 2 inicializada na central de ambientes. O Desktop não fornece ambiente local nativo, ambiente de execução do Windows nem ambiente de execução de contêiner local.
+2. Abra o aplicativo. No macOS ou Linux, escolha um ambiente local, Redeven Cloud, host SSH ou uma URL salva. No Windows, registre uma distribuição WSL 2 inicializada na central de ambientes. O Desktop não fornece ambiente local nativo, ambiente de execução do Windows nem ambiente de execução de contêiner local.
 3. Comece a trabalhar: a área de trabalho será aberta automaticamente no navegador.
 
 Cada distribuição registrada é um ambiente WSL separado. O Desktop transfere o ambiente de execução Linux x64 correspondente para `~/.redeven` do usuário da distribuição. Ele não instala nem gerencia o WSL, não usa `/mnt/c` e não depende de `systemd`. Fechar, atualizar ou desinstalar o Desktop não interrompe o ambiente de execução WSL nem exclui seus dados. Use a ação Parar desse ambiente quando quiser interrompê-lo.
 
-Para máquinas remotas, o Desktop pode instalar automaticamente a versão correspondente do Redeven via SSH e, quando você escolher, conectar explicitamente esse ambiente de execução SSH gerenciado a um ambiente de provider. Não é necessário fazer configuração manual no host remoto.
+Para máquinas remotas, o Desktop pode instalar automaticamente a versão correspondente do Redeven via SSH e, quando você escolher, conectar explicitamente esse ambiente de execução SSH gerenciado a um ambiente do Redeven Cloud. Não é necessário fazer configuração manual no host remoto.
 
 <!-- readme-section:cli -->
 <a id="cli"></a>
@@ -122,7 +122,7 @@ Execute `redeven help run` para conhecer outros modos de execução e a proteç�
 | Browser Editor | Sessões de editor no navegador configuradas explicitamente pelo Desktop e isoladas por área de trabalho. |
 | Serviços web | Registro de serviços e acesso por encaminhamento de portas gerenciados pelo ambiente de execução, sem túneis SSH escritos manualmente. |
 | Flower | Superfícies opcionais de IA que usam ferramentas validadas pelo ambiente de execução e configuração local do modelo e do host. |
-| Desktop | Inicializador nativo para ambientes locais, ambientes hospedados por um provider, ambientes inicializados por SSH e ambientes de Local UI salvos. |
+| Desktop | Inicializador nativo para ambientes locais, ambientes hospedados no Redeven Cloud, ambientes inicializados por SSH e ambientes de Local UI salvos. |
 
 <!-- readme-section:security -->
 <a id="security"></a>
@@ -145,7 +145,7 @@ O Redeven prioriza os recursos, mas o ambiente de execução continua sendo o li
 
 O Redeven mantém o conhecimento do repositório em [OKF v0.1](okf/index.md). O corpus OKF é gerado a partir do comportamento atual do código-fonte e incorporado ao ambiente de execução para `okf.search`.
 
-A superfície de integração com provider legível por máquina fica em [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Fora do OKF, os arquivos Markdown mantidos são deliberadamente limitados a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, ao `README.md` canônico e às traduções mantidas `README.<locale>.md` declaradas em `assets/readme/locales.json`.
+A superfície de integração RCPP Provider legível por máquina fica em [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Fora do OKF, os arquivos Markdown mantidos são deliberadamente limitados a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, ao `README.md` canônico e às traduções mantidas `README.<locale>.md` declaradas em `assets/readme/locales.json`.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

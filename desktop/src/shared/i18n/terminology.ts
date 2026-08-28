@@ -16,27 +16,14 @@ export type RedevenI18nFixedEnglishTermFamily = Readonly<{
   reason: string;
 }>;
 
-export const REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES = [
-  {
-    canonical: 'Provider',
-    forms: ['Provider', 'Providers', 'provider', 'providers'],
-    pathPrefixes: [
-      'desktop.',
-      'issue.',
-      'environmentCenter.',
-      'providerRuntimeLink.',
-      'environmentStatus.',
-      'environmentAction.',
-      'environmentFacts.',
-      'toast.',
-      'progress.',
-      'runtimeMessage.',
-      'connectionDialog.',
-      'confirm.',
-    ],
-    reason: 'Fixed Redeven domain term used for remote-environment and control-plane surfaces.',
-  },
-] as const satisfies readonly RedevenI18nFixedEnglishTermFamily[];
+export const REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES: readonly RedevenI18nFixedEnglishTermFamily[] = [];
+
+export const REDEVEN_I18N_MODEL_PROVIDER_ENGLISH_TERM_FAMILY = {
+  canonical: 'model provider',
+  forms: ['Provider', 'Providers', 'provider', 'providers'],
+  pathPrefixes: ['flowerSurface.'],
+  reason: 'AI model-provider terminology must be localized independently from the Redeven Cloud product name.',
+} as const satisfies RedevenI18nFixedEnglishTermFamily;
 
 export const REDEVEN_I18N_MODEL_PROVIDER_LOCALIZED_PATH_PREFIXES = [
   'flowerSurface.',
