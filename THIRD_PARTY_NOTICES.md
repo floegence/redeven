@@ -399,7 +399,6 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | @types/d3 | 7.4.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3/v/7.4.3 |  |
 | @types/debug | 4.1.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fdebug/v/4.1.13 |  |
 | @types/deep-eql | 4.0.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fdeep-eql/v/4.0.2 |  |
-| @types/diff | 8.0.0 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fdiff/v/8.0.0 |  |
 | @types/estree | 1.0.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Festree/v/1.0.8 |  |
 | @types/estree | 1.0.9 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Festree/v/1.0.9 |  |
 | @types/fs-extra | 9.0.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Ffs-extra/v/9.0.13 |  |
@@ -695,7 +694,6 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | get-intrinsic | 1.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/get-intrinsic/v/1.3.0 |  |
 | get-proto | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/get-proto/v/1.0.1 |  |
 | get-stream | 5.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/get-stream/v/5.2.0 |  |
-| github-slugger | 2.0.0 | ISC | Env App UI | https://www.npmjs.com/package/github-slugger/v/2.0.0 |  |
 | glob-parent | 6.0.2 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/glob-parent/v/6.0.2 |  |
 | glob | 13.0.6 | BlueOak-1.0.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/glob/v/13.0.6 |  |
 | glob | 7.2.3 | ISC | Desktop shell | https://www.npmjs.com/package/glob/v/7.2.3 |  |
@@ -716,7 +714,6 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | hast-util-to-html | 9.0.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/hast-util-to-html/v/9.0.5 |  |
 | hast-util-whitespace | 3.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/hast-util-whitespace/v/3.0.0 |  |
 | hey-listen | 1.0.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/hey-listen/v/1.0.8 |  |
-| highlight.js | 11.11.1 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/highlight.js/v/11.11.1 |  |
 | hosted-git-info | 4.1.0 | ISC | Desktop shell | https://www.npmjs.com/package/hosted-git-info/v/4.1.0 |  |
 | html-encoding-sniffer | 4.0.0 | MIT | Env App UI | https://www.npmjs.com/package/html-encoding-sniffer/v/4.0.0 |  |
 | html-encoding-sniffer | 6.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/html-encoding-sniffer/v/6.0.0 |  |
@@ -821,7 +818,6 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | lru-cache | 6.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/lru-cache/v/6.0.0 |  |
 | magic-string | 0.30.21 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/magic-string/v/0.30.21 |  |
 | marked-footnote | 1.4.0 | MIT | Env App UI | https://www.npmjs.com/package/marked-footnote/v/1.4.0 |  |
-| marked-gfm-heading-id | 4.1.4 | MIT | Env App UI | https://www.npmjs.com/package/marked-gfm-heading-id/v/4.1.4 |  |
 | marked | 14.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/14.0.0 |  |
 | marked | 16.4.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/16.4.2 |  |
 | marked | 17.0.3 | MIT | Env App UI | https://www.npmjs.com/package/marked/v/17.0.3 |  |

@@ -1,4 +1,4 @@
-import type { StreamEvent } from '../../../chat';
+import type { JsonValue } from '@floegence/flowersec-core';
 import type { ContextActionEnvelope } from '../../../contextActions/protocol';
 import type { FlowerReasoningSelection, FlowerTimelineDecoration } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -143,7 +143,7 @@ export type AIRealtimeEvent = {
   streamKind?: 'lifecycle' | 'assistant' | 'tool' | 'context';
   phase?: 'start' | 'state_change' | 'end' | 'error';
   diag?: Record<string, any>;
-  streamEvent?: StreamEvent;
+  streamEvent?: JsonValue;
   runStatus?: AIThreadRunStatus;
   runErrorCode?: string;
   runError?: string;

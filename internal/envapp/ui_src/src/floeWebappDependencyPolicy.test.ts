@@ -95,6 +95,11 @@ function expectedTarballUrl(packageName: string, version: string): string {
 }
 
 describe('published npm dependency policy', () => {
+  it('keeps generic Chat UI upstream instead of restoring a local fork', () => {
+    expect(fs.existsSync(path.join(resolvePackageRoot(), 'src/ui/chat'))).toBe(false);
+    expect(readText('src/ui/flower-feature.css')).not.toContain("@import './chat/chat.css'");
+  });
+
   it('keeps floe-webapp boot, core, and protocol on the released compatible package set', () => {
     const dependencies = readDependencySpecifiers();
 

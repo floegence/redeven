@@ -29,7 +29,7 @@ Flower schedules its existing transcript-tail follower on every disclosure anima
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/chat/blocks/ShellBlock.tsx` - The terminal shell block builds process read, write, and terminate requests from run and process ids.
+- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - The Env adapter maps authorized terminal output reads to the product API without owning process lifecycle.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Flower renders typed terminal activity detail and accessible execution status without approval presentation.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Terminal activity detail uses process, output, sequence, exit, and duration fields.
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts` - The wire adapter maps the closed Floret v5 nested activity presentation contract.
