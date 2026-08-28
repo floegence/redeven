@@ -272,7 +272,7 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			return nil, err
 		}
 		name, description := m.serviceDisplayMetadata(ctx, service)
-		view := ServiceView{ManagedService: service, Name: name, Description: description, ActiveOperation: active, ContainerResource: containerResourceLink(service)}
+		view := ServiceView{ManagedService: service, Name: name, Description: description, ActiveOperation: active, ContainerResources: containerResourceLinks(service)}
 		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
 			view.BrandIcon, view.LocalizationKey = definition.BrandIcon, definition.LocalizationKey
 			if service.TemplateSource == "builtin" && Deployment(service.Deployment) == DeploymentContainer && definition.Revision > service.TemplateRevision {

@@ -7,8 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CreateForwardDialog,
   EnvPortForwardsPage,
+  ForwardMetadataDialog,
+  ManagedServiceRow,
   isSupportedWebServiceTarget,
   resolveWebServiceOpenRoute,
+  validateTemplateDraft,
 } from './EnvPortForwardsPage';
 
 const notificationMocks = vi.hoisted(() => ({
@@ -72,7 +75,6 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   CheckCircle: (props: any) => <span class={props.class} data-testid="check-circle-icon" />,
   ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
   Cpu: (props: any) => <span class={props.class} data-testid="cpu-icon" />,
-  LayoutDashboard: (props: any) => <span class={props.class} data-testid="interactive-desktop-icon" />,
   Layers: (props: any) => <span class={props.class} data-testid="layers-icon" />,
   MoreHorizontal: (props: any) => <span class={props.class} data-testid="more-horizontal-icon" />,
   Package: (props: any) => <span class={props.class} data-testid="package-icon" />,
@@ -125,8 +127,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       ))}
     </div>
   ),
-  Input: (props: any) => <input value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} disabled={props.disabled} data-testid={props['data-testid']} />,
-  Textarea: (props: any) => <textarea value={props.value} onInput={props.onInput} class={props.class} disabled={props.disabled} />,
+  Input: (props: any) => <input id={props.id} value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} disabled={props.disabled} data-testid={props['data-testid']} data-template-field={props['data-template-field']} />,
+  Textarea: (props: any) => <textarea id={props.id} value={props.value} onInput={props.onInput} class={props.class} disabled={props.disabled} placeholder={props.placeholder} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} data-template-field={props['data-template-field']} />,
   Checkbox: (props: any) => <label><input type="checkbox" checked={props.checked} disabled={props.disabled} onChange={(event) => props.onChange?.(event.currentTarget.checked)} />{props.label}</label>,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
@@ -350,6 +352,98 @@ describe('web service route helpers', () => {
       forward_id: 'forward-1',
       label: 'Secure tunnel',
     });
+  });
+});
+
+describe('web service metadata and template validation', () => {
+  it('requires a clear service name and submits edited metadata', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const submit = vi.fn();
+    const dispose = render(() => (
+      <ForwardMetadataDialog
+        open
+        mode="edit"
+        editorKey="pf-one"
+        initialName="Original service"
+        initialDescription="Original description"
+        loading={false}
+        onOpenChange={() => undefined}
+        onSubmit={submit}
+      />
+    ), host);
+    try {
+      const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;
+      expect(name.value).toBe('Original service');
+      name.value = '';
+      name.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+      await flushPage();
+      expect(submit).not.toHaveBeenCalled();
+      expect(name.getAttribute('aria-invalid')).toBe('true');
+
+      name.value = 'Team dashboard';
+      name.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      const description = host.querySelector<HTMLTextAreaElement>('#web-service-metadata-description')!;
+      description.value = 'Internal status and release dashboard';
+      description.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+      expect(submit).toHaveBeenCalledWith('Team dashboard', 'Internal status and release dashboard');
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('validates each deployment with one authoritative draft validator', () => {
+    const base = {
+      name: 'Dashboard', description: '', version: '1.0.0', scheme: 'http' as const,
+      path: '/', healthPath: '/healthz', containerPort: '3000', installScript: '',
+      startScript: '', stopScript: '', uninstallScript: '', image: '', entrypoint: '',
+      command: '', environment: '', mainService: '', composeYAML: '',
+    };
+    expect(validateTemplateDraft({ ...base, kind: 'host' })).toMatchObject({ startScript: 'required' });
+    expect(validateTemplateDraft({ ...base, kind: 'container', image: 'invalid image', containerPort: '70000' })).toMatchObject({ image: 'imageInvalid', containerPort: 'portInvalid' });
+    expect(validateTemplateDraft({ ...base, kind: 'compose', mainService: 'bad service!', composeYAML: '' })).toMatchObject({ mainService: 'serviceNameInvalid', composeYAML: 'required' });
+    expect(validateTemplateDraft({ ...base, kind: 'container', image: 'ghcr.io/acme/dashboard:1.0.0' })).toEqual({});
+  });
+
+  it('routes the container and image actions to their exact resource identities', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const openResource = vi.fn();
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-one', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'webtop-ubuntu',
+          name: 'LinuxServer Webtop · Ubuntu KDE', template_source: 'builtin', brand_icon: 'ubuntu', deployment: 'container',
+          workspace_path: '/workspace', version: '1', desired_state: 'running', observed_state: 'running', forward_id: 'pf-one', runtime_port: 3000,
+          container_resources: [
+            { kind: 'container', engine: 'docker', view: 'containers', identity: 'container-id' },
+            { kind: 'image', engine: 'docker', view: 'images', identity: 'lscr.io/linuxserver/webtop@sha256:abc' },
+          ],
+          update_available: false,
+        }}
+        busy={false}
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={openResource}
+        onAction={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Containers')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Images')?.click();
+      expect(openResource).toHaveBeenNthCalledWith(1, expect.objectContaining({ view: 'containers', identity: 'container-id' }));
+      expect(openResource).toHaveBeenNthCalledWith(2, expect.objectContaining({ view: 'images', identity: 'lscr.io/linuxserver/webtop@sha256:abc' }));
+    } finally {
+      dispose();
+      host.remove();
+    }
   });
 });
 
@@ -674,7 +768,7 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'LinuxServer Webtop · Ubuntu KDE', description: 'Managed desktop', template_source: 'builtin', brand_icon: 'interactive-desktop', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls177', desired_state: 'running', observed_state: 'running', forward_id: 'pf-managed', runtime_port: 54945, update_available: false }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'LinuxServer Webtop · Ubuntu KDE', description: 'Managed desktop', template_source: 'builtin', brand_icon: 'ubuntu', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls177', desired_state: 'running', observed_state: 'running', forward_id: 'pf-managed', runtime_port: 54945, update_available: false }] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'pf-managed', target_url: 'http://127.0.0.1:54945', name: 'Webtop', description: 'Managed by Redeven' }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
@@ -704,7 +798,7 @@ describe('EnvPortForwardsPage', () => {
     expect(workspace?.className).toContain('truncate');
     expect(actions?.className).toContain('grid-cols-[4.75rem_4.75rem_2rem]');
     expect(actions?.querySelector('[data-testid="managed-service-more"]')).toBeTruthy();
-    expect(row?.querySelector('[data-template-brand="interactive-desktop"]')).toBeTruthy();
+    expect(row?.querySelector('[data-template-brand="ubuntu"]')).toBeTruthy();
   });
 
   it('shows managed service status and read actions without lifecycle permission', async () => {
@@ -781,6 +875,19 @@ describe('EnvPortForwardsPage', () => {
     expect(drawer.querySelector('h2')?.textContent).toBe('New service template');
     expect(drawer.textContent).toContain('Install script');
     expect(drawer.textContent).toContain('Save template');
+    expect(drawer.querySelector<HTMLInputElement>('[data-template-field="name"]')?.placeholder).toBe('Team dashboard');
+    expect(drawer.querySelector<HTMLTextAreaElement>('[data-template-field="startScript"]')?.placeholder).toContain('REDEVEN_SERVICE_PORT');
+    expect(drawer.querySelector('label[for="template-editor-name"]')?.textContent).toContain('*');
+    expect(drawer.querySelector('label[for="template-editor-start-script"]')?.textContent).toContain('*');
+
+    const startScript = drawer.querySelector<HTMLTextAreaElement>('[data-template-field="startScript"]')!;
+    startScript.value = '';
+    startScript.dispatchEvent(new InputEvent('input', { bubbles: true }));
+
+    Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save template')?.click();
+    await flushPage();
+    expect(drawer.querySelector('[data-template-field="name"]')?.getAttribute('aria-invalid')).toBe('true');
+    expect(drawer.querySelector('[data-template-field="startScript"]')?.getAttribute('aria-invalid')).toBe('true');
   });
 
   it('uses a space-free recommended workspace and preserves a custom path with spaces', async () => {
@@ -835,13 +942,13 @@ describe('EnvPortForwardsPage', () => {
     const templates = [
       {
         template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'Unlocalized Ubuntu desktop', description: 'Unlocalized Ubuntu description',
-        brand_icon: 'interactive-desktop', localization_key: 'linuxserverWebtopUbuntuKDE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
+        brand_icon: 'ubuntu', localization_key: 'linuxserverWebtopUbuntuKDE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         version: '654ea8e3-ls177', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
         default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
       },
       {
         template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'linuxserver-webtop-debian-xfce', name: 'Unlocalized Debian desktop', description: 'Unlocalized Debian description',
-        brand_icon: 'interactive-desktop', localization_key: 'linuxserverWebtopDebianXFCE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
+        brand_icon: 'debian', localization_key: 'linuxserverWebtopDebianXFCE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         version: '7c4ebdc9-ls209', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
         default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-debian-xfce', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
       },
@@ -872,7 +979,8 @@ describe('EnvPortForwardsPage', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
     await flushPage();
 
-    expect(host.querySelectorAll('[data-brand-icon="interactive-desktop"], [data-template-brand="interactive-desktop"]')).not.toHaveLength(0);
+    expect(host.querySelector('[data-brand-icon="ubuntu"], [data-template-brand="ubuntu"]')).toBeTruthy();
+    expect(host.querySelector('[data-brand-icon="debian"], [data-template-brand="debian"]')).toBeTruthy();
     expect(host.querySelector('[data-template-id="linuxserver-webtop-ubuntu-kde"]')?.textContent).toContain('LinuxServer Webtop · Ubuntu KDE');
     expect(host.querySelector('[data-template-id="linuxserver-webtop-debian-xfce"]')?.textContent).toContain('LinuxServer Webtop · Debian XFCE');
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
@@ -900,7 +1008,7 @@ describe('EnvPortForwardsPage', () => {
     };
     const service = {
       service_id: 'mws-webtop', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde',
-      name: 'Unlocalized Webtop', description: 'Unlocalized description', localization_key: 'linuxserverWebtopUbuntuKDE', brand_icon: 'interactive-desktop', deployment: 'container',
+      name: 'Unlocalized Webtop', description: 'Unlocalized description', localization_key: 'linuxserverWebtopUbuntuKDE', brand_icon: 'ubuntu', deployment: 'container',
       workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls176', target_version: '654ea8e3-ls177', target_revision: 2,
       update_available: true, update_notices: [updateNotice], desired_state: 'running', observed_state: 'running', forward_id: 'managed-webtop', runtime_port: 32100,
     };
@@ -1256,6 +1364,73 @@ describe('EnvPortForwardsPage', () => {
       expect.anything(),
     );
     expect(notificationMocks.error).not.toHaveBeenCalled();
+  });
+
+  it('asks for a service name when saving a temporary session', async () => {
+    vi.spyOn(window, 'open').mockReturnValue({ location: { assign: vi.fn() }, close: vi.fn() } as unknown as Window);
+    let saveBody: Record<string, unknown> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/forward-sessions') return {
+        forward: { forward_id: 'temporary-save', target_url: 'http://localhost:3000', name: '', description: '' },
+        app_path: '/',
+        ephemeral: true,
+      };
+      if (url === '/_redeven_proxy/api/forwards/temporary-save/touch') return { forward_id: 'temporary-save' };
+      if (url === '/_redeven_proxy/api/forward-sessions/temporary-save/save' && init?.method === 'POST') {
+        saveBody = JSON.parse(String(init.body));
+        return { forward_id: 'temporary-save', target_url: 'http://localhost:3000', name: saveBody?.name, description: saveBody?.description };
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    const addressInput = host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]')!;
+    addressInput.value = '3000';
+    addressInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    host.querySelector<HTMLFormElement>('[data-testid="web-service-address-form"]')?.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+    await waitForAssertion(() => expect(host.textContent).toContain('Save service'));
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save service')?.click();
+    await flushPage();
+
+    expect(host.textContent).toContain('Save Web Service');
+    const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;
+    expect(name.value).toBe('localhost:3000');
+    name.value = 'Local documentation';
+    name.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const dialog = Array.from(host.querySelectorAll('h2')).find((heading) => heading.textContent === 'Save Web Service')?.parentElement;
+    Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === 'Save service')?.click();
+
+    await waitForAssertion(() => expect(saveBody).toEqual({ name: 'Local documentation', description: '' }));
+  });
+
+  it('updates the name of an already saved service', async () => {
+    let updateBody: Record<string, unknown> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/forwards' && (!init?.method || init.method === 'GET')) return {
+        forwards: [{
+          forward_id: 'forward-1', target_url: 'http://localhost:3000', name: 'Demo Forward', description: 'Browser preview', health_path: '/', insecure_skip_verify: false,
+          created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 1, health: { status: 'unknown', last_checked_at_unix_ms: 0, latency_ms: 0, last_error: '' },
+        }],
+      };
+      if (url === '/_redeven_proxy/api/forwards/forward-1' && init?.method === 'PATCH') {
+        updateBody = JSON.parse(String(init.body));
+        return { forward_id: 'forward-1', target_url: 'http://localhost:3000', ...updateBody };
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="port-forward-row"]')).toBeTruthy());
+    host.querySelector<HTMLButtonElement>('button[aria-label="Edit service details"]')?.click();
+    await flushPage();
+    const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;
+    name.value = 'Renamed dashboard';
+    name.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+
+    await waitForAssertion(() => expect(updateBody).toEqual({ name: 'Renamed dashboard', description: 'Browser preview' }));
   });
 
   it('keeps one blocking transaction while a temporary session is created and opened', async () => {

@@ -14,6 +14,7 @@ type ContainerResourceKind string
 
 const (
 	ContainerResourceContainer      ContainerResourceKind = "container"
+	ContainerResourceImage          ContainerResourceKind = "image"
 	ContainerResourceVolume         ContainerResourceKind = "volume"
 	ContainerResourceComposeProject ContainerResourceKind = "compose_project"
 )
@@ -24,20 +25,27 @@ type ContainerResourceOwner struct {
 	Name      string `json:"name"`
 }
 
-func containerResourceLink(service pfregistry.ManagedService) *ContainerResourceLink {
+func containerResourceLinks(service pfregistry.ManagedService) []ContainerResourceLink {
 	identity := strings.TrimSpace(service.RuntimeIdentity)
-	if identity == "" {
-		return nil
-	}
 	switch Deployment(service.Deployment) {
 	case DeploymentDocker, DeploymentContainer:
-		return &ContainerResourceLink{Engine: string(containerengine.EngineDocker), View: "containers", Identity: identity}
+		links := make([]ContainerResourceLink, 0, 2)
+		if identity != "" {
+			links = append(links, ContainerResourceLink{Kind: string(ContainerResourceContainer), Engine: string(containerengine.EngineDocker), View: "containers", Identity: identity})
+		}
+		if image := strings.TrimSpace(service.ArtifactReference); image != "" {
+			links = append(links, ContainerResourceLink{Kind: string(ContainerResourceImage), Engine: string(containerengine.EngineDocker), View: "images", Identity: image})
+		}
+		return links
 	case DeploymentCompose:
+		if identity == "" {
+			return nil
+		}
 		parts := strings.Split(identity, ":")
 		if len(parts) != 4 || parts[0] != "compose" || strings.TrimSpace(parts[2]) == "" {
 			return nil
 		}
-		return &ContainerResourceLink{Engine: string(containerengine.EngineDocker), View: "compose-projects", Identity: containerengine.ComposeProjectID(parts[2])}
+		return []ContainerResourceLink{{Kind: string(ContainerResourceComposeProject), Engine: string(containerengine.EngineDocker), View: "compose-projects", Identity: containerengine.ComposeProjectID(parts[2])}}
 	default:
 		return nil
 	}

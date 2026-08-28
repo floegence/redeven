@@ -91,13 +91,14 @@ describe('EnvPortForwardsPage browser presentation', () => {
             observed_state: 'running',
             forward_id: 'pf-managed',
             runtime_port: 54945,
-            brand_icon: 'interactive-desktop',
+            brand_icon: 'ubuntu',
             update_available: false,
           }}
           busy={false}
           canOpen
           canManage
           onOpen={() => undefined}
+          onOpenResource={() => undefined}
           onAction={() => undefined}
           onUpdate={() => undefined}
           onLogs={() => undefined}
@@ -123,6 +124,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           }}
           busy={false}
           onOpen={() => undefined}
+          onEdit={() => undefined}
           onDelete={() => undefined}
         />
       </div>

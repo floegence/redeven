@@ -133,6 +133,7 @@ vi.mock('../services/containerResourcesApi', () => ({
 }));
 
 import { EnvContainersPage } from './EnvContainersPage';
+import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 
 async function settle() {
   await Promise.resolve();
@@ -215,6 +216,33 @@ describe('native Containers page', () => {
     expect(host.querySelectorAll('.container-touch-target').length).toBeGreaterThan(3);
     expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary');
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:widget-1')).toBe(true);
+  });
+
+  it('applies live resource navigation to an already mounted Activity page', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage stateScope="activity" variant="activity" />, host);
+    await settle();
+
+    requestContainerResourceNavigation({
+      engine: 'docker',
+      endpointID: 'docker-primary',
+      view: 'containers',
+      identity: 'container-1',
+    });
+    await settle();
+
+    expect(harness.storageWrites).toContainEqual({
+      key: 'containers:activity',
+      value: {
+        version: 1,
+        engine: 'docker',
+        endpointID: 'docker-primary',
+        view: 'containers',
+        selectedIdentity: 'container-1',
+      },
+    });
+    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-1', 'docker', 'docker-primary');
   });
 
   it('makes a large inventory scannable without repeating identifiers or ownership text', async () => {

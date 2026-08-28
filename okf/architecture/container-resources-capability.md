@@ -69,12 +69,15 @@ Admin and exact-name confirmation.
 Server-side enforcement is authoritative; disabled UI controls are only a
 presentation aid.
 
-Web Services is the lifecycle owner of containers, Compose Projects, and
-volumes it creates. Native inventory labels those resources as managed, offers
-a direct jump to the owning service, and rejects mutation attempts on the
-server. Web Services projects the same canonical resource identity back to
-Containers. The two surfaces share identity and observed state, never parallel
-lifecycle implementations.
+Web Services is the lifecycle owner of containers, images, Compose Projects,
+and volumes it creates. Native inventory labels owned mutable resources as
+managed, offers a direct jump to the owning service, and rejects mutation
+attempts on the server. Web Services projects each exact container, image, or
+Compose Project identity back to Containers. Navigation writes the established
+Activity selection and delivers that same selection to an already mounted
+Containers page, so a menu action opens the requested detail immediately
+without a second state owner or a stale remount. The two surfaces share identity
+and observed state, never parallel lifecycle implementations.
 
 ## Data and host safety
 

@@ -5,7 +5,6 @@ import {
   CheckCircle,
   ChevronDown,
   Cpu,
-  LayoutDashboard,
   Layers,
   MoreHorizontal,
   Package,
@@ -16,6 +15,7 @@ import { Button, Dropdown, Input, Tag, type DropdownItem } from '@floegence/floe
 
 import { useI18n } from '../i18n';
 import { DeepSeekHarnessLogo } from '../icons/DeepSeekHarnessLogo';
+import { DebianLogo, UbuntuLogo } from '../icons/DistributionBrandLogos';
 
 export type ServiceTemplateCategory = 'host' | 'container';
 export type ServiceTemplateKind = 'host' | 'container' | 'compose';
@@ -26,7 +26,7 @@ export type ServiceTemplatePresentation = Readonly<{
   description: string;
   source: 'builtin' | 'custom';
   kind: ServiceTemplateKind;
-  brandIcon?: 'deepseek-harness' | 'interactive-desktop';
+  brandIcon?: 'deepseek-harness' | 'ubuntu' | 'debian';
   deploymentLabel: string;
   version?: string;
   developerPreview: boolean;
@@ -56,7 +56,8 @@ export type ServiceTemplateCatalogProps = Readonly<{
 
 function TemplateKindIcon(props: { kind: ServiceTemplateKind; brandIcon?: ServiceTemplatePresentation['brandIcon']; class?: string }): JSX.Element {
   if (props.brandIcon === 'deepseek-harness') return <DeepSeekHarnessLogo class={props.class} />;
-  if (props.brandIcon === 'interactive-desktop') return <LayoutDashboard class={props.class} aria-hidden="true" />;
+  if (props.brandIcon === 'ubuntu') return <UbuntuLogo class={props.class} />;
+  if (props.brandIcon === 'debian') return <DebianLogo class={props.class} />;
   if (props.kind === 'host') return <Cpu class={props.class} aria-hidden="true" />;
   if (props.kind === 'compose') return <Layers class={props.class} aria-hidden="true" />;
   return <Package class={props.class} aria-hidden="true" />;

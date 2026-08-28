@@ -191,6 +191,13 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
     ({ lineSource }) => /(?:stop-color|\bfill|\bstroke)=/u.test(lineSource),
   ),
   exception(
+    'internal/envapp/ui_src/src/ui/icons/DistributionBrandLogos.tsx',
+    'brand',
+    'Ubuntu and Debian template marks retain their official distribution colors.',
+    ({ value, lineSource }) => ['#e95420', '#a81d33'].includes(value.toLowerCase())
+      && /\bfill=/u.test(lineSource),
+  ),
+  exception(
     'internal/flower_ui/src/icons/FlowerIcon.tsx',
     'brand',
     'Flower icon artwork retains its authored petal and center palette.',

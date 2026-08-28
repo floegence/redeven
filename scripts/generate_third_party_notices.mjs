@@ -711,6 +711,10 @@ Redeven itself is licensed under the MIT License; see \`LICENSE\`.
 
 This inventory is intentionally broad: it includes Go modules used by the runtime and JavaScript packages used to build the embedded Env App, Code App, and Desktop shell. Some JavaScript packages are build-time only, but keeping them in one auditable notice file avoids accidental omission when build output changes.
 
+## Service Template Brand Icons
+
+The Ubuntu and Debian marks used to identify their corresponding built-in Webtop templates are derived from Simple Icons revision \`1bd24ad0645f18ec68b17a087daa5649644bd303\`, published under CC0-1.0. Product names and marks remain the property of their respective owners. Sources: https://github.com/simple-icons/simple-icons/blob/1bd24ad0645f18ec68b17a087daa5649644bd303/icons/ubuntu.svg and https://github.com/simple-icons/simple-icons/blob/1bd24ad0645f18ec68b17a087daa5649644bd303/icons/debian.svg.
+
 ## On-Demand Managed Web Service Software
 
 Redeven can install the following software only after an authorized user explicitly requests a managed Web Service deployment. These artifacts are not embedded in the Redeven binary.
