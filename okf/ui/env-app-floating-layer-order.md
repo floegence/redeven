@@ -15,7 +15,13 @@ Env App owns one global stacking contract for cross-surface UI. Movable product 
 
 The command palette is always the top Env App surface at 5000. Blocking authorization, confirmation, recovery, and inspection modals use 4000 so required decisions remain above the plugin Panel and Flower but below command UI. The Activity plugin launcher Panel uses 3000. The expanded or transitioning Flower companion uses 2000. Every movable window, including Files, preview, Git, Debug Console, Flower launcher and context windows, and Activity plugin surfaces, uses the shared 1000 through 1099 band.
 
-The product layer constants are the only authority for these bands. Published floe-webapp `CommandPalette.zIndex` and `Dialog.globalZIndex` configure global roots without CSS guessing or DOM discovery. Env App's modal wrapper supplies 4000 by default. Floe surface-scoped dialogs ignore that global value and remain locally layered inside their owning window stacking context. Window-local menus, tooltips, recovery panels, and confirmations must not cross a global band.
+The product layer constants are the only authority for these bands. Published floe-webapp `CommandPalette.zIndex`, `Dialog.globalZIndex`, and `DialogPlacementProvider` configure global roots without CSS guessing or DOM discovery. Env App's modal wrapper supplies 4000 by default. Window-local menus, tooltips, and recovery panels must not cross a global band.
+
+## Dialog placement
+
+Activity owns one global modal boundary. The Activity Shell, Activity movable windows, and the retained Flower product while placed in Activity select global Dialog placement at layer 4000. Clicking the backdrop closes only the Dialog; the first click never reaches the Activity content beneath it. Escape, focus trapping, focus restoration, and exit presence use the same published global Dialog path.
+
+Workbench selects automatic placement. A Dialog opened from a widget or projected Flower surface remains inside that owning surface: clicking the canvas or another widget neither closes nor captures the destination interaction, while clicking the surface-local backdrop closes the Dialog. Moving the retained Flower product between Activity and Workbench changes this single placement input reactively; it does not install another listener or duplicate Dialog state. Dropdowns, tooltips, and `SurfaceFloatingLayer` keep their existing surface-coordinate ownership.
 
 ## Movable window order
 
@@ -29,15 +35,16 @@ The Flower companion remains above all movable windows while expanded. Its expli
 
 # Boundaries
 
-This contract governs cross-surface Env App stacking only. Workbench projected overlays and menus remain surface-local, and reusable floe-webapp or Flower components do not own Redeven's numeric product policy. New global UI must select an existing band or update this contract and its browser hit-testing evidence; arbitrary escape values and component-specific global counters are forbidden.
+This contract governs cross-surface Env App stacking and the Activity-versus-Workbench Dialog boundary. Workbench projected overlays and menus remain surface-local, and reusable floe-webapp or Flower components do not own Redeven's numeric product policy or display-mode decision. New global UI must select an existing band or update this contract and its browser hit-testing evidence; arbitrary escape values, document-level dismissal patches, per-Dialog placement branches, and component-specific global counters are forbidden.
 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/utils/envAppLayers.ts` - Defines the five product bands.
 - `redeven:internal/envapp/ui_src/src/ui/utils/envAppFloatingWindowStack.ts` - Maintains compact shared movable-window ordering.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.tsx` - Registers product windows and activates them from pointer and focus input.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.tsx` - Registers product windows, activates them from pointer and focus input, and supplies their global Dialog placement.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Selects global Activity placement and automatic Workbench placement for the retained Flower product.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceWindow.tsx` - Projects plugin bridge interaction into the shared window stack.
-- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Applies the product modal band to global dialogs while preserving surface-local behavior upstream.
+- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Applies the product modal band to explicitly global product dialogs.
 - `redeven:internal/envapp/ui_src/src/ui/envAppFloatingLayers.browser.test.tsx` - Uses actual overlapping DOM hit results to verify window MRU and every global band.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Verifies explicit close, focus handoff, persistent collapse, and outside dismissal.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Verifies trusted plugin window interaction dismisses the expanded companion across the iframe boundary.

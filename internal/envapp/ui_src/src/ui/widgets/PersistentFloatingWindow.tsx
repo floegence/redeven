@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, untrack, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
+  DialogPlacementProvider,
   FloatingWindow,
   LOCAL_INTERACTION_SURFACE_ATTR,
   type FloatingWindowProps,
@@ -397,22 +398,24 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
   });
 
   return (
-    <FloatingWindow
-      open={props.open}
-      onOpenChange={props.onOpenChange}
-      title={props.title}
-      footer={props.footer}
-      defaultPosition={persistedRect() ? { x: persistedRect()!.x, y: persistedRect()!.y } : props.defaultPosition}
-      defaultSize={persistedRect() ? { width: persistedRect()!.width, height: persistedRect()!.height } : props.defaultSize}
-      minSize={props.minSize}
-      maxSize={props.maxSize}
-      resizable={props.resizable}
-      draggable={props.draggable}
-      class={cn(markerClass, props.class)}
-      viewportInsets={floatingWindowViewportInsets()}
-      zIndex={windowZIndex()}
-    >
-      {props.children}
-    </FloatingWindow>
+    <DialogPlacementProvider mode="global" globalZIndex={ENV_APP_FLOATING_LAYER.productModal}>
+      <FloatingWindow
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+        title={props.title}
+        footer={props.footer}
+        defaultPosition={persistedRect() ? { x: persistedRect()!.x, y: persistedRect()!.y } : props.defaultPosition}
+        defaultSize={persistedRect() ? { width: persistedRect()!.width, height: persistedRect()!.height } : props.defaultSize}
+        minSize={props.minSize}
+        maxSize={props.maxSize}
+        resizable={props.resizable}
+        draggable={props.draggable}
+        class={cn(markerClass, props.class)}
+        viewportInsets={floatingWindowViewportInsets()}
+        zIndex={windowZIndex()}
+      >
+        {props.children}
+      </FloatingWindow>
+    </DialogPlacementProvider>
   );
 }

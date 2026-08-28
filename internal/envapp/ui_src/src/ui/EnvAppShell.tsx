@@ -47,6 +47,7 @@ import {
   type BottomBarCompanionPhase,
 } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
 
@@ -4831,40 +4832,45 @@ export function EnvAppShell() {
           aria-hidden={!flowerSurfaceVisible() ? 'true' : undefined}
           inert={!flowerSurfaceVisible()}
         >
-          <EnvAIPage
-            draftCoordinator={flowerDraftCoordinator}
-            presentation={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' ? 'full' : 'companion'}
-            engaged={flowerSurfaceEngaged()}
-            transcriptVisible={flowerSurfaceEngaged()}
-            companionPresenceOwner={!accessGateVisible()}
-            companionOpen={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' || activityFlowerCompanionDetailVisible()}
-            companionRegionID="redeven-activity-flower-companion"
-            companionSummary={{
-              visualText: activityFlowerPresentedSummary().visualText,
-              accessibleText: activityFlowerPresentedSummary().accessibleText,
-              priorityStatus: activityFlowerPresentedSummary().presentationStatus,
-              progressKind: activityFlowerPresentedSummary().progressKind,
-              progressIdentity: activityFlowerPresentedSummary().progressIdentity,
-              ephemeralKind: activityFlowerPresentedSummary().ephemeralKind,
-              targetThreadID: activityFlowerPresentedSummary().targetThreadID,
-              running: activityFlowerPresentedSummary().presentationStatus === 'running',
-            }}
-            companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}
-            focusRequestScope={flowerProductPlacement() === 'workbench' ? 'workbench' : 'activity'}
-            focusThreadRequest={flowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
-            focusComposerRequest={flowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
-            onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
-            onCompanionOpenRequest={(threadID) => {
-              if (threadID) focusActivityFlowerThread(threadID);
-              openActivityFlowerCompanion();
-            }}
-            companionCopy={activityFlowerCompanionCopy()}
-            headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
-            onPresenceChange={handleActivityFlowerPresenceChange}
-            settingsReturnSurfaceId={flowerProductPlacement() === 'workbench'
-              ? 'ai'
-              : lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
-          />
+          <DialogPlacementProvider
+            mode={flowerProductPlacement() === 'workbench' ? 'auto' : 'global'}
+            globalZIndex={ENV_APP_FLOATING_LAYER.productModal}
+          >
+            <EnvAIPage
+              draftCoordinator={flowerDraftCoordinator}
+              presentation={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' ? 'full' : 'companion'}
+              engaged={flowerSurfaceEngaged()}
+              transcriptVisible={flowerSurfaceEngaged()}
+              companionPresenceOwner={!accessGateVisible()}
+              companionOpen={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' || activityFlowerCompanionDetailVisible()}
+              companionRegionID="redeven-activity-flower-companion"
+              companionSummary={{
+                visualText: activityFlowerPresentedSummary().visualText,
+                accessibleText: activityFlowerPresentedSummary().accessibleText,
+                priorityStatus: activityFlowerPresentedSummary().presentationStatus,
+                progressKind: activityFlowerPresentedSummary().progressKind,
+                progressIdentity: activityFlowerPresentedSummary().progressIdentity,
+                ephemeralKind: activityFlowerPresentedSummary().ephemeralKind,
+                targetThreadID: activityFlowerPresentedSummary().targetThreadID,
+                running: activityFlowerPresentedSummary().presentationStatus === 'running',
+              }}
+              companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}
+              focusRequestScope={flowerProductPlacement() === 'workbench' ? 'workbench' : 'activity'}
+              focusThreadRequest={flowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
+              focusComposerRequest={flowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
+              onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
+              onCompanionOpenRequest={(threadID) => {
+                if (threadID) focusActivityFlowerThread(threadID);
+                openActivityFlowerCompanion();
+              }}
+              companionCopy={activityFlowerCompanionCopy()}
+              headerTrailingActions={flowerProductPlacement() === 'workbench' ? undefined : activityFlowerHeaderActions()}
+              onPresenceChange={handleActivityFlowerPresenceChange}
+              settingsReturnSurfaceId={flowerProductPlacement() === 'workbench'
+                ? 'ai'
+                : lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
+            />
+          </DialogPlacementProvider>
         </div>
       </Portal>
     </Show>
@@ -5061,7 +5067,17 @@ export function EnvAppShell() {
           activeId={viewMode()}
           activationMode="after-paint"
           views={[
-            { id: 'activity', render: renderActivityShell },
+            {
+              id: 'activity',
+              render: () => (
+                <DialogPlacementProvider
+                  mode="global"
+                  globalZIndex={ENV_APP_FLOATING_LAYER.productModal}
+                >
+                  {renderActivityShell()}
+                </DialogPlacementProvider>
+              ),
+            },
             {
               id: 'workbench',
               render: () => (
