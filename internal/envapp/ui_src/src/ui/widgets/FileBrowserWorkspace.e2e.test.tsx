@@ -2611,7 +2611,7 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
-  it('maps absolute reveal requests through the workspace shell, clears blocking filters, and shows the created item as selected', async () => {
+  it('maps absolute reveal requests through the workspace shell and keeps selection feedback in the status bar only', async () => {
     const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
     const consumed = vi.fn();
     let setRevealRequest!: (request: FileBrowserRevealRequest | null) => void;
@@ -2698,9 +2698,9 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(host.textContent).toContain('1 selected');
       const headerStatus = host.querySelector('[data-testid="file-browser-header-status"]') as HTMLElement | null;
       const statusBar = host.querySelector('[data-file-browser-status-bar="true"]') as HTMLElement | null;
-      expect(headerStatus?.textContent).toBe('1 selected');
-      expect(headerStatus?.querySelector('[aria-hidden="true"]')).toBeNull();
+      expect(headerStatus).toBeNull();
       expect(statusBar?.textContent).toContain('1 selected');
+      expect(countExactSpanText(host, '1 selected')).toBe(1);
       expect(consumed).toHaveBeenCalledWith('created-entry-1');
     } finally {
       dispose();
