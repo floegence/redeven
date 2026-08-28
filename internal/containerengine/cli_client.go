@@ -35,6 +35,10 @@ type CommandStreamer interface {
 	Stream(ctx context.Context, name string, args []string, onStdoutLine func([]byte) error) error
 }
 
+type CommandOutputStreamer interface {
+	StreamOutput(ctx context.Context, name string, args []string, consume func(io.Reader) error) error
+}
+
 type CommandRunnerFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
 
 func (f CommandRunnerFunc) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -255,6 +259,38 @@ func (c *CLIClient) stream(ctx context.Context, engine Engine, args []string, on
 	})
 }
 
+func (c *CLIClient) streamOutput(ctx context.Context, engine Engine, args []string, consume func(io.Reader) error) error {
+	runner := c.Runner
+	if runner == nil {
+		runner = execRunner{}
+	}
+	streamer, ok := runner.(CommandOutputStreamer)
+	if !ok || streamer == nil {
+		raw, err := c.run(ctx, engine, args...)
+		if err != nil {
+			return err
+		}
+		return consume(bytes.NewReader(raw))
+	}
+	timeout := c.Timeout
+	if timeout <= 0 {
+		timeout = defaultCommandTimeout
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	err := streamer.StreamOutput(runCtx, string(engine), endpointArgs(ctx, engine, args), consume)
+	if ctxErr := runCtx.Err(); ctxErr != nil {
+		if parentErr := ctx.Err(); parentErr != nil {
+			return parentErr
+		}
+		return fmt.Errorf("%w: %s", ErrEngineTimeout, engine)
+	}
+	if isCommandNotFound(err) {
+		return fmt.Errorf("%w: %s", ErrCLIUnavailable, engine)
+	}
+	return err
+}
+
 func actionArgs(method Method, containerID string, force bool, timeoutSec int) []string {
 	switch method {
 	case MethodStart:
@@ -422,6 +458,51 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 		return ctxErr
 	}
 	if waitErr != nil {
+		return classifyCommandFailure(args, waitErr, stderr.data)
+	}
+	return nil
+}
+
+func (execRunner) StreamOutput(ctx context.Context, name string, args []string, consume func(io.Reader) error) error {
+	if _, err := exec.LookPath(name); err != nil {
+		return fmt.Errorf("%w: %s", ErrCLIUnavailable, name)
+	}
+	if consume == nil {
+		return errors.New("container command output consumer is required")
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = processenv.Current()
+	configureCommandProcessGroup(cmd)
+	cmd.Cancel = func() error {
+		return terminateCommandProcessTree(cmd)
+	}
+	var stderr boundedCommandStderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return errors.New("container command stdout pipe failed")
+	}
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return ErrPermissionDenied
+		}
+		return errors.New("container command start failed")
+	}
+	consumeErr := consume(stdout)
+	if consumeErr != nil && cmd.Process != nil {
+		_ = terminateCommandProcessTree(cmd)
+	}
+	waitErr := cmd.Wait()
+	if consumeErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		return consumeErr
+	}
+	if waitErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		return classifyCommandFailure(args, waitErr, stderr.data)
 	}
 	return nil

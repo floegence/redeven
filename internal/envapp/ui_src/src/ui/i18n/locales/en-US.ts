@@ -2679,7 +2679,7 @@ export const enUS = defineDictionary({
     columns: {
       name: 'Name', status: 'Status', details: 'Details', image: 'Image', size: 'Size', driver: 'Driver',
       running: 'Running', usage: 'Usage', ownership: 'Ownership', tags: 'Tags', services: 'Services',
-      created: 'Created', health: 'Health', group: 'Group', digest: 'Digest', scope: 'Scope',
+      created: 'Created', health: 'Health', group: 'Group', digest: 'Digest', scope: 'Scope', settings: 'Columns',
     },
     states: {
       running: 'Running', stopped: 'Stopped', exited: 'Exited', paused: 'Paused', restarting: 'Restarting',
@@ -2709,6 +2709,19 @@ export const enUS = defineDictionary({
       name: 'Name', image: 'Image', driver: 'Driver', tag: 'New tag', command: 'Command',
       restartPolicy: 'Restart policy', cpus: 'CPUs', memory: 'Memory (MiB)',
     },
+    detailTabs: {
+      overview: 'Overview', logs: 'Logs', inspect: 'Inspect', mounts: 'Mounts', exec: 'Terminal',
+      files: 'Files', stats: 'Stats', layers: 'Layers', 'used-by': 'Used by', containers: 'Containers',
+    },
+    detail: {
+      back: 'Back', showCharts: 'Show charts', hideCharts: 'Hide charts', ports: 'Ports', actions: 'Actions',
+      searchLogs: 'Search logs', wrap: 'Wrap', copyLogs: 'Copy logs', downloadLogs: 'Download logs',
+      safeInspect: 'Redacted inspect', safeInspectHint: 'Only redacted, structured information is shown by default.',
+      rawJson: 'Raw JSON', rawWarning: 'Raw data can contain sensitive configuration. Open it only when needed.',
+      emptyReferences: 'No referenced containers', emptyMounts: 'No mounts', redacted: 'Redacted',
+      parentFolder: 'Parent folder', downloadFile: 'Download file', binaryFile: 'This file cannot be previewed as text.',
+      layer: 'Layer', execUnavailable: 'This Floeterm release does not support a container terminal.', fullscreen: 'Full screen',
+    },
     inspector: {
       title: 'Resource details', details: 'Details', logs: 'Logs', stats: 'Stats', overview: 'Overview', runtime: 'Runtime',
       technicalDetails: 'Technical details', selectTitle: 'Select a resource',
@@ -2733,12 +2746,13 @@ export const enUS = defineDictionary({
     permissions: {
       read: 'Read permission is required to view container resources.',
       admin: 'Admin permission is required for this high-risk operation.',
+      adminFiles: 'Read and Admin permissions are required to browse container or volume files.',
     },
     notifications: {
       inventoryChangedTitle: 'Inventory changed', inventoryChangedMessage: 'The selected resource is no longer available.',
       preflightFailedTitle: 'Preflight failed', operationFailedTitle: 'Operation failed',
       operationCompleteTitle: 'Operation complete', operationCompleteMessage: 'The authoritative inventory has been refreshed.',
-      logsFailedTitle: 'Logs unavailable',
+      logsFailedTitle: 'Logs unavailable', detailsFailedTitle: 'Details unavailable',
     },
   },
   webServices: {

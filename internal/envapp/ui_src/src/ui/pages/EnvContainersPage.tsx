@@ -3,20 +3,29 @@ import { useNotification } from '@floegence/floe-webapp-core';
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   ArrowDown,
   ArrowUp,
+  ChevronRight,
+  Copy,
   Cpu,
   Database,
+  Download,
   ExternalLink,
+  Folder,
   FileText,
   Info,
   Layers,
+  Maximize,
+  MoreVertical,
   Package,
   Pause,
   Play,
   Plus,
   Refresh,
   Search,
+  Settings,
+  Terminal,
   Stop,
   Trash,
   X,
@@ -29,13 +38,20 @@ import {
   cancelContainerOperation,
   createContainerOperation,
   getContainerEndpointStatus,
+  getContainerImageHistory,
+  getRawContainerInspect,
   getContainerResourceDetails,
   getContainerStats,
   listContainerEndpoints,
   listContainerOperations,
   listContainerResources,
+  listContainerResourceFiles,
+  readContainerResourceFile,
   preflightContainerOperation,
   subscribeContainerOperation,
+  subscribeContainerLogs,
+  subscribeContainerStats,
+  subscribeContainerStatsCollection,
   tailContainerLogs,
   type ComposeProjectInventoryItem,
   type ContainerEndpoint,
@@ -47,6 +63,8 @@ import {
   type ContainerResourceInventoryItem,
   type ContainerResourceView,
   type ContainerStats,
+  type ContainerImageHistoryEntry,
+  type ContainerResourceFileEntry,
   type ImageInventoryItem,
   type PodInventoryItem,
   type VolumeInventoryItem,
@@ -80,6 +98,9 @@ type ReviewState = Readonly<{
 }>;
 
 type ResourceFilter = 'all' | 'active' | 'inactive' | 'managed';
+type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'used-by' | 'containers';
+type ResourceSortKey = 'status' | 'name' | 'secondary' | 'created';
+type ResourceSortDirection = 'ascending' | 'descending';
 
 type DetailRecord = Readonly<Record<string, unknown>>;
 
@@ -296,10 +317,34 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [mutationBusy, setMutationBusy] = createSignal(false);
   const [logs, setLogs] = createSignal<ContainerLogLine[] | null>(null);
   const [stats, setStats] = createSignal<ContainerStats | null>(null);
-  const [inspectorMode, setInspectorMode] = createSignal<'details' | 'logs' | 'stats'>('details');
+  const [statsHistory, setStatsHistory] = createSignal<ContainerStats[]>([]);
+  const [collectionStats, setCollectionStats] = createSignal<ReadonlyMap<string, ContainerStats>>(new Map());
+  const [chartsOpen, setChartsOpen] = createSignal(false);
+  const [columnsOpen, setColumnsOpen] = createSignal(false);
+  const [showSecondaryColumn, setShowSecondaryColumn] = createSignal(true);
+  const [showPortsColumn, setShowPortsColumn] = createSignal(true);
+  const [showCreatedColumn, setShowCreatedColumn] = createSignal(true);
+  const [sortKey, setSortKey] = createSignal<ResourceSortKey>('name');
+  const [sortDirection, setSortDirection] = createSignal<ResourceSortDirection>('ascending');
+  const [rowMenuIdentity, setRowMenuIdentity] = createSignal('');
+  const [detailTab, setDetailTab] = createSignal<DetailTab>('overview');
+  const [logQuery, setLogQuery] = createSignal('');
+  const [logsPaused, setLogsPaused] = createSignal(false);
+  const [logsWrap, setLogsWrap] = createSignal(true);
+  const [rawInspect, setRawInspect] = createSignal<unknown>(null);
+  const [rawInspectLoading, setRawInspectLoading] = createSignal(false);
+  const [imageHistory, setImageHistory] = createSignal<ContainerImageHistoryEntry[]>([]);
+  const [filePath, setFilePath] = createSignal('/');
+  const [fileEntries, setFileEntries] = createSignal<ContainerResourceFileEntry[]>([]);
+  const [filesLoading, setFilesLoading] = createSignal(false);
+  const [filePreview, setFilePreview] = createSignal('');
+  const [filePreviewName, setFilePreviewName] = createSignal('');
   let endpointLoadSequence = 0;
   let inventoryLoadSequence = 0;
   let operationStreamAbort: AbortController | null = null;
+  let logViewElement: HTMLDivElement | undefined;
+  let inventoryScrollElement: HTMLDivElement | undefined;
+  let storedInventoryScrollTop = 0;
 
   const permissions = createMemo(() => env.env()?.permissions);
   const canRead = createMemo(() => Boolean(permissions()?.can_read));
@@ -317,25 +362,48 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const selectedManagedOwner = createMemo(() => resourceManagement(selected())?.owner ?? null);
   const activeOperationCount = createMemo(() => operations().filter(operationActive).length);
   const activeResourceCount = createMemo(() => inventory().filter((item) => resourceActive(view(), item)).length);
-  const inactiveResourceCount = createMemo(() => Math.max(0, inventory().length - activeResourceCount()));
-  const activeResourceShare = createMemo(() => inventory().length > 0
-    ? Math.round((activeResourceCount() / inventory().length) * 100)
-    : 0);
   const managedResourceCount = createMemo(() => inventory().filter((item) => resourceManagement(item)?.managed).length);
   const filteredInventory = createMemo(() => {
     const query = searchQuery().trim().toLocaleLowerCase();
     const filter = resourceFilter();
-    return inventory().filter((item) => {
+    const items = inventory().filter((item) => {
       if (query && !resourceSearchText(view(), item).includes(query)) return false;
       if (filter === 'active' && !resourceActive(view(), item)) return false;
       if (filter === 'inactive' && resourceActive(view(), item)) return false;
       if (filter === 'managed' && !resourceManagement(item)?.managed) return false;
       return true;
     });
+    const valueForSort = (item: ContainerResourceInventoryItem): string | number => {
+      switch (sortKey()) {
+        case 'status': return resourceStatus(view(), item);
+        case 'name': return resourceName(view(), item);
+        case 'created': return (item as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms ?? 0;
+        case 'secondary':
+          if (view() === 'containers') return (item as ContainerInventoryItem).image?.reference ?? '';
+          if (view() === 'images') return (item as ImageInventoryItem).size_bytes ?? 0;
+          if (view() === 'volumes') return (item as VolumeInventoryItem).driver ?? '';
+          return (item as ComposeProjectInventoryItem | PodInventoryItem).running_count ?? 0;
+      }
+    };
+    return [...items].sort((left, right) => {
+      const leftValue = valueForSort(left);
+      const rightValue = valueForSort(right);
+      const result = typeof leftValue === 'number' && typeof rightValue === 'number'
+        ? leftValue - rightValue
+        : String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true, sensitivity: 'base' });
+      return sortDirection() === 'ascending' ? result : -result;
+    });
   });
   const selectedDetailRecord = createMemo(() => {
     const loaded = detailRecord(details());
-    return Object.keys(loaded).length > 0 ? loaded : detailRecord(selected());
+    const projected = detailRecord(loaded.project);
+    return Object.keys(projected).length > 0 ? projected : Object.keys(loaded).length > 0 ? loaded : detailRecord(selected());
+  });
+
+  const filteredLogs = createMemo(() => {
+    const query = logQuery().trim().toLocaleLowerCase();
+    if (!query) return logs() ?? [];
+    return (logs() ?? []).filter((line) => line.message.toLocaleLowerCase().includes(query));
   });
 
   createEffect(() => {
@@ -446,11 +514,57 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   });
 
   createEffect(() => {
-    if (inspectorMode() !== 'stats' || view() !== 'containers' || !selectedIdentity()) return;
-    const refresh = () => getContainerStats(selectedIdentity(), engine(), endpointID()).then(setStats).catch(() => setStats(null));
-    void refresh();
-    const timer = window.setInterval(refresh, 1000);
-    onCleanup(() => window.clearInterval(timer));
+    if (!chartsOpen() || view() !== 'containers' || !endpointID() || !endpointStatus()?.capabilities?.collection_stats) {
+      setCollectionStats(new Map());
+      return;
+    }
+    const controller = new AbortController();
+    void subscribeContainerStatsCollection(engine(), endpointID(), (sample) => {
+      setCollectionStats(new Map(sample.samples.map((item) => [item.container_id, item])));
+    }, controller.signal).catch(() => setCollectionStats(new Map()));
+    onCleanup(() => controller.abort());
+  });
+
+  createEffect(() => {
+    if (detailTab() !== 'stats' || view() !== 'containers' || !selectedIdentity()) return;
+    const controller = new AbortController();
+    setStatsHistory([]);
+    void getContainerStats(selectedIdentity(), engine(), endpointID()).then((sample) => {
+      setStats(sample);
+      setStatsHistory([sample]);
+    }).catch(() => setStats(null));
+    void subscribeContainerStats(selectedIdentity(), engine(), endpointID(), (sample) => {
+      setStats(sample);
+      setStatsHistory((items) => [...items.slice(-59), sample]);
+    }, controller.signal).catch(() => undefined);
+    onCleanup(() => controller.abort());
+  });
+
+  createEffect(() => {
+    if (detailTab() !== 'logs' || view() !== 'containers' || !selectedIdentity()) return;
+    const controller = new AbortController();
+    void tailContainerLogs(selectedIdentity(), engine(), endpointID()).then(setLogs).catch(() => setLogs([]));
+    void subscribeContainerLogs(selectedIdentity(), engine(), endpointID(), (line) => {
+      if (!logsPaused()) setLogs((items) => [...(items ?? []).slice(-1999), line]);
+    }, controller.signal).catch(() => undefined);
+    onCleanup(() => controller.abort());
+  });
+
+  createEffect(() => {
+    if (detailTab() !== 'layers' || view() !== 'images' || !selectedIdentity()) return;
+    void getContainerImageHistory(selectedIdentity(), engine(), endpointID()).then(setImageHistory).catch(() => setImageHistory([]));
+  });
+
+  createEffect(() => {
+    const currentView = view();
+    if (detailTab() !== 'files' || (currentView !== 'containers' && currentView !== 'volumes') || !selectedIdentity()) return;
+    if (!canAdmin()) return;
+    if (currentView === 'volumes' && !endpointStatus()?.capabilities?.volume_files) return;
+    setFilesLoading(true);
+    void listContainerResourceFiles(currentView, selectedIdentity(), filePath(), engine(), endpointID())
+      .then((listing) => setFileEntries([...listing.entries]))
+      .catch(() => setFileEntries([]))
+      .finally(() => setFilesLoading(false));
   });
 
   onMount(() => void loadOperations());
@@ -463,15 +577,28 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setDetails(null);
     setSearchQuery('');
     setResourceFilter('all');
+    setChartsOpen(false);
     if (next === 'podman' && view() === 'compose-projects') setView('pods');
     if (next === 'docker' && view() === 'pods') setView('compose-projects');
   };
 
   const selectResource = (item: ContainerResourceInventoryItem) => {
+    storedInventoryScrollTop = inventoryScrollElement?.scrollTop ?? 0;
     setSelectedIdentity(resourceIdentity(view(), item));
-    setInspectorMode('details');
+    setDetailTab('overview');
     setLogs(null);
     setStats(null);
+    setRawInspect(null);
+    setImageHistory([]);
+    setFilePath('/');
+    setFileEntries([]);
+  };
+
+  const closeDetails = () => {
+    setSelectedIdentity('');
+    queueMicrotask(() => {
+      if (inventoryScrollElement) inventoryScrollElement.scrollTop = storedInventoryScrollTop;
+    });
   };
 
   const viewLabel = (value: ContainerResourceView): string => i18n.t(`containers.views.${value}` as Parameters<typeof i18n.t>[0]);
@@ -505,9 +632,31 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     return i18n.t('containers.columns.running');
   };
 
-  const tertiaryColumnLabel = () => (view() === 'images' || view() === 'volumes')
-    ? i18n.t('containers.columns.usage')
-    : i18n.t('containers.columns.status');
+  const changeSort = (next: ResourceSortKey) => {
+    if (sortKey() === next) {
+      setSortDirection(sortDirection() === 'ascending' ? 'descending' : 'ascending');
+      return;
+    }
+    setSortKey(next);
+    setSortDirection('ascending');
+  };
+
+  const SortControl = (props: { sort: ResourceSortKey; label: string }) => (
+    <button
+      type="button"
+      class="container-sort-control"
+      aria-label={props.label}
+      onClick={(event) => {
+        event.stopPropagation();
+        changeSort(props.sort);
+      }}
+    >
+      <span>{props.label}</span>
+      <Show when={sortKey() === props.sort}>
+        {sortDirection() === 'ascending' ? <ArrowUp class="h-3 w-3" /> : <ArrowDown class="h-3 w-3" />}
+      </Show>
+    </button>
+  );
 
   const renderStatus = (status: string) => (
     <span class="container-status" data-tone={resourceStatusTone(status)}>
@@ -620,8 +769,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     }
   };
 
-  const actionRequest = (method: string): MutationDraft | null => {
-    const item = selected();
+  const actionRequest = (method: string, target?: ContainerResourceInventoryItem | null): MutationDraft | null => {
+    const item = target ?? selected();
     if (!item) return null;
     const base = { engine: engine(), endpoint_id: endpointID() };
     if (view() === 'containers') {
@@ -669,6 +818,27 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const runAction = (method: string) => {
     const request = actionRequest(method);
     if (request) beginMutation(request);
+  };
+
+  const runRowAction = (event: MouseEvent, item: ContainerResourceInventoryItem, method: string) => {
+    event.stopPropagation();
+    setRowMenuIdentity('');
+    const request = actionRequest(method, item);
+    if (request) beginMutation(request);
+  };
+
+  const openImageRun = (event: MouseEvent, item: ContainerResourceInventoryItem) => {
+    event.stopPropagation();
+    const image = resourceIdentity('images', item);
+    openCreation('container');
+    setCreationImage(image);
+  };
+
+  const runSelectedImage = () => {
+    const item = selected();
+    if (!item) return;
+    openCreation('container');
+    setCreationImage(resourceIdentity('images', item));
   };
 
   const prune = () => {
@@ -728,13 +898,68 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setCreationMode(mode);
   };
 
-  const loadLogs = async () => {
-    if (!selectedIdentity()) return;
-    setInspectorMode('logs');
+  const loadRawInspect = async () => {
+    if (!selectedIdentity() || !canAdmin()) return;
+    setRawInspectLoading(true);
     try {
-      setLogs(await tailContainerLogs(selectedIdentity(), engine(), endpointID()));
+      setRawInspect(await getRawContainerInspect(selectedIdentity(), engine(), endpointID()));
     } catch (cause) {
-      notify.error(i18n.t('containers.notifications.logsFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+      notify.error(i18n.t('containers.notifications.detailsFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setRawInspectLoading(false);
+    }
+  };
+
+  const copyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(filteredLogs().map((line) => line.message).join('\n'));
+      notify.success(i18n.t('uiCopy.audit.copiedTitle'), i18n.t('uiCopy.audit.copiedMessage', { label: i18n.t('containers.inspector.logs') }));
+    } catch {
+      notify.error(i18n.t('uiCopy.audit.copyFailedTitle'), i18n.t('uiCopy.audit.copyFailedMessage'));
+    }
+  };
+
+  const downloadBlob = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = name;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const downloadLogs = () => {
+    downloadBlob(new Blob([filteredLogs().map((line) => line.message).join('\n')], { type: 'text/plain;charset=utf-8' }), `${resourceName('containers', selected()!)}.log`);
+  };
+
+  const toggleLogFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+      return;
+    }
+    void logViewElement?.requestFullscreen();
+  };
+
+  const openResourceFile = async (entry: ContainerResourceFileEntry, download = false) => {
+    if (entry.kind === 'directory') {
+      setFilePreview('');
+      setFilePreviewName('');
+      setFilePath(entry.path);
+      return;
+    }
+    const resourceView = view();
+    if ((resourceView !== 'containers' && resourceView !== 'volumes') || !selectedIdentity()) return;
+    try {
+      const blob = await readContainerResourceFile(resourceView, selectedIdentity(), entry.path, engine(), endpointID());
+      if (download) {
+        downloadBlob(blob, entry.name);
+        return;
+      }
+      const text = await blob.text();
+      setFilePreviewName(entry.name);
+      setFilePreview(text.includes('\u0000') ? '' : text);
+    } catch (cause) {
+      notify.error(i18n.t('containers.notifications.detailsFailedTitle'), cause instanceof Error ? cause.message : String(cause));
     }
   };
 
@@ -823,10 +1048,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           </DetailSection>
         </Show>
 
-        <details class="container-technical-details" data-container-technical-details>
-          <summary>{i18n.t('containers.inspector.technicalDetails')}</summary>
-          <pre>{JSON.stringify(details() ?? item, null, 2)}</pre>
-        </details>
       </div>
     );
   };
@@ -843,23 +1064,24 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           <Show when={state === 'running'}><Button size="sm" variant="ghost" onClick={() => runAction('containers.pause')} disabled={!canExecute()}><Pause class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.pause')}</Button></Show>
           <Show when={state === 'paused'}><Button size="sm" variant="ghost" onClick={() => runAction('containers.unpause')} disabled={!canExecute()}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.resume')}</Button></Show>
           <Button size="sm" variant="ghost" onClick={() => runAction('containers.kill')} disabled={!canExecute() || !canAdmin()}>{i18n.t('containers.actions.kill')}</Button>
-          <Button size="sm" variant="ghost" onClick={() => runAction('containers.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
+          <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('containers.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
         </>
       );
     }
     if (view() === 'images') return (
       <>
+        <Button size="sm" onClick={runSelectedImage} disabled={!canRWX()}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.run')}</Button>
         <Button size="sm" variant="outline" onClick={() => openCreation('image-tag')} disabled={!canRWX()}>{i18n.t('containers.actions.tag')}</Button>
-        <Button size="sm" variant="ghost" onClick={() => runAction('images.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
+        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('images.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
       </>
     );
-    if (view() === 'volumes') return <Button size="sm" variant="ghost" onClick={() => runAction('volumes.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>;
+    if (view() === 'volumes') return <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('volumes.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>;
     if (view() === 'compose-projects') return (
       <>
         <Button size="sm" onClick={() => runAction('compose.projects.start')} disabled={!canExecute()}>{i18n.t('containers.actions.start')}</Button>
         <Button size="sm" variant="outline" onClick={() => runAction('compose.projects.stop')} disabled={!canExecute()}>{i18n.t('containers.actions.stop')}</Button>
         <Button size="sm" variant="outline" onClick={() => runAction('compose.projects.restart')} disabled={!canExecute()}>{i18n.t('containers.actions.restart')}</Button>
-        <Button size="sm" variant="ghost" onClick={() => runAction('compose.projects.down')} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.down')}</Button>
+        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('compose.projects.down')} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.down')}</Button>
       </>
     );
     return (
@@ -867,14 +1089,145 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Button size="sm" onClick={() => runAction('pods.start')} disabled={!canExecute()}>{i18n.t('containers.actions.start')}</Button>
         <Button size="sm" variant="outline" onClick={() => runAction('pods.stop')} disabled={!canExecute()}>{i18n.t('containers.actions.stop')}</Button>
         <Button size="sm" variant="outline" onClick={() => runAction('pods.restart')} disabled={!canExecute()}>{i18n.t('containers.actions.restart')}</Button>
-        <Button size="sm" variant="ghost" onClick={() => runAction('pods.remove')} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.remove')}</Button>
+        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('pods.remove')} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.remove')}</Button>
       </>
     );
   };
 
+  const renderRowOverflow = (item: ContainerResourceInventoryItem) => {
+    const identity = resourceIdentity(view(), item);
+    const open = () => rowMenuIdentity() === identity;
+    const operationDisabled = (method: string) => {
+      if (method === 'containers.kill') return !canExecute() || !canAdmin();
+      if (method === 'containers.remove' || method === 'images.remove' || method === 'volumes.remove' || method === 'compose.projects.down' || method === 'pods.remove') {
+        return !canRWX() || !canAdmin();
+      }
+      return !canExecute();
+    };
+    const menuAction = (method: string, destructive = false) => (
+      <button type="button" class={destructive ? 'container-destructive-action' : undefined} disabled={operationDisabled(method)} onClick={(event) => runRowAction(event, item, method)}>
+        {operationLabel(method)}
+      </button>
+    );
+    return (
+      <div class="container-row-menu">
+        <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.actions')} aria-expanded={open()} onClick={(event) => { event.stopPropagation(); setRowMenuIdentity(open() ? '' : identity); }}><MoreVertical class="h-4 w-4" /></Button>
+        <Show when={open()}><div class="container-row-menu__content" role="menu">
+          <Show when={view() === 'containers'}>
+            {menuAction('containers.restart')}
+            <Show when={(item as ContainerInventoryItem).state === 'paused'} fallback={menuAction('containers.pause')}>{menuAction('containers.unpause')}</Show>
+            {menuAction('containers.kill', true)}
+            {menuAction('containers.remove', true)}
+          </Show>
+          <Show when={view() === 'images'}>{menuAction('images.remove', true)}</Show>
+          <Show when={view() === 'volumes'}>{menuAction('volumes.remove', true)}</Show>
+          <Show when={view() === 'compose-projects'}>{menuAction('compose.projects.restart')}{menuAction('compose.projects.down', true)}</Show>
+          <Show when={view() === 'pods'}>{menuAction('pods.restart')}{menuAction('pods.remove', true)}</Show>
+        </div></Show>
+      </div>
+    );
+  };
+
+  const statsForContainer = (item: ContainerInventoryItem): ContainerStats | undefined => {
+    const direct = collectionStats().get(item.container_id);
+    if (direct) return direct;
+    return [...collectionStats().values()].find((sample) => item.container_id.startsWith(sample.container_id) || sample.container_id.startsWith(item.container_id));
+  };
+
+  const detailTabs = createMemo<DetailTab[]>(() => {
+    if (view() === 'containers') {
+      const tabs: DetailTab[] = ['overview', 'logs', 'inspect', 'mounts'];
+      if (endpointStatus()?.capabilities?.exec) tabs.push('exec');
+      if (endpointStatus()?.capabilities?.container_files) tabs.push('files');
+      tabs.push('stats');
+      return tabs;
+    }
+    if (view() === 'images') return ['overview', 'layers', 'used-by'];
+    if (view() === 'volumes') return endpointStatus()?.capabilities?.volume_files ? ['overview', 'files', 'used-by'] : ['overview', 'used-by'];
+    return ['overview', 'containers'];
+  });
+
+  const detailTabLabel = (tab: DetailTab) => i18n.t(`containers.detailTabs.${tab}` as Parameters<typeof i18n.t>[0]);
+
+  const renderReferences = () => {
+    const record = selectedDetailRecord();
+    const raw = detailArray(record, view() === 'compose-projects' || view() === 'pods' ? 'containers' : 'used_by');
+    return (
+      <div class="container-reference-list">
+        <Show when={raw.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyReferences')}</div>}>
+          <For each={raw}>{(value) => {
+            const reference = detailRecord(value);
+            const identity = detailString(reference, 'container_id');
+            return (
+              <button type="button" class="container-reference-row" disabled={!identity} onClick={() => {
+                if (!identity) return;
+                setView('containers');
+                setSelectedIdentity(identity);
+                setDetailTab('overview');
+              }}>
+                <span class="container-status__dot" data-tone={resourceStatusTone(detailString(reference, 'state'))} />
+                <span class="truncate">{detailString(reference, 'name') || identity.slice(0, 12)}</span>
+                <span class="ml-auto text-xs text-muted-foreground">{localizedResourceStatus(detailString(reference, 'state'))}</span>
+                <ChevronRight class="h-3.5 w-3.5" />
+              </button>
+            );
+          }}</For>
+        </Show>
+      </div>
+    );
+  };
+
+  const renderDetailContent = () => {
+    const tab = detailTab();
+    const record = selectedDetailRecord();
+    if (tab === 'overview') return renderStructuredDetails();
+    if (tab === 'logs') return (
+      <div class="container-tool-view">
+        <div class="container-tool-toolbar">
+          <div class="container-search-control"><Search class="h-4 w-4" /><Input value={logQuery()} onInput={(event) => setLogQuery(event.currentTarget.value)} placeholder={i18n.t('containers.detail.searchLogs')} /></div>
+          <Button size="sm" variant="ghost" class="container-icon-action" aria-label={logsPaused() ? i18n.t('containers.actions.resume') : i18n.t('containers.actions.pause')} title={logsPaused() ? i18n.t('containers.actions.resume') : i18n.t('containers.actions.pause')} onClick={() => setLogsPaused(!logsPaused())}>{logsPaused() ? <Play class="h-4 w-4" /> : <Pause class="h-4 w-4" />}</Button>
+          <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.wrap')} title={i18n.t('containers.detail.wrap')} aria-pressed={logsWrap()} onClick={() => setLogsWrap(!logsWrap())}><FileText class="h-4 w-4" /></Button>
+          <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.copyLogs')} title={i18n.t('containers.detail.copyLogs')} onClick={() => void copyLogs()}><Copy class="h-4 w-4" /></Button>
+          <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.downloadLogs')} title={i18n.t('containers.detail.downloadLogs')} onClick={downloadLogs}><Download class="h-4 w-4" /></Button>
+          <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.fullscreen')} title={i18n.t('containers.detail.fullscreen')} onClick={toggleLogFullscreen}><Maximize class="h-4 w-4" /></Button>
+        </div>
+        <div ref={logViewElement} class="container-log-view" data-wrap={logsWrap() ? 'true' : 'false'}><Show when={logs()} fallback={i18n.t('containers.loading')}><For each={filteredLogs()}>{(line) => <div><Show when={line.timestamp_unix_ms}><time>{formatDate(line.timestamp_unix_ms)}</time></Show><span>{line.message}</span></div>}</For></Show></div>
+      </div>
+    );
+    if (tab === 'inspect') return (
+      <div class="container-inspect-view">
+        <div class="container-inspect-heading"><div><strong>{i18n.t('containers.detail.safeInspect')}</strong><span>{i18n.t('containers.detail.safeInspectHint')}</span></div><Show when={canAdmin()}><Button size="sm" variant="outline" onClick={() => void loadRawInspect()} disabled={rawInspectLoading()}>{i18n.t('containers.detail.rawJson')}</Button></Show></div>
+        <pre>{JSON.stringify(record, null, 2)}</pre>
+        <Show when={rawInspect()}><div class="container-raw-warning"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.detail.rawWarning')}</div><pre data-container-raw-inspect>{JSON.stringify(rawInspect(), null, 2)}</pre></Show>
+      </div>
+    );
+    if (tab === 'mounts') {
+      const mounts = detailArray(detailRecord(record.runtime), 'mounts');
+      return <div class="container-reference-list"><Show when={mounts.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyMounts')}</div>}><For each={mounts}>{(value) => { const mount = detailRecord(value); return <div class="container-mount-row"><Database class="h-4 w-4" /><div><strong>{detailString(mount, 'target') || '—'}</strong><span>{detailString(mount, 'type')} · {detailString(mount, 'source_kind') || i18n.t('containers.detail.redacted')}</span></div></div>; }}</For></Show></div>;
+    }
+    if (tab === 'files') return (
+      <div class="container-files-view">
+        <div class="container-file-path"><Button size="sm" variant="ghost" class="container-icon-action" disabled={filePath() === '/'} aria-label={i18n.t('containers.detail.parentFolder')} onClick={() => setFilePath(filePath().split('/').slice(0, -1).join('/') || '/')}><ArrowLeft class="h-4 w-4" /></Button><span class="font-mono">{filePath()}</span></div>
+        <Show when={canAdmin()} fallback={<div class="container-empty-inline">{i18n.t('containers.permissions.adminFiles')}</div>}>
+          <Show when={!filesLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}>
+            <div class="container-file-list"><For each={fileEntries()}>{(entry) => <div class="container-file-row"><button type="button" onClick={() => void openResourceFile(entry)}>{entry.kind === 'directory' ? <Folder class="h-4 w-4" /> : <FileText class="h-4 w-4" />}<span>{entry.name}</span></button><span>{formatBytes(entry.size_bytes)}</span><Show when={entry.kind === 'file'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.downloadFile')} onClick={() => void openResourceFile(entry, true)}><Download class="h-3.5 w-3.5" /></Button></Show></div>}</For></div>
+          </Show>
+        </Show>
+        <Show when={filePreviewName()}><div class="container-file-preview"><div>{filePreviewName()}</div><pre>{filePreview() || i18n.t('containers.detail.binaryFile')}</pre></div></Show>
+      </div>
+    );
+    if (tab === 'stats') {
+      const values = statsHistory();
+      return <div class="container-stats-dashboard"><div class="container-stat-summary"><StatMetric icon={<Cpu class="h-4 w-4" />} label={i18n.t('containers.stats.cpu')} value={`${(stats()?.cpu_percent ?? 0).toFixed(1)}%`} /><StatMetric icon={<Database class="h-4 w-4" />} label={i18n.t('containers.stats.memory')} value={formatBytes(stats()?.memory_bytes)} /><StatMetric icon={<ArrowDown class="h-4 w-4" />} label={i18n.t('containers.stats.networkIn')} value={formatBytes(stats()?.network_rx_bytes)} /><StatMetric icon={<ArrowUp class="h-4 w-4" />} label={i18n.t('containers.stats.networkOut')} value={formatBytes(stats()?.network_tx_bytes)} /></div><div class="container-chart-grid"><Sparkline label={i18n.t('containers.stats.cpu')} values={values.map((item) => item.cpu_percent)} /><Sparkline label={i18n.t('containers.stats.memory')} values={values.map((item) => item.memory_bytes)} /></div></div>;
+    }
+    if (tab === 'layers') return <div class="container-layer-list"><Show when={imageHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}><For each={imageHistory()}>{(layer, index) => <div class="container-layer-row"><span>{index() + 1}</span><span class="font-mono">{layer.id?.slice(0, 18) || i18n.t('containers.detail.layer')}</span><span>{formatBytes(layer.size_bytes)}</span><span>{formatDate(layer.created_at_unix_ms)}</span></div>}</For></Show></div>;
+    if (tab === 'used-by' || tab === 'containers') return renderReferences();
+    return <div class="container-empty-inline"><Terminal class="h-5 w-5" />{i18n.t('containers.detail.execUnavailable')}</div>;
+  };
+
   return (
     <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-variant={props.variant ?? 'activity'}>
-      <header class="container-command-header shrink-0 px-3 pt-3 md:px-5 md:pt-4">
+      <header class="container-command-header shrink-0 px-3 md:px-5">
         <div class="container-header-main">
           <div class="flex min-w-0 items-center gap-2.5">
             <div class="container-product-mark"><Layers class="h-5 w-5" aria-hidden="true" /></div>
@@ -908,9 +1261,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           </div>
         </div>
 
-        <nav class="container-resource-nav mt-2 flex gap-1 overflow-x-auto" aria-label={i18n.t('containers.resourceNavigation')}>
+        <nav class="container-resource-nav flex gap-1 overflow-x-auto" aria-label={i18n.t('containers.resourceNavigation')}>
           <For each={availableViews()}>{(item) => (
-            <button type="button" class="container-touch-target" aria-current={view() === item ? 'page' : undefined} onClick={() => { setView(item); setSelectedIdentity(''); setSearchQuery(''); setResourceFilter('all'); }}>
+            <button type="button" class="container-touch-target" aria-current={view() === item ? 'page' : undefined} onClick={() => { setView(item); setSelectedIdentity(''); setSearchQuery(''); setResourceFilter('all'); setDetailTab('overview'); }}>
               <ViewIcon view={item} class="h-4 w-4" />
               <span>{viewLabel(item)}</span>
             </button>
@@ -918,106 +1271,54 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </nav>
       </header>
 
-      <div class="container-content flex min-h-0 flex-1">
-        <main class="flex min-w-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-2 md:px-5 md:pb-5 md:pt-3" aria-busy={loading()}>
-          <section class="container-resource-toolbar shrink-0" data-container-summary>
-            <div class="container-overview-visual">
-              <div class="container-total-count">
-                <strong>{inventory().length}</strong>
-                <span>{viewLabel(view())}</span>
-              </div>
-              <div class="container-distribution">
-                <div
-                  class="container-distribution__track"
-                  role="img"
-                  aria-label={i18n.t('containers.summary.showing', { visible: activeResourceCount(), total: inventory().length })}
-                >
-                  <span class="container-distribution__active" style={`width: ${activeResourceShare()}%`} />
-                  <span class="container-distribution__inactive" />
+      <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy={loading()}>
+        <Show when={selected()} keyed fallback={
+          <div class="container-list-page">
+            <section class="container-resource-toolbar" data-container-summary>
+              <div class="container-list-heading"><strong>{viewLabel(view())}</strong><span>{inventory().length}</span></div>
+              <div class="container-search-control"><Search class="h-4 w-4" aria-hidden="true" /><Input value={searchQuery()} onInput={(event) => setSearchQuery(event.currentTarget.value)} aria-label={i18n.t('containers.search.label')} placeholder={i18n.t('containers.search.placeholder')} /><Show when={searchQuery()}><button type="button" class="container-search-clear" onClick={() => setSearchQuery('')} aria-label={i18n.t('containers.search.clear')}><X class="h-3.5 w-3.5" /></button></Show></div>
+              <div class="container-filter-switch" role="group" aria-label={i18n.t('containers.filters.label')}><button type="button" aria-pressed={resourceFilter() === 'all'} onClick={() => setResourceFilter('all')}>{filterLabel('all')}</button><button type="button" aria-pressed={resourceFilter() === 'active'} onClick={() => setResourceFilter('active')}>{filterLabel('active')}</button><button type="button" aria-pressed={resourceFilter() === 'inactive'} onClick={() => setResourceFilter('inactive')}>{filterLabel('inactive')}</button><Show when={managedResourceCount() > 0}><button type="button" aria-pressed={resourceFilter() === 'managed'} onClick={() => setResourceFilter('managed')}><Layers class="h-3.5 w-3.5" /><span>{managedResourceCount()}</span><span class="sr-only">{filterLabel('managed')}</span></button></Show></div>
+              <div class="container-toolbar-actions">
+                <div class="container-column-picker">
+                  <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.columns.settings')} aria-expanded={columnsOpen()} onClick={() => setColumnsOpen(!columnsOpen())}><Settings class="h-4 w-4" /></Button>
+                  <Show when={columnsOpen()}><div class="container-column-menu" role="group" aria-label={i18n.t('containers.columns.settings')}>
+                    <label><input type="checkbox" checked={showSecondaryColumn()} onChange={(event) => setShowSecondaryColumn(event.currentTarget.checked)} />{secondaryColumnLabel()}</label>
+                    <Show when={view() === 'containers'}><label><input type="checkbox" checked={showPortsColumn()} onChange={(event) => setShowPortsColumn(event.currentTarget.checked)} />{i18n.t('containers.detail.ports')}</label></Show>
+                    <Show when={view() !== 'containers'}><label><input type="checkbox" checked={showCreatedColumn()} onChange={(event) => setShowCreatedColumn(event.currentTarget.checked)} />{i18n.t('containers.columns.created')}</label></Show>
+                  </div></Show>
                 </div>
-                <div class="container-distribution__legend">
-                  <button type="button" aria-pressed={resourceFilter() === 'active'} onClick={() => setResourceFilter(resourceFilter() === 'active' ? 'all' : 'active')}><span data-tone="active" />{filterLabel('active')} <strong>{activeResourceCount()}</strong></button>
-                  <button type="button" aria-pressed={resourceFilter() === 'inactive'} onClick={() => setResourceFilter(resourceFilter() === 'inactive' ? 'all' : 'inactive')}><span data-tone="inactive" />{filterLabel('inactive')} <strong>{inactiveResourceCount()}</strong></button>
-                </div>
-              </div>
-            </div>
-            <div class="container-overview-actions">
-              <div class="container-search-control">
-                <Search class="h-4 w-4" aria-hidden="true" />
-                <Input value={searchQuery()} onInput={(event) => setSearchQuery(event.currentTarget.value)} aria-label={i18n.t('containers.search.label')} placeholder={i18n.t('containers.search.placeholder')} />
-                <Show when={searchQuery()}><button type="button" class="container-search-clear" onClick={() => setSearchQuery('')} aria-label={i18n.t('containers.search.clear')}><X class="h-3.5 w-3.5" /></button></Show>
-              </div>
-              <div class="container-filter-switch" role="group" aria-label={i18n.t('containers.filters.label')}>
-                <button type="button" class="container-touch-target" aria-pressed={resourceFilter() === 'all'} onClick={() => setResourceFilter('all')}>{filterLabel('all')}</button>
-                <Show when={managedResourceCount() > 0}><button type="button" class="container-touch-target" aria-pressed={resourceFilter() === 'managed'} onClick={() => setResourceFilter('managed')}><Layers class="h-3.5 w-3.5" /><span>{managedResourceCount()}</span><span class="sr-only">{filterLabel('managed')}</span></button></Show>
-              </div>
-              <div class="container-create-actions">
-                <Show when={view() === 'images' || view() === 'volumes'}><Button size="sm" variant="outline" onClick={prune} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.prune')}</Button></Show>
+                <Show when={view() === 'containers' && endpointStatus()?.capabilities?.collection_stats}><Button size="sm" variant="ghost" onClick={() => setChartsOpen(!chartsOpen())} aria-pressed={chartsOpen()}><Activity class="mr-1.5 h-3.5 w-3.5" />{chartsOpen() ? i18n.t('containers.detail.hideCharts') : i18n.t('containers.detail.showCharts')}</Button></Show>
+                <Show when={view() === 'images' || view() === 'volumes'}><Button size="sm" variant="ghost" onClick={prune} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.prune')}</Button></Show>
                 <Show when={view() === 'containers'}><Button size="sm" onClick={() => openCreation('container')} disabled={!canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.container')}</Button></Show>
                 <Show when={view() === 'images'}><Button size="sm" onClick={() => openCreation('image')} disabled={!canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.image')}</Button></Show>
                 <Show when={view() === 'volumes'}><Button size="sm" onClick={() => openCreation('volume')} disabled={!canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.volume')}</Button></Show>
                 <Show when={view() === 'pods'}><Button size="sm" onClick={() => openCreation('pod')} disabled={!canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.pod')}</Button></Show>
               </div>
-            </div>
-          </section>
-
-          <Show when={error()}><div class="mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />{error()}</div></Show>
-          <div class="mt-2 min-h-0 flex-1 overflow-auto">
-            <Show when={!loading()} fallback={<div class="grid gap-2" aria-label={i18n.t('containers.loading')}><For each={[1, 2, 3, 4, 5]}>{() => <div class="h-16 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />}</For></div>}>
-              <Show when={inventory().length > 0} fallback={<div class="container-empty-state"><div class="container-empty-state__mark"><ViewIcon view={view()} class="h-6 w-6" /></div><div class="mt-3 text-sm font-medium">{i18n.t('containers.empty.title')}</div></div>}>
-                <Show when={filteredInventory().length > 0} fallback={<div class="container-empty-state"><Search class="h-6 w-6 text-muted-foreground" /><div class="mt-3 text-sm font-medium">{i18n.t('containers.empty.filteredTitle')}</div><Button size="sm" variant="ghost" class="mt-2" onClick={() => { setSearchQuery(''); setResourceFilter('all'); }}>{i18n.t('containers.actions.clearFilters')}</Button></div>}>
-                  <div class="container-resource-table-shell hidden lg:block">
-                    <table class="w-full table-fixed text-left text-sm" data-container-resource-table>
-                      <thead><tr><th class="w-[42%]">{i18n.t('containers.columns.name')}</th><th class="w-[36%]">{secondaryColumnLabel()}</th><th>{tertiaryColumnLabel()}</th></tr></thead>
-                      <tbody>
-                        <For each={filteredInventory()}>{(item, index) => (
-                          <tr tabindex={0} data-container-resource-row-index={index()} aria-selected={selectedIdentity() === resourceIdentity(view(), item)} onClick={() => selectResource(item)} onKeyDown={(event) => handleTableKey(event, index())}>
-                            <td><div class="flex min-w-0 items-center gap-3"><div class="container-resource-icon" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="min-w-0"><div class="flex min-w-0 items-center gap-2"><div class="truncate font-medium text-foreground">{resourceName(view(), item)}</div><Show when={resourceManagement(item)?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')} aria-label={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></div></div></td>
-                            <td class="text-xs text-muted-foreground">
-                              <Show when={view() === 'containers'}><span class="block truncate font-mono text-foreground/80" title={(item as ContainerInventoryItem).image?.reference}>{(item as ContainerInventoryItem).image?.reference || '—'}</span></Show>
-                              <Show when={view() === 'images'}><span class="tabular-nums text-foreground/80">{formatBytes((item as ImageInventoryItem).size_bytes)}</span></Show>
-                              <Show when={view() === 'volumes'}><span class="text-foreground/80">{(item as VolumeInventoryItem).driver || '—'}</span><Show when={(item as VolumeInventoryItem).scope}><span class="ml-1.5 text-muted-foreground">· {(item as VolumeInventoryItem).scope}</span></Show></Show>
-                              <Show when={view() === 'compose-projects'}><span class="font-medium tabular-nums text-foreground/80">{(item as ComposeProjectInventoryItem).running_count} / {(item as ComposeProjectInventoryItem).container_count}</span></Show>
-                              <Show when={view() === 'pods'}><span class="font-medium tabular-nums text-foreground/80">{(item as PodInventoryItem).running_count} / {(item as PodInventoryItem).container_count}</span></Show>
-                            </td>
-                            <td>
-                              <Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item))}>
-                                <span class="text-xs tabular-nums text-muted-foreground">{i18n.t('containers.usage.containers', { count: Number(resourceStatus(view(), item)) })}</span>
-                              </Show>
-                              <Show when={view() === 'containers' && (item as ContainerInventoryItem).health && (item as ContainerInventoryItem).health !== 'healthy'}><div class="mt-1 text-[10px] text-[var(--redeven-status-warning-foreground)]">{localizedResourceStatus((item as ContainerInventoryItem).health ?? '')}</div></Show>
-                            </td>
-                          </tr>
-                        )}</For>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div class="grid gap-2 lg:hidden" data-container-mobile-list>
-                    <For each={filteredInventory()}>{(item) => (
-                      <button type="button" class="container-mobile-card container-touch-target" aria-pressed={selectedIdentity() === resourceIdentity(view(), item)} onClick={() => selectResource(item)}>
-                        <div class="flex min-w-0 items-center gap-3"><div class="container-resource-icon" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="min-w-0 flex-1"><div class="flex min-w-0 items-center gap-2"><div class="truncate text-sm font-medium">{resourceName(view(), item)}</div><Show when={resourceManagement(item)?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div><div class="mt-1 truncate text-xs text-muted-foreground">{view() === 'containers' ? (item as ContainerInventoryItem).image?.reference || '—' : view() === 'images' ? formatBytes((item as ImageInventoryItem).size_bytes) : view() === 'volumes' ? (item as VolumeInventoryItem).driver || '—' : `${(item as ComposeProjectInventoryItem | PodInventoryItem).running_count} / ${(item as ComposeProjectInventoryItem | PodInventoryItem).container_count}`}</div></div><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item))}><span class="text-xs text-muted-foreground">{Number(resourceStatus(view(), item))}</span></Show></div>
-                      </button>
-                    )}</For>
-                  </div>
+            </section>
+            <Show when={chartsOpen() && view() === 'containers'}><div class="container-metrics-strip"><div><span>{i18n.t('containers.stats.cpu')}</span><strong>{[...collectionStats().values()].reduce((sum, item) => sum + item.cpu_percent, 0).toFixed(1)}%</strong></div><div><span>{i18n.t('containers.stats.memory')}</span><strong>{formatBytes([...collectionStats().values()].reduce((sum, item) => sum + item.memory_bytes, 0))}</strong></div><div><span>{i18n.t('containers.filters.active')}</span><strong>{activeResourceCount()}</strong></div></div></Show>
+            <Show when={error()}><div class="container-error" role="alert"><AlertTriangle class="h-4 w-4" />{error()}</div></Show>
+            <div class="container-inventory-scroll" ref={(element) => { inventoryScrollElement = element; }}>
+              <Show when={!loading()} fallback={<div class="container-loading-list" aria-label={i18n.t('containers.loading')}><For each={[1, 2, 3, 4, 5]}>{() => <div />}</For></div>}>
+                <Show when={filteredInventory().length > 0} fallback={<div class="container-empty-state"><Search class="h-6 w-6" /><strong>{inventory().length ? i18n.t('containers.empty.filteredTitle') : i18n.t('containers.empty.title')}</strong></div>}>
+                  <div class="container-resource-table-shell" data-container-table-shell><table class="w-full text-left text-sm" data-container-resource-table><thead><tr>
+                    <th aria-sort={sortKey() === 'status' ? sortDirection() : 'none'}><SortControl sort="status" label={i18n.t('containers.columns.status')} /></th>
+                    <th aria-sort={sortKey() === 'name' ? sortDirection() : 'none'}><SortControl sort="name" label={i18n.t('containers.columns.name')} /></th>
+                    <Show when={showSecondaryColumn()}><th aria-sort={sortKey() === 'secondary' ? sortDirection() : 'none'}><SortControl sort="secondary" label={secondaryColumnLabel()} /></th></Show>
+                    <Show when={view() === 'containers'}><Show when={showPortsColumn()}><th>{i18n.t('containers.detail.ports')}</th></Show><Show when={chartsOpen()}><th>{i18n.t('containers.stats.cpu')}</th><th>{i18n.t('containers.stats.memory')}</th></Show></Show>
+                    <Show when={view() !== 'containers' && showCreatedColumn()}><th aria-sort={sortKey() === 'created' ? sortDirection() : 'none'}><SortControl sort="created" label={i18n.t('containers.columns.created')} /></th></Show>
+                    <th class="container-actions-column">{i18n.t('containers.detail.actions')}</th>
+                  </tr></thead><tbody><For each={filteredInventory()}>{(item, index) => {
+                    const container = () => item as ContainerInventoryItem;
+                    const sample = () => view() === 'containers' ? statsForContainer(container()) : undefined;
+                    return <tr tabindex={0} data-container-resource-row-index={index()} onClick={() => selectResource(item)} onKeyDown={(event) => handleTableKey(event, index())}><td><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item))}><span class="container-usage-dot" data-active={resourceActive(view(), item)} /></Show></td><td><div class="container-name-cell"><ViewIcon view={view()} class="h-4 w-4" /><span class="truncate">{resourceName(view(), item)}</span><Show when={resourceManagement(item)?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></td><Show when={showSecondaryColumn()}><td class="container-secondary-cell"><Show when={view() === 'containers'}>{container().image?.reference || '—'}</Show><Show when={view() === 'images'}>{formatBytes((item as ImageInventoryItem).size_bytes)}</Show><Show when={view() === 'volumes'}>{(item as VolumeInventoryItem).driver || '—'}</Show><Show when={view() === 'compose-projects' || view() === 'pods'}>{(item as ComposeProjectInventoryItem | PodInventoryItem).running_count} / {(item as ComposeProjectInventoryItem | PodInventoryItem).container_count}</Show></td></Show><Show when={view() === 'containers'}><Show when={showPortsColumn()}><td class="container-port-cell">{container().ports?.map(formatPort).filter(Boolean).slice(0, 2).join(', ') || '—'}</td></Show><Show when={chartsOpen()}><td class="tabular-nums">{sample() ? `${sample()!.cpu_percent.toFixed(1)}%` : '—'}</td><td class="tabular-nums">{formatBytes(sample()?.memory_bytes)}</td></Show></Show><Show when={view() !== 'containers' && showCreatedColumn()}><td>{formatDate((item as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms)}</td></Show><td><div class="container-row-actions"><Show when={resourceManagement(item)?.managed} fallback={<><Show when={view() === 'containers'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'containers.stop' : 'containers.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show><Show when={view() === 'images'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.actions.run')} disabled={!canRWX()} onClick={(event) => openImageRun(event, item)}><Play class="h-4 w-4" /></Button></Show><Show when={view() === 'compose-projects'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'compose.projects.stop' : 'compose.projects.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show><Show when={view() === 'pods'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'pods.stop' : 'pods.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show>{renderRowOverflow(item)}<ChevronRight class="h-4 w-4 text-muted-foreground" /></>}><Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); selectResource(item); queueMicrotask(openManagedService); }}><ExternalLink class="h-4 w-4" /></Button></Show></div></td></tr>;
+                  }}</For></tbody></table></div>
+                  <div class="container-mobile-list" data-container-mobile-list><For each={filteredInventory()}>{(item) => <button type="button" class="container-mobile-card" onClick={() => selectResource(item)}><span class="container-resource-icon" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></span><span class="min-w-0 flex-1"><strong>{resourceName(view(), item)}</strong><small>{view() === 'containers' ? (item as ContainerInventoryItem).image?.reference || '—' : secondaryColumnLabel()}</small></span><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item))}><span class="text-xs">{Number(resourceStatus(view(), item))}</span></Show><ChevronRight class="h-4 w-4" /></button>}</For></div>
                 </Show>
               </Show>
-            </Show>
-          </div>
-        </main>
-
-        <Show when={selected()}>
-          <aside class={`container-inspector z-20 flex w-[390px] shrink-0 flex-col max-lg:fixed max-lg:inset-0 max-lg:w-auto ${redevenSurfaceRoleClass('panel')}`} aria-label={i18n.t('containers.inspector.title')}>
-            <div class="container-inspector__header flex min-h-[68px] items-center gap-3 px-4"><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), selected()!))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="min-w-0 flex-1"><div class="flex min-w-0 items-center gap-2"><div class="truncate text-sm font-semibold">{resourceName(view(), selected()!)}</div><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), selected()!))}</Show></div></div><Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setSelectedIdentity('')} aria-label={i18n.t('containers.actions.close')}><X class="h-4 w-4" /></Button></div>
-            <Show when={view() === 'containers'}><div class="container-inspector-tabs" role="tablist" aria-label={i18n.t('containers.inspector.title')}><button type="button" role="tab" aria-selected={inspectorMode() === 'details'} onClick={() => setInspectorMode('details')}><Info class="h-3.5 w-3.5" />{i18n.t('containers.inspector.details')}</button><button type="button" role="tab" aria-selected={inspectorMode() === 'logs'} onClick={() => void loadLogs()}><FileText class="h-3.5 w-3.5" />{i18n.t('containers.inspector.logs')}</button><button type="button" role="tab" aria-selected={inspectorMode() === 'stats'} onClick={() => setInspectorMode('stats')}><Activity class="h-3.5 w-3.5" />{i18n.t('containers.inspector.stats')}</button></div></Show>
-            <div class="min-h-0 flex-1 overflow-auto p-4">
-              <Show when={selectedManagedOwner()} keyed>{(owner) => <button type="button" class="container-managed-card mb-4" onClick={openManagedService}><span class="container-managed-card__mark"><Layers class="h-3.5 w-3.5" /></span><span class="min-w-0 flex-1 truncate text-left"><span class="block text-[10px] text-muted-foreground">{i18n.t('containers.managed.badge')}</span><strong class="block truncate text-xs font-medium">{owner.name}</strong></span><ExternalLink class="h-3.5 w-3.5" aria-hidden="true" /></button>}</Show>
-              <Show when={inspectorMode() === 'details'}>{renderStructuredDetails()}</Show>
-              <Show when={inspectorMode() === 'logs'}><div class="container-log-view"><Show when={logs()} fallback={<span class="text-muted-foreground">{i18n.t('containers.loading')}</span>}><For each={logs() ?? []}>{(line) => <div class="whitespace-pre-wrap break-all">{line.message}</div>}</For></Show></div></Show>
-              <Show when={inspectorMode() === 'stats'}><Show when={stats()} fallback={<div class="text-sm text-muted-foreground">{i18n.t('containers.loading')}</div>}>{(value) => <div class="container-stats-visual"><div class="container-cpu-gauge" style={`--container-cpu-usage: ${Math.min(360, Math.max(0, value().cpu_percent * 3.6))}deg`}><div><strong>{value().cpu_percent.toFixed(1)}%</strong><span>{i18n.t('containers.stats.cpu')}</span></div></div><div class="container-stat-list"><StatMetric icon={<Database class="h-4 w-4" />} label={i18n.t('containers.stats.memory')} value={formatBytes(value().memory_bytes)} /><StatMetric icon={<ArrowDown class="h-4 w-4" />} label={i18n.t('containers.stats.networkIn')} value={formatBytes(value().network_rx_bytes)} /><StatMetric icon={<ArrowUp class="h-4 w-4" />} label={i18n.t('containers.stats.networkOut')} value={formatBytes(value().network_tx_bytes)} /></div></div>}</Show></Show>
             </div>
-            <Show when={!selectedManagedOwner()}><div class="container-inspector__actions flex flex-wrap gap-2 p-3">{renderResourceActions()}</div></Show>
-          </aside>
-        </Show>
-      </div>
+          </div>
+        }>{(item) => <article class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2>{resourceName(view(), item)}</h2><small>{resourceIdentity(view(), item).slice(0, 24)}</small></div><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><nav class="container-detail-tabs" role="tablist"><For each={detailTabs()}>{(tab) => <button type="button" role="tab" aria-selected={detailTab() === tab} onClick={() => setDetailTab(tab)}>{detailTabLabel(tab)}</button>}</For></nav><div class="container-detail-body">{renderDetailContent()}</div></article>}</Show>
+      </main>
 
       <EnvAppDrawer open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} description={i18n.t('containers.operations.description')} bodyClass="min-h-0">
         <div class="max-h-[70vh] space-y-2 overflow-auto p-1" data-container-operations>
@@ -1051,4 +1352,13 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
 function StatMetric(props: { icon: JSX.Element; label: string; value: string }) {
   return <div class="container-stat-metric"><span aria-hidden="true">{props.icon}</span><div><span>{props.label}</span><strong>{props.value}</strong></div></div>;
+}
+
+function Sparkline(props: { label: string; values: readonly number[] }) {
+  const points = () => {
+    const values = props.values.length > 1 ? props.values : [0, ...(props.values.length ? props.values : [0])];
+    const maximum = Math.max(1, ...values);
+    return values.map((value, index) => `${(index / Math.max(1, values.length - 1)) * 100},${36 - (Math.max(0, value) / maximum) * 32}`).join(' ');
+  };
+  return <figure class="container-sparkline"><figcaption>{props.label}</figcaption><svg viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label={props.label}><polyline points={points()} /></svg></figure>;
 }

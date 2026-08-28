@@ -9,9 +9,14 @@ vi.mock('./localApi', () => localApiMocks);
 
 import {
   createContainerOperation,
+  getContainerImageHistory,
+  getRawContainerInspect,
+  listContainerResourceFiles,
+  readContainerResourceFile,
   listContainerResources,
   preflightContainerOperation,
   subscribeContainerOperation,
+  subscribeContainerStatsCollection,
   type ContainerOperation,
   type ContainerPreflight,
 } from './containerResourcesApi';
@@ -109,6 +114,51 @@ describe('native container resources API', () => {
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
       '/_redeven_proxy/api/container-resource-operations/container_operation_1',
       expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('uses no-store reads for explicit raw inspect and resource files', async () => {
+    localApiMocks.fetchLocalApiJSON
+      .mockResolvedValueOnce({ Config: { Image: 'alpine:3.22' } })
+      .mockResolvedValueOnce({ path: '/etc', entries: [{ name: 'hosts', path: '/etc/hosts', kind: 'file' }], truncated: false });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response('127.0.0.1 localhost', { status: 200 }));
+
+    await expect(getRawContainerInspect('container/one', 'docker', 'endpoint/primary')).resolves.toMatchObject({ Config: { Image: 'alpine:3.22' } });
+    await expect(listContainerResourceFiles('containers', 'container/one', '/etc', 'docker', 'endpoint/primary')).resolves.toMatchObject({ path: '/etc' });
+    await expect(readContainerResourceFile('containers', 'container/one', '/etc/hosts', 'docker', 'endpoint/primary')).resolves.toMatchObject({ size: 19 });
+
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenNthCalledWith(1,
+      '/_redeven_proxy/api/container-resources/containers/container%2Fone/inspect/raw?engine=docker&endpoint_id=endpoint%2Fprimary',
+      { method: 'GET', cache: 'no-store' },
+    );
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenNthCalledWith(2,
+      '/_redeven_proxy/api/container-resources/containers/container%2Fone/files?engine=docker&path=%2Fetc&endpoint_id=endpoint%2Fprimary',
+      { method: 'GET', cache: 'no-store' },
+    );
+    expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/container-resources/containers/container%2Fone/files/content?engine=docker&path=%2Fetc%2Fhosts&endpoint_id=endpoint%2Fprimary',
+      { method: 'GET', cache: 'no-store' },
+    );
+  });
+
+  it('keeps image history safe and observes endpoint-wide stats from one SSE stream', async () => {
+    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ history: [{ id: 'layer-1', size_bytes: 1024, created_at_unix_ms: 1 }] });
+    await expect(getContainerImageHistory('alpine:3.22', 'podman', 'rootless')).resolves.toHaveLength(1);
+
+    const encoded = new TextEncoder().encode('event: stats\ndata: {"sampled_at_unix_ms":10,"samples":[{"container_id":"one","cpu_percent":3,"memory_bytes":1024}]}\n\n');
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoded);
+        controller.close();
+      },
+    }), { status: 200 }));
+    const observed = vi.fn();
+    await subscribeContainerStatsCollection('podman', 'rootless', observed, new AbortController().signal);
+
+    expect(observed).toHaveBeenCalledWith(expect.objectContaining({ samples: [expect.objectContaining({ container_id: 'one' })] }));
+    expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/container-resources/containers/stats/events?engine=podman&interval_ms=1500&endpoint_id=rootless',
+      expect.objectContaining({ method: 'GET', headers: { Accept: 'text/event-stream' } }),
     );
   });
 });

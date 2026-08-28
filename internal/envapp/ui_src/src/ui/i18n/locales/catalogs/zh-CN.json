@@ -2848,7 +2848,7 @@
     "views": { "containers": "容器", "images": "镜像", "volumes": "卷", "compose-projects": "Compose 项目", "pods": "Pod" },
     "status": { "connected": "已连接", "unavailable": "不可用" },
     "endpointMeta": { "local": "本地", "remote": "远程", "rootless": "无根模式" },
-    "columns": { "name": "名称", "status": "状态", "details": "详情", "image": "镜像", "size": "大小", "driver": "驱动", "running": "运行中", "usage": "使用情况", "ownership": "归属", "tags": "标签", "services": "服务", "created": "创建时间", "health": "健康状态", "group": "分组", "digest": "摘要", "scope": "作用域" },
+    "columns": { "name": "名称", "status": "状态", "details": "详情", "image": "镜像", "size": "大小", "driver": "驱动", "running": "运行中", "usage": "使用情况", "ownership": "归属", "tags": "标签", "services": "服务", "created": "创建时间", "health": "健康状态", "group": "分组", "digest": "摘要", "scope": "作用域", "settings": "列设置" },
     "states": { "running": "运行中", "stopped": "已停止", "exited": "已退出", "paused": "已暂停", "restarting": "正在重启", "created": "已创建", "removing": "正在移除", "dead": "已失效", "healthy": "健康", "unhealthy": "不健康", "degraded": "已降级", "partial": "部分运行", "unknown": "未知" },
     "search": { "label": "搜索资源", "placeholder": "按名称、镜像、ID 或分组搜索", "clear": "清除搜索" },
     "filters": { "label": "筛选资源", "all": "全部", "active": "活跃", "inactive": "非活跃", "managed": "托管资源", "inUse": "使用中", "unused": "未使用" },
@@ -2858,6 +2858,8 @@
     "actions": { "refresh": "刷新", "start": "启动", "stop": "停止", "restart": "重启", "pause": "暂停", "resume": "恢复", "kill": "强制终止", "remove": "删除", "down": "停止并移除", "tag": "添加标签", "prune": "清理未使用项", "cancel": "取消", "close": "关闭", "review": "审查", "run": "执行操作", "clearFilters": "清除筛选" },
     "create": { "title": "创建资源", "tagTitle": "添加镜像标签", "advanced": "运行设置", "container": "创建容器", "image": "拉取镜像", "volume": "创建卷", "pod": "创建 Pod" },
     "fields": { "name": "名称", "image": "镜像", "driver": "驱动", "tag": "新标签", "command": "命令", "restartPolicy": "重启策略", "cpus": "CPU", "memory": "内存 (MiB)" },
+    "detailTabs": { "overview": "概览", "logs": "日志", "inspect": "检查", "mounts": "挂载", "exec": "终端", "files": "文件", "stats": "统计", "layers": "镜像层", "used-by": "使用方", "containers": "容器" },
+    "detail": { "back": "返回", "showCharts": "显示图表", "hideCharts": "隐藏图表", "ports": "端口", "actions": "操作", "searchLogs": "搜索日志", "wrap": "自动换行", "copyLogs": "复制日志", "downloadLogs": "下载日志", "safeInspect": "脱敏检查", "safeInspectHint": "默认仅显示经过脱敏的结构化信息。", "rawJson": "原始 JSON", "rawWarning": "原始数据可能包含敏感配置，仅供管理员按需查看。", "emptyReferences": "没有关联容器", "emptyMounts": "没有挂载", "redacted": "已脱敏", "parentFolder": "上级目录", "downloadFile": "下载文件", "binaryFile": "此文件无法以文本预览。", "layer": "镜像层", "execUnavailable": "当前 Floeterm 版本不支持容器终端。", "fullscreen": "全屏" },
     "inspector": { "title": "资源详情", "details": "详情", "logs": "日志", "stats": "统计", "overview": "概览", "runtime": "运行配置", "technicalDetails": "技术详情", "selectTitle": "选择资源", "selectDescription": "选择一项资源，查看其身份、运行配置、健康状态和可用操作。", "identity": "资源标识", "selfManaged": "在此管理", "networkMode": "网络模式", "user": "运行用户", "privileged": "特权模式", "readOnlyRoot": "只读根目录", "ports": "已发布端口" },
     "stats": { "cpu": "CPU", "memory": "内存", "networkIn": "网络接收", "networkOut": "网络发送" },
     "operations": { "title": "操作", "description": "已审计的容器操作及其当前状态。", "empty": "暂无容器操作。" },
@@ -2865,8 +2867,8 @@
     "managed": { "badge": "由 Web 服务管理", "title": "由 Web 服务管理", "description": "“{name}”拥有此资源，其生命周期在此受到保护。", "openService": "打开 Web 服务" },
     "confirm": { "title": "确认高风险操作", "warning": "此操作可能永久删除或中断资源。", "typeName": "准确输入“{name}”以继续。" },
     "review": { "title": "审查操作", "operation": "操作" },
-    "permissions": { "read": "查看容器资源需要读取权限。", "admin": "此高风险操作需要管理员权限。" },
-    "notifications": { "inventoryChangedTitle": "资源清单已变化", "inventoryChangedMessage": "所选资源已不可用。", "preflightFailedTitle": "预检失败", "operationFailedTitle": "操作失败", "operationCompleteTitle": "操作完成", "operationCompleteMessage": "已刷新权威资源清单。", "logsFailedTitle": "日志不可用" }
+    "permissions": { "read": "查看容器资源需要读取权限。", "admin": "此高风险操作需要管理员权限。", "adminFiles": "查看容器或卷文件需要 Read 和 Admin 权限。" },
+    "notifications": { "inventoryChangedTitle": "资源清单已变化", "inventoryChangedMessage": "所选资源已不可用。", "preflightFailedTitle": "预检失败", "operationFailedTitle": "操作失败", "operationCompleteTitle": "操作完成", "operationCompleteMessage": "已刷新权威资源清单。", "logsFailedTitle": "日志不可用", "detailsFailedTitle": "无法加载详情" }
   },
   "webServices": {
     "title": "Web服务",

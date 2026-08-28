@@ -19,6 +19,14 @@ const harness = vi.hoisted(() => ({
   endpointStatus: vi.fn(),
   resourceDetails: vi.fn(),
   listOperations: vi.fn(),
+  imageHistory: vi.fn(),
+  rawInspect: vi.fn(),
+  listFiles: vi.fn(),
+  readFile: vi.fn(),
+  subscribeLogs: vi.fn(),
+  subscribeStats: vi.fn(),
+  subscribeCollectionStats: vi.fn(),
+  preflight: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -40,15 +48,24 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   FileText: icon('file'),
   Info: icon('info'),
   Layers: icon('layers'),
+  Maximize: icon('maximize'),
+  MoreVertical: icon('more-vertical'),
   Package: icon('package'),
   Pause: icon('pause'),
   Play: icon('play'),
   Plus: icon('plus'),
   Refresh: icon('refresh'),
   Search: icon('search'),
+  Settings: icon('settings'),
   Stop: icon('stop'),
   Trash: icon('trash'),
   X: icon('x'),
+  ArrowLeft: icon('arrow-left'),
+  ChevronRight: icon('chevron-right'),
+  Copy: icon('copy'),
+  Download: icon('download'),
+  Folder: icon('folder'),
+  Terminal: icon('terminal'),
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
@@ -92,10 +109,17 @@ vi.mock('../services/containerResourcesApi', () => ({
   listContainerResources: harness.listResources,
   getContainerResourceDetails: harness.resourceDetails,
   listContainerOperations: harness.listOperations,
+  getContainerImageHistory: harness.imageHistory,
+  getRawContainerInspect: harness.rawInspect,
+  listContainerResourceFiles: harness.listFiles,
+  readContainerResourceFile: harness.readFile,
+  subscribeContainerLogs: harness.subscribeLogs,
+  subscribeContainerStats: harness.subscribeStats,
+  subscribeContainerStatsCollection: harness.subscribeCollectionStats,
   cancelContainerOperation: vi.fn(),
   createContainerOperation: vi.fn(),
   getContainerStats: vi.fn(),
-  preflightContainerOperation: vi.fn(),
+  preflightContainerOperation: harness.preflight,
   subscribeContainerOperation: vi.fn(),
   tailContainerLogs: vi.fn(),
 }));
@@ -128,9 +152,11 @@ describe('native Containers page', () => {
       default: true,
       remote: false,
       available: true,
+      capabilities: { collection_stats: true, container_files: true, volume_files: false, exec: false },
     }]);
     harness.endpointStatus.mockReset().mockResolvedValue({
       endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', available: true,
+      capabilities: { collection_stats: true, container_files: true, volume_files: false, exec: false },
     });
     harness.listResources.mockReset().mockResolvedValue([{
       container_id: 'container-1',
@@ -140,6 +166,18 @@ describe('native Containers page', () => {
     }]);
     harness.resourceDetails.mockReset().mockResolvedValue({ container_id: 'container-1', state: 'running' });
     harness.listOperations.mockReset().mockResolvedValue([]);
+    harness.imageHistory.mockReset().mockResolvedValue([]);
+    harness.rawInspect.mockReset().mockResolvedValue({});
+    harness.listFiles.mockReset().mockResolvedValue({ path: '/', entries: [], truncated: false });
+    harness.readFile.mockReset().mockResolvedValue(new Blob());
+    harness.subscribeLogs.mockReset().mockResolvedValue(undefined);
+    harness.subscribeStats.mockReset().mockResolvedValue(undefined);
+    harness.subscribeCollectionStats.mockReset().mockResolvedValue(undefined);
+    harness.preflight.mockReset().mockResolvedValue({
+      method: 'containers.start', request_hash: 'request', plan_hash: 'plan',
+      plan: { method: 'containers.start', target: {}, plan_digest: 'plan', risk_level: 'low', risk_flags: [], requires_admin: false },
+      management: { managed: false },
+    });
   });
 
   afterEach(() => {
@@ -196,9 +234,9 @@ describe('native Containers page', () => {
     await settle();
 
     expect(host.querySelector('[data-container-summary]')?.textContent).toContain('containers.filters.active');
-    expect(host.querySelector('.container-distribution__track')).not.toBeNull();
+    expect(host.querySelector('.container-distribution__track')).toBeNull();
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.image');
-    expect(host.querySelectorAll('thead th')).toHaveLength(3);
+    expect(host.querySelectorAll('thead th')).toHaveLength(5);
     expect(host.textContent).toContain('containers.states.running');
     expect(host.querySelector('tbody tr')?.textContent).not.toContain('container-1');
     expect(host.querySelector('.container-managed-label')?.textContent).toBe('');
@@ -213,7 +251,7 @@ describe('native Containers page', () => {
 
     search!.value = '';
     search!.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    const inactiveFilter = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-distribution__legend button'))
+    const inactiveFilter = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-filter-switch button'))
       .find((button) => button.textContent?.includes('containers.filters.inactive'));
     inactiveFilter?.click();
     await settle();
@@ -222,8 +260,9 @@ describe('native Containers page', () => {
 
     (host.querySelector('tbody tr') as HTMLElement).click();
     await settle();
+    expect(host.querySelector('[data-container-detail-page]')).not.toBeNull();
+    expect(host.querySelector('.container-inspector')).toBeNull();
     expect(host.querySelector('[data-container-detail-grid]')?.textContent).toContain('containers.inspector.networkMode');
-    expect(host.querySelector('[data-container-technical-details]')).not.toBeNull();
   });
 
   it('keeps a Web Services-managed resource read-only and links to its owner', async () => {
@@ -234,13 +273,31 @@ describe('native Containers page', () => {
 
     (host.querySelector('tbody tr') as HTMLElement).click();
     await settle();
-    const openService = host.querySelector<HTMLButtonElement>('.container-managed-card');
+    const openService = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-detail-actions button'))
+      .find((button) => button.textContent?.includes('API'));
     expect(openService).not.toBeNull();
     expect(host.textContent).not.toContain('containers.actions.remove');
 
     openService?.click();
     expect(harness.goActivity).toHaveBeenCalledWith('ports');
     expect(harness.storageWrites).toContainEqual({ key: 'webServices:focus', value: { version: 1, serviceID: 'service-1' } });
+  });
+
+  it('restores the inventory scroll position after leaving a dedicated detail page', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    const inventory = host.querySelector<HTMLElement>('.container-inventory-scroll');
+    expect(inventory).not.toBeNull();
+    inventory!.scrollTop = 240;
+    (host.querySelector('tbody tr') as HTMLElement).click();
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.detail.back"]')?.click();
+    await settle();
+    expect(host.querySelector<HTMLElement>('.container-inventory-scroll')?.scrollTop).toBe(240);
   });
 
   it('uses resource-specific columns for images, volumes, Compose projects, and pods', async () => {
@@ -262,10 +319,10 @@ describe('native Containers page', () => {
     };
     await openView('containers.views.images');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.size');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.usage');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.created');
     await openView('containers.views.volumes');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.driver');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.usage');
+    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.created');
     await openView('containers.views.compose-projects');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.running');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.status');
@@ -278,7 +335,7 @@ describe('native Containers page', () => {
   });
 
   it('degrades mutation controls when the session lacks Write and Admin', async () => {
-    Object.assign(harness.permissions, { can_write: false, can_admin: false, is_owner: false });
+    Object.assign(harness.permissions, { can_write: false, can_execute: false, can_admin: false, is_owner: false });
     harness.listResources.mockResolvedValue([{
       container_id: 'container-2', name: 'Worker', state: 'stopped', management: { managed: false },
     }]);
@@ -289,10 +346,25 @@ describe('native Containers page', () => {
 
     const create = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('containers.create.container'));
     expect(create?.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="containers.actions.start"]')?.disabled).toBe(true);
     (host.querySelector('tbody tr') as HTMLElement).click();
     await settle();
     const remove = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('containers.actions.remove'));
     expect(remove?.disabled).toBe(true);
+  });
+
+  it('runs a row lifecycle action without navigating away from the inventory', async () => {
+    harness.listResources.mockResolvedValue([{ container_id: 'container-2', name: 'Worker', state: 'stopped', management: { managed: false } }]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.actions.start"]')?.click();
+    await settle();
+
+    expect(host.querySelector('[data-container-detail-page]')).toBeNull();
+    expect(harness.preflight).toHaveBeenCalledWith('containers.start', expect.objectContaining({ container_id: 'container-2' }));
   });
 
   it('keeps stale inventory visible and presents refresh failure recovery', async () => {

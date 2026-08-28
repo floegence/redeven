@@ -41,6 +41,9 @@ func TestCLIClientV4BatchesPodInspectionWithinResourceLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if capabilities := endpoints[len(endpoints)-1].Capabilities; !capabilities.CollectionStats || !capabilities.ContainerFiles || !capabilities.VolumeFiles || capabilities.Exec {
+		t.Fatalf("Podman endpoint capabilities = %+v", capabilities)
+	}
 	bound, _, err := client.BindEndpoint(context.Background(), EnginePodman, endpoints[len(endpoints)-1].EndpointID)
 	if err != nil {
 		t.Fatal(err)
@@ -67,6 +70,9 @@ func TestCLIClientV4BindsOpaqueDockerEndpointWithoutChangingGlobalContext(t *tes
 	}
 	if len(endpoints) != 2 || endpoints[1].DisplayName != "production" || !endpoints[1].Default {
 		t.Fatalf("endpoints = %+v", endpoints)
+	}
+	if capabilities := endpoints[1].Capabilities; !capabilities.CollectionStats || !capabilities.ContainerFiles || capabilities.VolumeFiles || capabilities.Exec {
+		t.Fatalf("Docker endpoint capabilities = %+v", capabilities)
 	}
 	if endpoints[1].EndpointID == EndpointID("production") || !endpoints[1].EndpointID.Valid() {
 		t.Fatalf("endpoint ID = %q, want an opaque Host projection", endpoints[1].EndpointID)

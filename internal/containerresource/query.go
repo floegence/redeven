@@ -2,6 +2,7 @@ package containerresource
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/floegence/redeven/internal/containerengine"
 )
@@ -165,4 +166,52 @@ func (s *Service) Stats(ctx context.Context, req containerengine.ContainerStatsW
 		return containerengine.ContainerStats{}, err
 	}
 	return s.engine.Stats(bound, req.Engine, req.ContainerID)
+}
+
+func (s *Service) StatsCollection(ctx context.Context, req containerengine.ContainerStatsCollectionRequest) (containerengine.ContainerStatsCollection, error) {
+	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return containerengine.ContainerStatsCollection{}, err
+	}
+	return s.engine.StatsCollection(bound, req)
+}
+
+func (s *Service) RawContainerInspect(ctx context.Context, req containerengine.ContainerInspectRequest) (json.RawMessage, error) {
+	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return nil, err
+	}
+	return s.engine.RawContainerInspect(bound, req)
+}
+
+func (s *Service) ListContainerFiles(ctx context.Context, req containerengine.ContainerFileRequest) (containerengine.ResourceFileListing, error) {
+	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return containerengine.ResourceFileListing{}, err
+	}
+	return s.engine.ListContainerFiles(bound, req)
+}
+
+func (s *Service) ReadContainerFile(ctx context.Context, req containerengine.ContainerFileRequest) (containerengine.ResourceFileContent, error) {
+	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return containerengine.ResourceFileContent{}, err
+	}
+	return s.engine.ReadContainerFile(bound, req)
+}
+
+func (s *Service) ListVolumeFiles(ctx context.Context, req containerengine.VolumeFileRequest) (containerengine.ResourceFileListing, error) {
+	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return containerengine.ResourceFileListing{}, err
+	}
+	return s.engine.ListVolumeFiles(bound, req)
+}
+
+func (s *Service) ReadVolumeFile(ctx context.Context, req containerengine.VolumeFileRequest) (containerengine.ResourceFileContent, error) {
+	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return containerengine.ResourceFileContent{}, err
+	}
+	return s.engine.ReadVolumeFile(bound, req)
 }

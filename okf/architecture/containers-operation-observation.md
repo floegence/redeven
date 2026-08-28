@@ -61,8 +61,11 @@ generation. A superseded response cannot replace current data. Existing data
 may remain visible as stale, but stale data cannot enable a mutation or release
 an operation lock.
 
-Changing engine or endpoint closes active logs and statistics streams, clears
-endpoint-specific detail, and fences prior responses. The Operations drawer
+Changing engine, endpoint, resource view, or detail tool closes the stream that
+lost ownership, clears endpoint-specific detail, and fences prior responses.
+List metrics are opt-in and use one endpoint-wide batch statistics process per
+sample instead of one process per row. Detail statistics and logs retain only a
+bounded browser window. The Operations drawer
 persists within its native surface instance and always shows engine, endpoint,
 resource identity, state, and recovery guidance. Mobile and desktop expose the
 same state and cancellation authority.
