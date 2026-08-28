@@ -83,6 +83,68 @@ function completedTerminalThread() {
 }
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('wraps live thinking without making the transcript horizontally scrollable', async () => {
+    const threadID = 'thread-thinking-wrap';
+    const turnID = 'turn-thinking-wrap';
+    const longURL = `https://example.invalid/${'path-segment-'.repeat(320)}`;
+    const longToken = 'unbroken'.repeat(512);
+    const thinkingText = `Inspecting the workspace.\n${longURL}\n${longToken}`;
+    const runningThread = thread({
+      thread_id: threadID,
+      title: 'Thinking wrap',
+      status: 'running',
+      active_run_id: turnID,
+      messages: [{
+        id: 'user:thinking-wrap', turn_id: turnID, role: 'user', content: 'Inspect the workspace',
+        status: 'complete', created_at_ms: 1,
+      }],
+    });
+    const stream = controlledWorkspaceStream([{
+      schema_version: 1,
+      kind: 'ready',
+      summaries: [runningThread],
+    }]);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 1)),
+      connectLiveStream: stream.connect,
+    });
+    runtime.style.width = '640px';
+    runtime.style.height = '720px';
+
+    await waitFor(() => runtime.querySelector(`[data-thread-id="${threadID}"] button`) !== null);
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-flower-message-id="user:thinking-wrap"]') !== null);
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID,
+        view_version: 2,
+        activity: 'active',
+        turn_id: turnID,
+        items: [
+          { id: 'user:thinking-wrap', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Inspect the workspace' },
+          { id: 'thinking:thinking-wrap', turn_id: turnID, ordinal: 2, kind: 'thinking', text: thinkingText, live: true },
+        ],
+      },
+    });
+
+    await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent === thinkingText);
+    const transcript = runtime.querySelector<HTMLElement>('.flower-chat-transcript');
+    const blockStack = runtime.querySelector<HTMLElement>('.flower-message-block-stack-assistant');
+    const thinkingContent = runtime.querySelector<HTMLElement>('.flower-thinking-content');
+    expect(transcript).not.toBeNull();
+    expect(blockStack).not.toBeNull();
+    expect(thinkingContent).not.toBeNull();
+    expect(thinkingContent?.textContent).toContain(`\n${longURL}\n`);
+    expect(getComputedStyle(blockStack!).wordBreak).toBe('break-word');
+    expect(getComputedStyle(blockStack!).overflowWrap).toBe('anywhere');
+    expect(transcript!.scrollWidth).toBeLessThanOrEqual(transcript!.clientWidth + 1);
+  });
+
   it('renders cumulative thinking before the provider turn completes', async () => {
     const threadID = 'thread-progressive-thinking';
     const turnID = 'turn-progressive-thinking';
