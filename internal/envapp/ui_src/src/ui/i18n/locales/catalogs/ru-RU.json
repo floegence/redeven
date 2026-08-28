@@ -3006,6 +3006,9 @@
     "session": {
       "temporary": "Временный"
     },
+    "collection": {
+      "title": "Сервисы"
+    },
     "card": {
       "fallbackName": "Сервис {id}"
     },

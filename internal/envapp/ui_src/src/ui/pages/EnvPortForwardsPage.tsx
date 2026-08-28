@@ -2,23 +2,15 @@ import { For, Show, createEffect, createMemo, createResource, createSignal, onCl
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
-import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
   Checkbox,
   Dropdown,
   Input,
   Textarea,
   Tag,
   type DropdownItem,
-  type TagProps,
 } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
@@ -41,7 +33,7 @@ import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOri
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { Tooltip } from '../primitives/Tooltip';
-import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
@@ -416,16 +408,40 @@ function InlineButtonSnakeLoading(props: { class?: string }) {
   );
 }
 
-/**
- * HealthBadge - Displays the health status with appropriate styling and animation
- */
-function HealthBadge(props: { health?: Health }) {
+type ServiceStatusTone = 'success' | 'error' | 'neutral';
+
+function ServiceStatusIndicator(props: { label: string; tone: ServiceStatusTone; class?: string }) {
+  return (
+    <span
+      class={cn(
+        'inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium',
+        props.tone === 'success' && 'text-[var(--redeven-status-success-foreground)]',
+        props.tone === 'error' && 'text-destructive',
+        props.tone === 'neutral' && 'text-muted-foreground',
+        props.class,
+      )}
+    >
+      <span
+        class={cn(
+          'h-1.5 w-1.5 shrink-0 rounded-full',
+          props.tone === 'success' && 'bg-[var(--redeven-status-success)]',
+          props.tone === 'error' && 'bg-destructive',
+          props.tone === 'neutral' && 'bg-muted-foreground/55',
+        )}
+        aria-hidden="true"
+      />
+      {props.label}
+    </span>
+  );
+}
+
+function HealthStatus(props: { health?: Health }) {
   const status = () => props.health?.status ?? 'unknown';
   const latency = () => props.health?.latency_ms;
   const lastError = () => props.health?.last_error;
   const i18n = useI18n();
 
-  const badgeVariant = (): TagProps['variant'] => {
+  const tone = (): ServiceStatusTone => {
     switch (status()) {
       case 'healthy':
         return 'success';
@@ -460,9 +476,7 @@ function HealthBadge(props: { health?: Health }) {
 
   return (
     <Tooltip content={tooltipContent()} placement="top">
-      <Tag variant={badgeVariant()} tone="soft" size="sm" dot class="cursor-default">
-        {label()}
-      </Tag>
+      <span class="cursor-default"><ServiceStatusIndicator label={label()} tone={tone()} /></span>
     </Tooltip>
   );
 }
@@ -489,10 +503,7 @@ function EmptyState(props: { onCreateClick: () => void; disabled?: boolean }) {
   );
 }
 
-/**
- * PortForwardCard - A single registered web service card with status, info, and actions
- */
-function PortForwardCard(props: {
+function PortForwardRow(props: {
   forward: PortForward;
   busy: boolean;
   busyText?: string;
@@ -503,60 +514,44 @@ function PortForwardCard(props: {
   const i18n = useI18n();
 
   return (
-    <Card
-      class={cn(
-        'border transition-all duration-200',
-        isHealthy()
-          ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]'
-          : props.forward.health?.status === 'unreachable'
-            ? 'border-destructive/30 bg-destructive/[0.02] hover:border-destructive/50'
-            : redevenSurfaceRoleClass('panelInteractive')
-      )}
+    <div
+      class="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors duration-150 hover:bg-muted/25 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.7fr)_auto]"
+      data-testid="port-forward-row"
+      data-forward-id={props.forward.forward_id}
     >
-      <CardHeader class="pb-2">
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0 flex-1">
-            <CardTitle class="text-sm truncate">{props.forward.name || i18n.t('webServices.card.fallbackName', { id: props.forward.forward_id })}</CardTitle>
-            <CardDescription class="text-xs truncate mt-0.5 font-mono" title={props.forward.target_url}>
-              {props.forward.target_url}
-            </CardDescription>
-          </div>
-          <HealthBadge health={props.forward.health} />
+      <div class="flex min-w-0 items-center gap-3">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/20 text-muted-foreground">
+          <Globe class="h-4 w-4" aria-hidden="true" />
         </div>
-      </CardHeader>
+        <div class="min-w-0">
+          <div class="truncate text-sm font-semibold leading-5">{props.forward.name || i18n.t('webServices.card.fallbackName', { id: props.forward.forward_id })}</div>
+          <div class="mt-0.5 truncate font-mono text-[11px] leading-4 text-muted-foreground" title={props.forward.target_url}>{props.forward.target_url}</div>
+          <Show when={props.forward.description}>
+            <div class="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/80">{props.forward.description}</div>
+          </Show>
+        </div>
+      </div>
 
-      <Show when={props.forward.description}>
-        <CardContent class="pb-2 pt-0">
-          <p class="text-xs text-muted-foreground line-clamp-2">{props.forward.description}</p>
-        </CardContent>
-      </Show>
-
-      <CardContent class={cn('pb-2', !props.forward.description && 'pt-0')}>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-          <div class="text-muted-foreground">{i18n.t('webServices.fields.lastOpened')}</div>
-          <Tooltip content={fmtTime(props.forward.last_opened_at_unix_ms, i18n)} placement="top">
-            <div class="text-right cursor-default">{fmtRelativeTime(props.forward.last_opened_at_unix_ms, i18n)}</div>
+      <div class="col-span-2 flex min-w-0 items-center gap-3 text-[11px] text-muted-foreground md:col-span-1 md:block" data-testid="port-forward-activity">
+        <Tooltip content={fmtTime(props.forward.last_opened_at_unix_ms, i18n)} placement="top">
+          <span class="cursor-default whitespace-nowrap">{i18n.t('webServices.fields.lastOpened')} · {fmtRelativeTime(props.forward.last_opened_at_unix_ms, i18n)}</span>
+        </Tooltip>
+        <Show when={props.forward.health?.last_checked_at_unix_ms}>
+          <Tooltip content={fmtTime(props.forward.health?.last_checked_at_unix_ms ?? 0, i18n)} placement="top">
+            <span class="cursor-default whitespace-nowrap md:mt-1 md:block">{i18n.t('webServices.fields.lastCheck')} · {fmtRelativeTime(props.forward.health?.last_checked_at_unix_ms ?? 0, i18n)}</span>
           </Tooltip>
+        </Show>
+        <Show when={isHealthy() && props.forward.health?.latency_ms}>
+          <span class="whitespace-nowrap md:mt-1 md:block">{i18n.t('webServices.fields.latency')} · <span class="font-mono">{props.forward.health?.latency_ms}ms</span></span>
+        </Show>
+      </div>
 
-          <Show when={isHealthy() && props.forward.health?.latency_ms}>
-            <div class="text-muted-foreground">{i18n.t('webServices.fields.latency')}</div>
-            <div class="text-right font-mono">{props.forward.health?.latency_ms}ms</div>
-          </Show>
-
-          <Show when={props.forward.health?.last_checked_at_unix_ms}>
-            <div class="text-muted-foreground">{i18n.t('webServices.fields.lastCheck')}</div>
-            <Tooltip content={fmtTime(props.forward.health?.last_checked_at_unix_ms ?? 0, i18n)} placement="top">
-              <div class="text-right cursor-default">{fmtRelativeTime(props.forward.health?.last_checked_at_unix_ms ?? 0, i18n)}</div>
-            </Tooltip>
-          </Show>
-        </div>
-      </CardContent>
-
-      <CardFooter class={cn('pt-2 flex items-center justify-between gap-2 border-t', redevenDividerRoleClass())}>
+      <div class="col-start-2 row-start-1 flex shrink-0 items-center gap-2 md:col-start-3" data-testid="port-forward-actions">
+        <div class="mr-1 hidden min-w-[5.5rem] justify-end sm:flex"><HealthStatus health={props.forward.health} /></div>
         <Tooltip content={props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top">
-          <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy} class="flex-1">
-            <Show when={props.busy} fallback={<ExternalLink class="w-3.5 h-3.5 mr-1" />}>
-              <InlineButtonSnakeLoading class="mr-1" />
+          <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy} class="h-8 px-3">
+            <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
+              <InlineButtonSnakeLoading class="mr-1.5" />
             </Show>
             {i18n.t('webServices.actions.open')}
           </Button>
@@ -567,13 +562,14 @@ function PortForwardCard(props: {
             variant="ghost"
             onClick={props.onDelete}
             disabled={props.busy}
-            class="px-2 text-muted-foreground hover:text-destructive"
+            class="h-8 w-8 px-0 text-muted-foreground hover:text-destructive"
+            aria-label={i18n.t('webServices.actions.deleteServiceTooltip')}
           >
-            <Trash class="w-4 h-4" />
+            <Trash class="h-3.5 w-3.5" />
           </Button>
         </Tooltip>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -721,7 +717,7 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
   };
 }
 
-export function ManagedServiceCard(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenContainers?: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenContainers?: () => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
@@ -762,43 +758,48 @@ export function ManagedServiceCard(props: { service: ManagedService; busy: boole
     else if (id === 'uninstall') props.onUninstall();
   };
   return (
-    <Card class={cn('min-w-0 overflow-hidden border px-3 py-2.5 transition-colors duration-200', running() ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]' : redevenSurfaceRoleClass('panelInteractive'))} data-testid="managed-service-card" data-managed-service-id={props.service.service_id}>
-      <div class="flex min-w-0 items-start gap-3">
-        <div class="min-w-0 flex-1"><ServiceTemplateIdentity template={presentation()} compact /></div>
-        <div class="flex shrink-0 flex-col items-end gap-1 pt-0.5" data-testid="managed-service-status">
-          <Tag variant={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'} tone="soft" size="sm">{managedStatusLabel(props.service.observed_state, i18n)}</Tag>
-          <Show when={props.service.update_available}><Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.updateAvailable')}</Tag></Show>
-        </div>
+    <div
+      class="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors duration-150 hover:bg-muted/25 md:grid-cols-[minmax(18rem,1fr)_minmax(10rem,0.65fr)_auto]"
+      data-testid="managed-service-row"
+      data-managed-service-id={props.service.service_id}
+    >
+      <div class="min-w-0"><ServiceTemplateIdentity template={presentation()} compact /></div>
+
+      <div class="col-span-2 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground md:col-span-1" data-testid="managed-service-workspace-column">
+        <FolderOpen class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span class="truncate font-mono leading-5 text-foreground/70" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</span>
       </div>
-      <Show when={props.service.last_error_code}><p class="mt-1.5 text-xs text-destructive">{i18n.t('webServices.managed.stages.failed')}</p></Show>
-      <div class={cn('mt-2 flex min-w-0 items-center gap-2 border-t pt-2', redevenDividerRoleClass())} data-testid="managed-service-footer">
-        <div class="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
-          <FolderOpen class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span class="truncate font-mono leading-5 text-foreground/80" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</span>
-        </div>
-        <div class="flex shrink-0 items-center gap-1.5" data-testid="managed-service-actions">
-          <Button size="sm" variant="default" class="h-8 px-3" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
-          <Button size="sm" variant="outline" class="h-8 px-3" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>{primaryLabel()}</Button>
-          <Dropdown
-            align="end"
-            items={moreItems()}
-            onSelect={selectMoreItem}
-            triggerAriaLabel={`${props.service.name}: ${i18n.t('webServices.managed.moreActions')}`}
-            triggerClass="shrink-0 rounded-md"
-            trigger={(
-              <button
-                type="button"
-                class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                data-testid="managed-service-more"
-                title={i18n.t('webServices.managed.moreActions')}
-              >
-                <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
+
+      <div class="col-start-2 row-start-1 flex shrink-0 items-center gap-2 md:col-start-3" data-testid="managed-service-actions">
+        <div class="mr-1 hidden min-w-[5.5rem] flex-col items-end gap-0.5 sm:flex" data-testid="managed-service-status">
+          <ServiceStatusIndicator
+            label={managedStatusLabel(props.service.observed_state, i18n)}
+            tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
           />
+          <Show when={props.service.update_available}><span class="text-[10px] font-medium text-warning">{i18n.t('webServices.managed.updateAvailable')}</span></Show>
         </div>
+        <Button size="sm" variant="default" class="h-8 px-3" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
+        <Button size="sm" variant="outline" class="h-8 px-3" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}><Show when={running()} fallback={failed() ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>{primaryLabel()}</Button>
+        <Dropdown
+          align="end"
+          items={moreItems()}
+          onSelect={selectMoreItem}
+          triggerAriaLabel={`${props.service.name}: ${i18n.t('webServices.managed.moreActions')}`}
+          triggerClass="shrink-0 rounded-md"
+          trigger={(
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="managed-service-more"
+              title={i18n.t('webServices.managed.moreActions')}
+            >
+              <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        />
       </div>
-    </Card>
+      <Show when={props.service.last_error_code}><p class="col-span-2 text-xs text-destructive md:col-span-3">{i18n.t('webServices.managed.stages.failed')}</p></Show>
+    </div>
   );
 }
 
@@ -1707,104 +1708,92 @@ export function EnvPortForwardsPage() {
   });
 
   return (
-    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('h-full min-h-0 overflow-auto', redevenSurfaceRoleClass('main'))}>
-      <Panel class={cn('overflow-hidden', redevenSurfaceRoleClass('panelStrong'))} data-testid="web-services-panel">
-        <PanelContent class="p-4 space-y-4">
-          {/* Page header */}
-          <div class="flex items-start justify-between gap-4">
-            <div class="flex items-start gap-3">
-              <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Globe class="w-5 h-5 text-primary" />
-              </div>
-              <div class="space-y-1">
-                <div class="text-sm font-semibold">{i18n.t('webServices.title')}</div>
-                <div class="text-xs text-muted-foreground">
-                  {i18n.t('webServices.description')}
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => { bumpRefresh(); void loadManaged(true); }}
-                disabled={!!busyID() || forwards.loading || managedLoading()}
-                aria-label={i18n.t('webServices.actions.refresh')}
-                aria-busy={forwardsRefreshing() ? 'true' : undefined}
-                title={i18n.t('webServices.actions.refresh')}
-                class={outlineControlClass}
-              >
-                <RefreshIcon class={cn('w-3.5 h-3.5 sm:mr-1', forwardsRefreshing() && 'animate-spin motion-reduce:animate-none')} />
-                <span class="hidden sm:inline">{i18n.t('webServices.actions.refresh')}</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => setCreateOpen(true)}
-                disabled={!!busyID() || (permissionReady() && !canExecute())}
-                aria-label={i18n.t('webServices.actions.addService')}
-                title={i18n.t('webServices.actions.addService')}
-              >
-                <Plus class="w-3.5 h-3.5 sm:mr-1" />
-                <span class="hidden sm:inline">{i18n.t('webServices.actions.addService')}</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={openTemplateCatalog}
-                disabled={managedLoading() || (permissionReady() && !canRead())}
-                class={outlineControlClass}
-                data-testid="service-templates-button"
-              >
-                <FileText class="w-3.5 h-3.5 sm:mr-1" />
-                <span class="hidden sm:inline">{i18n.t('webServices.managed.serviceTemplates')}</span>
-              </Button>
-            </div>
+    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
+      <header class="shrink-0 border-b bg-background/95 px-4 py-3 backdrop-blur md:px-5" data-testid="web-services-panel">
+        <div class="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3">
+          <div class="min-w-0">
+            <h1 class="text-base font-semibold tracking-tight">{i18n.t('webServices.title')}</h1>
+            <p class="hidden text-xs leading-5 text-muted-foreground sm:block">{i18n.t('webServices.description')}</p>
           </div>
+          <div class="ml-auto flex shrink-0 items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { bumpRefresh(); void loadManaged(true); }}
+              disabled={!!busyID() || forwards.loading || managedLoading()}
+              aria-label={i18n.t('webServices.actions.refresh')}
+              aria-busy={forwardsRefreshing() ? 'true' : undefined}
+              title={i18n.t('webServices.actions.refresh')}
+              class="h-8 w-8 px-0"
+            >
+              <RefreshIcon class={cn('h-4 w-4', forwardsRefreshing() && 'animate-spin motion-reduce:animate-none')} />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={openTemplateCatalog}
+              disabled={managedLoading() || (permissionReady() && !canRead())}
+              class={cn('h-8', outlineControlClass)}
+              data-testid="service-templates-button"
+            >
+              <FileText class="mr-1.5 h-3.5 w-3.5" />
+              <span>{i18n.t('webServices.managed.serviceTemplates')}</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              class="h-8"
+              onClick={() => setCreateOpen(true)}
+              disabled={!!busyID() || (permissionReady() && !canExecute())}
+              aria-label={i18n.t('webServices.actions.addService')}
+              title={i18n.t('webServices.actions.addService')}
+            >
+              <Plus class="mr-1.5 h-3.5 w-3.5" />
+              <span>{i18n.t('webServices.actions.addService')}</span>
+            </Button>
+          </div>
+        </div>
+      </header>
 
-          <form
-            class={cn('border-y py-4', redevenDividerRoleClass())}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void doOpenAddress();
-            }}
-            data-testid="web-service-address-form"
-          >
-            <div class="mx-auto w-full max-w-3xl">
+      <main class="min-h-0 flex-1 overflow-auto px-4 py-5 md:px-5">
+        <div class="mx-auto w-full max-w-5xl space-y-6">
+          <section aria-labelledby="web-service-address-label">
+            <div class="mb-2 flex items-center gap-2">
+              <Globe class="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              <h2 id="web-service-address-label" class="text-xs font-medium text-foreground">{i18n.t('webServices.address.label')}</h2>
+            </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void doOpenAddress();
+              }}
+              data-testid="web-service-address-form"
+            >
               <div class="flex flex-col gap-2 sm:flex-row">
-                <div class="relative min-w-0 flex-1">
-                  <Globe class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input
-                    value={address()}
-                    onInput={(event) => {
-                      setAddress(event.currentTarget.value);
-                      setAddressValidationVisible(false);
-                    }}
-                    onBlur={() => {
-                      if (address().trim() && !isSupportedWebServiceTarget(address())) setAddressValidationVisible(true);
-                    }}
-                    placeholder={i18n.t('webServices.address.placeholder')}
-                    aria-label={i18n.t('webServices.address.label')}
-                    aria-invalid={addressValidationVisible() ? 'true' : undefined}
-                    aria-describedby="web-service-address-guidance"
-                    autocomplete="url"
-                    spellcheck={false}
-                    size="sm"
-                    class={cn(
-                      'h-10 w-full pl-9 font-mono text-sm',
-                      addressValidationVisible() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
-                    )}
-                    disabled={!canExecute() || !!busyID()}
-                    data-testid="web-service-address-input"
-                  />
-                </div>
-                <Button
-                  type="submit"
+                <Input
+                  value={address()}
+                  onInput={(event) => {
+                    setAddress(event.currentTarget.value);
+                    setAddressValidationVisible(false);
+                  }}
+                  onBlur={() => {
+                    if (address().trim() && !isSupportedWebServiceTarget(address())) setAddressValidationVisible(true);
+                  }}
+                  placeholder={i18n.t('webServices.address.placeholder')}
+                  aria-label={i18n.t('webServices.address.label')}
+                  aria-invalid={addressValidationVisible() ? 'true' : undefined}
+                  aria-describedby="web-service-address-guidance"
+                  autocomplete="url"
+                  spellcheck={false}
                   size="sm"
-                  class="h-10 shrink-0 px-4"
-                  disabled={!canExecute() || !!busyID() || !address().trim()}
-                  data-testid="web-service-address-open"
-                >
+                  class={cn(
+                    'h-10 min-w-0 flex-1 font-mono text-sm',
+                    addressValidationVisible() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
+                  )}
+                  disabled={!canExecute() || !!busyID()}
+                  data-testid="web-service-address-input"
+                />
+                <Button type="submit" size="sm" class="h-10 shrink-0 px-4" disabled={!canExecute() || !!busyID() || !address().trim()} data-testid="web-service-address-open">
                   <ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />
                   {i18n.t('webServices.actions.openAddress')}
                 </Button>
@@ -1824,7 +1813,7 @@ export function EnvPortForwardsPage() {
                   when={addressValidationVisible()}
                   fallback={<>
                     <Globe class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    <span><span class="font-medium text-foreground">{i18n.t('webServices.address.scopeTitle')}</span>{' '}{i18n.t('webServices.address.scopeDescription')}</span>
+                  <span><span class="font-medium text-foreground">{i18n.t('webServices.address.scopeTitle')}</span>{' '}{i18n.t('webServices.address.scopeDescription')}</span>
                   </>}
                 >
                   <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-warning/12 text-warning" aria-hidden="true">
@@ -1837,36 +1826,26 @@ export function EnvPortForwardsPage() {
                   </span>
                 </Show>
               </div>
-            </div>
 
-            <Show when={recentSession()?.ephemeral && recentSession()} keyed>
-              {(session) => (
-                <div class="mx-auto mt-3 flex w-full max-w-3xl flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div class="min-w-0">
-                    <div class="flex items-center gap-2">
+              <Show when={recentSession()?.ephemeral && recentSession()} keyed>
+                {(session) => (
+                  <div class="mt-3 flex flex-col gap-2 rounded-lg bg-muted/30 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex min-w-0 items-center gap-2">
                       <Tag variant="neutral" tone="soft" size="sm">{i18n.t('webServices.session.temporary')}</Tag>
                       <span class="truncate font-mono text-xs text-foreground">{session.forward.target_url}{session.app_path === '/' ? '' : session.app_path}</span>
                     </div>
+                    <Button type="button" size="sm" variant="ghost" class="h-8 shrink-0" onClick={() => void doSaveRecentSession()} disabled={savingSession()}>
+                      <Save class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      {savingSession() ? i18n.t('webServices.actions.saving') : i18n.t('webServices.actions.saveService')}
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    class={cn('h-8 shrink-0', outlineControlClass)}
-                    onClick={() => void doSaveRecentSession()}
-                    disabled={savingSession()}
-                  >
-                    <Save class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                    {savingSession() ? i18n.t('webServices.actions.saving') : i18n.t('webServices.actions.saveService')}
-                  </Button>
-                </div>
-              )}
-            </Show>
-          </form>
+                )}
+              </Show>
+            </form>
+          </section>
 
-          {/* Permission warning */}
           <Show when={permissionReady() && !canExecute()}>
-            <div class="flex items-center gap-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+            <div class="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
               <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path
                   stroke-linecap="round"
@@ -1878,11 +1857,14 @@ export function EnvPortForwardsPage() {
             </div>
           </Show>
 
-          <div class="mx-auto w-full max-w-6xl space-y-3" data-testid="web-services-collection">
-            {/* Search bar - only show when there are services */}
+          <section class="space-y-3" data-testid="web-services-collection" aria-labelledby="web-services-collection-title">
             <Show when={unmanagedForwards().length > 0 || managedState().length > 0}>
-              <div class="w-full max-w-[23.5rem]" data-testid="web-services-search">
-                <div class="relative min-w-0">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="flex items-baseline gap-2">
+                  <h2 id="web-services-collection-title" class="text-sm font-semibold tracking-tight">{i18n.t('webServices.collection.title')}</h2>
+                  <span class="text-xs tabular-nums text-muted-foreground">{unmanagedForwards().length + managedState().length}</span>
+                </div>
+                <div class="relative min-w-0 sm:ml-auto sm:w-72" data-testid="web-services-search">
                   <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <Input
                     value={searchQuery()}
@@ -1902,7 +1884,6 @@ export function EnvPortForwardsPage() {
               </div>
             </Show>
 
-            {/* Services list */}
             <div
               class="relative"
               style={{ 'min-height': '200px' }}
@@ -1931,37 +1912,37 @@ export function EnvPortForwardsPage() {
                 </div>
               </Show>
 
-            <Show when={(forwardsRenderable() || managedState().length > 0) && !forwards.error}>
-              <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}>
-                <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
-                  <div class="flex flex-col items-center justify-center py-12 px-4">
-                    <p class="text-sm text-muted-foreground">{i18n.t('webServices.search.noMatches', { query: searchQuery() })}</p>
-                    <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button>
-                  </div>
-                }>
-                  <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3" data-testid="unified-web-services-grid">
-                    <For each={filteredManagedServices()}>{(service) => (
-                      <ManagedServiceCard service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onOpenContainers={service.container_resource ? () => openManagedContainerResource(service) : undefined} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
-                    )}</For>
-                    <For each={filteredForwards()}>{(f) => (
-                      <PortForwardCard forward={f} busy={busyID() === f.forward_id} busyText={busyID() === f.forward_id ? busyText() : undefined} onOpen={() => void doOpen(f)} onDelete={() => setDeleteID(f.forward_id)} />
-                    )}</For>
-                  </div>
+              <Show when={(forwardsRenderable() || managedState().length > 0) && !forwards.error}>
+                <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}>
+                  <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
+                    <div class="flex flex-col items-center justify-center px-4 py-12">
+                      <p class="text-sm text-muted-foreground">{i18n.t('webServices.search.noMatches', { query: searchQuery() })}</p>
+                      <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button>
+                    </div>
+                  }>
+                    <div class={cn('overflow-hidden rounded-xl border divide-y', redevenSurfaceRoleClass('panel'))} data-testid="unified-web-services-list">
+                      <For each={filteredManagedServices()}>{(service) => (
+                        <ManagedServiceRow service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onOpenContainers={service.container_resource ? () => openManagedContainerResource(service) : undefined} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
+                      )}</For>
+                      <For each={filteredForwards()}>{(forward) => (
+                        <PortForwardRow forward={forward} busy={busyID() === forward.forward_id} busyText={busyID() === forward.forward_id ? busyText() : undefined} onOpen={() => void doOpen(forward)} onDelete={() => setDeleteID(forward.forward_id)} />
+                      )}</For>
+                    </div>
+                  </Show>
                 </Show>
               </Show>
-            </Show>
-            <Show when={managedLoadError()}><p class="mt-3 text-xs text-warning">{i18n.t('webServices.errors.loadFailedPrefix')}</p></Show>
-            <Show when={managedOperation()} keyed>{(operation) => (
-              <div class="mt-3 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite">
-                <Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show>
-                <span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span>
-                <Show when={['pending', 'running', 'cancelling'].includes(operation.state)}><Button size="sm" variant="ghost" onClick={() => void cancelManagedOperation()} disabled={operation.state === 'cancelling' || !canManageManagedService()}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show>
-              </div>
-            )}</Show>
+              <Show when={managedLoadError()}><p class="mt-3 text-xs text-warning">{i18n.t('webServices.errors.loadFailedPrefix')}</p></Show>
+              <Show when={managedOperation()} keyed>{(operation) => (
+                <div class="mt-3 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite">
+                  <Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><InlineButtonSnakeLoading /></Show>
+                  <span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span>
+                  <Show when={['pending', 'running', 'cancelling'].includes(operation.state)}><Button size="sm" variant="ghost" onClick={() => void cancelManagedOperation()} disabled={operation.state === 'cancelling' || !canManageManagedService()}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show>
+                </div>
+              )}</Show>
             </div>
-          </div>
-        </PanelContent>
-      </Panel>
+          </section>
+        </div>
+      </main>
 
       {/* Create dialog */}
       <CreateForwardDialog open={createOpen()} loading={createLoading()} onOpenChange={setCreateOpen} onCreate={doCreate} />

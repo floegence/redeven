@@ -2916,6 +2916,9 @@
     "session": {
       "temporary": "临时"
     },
+    "collection": {
+      "title": "服务"
+    },
     "card": {
       "fallbackName": "服务 {id}"
     },

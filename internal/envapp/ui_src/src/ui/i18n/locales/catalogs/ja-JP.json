@@ -2916,6 +2916,9 @@
     "session": {
       "temporary": "一時"
     },
+    "collection": {
+      "title": "サービス"
+    },
     "card": {
       "fallbackName": "サービス {id}"
     },
