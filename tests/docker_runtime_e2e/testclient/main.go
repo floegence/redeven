@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -86,10 +87,10 @@ type apiEnvelope struct {
 }
 
 type networkExposureCheckResult struct {
-	AccessStatus           accessStatus `json:"access_status"`
-	EnvAppLoaded           bool         `json:"env_app_loaded"`
-	WrongHostStatus        int          `json:"wrong_host_status"`
-	DirectArtifactRejected bool         `json:"direct_artifact_rejected"`
+	AccessStatus            accessStatus `json:"access_status"`
+	EnvAppLoaded            bool         `json:"env_app_loaded"`
+	WrongHostStatus         int          `json:"wrong_host_status"`
+	DirectArtifactAvailable bool         `json:"direct_artifact_available"`
 }
 
 func main() {
@@ -97,26 +98,27 @@ func main() {
 	action := flag.String("action", "ping", "Action: ping, restart, upgrade, or network-check.")
 	targetVersion := flag.String("target-version", "", "Target version for upgrade.")
 	password := flag.String("password", "", "Local UI password for authenticated network checks.")
+	caFile := flag.String("ca-file", "", "PEM CA file for Local UI TLS checks.")
 	flag.Parse()
 
-	if err := run(*baseURL, *action, *targetVersion, *password); err != nil {
+	if err := run(*baseURL, *action, *targetVersion, *password, *caFile); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 }
 
-func run(baseURL string, action string, targetVersion string, password string) error {
+func run(baseURL string, action string, targetVersion string, password string, caFile string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	if strings.TrimSpace(action) == "network-check" {
-		result, err := verifyNetworkExposure(ctx, baseURL, password)
+		result, err := verifyNetworkExposure(ctx, baseURL, password, caFile)
 		if err != nil {
 			return err
 		}
 		return printResult(commandResult{Action: "network-check", NetworkCheck: result})
 	}
 
-	httpClient, parsedBase, err := newHTTPClient(baseURL)
+	httpClient, parsedBase, err := newHTTPClient(baseURL, "")
 	if err != nil {
 		return err
 	}
@@ -181,7 +183,7 @@ func printResult(result commandResult) error {
 	return nil
 }
 
-func newHTTPClient(baseURL string) (*http.Client, *url.URL, error) {
+func newHTTPClient(baseURL string, caFile string) (*http.Client, *url.URL, error) {
 	parsedBase, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse base URL: %w", err)
@@ -193,7 +195,19 @@ func newHTTPClient(baseURL string) (*http.Client, *url.URL, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("create cookie jar: %w", err)
 	}
-	return &http.Client{Jar: jar}, parsedBase, nil
+	transport := http.DefaultTransport
+	if strings.TrimSpace(caFile) != "" {
+		caPEM, err := os.ReadFile(strings.TrimSpace(caFile))
+		if err != nil {
+			return nil, nil, fmt.Errorf("read CA file: %w", err)
+		}
+		roots := x509.NewCertPool()
+		if !roots.AppendCertsFromPEM(caPEM) {
+			return nil, nil, errors.New("CA file does not contain a valid certificate")
+		}
+		transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}}
+	}
+	return &http.Client{Jar: jar, Transport: transport}, parsedBase, nil
 }
 
 func unlockLocalUI(ctx context.Context, client *http.Client, parsedBase *url.URL, password string) error {
@@ -279,8 +293,8 @@ func requestWithWrongHost(ctx context.Context, client *http.Client, parsedBase *
 	return resp.StatusCode, nil
 }
 
-func verifyNetworkExposure(ctx context.Context, baseURL string, password string) (*networkExposureCheckResult, error) {
-	client, parsedBase, err := newHTTPClient(baseURL)
+func verifyNetworkExposure(ctx context.Context, baseURL string, password string, caFile string) (*networkExposureCheckResult, error) {
+	client, parsedBase, err := newHTTPClient(baseURL, caFile)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +302,7 @@ func verifyNetworkExposure(ctx context.Context, baseURL string, password string)
 	if err != nil {
 		return nil, err
 	}
-	if !status.PasswordRequired || status.Unlocked || status.Exposure.Scope != "network" || status.Exposure.Transport != "plaintext" || !status.Exposure.PasswordRequired {
+	if !status.PasswordRequired || status.Unlocked || status.Exposure.Scope != "network" || status.Exposure.Transport != "tls" || !status.Exposure.PasswordRequired {
 		return nil, fmt.Errorf("unexpected locked network exposure status: %#v", status)
 	}
 	if err := loadEnvApp(ctx, client, parsedBase); err != nil {
@@ -308,14 +322,14 @@ func verifyNetworkExposure(ctx context.Context, baseURL string, password string)
 	if err != nil {
 		return nil, err
 	}
-	if directStatus != http.StatusForbidden {
-		return nil, fmt.Errorf("plaintext network connect artifact returned HTTP %d", directStatus)
+	if directStatus != http.StatusOK {
+		return nil, fmt.Errorf("unlocked TLS network connect artifact returned HTTP %d", directStatus)
 	}
 	return &networkExposureCheckResult{
-		AccessStatus:           status,
-		EnvAppLoaded:           true,
-		WrongHostStatus:        wrongHostStatus,
-		DirectArtifactRejected: true,
+		AccessStatus:            status,
+		EnvAppLoaded:            true,
+		WrongHostStatus:         wrongHostStatus,
+		DirectArtifactAvailable: true,
 	}, nil
 }
 
