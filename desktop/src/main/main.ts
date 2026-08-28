@@ -389,6 +389,7 @@ import {
 import {
   closedWindowSnapshot,
   liveTrackedBrowserWindow,
+  snapshotWebContentsIdentity,
   trackBrowserWindow,
   type DesktopClosedWindowSnapshot,
   type DesktopTrackedWindow,
@@ -8336,7 +8337,7 @@ function createWebServiceBrowserController(
     onClosed: (closedWindow) => {
       webServiceBrowserByToolbarWebContentsID.delete(closedWindow.webContentsID);
       sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
-      sessionKeyByWebContentsID.delete(contentView.webContents.id);
+      sessionKeyByWebContentsID.delete(contentViewIdentity.webContentsID);
       const current = sessionRecord.web_service_windows.get(request.forward_id);
       if (current?.webContentsID !== closedWindow.webContentsID) return;
       sessionRecord.web_service_windows.delete(request.forward_id);
@@ -8356,7 +8357,8 @@ function createWebServiceBrowserController(
       backgroundThrottling: false,
     },
   });
-  sessionKeyByWebContentsID.set(contentView.webContents.id, sessionRecord.session_key);
+  const contentViewIdentity = snapshotWebContentsIdentity(contentView.webContents);
+  sessionKeyByWebContentsID.set(contentViewIdentity.webContentsID, sessionRecord.session_key);
   win.contentView.addChildView(contentView);
 
   const layoutContent = (): void => {
