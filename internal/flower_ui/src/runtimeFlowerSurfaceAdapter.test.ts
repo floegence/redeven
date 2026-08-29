@@ -322,7 +322,7 @@ describe('runtime Flower surface adapter read state', () => {
 						status: 'noop',
 						updated_at_ms: 4,
 					}],
-						timeline_decorations: [{
+					timeline_decorations: [{
 						decoration_id: 'context-compaction:compact_stream',
 						kind: 'context_compaction',
 						anchor: { target_kind: 'message', message_id: 'message_compact', edge: 'after' },
@@ -333,49 +333,68 @@ describe('runtime Flower surface adapter read state', () => {
 							status: 'noop',
 							updated_at_ms: 4,
 						},
-						}],
-						context_usage: {
-							run_id: 'run_stream', phase: 'provider_usage', input_tokens: 500,
-							context_window_tokens: 1000, used_ratio: 0.5, pressure_status: 'stable', updated_at_ms: 5,
-						},
+					}],
+					context_usage: {
+						run_id: 'run_stream', phase: 'provider_usage', input_tokens: 500,
+						context_window_tokens: 1000, used_ratio: 0.5, pressure_status: 'stable', updated_at_ms: 5,
+					},
 					current: {
 						thread: { id: 'thread_stream', title: 'Streaming' },
 						version: 3,
 						activity: 'active',
 					},
 				};
-					yield {
-						schema_version: 1,
-						kind: 'viewer.read_state',
-						thread_id: 'thread_stream',
+				yield {
+					schema_version: 1,
+					kind: 'viewer.read_state',
+					thread_id: 'thread_stream',
 					read_status: readStatus(),
 				};
-		});
-		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream }));
-		const controller = new AbortController();
+				yield {
+					schema_version: 1,
+					kind: 'thread.batch',
+					thread_id: 'thread_stream',
+					subagents: [{
+						parent_thread_id: 'thread_stream',
+						thread_id: 'thread_child',
+						task_name: 'Research models',
+						status: 'running',
+						can_send_input: true,
+						can_interrupt: true,
+						can_close: true,
+					}],
+				};
+			});
+			const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream }));
+			const controller = new AbortController();
 			const frames = [];
 			for await (const frame of adapter.connectLiveStream!({
 				signal: controller.signal,
 			})) frames.push(frame);
 
-				expect(frames).toHaveLength(3);
+			expect(frames).toHaveLength(4);
 			expect(frames[0]).toMatchObject({
 				kind: 'ready',
 				summaries: [{ thread_id: 'thread_stream', messages: [] }],
 			});
-				expect(frames[1]).toMatchObject({
-					kind: 'thread.batch',
-					context_usage: { input_tokens: 500, used_ratio: 0.5 },
+			expect(frames[1]).toMatchObject({
+				kind: 'thread.batch',
+				context_usage: { input_tokens: 500, used_ratio: 0.5 },
 				context_compactions: [{ operation_id: 'compact_stream', status: 'noop' }],
 				timeline_decorations: [{ decoration_id: 'context-compaction:compact_stream' }],
 				current: { thread: { id: 'thread_stream', title: 'Streaming' }, version: 3, activity: 'active' },
-				});
-				expect(frames[2]).toMatchObject({
-					kind: 'viewer.read_state',
-					thread_id: 'thread_stream',
+			});
+			expect(frames[2]).toMatchObject({
+				kind: 'viewer.read_state',
+				thread_id: 'thread_stream',
 				read_status: { is_unread: false },
 			});
-	});
+			expect(frames[3]).toMatchObject({
+				kind: 'thread.batch',
+				thread_id: 'thread_stream',
+				subagents: [{ thread_id: 'thread_child', task_name: 'Research models', status: 'running' }],
+			});
+		});
 
 	it('maps summary-only SSE frames without requiring viewer read state', async () => {
 		const connectLiveStream = vi.fn(async function* () {

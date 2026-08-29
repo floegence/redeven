@@ -159,6 +159,7 @@ export type ThreadCache = {
   select(id: string | null): ThreadCache;
   replaceSummary(summary: FlowerThreadSnapshot): ThreadCache;
   replaceSummaries(summaries: readonly FlowerThreadSnapshot[]): ThreadCache;
+  resetRootSummaries(summaries: readonly FlowerThreadSnapshot[]): ThreadCache;
   receiveView(
     view: ThreadView,
     options?: Readonly<{ preserveSummary?: boolean }>,
@@ -219,6 +220,18 @@ function createCache(
         if (id) next.set(id, summaryOnly(summary));
       }
       return createCache(selectedId, next, views, clock + 1);
+    },
+    resetRootSummaries(nextSummaries) {
+      const next = new Map<string, FlowerThreadSnapshot>();
+      for (const summary of nextSummaries) {
+        const id = summary.thread_id.trim();
+        if (id) next.set(id, summaryOnly(summary));
+      }
+      const nextViews = new Map<string, CacheEntry>();
+      for (const [id, view] of views) {
+        if (next.has(id)) nextViews.set(id, view);
+      }
+      return createCache(selectedId && next.has(selectedId) ? selectedId : null, next, nextViews, clock + 1);
     },
     receiveView(view, options) {
       const id = view.thread.thread_id.trim();

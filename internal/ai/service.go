@@ -135,6 +135,9 @@ type Service struct {
 	flowerLiveMetrics               flowerLiveMetrics
 	flowerRuntimeCurrentPublisher   *flowerRuntimeCurrentPublisher
 	flowerRuntimeEndpointByThread   map[string]string
+	flowerRuntimeParentByThread     map[string]string
+	flowerRuntimeRouteKnown         map[string]bool
+	flowerSubagentBoundaryByThread  map[string]string
 
 	uploadsDir string
 	threadsDB  *threadstore.Store
@@ -299,6 +302,9 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		flowerLiveSubscribersByEndpoint: make(map[string]int),
 		flowerLiveSubscribers:           make(map[uint64]*flowerLiveSubscriber),
 		flowerRuntimeEndpointByThread:   make(map[string]string),
+		flowerRuntimeParentByThread:     make(map[string]string),
+		flowerRuntimeRouteKnown:         make(map[string]bool),
+		flowerSubagentBoundaryByThread:  make(map[string]string),
 		uploadsDir:                      uploadsDir,
 		threadsDB:                       ts,
 		closeFloret:                     floretBootstrap.close,
@@ -316,7 +322,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	svc.flowerRuntimeCurrentPublisher = newFlowerRuntimeCurrentPublisher(
 		flowerRuntimeCurrentPublishInterval,
 		systemFlowerRuntimePublishClock{},
-		svc.broadcastFlowerRuntimeCurrent,
+		svc.broadcastFlowerRuntimeProjection,
 	)
 	svc.flowerRuntimeCurrentPublisher.metrics = &svc.flowerLiveMetrics
 	svc.terminalProcesses = newTerminalProcessManager()
@@ -392,7 +398,7 @@ func (s *Service) startFlowerRuntimeViewPump() {
 			}
 			s.reconcileAIWorkloadLeases(threadID, current)
 			lookupCtx, cancel := context.WithTimeout(s.lifecycleCtx, s.persistTimeout())
-			endpointID, lookupErr := s.resolveFlowerRuntimeEndpoint(lookupCtx, threadID)
+			endpointID, parentThreadID, lookupErr := s.resolveFlowerRuntimeRoute(lookupCtx, threadID)
 			cancel()
 			if lookupErr != nil {
 				if s.log != nil && !errors.Is(lookupErr, context.Canceled) {
@@ -402,6 +408,9 @@ func (s *Service) startFlowerRuntimeViewPump() {
 			}
 			if endpointID == "" {
 				continue
+			}
+			if parentThreadID != "" {
+				s.rememberFlowerRuntimeParent(threadID, parentThreadID)
 			}
 			s.publishFlowerRuntimeCurrent(endpointID, current)
 		}

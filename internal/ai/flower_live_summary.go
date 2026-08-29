@@ -27,6 +27,10 @@ func (s *Service) broadcastThreadSummary(endpointID, threadID string) error {
 	if settings == nil {
 		return nil
 	}
+	if parentThreadID := strings.TrimSpace(settings.ParentThreadID); parentThreadID != "" {
+		s.publishFlowerSubagentsPatch(context.Background(), endpointID, parentThreadID)
+		return nil
+	}
 	current, err := s.threadRuntime.View(context.Background(), identity.ThreadID(threadID))
 	if err != nil {
 		return err

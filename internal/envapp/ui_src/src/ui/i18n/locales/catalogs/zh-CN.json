@@ -1052,7 +1052,7 @@
       },
       "activity": {
         "actions": {
-          "spawn": "启动子代理",
+          "spawn": "创建子代理",
           "sendInput": "引导子代理",
           "wait": "等待子代理",
           "list": "列出子代理",
@@ -1066,8 +1066,9 @@
           "failed": "Subagent 操作失败",
           "timedOut": "Subagent 已超时",
           "needsInput": "Subagent 需要输入",
-          "starting": "正在启动 Subagent",
-          "started": "已启动 Subagent",
+          "starting": "正在创建 Subagent",
+          "started": "已创建 Subagent",
+          "createFailed": "创建 Subagent 失败",
           "waiting": "正在等待 {count} 个 Subagent",
           "completed": "{count} 个 Subagent 已完成",
           "waitTimedOut": "等待超时 · 已完成 {completed}/{count}"
@@ -4040,7 +4041,7 @@
       },
       "activity": {
         "actions": {
-          "spawn": "启动子代理",
+          "spawn": "创建子代理",
           "sendInput": "引导子代理",
           "wait": "等待子代理",
           "list": "列出子代理",
@@ -4054,8 +4055,9 @@
           "failed": "Subagent 操作失败",
           "timedOut": "Subagent 已超时",
           "needsInput": "Subagent 需要输入",
-          "starting": "正在启动 Subagent",
-          "started": "已启动 Subagent",
+          "starting": "正在创建 Subagent",
+          "started": "已创建 Subagent",
+          "createFailed": "创建 Subagent 失败",
           "waiting": "正在等待 {count} 个 Subagent",
           "completed": "{count} 个 Subagent 已完成",
           "waitTimedOut": "等待超时 · 已完成 {completed}/{count}"

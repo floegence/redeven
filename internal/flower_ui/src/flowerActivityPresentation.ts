@@ -838,11 +838,16 @@ function subagentActionTitle(
   const statusTitle = (status: string, fallback: string): string => (
     actionTitle && normalizedAction !== 'unknown' ? `${actionTitle} · ${status}` : fallback
   );
+  const singleName = items.length === 1 ? trimString(items[0]?.name) : '';
+  const withSingleName = (title: string): string => singleName ? `${title} · ${singleName}` : title;
+  if (normalizedAction === 'spawn') {
+    if (item.status === 'error') return withSingleName(activityCopy.titles.createFailed);
+    return withSingleName(item.status === 'success' ? activityCopy.titles.started : activityCopy.titles.starting);
+  }
   if (item.status === 'error') return statusTitle(subagentsCopy(copy).statusLabels.failed, activityCopy.titles.failed);
   if (items.some((entry) => entry.raw_status === 'waiting_input')) {
     return statusTitle(subagentsCopy(copy).statusLabels.waiting_input, activityCopy.titles.needsInput);
   }
-  if (normalizedAction === 'spawn') return item.status === 'success' ? activityCopy.titles.started : activityCopy.titles.starting;
   if (normalizedAction === 'wait') {
     if (requestedCount === 0) return timedOut ? activityCopy.titles.timedOut : activityCopy.actions.wait;
     if (timedOut) return activityCopy.titles.waitTimedOut(String(completedCount), countText);
@@ -912,7 +917,9 @@ function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivit
   return {
     label: title.text,
     title,
-    meta: subagentMetaText(detail.items),
+    meta: detail.action === 'spawn' && detail.items.length === 1
+      ? detail.items[0]?.description ?? ''
+      : subagentMetaText(detail.items),
     detailLines: [],
     detailBlocks,
   };

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,6 +37,85 @@ func TestFlowerWorkspaceStreamAcceptsEmptySelectionAndReceivesBackgroundThreadUp
 	frame := nextFlowerLiveStreamFrame(t, subscription)
 	if frame.Kind != FlowerLiveStreamThreadBatch {
 		t.Fatalf("workspace update kind=%q, want thread.batch", frame.Kind)
+	}
+}
+
+func TestFlowerWorkspaceStreamRoutesChildCurrentToParentSubagentInventory(t *testing.T) {
+	t.Parallel()
+	svc := newFlowerLiveMemoryTestService()
+	meta := flowerLiveMemoryTestMeta("env_live_subagent_inventory")
+	const parentThreadID = "parent-thread"
+	const childThreadID = "child-thread"
+	now := time.Now().UTC()
+	var listCalls atomic.Int64
+	runtime := &authorityContinuityRuntime{}
+	runtime.list = func(_ context.Context, scope flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
+		listCalls.Add(1)
+		if scope.ParentID == nil || scope.ParentID.String() != parentThreadID {
+			t.Fatalf("child inventory scope=%#v, want parent %q", scope, parentThreadID)
+		}
+		return []flruntime.ThreadSummary{{
+			ID: identity.ThreadID(childThreadID), ParentThreadID: identity.ThreadID(parentThreadID),
+			TaskName: "Research models", TaskDescription: "Review model releases", HostProfileRef: subagentAgentTypeExplore,
+			ForkMode: subagentContextModeMissionOnly, Activity: flruntime.ThreadActivityActive,
+			CreatedAt: now, UpdatedAt: now,
+		}}, nil
+	}
+	svc.threadRuntime = runtime
+	svc.rememberFlowerRuntimeParent(childThreadID, parentThreadID)
+	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	_ = nextFlowerLiveStreamFrame(t, subscription)
+
+	svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
+		ThreadID: identity.ThreadID(childThreadID), ViewVersion: 1, Activity: flruntime.ThreadActivityActive,
+	})
+	frame := nextFlowerLiveStreamFrame(t, subscription)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.ThreadID != parentThreadID || envelope.Current != nil || envelope.Subagents == nil || len(*envelope.Subagents) != 1 {
+		t.Fatalf("child projection=%#v, want parent inventory patch without child current", envelope)
+	}
+	item := (*envelope.Subagents)[0]
+	if item.ThreadID != childThreadID || item.TaskName != "Research models" || item.Status != subagentStatusRunning {
+		t.Fatalf("subagent patch item=%#v", item)
+	}
+	svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
+		ThreadID: identity.ThreadID(childThreadID), ViewVersion: 2, Activity: flruntime.ThreadActivityActive,
+	})
+	time.Sleep(2 * flowerRuntimeCurrentPublishInterval)
+	if got := listCalls.Load(); got != 1 {
+		t.Fatalf("text-only child updates loaded parent inventory %d times, want 1", got)
+	}
+	svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
+		ThreadID: identity.ThreadID(childThreadID), ViewVersion: 3, Activity: flruntime.ThreadActivityActive,
+		Attention: flruntime.AttentionSummary{InputCount: 1},
+	})
+	_ = nextFlowerLiveStreamFrame(t, subscription)
+	if got := listCalls.Load(); got != 2 {
+		t.Fatalf("child lifecycle updates loaded parent inventory %d times, want 2", got)
+	}
+}
+
+func TestFlowerWorkspaceStreamSubagentPatchPreservesExplicitEmptyInventory(t *testing.T) {
+	t.Parallel()
+	svc := newFlowerLiveMemoryTestService()
+	meta := flowerLiveMemoryTestMeta("env_live_empty_subagents")
+	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	_ = nextFlowerLiveStreamFrame(t, subscription)
+	svc.broadcastFlowerSubagentsPatch(meta.EndpointID, "parent-thread", nil)
+	frame := nextFlowerLiveStreamFrame(t, subscription)
+	if !strings.Contains(string(frame.Data), `"subagents":[]`) {
+		t.Fatalf("empty inventory patch=%s, want explicit empty replacement", frame.Data)
 	}
 }
 

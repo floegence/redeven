@@ -54,6 +54,7 @@ type FlowerLiveStreamEnvelope struct {
 	ThreadID            string                     `json:"thread_id,omitempty"`
 	Summaries           []ThreadView               `json:"summaries,omitempty"`
 	Current             *flruntime.ThreadView      `json:"current,omitempty"`
+	Subagents           *[]FlowerSubagentSummary   `json:"subagents,omitempty"`
 	ContextUsage        *FlowerContextUsage        `json:"context_usage,omitempty"`
 	ContextCompactions  []FlowerContextCompaction  `json:"context_compactions,omitempty"`
 	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
@@ -244,6 +245,30 @@ func (s *Service) broadcastFlowerRuntimeCurrent(endpointID string, current flrun
 		}
 	}
 	batch := newFlowerLiveEncodedBatch(envelope)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, subscriber := range s.flowerLiveSubscribers {
+		if subscriber.endpointID != endpointID || subscriber.closed {
+			continue
+		}
+		enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
+	}
+}
+
+func (s *Service) broadcastFlowerSubagentsPatch(endpointID, parentThreadID string, subagents []FlowerSubagentSummary) {
+	endpointID = strings.TrimSpace(endpointID)
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	if s == nil || endpointID == "" || parentThreadID == "" {
+		return
+	}
+	itemsCopy := make([]FlowerSubagentSummary, len(subagents))
+	copy(itemsCopy, subagents)
+	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+		SchemaVersion: FlowerLiveSchemaVersion,
+		Kind:          FlowerLiveStreamThreadBatch,
+		ThreadID:      parentThreadID,
+		Subagents:     &itemsCopy,
+	})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, subscriber := range s.flowerLiveSubscribers {

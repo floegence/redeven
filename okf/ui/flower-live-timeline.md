@@ -52,10 +52,12 @@ provider-phase, polling, or text-accumulation state machine. A newer turn ID and
 `view_version` replace the stopped turn, while late terminal views remain stale.
 
 Canonical Thread ownership is immutable product routing metadata. The runtime
-view pump resolves `thread_id -> endpoint_id` once and reuses that binding for
-later current views instead of querying SQLite for every provider token. The
-binding contains no lifecycle, message, permission, model, or settings state and
-is removed with the Thread or Service.
+view pump resolves `thread_id -> (endpoint_id, parent_thread_id?)` once and
+reuses that binding instead of querying SQLite for every provider token. Root
+current views feed the thread cache. Child current views feed only a
+parent-scoped full Subagent inventory replacement; they never become a root
+summary or detail view. The binding contains no lifecycle, message, permission,
+model, or settings state and is removed with the Thread or Service.
 
 The server never silently drops an authoritative frame. An initial baseline
 paginates the complete workspace summary inventory and includes current views
@@ -73,17 +75,24 @@ The baseline list is built from one Floret root-inventory `List` projection.
 Redeven does not call `View` for each row; timeline, attachment, context, and
 SubAgent detail load only for the selected thread. Until the first list request
 succeeds, the rail shows a loading skeleton. The empty-conversation copy is
-valid only after an authoritative empty list response.
+valid only after an authoritative empty list response. A reconnecting `ready`
+baseline replaces the root summary set and removes stale non-root cache entries.
+
+`thread.batch.subagents` is a strict full replacement for one cached parent
+detail; an empty array clears it. The patch never creates a summary, changes the
+selected thread, or navigates to a child. The top-right panel and Activity rows
+read this same canonical inventory, and both open the existing floating
+Subagent detail window.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. When a selected summary is ahead, Flower issues a fresh detail request instead of reusing an older in-flight request. One recovery request runs per thread, tracks newer summary targets, and uses finite 100/300/900 ms retries for transient failure. Recovery succeeds when the summary/detail invariant is satisfied, including when only newer activity metadata was accepted or an unchanged response proves the cache is already current. Only a remaining mismatch or request failure advances the retry budget. Exhaustion preserves cached content and exposes an explicit retry action.
 
-Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v5.0.13. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
+Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v5.0.14. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
 
 Summary runtime state only triggers revalidation. Product settings revisions do not enter that signature and cannot start runtime recovery. Exhausted finite recovery remains stopped until a newer runtime signature or an explicit user reload arrives. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, or an active-turn admission failure proves that a turn may still be active; an in-flight Stop request changes that control to its localized pending state without creating another lifecycle fact.
 
 Runtime failures are classified once at the Redeven projection boundary before
 summary, detail, and typed current responses reach Flower. Published Floret
-v5.0.13 supplies the canonical terminal `Failure.Code`; Redeven maps that code
+v5.0.14 supplies the canonical terminal `Failure.Code`; Redeven maps that code
 once and removes the upstream failure payload before serializing Flower data.
 Only historical failures without the typed field use the legacy text
 classifier. Known provider, gateway, control, and canonical-authority failures

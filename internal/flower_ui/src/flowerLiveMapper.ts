@@ -860,7 +860,7 @@ function mapFlowerSubagentSummary(raw: unknown): FlowerSubagentSummary | null {
   };
 }
 
-function mapFlowerSubagents(raw: unknown, field: string): readonly FlowerSubagentSummary[] | undefined {
+export function mapFlowerSubagents(raw: unknown, field: string): readonly FlowerSubagentSummary[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) {
     throw new Error(`Flower contract error: ${field} must be an array.`);

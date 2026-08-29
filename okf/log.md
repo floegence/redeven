@@ -1,7 +1,13 @@
 # Redeven OKF Update Log
 
 ## 2026-08-29
-* **Typed SubAgent operation Activity and Floret v5.0.13 adoption**: Redeven now
+* **Subagent admission latency and parent-only presentation**: Floret v5.0.14
+  supplies segmented domain persistence and canonical task-name titles.
+  Redeven removes post-admission child reads and title writes, treats wait
+  timeout as a normal result, routes child current views to one parent-scoped
+  inventory replacement, keeps children out of the root rail, and opens their
+  detail only in the existing floating window.
+* **Typed SubAgent operation Activity and Floret v5.0.14 adoption**: Redeven now
   preserves each SubAgent action, ordered target list, completion and missing
   counts, and timeout state through Floret Activity and Flower bootstrap/live
   projection. Flower uses one localized action-and-outcome title formatter,

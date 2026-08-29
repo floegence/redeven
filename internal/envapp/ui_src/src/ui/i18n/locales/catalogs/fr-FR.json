@@ -1052,7 +1052,7 @@
       },
       "activity": {
         "actions": {
-          "spawn": "Démarrer un sous-agent",
+          "spawn": "Créer un sous-agent",
           "sendInput": "Guider le sous-agent",
           "wait": "Attendre les sous-agents",
           "list": "Lister les sous-agents",
@@ -1066,8 +1066,9 @@
           "failed": "Échec de l’opération de sous-agent",
           "timedOut": "Délai du sous-agent dépassé",
           "needsInput": "Le sous-agent attend une réponse",
-          "starting": "Démarrage du sous-agent",
-          "started": "Sous-agent démarré",
+          "starting": "Création du sous-agent",
+          "started": "Sous-agent créé",
+          "createFailed": "Échec de la création du sous-agent",
           "waiting": "Attente de {count} sous-agents",
           "completed": "{count} sous-agents terminés",
           "waitTimedOut": "Délai d’attente dépassé · {completed}/{count} terminés"
@@ -4040,7 +4041,7 @@
       },
       "activity": {
         "actions": {
-          "spawn": "Démarrer un sous-agent",
+          "spawn": "Créer un sous-agent",
           "sendInput": "Guider le sous-agent",
           "wait": "Attendre les sous-agents",
           "list": "Lister les sous-agents",
@@ -4054,8 +4055,9 @@
           "failed": "Échec de l’opération de sous-agent",
           "timedOut": "Délai du sous-agent dépassé",
           "needsInput": "Le sous-agent attend une réponse",
-          "starting": "Démarrage du sous-agent",
-          "started": "Sous-agent démarré",
+          "starting": "Création du sous-agent",
+          "started": "Sous-agent créé",
+          "createFailed": "Échec de la création du sous-agent",
           "waiting": "Attente de {count} sous-agents",
           "completed": "{count} sous-agents terminés",
           "waitTimedOut": "Délai d’attente dépassé · {completed}/{count} terminés"

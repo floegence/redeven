@@ -32,11 +32,22 @@ and prevent late output from outranking a tombstone.
 Restart hydration restores accepted input, queue items, unresolved interactions,
 retry-specific input, and canonical outputs, then resumes provider-safe work
 from the last canonical boundary. Unknown effects remain unresolved. Floret owns
-the permanent domain migration lineage from v2 through v5; migration, logical
-version update, and final verification commit in one backend transaction, while
-current canonical bytes remain unchanged.
+the permanent domain migration lineage from v2 through v6. Version 6 stores the
+manifest, root index, threads, entries, artifacts, and supporting records
+separately, so one child admission writes only affected records. The v5 to v6
+migration verifies and replaces the old checkpoint atomically; normal execution
+has no old-format read or whole-state rewrite path.
 
 Child agents are ordinary child threads with parent identity and independent runtime ownership. No product-owned SubAgent lifecycle, recovery handle, or publication state may become a second authority.
+
+The Subagent tool maps each mutation once. `spawn` uses the task name supplied
+to Floret as the canonical child title, persists host authority, and returns the
+typed `Send` view immediately after admission. `send_input`, `close`, and
+`close_all` resolve ownership before the effect and build their result from the
+returned view plus known request metadata. None performs a post-effect `List`,
+`View`, title mutation, or parent summary refresh. Read-only list, inspect, and
+wait operations use the parent-scoped summary inventory; wait timeout is a
+normal typed result and does not fail the parent turn.
 
 The first accepted canonical user message and its fallback title commit in the
 same Floret boundary. Pending or failed automatic-title work keeps that
@@ -67,7 +78,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v5.0.13's public ordered `ThreadView.Items` and
+Redeven consumes Floret v5.0.14's public ordered `ThreadView.Items` and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
@@ -79,7 +90,7 @@ stream text. `TurnResult.Output` remains a run aggregate and is not another
 message source. Flower deduplicates exact item IDs only; equal text with
 different stable IDs remains visible.
 
-Canonical terminal failure classification comes from Floret v5.0.13
+Canonical terminal failure classification comes from Floret v5.0.14
 `ThreadView.Failure` and `ThreadSummary.Failure`. Redeven maps the typed code
 once for list, detail, live current, and command responses, then removes the
 upstream failure payload from the Flower wire view. The deprecated upstream
@@ -166,7 +177,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v5.0.13 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v5.0.14 typed runtime without local replacement.
 - `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces exact published-v5 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.
@@ -174,7 +185,9 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/ai/send_user_turn.go` - Thin product send mapping into typed Floret state.
 - `redeven:internal/ai/activity_file_actions.go` - Shared public Activity sanitizer for all projection paths.
 - `redeven:internal/ai/activity_timeline.go` - Applies Activity sanitization to typed timeline blocks.
-- `redeven:internal/ai/threads.go` - Summary-only inventory mapping and the single endpoint/thread ownership boundary before canonical mutation.
+- `redeven:internal/ai/threads.go` - Summary-only root inventory mapping and the single endpoint/thread ownership boundary before canonical mutation.
+- `redeven:internal/ai/subagents_floret.go` - Single Subagent mutation/read adapter and parent-scoped summary inventory projection.
+- `redeven:internal/ai/flower_runtime_current_routing.go` - Persisted root-versus-child live routing.
 - `redeven:internal/ai/execution_authority.go` - Current submitting-user authority capture for restart recovery.
 - `redeven:internal/ai/threadstore/execution_authority.go` - Minimal host authorization facts for restart redispatch.
 - `redeven:internal/ai/execution_authority_continuity_test.go` - Retry and SubAgent authority continuity across accepted turns and restart.
