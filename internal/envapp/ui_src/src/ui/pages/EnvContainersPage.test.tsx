@@ -274,7 +274,8 @@ describe('native Containers page', () => {
     await settle();
 
     expect(harness.listEndpoints).not.toHaveBeenCalled();
-    expect(host.querySelector('.container-loading-list--page')).not.toBeNull();
+    expect(host.querySelector('[data-container-list-loading]')).not.toBeNull();
+    expect(host.querySelector('[data-container-resource-skeleton-table]')).not.toBeNull();
     expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
 
     harness.setEnvironment({ permissions: harness.permissions });
@@ -613,6 +614,41 @@ describe('native Containers page', () => {
     await settle();
     expect(host.textContent).toContain('Fresh API');
     expect(host.textContent).not.toContain('Cached API');
+    expect(host.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('keeps the resolved inventory mounted while an explicit refresh revalidates the same endpoint', async () => {
+    const refreshedEndpoints = deferred<any[]>();
+    let endpointRequests = 0;
+    harness.listEndpoints.mockImplementation(() => {
+      endpointRequests += 1;
+      if (endpointRequests === 1) {
+        return Promise.resolve([{
+          endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', default: true,
+          remote: false, available: true, capabilities: { collection_stats: true, volume_files: false, exec: false },
+        }]);
+      }
+      return refreshedEndpoints.promise;
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    expect(host.textContent).toContain('Managed API');
+
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.actions.refresh"]')?.click();
+    await Promise.resolve();
+
+    expect(host.textContent).toContain('Managed API');
+    expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
+    expect(host.querySelector('[data-container-list-loading]')).toBeNull();
+    expect(host.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
+
+    refreshedEndpoints.resolve([{
+      endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', default: true,
+      remote: false, available: true, capabilities: { collection_stats: true, volume_files: false, exec: false },
+    }]);
+    await settle();
     expect(host.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
   });
 

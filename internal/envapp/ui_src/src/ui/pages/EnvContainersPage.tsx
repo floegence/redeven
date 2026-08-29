@@ -578,12 +578,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   ) => {
     const target = normalizeConsoleTarget(requestedTarget);
     const previous = consoleState();
-    const canReuseConnection = !options.forceConnectionCheck
-      && previous.endpoint?.available
+    const hasMatchingConnection = Boolean(previous.endpoint?.available)
       && previous.target.engine === target.engine
       && (!target.endpointID || previous.target.endpointID === target.endpointID);
-    let nextEndpoints = canReuseConnection ? previous.endpoints : [];
-    let nextEndpoint = canReuseConnection ? previous.endpoint : null;
+    let nextEndpoints = hasMatchingConnection ? previous.endpoints : [];
+    let nextEndpoint = hasMatchingConnection ? previous.endpoint : null;
     const loadingTarget = nextEndpoint
       ? { ...target, endpointID: nextEndpoint.endpoint_id }
       : target;
@@ -621,7 +620,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     }
 
     try {
-      if (!nextEndpoint) {
+      if (!nextEndpoint || options.forceConnectionCheck) {
         nextEndpoints = await listContainerEndpoints(target.engine, controller.signal);
         if (!current()) return;
         const preferred = nextEndpoints.find((item) => item.endpoint_id === target.endpointID);
@@ -1522,23 +1521,98 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     return <div class="container-empty-inline"><Terminal class="h-5 w-5" />{i18n.t('containers.detail.execUnavailable')}</div>;
   };
 
+  const renderInventoryToolbar = (pending = false): JSX.Element => (
+    <section class="container-resource-toolbar" data-container-summary data-loading={pending ? 'true' : 'false'}>
+      <div class="container-list-heading">
+        <strong>{viewLabel(view())}</strong>
+        <Show when={!pending} fallback={<span class="container-skeleton container-skeleton--count" aria-hidden="true" />}>
+          <span>{inventory().length}</span>
+        </Show>
+      </div>
+      <div class="container-search-control">
+        <Search class="h-4 w-4" aria-hidden="true" />
+        <Input
+          value={pending ? '' : searchQuery()}
+          onInput={(event) => setSearchQuery(event.currentTarget.value)}
+          aria-label={i18n.t('containers.search.label')}
+          placeholder={i18n.t('containers.search.placeholder')}
+          disabled={pending}
+        />
+        <Show when={!pending && searchQuery()}><button type="button" class="container-search-clear" onClick={() => setSearchQuery('')} aria-label={i18n.t('containers.search.clear')}><X class="h-3.5 w-3.5" /></button></Show>
+      </div>
+      <div class="container-filter-switch" role="group" aria-label={i18n.t('containers.filters.label')}>
+        <button type="button" aria-pressed={resourceFilter() === 'all'} onClick={() => setResourceFilter('all')} disabled={pending}>{filterLabel('all')}</button>
+        <button type="button" aria-pressed={resourceFilter() === 'active'} onClick={() => setResourceFilter('active')} disabled={pending}>{filterLabel('active')}</button>
+        <button type="button" aria-pressed={resourceFilter() === 'inactive'} onClick={() => setResourceFilter('inactive')} disabled={pending}>{filterLabel('inactive')}</button>
+        <Show when={!pending && managedResourceCount() > 0}><button type="button" aria-pressed={resourceFilter() === 'managed'} onClick={() => setResourceFilter('managed')}><Layers class="h-3.5 w-3.5" /><span>{managedResourceCount()}</span><span class="sr-only">{filterLabel('managed')}</span></button></Show>
+      </div>
+      <div class="container-toolbar-actions">
+        <div class="container-column-picker">
+          <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.columns.settings')} aria-expanded={!pending && columnsOpen()} onClick={() => setColumnsOpen(!columnsOpen())} disabled={pending}><Settings class="h-4 w-4" /></Button>
+          <Show when={!pending && columnsOpen()}><div class="container-column-menu" role="group" aria-label={i18n.t('containers.columns.settings')}>
+            <label><input type="checkbox" checked={showSecondaryColumn()} onChange={(event) => setShowSecondaryColumn(event.currentTarget.checked)} />{secondaryColumnLabel()}</label>
+            <Show when={view() === 'containers'}><label><input type="checkbox" checked={showPortsColumn()} onChange={(event) => setShowPortsColumn(event.currentTarget.checked)} />{i18n.t('containers.detail.ports')}</label></Show>
+            <Show when={view() !== 'containers'}><label><input type="checkbox" checked={showCreatedColumn()} onChange={(event) => setShowCreatedColumn(event.currentTarget.checked)} />{i18n.t('containers.columns.created')}</label></Show>
+          </div></Show>
+        </div>
+        <Show when={view() === 'containers' && (pending || endpointStatus()?.capabilities?.collection_stats)}><Button size="sm" variant="ghost" onClick={() => setChartsOpen(!chartsOpen())} aria-pressed={!pending && chartsOpen()} disabled={pending}><Activity class="mr-1.5 h-3.5 w-3.5" />{chartsOpen() ? i18n.t('containers.detail.hideCharts') : i18n.t('containers.detail.showCharts')}</Button></Show>
+        <Show when={view() === 'images' || view() === 'volumes'}><Button size="sm" variant="ghost" onClick={prune} disabled={pending || !canRWX() || !canAdmin()}>{i18n.t('containers.actions.prune')}</Button></Show>
+        <Show when={view() === 'containers'}><Button size="sm" onClick={() => openCreation('container')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.container')}</Button></Show>
+        <Show when={view() === 'images'}><Button size="sm" onClick={() => openCreation('image')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.image')}</Button></Show>
+        <Show when={view() === 'volumes'}><Button size="sm" onClick={() => openCreation('volume')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.volume')}</Button></Show>
+        <Show when={view() === 'pods'}><Button size="sm" onClick={() => openCreation('pod')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.pod')}</Button></Show>
+      </div>
+    </section>
+  );
+
+  const renderInventoryTableHeader = (pending = false): JSX.Element => (
+    <thead><tr>
+      <th aria-sort={pending ? 'none' : sortKey() === 'status' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{i18n.t('containers.columns.status')}</span>}><SortControl sort="status" label={i18n.t('containers.columns.status')} /></Show></th>
+      <th aria-sort={pending ? 'none' : sortKey() === 'name' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{i18n.t('containers.columns.name')}</span>}><SortControl sort="name" label={i18n.t('containers.columns.name')} /></Show></th>
+      <Show when={showSecondaryColumn()}><th aria-sort={pending ? 'none' : sortKey() === 'secondary' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{secondaryColumnLabel()}</span>}><SortControl sort="secondary" label={secondaryColumnLabel()} /></Show></th></Show>
+      <Show when={view() === 'containers'}><Show when={showPortsColumn()}><th>{i18n.t('containers.detail.ports')}</th></Show><Show when={chartsOpen()}><th>{i18n.t('containers.stats.cpu')}</th><th>{i18n.t('containers.stats.memory')}</th></Show></Show>
+      <Show when={view() !== 'containers' && showCreatedColumn()}><th aria-sort={pending ? 'none' : sortKey() === 'created' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{i18n.t('containers.columns.created')}</span>}><SortControl sort="created" label={i18n.t('containers.columns.created')} /></Show></th></Show>
+      <th class="container-actions-column">{i18n.t('containers.detail.actions')}</th>
+    </tr></thead>
+  );
+
+  const renderInventorySkeleton = (): JSX.Element => (
+    <>
+      <div class="container-resource-table-shell container-resource-table-shell--loading" data-container-resource-skeleton-table>
+        <table class="w-full text-left text-sm">
+          {renderInventoryTableHeader(true)}
+          <tbody><For each={[0, 1, 2, 3, 4]}>{(row) => <tr data-container-skeleton-row aria-hidden="true">
+            <td><span class={`container-skeleton ${view() === 'images' || view() === 'volumes' ? 'container-skeleton--dot' : 'container-skeleton--status'}`} /></td>
+            <td><div class="container-name-cell"><span class="container-skeleton container-skeleton--resource-icon" /><span class="container-skeleton container-skeleton--name" data-row={row % 3} /></div></td>
+            <Show when={showSecondaryColumn()}><td><span class="container-skeleton container-skeleton--secondary" data-row={row % 2} /></td></Show>
+            <Show when={view() === 'containers'}><Show when={showPortsColumn()}><td><span class="container-skeleton container-skeleton--port" data-row={row % 2} /></td></Show><Show when={chartsOpen()}><td><span class="container-skeleton container-skeleton--metric" /></td><td><span class="container-skeleton container-skeleton--metric" /></td></Show></Show>
+            <Show when={view() !== 'containers' && showCreatedColumn()}><td><span class="container-skeleton container-skeleton--created" /></td></Show>
+            <td><div class="container-row-actions"><span class="container-skeleton container-skeleton--action" /><span class="container-skeleton container-skeleton--action" /><span class="container-skeleton container-skeleton--chevron" /></div></td>
+          </tr>}</For></tbody>
+        </table>
+      </div>
+      <div class="container-mobile-list container-mobile-list--loading" data-container-mobile-skeleton aria-hidden="true">
+        <For each={[0, 1, 2, 3, 4]}>{(row) => <div class="container-mobile-card">
+          <span class="container-skeleton container-skeleton--resource-icon" />
+          <span class="container-mobile-skeleton-copy"><span class="container-skeleton container-skeleton--name" data-row={row % 3} /><span class="container-skeleton container-skeleton--mobile-secondary" /></span>
+          <span class="container-skeleton container-skeleton--mobile-status" />
+          <span class="container-skeleton container-skeleton--chevron" />
+        </div>}</For>
+      </div>
+    </>
+  );
+
   const renderConsoleFallback = () => {
     const state = consoleState();
     if (state.phase === 'loading') {
-      if (state.endpoint?.available) {
-        return (
-          <div class="container-list-page" data-container-list-loading>
-            <section class="container-resource-toolbar" data-container-summary>
-              <div class="container-list-heading"><strong>{viewLabel(state.target.view)}</strong><span aria-hidden="true">—</span></div>
-              <div class="container-toolbar-loading" aria-hidden="true"><span /><span /><span /></div>
-            </section>
-            <div class="container-inventory-scroll">
-              <div class="container-loading-list container-loading-list--inventory" aria-label={i18n.t('containers.loading')}><For each={[1, 2, 3, 4, 5]}>{() => <div />}</For></div>
-            </div>
+      return (
+        <div class="container-list-page" data-container-list-loading aria-label={i18n.t('containers.loading')}>
+          {renderInventoryToolbar(true)}
+          <div class="container-inventory-scroll">
+            {renderInventorySkeleton()}
           </div>
-        );
-      }
-      return <div class="container-loading-list container-loading-list--page" aria-label={i18n.t('containers.loading')}><For each={[1, 2, 3, 4, 5]}>{() => <div />}</For></div>;
+        </div>
+      );
     }
     const permission = state.phase === 'permission';
     const message = state.phase === 'error'
@@ -1569,7 +1643,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 <button type="button" role="radio" aria-checked={engine() === value} class="container-touch-target" onClick={() => setCurrentEngine(value)}>{value}</button>
               )}</For>
             </div>
-            <Show when={endpointStatus()}><div class="container-endpoint-control min-w-0">
+            <Show when={endpointStatus()} fallback={<Show when={loading()}><div class="container-endpoint-control container-endpoint-control--loading" aria-hidden="true"><span class="container-skeleton container-skeleton--endpoint-status" /><span class="container-skeleton container-skeleton--endpoint" /></div></Show>}><div class="container-endpoint-control min-w-0">
               <span class="container-endpoint-status" data-available={endpointStatus()?.available ? 'true' : 'false'} aria-hidden="true" />
               <label class="sr-only" for={`container-endpoint-${props.stateScope ?? 'activity'}`}>{i18n.t('containers.endpoint')}</label>
               <select
@@ -1577,7 +1651,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 class="container-touch-target min-w-0 flex-1 bg-transparent px-2 text-sm font-medium outline-none"
                 title={`${endpointStatus()?.remote ? i18n.t('containers.endpointMeta.remote') : i18n.t('containers.endpointMeta.local')} · ${endpointStatus()?.engine_version ?? ''}`}
                 value={endpointID()}
-                disabled={loading()}
+                disabled={consoleBusy()}
                 onChange={(event) => void loadConsole(
                   { ...consoleState().target, endpointID: event.currentTarget.value, selectedIdentity: '' },
                   { forceConnectionCheck: true, resetListControls: true },
@@ -1587,7 +1661,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
               </select>
               <span class="sr-only" role="status">{endpointStatus()?.available ? i18n.t('containers.status.connected') : i18n.t('containers.status.unavailable')}</span>
             </div></Show>
-            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void reloadConsole(true)} disabled={loading()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
+            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void reloadConsole(true)} disabled={consoleBusy()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${consoleBusy() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
             <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setOperationsOpen(true)} aria-label={i18n.t('containers.operations.title')} title={i18n.t('containers.operations.title')}>
               <Activity class="h-4 w-4" aria-hidden="true" />
               <Show when={activeOperationCount() > 0}><span class="container-operation-count">{activeOperationCount()}</span></Show>
@@ -1611,38 +1685,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Show when={readyConsole()} fallback={renderConsoleFallback()}>
         <Show when={selected()} keyed fallback={
           <div class="container-list-page">
-            <section class="container-resource-toolbar" data-container-summary>
-              <div class="container-list-heading"><strong>{viewLabel(view())}</strong><span>{inventory().length}</span></div>
-              <div class="container-search-control"><Search class="h-4 w-4" aria-hidden="true" /><Input value={searchQuery()} onInput={(event) => setSearchQuery(event.currentTarget.value)} aria-label={i18n.t('containers.search.label')} placeholder={i18n.t('containers.search.placeholder')} /><Show when={searchQuery()}><button type="button" class="container-search-clear" onClick={() => setSearchQuery('')} aria-label={i18n.t('containers.search.clear')}><X class="h-3.5 w-3.5" /></button></Show></div>
-              <div class="container-filter-switch" role="group" aria-label={i18n.t('containers.filters.label')}><button type="button" aria-pressed={resourceFilter() === 'all'} onClick={() => setResourceFilter('all')}>{filterLabel('all')}</button><button type="button" aria-pressed={resourceFilter() === 'active'} onClick={() => setResourceFilter('active')}>{filterLabel('active')}</button><button type="button" aria-pressed={resourceFilter() === 'inactive'} onClick={() => setResourceFilter('inactive')}>{filterLabel('inactive')}</button><Show when={managedResourceCount() > 0}><button type="button" aria-pressed={resourceFilter() === 'managed'} onClick={() => setResourceFilter('managed')}><Layers class="h-3.5 w-3.5" /><span>{managedResourceCount()}</span><span class="sr-only">{filterLabel('managed')}</span></button></Show></div>
-              <div class="container-toolbar-actions">
-                <div class="container-column-picker">
-                  <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.columns.settings')} aria-expanded={columnsOpen()} onClick={() => setColumnsOpen(!columnsOpen())}><Settings class="h-4 w-4" /></Button>
-                  <Show when={columnsOpen()}><div class="container-column-menu" role="group" aria-label={i18n.t('containers.columns.settings')}>
-                    <label><input type="checkbox" checked={showSecondaryColumn()} onChange={(event) => setShowSecondaryColumn(event.currentTarget.checked)} />{secondaryColumnLabel()}</label>
-                    <Show when={view() === 'containers'}><label><input type="checkbox" checked={showPortsColumn()} onChange={(event) => setShowPortsColumn(event.currentTarget.checked)} />{i18n.t('containers.detail.ports')}</label></Show>
-                    <Show when={view() !== 'containers'}><label><input type="checkbox" checked={showCreatedColumn()} onChange={(event) => setShowCreatedColumn(event.currentTarget.checked)} />{i18n.t('containers.columns.created')}</label></Show>
-                  </div></Show>
-                </div>
-                <Show when={view() === 'containers' && endpointStatus()?.capabilities?.collection_stats}><Button size="sm" variant="ghost" onClick={() => setChartsOpen(!chartsOpen())} aria-pressed={chartsOpen()}><Activity class="mr-1.5 h-3.5 w-3.5" />{chartsOpen() ? i18n.t('containers.detail.hideCharts') : i18n.t('containers.detail.showCharts')}</Button></Show>
-                <Show when={view() === 'images' || view() === 'volumes'}><Button size="sm" variant="ghost" onClick={prune} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.prune')}</Button></Show>
-                <Show when={view() === 'containers'}><Button size="sm" onClick={() => openCreation('container')} disabled={!canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.container')}</Button></Show>
-                <Show when={view() === 'images'}><Button size="sm" onClick={() => openCreation('image')} disabled={!canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.image')}</Button></Show>
-                <Show when={view() === 'volumes'}><Button size="sm" onClick={() => openCreation('volume')} disabled={!canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.volume')}</Button></Show>
-                <Show when={view() === 'pods'}><Button size="sm" onClick={() => openCreation('pod')} disabled={!canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.pod')}</Button></Show>
-              </div>
-            </section>
+            {renderInventoryToolbar()}
             <Show when={chartsOpen() && view() === 'containers'}><div class="container-metrics-strip"><div><span>{i18n.t('containers.stats.cpu')}</span><strong>{[...collectionStats().values()].reduce((sum, item) => sum + item.cpu_percent, 0).toFixed(1)}%</strong></div><div><span>{i18n.t('containers.stats.memory')}</span><strong>{formatBytes([...collectionStats().values()].reduce((sum, item) => sum + item.memory_bytes, 0))}</strong></div><div><span>{i18n.t('containers.filters.active')}</span><strong>{activeResourceCount()}</strong></div></div></Show>
             <div class="container-inventory-scroll" ref={(element) => { inventoryScrollElement = element; }}>
               <Show when={filteredInventory().length > 0} fallback={<div class="container-empty-state"><Search class="h-6 w-6" /><strong>{inventory().length ? i18n.t('containers.empty.filteredTitle') : i18n.t('containers.empty.title')}</strong></div>}>
-                  <div class="container-resource-table-shell" data-container-table-shell><table class="w-full text-left text-sm" data-container-resource-table><thead><tr>
-                    <th aria-sort={sortKey() === 'status' ? sortDirection() : 'none'}><SortControl sort="status" label={i18n.t('containers.columns.status')} /></th>
-                    <th aria-sort={sortKey() === 'name' ? sortDirection() : 'none'}><SortControl sort="name" label={i18n.t('containers.columns.name')} /></th>
-                    <Show when={showSecondaryColumn()}><th aria-sort={sortKey() === 'secondary' ? sortDirection() : 'none'}><SortControl sort="secondary" label={secondaryColumnLabel()} /></th></Show>
-                    <Show when={view() === 'containers'}><Show when={showPortsColumn()}><th>{i18n.t('containers.detail.ports')}</th></Show><Show when={chartsOpen()}><th>{i18n.t('containers.stats.cpu')}</th><th>{i18n.t('containers.stats.memory')}</th></Show></Show>
-                    <Show when={view() !== 'containers' && showCreatedColumn()}><th aria-sort={sortKey() === 'created' ? sortDirection() : 'none'}><SortControl sort="created" label={i18n.t('containers.columns.created')} /></th></Show>
-                    <th class="container-actions-column">{i18n.t('containers.detail.actions')}</th>
-                  </tr></thead><tbody><For each={filteredInventory()}>{(item, index) => {
+                  <div class="container-resource-table-shell" data-container-table-shell><table class="w-full text-left text-sm" data-container-resource-table>{renderInventoryTableHeader()}<tbody><For each={filteredInventory()}>{(item, index) => {
                     const container = () => item as ContainerInventoryItem;
                     const sample = () => view() === 'containers' ? statsForContainer(container()) : undefined;
                     return <tr tabindex={0} data-container-resource-row-index={index()} onClick={() => selectResource(item)} onKeyDown={(event) => handleTableKey(event, index())}><td><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item))}><span class="container-usage-dot" data-active={resourceActive(view(), item)} /></Show></td><td><div class="container-name-cell"><ViewIcon view={view()} class="h-4 w-4" /><span class="truncate">{resourceName(view(), item)}</span><Show when={resourceManagement(item)?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></td><Show when={showSecondaryColumn()}><td class="container-secondary-cell"><Show when={view() === 'containers'}>{container().image?.reference || '—'}</Show><Show when={view() === 'images'}>{formatBytes((item as ImageInventoryItem).size_bytes)}</Show><Show when={view() === 'volumes'}>{(item as VolumeInventoryItem).driver || '—'}</Show><Show when={view() === 'compose-projects' || view() === 'pods'}>{(item as ComposeProjectInventoryItem | PodInventoryItem).running_count} / {(item as ComposeProjectInventoryItem | PodInventoryItem).container_count}</Show></td></Show><Show when={view() === 'containers'}><Show when={showPortsColumn()}><td class="container-port-cell">{container().ports?.map(formatPort).filter(Boolean).slice(0, 2).join(', ') || '—'}</td></Show><Show when={chartsOpen()}><td class="tabular-nums">{sample() ? `${sample()!.cpu_percent.toFixed(1)}%` : '—'}</td><td class="tabular-nums">{formatBytes(sample()?.memory_bytes)}</td></Show></Show><Show when={view() !== 'containers' && showCreatedColumn()}><td>{formatDate((item as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms)}</td></Show><td><div class="container-row-actions"><Show when={resourceManagement(item)?.managed} fallback={<><Show when={view() === 'containers'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'containers.stop' : 'containers.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show><Show when={view() === 'images'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.actions.run')} disabled={!canRWX()} onClick={(event) => openImageRun(event, item)}><Play class="h-4 w-4" /></Button></Show><Show when={view() === 'compose-projects'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'compose.projects.stop' : 'compose.projects.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show><Show when={view() === 'pods'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'pods.stop' : 'pods.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show>{renderRowOverflow(item)}<ChevronRight class="h-4 w-4 text-muted-foreground" /></>}><Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); selectResource(item); queueMicrotask(openManagedService); }}><ExternalLink class="h-4 w-4" /></Button></Show></div></td></tr>;

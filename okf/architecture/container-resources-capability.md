@@ -125,8 +125,11 @@ connection resolves. View changes clear detail and streams. The controller
 retains a
 component-lifetime inventory cache keyed by the exact `(engine, endpoint,
 view)`: a visited view renders its cached inventory immediately while one
-background request refreshes it, while a first visit keeps the header, tabs,
-toolbar, and inventory skeleton in place. One request generation and one
+background request refreshes it; a same-target manual refresh follows the same
+stable presentation path. A first visit keeps the header, tabs, and disabled
+toolbar in place, then uses the production table headers, row heights, mobile
+cards, and responsive breakpoints for its inventory skeleton. One request
+generation and one
 cancellation signal prevent any older response from committing. Only `ready`
 may render resource data or detail; a refreshing cache entry remains `ready`
 and cannot authorize mutation without current server preflight. `ready` always
