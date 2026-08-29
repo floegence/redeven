@@ -1,5 +1,10 @@
 import http, { type ClientRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import https from 'node:https';
+import {
+	DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER,
+	normalizeDesktopPrivateBridgeToken,
+} from './desktopPrivateBridge';
+import type { StartupReport } from './startup';
 import type { RuntimeFlowerError, RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
 
 export type RuntimeFlowerHTTPResponse = Readonly<{
@@ -25,6 +30,23 @@ export function invalidateRuntimeFlowerAccessOnStatus(
 ): boolean {
 	if (status !== 423) return false;
 	return cache.delete(cacheKey);
+}
+
+export function runtimeFlowerPrivateBridgeHeaders(
+	startup: Pick<StartupReport, 'local_ui_bridge_token'>,
+	headers: Readonly<Record<string, string>> = {},
+): Record<string, string> {
+	const token = normalizeDesktopPrivateBridgeToken(startup.local_ui_bridge_token);
+	if (!token) {
+		throw new Error('Desktop startup report is missing private Local UI bridge authorization.');
+	}
+	const normalizedHeaderName = DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER.toLowerCase();
+	return {
+		...Object.fromEntries(
+			Object.entries(headers).filter(([name]) => name.toLowerCase() !== normalizedHeaderName),
+		),
+		[DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER]: token,
+	};
 }
 
 export function readRuntimeFlowerHTTPResponse(response: IncomingMessage): Promise<RuntimeFlowerHTTPResponse> {

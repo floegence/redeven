@@ -779,7 +779,7 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('interrupt_kind:');
     expect(mainSrc).toContain('const runtimeLifecycleCoordinator = new RuntimeLifecycleCoordinator();');
     expect(mainSrc).toContain('runtimeLifecycleCoordinator.run({');
-    expect(mainSrc).not.toContain('runtimeLifecycleCoordinator.waitForReadyMutation(');
+    expect(mainSrc).toContain('runtimeLifecycleCoordinator.waitForReadyMutation<DesktopLauncherActionResult>(');
     expect(mainSrc).toContain('runtimeLifecycleCoordinator.runOpen({');
     expect(mainSrc).not.toContain('runtimeLifecycleCoordinator.runWhenReady({');
     expect(mainSrc).toContain('snapshot.operation_key !== preservedOperationKey');
@@ -1575,7 +1575,9 @@ describe('main routing', () => {
     );
     expect(requestSrc).toContain('runtimeFlowerInvalidJSONError(response, parsed)');
     expect(requestSrc).not.toContain('error.body');
-    expect(requestSrc).toContain('Cookie: runtimeFlowerAccessCookieHeader(cookie)');
+    expect(requestSrc).toContain(
+      'accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));',
+    );
     expect(requestSrc).toContain(
       'runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders })',
     );
@@ -1595,6 +1597,8 @@ describe('main routing', () => {
     expect(requestSrc).not.toContain('displayName: request.display_name');
 
     expect(runtimeFlowerHTTPSrc).toContain('export function requestRuntimeFlowerHTTP(');
+    expect(runtimeFlowerHTTPSrc).toContain('export function runtimeFlowerPrivateBridgeHeaders(');
+    expect(runtimeFlowerHTTPSrc).toContain('DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER');
     expect(runtimeFlowerHTTPSrc).toContain('export function parseRuntimeFlowerJSON(');
     expect(runtimeFlowerHTTPSrc).toContain('export function runtimeFlowerInvalidJSONError(');
     expect(runtimeFlowerHTTPSrc).toContain("'runtime_flower_invalid_json'");
@@ -1632,8 +1636,18 @@ describe('main routing', () => {
     expect(unlockEnd).toBeGreaterThan(unlockStart);
     const unlockSrc = mainSrc.slice(unlockStart, unlockEnd);
     expect(unlockSrc).toContain("new URL('/api/local/access/unlock', baseURL)");
+    expect(unlockSrc).toContain('headers: runtimeFlowerPrivateBridgeHeaders(record.startup)');
     expect(unlockSrc).toContain('throw (error ?? runtimeFlowerError(');
     expect(unlockSrc).not.toContain('throw new Error(error?.message');
+
+    const accessStart = mainSrc.indexOf('async function runtimeFlowerAccessHeaders(', unlockEnd);
+    const accessEnd = mainSrc.indexOf('async function requestRuntimeFlower(', accessStart);
+    expect(accessStart).toBeGreaterThanOrEqual(0);
+    expect(accessEnd).toBeGreaterThan(accessStart);
+    const accessSrc = mainSrc.slice(accessStart, accessEnd);
+    expect(accessSrc).toContain('const bridgeHeaders = runtimeFlowerPrivateBridgeHeaders(record.startup);');
+    expect(accessSrc).toContain('...bridgeHeaders');
+    expect(accessSrc).toContain('Cookie: runtimeFlowerAccessCookieHeader(cookie)');
 
     const ensureStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecord()');
     const ensureEnd = mainSrc.indexOf('function runtimeFlowerEnvelopeError(', ensureStart);
@@ -1642,12 +1656,22 @@ describe('main routing', () => {
     const ensureSrc = mainSrc.slice(ensureStart, ensureEnd);
     expect(ensureSrc).toContain('if (desktopPlatformCapabilities.wsl_environment)');
     expect(ensureSrc).toContain('return ensureWSLRuntimeFlowerTarget(preferences);');
+    expect(ensureSrc).toContain('const targetKey = localHostRuntimeLifecycleTargetKey(environment);');
+    expect(ensureSrc).toContain("activeLifecycle.intent === 'start'");
+    expect(ensureSrc).toContain("activeLifecycle.intent === 'restart'");
+    expect(ensureSrc).toContain("activeLifecycle.intent === 'update'");
+    expect(ensureSrc).toContain("markRuntimeLifecyclePresentationContext(activeLifecycle, 'flower_warmup');");
+    expect(ensureSrc).toContain('runtimeLifecycleCoordinator.waitForReadyMutation<DesktopLauncherActionResult>(targetKey)');
+    expect(ensureSrc).toContain("presentationContext: 'flower_warmup'");
+    expect(ensureSrc).toContain("kind: 'start_environment_runtime'");
+    expect(ensureSrc).toContain('runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(target.record));');
     expect(ensureSrc).toContain('buildDesktopLocalRuntimeOpenPlan(');
     expect(ensureSrc).toContain('if (runtimePlan.requires_restart)');
     expect(ensureSrc).toContain('assertRuntimeFlowerRecordOpenable(attached);');
     expect(ensureSrc).toContain('Initialize this environment before restarting it.');
     expect(ensureSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress({');
-    expect(ensureSrc).not.toContain('runtimeLifecycleCoordinator.');
+    expect(ensureSrc).not.toContain('setTimeout(');
+    expect(ensureSrc).not.toContain('setInterval(');
 
     expect(mainSrc).not.toContain('async function startLocalHostRuntimeWithLifecycleProgress(');
     expect(mainSrc).not.toContain('async function stopEnvironmentRuntimeFromLauncherUncoordinated(');

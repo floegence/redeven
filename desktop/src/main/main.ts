@@ -221,6 +221,7 @@ import {
   runtimeLifecycleFingerprint,
   runtimeLifecycleTargetKey,
   type RuntimeLifecycleIntent,
+  type RuntimeLifecycleOperationSnapshot,
 } from './runtimeLifecycleCoordinator';
 import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOperationAttemptIdentity } from './launcherOperations';
 import {
@@ -229,6 +230,7 @@ import {
 	readRuntimeFlowerHTTPResponse,
 	requestRuntimeFlowerHTTP as runtimeFlowerRequestHTTP,
   openRuntimeFlowerHTTPStream,
+  runtimeFlowerPrivateBridgeHeaders,
   runtimeFlowerDeleteQuery,
 	runtimeFlowerInvalidJSONError,
   type RuntimeFlowerHTTPResponse,
@@ -9865,8 +9867,12 @@ async function ensureRuntimeFlowerRecord(): Promise<RuntimeFlowerTarget> {
     return ensureWSLRuntimeFlowerTarget(preferences);
   }
   const environment = preferences.local_environment;
-  const attached = await attachLocalEnvironmentRuntime(environment);
-  if (attached) {
+  const targetKey = localHostRuntimeLifecycleTargetKey(environment);
+  const attachReadyRecord = async (): Promise<RuntimeFlowerTarget | null> => {
+    const attached = await attachLocalEnvironmentRuntime(environment);
+    if (!attached) {
+      return null;
+    }
     const runtimePlan = buildDesktopLocalRuntimeOpenPlan(
       { kind: 'local_environment' },
       attached.startup,
@@ -9882,8 +9888,84 @@ async function ensureRuntimeFlowerRecord(): Promise<RuntimeFlowerTarget> {
       record: attached,
       local_environment: environment,
     };
+  };
+  const reattachAfterLifecycle = async (missingMessage: string): Promise<RuntimeFlowerTarget> => {
+    const target = await attachReadyRecord();
+    if (!target) {
+      throw new Error(missingMessage);
+    }
+    runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(target.record));
+    return target;
+  };
+
+  const activeLifecycle = runtimeLifecycleCoordinator.active(targetKey);
+  if (
+    activeLifecycle
+    && (
+      activeLifecycle.intent === 'start'
+      || activeLifecycle.intent === 'restart'
+      || activeLifecycle.intent === 'update'
+    )
+  ) {
+    markRuntimeLifecyclePresentationContext(activeLifecycle, 'flower_warmup');
+    const lifecycleResult = await runtimeLifecycleCoordinator.waitForReadyMutation<DesktopLauncherActionResult>(targetKey);
+    if (!lifecycleResult) {
+      throw new Error('The local Runtime lifecycle operation ended before Flower could join it.');
+    }
+    requireSuccessfulRuntimeFlowerLifecycle(lifecycleResult);
+    return reattachAfterLifecycle(
+      'The local Runtime lifecycle operation completed without an attachable Runtime Service.',
+    );
   }
-  throw new Error('The local environment is not running. Initialize it before starting it from Desktop.');
+  if (activeLifecycle?.intent === 'stop' || activeLifecycle?.intent === 'reinstall') {
+    throw new RuntimeLifecycleInProgressError(activeLifecycle);
+  }
+
+  if (activeLifecycle) {
+    try {
+      const attachedTarget = await attachReadyRecord();
+      if (attachedTarget) {
+        return attachedTarget;
+      }
+    } catch {
+      throw new RuntimeLifecycleInProgressError(activeLifecycle);
+    }
+    throw new RuntimeLifecycleInProgressError(activeLifecycle);
+  }
+
+  const attachedTarget = await attachReadyRecord();
+  if (attachedTarget) {
+    return attachedTarget;
+  }
+
+  const placement = localHostRuntimeLifecyclePlacement(environment);
+  const targetID = desktopRuntimeTargetID({ kind: 'local_host' }, placement, environment.id);
+  const lifecycleResult = await runEnvironmentRuntimeLifecycleFromLauncher({
+    kind: 'start_environment_runtime',
+    environment_id: environment.id,
+    label: environment.label,
+    runtime_target_id: targetID,
+    host_access: { kind: 'local_host' },
+    placement,
+    operation_key: `${targetID}:flower_warmup`,
+  }, {
+    presentationContext: 'flower_warmup',
+  });
+  requireSuccessfulRuntimeFlowerLifecycle(lifecycleResult);
+  return reattachAfterLifecycle(
+    'Desktop started the local Runtime, but Flower could not attach to its Runtime Service.',
+  );
+}
+
+function requireSuccessfulRuntimeFlowerLifecycle(result: DesktopLauncherActionResult): void {
+  if (result.ok) {
+    return;
+  }
+  throw new DesktopOperationFailureError(result.failure ?? desktopOperationFailurePresentation({
+    code: 'local_runtime_launch_failed',
+    title: 'Local Runtime startup failed',
+    summary: result.message,
+  }));
 }
 
 function runtimeFlowerEnvelopeError(parsed: unknown, status: number): RuntimeFlowerError | null {
@@ -9927,6 +10009,8 @@ async function unlockRuntimeFlowerAccess(
     method: 'POST',
     path: '/api/local/access/unlock',
     body: { password: access.local_ui_password },
+  }, {
+    headers: runtimeFlowerPrivateBridgeHeaders(record.startup),
   });
   const parsed = parseRuntimeFlowerJSON(response.body);
   const error = runtimeFlowerEnvelopeError(parsed, response.status);
@@ -9949,12 +10033,14 @@ async function runtimeFlowerAccessHeaders(
   record: LocalEnvironmentRuntimeRecord | RuntimePlacementBridgeRecord,
   environment: DesktopLocalEnvironmentState | null,
 ): Promise<Record<string, string>> {
+  const bridgeHeaders = runtimeFlowerPrivateBridgeHeaders(record.startup);
   if (record.startup.password_required !== true) {
-    return {};
+    return bridgeHeaders;
   }
   const baseURL = runtimeFlowerBaseURL(record);
   const cookie = runtimeFlowerAccessCookies.get(baseURL) || await unlockRuntimeFlowerAccess(record, environment);
   return {
+    ...bridgeHeaders,
     Cookie: runtimeFlowerAccessCookieHeader(cookie),
   };
 }
@@ -10009,10 +10095,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   }
   if (response.status === 423) {
     runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
-    const cookie = await unlockRuntimeFlowerAccess(record, environment);
-    accessHeaders = withStagingCapability({
-      Cookie: runtimeFlowerAccessCookieHeader(cookie),
-    });
+    accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));
     try {
       response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
     } catch (error) {
@@ -10138,8 +10221,7 @@ async function startRuntimeFlowerStream(
     if (response.statusCode === 423) {
       response.resume();
       runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
-      const cookie = await unlockRuntimeFlowerAccess(record, environment);
-      accessHeaders = { Cookie: runtimeFlowerAccessCookieHeader(cookie) };
+      accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
       response = await openRuntimeFlowerStreamResponse(operation, url, accessHeaders);
     }
     if (operation.settled) {
@@ -10216,9 +10298,8 @@ async function fetchRuntimeFlowerAttachmentPreview(request: RuntimeFlowerAttachm
       runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
     },
     refreshAccess: async () => {
-      const cookie = await unlockRuntimeFlowerAccess(record, environment);
       accessHeaders = {
-        Cookie: runtimeFlowerAccessCookieHeader(cookie),
+        ...await runtimeFlowerAccessHeaders(record, environment),
         ...stagingHeaders,
       };
     },
@@ -14610,7 +14691,26 @@ type EnvironmentRuntimeLifecycleExecutionOptions = Readonly<{
     confirmationContinuation: () => Promise<DesktopLauncherActionResult>;
     requiredOperation?: ManagedRuntimeLifecycleOperation;
   }>;
+  presentationContext?: DesktopLauncherOperationSnapshot['presentation_context'];
 }>;
+
+function markRuntimeLifecyclePresentationContext(
+  lifecycle: RuntimeLifecycleOperationSnapshot,
+  presentationContext: NonNullable<DesktopLauncherOperationSnapshot['presentation_context']>,
+): void {
+  const operation = launcherOperations.get(lifecycle.operation_key);
+  if (!operation || !launcherOperationIsActive(operation)) {
+    return;
+  }
+  launcherOperations.updateCurrentAttempt(
+    lifecycle.operation_key,
+    {
+      action: operation.action,
+      started_at_unix_ms: operation.started_at_unix_ms,
+    },
+    { presentation_context: presentationContext },
+  );
+}
 
 function clearSupersededRuntimeFailuresForEnvironments(
   affectedEnvironmentIDs: readonly string[],
@@ -15257,6 +15357,7 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       ),
       detail: 'Desktop is checking the registered direct Runtime target.',
       active_progress_surface: 'runtime_lifecycle',
+      ...(options.presentationContext ? { presentation_context: options.presentationContext } : {}),
       cancelable: requestedOperation !== 'stop',
       started_at_unix_ms: request.operation_started_at_unix_ms,
     });
@@ -15290,6 +15391,16 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       operation_owner: 'open',
       lifecycle_signal: openSignal,
     });
+  }
+
+  if (options.presentationContext) {
+    const activeLifecycle = runtimeLifecycleCoordinator.active(coordinatorTargetKey);
+    if (
+      activeLifecycle?.intent === coordinatorIntent
+      && activeLifecycle.fingerprint === coordinatorFingerprint
+    ) {
+      markRuntimeLifecyclePresentationContext(activeLifecycle, options.presentationContext);
+    }
   }
 
   try {
