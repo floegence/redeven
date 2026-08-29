@@ -431,6 +431,7 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
         needsInput: t(i18n, k('activity.titles.needsInput')),
         starting: t(i18n, k('activity.titles.starting')),
         started: t(i18n, k('activity.titles.started')),
+        createFailed: t(i18n, k('activity.titles.createFailed')),
         waiting: (count) => t(i18n, k('activity.titles.waiting'), { count }),
         completed: (count) => t(i18n, k('activity.titles.completed'), { count }),
         waitTimedOut: (completed, count) => t(i18n, k('activity.titles.waitTimedOut'), { completed, count }),

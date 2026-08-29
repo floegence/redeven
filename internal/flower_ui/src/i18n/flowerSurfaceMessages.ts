@@ -366,7 +366,7 @@ export const flowerSurfaceEnUS = {
     },
     activity: {
       actions: {
-        spawn: 'Spawn subagent',
+        spawn: 'Create subagent',
         sendInput: 'Steer subagent',
         wait: 'Wait for subagents',
         list: 'List subagents',
@@ -380,8 +380,9 @@ export const flowerSurfaceEnUS = {
         failed: 'Subagent operation failed',
         timedOut: 'Subagent timed out',
         needsInput: 'Subagent needs input',
-        starting: 'Starting subagent',
-        started: 'Started subagent',
+        starting: 'Creating subagent',
+        started: 'Created subagent',
+        createFailed: 'Failed to create subagent',
         waiting: 'Waiting for {count} subagents',
         completed: '{count} subagents completed',
         waitTimedOut: 'Wait timed out · {completed}/{count} completed',

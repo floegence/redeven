@@ -312,4 +312,28 @@ describe('ThreadCache', () => {
     expect(cache.summaries.get('summary-only')?.messages).toEqual([]);
     expect(cache.views.has('summary-only')).toBe(false);
   });
+
+  it('resets stale child entries from an authoritative root baseline', () => {
+    let cache = receive(receive(createThreadCache(), view('root', 2, 'root')), view('child', 1, 'child')).select('child');
+    cache = cache.resetRootSummaries([{ ...thread('root', 3, 'root summary'), messages: [] }]);
+
+    expect([...cache.summaries.keys()]).toEqual(['root']);
+    expect([...cache.views.keys()]).toEqual(['root']);
+    expect(cache.selectedId).toBeNull();
+  });
+
+  it('applies a Subagent inventory only to an existing parent detail', () => {
+    const inventory = [{
+      parent_thread_id: 'root', thread_id: 'child', task_name: 'Research models', status: 'running',
+      can_send_input: true, can_interrupt: true, can_close: true,
+    }];
+    let cache = receive(createThreadCache(), view('root', 2, 'root'));
+    cache = cache.updateDetailAdjuncts('root', (current) => ({ ...current, subagents: inventory }));
+    cache = cache.updateDetailAdjuncts('missing-parent', (current) => ({ ...current, subagents: inventory }));
+
+    expect(cache.views.get('root')?.thread.subagents).toEqual(inventory);
+    expect(cache.summaries.has('child')).toBe(false);
+    expect(cache.views.has('child')).toBe(false);
+    expect(cache.summaries.has('missing-parent')).toBe(false);
+  });
 });

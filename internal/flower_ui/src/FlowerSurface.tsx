@@ -4217,15 +4217,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
-		if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
+    if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
       const selectedID = selectedThreadID();
-      for (const summary of envelope.summaries ?? []) {
-        if (retiredThreadIDs.has(summary.thread_id)) continue;
-        setThreadCache((cache) => cache.replaceSummary(summary));
+      const incoming = (envelope.summaries ?? [])
+        .filter((summary) => !retiredThreadIDs.has(summary.thread_id));
+      if (envelope.kind === 'ready') {
+        setThreadCache((cache) => cache.resetRootSummaries(incoming));
+        if (selectedID && !incoming.some((summary) => summary.thread_id === selectedID)) {
+          closeSubagentOverlays();
+          setSelectedThreadID('');
+        }
+      } else {
+        for (const summary of incoming) {
+          setThreadCache((cache) => cache.replaceSummary(summary));
+        }
       }
-			const selectedSummaryAfter = selectedID ? threadCache().summaries.get(selectedID) : undefined;
-			if (selectedID) {
+      const selectedSummaryAfter = selectedID ? threadCache().summaries.get(selectedID) : undefined;
+      if (selectedID) {
         recoverSelectedThreadFromSummary(selectedID, selectedSummaryAfter);
+      }
+      return;
+    }
+    if (envelope.kind === 'thread.batch' && envelope.subagents !== undefined) {
+      const parentThreadID = trimString(envelope.thread_id);
+      if (parentThreadID && !retiredThreadIDs.has(parentThreadID)) {
+        const subagents = envelope.subagents;
+        setThreadCache((cache) => cache.updateDetailAdjuncts(parentThreadID, (thread) => ({
+          ...thread,
+          subagents,
+        })));
       }
       return;
     }

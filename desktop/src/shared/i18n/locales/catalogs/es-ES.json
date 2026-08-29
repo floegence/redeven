@@ -372,7 +372,7 @@
       },
       "activity": {
         "actions": {
-          "spawn": "Iniciar subagente",
+          "spawn": "Crear subagente",
           "sendInput": "Guiar subagente",
           "wait": "Esperar subagentes",
           "list": "Listar subagentes",
@@ -386,8 +386,9 @@
           "failed": "La operación de subagente falló",
           "timedOut": "El subagente agotó el tiempo",
           "needsInput": "El subagente necesita datos",
-          "starting": "Iniciando subagente",
-          "started": "Subagente iniciado",
+          "starting": "Creando subagente",
+          "started": "Subagente creado",
+          "createFailed": "No se pudo crear el subagente",
           "waiting": "Esperando a {count} subagentes",
           "completed": "{count} subagentes completados",
           "waitTimedOut": "Tiempo de espera agotado · {completed}/{count} completados"

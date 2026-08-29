@@ -161,21 +161,27 @@ func TestSubagentInputsPersistAuthorityBeforeSendAndRestoreAutonomousOptions(t *
 	childView := flruntime.ThreadView{ThreadID: identity.ThreadID(childThreadID), Activity: flruntime.ThreadActivityActive}
 	sendKeys := make([]string, 0, 2)
 	sendCount := 0
+	listCount := 0
+	viewCount := 0
+	setTitleCount := 0
 	var cancelAcceptedSend context.CancelFunc
 	runtime := &authorityContinuityRuntime{}
 	runtime.create = func(context.Context, flruntime.CreateThreadInput) (flruntime.ThreadView, error) {
 		return childView, nil
 	}
 	runtime.setTitle = func(context.Context, flruntime.SetTitleInput) (flruntime.ThreadView, error) {
+		setTitleCount++
 		return childView, nil
 	}
 	runtime.list = func(_ context.Context, scope flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
+		listCount++
 		if scope.ParentID != nil {
 			return []flruntime.ThreadSummary{childSummary}, nil
 		}
 		return []flruntime.ThreadSummary{parentSummary}, nil
 	}
 	runtime.view = func(_ context.Context, threadID identity.ThreadID) (flruntime.ThreadView, error) {
+		viewCount++
 		if threadID == identity.ThreadID(childThreadID) {
 			return childView, nil
 		}
@@ -211,6 +217,9 @@ func TestSubagentInputsPersistAuthorityBeforeSendAndRestoreAutonomousOptions(t *
 		"agent_type": subagentAgentTypeReviewer, "context_mode": subagentContextModeMissionOnly,
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if listCount != 0 || viewCount != 0 || setTitleCount != 0 {
+		t.Fatalf("spawn post-admission reads: list=%d view=%d set_title=%d, want zero", listCount, viewCount, setTitleCount)
 	}
 	spawnAuthority, err := store.GetExecutionAuthorityByTurn(ctx, childThreadID, "turn-child-1")
 	if err != nil {
@@ -250,6 +259,9 @@ func TestSubagentInputsPersistAuthorityBeforeSendAndRestoreAutonomousOptions(t *
 		"target": childThreadID, "message": "Review the updated execution.",
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if listCount != 1 || viewCount != 0 {
+		t.Fatalf("send_input reads: list=%d view=%d, want one pre-effect list and no view", listCount, viewCount)
 	}
 	sendAuthority, err := store.GetExecutionAuthorityByTurn(ctx, childThreadID, "turn-child-2")
 	if err != nil {

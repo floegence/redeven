@@ -232,6 +232,7 @@ export type FlowerSubagentsCopy = Readonly<{
       needsInput: string;
       starting: string;
       started: string;
+      createFailed: string;
       waiting: (count: string) => string;
       completed: (count: string) => string;
       waitTimedOut: (completed: string, count: string) => string;
@@ -894,7 +895,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     },
     activity: {
       actions: {
-        spawn: 'Spawn subagent',
+        spawn: 'Create subagent',
         send_input: 'Steer subagent',
         wait: 'Wait for subagents',
         list: 'List subagents',
@@ -908,8 +909,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         failed: 'Subagent operation failed',
         timedOut: 'Subagent timed out',
         needsInput: 'Subagent needs input',
-        starting: 'Starting subagent',
-        started: 'Started subagent',
+        starting: 'Creating subagent',
+        started: 'Created subagent',
+        createFailed: 'Failed to create subagent',
         waiting: (count) => `Waiting for ${count} subagents`,
         completed: (count) => `${count} subagents completed`,
         waitTimedOut: (completed, count) => `Wait timed out · ${completed}/${count} completed`,

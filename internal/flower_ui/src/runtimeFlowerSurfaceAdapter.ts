@@ -34,6 +34,7 @@ import type {
 import {
   mapFlowerContextCompactions,
   mapFlowerReadStatus,
+  mapFlowerSubagents,
   mapFlowerThread,
   mapFlowerTimelineDecorations,
   mapContextUsage,
@@ -208,12 +209,14 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   const contextCompactions = mapFlowerContextCompactions(value.context_compactions);
   const timelineDecorations = mapFlowerTimelineDecorations(value.timeline_decorations);
   const contextUsage = mapContextUsage(value.context_usage);
+  const subagents = mapFlowerSubagents(value.subagents, 'live.subagents');
   return {
     schema_version: Math.floor(Number(value.schema_version)),
     kind,
     ...(trim(value.thread_id) ? { thread_id: trim(value.thread_id) } : {}),
     ...(summaries ? { summaries } : {}),
     ...(current ? { current } : {}),
+    ...(subagents !== undefined ? { subagents } : {}),
     ...(contextUsage ? { context_usage: contextUsage } : {}),
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),

@@ -1052,7 +1052,7 @@
       },
       "activity": {
         "actions": {
-          "spawn": "하위 에이전트 시작",
+          "spawn": "하위 에이전트 생성",
           "sendInput": "하위 에이전트 지시",
           "wait": "하위 에이전트 대기",
           "list": "하위 에이전트 나열",
@@ -1066,8 +1066,9 @@
           "failed": "하위 에이전트 작업 실패",
           "timedOut": "하위 에이전트 시간 초과",
           "needsInput": "하위 에이전트에 입력 필요",
-          "starting": "하위 에이전트 시작 중",
-          "started": "하위 에이전트 시작됨",
+          "starting": "하위 에이전트 생성 중",
+          "started": "하위 에이전트 생성됨",
+          "createFailed": "하위 에이전트 생성 실패",
           "waiting": "하위 에이전트 {count}개 대기 중",
           "completed": "하위 에이전트 {count}개 완료",
           "waitTimedOut": "대기 시간 초과 · {completed}/{count} 완료"
@@ -4040,7 +4041,7 @@
       },
       "activity": {
         "actions": {
-          "spawn": "하위 에이전트 시작",
+          "spawn": "하위 에이전트 생성",
           "sendInput": "하위 에이전트 지시",
           "wait": "하위 에이전트 대기",
           "list": "하위 에이전트 나열",
@@ -4054,8 +4055,9 @@
           "failed": "하위 에이전트 작업 실패",
           "timedOut": "하위 에이전트 시간 초과",
           "needsInput": "하위 에이전트에 입력 필요",
-          "starting": "하위 에이전트 시작 중",
-          "started": "하위 에이전트 시작됨",
+          "starting": "하위 에이전트 생성 중",
+          "started": "하위 에이전트 생성됨",
+          "createFailed": "하위 에이전트 생성 실패",
           "waiting": "하위 에이전트 {count}개 대기 중",
           "completed": "하위 에이전트 {count}개 완료",
           "waitTimedOut": "대기 시간 초과 · {completed}/{count} 완료"

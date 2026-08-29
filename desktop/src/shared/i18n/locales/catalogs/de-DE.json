@@ -372,7 +372,7 @@
       },
       "activity": {
         "actions": {
-          "spawn": "Sub-Agent starten",
+          "spawn": "Sub-Agent erstellen",
           "sendInput": "Sub-Agent steuern",
           "wait": "Auf Sub-Agenten warten",
           "list": "Sub-Agenten auflisten",
@@ -386,8 +386,9 @@
           "failed": "Sub-Agent-Aktion fehlgeschlagen",
           "timedOut": "Zeitüberschreitung beim Sub-Agenten",
           "needsInput": "Sub-Agent benötigt eine Eingabe",
-          "starting": "Sub-Agent wird gestartet",
-          "started": "Sub-Agent gestartet",
+          "starting": "Sub-Agent wird erstellt",
+          "started": "Sub-Agent erstellt",
+          "createFailed": "Sub-Agent konnte nicht erstellt werden",
           "waiting": "Warte auf {count} Sub-Agenten",
           "completed": "{count} Sub-Agenten abgeschlossen",
           "waitTimedOut": "Wartezeit abgelaufen · {completed}/{count} abgeschlossen"

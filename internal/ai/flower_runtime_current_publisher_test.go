@@ -284,7 +284,7 @@ func waitForFlowerRuntimePublisherVersion(
 	t.Fatalf("publisher version did not reach %d", want)
 }
 
-func TestResolveFlowerRuntimeEndpointLoadsImmutableRouteOnce(t *testing.T) {
+func TestResolveFlowerRuntimeRouteLoadsImmutableRootRouteOnce(t *testing.T) {
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
 	if err != nil {
 		t.Fatalf("open thread store: %v", err)
@@ -298,23 +298,45 @@ func TestResolveFlowerRuntimeEndpointLoadsImmutableRouteOnce(t *testing.T) {
 		threadsDB:                     store,
 		flowerRuntimeEndpointByThread: make(map[string]string),
 	}
-	endpointID, err := service.resolveFlowerRuntimeEndpoint(context.Background(), "thread-route")
-	if err != nil || endpointID != "env-route" {
-		t.Fatalf("initial endpoint resolution = %q, %v", endpointID, err)
+	endpointID, parentThreadID, err := service.resolveFlowerRuntimeRoute(context.Background(), "thread-route")
+	if err != nil || endpointID != "env-route" || parentThreadID != "" {
+		t.Fatalf("initial route resolution = (%q, %q), %v", endpointID, parentThreadID, err)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("close thread store: %v", err)
 	}
-	endpointID, err = service.resolveFlowerRuntimeEndpoint(context.Background(), "thread-route")
-	if err != nil || endpointID != "env-route" {
-		t.Fatalf("cached endpoint resolution = %q, %v", endpointID, err)
+	endpointID, parentThreadID, err = service.resolveFlowerRuntimeRoute(context.Background(), "thread-route")
+	if err != nil || endpointID != "env-route" || parentThreadID != "" {
+		t.Fatalf("cached route resolution = (%q, %q), %v", endpointID, parentThreadID, err)
 	}
 	if err := service.rememberFlowerRuntimeEndpoint("thread-route", "env-other"); err != errFlowerRuntimeEndpointConflict {
 		t.Fatalf("conflicting endpoint error = %v, want %v", err, errFlowerRuntimeEndpointConflict)
 	}
 	service.forgetFlowerRuntimeThread("thread-route")
-	if _, err := service.resolveFlowerRuntimeEndpoint(context.Background(), "thread-route"); err == nil {
-		t.Fatal("endpoint resolved after route removal with closed store")
+	if _, _, err := service.resolveFlowerRuntimeRoute(context.Background(), "thread-route"); err == nil {
+		t.Fatal("route resolved after removal with closed store")
+	}
+}
+
+func TestResolveFlowerRuntimeRouteLoadsPersistedParentIdentity(t *testing.T) {
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{
+		ThreadID: "thread-child-route", ParentThreadID: "thread-parent-route", EndpointID: "env-route",
+		PermissionType: "approval_required",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := &Service{
+		threadsDB: store, flowerRuntimeEndpointByThread: make(map[string]string),
+		flowerRuntimeParentByThread: make(map[string]string), flowerRuntimeRouteKnown: make(map[string]bool),
+	}
+	endpointID, parentThreadID, err := service.resolveFlowerRuntimeRoute(context.Background(), "thread-child-route")
+	if err != nil || endpointID != "env-route" || parentThreadID != "thread-parent-route" {
+		t.Fatalf("resolved route=(%q,%q,%v)", endpointID, parentThreadID, err)
 	}
 }
 

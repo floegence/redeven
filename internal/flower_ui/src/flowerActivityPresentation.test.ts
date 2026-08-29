@@ -459,9 +459,9 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('Started subagent');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Started subagent' });
-    expect(presentation.meta).toBe('Review API boundary · Review the API boundary and identify contract risks.');
+    expect(presentation.label).toBe('Created subagent · Review API boundary');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Created subagent · Review API boundary' });
+    expect(presentation.meta).toBe('Review the API boundary and identify contract risks.');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`).join('\n')).not.toContain('child-thread-1');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'subagents',
@@ -485,7 +485,7 @@ describe('presentFlowerActivityItem', () => {
   });
 
   it.each([
-    ['spawn', 'Starting subagent', 'Started subagent', 'Spawn subagent · Failed'],
+    ['spawn', 'Creating subagent', 'Created subagent', 'Failed to create subagent'],
     ['wait', 'Waiting for 2 subagents', '2 subagents completed', 'Wait for subagents · Failed'],
     ['list', 'List subagents · Running', 'List subagents · Completed', 'List subagents · Failed'],
     ['inspect', 'Inspect subagents · Running', 'Inspect subagents · Completed', 'Inspect subagents · Failed'],
@@ -524,6 +524,23 @@ describe('presentFlowerActivityItem', () => {
     expect(running.label).toBe(runningTitle);
     expect(success.label).toBe(successTitle);
     expect(failed.label).toBe(failedTitle);
+  });
+
+  it('names the exact Subagent in create progress, success, and failure titles', () => {
+    const present = (status: 'running' | 'success' | 'error') => presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      status,
+      payload: {
+        action: 'spawn',
+        targets: [{ task_name: 'Research model releases', status: status === 'error' ? 'failed' : 'running' }],
+        ...(status === 'error' ? { error: { message: 'creation failed' } } : {}),
+      },
+    })).label;
+
+    expect(present('running')).toBe('Creating subagent · Research model releases');
+    expect(present('success')).toBe('Created subagent · Research model releases');
+    expect(present('error')).toBe('Failed to create subagent · Research model releases');
   });
 
   it('uses a neutral title for an unknown Subagent operation without guessing from its label', () => {

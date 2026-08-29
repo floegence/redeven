@@ -185,26 +185,25 @@ func (runtime *floretSubagentRuntime) spawn(ctx context.Context, toolCallID stri
 	if err := service.ensureChildThreadSettings(ctx, parent, child.ThreadID.String(), parentID.String(), agentType); err != nil {
 		return nil, err
 	}
-	_, _ = threads.SetTitle(ctxOrBackground(ctx), flruntime.SetTitleInput{
-		ThreadID: child.ThreadID, Title: taskName, RequestKey: flruntime.RequestKey(requestKey + ":title"),
-	})
 	sendKey := requestKey + ":input"
 	request := runtime.childEffectRequest(parent, child.ThreadID.String(), sendKey, prompt, agentType)
 	result, err := service.sendFloretSubagentInput(ctx, threads, child.ThreadID, prompt, sendKey, request)
 	if err != nil {
 		return nil, err
 	}
-	summary, err := runtime.snapshotForView(ctx, result)
-	if err != nil {
-		return nil, err
+	now := time.Now()
+	summary := flruntime.ThreadSummary{
+		ID: child.ThreadID, ParentThreadID: parentID, ParentTurnID: parentTurnID,
+		TaskName: taskName, TaskDescription: taskDescription, HostProfileRef: agentType,
+		ForkMode: contextMode, CreatedAt: now, UpdatedAt: now,
 	}
-	runtime.publishParent(ctx)
-	item := boundedSubagentItem(subagentSnapshotPayload(summary))
+	snapshot := subagentSnapshotFromThread(summary, result)
+	item := boundedSubagentItem(subagentSnapshotPayload(snapshot))
 	return trimSubagentToolResult(map[string]any{
 		"status": "ok", "action": subagentActionSpawn, "accepted": true,
-		"thread_id": summary.ThreadID, "agent_type": summary.AgentType,
-		"context_mode": summary.ContextMode, "task_name": summary.TaskName,
-		"task_description": summary.TaskDescription, "items": []map[string]any{item},
+		"thread_id": snapshot.ThreadID, "agent_type": snapshot.AgentType,
+		"context_mode": snapshot.ContextMode, "task_name": snapshot.TaskName,
+		"task_description": snapshot.TaskDescription, "items": []map[string]any{item},
 	}), nil
 }
 
@@ -323,11 +322,7 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := runtime.snapshotForView(ctx, result)
-	if err != nil {
-		return nil, err
-	}
-	runtime.publishParent(ctx)
+	snapshot := subagentSnapshotFromThread(summary, result)
 	return trimSubagentToolResult(map[string]any{
 		"status": "ok", "action": subagentActionSendInput, "target": target,
 		"thread_id": target, "accepted": true,
@@ -352,11 +347,7 @@ func (runtime *floretSubagentRuntime) close(ctx context.Context, toolCallID stri
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := runtime.snapshotForView(ctx, result)
-	if err != nil {
-		return nil, err
-	}
-	runtime.publishParent(ctx)
+	snapshot := subagentSnapshotFromThread(summary, result)
 	return trimSubagentToolResult(map[string]any{
 		"status": "ok", "action": subagentActionClose, "target": target,
 		"thread_id": target, "closed": true, "stopped": true,
@@ -384,15 +375,11 @@ func (runtime *floretSubagentRuntime) closeAll(ctx context.Context, toolCallID s
 			if cancelErr != nil {
 				return nil, cancelErr
 			}
-			snapshot, err = runtime.snapshotForView(ctx, result)
-			if err != nil {
-				return nil, err
-			}
+			snapshot = subagentSnapshotFromThread(subagentThreadSummary(snapshot), result)
 		}
 		affected = append(affected, snapshot.ThreadID)
 		items = append(items, boundedSubagentItem(subagentSnapshotPayload(snapshot)))
 	}
-	runtime.publishParent(ctx)
 	out := subagentBoundedResult(subagentActionCloseAll, items)
 	out["scope"] = "current_run"
 	out["closed_count"] = len(affected)
@@ -549,11 +536,7 @@ func (runtime *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagent
 	}
 	out := make([]subagentSnapshot, 0, len(summaries))
 	for _, summary := range summaries {
-		view, viewErr := threads.View(ctxOrBackground(ctx), summary.ID)
-		if viewErr != nil {
-			return nil, viewErr
-		}
-		out = append(out, subagentSnapshotFromThread(summary, view))
+		out = append(out, subagentSnapshotFromSummary(summary))
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].UpdatedAtMS == out[j].UpdatedAtMS {
@@ -564,12 +547,28 @@ func (runtime *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagent
 	return out, nil
 }
 
-func (runtime *floretSubagentRuntime) snapshotForView(ctx context.Context, view flruntime.ThreadView) (subagentSnapshot, error) {
-	summary, err := runtime.childSummary(ctx, view.ThreadID.String())
-	if err != nil {
-		return subagentSnapshot{}, err
+func subagentSnapshotFromSummary(summary flruntime.ThreadSummary) subagentSnapshot {
+	view := flruntime.ThreadView{
+		ThreadID: summary.ID, Activity: summary.Activity, Attention: summary.Attention,
+		LastOutcome: summary.LastOutcome, Failure: summary.Failure, Error: summary.Error,
+		TurnID: summary.TurnID, Queue: make([]flruntime.QueuedInput, summary.QueueCount),
 	}
-	return subagentSnapshotFromThread(summary, view), nil
+	snapshot := subagentSnapshotFromThread(summary, view)
+	snapshot.LastMessage = strings.TrimSpace(summary.LastItemPreview)
+	if summary.PendingInput != nil {
+		snapshot.WaitingPrompt = strings.TrimSpace(summary.PendingInput.Summary)
+	}
+	return snapshot
+}
+
+func subagentThreadSummary(snapshot subagentSnapshot) flruntime.ThreadSummary {
+	return flruntime.ThreadSummary{
+		ID: identity.ThreadID(snapshot.ThreadID), ParentThreadID: identity.ThreadID(snapshot.ParentThreadID),
+		ParentTurnID: identity.TurnID(snapshot.ParentTurnID), TaskName: snapshot.TaskName,
+		TaskDescription: snapshot.TaskDescription, HostProfileRef: snapshot.AgentType,
+		ForkMode: snapshot.ContextMode, CreatedAt: time.UnixMilli(snapshot.CreatedAtMS),
+		UpdatedAt: time.UnixMilli(snapshot.UpdatedAtMS),
+	}
 }
 
 func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.ThreadView) subagentSnapshot {
@@ -611,13 +610,6 @@ func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.
 		QueuedInputs: len(view.Queue), CreatedAtMS: timeUnixMS(summary.CreatedAt), UpdatedAtMS: timeUnixMS(summary.UpdatedAt),
 		Closed: closed, CanSendInput: !closed, CanInterrupt: view.Activity == flruntime.ThreadActivityActive,
 		CanClose: !closed,
-	}
-}
-
-func (runtime *floretSubagentRuntime) publishParent(ctx context.Context) {
-	service, parent, _, err := runtime.boundaries()
-	if err == nil {
-		_ = service.broadcastThreadSummary(parent.endpointID, parent.threadID)
 	}
 }
 
@@ -663,11 +655,7 @@ func (service *Service) listFlowerSubagentsForParent(ctx context.Context, parent
 	}
 	out := make([]FlowerSubagentSummary, 0, len(summaries))
 	for _, summary := range summaries {
-		view, viewErr := service.threadRuntime.View(ctxOrBackground(ctx), summary.ID)
-		if viewErr != nil {
-			return nil, viewErr
-		}
-		out = append(out, flowerSubagentSummaryFromSnapshot(subagentSnapshotFromThread(summary, view)))
+		out = append(out, flowerSubagentSummaryFromSnapshot(subagentSnapshotFromSummary(summary)))
 	}
 	return out, nil
 }
@@ -684,9 +672,21 @@ func flowerSubagentSummaryFromSnapshot(snapshot subagentSnapshot) FlowerSubagent
 }
 
 func (service *Service) publishFlowerSubagentsPatch(ctx context.Context, endpointID, parentThreadID string) {
-	if service != nil {
-		_ = service.broadcastThreadSummary(strings.TrimSpace(endpointID), strings.TrimSpace(parentThreadID))
+	if service == nil {
+		return
 	}
+	endpointID, parentThreadID = strings.TrimSpace(endpointID), strings.TrimSpace(parentThreadID)
+	if endpointID == "" || parentThreadID == "" {
+		return
+	}
+	items, err := service.listFlowerSubagentsForParent(ctxOrBackground(ctx), identity.ThreadID(parentThreadID))
+	if err != nil {
+		if service.log != nil && !errors.Is(err, context.Canceled) {
+			service.log.Warn("ai: publish Flower Subagent inventory", "parent_thread_id", parentThreadID, "error", err)
+		}
+		return
+	}
+	service.broadcastFlowerSubagentsPatch(endpointID, parentThreadID, items)
 }
 
 func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Meta, parentThreadID, childThreadID string, afterOrdinal int64, limit int) (*FlowerSubagentDetailResponse, error) {

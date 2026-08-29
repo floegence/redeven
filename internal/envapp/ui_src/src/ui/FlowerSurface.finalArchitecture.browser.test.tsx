@@ -20,6 +20,8 @@ import {
   readStatus,
   renderSurfaceWithAdapter,
   runtimeCurrentView,
+  subagentDetail,
+  subagentSummary,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -83,6 +85,56 @@ function completedTerminalThread() {
 }
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('routes a live Subagent inventory to the parent panel and opens its floating detail', async () => {
+    const parent = thread({
+      thread_id: 'thread-parent-live-subagent',
+      title: 'Parent research task',
+      subagents: [],
+    });
+    const child = subagentSummary({
+      parent_thread_id: parent.thread_id,
+      thread_id: 'thread-child-live-subagent',
+      task_name: 'Research model releases',
+      task_description: 'Review the latest model releases.',
+      status: 'running',
+    });
+    const stream = controlledWorkspaceStream([{
+      schema_version: 1,
+      kind: 'ready',
+      summaries: [parent],
+    }]);
+    const surfaceAdapter = adapter(true);
+    const runtime = renderSurfaceWithAdapter({
+      ...surfaceAdapter,
+      listThreads: vi.fn(async () => [parent]),
+      loadThread: vi.fn(async () => liveBootstrap(parent, 1)),
+      connectLiveStream: stream.connect,
+      loadSubagentDetail: vi.fn(async () => subagentDetail({ summary: child })),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector(`[data-thread-id="${parent.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      subagents: [child],
+    });
+
+    await waitFor(() => runtime.querySelector('.flower-header-icon-badge')?.textContent === '1');
+    expect(runtime.querySelector(`[data-thread-id="${child.thread_id}"]`)).toBeNull();
+    const trigger = runtime.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement;
+    trigger.click();
+    await waitFor(() => Boolean(document.querySelector(`[data-flower-subagent-row="0"]`)));
+    (document.querySelector(`[data-flower-subagent-row="0"]`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
+
+    expect(document.querySelector('[data-floe-geometry-surface="floating-window"]')).not.toBeNull();
+    expect(runtime.querySelector(`[data-thread-id="${parent.thread_id}"]`)?.getAttribute('data-flower-thread-active')).toBe('true');
+    expect(runtime.querySelector(`[data-thread-id="${child.thread_id}"]`)).toBeNull();
+  });
+
   it('wraps live thinking without making the transcript horizontally scrollable', async () => {
     const threadID = 'thread-thinking-wrap';
     const turnID = 'turn-thinking-wrap';
