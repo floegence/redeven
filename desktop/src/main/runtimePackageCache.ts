@@ -332,7 +332,7 @@ type RuntimeArchiveEntry = Readonly<{
   mode: number;
 }>;
 
-const LINUX_RUNTIME_COMPANION_FILES = [
+const NATIVE_RUNTIME_COMPANION_FILES = [
   'redevplugin-runtime',
   '.redevplugin-release-artifacts-verified.json',
   'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
@@ -572,8 +572,8 @@ function runtimePackageEntryNames(args: Readonly<{
   if (args.packageKind === 'gateway') {
     return ['redeven-gateway'];
   }
-  if (args.platform.goos === 'linux') {
-    return ['redeven', ...LINUX_RUNTIME_COMPANION_FILES];
+  if (args.platform.goos === 'linux' || args.platform.goos === 'darwin') {
+    return ['redeven', ...NATIVE_RUNTIME_COMPANION_FILES];
   }
   return ['redeven'];
 }
@@ -837,7 +837,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
       signal: args.signal,
     });
     throwIfCanceled(args.signal);
-    if (args.packageKind === 'runtime' && args.platform.goos === 'linux') {
+    if (args.packageKind === 'runtime') {
       const suiteRoot = path.join(buildRoot, 'runtime-suite');
       await fs.mkdir(suiteRoot, { recursive: true });
       await stageSourceRuntimeCompanions({
@@ -852,7 +852,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
         data: await fs.readFile(binaryPath),
         mode: 0o755,
       }];
-      for (const name of LINUX_RUNTIME_COMPANION_FILES) {
+      for (const name of NATIVE_RUNTIME_COMPANION_FILES) {
         entries.push({
           name,
           data: await fs.readFile(path.join(suiteRoot, name)),
@@ -1133,7 +1133,7 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
     const sourceRoot = compact(args.sourceRuntimeRoot);
     let redevpluginReleaseTag = 'none';
     let pluginManifest: Readonly<{ path: string; digest: string }> | undefined;
-    if (sourceRoot !== '' && packageKind === 'runtime' && args.platform.goos === 'linux') {
+    if (sourceRoot !== '' && packageKind === 'runtime') {
       const normalizedSourceRoot = normalizeSourceRuntimeRoot(sourceRoot);
       redevpluginReleaseTag = await readReDevPluginReleaseTag(normalizedSourceRoot, args.signal);
       const sourceCommit = await readSourceRuntimeCommit(normalizedSourceRoot, args.signal);

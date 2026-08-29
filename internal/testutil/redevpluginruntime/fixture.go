@@ -13,13 +13,13 @@ import (
 
 const binaryName = "redevplugin-runtime"
 
-// InstallAt writes the minimal executable needed to exercise Linux runtime
-// admission without starting a worker. Other platforms do not admit workers.
+// InstallAt writes the minimal executable needed to exercise native runtime
+// admission without starting a worker.
 func InstallAt(root string) (func() error, error) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		return func() error { return nil }, nil
 	}
-	header, err := elfHeader(runtime.GOARCH)
+	header, err := executableHeader(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func InstallAt(root string) (func() error, error) {
 // InstallSiblingOfCurrentExecutable follows the same canonical sibling rule as
 // the production Redeven runtime resolver.
 func InstallSiblingOfCurrentExecutable() (func() error, error) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		return func() error { return nil }, nil
 	}
 	executable, err := os.Executable()
@@ -75,6 +75,17 @@ func InstallSiblingOfCurrentExecutable() (func() error, error) {
 		return nil, fmt.Errorf("resolve test executable symlinks: %w", err)
 	}
 	return InstallAt(filepath.Dir(executable))
+}
+
+func executableHeader(goos, goarch string) ([]byte, error) {
+	switch goos {
+	case "linux":
+		return elfHeader(goarch)
+	case "darwin":
+		return machOHeader(goarch)
+	default:
+		return nil, fmt.Errorf("unsupported ReDevPlugin runtime fixture target %q", goos+"/"+goarch)
+	}
 }
 
 func preserveExistingFixture(path string, expected []byte) (func() error, error) {
@@ -114,5 +125,23 @@ func elfHeader(goarch string) ([]byte, error) {
 	binary.LittleEndian.PutUint16(header[52:], 64)
 	binary.LittleEndian.PutUint16(header[54:], 56)
 	binary.LittleEndian.PutUint16(header[58:], 64)
+	return header, nil
+}
+
+func machOHeader(goarch string) ([]byte, error) {
+	var cpu uint32
+	switch goarch {
+	case "amd64":
+		cpu = 0x01000007
+	case "arm64":
+		cpu = 0x0100000c
+	default:
+		return nil, fmt.Errorf("unsupported ReDevPlugin runtime fixture architecture %q", goarch)
+	}
+
+	header := make([]byte, 32)
+	binary.LittleEndian.PutUint32(header[0:], 0xfeedfacf)
+	binary.LittleEndian.PutUint32(header[4:], cpu)
+	binary.LittleEndian.PutUint32(header[12:], 2)
 	return header, nil
 }

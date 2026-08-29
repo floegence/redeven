@@ -33,7 +33,7 @@ const manifest = {
   ],
 };
 
-function createFixture(root) {
+function createFixture(root, target = 'linux/amd64') {
   mkdirSync(root, { recursive: true });
   const manifestPath = path.join(root, 'platform-release-manifest.json');
   writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
@@ -44,19 +44,25 @@ function createFixture(root) {
   const notices = path.join(root, runtimeNoticesName);
   const signature = path.join(root, runtimeSignatureName);
   const certificate = path.join(root, runtimeCertificateName);
-  const elf = Buffer.alloc(64);
-  Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1]).copy(elf);
-  elf.writeUInt16LE(3, 16);
-  elf.writeUInt16LE(62, 18);
-  writeFileSync(runtime, elf, { mode: 0o755 });
+  const executable = Buffer.alloc(target.startsWith('linux/') ? 64 : 32);
+  if (target.startsWith('linux/')) {
+    Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1]).copy(executable);
+    executable.writeUInt16LE(3, 16);
+    executable.writeUInt16LE(target === 'linux/amd64' ? 62 : 183, 18);
+  } else {
+    executable.writeUInt32LE(0xfeedfacf, 0);
+    executable.writeUInt32LE(target === 'darwin/amd64' ? 0x01000007 : 0x0100000c, 4);
+    executable.writeUInt32LE(2, 12);
+  }
+  writeFileSync(runtime, executable, { mode: 0o755 });
   writeFileSync(sbom, '{}\n');
   writeFileSync(provenance, '{}\n');
   writeFileSync(notices, 'notices\n');
   const keys = generateKeyPairSync('ed25519');
-  writeFileSync(signature, sign(null, elf, keys.privateKey));
+  writeFileSync(signature, sign(null, executable, keys.privateKey));
   writeFileSync(certificate, keys.publicKey.export({ type: 'spki', format: 'pem' }));
   const marker = createRuntimeEvidence({
-    profile: 'development', target: 'linux/amd64', releaseVerification: verification,
+    profile: 'development', target, releaseVerification: verification,
     runtimePath: runtime, sbomPath: sbom, provenancePath: provenance, noticesPath: notices,
     signaturePath: signature, certificatePath: certificate,
     product: { repository: 'floegence/redeven', workflow_path: '.github/workflows/release.yml', ref: 'refs/heads/fixture', source_commit: '2'.repeat(40) },
@@ -77,6 +83,17 @@ test('accepts a signed development runtime and rejects tampered evidence', () =>
     run(['--scan-root', root, '--runtime-target', 'linux/amd64']);
     writeFileSync(path.join(root, runtimeNoticesName), 'tampered\n');
     run(['--scan-root', root, '--runtime-target', 'linux/amd64'], 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('accepts a signed Darwin development runtime with exact Mach-O identity', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-consumption-darwin-'));
+  try {
+    createFixture(root, 'darwin/arm64');
+    run(['--scan-root', root, '--runtime-target', 'darwin/arm64']);
+    run(['--scan-root', root, '--runtime-target', 'darwin/amd64'], 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

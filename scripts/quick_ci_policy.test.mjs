@@ -5,6 +5,8 @@ import test from "node:test";
 const workflow = readFileSync(new URL("../.github/workflows/ci-check.yml", import.meta.url), "utf8");
 const codeqlWorkflow = readFileSync(new URL("../.github/workflows/codeql.yml", import.meta.url), "utf8");
 const releaseWorkflow = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+const desktopBuilderConfig = readFileSync(new URL("../desktop/electron-builder.config.mjs", import.meta.url), "utf8");
+const redevpluginRuntimeStage = readFileSync(new URL("./stage_redevplugin_release_artifacts.sh", import.meta.url), "utf8");
 const sparkleReleaseScript = readFileSync(new URL("./generate_desktop_sparkle_appcast.sh", import.meta.url), "utf8");
 const quickGate = readFileSync(new URL("./check_quick_ci.sh", import.meta.url), "utf8");
 const finalGate = readFileSync(new URL("./check_final_integration.sh", import.meta.url), "utf8");
@@ -223,4 +225,12 @@ test("release workflow keeps Desktop update credentials in the protected environ
   for (const forbidden of ['find-disk-killer', 'jianyintang', 'Y3A8BJ447', 'BEGIN PRIVATE KEY']) {
     assert.doesNotMatch(releaseWorkflow, new RegExp(forbidden, 'i'));
   }
+});
+
+test("release workflow signs and preserves exact Darwin ReDevPlugin runtime bytes", () => {
+  assert.match(releaseWorkflow, /apple-actions\/import-codesign-certs@v7/u);
+  assert.match(releaseWorkflow, /REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY: \$\{\{ secrets\.REDEVEN_DESKTOP_MAC_IDENTITY \}\}/u);
+  assert.match(redevpluginRuntimeStage, /codesign --force --options runtime --timestamp --sign "\$codesign_identity" "\$runtime"/u);
+  assert.match(redevpluginRuntimeStage, /verify-runtime-executable "\$runtime" "\$target"/u);
+  assert.match(desktopBuilderConfig, /signIgnore: \['\*\*\/Contents\/Resources\/bin\/redevplugin-runtime'\]/u);
 });

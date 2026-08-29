@@ -20,6 +20,8 @@ import {
   validateReleaseManifest,
   validateRuntimeEvidence,
   verifyELF,
+  verifyMachO,
+  verifyRuntimeExecutable,
 } from './redevplugin_release_contract.mjs';
 
 const version = '1.2.3';
@@ -51,7 +53,7 @@ test('runtime staging derives its release tag from the published Go dependency',
   assert.match(verificationSource, /api\.github\.com\/repos\/\$REPOSITORY\/releases\/tags\/\$tag/u);
   assert.doesNotMatch(verificationSource, /gh release view/u);
   assert.match(source, /release manifest version does not match Go module version/u);
-  assert.match(source, /redevplugin_release_contract\.mjs" verify-elf "\$runtime" "\$target"/u);
+  assert.match(source, /redevplugin_release_contract\.mjs" verify-runtime-executable "\$runtime" "\$target"/u);
   assert.match(source, /link_redevplugin_runtime_static_pie\.sh/u);
   assert.doesNotMatch(source, /\breadelf\b/u);
   assert.doesNotMatch(source, /\bmapfile\b/u);
@@ -232,6 +234,24 @@ test('runtime evidence binds the release manifest and every product file', () =>
     writeFileSync(notices, 'tampered\n');
     assert.throws(() => validateRuntimeEvidence(marker, root, { target: 'linux/amd64' }), /descriptor mismatch/u);
     assert.notEqual(readFileSync(notices, 'utf8'), 'notices\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runtime executable verification accepts exact Darwin Mach-O targets', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-darwin-runtime-contract-'));
+  try {
+    const runtime = path.join(root, 'redevplugin-runtime');
+    const macho = Buffer.alloc(32);
+    macho.writeUInt32LE(0xfeedfacf, 0);
+    macho.writeUInt32LE(0x0100000c, 4);
+    macho.writeUInt32LE(2, 12);
+    writeFileSync(runtime, macho);
+    verifyMachO(runtime, 'darwin/arm64');
+    verifyRuntimeExecutable(runtime, 'darwin/arm64');
+    assert.throws(() => verifyMachO(runtime, 'darwin/amd64'), /CPU/u);
+    assert.throws(() => verifyRuntimeExecutable(runtime, 'linux/arm64'), /ELF/u);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -70,21 +70,20 @@ function createFixture(root, version = '1.2.3') {
     for (const extension of target.extensions) {
       const installerName = `Redeven-Desktop-${version}-${target.desktopOS}-${target.desktopArch}.${extension}`;
       const installerPath = write(desktopDirectory, installerName, Buffer.from(`installer ${installerName}\n`));
-      const hasRuntime = target.goos === 'linux';
       const targetLabel = `${target.goos}/${target.goarch}`;
       write(desktopDirectory, `${installerName}.redevplugin-verification.json`, `${JSON.stringify({
         schema_version: 'redeven.desktop_redevplugin_package_verification.v2',
         package: packageDescriptor(installerPath),
         runtime_target: targetLabel,
-        redevplugin_runtime: hasRuntime ? evidenceDescriptor(`runtime ${targetLabel}`) : null,
-        redevplugin_evidence: hasRuntime ? {
+        redevplugin_runtime: evidenceDescriptor(`runtime ${targetLabel}`),
+        redevplugin_evidence: {
           marker: evidenceDescriptor(`marker ${targetLabel}`),
           notices: evidenceDescriptor(`notices ${targetLabel}`),
           sbom: evidenceDescriptor(`sbom ${targetLabel}`),
           provenance: evidenceDescriptor(`provenance ${targetLabel}`),
           signature: evidenceDescriptor(`signature ${targetLabel}`),
           certificate: evidenceDescriptor(`certificate ${targetLabel}`),
-        } : null,
+        },
       }, null, 2)}\n`);
     }
   }

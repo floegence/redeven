@@ -7,6 +7,16 @@ import { promisify } from 'node:util';
 const DESKTOP_BUNDLE_MANIFEST_NAME = 'desktop-bundle-manifest.json';
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 const execFileAsync = promisify(execFile);
+const NATIVE_RUNTIME_FILES = Object.freeze([
+  '.redevplugin-release-artifacts-verified.json',
+  'REDEVPLUGIN_RUNTIME.spdx.json',
+  'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+  'redeven',
+  'redevplugin-runtime',
+  'redevplugin-runtime.pem',
+  'redevplugin-runtime.provenance.json',
+  'redevplugin-runtime.sig',
+].sort((left, right) => left.localeCompare(right)));
 const MANAGED_WSL_ARCHIVE_FILES = Object.freeze([
   '.redevplugin-release-artifacts-verified.json',
   'LICENSE',
@@ -233,8 +243,15 @@ export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Prom
     ) {
       throw new Error('Desktop bundle managed WSL archive inventory is invalid.');
     }
-  } else if (distributionKind !== 'bundled_host_runtime' || !runtime?.executable) {
-    throw new Error('Desktop bundle Runtime inventory is invalid.');
+  } else {
+    const nativeInventory = runtimeFiles.map((artifact) => artifact.path).sort((left, right) => left.localeCompare(right));
+    if (
+      distributionKind !== 'bundled_host_runtime'
+      || !runtime?.executable
+      || JSON.stringify(nativeInventory) !== JSON.stringify(NATIVE_RUNTIME_FILES)
+    ) {
+      throw new Error('Desktop bundle Runtime inventory is invalid.');
+    }
   }
   const identity = { schema_version: 1, files: runtimeFiles.map((artifact) => ({ name: artifact.path, sha256: `sha256:${artifact.sha256}`, size_bytes: artifact.size_bytes, executable: artifact.executable })).sort((a, b) => a.name.localeCompare(b.name)) };
   if (`sha256:${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}` !== filesDigest) throw new Error('Desktop bundle Runtime digest does not match its manifest.');

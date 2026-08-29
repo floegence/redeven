@@ -44,9 +44,8 @@ type runtimeModuleDependencies struct {
 type runtimeExecutableOpener func(context.Context, host.VerifiedExecutableOptions) (*host.VerifiedExecutable, error)
 
 // newOfficialRuntimeModule admits Redeven's product-built ReDevPlugin runtime
-// through the released Host capability. ReDevPlugin exposes
-// runtime admission only on Linux; other platforms keep the plugin management
-// surface available without claiming worker execution support.
+// through the released Host capability on every target supported by the
+// published ReDevPlugin runtime contract.
 func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencies) (*host.RuntimeModule, error) {
 	return newOfficialRuntimeModuleForPlatform(ctx, deps, runtime.GOOS+"/"+runtime.GOARCH, host.OpenVerifiedExecutable)
 }
@@ -65,8 +64,8 @@ func newOfficialRuntimeModuleForPlatform(
 	if executionRootPath == "" || !filepath.IsAbs(executionRootPath) || filepath.Clean(executionRootPath) != executionRootPath {
 		return nil, errors.New("official runtime execution root must be an absolute canonical path")
 	}
-	if !strings.HasPrefix(platform, "linux/") {
-		return nil, nil
+	if _, err := runtimetarget.Parse(platform); err != nil {
+		return nil, err
 	}
 	if openExecutable == nil {
 		return nil, errors.New("runtime executable opener is required")

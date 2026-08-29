@@ -387,6 +387,7 @@ export function createRuntimeNotices(provenance) {
 
 export function verifyELF(pathname, target) {
   targetIdentity(target);
+  if (target !== 'linux/amd64' && target !== 'linux/arm64') fail(`runtime target is not ELF: ${target}`);
   const bytes = readFileSync(pathname);
   if (bytes.length < 64 || !bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
       || bytes[4] !== 2 || bytes[5] !== 1) {
@@ -423,6 +424,27 @@ export function verifyELF(pathname, target) {
       if (tag === 1n) fail('runtime ELF dynamic dependencies are forbidden');
     }
   }
+}
+
+export function verifyMachO(pathname, target) {
+  targetIdentity(target);
+  if (target !== 'darwin/amd64' && target !== 'darwin/arm64') fail(`runtime target is not Mach-O: ${target}`);
+  const bytes = readFileSync(pathname);
+  if (bytes.length < 32 || bytes.readUInt32LE(0) !== 0xfeedfacf) {
+    fail('runtime binary is not a 64-bit little-endian Mach-O executable');
+  }
+  const cpu = bytes.readUInt32LE(4);
+  const expected = target === 'darwin/amd64' ? 0x01000007 : 0x0100000c;
+  if (cpu !== expected) fail(`runtime Mach-O CPU ${cpu} does not match ${target}`);
+  if (bytes.readUInt32LE(12) !== 2) fail('runtime Mach-O is not an executable');
+}
+
+export function verifyRuntimeExecutable(pathname, target) {
+  if (target.startsWith('linux/')) {
+    verifyELF(pathname, target);
+    return;
+  }
+  verifyMachO(pathname, target);
 }
 
 export function descriptor(pathname, name = path.basename(pathname)) {
@@ -595,7 +617,9 @@ function digest(value, label) {
 }
 
 function targetIdentity(value) {
-  if (!['linux/amd64', 'linux/arm64'].includes(value)) fail(`unsupported ReDevPlugin runtime target: ${value}`);
+  if (!['darwin/amd64', 'darwin/arm64', 'linux/amd64', 'linux/arm64'].includes(value)) {
+    fail(`unsupported ReDevPlugin runtime target: ${value}`);
+  }
 }
 
 function compareCoordinates(left, right) {
@@ -658,6 +682,10 @@ async function main(args) {
     verifyELF(rest[0], rest[1]);
     return;
   }
+  if (command === 'verify-runtime-executable' && rest.length === 2) {
+    verifyRuntimeExecutable(rest[0], rest[1]);
+    return;
+  }
   if (command === 'write-build-evidence') {
     const options = parseOptions(rest);
     const releaseVerification = readJSON(required(options, '--release-verification'), 'release verification');
@@ -716,7 +744,7 @@ async function main(args) {
       target: required(options, '--target'),
       requireRelease: options['--require-release'] === 'true',
     });
-    verifyELF(path.join(root, 'redevplugin-runtime'), required(options, '--target'));
+    verifyRuntimeExecutable(path.join(root, 'redevplugin-runtime'), required(options, '--target'));
     return;
   }
   console.error('usage: redevplugin_release_contract.mjs <command> ...');

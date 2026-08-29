@@ -8,12 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 )
 
 // artifactFS contains only public verification material. Private signing keys
 // and plugin release payloads are never part of the repository or product binary.
 //
-//go:embed official-package-signing-key.public.json
+//go:embed official-release-trust-v1.public.json official-package-signing-key.public.json
 var artifactFS embed.FS
 
 type signingPublicKey struct {
@@ -25,10 +26,45 @@ type signingPublicKey struct {
 	CreatedAt     string `json:"created_at"`
 }
 
+type publicKeyPin struct {
+	Algorithm string `json:"algorithm"`
+	KeyID     string `json:"key_id"`
+	PublicKey string `json:"public_key"`
+}
+
+type officialReleaseTrustAnchorsFile struct {
+	SchemaVersion string       `json:"schema_version"`
+	SourceID      string       `json:"source_id"`
+	Root          publicKeyPin `json:"root"`
+}
+
 type ReleaseTrustPublicKey struct {
 	KeyID       string
 	PublisherID string
 	PublicKey   ed25519.PublicKey
+}
+
+type OfficialReleaseTrustAnchors struct {
+	SourceID string
+	Root     ReleaseTrustPublicKey
+}
+
+// OfficialReleaseTrustAnchorSet returns the root key Redeven pins for official
+// market release metadata. Package-signing delegation and revocation remain
+// ReDevPlugin release-trust decisions beneath this product-owned anchor.
+func OfficialReleaseTrustAnchorSet() (OfficialReleaseTrustAnchors, error) {
+	var value officialReleaseTrustAnchorsFile
+	if err := readStrictJSON("official-release-trust-v1.public.json", &value); err != nil {
+		return OfficialReleaseTrustAnchors{}, err
+	}
+	if value.SchemaVersion != "redeven.official_release_trust_anchors.v1" || value.SourceID != "redeven_official" {
+		return OfficialReleaseTrustAnchors{}, errors.New("official release trust anchor identity is invalid")
+	}
+	root, err := decodePublicKeyPin(value.Root)
+	if err != nil {
+		return OfficialReleaseTrustAnchors{}, err
+	}
+	return OfficialReleaseTrustAnchors{SourceID: value.SourceID, Root: root}, nil
 }
 
 // OfficialSigningPublicKey returns the package-signing key pinned by Redeven.
@@ -60,6 +96,19 @@ func readSigningPublicKey(name, expectedKeyID string) (ReleaseTrustPublicKey, er
 	return ReleaseTrustPublicKey{
 		KeyID: public.KeyID, PublisherID: public.PublisherID,
 		PublicKey: append(ed25519.PublicKey(nil), publicBytes...),
+	}, nil
+}
+
+func decodePublicKeyPin(value publicKeyPin) (ReleaseTrustPublicKey, error) {
+	if value.Algorithm != "ed25519" || strings.TrimSpace(value.KeyID) == "" {
+		return ReleaseTrustPublicKey{}, errors.New("official release public key identity is invalid")
+	}
+	publicBytes, err := base64.StdEncoding.DecodeString(value.PublicKey)
+	if err != nil || len(publicBytes) != ed25519.PublicKeySize {
+		return ReleaseTrustPublicKey{}, errors.New("official release public key is invalid")
+	}
+	return ReleaseTrustPublicKey{
+		KeyID: value.KeyID, PublicKey: append(ed25519.PublicKey(nil), publicBytes...),
 	}, nil
 }
 

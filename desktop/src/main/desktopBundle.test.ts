@@ -43,12 +43,25 @@ function bundleFixture(overrides: Record<string, unknown> = {}) {
   roots.push(root);
   const runtime = Buffer.from("#!/bin/sh\nprintf 'redeven v1.2.3 (abc123) 2026-08-19T00:00:00Z\\n'\n");
   fs.writeFileSync(path.join(root, 'redeven'), runtime, { mode: 0o755 });
-  const runtimeFiles = [{
-    path: 'redeven',
-    sha256: sha256(runtime),
-    size_bytes: runtime.length,
-    executable: true,
-  }];
+  const runtimeContents = new Map<string, Buffer>([
+    ['redeven', runtime],
+    ['redevplugin-runtime', Buffer.from('plugin runtime')],
+    ['.redevplugin-release-artifacts-verified.json', Buffer.from('{}\n')],
+    ['REDEVPLUGIN_RUNTIME.spdx.json', Buffer.from('{}\n')],
+    ['REDEVPLUGIN_THIRD_PARTY_NOTICES.md', Buffer.from('notices\n')],
+    ['redevplugin-runtime.pem', Buffer.from('certificate\n')],
+    ['redevplugin-runtime.provenance.json', Buffer.from('{}\n')],
+    ['redevplugin-runtime.sig', Buffer.from('signature\n')],
+  ]);
+  for (const [name, bytes] of runtimeContents) {
+    fs.writeFileSync(path.join(root, name), bytes, { mode: name === 'redeven' || name === 'redevplugin-runtime' ? 0o755 : 0o600 });
+  }
+  const runtimeFiles = [...runtimeContents].map(([name, bytes]) => ({
+    path: name,
+    sha256: sha256(bytes),
+    size_bytes: bytes.length,
+    executable: name === 'redeven' || name === 'redevplugin-runtime',
+  }));
   const manifest = {
     schema_version: 4,
     version: 'v1.2.3',
@@ -126,17 +139,44 @@ describe('Desktop precompiled bundle', () => {
   it('validates the exact packaged Runtime identity before startup', async () => {
     const root = bundleFixture();
 
-    await expect(loadDesktopBundle({
+    const bundle = await loadDesktopBundle({
       root,
       expectedPlatform: 'linux',
       expectedArchitecture: 'amd64',
       expectedVersion: 'v1.2.3',
-    })).resolves.toMatchObject({
+    });
+    expect(bundle).toMatchObject({
       root,
       version: 'v1.2.3',
       commit: 'abc123',
-      runtime_files: [{ path: path.join(root, 'redeven') }],
     });
+    expect(bundle.runtime_files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: path.join(root, 'redeven') }),
+      expect.objectContaining({ path: path.join(root, 'redevplugin-runtime') }),
+    ]));
+  });
+
+  it('accepts the complete Darwin Runtime suite and rejects a missing ReDevPlugin companion', async () => {
+    const root = bundleFixture({ platform: 'darwin', architecture: 'arm64' });
+    await expect(loadDesktopBundle({
+      root,
+      expectedPlatform: 'darwin',
+      expectedArchitecture: 'arm64',
+      expectedVersion: 'v1.2.3',
+    })).resolves.toMatchObject({ platform: 'darwin', architecture: 'arm64' });
+
+    const manifestPath = path.join(root, 'desktop-bundle-manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown> & {
+      runtime_files: Array<Record<string, unknown>>;
+    };
+    manifest.runtime_files = manifest.runtime_files.filter((artifact) => artifact.path !== 'redevplugin-runtime');
+    manifest.runtime_files_sha256 = suiteSHA256(manifest.runtime_files);
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
+    await expect(loadDesktopBundle({
+      root,
+      expectedPlatform: 'darwin',
+      expectedArchitecture: 'arm64',
+    })).rejects.toThrow('inventory');
   });
 
   it.each([

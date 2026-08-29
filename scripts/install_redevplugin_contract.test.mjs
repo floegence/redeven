@@ -172,20 +172,15 @@ test('keeps the prior runtime suite active when a replacement is incomplete', ()
   }
 });
 
-test('atomically activates a Darwin suite only when ReDevPlugin runtime evidence is absent', () => {
+test('atomically activates a Darwin suite with the complete ReDevPlugin runtime evidence', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-installer-contract-'));
   try {
     const extracted = path.join(root, 'extracted');
     const install = path.join(root, 'install');
-    mkdirSync(extracted);
     mkdirSync(install);
-    writeFileSync(path.join(extracted, 'redeven'), '#!/bin/sh\n[ "$1" = version ]\n');
-    chmodSync(path.join(extracted, 'redeven'), 0o755);
-    writeFileSync(path.join(extracted, 'LICENSE'), 'license\n');
-    writeFileSync(path.join(extracted, 'THIRD_PARTY_NOTICES.md'), 'notices\n');
+    writeRuntimeSuite(extracted, 'darwin');
     const hash = 'c'.repeat(64);
     const result = runInstallerLibrary(root, [
-      'REDEVPLUGIN_RUNTIME_REQUIRED=0',
       `INSTALL_DIR='${install}'`,
       `REDEVEN_INSTALL_DIR='${install}'`,
       `SAFE_EXTRACTOR_PATH='${path.join(repositoryRoot, 'scripts', 'safe_extract_tar.py')}'`,
@@ -196,7 +191,18 @@ test('atomically activates a Darwin suite only when ReDevPlugin runtime evidence
     ].join('\n'));
     assert.equal(result.status, 0, result.stderr);
     const suite = path.join(install, '.redeven-runtime-suites', hash);
-    assert.deepEqual(readdirSync(suite).sort(), ['REDEVEN_LICENSE', 'REDEVEN_THIRD_PARTY_NOTICES.md', 'redeven']);
+    assert.deepEqual(readdirSync(suite).sort(), [
+      '.redevplugin-release-artifacts-verified.json',
+      'REDEVEN_LICENSE',
+      'REDEVEN_THIRD_PARTY_NOTICES.md',
+      'REDEVPLUGIN_RUNTIME.spdx.json',
+      'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+      'redeven',
+      'redevplugin-runtime',
+      'redevplugin-runtime.pem',
+      'redevplugin-runtime.provenance.json',
+      'redevplugin-runtime.sig',
+    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

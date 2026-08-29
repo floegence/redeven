@@ -10,7 +10,7 @@ quality_exception: Cross-domain host integration contract spanning identity, sec
 
 Redeven integrates ReDevPlugin `v3.0.17` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
-released ProcessManager over a verified Redeven-built Linux runtime. Redeven
+released ProcessManager over a verified Redeven-built Linux or Darwin runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
 placement, and business adapters; ReDevPlugin retains package, state, protocol,
 trust, and runtime ownership. Activity supports Shell-root multi-window placement
@@ -139,12 +139,15 @@ user pin.
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
 `v3.0.17`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
-replay storage, and released limits. Linux runtime bytes are built with Rust
-1.88.0 from the attested release manifest and travel with SBOM, provenance, notices,
-and signature evidence. The expected binary digest comes from the product release
-marker; field binary bytes are never hashed and accepted as their own trust
-anchor. Missing, non-canonical, wrong-target, unsigned, or wrong-hash runtime
-evidence blocks startup. Darwin constructs no runtime module.
+replay storage, and released limits. Linux and Darwin runtime bytes are built
+with Rust 1.88.0 from the attested release manifest and travel with SBOM,
+provenance, notices, and signature evidence. Linux admission requires the
+released static-PIE shape; Darwin admission requires the released native Mach-O
+target, and release bytes are Developer ID signed before the product digest and
+Sigstore evidence are written. The expected binary digest comes from the product
+release marker; field binary bytes are never hashed and accepted as their own
+trust anchor. Missing, non-canonical, wrong-target, unsigned, or wrong-hash
+runtime evidence blocks startup.
 
 Native Containers is intentionally outside the plugin runtime and does not
 register a capability adapter. Its Local API, permissions, operation lifecycle,

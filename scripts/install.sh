@@ -64,7 +64,6 @@ INSTALL_DIR="${REDEVEN_HOME}/bin"
 RG_TARGET=""
 RG_ARCHIVE_NAME=""
 RG_EXPECTED_SHA256=""
-REDEVPLUGIN_RUNTIME_REQUIRED=1
 
 # Logging functions
 log_info() {
@@ -186,11 +185,6 @@ detect_platform() {
 
     PLATFORM="${OS}_${ARCH}"
     PACKAGE_NAME="${BINARY_NAME}_${PLATFORM}.tar.gz"
-    if [ "$OS" = "linux" ]; then
-        REDEVPLUGIN_RUNTIME_REQUIRED=1
-    else
-        REDEVPLUGIN_RUNTIME_REQUIRED=0
-    fi
 
     case "${OS}_${ARCH}" in
         linux_amd64)
@@ -398,40 +392,23 @@ verify_runtime_suite_directory() {
         log_error "Installed Redeven runtime is not executable"
         exit 1
     fi
-    if [ "$REDEVPLUGIN_RUNTIME_REQUIRED" = "1" ]; then
-        for required in \
-            "$suite_dir/redevplugin-runtime" \
-            "$suite_dir/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" \
-            "$suite_dir/REDEVPLUGIN_RUNTIME.spdx.json" \
-            "$suite_dir/redevplugin-runtime.provenance.json" \
-            "$suite_dir/redevplugin-runtime.sig" \
-            "$suite_dir/redevplugin-runtime.pem" \
-            "$suite_dir/.redevplugin-release-artifacts-verified.json"
-        do
-            if [ ! -f "$required" ] || [ -L "$required" ]; then
-                log_error "Installed Linux runtime suite is incomplete: $required"
-                exit 1
-            fi
-        done
-        if [ ! -x "$suite_dir/redevplugin-runtime" ]; then
-            log_error "Installed ReDevPlugin runtime is not executable"
+    for required in \
+        "$suite_dir/redevplugin-runtime" \
+        "$suite_dir/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" \
+        "$suite_dir/REDEVPLUGIN_RUNTIME.spdx.json" \
+        "$suite_dir/redevplugin-runtime.provenance.json" \
+        "$suite_dir/redevplugin-runtime.sig" \
+        "$suite_dir/redevplugin-runtime.pem" \
+        "$suite_dir/.redevplugin-release-artifacts-verified.json"
+    do
+        if [ ! -f "$required" ] || [ -L "$required" ]; then
+            log_error "Installed runtime suite is incomplete: $required"
             exit 1
         fi
-    else
-        for forbidden in \
-            redevplugin-runtime \
-            REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
-            REDEVPLUGIN_RUNTIME.spdx.json \
-            redevplugin-runtime.provenance.json \
-            redevplugin-runtime.sig \
-            redevplugin-runtime.pem \
-            .redevplugin-release-artifacts-verified.json
-        do
-            if [ -e "$suite_dir/$forbidden" ] || [ -L "$suite_dir/$forbidden" ]; then
-                log_error "Darwin runtime suite must not contain $forbidden"
-                exit 1
-            fi
-        done
+    done
+    if [ ! -x "$suite_dir/redevplugin-runtime" ]; then
+        log_error "Installed ReDevPlugin runtime is not executable"
+        exit 1
     fi
     if ! "$suite_dir/redeven" version >/dev/null 2>&1; then
         log_error "Installed Redeven binary failed its version check"
@@ -604,21 +581,12 @@ publish_runtime_suite() {
             exit 1
         fi
     done
-    if [ "$REDEVPLUGIN_RUNTIME_REQUIRED" = "1" ]; then
-        for source_name in redevplugin-runtime REDEVPLUGIN_THIRD_PARTY_NOTICES.md REDEVPLUGIN_RUNTIME.spdx.json redevplugin-runtime.provenance.json redevplugin-runtime.sig redevplugin-runtime.pem .redevplugin-release-artifacts-verified.json; do
-            if [ ! -f "$extracted_dir/$source_name" ] || [ -L "$extracted_dir/$source_name" ]; then
-                log_error "Linux runtime source is not a regular file: $source_name"
-                exit 1
-            fi
-        done
-    else
-        for forbidden in redevplugin-runtime REDEVPLUGIN_THIRD_PARTY_NOTICES.md REDEVPLUGIN_RUNTIME.spdx.json redevplugin-runtime.provenance.json redevplugin-runtime.sig redevplugin-runtime.pem .redevplugin-release-artifacts-verified.json; do
-            if [ -e "$extracted_dir/$forbidden" ] || [ -L "$extracted_dir/$forbidden" ]; then
-                log_error "Darwin runtime source must not contain $forbidden"
-                exit 1
-            fi
-        done
-    fi
+    for source_name in redevplugin-runtime REDEVPLUGIN_THIRD_PARTY_NOTICES.md REDEVPLUGIN_RUNTIME.spdx.json redevplugin-runtime.provenance.json redevplugin-runtime.sig redevplugin-runtime.pem .redevplugin-release-artifacts-verified.json; do
+        if [ ! -f "$extracted_dir/$source_name" ] || [ -L "$extracted_dir/$source_name" ]; then
+            log_error "Runtime source is not a regular file: $source_name"
+            exit 1
+        fi
+    done
 
     if [ "${ACTIVE_RUNTIME_SUITE_HASH:-}" = "$ARCHIVE_SHA256" ]; then
         verify_runtime_suite_directory "$suite_dir"
@@ -634,23 +602,21 @@ publish_runtime_suite() {
     runtime_install_command cp "$extracted_dir/THIRD_PARTY_NOTICES.md" "$suite_staging/REDEVEN_THIRD_PARTY_NOTICES.md"
     runtime_install_command chmod 755 "$suite_staging/redeven"
     runtime_install_command chmod 644 "$suite_staging/REDEVEN_LICENSE" "$suite_staging/REDEVEN_THIRD_PARTY_NOTICES.md"
-    if [ "$REDEVPLUGIN_RUNTIME_REQUIRED" = "1" ]; then
-        runtime_install_command cp "$extracted_dir/redevplugin-runtime" "$suite_staging/redevplugin-runtime"
-        runtime_install_command cp "$extracted_dir/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" "$suite_staging/REDEVPLUGIN_THIRD_PARTY_NOTICES.md"
-        runtime_install_command cp "$extracted_dir/REDEVPLUGIN_RUNTIME.spdx.json" "$suite_staging/REDEVPLUGIN_RUNTIME.spdx.json"
-        runtime_install_command cp "$extracted_dir/redevplugin-runtime.provenance.json" "$suite_staging/redevplugin-runtime.provenance.json"
-        runtime_install_command cp "$extracted_dir/redevplugin-runtime.sig" "$suite_staging/redevplugin-runtime.sig"
-        runtime_install_command cp "$extracted_dir/redevplugin-runtime.pem" "$suite_staging/redevplugin-runtime.pem"
-        runtime_install_command cp "$extracted_dir/.redevplugin-release-artifacts-verified.json" "$suite_staging/.redevplugin-release-artifacts-verified.json"
-        runtime_install_command chmod 755 "$suite_staging/redevplugin-runtime"
-        runtime_install_command chmod 644 \
-            "$suite_staging/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" \
-            "$suite_staging/REDEVPLUGIN_RUNTIME.spdx.json" \
-            "$suite_staging/redevplugin-runtime.provenance.json" \
-            "$suite_staging/redevplugin-runtime.sig" \
-            "$suite_staging/redevplugin-runtime.pem" \
-            "$suite_staging/.redevplugin-release-artifacts-verified.json"
-    fi
+    runtime_install_command cp "$extracted_dir/redevplugin-runtime" "$suite_staging/redevplugin-runtime"
+    runtime_install_command cp "$extracted_dir/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" "$suite_staging/REDEVPLUGIN_THIRD_PARTY_NOTICES.md"
+    runtime_install_command cp "$extracted_dir/REDEVPLUGIN_RUNTIME.spdx.json" "$suite_staging/REDEVPLUGIN_RUNTIME.spdx.json"
+    runtime_install_command cp "$extracted_dir/redevplugin-runtime.provenance.json" "$suite_staging/redevplugin-runtime.provenance.json"
+    runtime_install_command cp "$extracted_dir/redevplugin-runtime.sig" "$suite_staging/redevplugin-runtime.sig"
+    runtime_install_command cp "$extracted_dir/redevplugin-runtime.pem" "$suite_staging/redevplugin-runtime.pem"
+    runtime_install_command cp "$extracted_dir/.redevplugin-release-artifacts-verified.json" "$suite_staging/.redevplugin-release-artifacts-verified.json"
+    runtime_install_command chmod 755 "$suite_staging/redevplugin-runtime"
+    runtime_install_command chmod 644 \
+        "$suite_staging/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" \
+        "$suite_staging/REDEVPLUGIN_RUNTIME.spdx.json" \
+        "$suite_staging/redevplugin-runtime.provenance.json" \
+        "$suite_staging/redevplugin-runtime.sig" \
+        "$suite_staging/redevplugin-runtime.pem" \
+        "$suite_staging/.redevplugin-release-artifacts-verified.json"
 
     if [ -e "$suite_dir" ] || [ -L "$suite_dir" ]; then
         if [ ! -d "$suite_dir" ] || [ -L "$suite_dir" ]; then
@@ -729,32 +695,21 @@ install_redeven() {
     ARCHIVE_SHA256=$(sha256_file "$ARCHIVE_PATH" | tr -d '\r\n')
     ARCHIVE_SIZE=$(wc -c < "$ARCHIVE_PATH" | tr -d '[:space:]')
     log_info "Extracting the closed runtime suite..."
-    if [ "$REDEVPLUGIN_RUNTIME_REQUIRED" = "1" ]; then
-        python3 "$SAFE_EXTRACTOR_PATH" \
-            --archive "$ARCHIVE_PATH" \
-            --dest "$EXTRACT_DIR" \
-            --expected-sha256 "$ARCHIVE_SHA256" \
-            --expected-size "$ARCHIVE_SIZE" \
-            --allow-file redeven \
-            --allow-file redevplugin-runtime \
-            --allow-file REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
-            --allow-file REDEVPLUGIN_RUNTIME.spdx.json \
-            --allow-file redevplugin-runtime.provenance.json \
-            --allow-file redevplugin-runtime.sig \
-            --allow-file redevplugin-runtime.pem \
-            --allow-file .redevplugin-release-artifacts-verified.json \
-            --allow-file LICENSE \
-            --allow-file THIRD_PARTY_NOTICES.md
-    else
-        python3 "$SAFE_EXTRACTOR_PATH" \
-            --archive "$ARCHIVE_PATH" \
-            --dest "$EXTRACT_DIR" \
-            --expected-sha256 "$ARCHIVE_SHA256" \
-            --expected-size "$ARCHIVE_SIZE" \
-            --allow-file redeven \
-            --allow-file LICENSE \
-            --allow-file THIRD_PARTY_NOTICES.md
-    fi
+    python3 "$SAFE_EXTRACTOR_PATH" \
+        --archive "$ARCHIVE_PATH" \
+        --dest "$EXTRACT_DIR" \
+        --expected-sha256 "$ARCHIVE_SHA256" \
+        --expected-size "$ARCHIVE_SIZE" \
+        --allow-file redeven \
+        --allow-file redevplugin-runtime \
+        --allow-file REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
+        --allow-file REDEVPLUGIN_RUNTIME.spdx.json \
+        --allow-file redevplugin-runtime.provenance.json \
+        --allow-file redevplugin-runtime.sig \
+        --allow-file redevplugin-runtime.pem \
+        --allow-file .redevplugin-release-artifacts-verified.json \
+        --allow-file LICENSE \
+        --allow-file THIRD_PARTY_NOTICES.md
 
     publish_runtime_suite "$EXTRACT_DIR"
     log_info "Runtime suite prepared in: $RUNTIME_SUITE_DIR"
@@ -917,11 +872,7 @@ print_summary() {
     log_info "  ripgrep: ${REDEVEN_HOME}/bin/rg (v${RG_VERSION})"
     echo ""
 
-    if [ "$REDEVPLUGIN_RUNTIME_REQUIRED" = "1" ]; then
-        log_info "✓ Binary and ReDevPlugin runtime suite are ready"
-    else
-        log_info "✓ Binary is ready (plugin worker execution is unavailable on Darwin)"
-    fi
+    log_info "✓ Binary and ReDevPlugin runtime suite are ready"
     echo ""
 
     # Check if binary is in PATH

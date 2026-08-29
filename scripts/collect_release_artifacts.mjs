@@ -76,12 +76,6 @@ function validateReceipt(receiptSource, receiptStagedPath, expectedPackage, targ
   assertExactKeys(receipt.package, ['name', 'sha256', 'size'], `${receiptSource}: package`);
   if (JSON.stringify(receipt.package) !== JSON.stringify(expectedPackage)) fail(`${receiptSource}: installer descriptor mismatch`);
   if (receipt.runtime_target !== `${target.goos}/${target.goarch}`) fail(`${receiptSource}: runtime_target mismatch`);
-  if (target.goos === 'darwin') {
-    if (receipt.redevplugin_runtime !== null || receipt.redevplugin_evidence !== null) {
-      fail(`${receiptSource}: Darwin receipt must omit ReDevPlugin runtime evidence`);
-    }
-    return { runtime: null, evidence: null };
-  }
   validateDigestDescriptor(receipt.redevplugin_runtime, `${receiptSource}: redevplugin_runtime`);
   assertExactKeys(receipt.redevplugin_evidence, ['marker', 'notices', 'sbom', 'provenance', 'signature', 'certificate'], `${receiptSource}: redevplugin_evidence`);
   for (const [name, descriptor] of Object.entries(receipt.redevplugin_evidence)) {

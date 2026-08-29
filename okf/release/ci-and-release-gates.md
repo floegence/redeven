@@ -158,12 +158,15 @@ Partial publication, an extra GitHub Release asset, an unrecognized workflow,
 local package source, mutable source identity, or any registry mismatch fails
 before runtime construction.
 
-For Linux only, staging installs Rust 1.88.0 and the exact published
-`redevplugin-runtime` version with its packaged lockfile. Metadata comes from
-that crate and must not resolve another first-party runtime path dependency.
-The fixed product toolchain links a static PIE with no ELF interpreter or
-dynamic dependencies, matching the released Host admission profile. Redeven
-emits the binary, SPDX SBOM, resolved-package provenance, notices, and a
+For every native Linux and Darwin target, staging installs Rust 1.88.0 and the
+exact published `redevplugin-runtime` version with its packaged lockfile.
+Metadata comes from that crate and must not resolve another first-party runtime
+path dependency. The fixed product toolchain links a static PIE with no ELF
+interpreter or dynamic dependencies on Linux, and a target-exact 64-bit Mach-O
+executable on a native macOS runner. Darwin release bytes are Developer ID
+signed with hardened runtime and a timestamp before their product digest and
+Sigstore evidence are created; development bytes receive an ad hoc signature.
+Redeven emits the binary, SPDX SBOM, resolved-package provenance, notices, and a
 signature/certificate. Release builds use Sigstore keyless identity bound to
 the exact Redeven tag workflow; local builds use a fresh ephemeral Ed25519 key
 and are rejected by `--require-release`.
@@ -171,21 +174,22 @@ and are rejected by `--require-release`.
 The deterministic `redeven.redevplugin_runtime_build.v1` marker embeds the
 verified upstream publication and binds every product-built file, target, Rust
 toolchain, Redeven source commit, workflow, and signature identity. The
-consumption gate rechecks file descriptors, ELF machine identity, evidence
-profile, and signature. Linux runtime archives contain exactly the Redeven
-binary, runtime, six evidence files, license, and product notices. Darwin
-archives contain only Redeven, license, and product notices; any runtime or
-runtime-evidence file is forbidden.
+consumption gate rechecks file descriptors, ELF or Mach-O target identity,
+evidence profile, and signature. Linux and Darwin runtime archives contain
+exactly the Redeven binary, runtime, six evidence files, license, and product
+notices.
 
 Desktop assembly validates Redeven and Gateway archive names, exact flat
 inventories, Go targets, and the target-specific runtime policy before replacing
-`.bundle/<target>`. Linux Electron packages include the complete runtime evidence
-beside `redeven`; Darwin packages include none. Native builders inspect final
-DEB, RPM, or read-only DMG bytes and write v2 receipts. Linux package parsers use
+`.bundle/<target>`. Linux and Darwin Electron packages include the complete
+runtime evidence beside `redeven`; macOS packaging excludes the already
+Developer-ID-signed nested runtime from a second signing pass so its evidence
+remains exact. Native builders inspect final DEB, RPM, or read-only DMG bytes and
+write v2 receipts. Linux package parsers use
 bounded no-follow snapshots and reject non-canonical paths, duplicate entries,
 links, devices, privileged modes, sparse/PAX metadata, malformed trailers,
-trailing data, and oversized payloads. Darwin receipts carry explicit null
-runtime evidence.
+trailing data, and oversized payloads. Every native receipt binds the runtime
+and all six evidence files to the exact installer bytes.
 
 Windows assembly is a separate `managed_wsl_archive` policy: it admits one
 verified `redeven_linux_amd64.tar.gz`, binds version, commit, size, and digest,
@@ -210,8 +214,8 @@ publishes `safe_extract_tar.py`, verifies the complete draft asset set by name,
 size, and SHA-256, then makes the release public. The installer binds Cosign to
 the selected tag, extracts the target-specific closed archive, publishes one
 content-addressed suite, prepares retention, and only then changes the activation
-symlink. Unknown activation links, unsupported architectures, missing Linux
-runtime evidence, or any Darwin runtime payload are fatal.
+symlink. Unknown activation links, unsupported architectures, or missing native
+runtime evidence are fatal.
 
 ## Desktop update publication
 
@@ -311,7 +315,7 @@ not become a fallback, shim, or local artifact path.
 - `redeven:internal/pluginmarket/service_test.go:1` - Proves strict market validation, complete remote transport, and last-known-good fallback.
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact-one upstream publication and registry readbacks.
 - `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Verifies the product runtime marker, evidence, target, and signature.
-- `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs the Linux runtime from the exact published crate graph.
+- `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs each native Linux or Darwin runtime from the exact published crate graph.
 - `redeven:scripts/link_redevplugin_runtime_static_pie.sh:1` - Enforces the closed static PIE linker profile required by runtime admission.
 - `redeven:scripts/safe_extract_tar.py:1` - Enforces bounded, typed, inode-bound archive extraction and atomic directory publication.
 - `redeven:scripts/build_desktop_bundled_runtime.sh:1` - Stages the formal runtime into Desktop bundles.

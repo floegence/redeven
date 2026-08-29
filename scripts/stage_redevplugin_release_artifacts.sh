@@ -18,7 +18,7 @@ usage() {
   cat <<'USAGE'
 Usage:
   ./scripts/stage_redevplugin_release_artifacts.sh \
-    --dest-dir <dir> --redeven-goos linux --redeven-goarch <amd64|arm64> \
+    --dest-dir <dir> --redeven-goos <linux|darwin> --redeven-goarch <amd64|arm64> \
     --runtime-out <file> [--profile development|release]
     [--manifest-file <file>]
   ./scripts/stage_redevplugin_release_artifacts.sh --self-test
@@ -26,7 +26,8 @@ Usage:
 Downloads and verifies the released ReDevPlugin platform manifest, builds the
 runtime from the exact published Rust source crate with Rust 1.88.0, and emits
 Redeven-owned SBOM, provenance, notices, signature, and verification evidence.
-Only linux/amd64 and linux/arm64 are supported runtime targets.
+The closed runtime target set is linux/amd64, linux/arm64, darwin/amd64, and
+darwin/arm64.
 USAGE
 }
 
@@ -82,10 +83,19 @@ case "$target" in
   linux/arm64)
     rust_target="aarch64-unknown-linux-$rust_libc"
     ;;
+  darwin/amd64)
+    [[ "$(uname -s)" == "Darwin" ]] || die "Darwin ReDevPlugin runtime builds require a macOS builder"
+    rust_target="x86_64-apple-darwin"
+    ;;
+  darwin/arm64)
+    [[ "$(uname -s)" == "Darwin" ]] || die "Darwin ReDevPlugin runtime builds require a macOS builder"
+    rust_target="aarch64-apple-darwin"
+    ;;
   *) die "unsupported ReDevPlugin runtime target: $target" ;;
 esac
 
 for command in cargo go node rustc rustup; do require_command "$command"; done
+if [[ "$goos" == "darwin" ]]; then require_command codesign; fi
 if [[ -z "$manifest_file" || "$profile" == "release" ]]; then
   require_command curl
   require_command jq
@@ -187,16 +197,28 @@ rustc_version=$("$toolchain_rustc" --version)
 export CARGO_HOME="$tmpdir/cargo-home"
 install_root="$tmpdir/runtime-install"
 rustflags_key="CARGO_TARGET_$(printf '%s' "$rust_target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
-env \
-  "$rustflags_key=-C target-feature=+crt-static -C relocation-model=pic -C linker=$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
-  PATH="$toolchain_root/bin:$PATH" \
-  CARGO_HOME="$CARGO_HOME" \
-  "$toolchain_cargo" install \
-  --locked \
-  --root "$install_root" \
-  --target "$rust_target" \
-  --version "=$version" \
-  redevplugin-runtime
+if [[ "$goos" == "linux" ]]; then
+  env \
+    "$rustflags_key=-C target-feature=+crt-static -C relocation-model=pic -C linker=$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
+    PATH="$toolchain_root/bin:$PATH" \
+    CARGO_HOME="$CARGO_HOME" \
+    "$toolchain_cargo" install \
+    --locked \
+    --root "$install_root" \
+    --target "$rust_target" \
+    --version "=$version" \
+    redevplugin-runtime
+else
+  env \
+    PATH="$toolchain_root/bin:$PATH" \
+    CARGO_HOME="$CARGO_HOME" \
+    "$toolchain_cargo" install \
+    --locked \
+    --root "$install_root" \
+    --target "$rust_target" \
+    --version "=$version" \
+    redevplugin-runtime
+fi
 
 runtime_sources=()
 while IFS= read -r runtime_source; do
@@ -230,7 +252,17 @@ node "$SCRIPT_DIR/redevplugin_release_contract.mjs" project-runtime-cargo-metada
 
 runtime="$tmpdir/redevplugin-runtime"
 install -m 0755 "$install_root/bin/redevplugin-runtime" "$runtime"
-node "$SCRIPT_DIR/redevplugin_release_contract.mjs" verify-elf "$runtime" "$target"
+if [[ "$goos" == "darwin" ]]; then
+  if [[ "$profile" == "release" ]]; then
+    codesign_identity="${REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY:-}"
+    [[ -n "$codesign_identity" ]] || die "release Darwin runtime build requires REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY"
+    codesign --force --options runtime --timestamp --sign "$codesign_identity" "$runtime"
+  else
+    codesign --force --options runtime --sign - "$runtime"
+  fi
+  codesign --verify --strict --verbose=2 "$runtime"
+fi
+node "$SCRIPT_DIR/redevplugin_release_contract.mjs" verify-runtime-executable "$runtime" "$target"
 
 provenance="$tmpdir/$RUNTIME_PROVENANCE"
 sbom="$tmpdir/$RUNTIME_SBOM"
