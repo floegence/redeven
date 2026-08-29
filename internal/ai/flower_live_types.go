@@ -31,21 +31,10 @@ type FlowerThreadReadView struct {
 	ReadState FlowerThreadReadRecord   `json:"read_state"`
 }
 
-type FlowerModelIOPhase string
-
-const (
-	FlowerModelIOPhasePreparing       FlowerModelIOPhase = "preparing"
-	FlowerModelIOPhaseWaitingResponse FlowerModelIOPhase = "waiting_response"
-	FlowerModelIOPhaseStreaming       FlowerModelIOPhase = "streaming"
-	FlowerModelIOPhaseRetrying        FlowerModelIOPhase = "retrying"
-	FlowerModelIOPhaseFinalizing      FlowerModelIOPhase = "finalizing"
-)
-
-type FlowerModelIOStatus struct {
-	Phase       FlowerModelIOPhase `json:"phase"`
-	RunID       string             `json:"run_id,omitempty"`
-	StepIndex   int                `json:"step_index,omitempty"`
-	UpdatedAtMs int64              `json:"updated_at_ms"`
+type FlowerRunProgress struct {
+	RunID  string                   `json:"run_id"`
+	TurnID string                   `json:"turn_id"`
+	Phase  flruntime.ThreadRunPhase `json:"phase"`
 }
 
 type FlowerApprovalState string

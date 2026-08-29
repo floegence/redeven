@@ -25,90 +25,57 @@ function renderIndicator() {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const [progress, setProgress] = createSignal<FlowerProgressIndicatorState | null>({
-    kind: 'waiting',
+    kind: 'waiting_response',
     runID: 'run-1',
   });
-  const [label, setLabel] = createSignal('Thinking...');
-  const [threadID, setThreadID] = createSignal('thread-1');
-  const [activeRunID, setActiveRunID] = createSignal('run-1');
-  const [running, setRunning] = createSignal(true);
+  const [label, setLabel] = createSignal('Waiting for model response...');
   disposers.push(render(() => (
-    <FlowerProgressIndicator
-      progress={progress()}
-      label={label()}
-      threadID={threadID()}
-      activeRunID={activeRunID()}
-      running={running()}
-    />
+    <FlowerProgressIndicator progress={progress()} label={label()} />
   ), host));
-  return { host, setProgress, setLabel, setThreadID, setActiveRunID, setRunning };
+  return { host, setProgress, setLabel };
 }
 
 describe('FlowerProgressIndicator', () => {
-  it('keeps the same DOM node while one run changes phase and label', async () => {
+  it('keeps the indicator, Flower, and dots DOM nodes while one run changes phase', async () => {
     const { host, setProgress, setLabel } = renderIndicator();
     await flushEffects();
     const indicator = host.querySelector('.flower-model-status-indicator');
+    const flower = indicator?.querySelector('.flower-model-status-flower');
+    const dots = indicator?.querySelector('.flower-model-status-dots');
 
     batch(() => {
-      setProgress({ kind: 'output', runID: 'run-1' });
-      setLabel('Replying...');
+      setProgress({ kind: 'streaming', runID: 'run-1' });
+      setLabel('Thinking...');
     });
     await flushEffects();
 
     expect(host.querySelector('.flower-model-status-indicator')).toBe(indicator);
-    expect(indicator?.getAttribute('data-flower-progress-kind')).toBe('output');
-    expect(indicator?.textContent).toContain('Replying');
-    expect(indicator?.querySelector('.flower-model-status-dots')?.textContent).toBe('...');
+    expect(indicator?.querySelector('.flower-model-status-flower')).toBe(flower);
+    expect(indicator?.querySelector('.flower-model-status-dots')).toBe(dots);
+    expect(indicator?.getAttribute('data-flower-progress-kind')).toBe('streaming');
+    expect(indicator?.textContent).toContain('Thinking');
   });
 
-  it('keeps the current indicator through a transient empty status while the run remains active', async () => {
+  it('clears when upstream run progress clears', async () => {
     const { host, setProgress } = renderIndicator();
     await flushEffects();
-    const indicator = host.querySelector('.flower-model-status-indicator');
 
     setProgress(null);
     await flushEffects();
 
-    expect(host.querySelector('.flower-model-status-indicator')).toBe(indicator);
-    expect(indicator?.getAttribute('data-flower-progress-run-id')).toBe('run-1');
+    expect(host.querySelector('.flower-model-status-indicator')).toBeNull();
   });
 
-  it('clears on terminal or waiting state and remounts for a new run', async () => {
-    const { host, setProgress, setActiveRunID, setRunning } = renderIndicator();
+  it('remounts only when the real run identity changes', async () => {
+    const { host, setProgress } = renderIndicator();
     await flushEffects();
     const firstIndicator = host.querySelector('.flower-model-status-indicator');
 
-    setRunning(false);
-    await flushEffects();
-    expect(host.querySelector('.flower-model-status-indicator')).toBeNull();
-
-    batch(() => {
-      setActiveRunID('run-2');
-      setProgress({ kind: 'waiting', runID: 'run-2' });
-      setRunning(true);
-    });
+    setProgress({ kind: 'preparing', runID: 'run-2' });
     await flushEffects();
 
     const nextIndicator = host.querySelector('.flower-model-status-indicator');
     expect(nextIndicator).not.toBeNull();
-    expect(nextIndicator).not.toBe(firstIndicator);
-    expect(nextIndicator?.getAttribute('data-flower-progress-run-id')).toBe('run-2');
-  });
-
-  it('clears rather than carrying status across thread selection', async () => {
-    const { host, setProgress, setThreadID, setActiveRunID } = renderIndicator();
-    await flushEffects();
-    const firstIndicator = host.querySelector('.flower-model-status-indicator');
-
-    batch(() => {
-      setThreadID('thread-2');
-      setActiveRunID('run-2');
-      setProgress({ kind: 'waiting', runID: 'run-2' });
-    });
-    await flushEffects();
-
-    const nextIndicator = host.querySelector('.flower-model-status-indicator');
     expect(nextIndicator).not.toBe(firstIndicator);
     expect(nextIndicator?.getAttribute('data-flower-progress-run-id')).toBe('run-2');
   });

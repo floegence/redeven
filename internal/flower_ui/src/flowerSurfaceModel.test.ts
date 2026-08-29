@@ -33,7 +33,8 @@ describe('flowerThreadHasActiveTurnEvidence', () => {
   it('accepts retained turn identities even when status is stale', () => {
     expect(flowerThreadHasActiveTurnEvidence(snapshot({ active_run_id: 'run-a' }))).toBe(true);
     expect(flowerThreadHasActiveTurnEvidence(snapshot({
-      model_io_status: { phase: 'finalizing', run_id: 'run-b', updated_at_ms: 3 },
+      active_run_id: 'run-b',
+      run_progress: { phase: 'finalizing', run_id: 'run-b', turn_id: 'turn-b' },
     }))).toBe(true);
   });
 

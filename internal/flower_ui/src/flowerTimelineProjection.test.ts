@@ -78,40 +78,28 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
-  it('adds one transient waiting row only before the active turn has real assistant activity', () => {
+  it('keeps transient run progress out of the canonical message timeline', () => {
     const user = {
       id: 'user:turn-live', turn_id: 'turn-live', role: 'user' as const,
       content: 'continue', status: 'complete' as const, created_at_ms: 10,
     };
     const waiting = buildFlowerTimelineEntries(thread({
-      status: 'running', active_run_id: 'turn-live', messages: [user],
+      status: 'running', active_run_id: 'run-live',
+      run_progress: { phase: 'waiting_response', run_id: 'run-live', turn_id: 'turn-live' },
+      messages: [user],
     }));
-    expect(waiting.map((entry) => entry.type)).toEqual(['message', 'live_progress']);
-    expect(waiting[1]).toMatchObject({
-      type: 'live_progress',
-      progress: { kind: 'waiting', runID: 'turn-live', initialWait: true },
-    });
+    expect(waiting.map((entry) => entry.type)).toEqual(['message']);
 
     const thinking = buildFlowerTimelineEntries(thread({
-      status: 'running', active_run_id: 'turn-live',
+      status: 'running', active_run_id: 'run-live',
+      run_progress: { phase: 'streaming', run_id: 'run-live', turn_id: 'turn-live' },
       messages: [user, {
         id: 'thinking:turn-live', turn_id: 'turn-live', role: 'assistant', content: '',
         status: 'streaming', created_at_ms: 11, live: true,
         blocks: [{ type: 'thinking', content: 'Inspecting the request' }],
       }],
     }));
-    expect(thinking.some((entry) => entry.type === 'live_progress')).toBe(false);
-  });
-
-  it('does not add another waiting row between completed tool steps', () => {
-    const entries = buildFlowerTimelineEntries(thread({
-      status: 'running', active_run_id: 'turn-1',
-      messages: [{
-        id: 'tool:turn-1', turn_id: 'turn-1', role: 'assistant', content: '', status: 'complete', created_at_ms: 10,
-        blocks: [activityTimeline()],
-      }],
-    }));
-    expect(entries.some((entry) => entry.type === 'live_progress')).toBe(false);
+    expect(thinking.map((entry) => entry.type)).toEqual(['message', 'message']);
   });
 
   it('preserves Floret ordered thinking and tool message input without sorting', () => {

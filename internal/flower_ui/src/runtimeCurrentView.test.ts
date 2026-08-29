@@ -13,7 +13,8 @@ const summary = (): FlowerThreadSnapshot => ({
 describe('applyFlowerRuntimeCurrentView', () => {
   it('keeps product metadata while replacing detail with the typed current view', () => {
     const current: FlowerRuntimeCurrentView = {
-      thread_id: 'thread-a', view_version: 7, activity: 'active', turn_id: 'turn-a',
+      thread_id: 'thread-a', view_version: 7, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
+      run_progress: { phase: 'waiting_response' },
       items: [{ id: 'user-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'hello' }],
       assistant_draft: 'deprecated assistant draft must not render',
       thinking_draft: 'deprecated thinking draft must not render',
@@ -23,7 +24,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.working_dir).toBe('/');
     expect(result.status).toBe('running');
     expect(result.messages.map((message) => message.content)).toEqual(['hello']);
-    expect(result.model_io_status).toBeNull();
+    expect(result.active_run_id).toBe('run-a');
+    expect(result.run_progress).toEqual({ run_id: 'run-a', turn_id: 'turn-a', phase: 'waiting_response' });
   });
 
   it('clears the derived model status after the runtime settles', () => {
@@ -32,7 +34,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
       items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'done' }],
     });
 
-    expect(result.model_io_status).toBeNull();
+    expect(result.run_progress).toBeNull();
   });
 
   it('keeps a runtime failure visible in the thread error projection', () => {
@@ -92,7 +94,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('keeps user messages with different request identities even when text repeats', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
-      thread_id: 'thread-a', view_version: 11, activity: 'active', turn_id: 'turn-b',
+      thread_id: 'thread-a', view_version: 11, activity: 'active', run_id: 'run-b', turn_id: 'turn-b',
       items: [
         { id: 'user:request-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'same message' },
         { id: 'user:request-b', turn_id: 'turn-b', ordinal: 2, kind: 'user', text: 'same message' },
@@ -123,7 +125,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('keeps queued mixed attachments in order and projects scoped image URLs', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
-      thread_id: 'thread-a', view_version: 13, activity: 'active', turn_id: 'turn-a',
+      thread_id: 'thread-a', view_version: 13, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       queue: [{
         id: 'queue-a', request_key: 'request-a', created_at: '2026-08-24T10:00:00.000Z',
         input: {
@@ -154,7 +156,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('uses the explicit live item marker as the only streaming authority', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
-      thread_id: 'thread-a', view_version: 9, activity: 'active', turn_id: 'turn-a',
+      thread_id: 'thread-a', view_version: 9, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       items: [
         { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'sealed segment' },
         { id: 'assistant:turn-a:2', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: 'live segment', live: true },
@@ -201,6 +203,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
       const current: FlowerRuntimeCurrentView = {
         thread_id: 'thread-a', view_version: index + 1,
         activity: index === stages.length - 1 ? 'idle' : 'active', turn_id: 'turn-a',
+        ...(index === stages.length - 1 ? {} : { run_id: 'run-a' }),
         ...(index === stages.length - 1 ? { last_outcome: 'completed' as const } : {}),
         items,
         assistant_draft: 'deprecated assistant draft must not render',
@@ -228,7 +231,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('prioritizes waiting input over approval and running', () => {
     const current: FlowerRuntimeCurrentView = {
-      thread_id: 'thread-a', view_version: 8, activity: 'active',
+      thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a',
       interactions: [
         { id: 'approval-a', kind: 'approval' },
         { id: 'input-a', kind: 'input', signal: { name: 'ask_user', call_id: 'input-a' } },
@@ -239,7 +242,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('renders accepted busy input only in the typed runtime queue', () => {
     const current: FlowerRuntimeCurrentView = {
-      thread_id: 'thread-a', view_version: 8, activity: 'active',
+      thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a',
       items: [{ id: 'user:active', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'active work' }],
       queue: [
         { id: 'queue:queued-first', request_key: 'queued-first', input: { text: 'first queued' } },
@@ -474,7 +477,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
       input_request: { prompt_id: 'input-a', message_id: 'message-a', tool_id: 'ask-a', tool_name: 'ask_user', questions: [] },
     };
     const current: FlowerRuntimeCurrentView = {
-      thread_id: 'thread-a', view_version: 10, activity: 'active', turn_id: 'turn-a',
+      thread_id: 'thread-a', view_version: 10, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       interactions: [
         { id: 'approval-a', kind: 'approval', tool_call_id: 'tool-a', resolved: true, approved: false },
         {
@@ -494,7 +497,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('projects an unresolved approval as the composer authority instead of model thinking', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
-      thread_id: 'thread-a', view_version: 11, activity: 'active', turn_id: 'turn-a',
+      thread_id: 'thread-a', view_version: 11, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       interactions: [{
         id: 'approval-a', kind: 'approval', tool_call_id: 'tool-a',
         approval: { label: 'Run command', tool_name: 'terminal.exec', tool_call_id: 'tool-a' },
@@ -505,12 +508,12 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.approval_pending).toBe(true);
     expect(result.approval_pending_count).toBe(1);
     expect(result.approval_actions).toHaveLength(1);
-    expect(result.model_io_status).toBeNull();
+    expect(result.run_progress).toBeNull();
   });
 
   it('decodes typed approval targets without exposing Floret target encoding', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
-      thread_id: 'thread-a', view_version: 12, activity: 'active', turn_id: 'turn-a',
+      thread_id: 'thread-a', view_version: 12, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       interactions: [{
         id: 'approval-file', turn_id: 'turn-a', kind: 'approval', tool_call_id: 'tool-file',
         approval: {

@@ -125,12 +125,14 @@ describe('Flower workspace stream visibility', () => {
   it('projects typed-current assistant output from the one workspace stream even when summaries omit detail and title', async () => {
     const threadID = 'thread-companion-live-tail';
     const turnID = 'turn-companion-live-tail';
+    const runID = 'run-companion-live-tail';
     const summary = thread({
       thread_id: threadID,
       title: '',
       title_status: 'unset',
       status: 'running',
-      active_run_id: turnID,
+      active_run_id: runID,
+      run_progress: { phase: 'streaming', run_id: runID, turn_id: turnID },
       messages: [],
     });
     const stream = controlledWorkspaceStream([{
@@ -159,7 +161,9 @@ describe('Flower workspace stream visibility', () => {
         thread_id: threadID,
         view_version: 1,
         activity: 'active',
+        run_id: runID,
         turn_id: turnID,
+        run_progress: { phase: 'streaming' },
         items: [
           { id: 'user-live-tail', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Report progress' },
           { id: 'assistant-live-tail', turn_id: turnID, ordinal: 2, kind: 'assistant', text: 'The first visible tokens', live: true },
@@ -171,7 +175,7 @@ describe('Flower workspace stream visibility', () => {
     expect(first).toMatchObject({
       priority_status: 'running',
       priority_thread_id: threadID,
-      priority_run_id: turnID,
+      priority_run_id: runID,
       priority_thread_progress_kind: 'output',
     });
     expect(first?.priority_run_generation).toBeGreaterThan(0);
@@ -184,7 +188,9 @@ describe('Flower workspace stream visibility', () => {
         thread_id: threadID,
         view_version: 2,
         activity: 'active',
+        run_id: runID,
         turn_id: turnID,
+        run_progress: { phase: 'streaming' },
         items: [
           { id: 'user-live-tail', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Report progress' },
           { id: 'assistant-live-tail', turn_id: turnID, ordinal: 2, kind: 'assistant', text: 'The first visible tokens now include the newest output', live: true },
@@ -198,11 +204,13 @@ describe('Flower workspace stream visibility', () => {
   it('emits one matching terminal receipt and keeps a safe failure visible until canonical read state clears it', async () => {
     const threadID = 'thread-companion-failure';
     const turnID = 'turn-companion-failure';
+    const runID = 'run-companion-failure';
     const running = thread({
       thread_id: threadID,
       title: 'Validate deployment',
       status: 'running',
-      active_run_id: turnID,
+      active_run_id: runID,
+      run_progress: { phase: 'preparing', run_id: runID, turn_id: turnID },
       messages: [],
       read_status: readStatus(false, 1, 'running'),
     });
@@ -210,6 +218,7 @@ describe('Flower workspace stream visibility', () => {
       ...running,
       status: 'failed',
       active_run_id: undefined,
+      run_progress: null,
       read_status: readStatus(true, 3, 'failed'),
     });
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running] }]);
@@ -234,7 +243,9 @@ describe('Flower workspace stream visibility', () => {
         thread_id: threadID,
         view_version: 1,
         activity: 'active',
+        run_id: runID,
         turn_id: turnID,
+        run_progress: { phase: 'preparing' },
       },
     });
     await waitFor(() => presences.some((presence) => Number.isFinite(presence.priority_run_generation)));
@@ -248,6 +259,7 @@ describe('Flower workspace stream visibility', () => {
         thread_id: threadID,
         view_version: 2,
         activity: 'idle',
+        run_id: runID,
         turn_id: turnID,
         last_outcome: 'failed',
         error: 'Raw provider response must not be shown in the collapsed bar.',
@@ -258,7 +270,7 @@ describe('Flower workspace stream visibility', () => {
     const terminalPresence = latestPresence(presences, (presence) => presence.terminal_transition?.outcome === 'failed');
     expect(terminalPresence?.terminal_transition).toEqual({
       thread_id: threadID,
-      run_id: turnID,
+      run_id: runID,
       run_generation: generation,
       outcome: 'failed',
     });

@@ -894,7 +894,8 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.textContent).toContain('follow the accepted thread');
     expect(runtime.querySelectorAll('[data-flower-message-role="user"][data-flower-message-status="complete"]')).toHaveLength(1);
     expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
-    expect(runtime.querySelector('.flower-live-progress-placeholder .flower-model-status-indicator')?.textContent).toContain('Waiting for model response');
+    expect(runtime.querySelector('.flower-model-status-lane .flower-model-status-indicator')?.textContent).toContain('Preparing');
+    expect(runtime.querySelector('.flower-live-progress-placeholder')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-flower')).toBeTruthy();
     expect(runtime.querySelector('.flower-model-status-flower')?.getAttribute('aria-hidden')).toBe('true');
     expect(runtime.querySelector('.flower-model-status-indicator')?.firstElementChild?.className).toContain('flower-model-status-flower');

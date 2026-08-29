@@ -27,7 +27,7 @@ function terminalOutcome(
 
 /**
  * Tracks only typed current views already accepted by FlowerSurface. It gives
- * each observed active turn a process-local generation so a later terminal
+ * each observed active run a process-local generation so a later terminal
  * view can produce one exact companion receipt without adding another stream.
  */
 export class FlowerCompanionRunTracker {
@@ -36,7 +36,7 @@ export class FlowerCompanionRunTracker {
 
   observe(current: FlowerRuntimeCurrentView): FlowerCompanionRunObservation {
     const threadID = trim(current.thread_id);
-    const runID = trim(current.turn_id);
+    const runID = trim(current.run_id);
     if (!threadID || !runID) return { changed: false };
 
     if (current.activity === 'active') {

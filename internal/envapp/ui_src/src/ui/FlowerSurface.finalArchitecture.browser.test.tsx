@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type {
   FlowerLiveStreamEnvelope,
+  FlowerRuntimeCurrentView,
   FlowerTurnLaunchInput,
   FlowerTurnLaunchReceipt,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -16,7 +17,6 @@ import {
   inputRequest,
   launchReceipt,
   liveBootstrap,
-  modelIOStatus,
   readStatus,
   renderSurfaceWithAdapter,
   runtimeCurrentView,
@@ -138,6 +138,7 @@ describe('Flower final thread cache and workspace transport', () => {
   it('wraps live thinking without making the transcript horizontally scrollable', async () => {
     const threadID = 'thread-thinking-wrap';
     const turnID = 'turn-thinking-wrap';
+    const runID = 'run-thinking-wrap';
     const longURL = `https://example.invalid/${'path-segment-'.repeat(320)}`;
     const longToken = 'unbroken'.repeat(512);
     const thinkingText = `Inspecting the workspace.\n${longURL}\n${longToken}`;
@@ -145,7 +146,7 @@ describe('Flower final thread cache and workspace transport', () => {
       thread_id: threadID,
       title: 'Thinking wrap',
       status: 'running',
-      active_run_id: turnID,
+      active_run_id: runID,
       messages: [{
         id: 'user:thinking-wrap', turn_id: turnID, role: 'user', content: 'Inspect the workspace',
         status: 'complete', created_at_ms: 1,
@@ -176,6 +177,7 @@ describe('Flower final thread cache and workspace transport', () => {
         thread_id: threadID,
         view_version: 2,
         activity: 'active',
+        run_id: runID,
         turn_id: turnID,
         items: [
           { id: 'user:thinking-wrap', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Inspect the workspace' },
@@ -200,11 +202,12 @@ describe('Flower final thread cache and workspace transport', () => {
   it('renders cumulative thinking before the provider turn completes', async () => {
     const threadID = 'thread-progressive-thinking';
     const turnID = 'turn-progressive-thinking';
+    const runID = 'run-progressive-thinking';
     const runningThread = thread({
       thread_id: threadID,
       title: 'Progressive thinking',
       status: 'running',
-      active_run_id: turnID,
+      active_run_id: runID,
       messages: [{
         id: 'user:progressive-thinking', turn_id: turnID, role: 'user', content: 'Explain the workspace',
         status: 'complete', created_at_ms: 1,
@@ -233,6 +236,7 @@ describe('Flower final thread cache and workspace transport', () => {
         thread_id: threadID,
         view_version: 2,
         activity: 'active',
+        run_id: runID,
         turn_id: turnID,
         items: [
           { id: 'user:progressive-thinking', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
@@ -251,6 +255,7 @@ describe('Flower final thread cache and workspace transport', () => {
         thread_id: threadID,
         view_version: 3,
         activity: 'active',
+        run_id: runID,
         turn_id: turnID,
         items: [
           { id: 'user:progressive-thinking', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
@@ -285,11 +290,14 @@ describe('Flower final thread cache and workspace transport', () => {
     const threadID = 'thread-stop-continue-progress';
     const oldTurnID = 'turn-stopped';
     const newTurnID = 'turn-continued';
+    const oldRunID = 'run-stopped';
+    const newRunID = 'run-continued';
     const runningThread = thread({
       thread_id: threadID,
       title: 'Stop then continue',
       status: 'running',
-      active_run_id: oldTurnID,
+      active_run_id: oldRunID,
+      run_progress: { phase: 'preparing', run_id: oldRunID, turn_id: oldTurnID },
       messages: [{
         id: 'user:stopped', turn_id: oldTurnID, role: 'user', content: 'Start the task',
         status: 'complete', created_at_ms: 1,
@@ -331,7 +339,8 @@ describe('Flower final thread cache and workspace transport', () => {
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
-        thread_id: threadID, view_version: 3, activity: 'active', turn_id: newTurnID,
+        thread_id: threadID, view_version: 3, activity: 'active', run_id: newRunID, turn_id: newTurnID,
+        run_progress: { phase: 'waiting_response' },
         items: [
           { id: 'user:stopped', turn_id: oldTurnID, ordinal: 1, kind: 'user', text: 'Start the task' },
           { id: 'user:continued', turn_id: newTurnID, ordinal: 2, kind: 'user', text: '请继续' },
@@ -339,8 +348,12 @@ describe('Flower final thread cache and workspace transport', () => {
         ],
       },
     });
-    await waitFor(() => runtime.querySelector('[data-flower-live-progress-run-id="turn-continued"]') !== null);
-    expect(runtime.querySelector('.flower-live-progress-placeholder')).not.toBeNull();
+    await waitFor(() => runtime.querySelector('[data-flower-progress-run-id="run-continued"]') !== null);
+    const progressIndicator = runtime.querySelector('.flower-model-status-indicator');
+    const progressFlower = progressIndicator?.querySelector('.flower-model-status-flower');
+    const progressDots = progressIndicator?.querySelector('.flower-model-status-dots');
+    expect(runtime.querySelector('.flower-live-progress-placeholder')).toBeNull();
+    expect(progressIndicator?.closest('.flower-model-status-lane')).not.toBeNull();
     expect(runtime.textContent).toContain('Waiting for model response');
 
     // A late terminal view from the stopped turn cannot replace the newer turn.
@@ -354,14 +367,15 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
     await waitFor(() => runtime.textContent?.includes('请继续') === true);
-    expect(runtime.querySelector('[data-flower-live-progress-run-id="turn-continued"]')).not.toBeNull();
+    expect(runtime.querySelector('[data-flower-progress-run-id="run-continued"]')).toBe(progressIndicator);
 
     stream.push({
       schema_version: 1,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
-        thread_id: threadID, view_version: 4, activity: 'active', turn_id: newTurnID,
+        thread_id: threadID, view_version: 4, activity: 'active', run_id: newRunID, turn_id: newTurnID,
+        run_progress: { phase: 'streaming' },
         items: [
           { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
           { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step', live: true },
@@ -369,7 +383,9 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
     await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting the next step') === true);
-    expect(runtime.querySelector('.flower-live-progress-placeholder')).toBeNull();
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
+    expect(progressIndicator?.querySelector('.flower-model-status-flower')).toBe(progressFlower);
+    expect(progressIndicator?.querySelector('.flower-model-status-dots')).toBe(progressDots);
     expect(runtime.textContent).toContain('Thinking');
 
     const toolActivity = {
@@ -390,7 +406,8 @@ describe('Flower final thread cache and workspace transport', () => {
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
-        thread_id: threadID, view_version: 5, activity: 'active', turn_id: newTurnID,
+        thread_id: threadID, view_version: 5, activity: 'active', run_id: newRunID, turn_id: newTurnID,
+        run_progress: { phase: 'tool_execution' },
         items: [
           { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
           { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
@@ -406,6 +423,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(toolRow.textContent).not.toContain('display name');
     expect(toolRow.querySelector('button.flower-activity-inline-button')).toBeNull();
     expect(runtime.textContent).toContain('Using a tool');
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
 
     const completedToolActivity = {
       ...toolActivity,
@@ -423,12 +441,13 @@ describe('Flower final thread cache and workspace transport', () => {
         },
       },
     };
-    const assistantCurrent = (version: number, text: string): FlowerLiveStreamEnvelope => ({
+    const assistantCurrent = (version: number, text: string): FlowerLiveStreamEnvelope & { current: FlowerRuntimeCurrentView } => ({
       schema_version: 1,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
-        thread_id: threadID, view_version: version, activity: 'active', turn_id: newTurnID,
+        thread_id: threadID, view_version: version, activity: 'active', run_id: newRunID, turn_id: newTurnID,
+        run_progress: { phase: 'streaming' },
         items: [
           { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
           { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
@@ -447,9 +466,52 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(toolRow.querySelector('.flower-activity-file-diff-unified')?.textContent).toContain('def main():');
     expect(toolRow.textContent).not.toContain('No textual diff');
     expect(toolRow.textContent).not.toContain('create');
-    expect(runtime.textContent).toContain('Writing the reply');
+    expect(runtime.textContent).toContain('Thinking');
     stream.push(assistantCurrent(7, 'Weather data is ready'));
     await waitFor(() => runtime.textContent?.includes('Weather data is ready') === true);
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        ...assistantCurrent(8, 'Weather data is ready').current,
+        view_version: 8,
+        run_progress: { phase: 'retrying' },
+      },
+    });
+    await waitFor(() => runtime.textContent?.includes('Retrying') === true);
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        ...assistantCurrent(9, 'Weather data is ready').current,
+        view_version: 9,
+        run_progress: { phase: 'finalizing' },
+      },
+    });
+    await waitFor(() => runtime.textContent?.includes('Finalizing') === true);
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
+    expect(progressIndicator?.querySelector('.flower-model-status-flower')).toBe(progressFlower);
+    expect(progressIndicator?.querySelector('.flower-model-status-dots')).toBe(progressDots);
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        ...assistantCurrent(10, 'Weather data is ready').current,
+        view_version: 10,
+        activity: 'idle',
+        run_progress: null,
+        last_outcome: 'completed',
+      },
+    });
+    await waitFor(() => runtime.querySelector('.flower-model-status-indicator') === null);
 
     expect(stopThread).toHaveBeenCalledTimes(1);
     expect(connectLiveStream).toHaveBeenCalledTimes(1);
@@ -960,7 +1022,7 @@ describe('Flower final thread cache and workspace transport', () => {
       active_run_id: 'turn-terminal',
       updated_at_ms: 795,
       read_status: readStatus(false, 795, 'running'),
-      model_io_status: modelIOStatus({ run_id: 'turn-terminal', updated_at_ms: 795 }),
+      run_progress: { phase: 'streaming', run_id: 'turn-terminal', turn_id: 'turn-terminal' },
       messages: completed.messages.slice(0, 1),
     });
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running] }]);
@@ -1014,7 +1076,7 @@ describe('Flower final thread cache and workspace transport', () => {
       active_run_id: 'turn-terminal',
       updated_at_ms: 795,
       read_status: readStatus(false, 795, 'running'),
-      model_io_status: modelIOStatus({ run_id: 'turn-terminal', updated_at_ms: 795 }),
+      run_progress: { phase: 'streaming', run_id: 'turn-terminal', turn_id: 'turn-terminal' },
       messages: completed.messages.slice(0, 1),
     });
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running] }]);
@@ -1061,7 +1123,7 @@ describe('Flower final thread cache and workspace transport', () => {
       active_run_id: 'turn-terminal',
       updated_at_ms: 795,
       read_status: readStatus(false, 795, 'running'),
-      model_io_status: modelIOStatus({ run_id: 'turn-terminal', updated_at_ms: 795 }),
+      run_progress: { phase: 'streaming', run_id: 'turn-terminal', turn_id: 'turn-terminal' },
       messages: completed.messages.slice(0, 1),
     });
     const staleRequest = deferred<ReturnType<typeof liveBootstrap>>();
@@ -1098,7 +1160,7 @@ describe('Flower final thread cache and workspace transport', () => {
       active_run_id: 'turn-terminal',
       updated_at_ms: 795,
       read_status: readStatus(false, 795, 'running'),
-      model_io_status: modelIOStatus({ run_id: 'turn-terminal', updated_at_ms: 795 }),
+      run_progress: { phase: 'streaming', run_id: 'turn-terminal', turn_id: 'turn-terminal' },
       messages: completed.messages.slice(0, 1),
     });
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running] }]);

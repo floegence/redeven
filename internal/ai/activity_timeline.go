@@ -125,9 +125,6 @@ func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
-	if modelIOEndsBeforeActivity(ev.Type) {
-		r.clearModelIOStatus()
-	}
 }
 
 func (r *run) recordObservationActivityEvent(ev observation.Event) {
@@ -139,9 +136,6 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	}
 	if !shouldRecordObservationActivityEvent(ev) {
 		return
-	}
-	if modelIOEndsBeforeActivity(ev.Type) {
-		r.clearModelIOStatus()
 	}
 }
 
@@ -156,18 +150,6 @@ func shouldRecordObservationActivityEvent(ev observation.Event) bool {
 	return message == string(observation.ActivityStatusWaiting) ||
 		message == string(observation.ActivityStatusCanceled) ||
 		message == "cancelled"
-}
-
-func modelIOEndsBeforeActivity(eventType observation.EventType) bool {
-	switch eventType {
-	case observation.EventTypeToolCall,
-		observation.EventTypeHostedToolCall,
-		observation.EventTypeToolApprovalRequested,
-		observation.EventTypeControlSignal:
-		return true
-	default:
-		return false
-	}
 }
 
 func isActivityObservationEvent(eventType observation.EventType) bool {

@@ -92,6 +92,42 @@ describe('Flower empty-state presentation', () => {
     expect(trigger.dataset.flowerCompanionEmptySelection).toBeUndefined();
   });
 
+  it.each([
+    ['running', false],
+    ['failed', false],
+    ['idle', true],
+  ] as const)('keeps one left Flower icon for the %s collapsed summary', async (priorityStatus, completion) => {
+    const onCompanionOpenRequest = vi.fn();
+    const runtime = renderSurfaceWithAdapterProps(adapter(true), {
+      presentation: 'companion',
+      companionOpen: false,
+      engaged: true,
+      transcriptVisible: true,
+      companionPresenceOwner: true,
+      companionCopy,
+      companionSummary: {
+        visualText: completion ? 'Completed' : priorityStatus === 'failed' ? 'Task failed' : 'Thinking...',
+        accessibleText: completion ? 'Flower task completed' : priorityStatus === 'failed' ? 'Flower task failed' : 'Flower task running',
+        priorityStatus,
+        ...(completion ? { ephemeralKind: 'completion' as const } : {}),
+        targetThreadID: 'thread-target',
+        running: priorityStatus === 'running',
+      },
+      onCompanionOpenRequest,
+    });
+
+    await waitFor(() => runtime.querySelector('.flower-companion-collapsed-summary') !== null);
+    const summary = runtime.querySelector('.flower-companion-collapsed-summary') as HTMLButtonElement;
+    expect(runtime.querySelectorAll('.flower-companion-thread-trigger-icon')).toHaveLength(1);
+    expect(summary.querySelector('svg')).toBeNull();
+    expect(summary.querySelector('.flower-companion-collapsed-status')).not.toBeNull();
+    expect(summary.querySelector('.flower-companion-collapsed-summary-text')).not.toBeNull();
+    expect(summary.getAttribute('aria-label')).toBe(completion ? 'Flower task completed' : priorityStatus === 'failed' ? 'Flower task failed' : 'Flower task running');
+
+    summary.click();
+    expect(onCompanionOpenRequest).toHaveBeenCalledWith('thread-target');
+  });
+
   it('omits starter suggestions from the expanded companion', async () => {
     const { surfaceAdapter } = emptyThreadAdapter();
     const runtime = renderSurfaceWithAdapterProps(surfaceAdapter, {

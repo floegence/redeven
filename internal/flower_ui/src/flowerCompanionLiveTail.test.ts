@@ -10,16 +10,18 @@ import { projectFlowerCompanionLiveTail } from './flowerCompanionLiveTail';
 import type { FlowerLiveProgressKind } from './flowerLiveProgress';
 
 const labels: Record<FlowerLiveProgressKind, string> = {
-  waiting: 'Waiting for model response...',
-  thinking: 'Thinking...',
-  tool: 'Using a tool',
-  output: 'Writing the reply',
+  preparing: 'Preparing...',
+  waiting_response: 'Waiting for model response...',
+  streaming: 'Thinking...',
+  retrying: 'Retrying...',
+  finalizing: 'Finalizing...',
+  tool_execution: 'Using a tool',
 };
 
 function message(overrides: Partial<FlowerChatMessage> = {}): FlowerChatMessage {
   return {
     id: 'assistant-live',
-    turn_id: 'run-live',
+    turn_id: 'turn-live',
     role: 'assistant',
     content: '',
     status: 'streaming',
@@ -72,6 +74,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     updated_at_ms: 2,
     status: 'running',
     active_run_id: 'run-live',
+    run_progress: { phase: 'waiting_response', run_id: 'run-live', turn_id: 'turn-live' },
     source_label: 'this host',
     target_labels: [],
     messages: [],
@@ -101,6 +104,7 @@ describe('projectFlowerCompanionLiveTail', () => {
 
   it('does not expose raw thinking content', () => {
     expect(projectFlowerCompanionLiveTail(thread({
+      run_progress: { phase: 'streaming', run_id: 'run-live', turn_id: 'turn-live' },
       messages: [message({ live: true, blocks: [{ type: 'thinking', content: 'Private chain of thought' }] })],
     }), label)).toMatchObject({ kind: 'status', text: 'Thinking...' });
   });
@@ -121,7 +125,7 @@ describe('projectFlowerCompanionLiveTail', () => {
     expect(projectFlowerCompanionLiveTail(thread({
       messages: [message({
         run_id: undefined,
-        turn_id: 'run-live',
+        turn_id: 'turn-live',
         live: true,
         content: 'Typed current output remains visible.',
       })],
@@ -157,7 +161,7 @@ describe('projectFlowerCompanionLiveTail', () => {
     expect(projectFlowerCompanionLiveTail(thread({
       messages: [
         message({ id: 'assistant-old', turn_id: 'run-old', live: true, content: 'Old answer', status: 'streaming' }),
-        message({ id: 'user-live', role: 'user', turn_id: 'run-live', content: 'User request' }),
+        message({ id: 'user-live', role: 'user', turn_id: 'turn-live', content: 'User request' }),
       ],
     }), label)).toMatchObject({ kind: 'status', text: 'Waiting for model response...' });
   });
@@ -168,11 +172,10 @@ describe('projectFlowerCompanionLiveTail', () => {
     }), label)).toMatchObject({ kind: 'status', text: 'Waiting for model response...' });
   });
 
-  it('ignores the retired main-thread model status field', () => {
+  it('uses the upstream phase when content has not started', () => {
     expect(projectFlowerCompanionLiveTail(thread({
-      model_io_status: { phase: 'waiting_response', run_id: 'run-old', updated_at_ms: 3 },
-      messages: [message({ live: true, content: 'Current run output' })],
-    }), label)).toMatchObject({ kind: 'output', text: 'Current run output' });
+      run_progress: { phase: 'finalizing', run_id: 'run-live', turn_id: 'turn-live' },
+    }), label)).toMatchObject({ kind: 'status', text: 'Finalizing...' });
   });
 
   it('does not claim sealed output is still streaming', () => {

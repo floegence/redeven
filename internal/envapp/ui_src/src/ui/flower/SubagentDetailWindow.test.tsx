@@ -120,7 +120,6 @@ function windowProps(entries: readonly FlowerTimelineEntry[]): SubagentDetailWin
     loadingMore: false,
     onLoadMore: () => undefined,
     onRetryLoad: () => undefined,
-    modelStatus: null,
     tailLoading: false,
     tailError: '',
     onRetryTail: () => undefined,

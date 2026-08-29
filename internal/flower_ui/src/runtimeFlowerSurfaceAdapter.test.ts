@@ -50,6 +50,7 @@ function approvalResult(threadID: string, interactionID = 'approval-1', approved
       thread_id: threadID,
       view_version: version,
       activity: 'active',
+      run_id: `run:${threadID}`,
       interactions: [{ id: interactionID, kind: 'approval', resolved: true, approved }],
     },
   };
@@ -189,6 +190,7 @@ describe('runtime Flower surface adapter read state', () => {
 				working_dir: '/workspace',
 				queued_turn_count: 0,
 				run_status: 'running',
+				active_run_id: 'run_detail',
 				created_at_unix_ms: 1,
 				updated_at_unix_ms: 2,
 				last_message_at_unix_ms: 2,
@@ -198,6 +200,7 @@ describe('runtime Flower surface adapter read state', () => {
 					thread_id: 'thread_detail',
 					view_version: 7,
 				activity: 'active',
+				run_id: 'run_detail',
 				items: [{ id: 'user:req-1', ordinal: 1, kind: 'user', text: 'hello' }],
 			},
 		}));
@@ -276,6 +279,7 @@ describe('runtime Flower surface adapter read state', () => {
 				working_dir: '/workspace',
 				queued_turn_count: 0,
 				run_status: 'running',
+				active_run_id: 'run_1',
 				created_at_unix_ms: 1,
 				updated_at_unix_ms: 2,
 				last_message_at_unix_ms: 2,
@@ -306,6 +310,7 @@ describe('runtime Flower surface adapter read state', () => {
 						working_dir: '/workspace',
 						queued_turn_count: 0,
 						run_status: 'running',
+						active_run_id: 'run_stream',
 						created_at_unix_ms: 1,
 						updated_at_unix_ms: 2,
 						last_message_at_unix_ms: 2,
@@ -339,9 +344,10 @@ describe('runtime Flower surface adapter read state', () => {
 						context_window_tokens: 1000, used_ratio: 0.5, pressure_status: 'stable', updated_at_ms: 5,
 					},
 					current: {
-						thread: { id: 'thread_stream', title: 'Streaming' },
-						version: 3,
+						thread_id: 'thread_stream',
+						view_version: 3,
 						activity: 'active',
+						run_id: 'run_stream',
 					},
 				};
 				yield {
@@ -382,7 +388,7 @@ describe('runtime Flower surface adapter read state', () => {
 				context_usage: { input_tokens: 500, used_ratio: 0.5 },
 				context_compactions: [{ operation_id: 'compact_stream', status: 'noop' }],
 				timeline_decorations: [{ decoration_id: 'context-compaction:compact_stream' }],
-				current: { thread: { id: 'thread_stream', title: 'Streaming' }, version: 3, activity: 'active' },
+				current: { thread_id: 'thread_stream', view_version: 3, activity: 'active', run_id: 'run_stream' },
 			});
 			expect(frames[2]).toMatchObject({
 				kind: 'viewer.read_state',
@@ -447,7 +453,7 @@ describe('runtime Flower surface adapter read state', () => {
           updated_at_unix_ms: 2_000,
           last_message_at_unix_ms: 2_000,
           last_message_preview: 'This preview must not become a transcript message.',
-          model_io_status: { run_id: 'run_live', phase: 'streaming', updated_at_ms: 2_000 },
+          run_progress: { run_id: 'run_live', turn_id: 'turn_live', phase: 'streaming' },
           read_status: readStatus(),
         }],
       })),
@@ -456,7 +462,7 @@ describe('runtime Flower surface adapter read state', () => {
     const [summary] = await adapter.listThreads();
 
     expect(summary.messages).toEqual([]);
-    expect(summary.model_io_status).toBeUndefined();
+    expect(summary.run_progress).toEqual({ run_id: 'run_live', turn_id: 'turn_live', phase: 'streaming' });
     expect(summary.active_run_id).toBe('run_live');
   });
 
@@ -628,13 +634,14 @@ describe('runtime Flower surface adapter read state', () => {
         title: 'Permission thread',
         title_status: 'ready',
         run_status: 'running',
+        active_run_id: 'run_permission',
         model_id: 'default/gpt-5',
         permission_type: 'full_access',
         created_at_unix_ms: 1,
         updated_at_unix_ms: 2,
         read_status: readStatus(),
 	      },
-	      current: { thread_id: 'thread_permission', view_version: 5, activity: 'active' as const, items: [] },
+	      current: { thread_id: 'thread_permission', view_version: 5, activity: 'active' as const, run_id: 'run_permission', items: [] },
 	    }));
     const loadThread = vi.fn();
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ patchThread, loadThread }));

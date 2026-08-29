@@ -13,7 +13,7 @@ export function flowerThreadHasActiveTurnEvidence(
 ): boolean {
   if (!thread) return false;
   return Boolean(trimString(thread.active_run_id))
-    || Boolean(trimString(thread.model_io_status?.run_id))
+    || Boolean(trimString(thread.run_progress?.run_id))
     || thread.status === 'running'
     || thread.status === 'waiting_approval'
     || thread.status === 'waiting_user';

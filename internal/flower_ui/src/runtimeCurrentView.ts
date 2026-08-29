@@ -6,6 +6,8 @@ import type {
   FlowerRuntimeCurrentItem,
   FlowerRuntimeCurrentView,
   FlowerRuntimeInteraction,
+  FlowerRunProgress,
+  FlowerRunProgressPhase,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { mapFlowerActivityItem } from './flowerLiveMapper';
@@ -16,6 +18,30 @@ type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function runtimeRunProgressPhase(value: unknown): FlowerRunProgressPhase {
+  switch (trim(value)) {
+    case 'preparing':
+    case 'waiting_response':
+    case 'streaming':
+    case 'retrying':
+    case 'finalizing':
+    case 'tool_execution':
+      return trim(value) as FlowerRunProgressPhase;
+    default:
+      throw new Error(`Flower contract error: unsupported run progress phase ${trim(value) || '<empty>'}.`);
+  }
+}
+
+function runtimeRunProgress(current: FlowerRuntimeCurrentView): FlowerRunProgress | null {
+  if (!current.run_progress) return null;
+  const runID = trim(current.run_id);
+  const turnID = trim(current.turn_id);
+  if (!runID || !turnID) {
+    throw new Error('Flower contract error: run progress requires exact run_id and turn_id.');
+  }
+  return { run_id: runID, turn_id: turnID, phase: runtimeRunProgressPhase(current.run_progress.phase) };
 }
 
 function approvalTarget(value: unknown): { kind: string; label: string } | null {
@@ -167,7 +193,8 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
     schema_version: 1,
     thread_id: base.thread_id,
     turn_id: trim(item.turn_id) || trim(view.turn_id),
-    run_id: trim(item.interaction?.run_id) || trim(view.turn_id),
+    run_id: trim(item.interaction?.run_id)
+      || (trim(item.turn_id) === trim(view.turn_id) ? trim(view.run_id) : ''),
     summary: {
       status: activity.status,
       severity: activity.severity,
@@ -253,7 +280,8 @@ function runtimeApprovalActions(
     return {
       action_id: trim(interaction.id),
       origin: 'main_tool' as const,
-      run_id: trim(interaction.turn_id) || trim(view.turn_id),
+      run_id: trim(interaction.run_id)
+        || (trim(interaction.turn_id) === trim(view.turn_id) ? trim(view.run_id) : ''),
       turn_id: trim(interaction.turn_id) || trim(view.turn_id),
       tool_id: trim(interaction.tool_call_id) || trim(approval.tool_call_id),
       tool_name: trim(approval.tool_name),
@@ -375,19 +403,22 @@ export function applyFlowerRuntimeCurrentView(
       })).filter((attachment) => attachment.name && attachment.mime_type),
     } : {}),
   }));
+  const activeRunID = status === 'running' || status === 'waiting_approval' || status === 'waiting_user'
+    ? trim(current.run_id)
+    : '';
+  if ((status === 'running' || status === 'waiting_approval' || status === 'waiting_user') && !activeRunID) {
+    throw new Error('Flower contract error: an active thread current requires run_id.');
+  }
   const projected: FlowerThreadSnapshot = {
     ...base,
     updated_at_ms: base.updated_at_ms,
     status,
-    active_run_id: status === 'running' || status === 'waiting_approval' ? trim(current.turn_id) || base.active_run_id : undefined,
+    active_run_id: activeRunID || undefined,
+    run_progress: runtimeRunProgress(current),
     approval_pending: approvalCount > 0,
     approval_pending_count: approvalCount,
     approval_actions: approvalActions,
     input_request: inputRequest,
-    // Typed current items are the sole main-thread progress authority. Floret
-    // does not expose provider I/O phases here, so activity must not be
-    // mislabeled as model streaming. SubAgent detail keeps its own status path.
-    model_io_status: null,
     queued_turn_count: queuedTurns.length,
     queued_turns: queuedTurns,
     messages,
