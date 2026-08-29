@@ -77,13 +77,13 @@ valid only after an authoritative empty list response.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. When a selected summary is ahead, Flower issues a fresh detail request instead of reusing an older in-flight request. One recovery request runs per thread, tracks newer summary targets, and uses finite 100/300/900 ms retries for transient failure. Recovery succeeds when the summary/detail invariant is satisfied, including when only newer activity metadata was accepted or an unchanged response proves the cache is already current. Only a remaining mismatch or request failure advances the retry budget. Exhaustion preserves cached content and exposes an explicit retry action.
 
-Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v5.0.12. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
+Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v5.0.13. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
 
 Summary runtime state only triggers revalidation. Product settings revisions do not enter that signature and cannot start runtime recovery. Exhausted finite recovery remains stopped until a newer runtime signature or an explicit user reload arrives. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, or an active-turn admission failure proves that a turn may still be active; an in-flight Stop request changes that control to its localized pending state without creating another lifecycle fact.
 
 Runtime failures are classified once at the Redeven projection boundary before
 summary, detail, and typed current responses reach Flower. Published Floret
-v5.0.12 supplies the canonical terminal `Failure.Code`; Redeven maps that code
+v5.0.13 supplies the canonical terminal `Failure.Code`; Redeven maps that code
 once and removes the upstream failure payload before serializing Flower data.
 Only historical failures without the typed field use the legacy text
 classifier. Known provider, gateway, control, and canonical-authority failures

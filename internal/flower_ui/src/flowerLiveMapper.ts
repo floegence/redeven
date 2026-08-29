@@ -371,7 +371,7 @@ function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefine
 const activityStatuses = new Set<FlowerActivityStatus>(['pending', 'running', 'waiting', 'success', 'error', 'declined', 'canceled']);
 const activitySeverities = new Set<FlowerActivitySeverity>(['quiet', 'normal', 'warning', 'error', 'blocking']);
 const activityKinds = new Set<FlowerActivityKind>(['tool', 'hosted_tool', 'control', 'budget']);
-const activityRenderers = new Set<FlowerActivityRenderer>(['structured', 'terminal', 'file', 'patch', 'web_search', 'web_fetch', 'todos', 'question', 'completion']);
+const activityRenderers = new Set<FlowerActivityRenderer>(['structured', 'terminal', 'file', 'patch', 'web_search', 'web_fetch', 'todos', 'question', 'completion', 'subagent', 'subagent_operation']);
 const activityAttentionReasons = new Set<FlowerActivityAttentionReason>(['running', 'waiting', 'approval', 'error']);
 const activityApprovalStates = new Set<FlowerActivityApprovalState>(['requested', 'approved', 'rejected', 'timed_out', 'canceled']);
 
@@ -488,6 +488,74 @@ const webFetchActivityPayloadKeys = new Set([
   'bytes_read', 'truncated', 'status', 'error',
 ]);
 const webFetchActivityPreviewMaxCharacters = 2_000;
+const subagentOperationActions = new Set(['spawn', 'wait', 'list', 'inspect', 'send_input', 'close', 'close_all']);
+const subagentOperationPayloadKeys = new Set(['action', 'status', 'targets', 'requested_count', 'completed_count', 'missing_count', 'timed_out', 'error']);
+const subagentOperationTargetKeys = new Set(['thread_id', 'task_name', 'task_description', 'status']);
+const subagentOperationTargetLimit = 200;
+
+function mapSubagentOperationActivityPayload(payload: JsonRecord): Readonly<Record<string, unknown>> {
+  for (const key of Object.keys(payload)) {
+    if (!subagentOperationPayloadKeys.has(key)) {
+      throw new Error(`Flower contract error: activity_item.presentation.payload.${key} is not part of the Subagent operation contract.`);
+    }
+  }
+  const action = trim(payload.action);
+  if (!subagentOperationActions.has(action)) {
+    throw new Error(`Flower contract error: activity_item.presentation.payload.action is unsupported: ${action || '<empty>'}.`);
+  }
+  const out: Record<string, unknown> = { action };
+  const status = trim(payload.status);
+  if (status) out.status = status;
+  if (payload.targets !== undefined) {
+    if (!Array.isArray(payload.targets) || payload.targets.length > subagentOperationTargetLimit) {
+      throw new Error(`Flower contract error: activity_item.presentation.payload.targets must contain at most ${subagentOperationTargetLimit} entries.`);
+    }
+    const seen = new Set<string>();
+    out.targets = payload.targets.map((value, index) => {
+      const target = plainRecordValue(value);
+      if (!target) {
+        throw new Error(`Flower contract error: activity_item.presentation.payload.targets[${index}] must be an object.`);
+      }
+      for (const key of Object.keys(target)) {
+        if (!subagentOperationTargetKeys.has(key)) {
+          throw new Error(`Flower contract error: activity_item.presentation.payload.targets[${index}].${key} is unsupported.`);
+        }
+      }
+      const threadID = trim(target.thread_id);
+      const taskName = trim(target.task_name);
+      if (!threadID && !taskName) {
+        throw new Error(`Flower contract error: activity_item.presentation.payload.targets[${index}] requires thread_id or task_name.`);
+      }
+      if (threadID) {
+        if (seen.has(threadID)) {
+          throw new Error(`Flower contract error: activity_item.presentation.payload.targets[${index}].thread_id is duplicated.`);
+        }
+        seen.add(threadID);
+      }
+      const taskDescription = trim(target.task_description);
+      const targetStatus = trim(target.status);
+      return {
+        ...(threadID ? { thread_id: threadID } : {}),
+        ...(taskName ? { task_name: taskName } : {}),
+        ...(taskDescription ? { task_description: taskDescription } : {}),
+        ...(targetStatus ? { status: targetStatus } : {}),
+      };
+    });
+  }
+  for (const key of ['requested_count', 'completed_count', 'missing_count'] as const) {
+    if (payload[key] !== undefined) out[key] = nonNegativeInteger(payload[key], `activity_item.presentation.payload.${key}`);
+  }
+  if (payload.timed_out !== undefined) {
+    if (typeof payload.timed_out !== 'boolean') {
+      throw new Error('Flower contract error: activity_item.presentation.payload.timed_out must be a boolean.');
+    }
+    out.timed_out = payload.timed_out;
+  }
+  if (payload.error !== undefined) {
+    out.error = sanitizeActivityPublicValue(payload.error, 'activity_item.presentation.payload.error');
+  }
+  return out;
+}
 
 function mapStructuredActivityRows(raw: unknown): readonly Readonly<Record<string, string>>[] {
   if (!Array.isArray(raw)) {
@@ -528,6 +596,7 @@ function mapStructuredActivityRows(raw: unknown): readonly Readonly<Record<strin
 function mapActivityPayload(raw: unknown, renderer?: FlowerActivityRenderer): Readonly<Record<string, unknown>> | undefined {
   const payload = plainRecordValue(raw);
   if (!payload) return undefined;
+  if (renderer === 'subagent_operation') return mapSubagentOperationActivityPayload(payload);
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(payload)) {
     const safeKey = trim(key);

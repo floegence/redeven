@@ -379,16 +379,18 @@
           "inspect": "Inspecionar subagentes",
           "close": "Fechar subagente",
           "closeAll": "Fechar subagentes",
-          "unknown": "Subagentes"
+          "unknown": "Operação de subagente"
         },
-        "titleVerbs": {
-          "spawn": "Iniciar",
-          "sendInput": "Orientar",
-          "wait": "Aguardar",
-          "list": "Listar",
-          "inspect": "Inspecionar",
-          "close": "Fechar",
-          "closeAll": "Fechar"
+        "titles": {
+          "operation": "Operação de subagente",
+          "failed": "Falha na operação de subagente",
+          "timedOut": "O subagente atingiu o limite de tempo",
+          "needsInput": "O subagente precisa de entrada",
+          "starting": "Iniciando subagente",
+          "started": "Subagente iniciado",
+          "waiting": "Aguardando {count} subagentes",
+          "completed": "{count} subagentes concluídos",
+          "waitTimedOut": "Tempo de espera esgotado · {completed}/{count} concluídos"
         },
         "labels": {
           "approval": "aprovação",

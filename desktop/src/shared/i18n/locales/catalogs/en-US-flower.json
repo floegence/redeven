@@ -378,16 +378,18 @@
         "inspect": "Inspect subagents",
         "close": "Close subagent",
         "closeAll": "Close subagents",
-        "unknown": "Subagents"
+        "unknown": "Subagent operation"
       },
-      "titleVerbs": {
-        "spawn": "Spawn",
-        "sendInput": "Steer",
-        "wait": "Wait",
-        "list": "List",
-        "inspect": "Inspect",
-        "close": "Close",
-        "closeAll": "Close"
+      "titles": {
+        "operation": "Subagent operation",
+        "failed": "Subagent operation failed",
+        "timedOut": "Subagent timed out",
+        "needsInput": "Subagent needs input",
+        "starting": "Starting subagent",
+        "started": "Started subagent",
+        "waiting": "Waiting for {count} subagents",
+        "completed": "{count} subagents completed",
+        "waitTimedOut": "Wait timed out · {completed}/{count} completed"
       },
       "labels": {
         "approval": "approval",

@@ -18,6 +18,8 @@ Thread-level child membership comes from Floret v5 `ThreadRuntime.List` scoped b
 
 `FlowerSubagentSummary` contains `parent_thread_id`, canonical child `thread_id`, required `task_name`, task description, agent type, context mode, status, timing, and current control flags. There is no `subagent_id` or `title` compatibility field. Activity payloads route `Open messages` with `thread_id` only. Delegated approval presentation uses `child_thread_id`; it does not duplicate the same identity under another name.
 
+SubAgent tool rows are action-first. One localized formatter combines the typed operation action with the Activity lifecycle and outcome counts, so spawn, wait, list, inspect, send-input, close, and close-all never collapse to the ambiguous title “Subagents.” A collapsed multi-target row shows the first two task names plus the remaining count; expanded detail preserves every requested target in request order. Unknown or invalid operation data uses a neutral operation title and never guesses from a generic label.
+
 The dropdown is a compact accessible floating surface over the parent thread. Active and ended groups stay visible, rows sort by canonical status and update time, and keyboard navigation supports arrows, Home, End, Enter, and Escape. Selecting a row opens the parent-scoped detail API in a read-only floating window. It does not select a sidebar child thread or create a child composer.
 
 The detail window maps the canonical child `ThreadView` messages, interactions, and Activity into the shared renderers. It supports active current-view replacement, bottom-follow behavior, local retry, and disclosure-preserving operation groups. The detail is human UI state and is not injected into the parent model context or persisted as a second transcript.
@@ -34,3 +36,4 @@ Flower must not recover a missing child identity from activity sidecars, a title
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts:744` - Wire mapping accepts only canonical child thread identity.
 - `redeven:internal/flower_ui/src/flowerSubagentProjection.ts:128` - Header rows derive directly from canonical summaries.
 - `redeven:internal/flower_ui/src/flowerSubagentDetailThread.ts:304` - Child detail requires canonical summary identity and task name.
+- `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Formats localized operation titles and exact ordered target summaries.

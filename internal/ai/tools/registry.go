@@ -395,11 +395,11 @@ var builtinDefinitions = map[string]Definition{
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
-			presentation(ToolPresentationDelegation, "readonly", "subagent", "delegation", "args", "result", "error"),
+			presentation(ToolPresentationDelegation, "readonly", "subagent_operation", "delegation", "args", "result", "error"),
 			operation("subagents"),
 			labelFields("task_name", "action"),
 			callPayloadFields("action", "task_name", "task_description", "agent_type", "context_mode", "target", "thread_id", "ids", "interrupt", "limit", "running_only"),
-			resultPayloadFields("action", "status", "task_name", "task_description", "agent_type", "context_mode", "accepted", "closed", "stopped", "closed_count", "stopped_count", "agent_count", "total", "running_only", "counts", "final_handoff_report", "progress_summary", "requested_count", "found_count", "missing_count", "items", "timed_out", "truncated", "omitted_count"),
+			resultPayloadFields("action", "status", "task_name", "task_description", "agent_type", "context_mode", "target", "thread_id", "ids", "target_ids", "requested_ids", "affected_ids", "accepted", "closed", "stopped", "closed_count", "stopped_count", "agent_count", "total", "running_only", "counts", "final_handoff_report", "progress_summary", "requested_count", "found_count", "missing_count", "items", "timed_out", "truncated", "omitted_count"),
 			chipFields("action", "agent_type", "status", "agent_count", "total", "timed_out", "closed_count", "truncated"),
 		),
 	},

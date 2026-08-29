@@ -448,6 +448,15 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 		"detail_omitted": true, "detail_strategy": "thread_view", "items": items,
 		"counts": subagentModelStatusCounts(items), "agent_count": len(items),
 	}
+	if len(targets) > 0 {
+		out["requested_count"] = len(targets)
+		out["found_count"] = len(items)
+		out["missing_count"] = len(targets) - len(items)
+	} else {
+		out["requested_count"] = len(items)
+		out["found_count"] = len(items)
+		out["missing_count"] = 0
+	}
 	return trimSubagentToolResult(out), nil
 }
 
@@ -455,13 +464,13 @@ func selectSubagentSnapshots(items []subagentSnapshot, targets []string) []subag
 	if len(targets) == 0 {
 		return items
 	}
-	wanted := make(map[string]struct{}, len(targets))
-	for _, target := range targets {
-		wanted[strings.TrimSpace(target)] = struct{}{}
+	byThreadID := make(map[string]subagentSnapshot, len(items))
+	for _, item := range items {
+		byThreadID[strings.TrimSpace(item.ThreadID)] = item
 	}
 	out := make([]subagentSnapshot, 0, len(targets))
-	for _, item := range items {
-		if _, ok := wanted[item.ThreadID]; ok {
+	for _, target := range targets {
+		if item, ok := byThreadID[strings.TrimSpace(target)]; ok {
 			out = append(out, item)
 		}
 	}

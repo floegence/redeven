@@ -55,7 +55,10 @@ func toolSuccessSummary(toolName string) string {
 	}
 }
 
-func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result ToolResult, err error) {
+	defer func() {
+		result.activityInput = cloneAnyMap(call.Args)
+	}()
 	if h == nil || h.r == nil {
 		return ToolResult{}, fmt.Errorf("tool handler unavailable")
 	}
