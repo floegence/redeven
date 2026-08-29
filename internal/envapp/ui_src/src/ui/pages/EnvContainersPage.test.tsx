@@ -11,6 +11,7 @@ const harness = vi.hoisted(() => ({
     can_admin: true,
     is_owner: true,
   },
+  setEnvironment: (_value: unknown) => undefined as void,
   goActivity: vi.fn(),
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   storageWrites: [] as Array<{ key: string; value: unknown }>,
@@ -86,6 +87,27 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     data-point-count={props.series[0]?.data?.length ?? 0}
     data-y-max={props.yMax}
   />,
+  Tabs: (props: any) => <div class={props.class} role="tablist" aria-label={props.ariaLabel}>
+    {props.items.map((item: any) => <button
+      type="button"
+      role="tab"
+      class={props.slotClassNames?.tab}
+      aria-selected={props.activeId === item.id}
+      aria-disabled={item.disabled || undefined}
+      disabled={item.disabled}
+      onClick={() => !item.disabled && props.onChange?.(item.id)}
+      onKeyDown={(event: KeyboardEvent) => {
+        if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+        const enabled = props.items.filter((candidate: any) => !candidate.disabled);
+        const current = enabled.findIndex((candidate: any) => candidate.id === item.id);
+        if (current < 0 || enabled.length === 0) return;
+        const next = event.key === 'Home' ? enabled[0]
+          : event.key === 'End' ? enabled.at(-1)
+            : enabled[(current + (event.key === 'ArrowRight' ? 1 : -1) + enabled.length) % enabled.length];
+        props.onChange?.(next.id);
+      }}
+    >{item.icon}{item.label}</button>)}
+  </div>,
   Tag: (props: any) => <span>{props.children}</span>,
 }));
 
@@ -106,12 +128,17 @@ vi.mock('../i18n', () => ({
   }),
 }));
 
-vi.mock('./EnvContext', () => ({
-  useEnvContext: () => ({
-    env: () => ({ permissions: harness.permissions }),
-    goActivity: harness.goActivity,
-  }),
-}));
+vi.mock('./EnvContext', async () => {
+  const { createSignal } = await import('solid-js');
+  const [environment, setEnvironment] = createSignal<unknown>({ permissions: harness.permissions });
+  harness.setEnvironment = setEnvironment;
+  return {
+    useEnvContext: () => ({
+      env: environment,
+      goActivity: harness.goActivity,
+    }),
+  };
+});
 
 vi.mock('../services/uiStorage', () => ({
   readUIStorageJSON: (_key: string, fallback: unknown) => fallback,
@@ -148,6 +175,16 @@ async function settle() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (cause: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('native Containers page', () => {
   let dispose: (() => void) | undefined;
 
@@ -159,6 +196,7 @@ describe('native Containers page', () => {
       can_admin: true,
       is_owner: true,
     });
+    harness.setEnvironment({ permissions: harness.permissions });
     harness.goActivity.mockReset();
     harness.storageWrites.length = 0;
     harness.listEndpoints.mockReset().mockResolvedValue([{
@@ -219,10 +257,30 @@ describe('native Containers page', () => {
 
     expect(host.querySelector('[data-container-page]')?.getAttribute('data-variant')).toBe('workbench');
     expect(host.querySelector('table')).not.toBeNull();
+    expect(host.querySelector<HTMLSelectElement>('[data-container-endpoint-bar] select')?.value).toBe('docker-primary');
+    expect(host.querySelectorAll('.container-resource-tabs [role="tab"]')).toHaveLength(4);
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('containers.views.containers');
     expect(host.querySelector('[data-container-mobile-list] button')).not.toBeNull();
-    expect(host.querySelectorAll('.container-touch-target').length).toBeGreaterThan(3);
-    expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary');
+    expect(host.querySelectorAll('.container-touch-target').length).toBeGreaterThanOrEqual(3);
+    expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary', expect.anything());
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:widget-1')).toBe(true);
+  });
+
+  it('keeps one disabled loading surface until environment permissions are available', async () => {
+    harness.setEnvironment(undefined);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    expect(harness.listEndpoints).not.toHaveBeenCalled();
+    expect(host.querySelector('.container-loading-list--page')).not.toBeNull();
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
+
+    harness.setEnvironment({ permissions: harness.permissions });
+    await settle();
+    expect(host.querySelector('[data-container-endpoint-bar] select')).not.toBeNull();
+    expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
   });
 
   it('applies live resource navigation to an already mounted Activity page', async () => {
@@ -440,7 +498,7 @@ describe('native Containers page', () => {
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
-    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-nav button'))
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
       .find((button) => button.textContent?.includes('containers.views.images'))
       ?.click();
     await settle();
@@ -467,6 +525,115 @@ describe('native Containers page', () => {
 
     expect(host.querySelector('[data-container-engine-state]')?.textContent).toContain(title);
     expect(host.querySelector('[data-container-resource-table]')).toBeNull();
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'));
+    expect(tabs).toHaveLength(4);
+    expect(tabs.every((tab) => tab.disabled && tab.getAttribute('aria-disabled') === 'true')).toBe(true);
+  });
+
+  it('discards a delayed image response after a newer navigation target becomes ready', async () => {
+    const delayedImages = deferred<any[]>();
+    harness.listResources.mockImplementation((nextView: string) => {
+      if (nextView === 'images') return delayedImages.promise;
+      return Promise.resolve([{
+        container_id: 'container-current',
+        name: 'Current API',
+        state: 'running',
+        management: { managed: false },
+      }]);
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage stateScope="activity" />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((tab) => tab.textContent?.includes('containers.views.images'))
+      ?.click();
+    await Promise.resolve();
+
+    expect(host.textContent).not.toContain('Current API');
+    expect(host.querySelector('[data-container-resource-table]')).toBeNull();
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
+
+    requestContainerResourceNavigation({
+      engine: 'docker',
+      endpointID: 'docker-primary',
+      view: 'containers',
+      identity: '',
+    });
+    await settle();
+    delayedImages.resolve([{
+      id: 'stale-image',
+      reference: 'stale:latest',
+      referenced_containers: 0,
+    }]);
+    await settle();
+
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('containers.views.containers');
+    expect(host.textContent).toContain('Current API');
+    expect(host.textContent).not.toContain('stale:latest');
+  });
+
+  it('loads an endpoint change through the same ready-state boundary', async () => {
+    harness.listEndpoints.mockResolvedValue([
+      {
+        endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', default: true,
+        remote: false, available: true, capabilities: { collection_stats: true, volume_files: false, exec: false },
+      },
+      {
+        endpoint_id: 'docker-secondary', engine: 'docker', display_name: 'Secondary Docker', default: false,
+        remote: true, available: true, capabilities: { collection_stats: true, volume_files: false, exec: false },
+      },
+    ]);
+    harness.endpointStatus.mockImplementation((_engine: string, nextEndpointID: string) => Promise.resolve({
+      endpoint_id: nextEndpointID,
+      engine: 'docker',
+      display_name: nextEndpointID === 'docker-secondary' ? 'Secondary Docker' : 'Primary Docker',
+      default: nextEndpointID === 'docker-primary',
+      remote: nextEndpointID === 'docker-secondary',
+      available: true,
+      capabilities: { collection_stats: true, volume_files: false, exec: false },
+    }));
+    harness.listResources.mockImplementation((_view: string, _engine: string, nextEndpointID: string) => Promise.resolve([{
+      container_id: `container-${nextEndpointID}`,
+      name: nextEndpointID === 'docker-secondary' ? 'Secondary API' : 'Primary API',
+      state: 'running',
+      management: { managed: false },
+    }]));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    const select = host.querySelector<HTMLSelectElement>('[data-container-endpoint-bar] select')!;
+    select.value = 'docker-secondary';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(host.querySelector('[data-container-resource-table]')).toBeNull();
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
+    await settle();
+
+    expect(host.querySelector<HTMLSelectElement>('[data-container-endpoint-bar] select')?.value).toBe('docker-secondary');
+    expect(host.textContent).toContain('Secondary API');
+    expect(host.textContent).not.toContain('Primary API');
+  });
+
+  it('retries engine detection and reaches one coherent ready state', async () => {
+    harness.listEndpoints.mockRejectedValueOnce(Object.assign(new Error('missing engine'), { code: 'ENGINE_UNAVAILABLE' }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    expect(host.querySelector('[data-container-engine-state="unavailable"]')).not.toBeNull();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.engineState.retry'))
+      ?.click();
+    await settle();
+
+    expect(host.querySelector('[data-container-engine-state]')).toBeNull();
+    expect(host.querySelector('[data-container-endpoint-bar] select')).not.toBeNull();
+    expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => !tab.disabled)).toBe(true);
   });
 
   it('uses resource-specific columns for images, volumes, Compose projects, and pods', async () => {
@@ -483,7 +650,7 @@ describe('native Containers page', () => {
     await settle();
 
     const openView = async (label: string) => {
-      Array.from(host.querySelectorAll<HTMLButtonElement>('nav button')).find((button) => button.textContent?.includes(label))?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).find((button) => button.textContent?.includes(label))?.click();
       await settle();
     };
     await openView('containers.views.images');
@@ -540,7 +707,7 @@ describe('native Containers page', () => {
     expect(harness.preflight).toHaveBeenCalledWith('containers.start', expect.objectContaining({ container_id: 'container-2' }));
   });
 
-  it('keeps stale inventory visible and presents refresh failure recovery', async () => {
+  it('clears stale inventory and presents refresh failure recovery', async () => {
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
@@ -552,6 +719,7 @@ describe('native Containers page', () => {
     await settle();
 
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('engine temporarily unavailable');
-    expect(host.textContent).toContain('Managed API');
+    expect(host.textContent).not.toContain('Managed API');
+    expect(host.querySelector('[data-container-resource-table]')).toBeNull();
   });
 });

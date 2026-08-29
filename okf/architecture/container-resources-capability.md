@@ -117,6 +117,19 @@ default to All. Column visibility is user-controlled. Metrics are off by default
 when requested, one endpoint-wide SSE sample updates aggregate values and row
 metrics and stops as soon as its owning view closes.
 
+One discriminated console controller owns engine, endpoint, resource view,
+endpoint inventory, and resource inventory. Every engine, endpoint, view,
+retry, and Web Services navigation enters that controller. A transition clears
+the prior resource, detail, and stream context before it starts work; one
+request generation and one cancellation signal prevent any older response from
+committing. Only `ready` may render a resource list or detail. `ready` always
+contains the resolved endpoint, the enabled resource tabs, and the inventory
+for that exact `(engine, endpoint, view)` target. Loading, unavailable,
+permission-denied, and error states retain the resource tab position but disable
+navigation and mutation controls. Resource and detail navigation use the
+published Floe Webapp `Tabs` owner for icons, underlined selection, keyboard
+movement, and narrow-width overflow instead of Redeven-local tab behavior.
+
 Selecting a resource opens a component-local detail page, never a floating
 inspector. Returning preserves the list query, filter, sort, and scroll owner.
 Container details provide Overview, live searchable logs, redacted Inspect,
@@ -142,8 +155,10 @@ The UI provides structured create dialogs and a separate risk review before
 submission. It supports keyboard operation, 44 px touch targets, forced colors,
 reduced motion, and every shipped locale. A missing, stopped, unreachable, or
 permission-denied engine produces a dedicated detection state with retry instead
-of a broken resource table. Stale or unavailable inventory is shown explicitly
-and cannot authorize destructive work.
+of a broken resource table. Inventory from an earlier target is never shown in
+a loading or failure state and cannot authorize destructive work. Detail reads,
+logs, statistics, image history, and file reads commit only while their owning
+`ready` context is still current.
 
 # Boundaries
 
@@ -165,5 +180,6 @@ and cannot authorize destructive work.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Enforces native Local API routes and RWX/Admin permissions.
 - `redeven:internal/managedwebservice/container_resources.go` - Resolves protected Web Services ownership.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Implements the native responsive product surface.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies request cancellation, stale-response rejection, retry, endpoint changes, permissions, and ready-only rendering.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Verifies desktop and narrow dedicated-detail layouts in Chromium.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Registers the multi-instance Workbench component.

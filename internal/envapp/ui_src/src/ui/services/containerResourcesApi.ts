@@ -176,18 +176,18 @@ function query(engine: ContainerEngine, endpointID: string, extras: Readonly<Rec
   if (endpointID) params.set('endpoint_id', endpointID);
   return params.toString();
 }
-export async function listContainerEndpoints(engine: ContainerEngine): Promise<ContainerEndpoint[]> {
+export async function listContainerEndpoints(engine: ContainerEngine, signal?: AbortSignal): Promise<ContainerEndpoint[]> {
   const response = await fetchLocalApiJSON<{ engines: readonly Readonly<{ engine: ContainerEngine; endpoints: ContainerEndpoint[] }>[] }>(
     `/_redeven_proxy/api/container-resources/endpoints?engine=${encodeURIComponent(engine)}`,
-    { method: 'GET' },
+    { method: 'GET', signal },
   );
   return response.engines?.[0]?.endpoints ?? [];
 }
 
-export async function getContainerEndpointStatus(engine: ContainerEngine, endpointID: string): Promise<ContainerEndpoint> {
+export async function getContainerEndpointStatus(engine: ContainerEngine, endpointID: string, signal?: AbortSignal): Promise<ContainerEndpoint> {
   return fetchLocalApiJSON<ContainerEndpoint>(
     `/_redeven_proxy/api/container-resources/endpoints/${encodeURIComponent(endpointID)}?engine=${encodeURIComponent(engine)}`,
-    { method: 'GET' },
+    { method: 'GET', signal },
   );
 }
 
@@ -195,10 +195,11 @@ export async function listContainerResources(
   view: ContainerResourceView,
   engine: ContainerEngine,
   endpointID: string,
+  signal?: AbortSignal,
 ): Promise<ContainerResourceInventoryItem[]> {
   const response = await fetchLocalApiJSON<Record<string, ContainerResourceInventoryItem[]>>(
     `/_redeven_proxy/api/container-resources/${view}?${query(engine, endpointID, view === 'containers' ? { all: 'true' } : {})}`,
-    { method: 'GET' },
+    { method: 'GET', signal },
   );
   const key = view === 'compose-projects' ? 'compose_projects' : view;
   return response[key] ?? [];

@@ -66,13 +66,14 @@ beforeEach(() => {
 describe('native container resources API', () => {
   it('keeps engine and opaque endpoint identity on inventory requests', async () => {
     localApiMocks.fetchLocalApiJSON.mockResolvedValue({ compose_projects: [{ project_id: 'project-1' }] });
+    const signal = new AbortController().signal;
 
-    await expect(listContainerResources('compose-projects', 'docker', 'endpoint/primary'))
+    await expect(listContainerResources('compose-projects', 'docker', 'endpoint/primary', signal))
       .resolves.toEqual([{ project_id: 'project-1' }]);
 
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
       '/_redeven_proxy/api/container-resources/compose-projects?engine=docker&endpoint_id=endpoint%2Fprimary',
-      { method: 'GET' },
+      { method: 'GET', signal },
     );
   });
 
