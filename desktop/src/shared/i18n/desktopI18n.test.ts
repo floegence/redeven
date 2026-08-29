@@ -26,6 +26,7 @@ import {
 } from './index';
 import { isPluralMessage, type TranslationLeaf, type TranslationTree } from './messageTypes';
 import { enUS } from './locales/en-US';
+import { createDesktopFlowerSurfaceCopy } from '../../welcome/flower/desktopFlowerSurfaceCopy';
 
 type ReadmeLocaleManifest = Readonly<{
   locales: readonly Readonly<{
@@ -587,6 +588,20 @@ describe('Desktop shared i18n dictionaries', () => {
 });
 
 describe('Desktop shared i18n helpers', () => {
+  it('formats Subagent operation titles from the active locale', () => {
+    const en = createDesktopFlowerSurfaceCopy(createDesktopI18n('en-US')).subagents!.activity.titles;
+    const zhCN = createDesktopFlowerSurfaceCopy(createDesktopI18n('zh-CN')).subagents!.activity.titles;
+
+    expect(en.starting).toBe('Starting subagent');
+    expect(en.waiting('3')).toBe('Waiting for 3 subagents');
+    expect(en.completed('3')).toBe('3 subagents completed');
+    expect(en.waitTimedOut('1', '3')).toBe('Wait timed out · 1/3 completed');
+    expect(zhCN.starting).toBe('正在启动 Subagent');
+    expect(zhCN.waiting('3')).toBe('正在等待 3 个 Subagent');
+    expect(zhCN.completed('3')).toBe('3 个 Subagent 已完成');
+    expect(zhCN.waitTimedOut('1', '3')).toBe('等待超时 · 已完成 1/3');
+  });
+
   it('translates string messages and preserves missing placeholders for callers to notice', () => {
     const i18n = createDesktopI18n('zh-CN');
     expect(i18n.t('language.updatedMessage', { language: '简体中文' })).toBe('语言已更新为 简体中文。');

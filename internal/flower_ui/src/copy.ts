@@ -225,7 +225,17 @@ export type FlowerSubagentsCopy = Readonly<{
   typeLabels: Readonly<Record<'explore' | 'worker' | 'reviewer' | 'unknown', string>>;
   activity: Readonly<{
     actions: Readonly<Record<'spawn' | 'send_input' | 'wait' | 'list' | 'inspect' | 'close' | 'close_all' | 'unknown', string>>;
-    titleVerbs: Readonly<Record<'spawn' | 'send_input' | 'wait' | 'list' | 'inspect' | 'close' | 'close_all', string>>;
+    titles: Readonly<{
+      operation: string;
+      failed: string;
+      timedOut: string;
+      needsInput: string;
+      starting: string;
+      started: string;
+      waiting: (count: string) => string;
+      completed: (count: string) => string;
+      waitTimedOut: (completed: string, count: string) => string;
+    }>;
     labels: Readonly<Record<'approval' | 'action' | 'status' | 'thread' | 'subagent' | 'task' | 'title' | 'profile' | 'target' | 'targets' | 'ids' | 'accepted' | 'closed' | 'affected' | 'agents' | 'total' | 'runningOnly' | 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'canceled' | 'timedOut' | 'requested' | 'found' | 'missing' | 'missingIds' | 'lastMessage' | 'waitingPrompt' | 'canSendInput' | 'canInterrupt' | 'canClose' | 'runtime' | 'summary' | 'details' | 'errorCode' | 'errorMessage' | 'retryable', string>>;
     values: Readonly<Record<'yes' | 'no', string>>;
     agentsCount: (count: string) => string;
@@ -891,16 +901,18 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         inspect: 'Inspect subagents',
         close: 'Close subagent',
         close_all: 'Close subagents',
-        unknown: 'Subagents',
+        unknown: 'Subagent operation',
       },
-      titleVerbs: {
-        spawn: 'Spawn',
-        send_input: 'Steer',
-        wait: 'Wait',
-        list: 'List',
-        inspect: 'Inspect',
-        close: 'Close',
-        close_all: 'Close',
+      titles: {
+        operation: 'Subagent operation',
+        failed: 'Subagent operation failed',
+        timedOut: 'Subagent timed out',
+        needsInput: 'Subagent needs input',
+        starting: 'Starting subagent',
+        started: 'Started subagent',
+        waiting: (count) => `Waiting for ${count} subagents`,
+        completed: (count) => `${count} subagents completed`,
+        waitTimedOut: (completed, count) => `Wait timed out · ${completed}/${count} completed`,
       },
       labels: {
         approval: 'approval',

@@ -1059,16 +1059,18 @@
           "inspect": "하위 에이전트 검사",
           "close": "하위 에이전트 닫기",
           "closeAll": "하위 에이전트 닫기",
-          "unknown": "하위 에이전트"
+          "unknown": "하위 에이전트 작업"
         },
-        "titleVerbs": {
-          "spawn": "시작",
-          "sendInput": "지시",
-          "wait": "대기",
-          "list": "나열",
-          "inspect": "검사",
-          "close": "닫기",
-          "closeAll": "닫기"
+        "titles": {
+          "operation": "하위 에이전트 작업",
+          "failed": "하위 에이전트 작업 실패",
+          "timedOut": "하위 에이전트 시간 초과",
+          "needsInput": "하위 에이전트에 입력 필요",
+          "starting": "하위 에이전트 시작 중",
+          "started": "하위 에이전트 시작됨",
+          "waiting": "하위 에이전트 {count}개 대기 중",
+          "completed": "하위 에이전트 {count}개 완료",
+          "waitTimedOut": "대기 시간 초과 · {completed}/{count} 완료"
         },
         "labels": {
           "approval": "승인",
@@ -4045,16 +4047,18 @@
           "inspect": "하위 에이전트 확인",
           "close": "하위 에이전트 닫기",
           "closeAll": "모든 하위 에이전트 닫기",
-          "unknown": "하위 에이전트"
+          "unknown": "하위 에이전트 작업"
         },
-        "titleVerbs": {
-          "spawn": "시작",
-          "sendInput": "지시",
-          "wait": "대기",
-          "list": "나열",
-          "inspect": "확인",
-          "close": "닫기",
-          "closeAll": "모두 닫기"
+        "titles": {
+          "operation": "하위 에이전트 작업",
+          "failed": "하위 에이전트 작업 실패",
+          "timedOut": "하위 에이전트 시간 초과",
+          "needsInput": "하위 에이전트에 입력 필요",
+          "starting": "하위 에이전트 시작 중",
+          "started": "하위 에이전트 시작됨",
+          "waiting": "하위 에이전트 {count}개 대기 중",
+          "completed": "하위 에이전트 {count}개 완료",
+          "waitTimedOut": "대기 시간 초과 · {completed}/{count} 완료"
         },
         "labels": {
           "approval": "승인",

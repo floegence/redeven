@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-08-29
+* **Typed SubAgent operation Activity and Floret v5.0.13 adoption**: Redeven now
+  preserves each SubAgent action, ordered target list, completion and missing
+  counts, and timeout state through Floret Activity and Flower bootstrap/live
+  projection. Flower uses one localized action-and-outcome title formatter,
+  exact `ThreadID` joins, and a first-two-plus-count collapsed summary. Manual
+  detail disclosure pauses
+  transcript tail following, anchors the clicked title through measured-height
+  animation, and removes the obsolete auto-open, settle, and intrinsic-height
+  paths.
+
 ## 2026-08-28
 * **Live Flower cache totals and Floret v5.0.12 adoption**: Committed final
   provider usage now supplies canonical cumulative thread totals in the live

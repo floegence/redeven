@@ -810,7 +810,6 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 	payload = activityPayloadWithHostDisplayFields(payload, args, spec, hasSpec)
 	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, _ = contractSafePayloadMap(payload, 0)
-	renderer = activityRendererForPayload(renderer, payload)
 	activity := &fltools.ActivityPresentation{
 		Label:    activityCallLabel(toolName, spec, hasSpec, renderer, args, payload),
 		Renderer: renderer,
@@ -839,7 +838,8 @@ func activityRendererFromSpec(spec aitools.ToolPresentationSpec, ok bool) fltool
 		fltools.ActivityRendererTodos,
 		fltools.ActivityRendererQuestion,
 		fltools.ActivityRendererCompletion,
-		fltools.ActivityRendererSubAgent:
+		fltools.ActivityRendererSubAgent,
+		fltools.ActivityRendererSubAgentOperation:
 		return renderer
 	default:
 		return fltools.ActivityRendererStructured
@@ -1137,6 +1137,9 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	spec, hasSpec := aitools.PresentationSpec(toolName)
 	renderer := activityRendererFromSpec(spec, hasSpec)
 	rawPayload, dataTruncated := activityPayloadFromResultDataForTool(toolName, result.Data)
+	if renderer == fltools.ActivityRendererSubAgentOperation {
+		rawPayload = subAgentOperationResultActivitySource(result.activityInput, rawPayload)
+	}
 	payload := activityPayloadFromFieldListWithRegistry(r, spec.ResultPayloadFields, rawPayload)
 	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
 	if status != "" {
@@ -1163,7 +1166,6 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	if payloadTruncated && !isOKFToolName(toolName) {
 		payload["truncated"] = true
 	}
-	renderer = activityRendererForPayload(renderer, payload)
 	activity := &fltools.ActivityPresentation{
 		Label:      activityResultLabel(toolName, spec, hasSpec, renderer, payload),
 		Renderer:   renderer,
@@ -1174,22 +1176,17 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	return contractSafeActivityPresentationForTool(toolName, activity), nil
 }
 
-func activityRendererForPayload(renderer fltools.ActivityRenderer, payload map[string]any) fltools.ActivityRenderer {
-	if renderer != fltools.ActivityRendererSubAgent {
-		return renderer
-	}
-	record := payload
-	if items := toAnySlice(payload["items"]); len(items) > 0 {
-		if item, ok := items[0].(map[string]any); ok {
-			record = item
+func subAgentOperationResultActivitySource(input, result map[string]any) map[string]any {
+	out := cloneAnyMap(result)
+	for _, key := range []string{"action", "task_name", "task_description", "target", "thread_id", "ids"} {
+		if _, exists := out[key]; exists {
+			continue
+		}
+		if value, exists := input[key]; exists {
+			out[key] = value
 		}
 	}
-	if strings.TrimSpace(anyToString(record["thread_id"])) == "" ||
-		strings.TrimSpace(anyToString(record["parent_thread_id"])) == "" ||
-		strings.TrimSpace(anyToString(record["status"])) == "" {
-		return fltools.ActivityRendererStructured
-	}
-	return renderer
+	return out
 }
 
 func isNonInformativeToolActivityText(value string) bool {
@@ -1571,6 +1568,8 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 		}
 	case fltools.ActivityRendererCompletion:
 		return fltools.CompletionActivityPayload{Status: status, Summary: summary}
+	case fltools.ActivityRendererSubAgentOperation:
+		return subAgentOperationActivityPayload(payload, status, activityError())
 	case fltools.ActivityRendererSubAgent:
 		record := payload
 		if items := toAnySlice(payload["items"]); len(items) > 0 {
@@ -1597,6 +1596,119 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 			Rows: structuredActivityRowsFromValue(payload["rows"]),
 		}
 	}
+}
+
+func subAgentOperationActivityPayload(payload map[string]any, status string, activityError *fltools.ActivityError) fltools.SubAgentOperationActivityPayload {
+	action := fltools.SubAgentOperationAction(strings.TrimSpace(anyToString(payload["action"])))
+	requestedIDs := subAgentOperationRequestedIDs(payload)
+	targets := subAgentOperationTargets(payload, requestedIDs)
+	requestedCount := readIntField(payload, "requested_count")
+	if requestedCount == 0 && len(requestedIDs) > 0 {
+		requestedCount = len(requestedIDs)
+	}
+	if requestedCount == 0 && len(targets) > 0 {
+		requestedCount = len(targets)
+	}
+	completedCount := readIntField(payload, "completed_count")
+	if completedCount == 0 {
+		if counts, ok := payload["counts"].(map[string]any); ok {
+			completedCount = readIntField(counts, "completed")
+		}
+	}
+	if completedCount == 0 {
+		for _, target := range targets {
+			if strings.TrimSpace(target.Status) == subagentStatusCompleted {
+				completedCount++
+			}
+		}
+	}
+	return fltools.SubAgentOperationActivityPayload{
+		Action:         action,
+		Status:         strings.TrimSpace(status),
+		Targets:        targets,
+		RequestedCount: requestedCount,
+		CompletedCount: completedCount,
+		MissingCount:   readIntField(payload, "missing_count"),
+		TimedOut:       readBoolField(payload, "timed_out"),
+		Error:          activityError,
+	}
+}
+
+func subAgentOperationRequestedIDs(payload map[string]any) []string {
+	for _, key := range []string{"ids", "target_ids", "requested_ids", "affected_ids"} {
+		if ids := normalizeSubagentThreadIDs(payload[key]); len(ids) > 0 {
+			return ids
+		}
+	}
+	if id := firstNonEmptyString(anyToString(payload["thread_id"]), anyToString(payload["target"])); id != "" {
+		return []string{id}
+	}
+	return nil
+}
+
+func subAgentOperationTargets(payload map[string]any, requestedIDs []string) []fltools.SubAgentOperationTarget {
+	values := toAnySlice(payload["targets"])
+	if len(values) == 0 {
+		values = toAnySlice(payload["items"])
+	}
+	fromRecords := make([]fltools.SubAgentOperationTarget, 0, len(values))
+	byThreadID := make(map[identity.ThreadID]fltools.SubAgentOperationTarget, len(values))
+	for _, value := range values {
+		record, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		target := fltools.SubAgentOperationTarget{
+			ThreadID:        identity.ThreadID(strings.TrimSpace(anyToString(record["thread_id"]))),
+			TaskName:        strings.TrimSpace(anyToString(record["task_name"])),
+			TaskDescription: strings.TrimSpace(anyToString(record["task_description"])),
+			Status:          strings.TrimSpace(anyToString(record["status"])),
+		}
+		if target.ThreadID == "" && target.TaskName == "" {
+			continue
+		}
+		fromRecords = append(fromRecords, target)
+		if target.ThreadID != "" {
+			byThreadID[target.ThreadID] = target
+		}
+	}
+	if len(requestedIDs) > 0 {
+		out := make([]fltools.SubAgentOperationTarget, 0, len(requestedIDs)+len(fromRecords))
+		seen := make(map[identity.ThreadID]struct{}, len(requestedIDs)+len(fromRecords))
+		for _, rawID := range requestedIDs {
+			threadID := identity.ThreadID(strings.TrimSpace(rawID))
+			if threadID == "" {
+				continue
+			}
+			target, ok := byThreadID[threadID]
+			if !ok {
+				target = fltools.SubAgentOperationTarget{ThreadID: threadID}
+			}
+			out = append(out, target)
+			seen[threadID] = struct{}{}
+		}
+		for _, target := range fromRecords {
+			if target.ThreadID != "" {
+				if _, ok := seen[target.ThreadID]; ok {
+					continue
+				}
+			}
+			out = append(out, target)
+		}
+		return out
+	}
+	if len(fromRecords) > 0 {
+		return fromRecords
+	}
+	taskName := strings.TrimSpace(anyToString(payload["task_name"]))
+	if taskName == "" {
+		return nil
+	}
+	return []fltools.SubAgentOperationTarget{{
+		TaskName:        taskName,
+		TaskDescription: strings.TrimSpace(anyToString(payload["task_description"])),
+		Status:          strings.TrimSpace(anyToString(payload["status"])),
+	}}
 }
 
 func structuredActivityRowsForTool(toolName string, payload map[string]any) []map[string]any {

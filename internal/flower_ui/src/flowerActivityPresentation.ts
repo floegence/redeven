@@ -527,10 +527,6 @@ function metaForTerminalItem(item: FlowerActivityItem): string {
     .join(' · ');
 }
 
-function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
-  return trimString(item.tool_name) === 'subagents';
-}
-
 function detailLabel(key: string): string {
   return DETAIL_LABELS[key] ?? key;
 }
@@ -654,7 +650,7 @@ function subagentStatusLabel(status: string, copy?: FlowerActivityPresentationCo
 }
 
 function subagentItemRecords(payload: Readonly<Record<string, unknown>> | undefined): readonly Readonly<Record<string, unknown>>[] {
-  return asArray(payload?.items)
+  return asArray(payload?.targets)
     .map((entry) => asRecord(entry))
     .filter((record) => Object.keys(record).length > 0);
 }
@@ -727,9 +723,10 @@ function shouldShowSubagentStatus(status: string): boolean {
   }
 }
 
-function subagentActionItems(payload: Readonly<Record<string, unknown>>): readonly Readonly<Record<string, unknown>>[] {
+function subagentActionItems(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>>): readonly Readonly<Record<string, unknown>>[] {
   const nested = subagentItemRecords(payload);
-  return nested.length > 0 ? nested : [payload];
+  if (nested.length > 0) return nested;
+  return item.renderer === 'subagent' ? [payload] : [];
 }
 
 function subagentDetailItemFromRecord(
@@ -742,9 +739,11 @@ function subagentDetailItemFromRecord(
   const normalizedStatus = normalizedSubagentStatus(rawStatus);
   const status = subagentDisplayStatus(rawStatus, copy);
   const threadID = subagentThreadID(record) || subagentThreadID(payload);
-  const name = subagentNameFromRecord(record);
+  const name = subagentNameFromRecord(record) || (threadID ? subagentsCopy(copy).activity.labels.subagent : '');
   const description = subagentDescriptionFromRecord(record, payload);
-  const agentType = payloadValue(record, 'agent_type') || payloadValue(payload, 'agent_type');
+  const agentType = item.renderer === 'subagent'
+    ? payloadValue(record, 'agent_type', 'host_profile_ref') || payloadValue(payload, 'agent_type', 'host_profile_ref')
+    : '';
   if (!name) return null;
   return {
     name,
@@ -752,7 +751,7 @@ function subagentDetailItemFromRecord(
     agent_type: agentType,
     raw_status: normalizedStatus,
     status,
-    show_status: shouldShowSubagentStatus(rawStatus),
+    show_status: item.renderer === 'subagent_operation' ? Boolean(status) : shouldShowSubagentStatus(rawStatus),
     ...(optionalNumericValue(record.started_at_ms) ? { started_at_ms: optionalNumericValue(record.started_at_ms) } : {}),
     ...(optionalNumericValue(record.created_at_ms) ? { created_at_ms: optionalNumericValue(record.created_at_ms) } : {}),
     ...(optionalNumericValue(record.updated_at_ms) ? { updated_at_ms: optionalNumericValue(record.updated_at_ms) } : {}),
@@ -776,30 +775,6 @@ function subagentSummaryRecord(summary: FlowerSubagentSummary): Readonly<Record<
   };
 }
 
-function subagentSummaryMatchesItem(summary: FlowerSubagentSummary, item: FlowerActivityItem): boolean {
-  const payload = item.payload ?? {};
-  const threadID = payloadValue(payload, 'thread_id');
-  if (threadID && threadID === summary.thread_id) return true;
-  const taskName = payloadValue(payload, 'task_name');
-  if (taskName && taskName === summary.task_name) return true;
-  const label = trimString(item.label);
-  if (label && label !== trimString(item.tool_name) && label !== trimString(item.kind)) {
-    return label === summary.task_name;
-  }
-  return false;
-}
-
-function subagentSummaryFallbacks(item: FlowerActivityItem, summaries: readonly FlowerSubagentSummary[]): readonly FlowerSubagentSummary[] {
-  const matched = summaries.filter((summary) => subagentSummaryMatchesItem(summary, item));
-  if (matched.length > 0) return matched;
-  const label = trimString(item.label);
-  const genericLabel = !label
-    || label === trimString(item.tool_name)
-    || label === trimString(item.kind)
-    || label.toLowerCase() === 'subagents';
-  return genericLabel ? summaries : [];
-}
-
 function uniqueSubagentDetailItems(items: readonly FlowerActivitySubagentDetailItem[]): readonly FlowerActivitySubagentDetailItem[] {
   const seen = new Set<string>();
   const out: FlowerActivitySubagentDetailItem[] = [];
@@ -817,57 +792,84 @@ function subagentsDetailItemsFromPayload(
   payload: Readonly<Record<string, unknown>>,
   copy?: FlowerActivityPresentationCopy,
 ): readonly FlowerActivitySubagentDetailItem[] {
+  const summariesByThreadID = new Map(
+    (copy?.subagentSummaries ?? []).map((summary) => [trimString(summary.thread_id), summary] as const),
+  );
   const payloadItems = uniqueSubagentDetailItems(
-    subagentActionItems(payload)
-      .map((record) => subagentDetailItemFromRecord(record, item, payload, copy))
+    subagentActionItems(item, payload)
+      .map((record) => {
+        const summary = summariesByThreadID.get(subagentThreadID(record));
+        const resolved = summary ? { ...subagentSummaryRecord(summary), ...record } : record;
+        return subagentDetailItemFromRecord(resolved, item, payload, copy);
+      })
       .filter((entry): entry is FlowerActivitySubagentDetailItem => entry !== null),
   );
-  if (payloadItems.length > 0) return payloadItems;
-  return uniqueSubagentDetailItems(
-    subagentSummaryFallbacks(item, copy?.subagentSummaries ?? [])
-      .map((summary) => subagentDetailItemFromRecord(subagentSummaryRecord(summary), item, payload, copy))
-      .filter((entry): entry is FlowerActivitySubagentDetailItem => entry !== null),
-  );
+  return payloadItems;
 }
 
 function subagentNeedsAttention(items: readonly FlowerActivitySubagentDetailItem[]): boolean {
   return items.some((entry) => entry.show_status);
 }
 
-function subagentActionTitle(action: string, items: readonly FlowerActivitySubagentDetailItem[], item: FlowerActivityItem): string {
-  if (item.status === 'error' || items.some((entry) => entry.raw_status === 'failed')) return 'Subagent failed';
-  if (items.some((entry) => entry.raw_status === 'timed_out')) return 'Subagent timed out';
-  if (items.some((entry) => entry.raw_status === 'waiting_input')) return 'Subagent needs input';
-  const count = items.length;
-  const plural = count !== 1;
-  switch (trimString(action)) {
-    case 'spawn':
-      return plural ? 'Started subagents' : 'Started subagent';
-    case 'wait':
-      return 'Waiting';
-    case 'send_input':
-      return plural ? 'Messaged subagents' : 'Messaged subagent';
-    case 'close':
-    case 'close_all':
-      return plural ? 'Closed subagents' : 'Closed subagent';
-    case 'list':
-    case 'inspect':
-      return 'Subagents';
-    default:
-      return 'Subagents';
-  }
+function subagentPayloadCount(payload: Readonly<Record<string, unknown>>, key: string): number {
+  const value = optionalNumericValue(payload[key]);
+  return value === undefined ? 0 : Math.max(0, Math.trunc(value));
 }
 
-function subagentTaskPreview(items: readonly FlowerActivitySubagentDetailItem[]): string {
+function subagentActionTitle(
+  action: string,
+  items: readonly FlowerActivitySubagentDetailItem[],
+  item: FlowerActivityItem,
+  payload: Readonly<Record<string, unknown>>,
+  copy?: FlowerActivityPresentationCopy,
+): string {
+  const activityCopy = subagentsCopy(copy).activity;
+  const normalizedAction = trimString(action);
+  const requestedCount = Math.max(subagentPayloadCount(payload, 'requested_count'), items.length);
+  const completedCount = Math.max(
+    subagentPayloadCount(payload, 'completed_count'),
+    items.filter((entry) => entry.raw_status === 'completed').length,
+  );
+  const missingCount = subagentPayloadCount(payload, 'missing_count');
+  const countText = String(requestedCount || items.length);
+  const isActive = item.status === 'pending' || item.status === 'running' || item.status === 'waiting';
+  const timedOut = boolValue(payload.timed_out) || items.some((entry) => entry.raw_status === 'timed_out');
+  const actionTitle = activityCopy.actions[normalizedAction as keyof typeof activityCopy.actions];
+  const statusTitle = (status: string, fallback: string): string => (
+    actionTitle && normalizedAction !== 'unknown' ? `${actionTitle} · ${status}` : fallback
+  );
+  if (item.status === 'error') return statusTitle(subagentsCopy(copy).statusLabels.failed, activityCopy.titles.failed);
+  if (items.some((entry) => entry.raw_status === 'waiting_input')) {
+    return statusTitle(subagentsCopy(copy).statusLabels.waiting_input, activityCopy.titles.needsInput);
+  }
+  if (normalizedAction === 'spawn') return item.status === 'success' ? activityCopy.titles.started : activityCopy.titles.starting;
+  if (normalizedAction === 'wait') {
+    if (requestedCount === 0) return timedOut ? activityCopy.titles.timedOut : activityCopy.actions.wait;
+    if (timedOut) return activityCopy.titles.waitTimedOut(String(completedCount), countText);
+    if (isActive) return activityCopy.titles.waiting(countText);
+    if (requestedCount > 0 && completedCount === requestedCount && missingCount === 0) {
+      return activityCopy.titles.completed(countText);
+    }
+    return activityCopy.titles.waitTimedOut(String(completedCount), countText);
+  }
+  if (timedOut) return statusTitle(subagentsCopy(copy).statusLabels.timed_out, activityCopy.titles.timedOut);
+  if (!actionTitle || normalizedAction === 'unknown') return activityCopy.titles.operation;
+  return `${actionTitle} · ${isActive ? subagentsCopy(copy).statusLabels.running : subagentsCopy(copy).statusLabels.completed}`;
+}
+
+function subagentTaskPreview(items: readonly FlowerActivitySubagentDetailItem[], copy?: FlowerActivityPresentationCopy): string {
   if (items.length === 0) return '';
-  if (items.length > 1) return `${items.length} subagents`;
+  if (items.length > 1) return subagentsCopy(copy).activity.agentsCount(String(items.length));
   const item = items[0];
   return item.description;
 }
 
 function subagentMetaText(items: readonly FlowerActivitySubagentDetailItem[]): string {
   if (items.length === 0) return '';
-  if (items.length > 1) return `${items.length} subagents`;
+  if (items.length > 1) {
+    const names = items.map((item) => item.name).filter(Boolean);
+    return [...names.slice(0, 2), ...(names.length > 2 ? [`+${names.length - 2}`] : [])].join(' · ');
+  }
   const item = items[0];
   return [item.name, item.description].filter(Boolean).join(' · ');
 }
@@ -888,7 +890,7 @@ function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<
   return {
     action,
     status: subagentNeedsAttention(items) ? firstStatus : '',
-    task_preview: subagentTaskPreview(items),
+    task_preview: subagentTaskPreview(items, copy),
     elapsed_mode: subagentsElapsedMode(action, items),
     items,
   };
@@ -897,7 +899,9 @@ function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<
 function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const detail = subagentsDetailFromPayload(item, payload, copy);
-  const titleText = subagentActionTitle(detail.action, detail.items, item);
+  const titleText = item.renderer === 'subagent'
+    ? subagentsCopy(copy).typeLabels.unknown
+    : subagentActionTitle(detail.action, detail.items, item, payload, copy);
   const title: FlowerActivityTitle = { kind: 'plain', text: titleText };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const errorBlock = errorDetailBlockForItem(item, payload);
@@ -1450,10 +1454,11 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   todos: (item) => presentationForTodos(item),
   question: (item) => presentationForQuestion(item),
   completion: (item) => presentationForCompletion(item),
+  subagent: (item, context) => presentationForSubagents(item, context.copy),
+  subagent_operation: (item, context) => presentationForSubagents(item, context.copy),
 };
 
 export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   const renderer = rendererForItem(item);
-  if (isSubagentsActivityItem(item)) return presentationForSubagents(item, copy);
   return FLOWER_ACTIVITY_RENDERERS[renderer](item, { fileActions, copy });
 }

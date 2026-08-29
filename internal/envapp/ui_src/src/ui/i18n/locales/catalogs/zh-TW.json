@@ -1059,16 +1059,18 @@
           "inspect": "檢視子代理",
           "close": "關閉子代理",
           "closeAll": "關閉子代理",
-          "unknown": "子代理"
+          "unknown": "Subagent 操作"
         },
-        "titleVerbs": {
-          "spawn": "啟動",
-          "sendInput": "引導",
-          "wait": "等待",
-          "list": "列出",
-          "inspect": "檢視",
-          "close": "關閉",
-          "closeAll": "關閉"
+        "titles": {
+          "operation": "Subagent 操作",
+          "failed": "Subagent 操作失敗",
+          "timedOut": "Subagent 已逾時",
+          "needsInput": "Subagent 需要輸入",
+          "starting": "正在啟動 Subagent",
+          "started": "已啟動 Subagent",
+          "waiting": "正在等待 {count} 個 Subagent",
+          "completed": "{count} 個 Subagent 已完成",
+          "waitTimedOut": "等待逾時 · 已完成 {completed}/{count}"
         },
         "labels": {
           "approval": "核准",
@@ -4045,16 +4047,18 @@
           "inspect": "查看子代理",
           "close": "關閉子代理",
           "closeAll": "關閉子代理",
-          "unknown": "子代理"
+          "unknown": "Subagent 操作"
         },
-        "titleVerbs": {
-          "spawn": "啟動",
-          "sendInput": "引導",
-          "wait": "等待",
-          "list": "列出",
-          "inspect": "查看",
-          "close": "關閉",
-          "closeAll": "關閉"
+        "titles": {
+          "operation": "Subagent 操作",
+          "failed": "Subagent 操作失敗",
+          "timedOut": "Subagent 已逾時",
+          "needsInput": "Subagent 需要輸入",
+          "starting": "正在啟動 Subagent",
+          "started": "已啟動 Subagent",
+          "waiting": "正在等待 {count} 個 Subagent",
+          "completed": "{count} 個 Subagent 已完成",
+          "waitTimedOut": "等待逾時 · 已完成 {completed}/{count}"
         },
         "labels": {
           "approval": "核准",

@@ -73,13 +73,14 @@ function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): Flower
 }
 
 describe('presentFlowerActivityItem', () => {
-  it('uses the thread subagent summary when the activity payload has no detail', () => {
+  it('joins a Subagent operation target to the exact thread summary', () => {
     const presentation = presentFlowerActivityItem(item({
       item_id: 'subagent:review-api',
       tool_name: 'subagents',
-      renderer: 'structured',
+      renderer: 'subagent_operation',
+      status: 'running',
       label: 'Review API boundary',
-      payload: {},
+      payload: { action: 'wait', targets: [{ thread_id: 'child-thread-1' }], requested_count: 1 },
     }), undefined, {
       subagentSummaries: [subagentSummary()],
     });
@@ -102,9 +103,9 @@ describe('presentFlowerActivityItem', () => {
   it('does not use unrelated thread subagent summaries for an activity item', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'subagents',
-      renderer: 'structured',
+      renderer: 'subagent_operation',
       label: 'Unrelated task',
-      payload: {},
+      payload: { action: 'list', targets: [] },
     }), undefined, {
       subagentSummaries: [subagentSummary()],
     });
@@ -432,7 +433,7 @@ describe('presentFlowerActivityItem', () => {
 
   it('routes every terminal tool through the semantic terminal presenter', () => {
     const presentation = presentFlowerActivityItem(item({
-      renderer: 'structured',
+      renderer: 'terminal',
       label: 'Resolve workspace status',
       tool_name: 'terminal.exec',
     }));
@@ -443,24 +444,18 @@ describe('presentFlowerActivityItem', () => {
   it('renders subagent tool activity as delegation instead of raw structured payload', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'subagents',
-      renderer: 'structured',
+      renderer: 'subagent_operation',
       label: 'subagents',
       payload: {
         action: 'spawn',
-        status: 'ok',
-        task_name: 'Review API boundary',
-        task_description: 'Review the API boundary and identify contract risks.',
-        agent_type: 'reviewer',
-        context_mode: 'mission_only',
-        items: [{
+        status: 'success',
+        targets: [{
           thread_id: 'child-thread-1',
           task_name: 'Review API boundary',
           task_description: 'Review the API boundary and identify contract risks.',
-          agent_type: 'reviewer',
           status: 'running',
-          last_message: 'Reading contracts',
-          context_mode: 'mission_only',
         }],
+        requested_count: 1,
       },
     }));
 
@@ -476,9 +471,9 @@ describe('presentFlowerActivityItem', () => {
         items: [{
           name: 'Review API boundary',
           description: 'Review the API boundary and identify contract risks.',
-          agent_type: 'reviewer',
+          agent_type: '',
           raw_status: 'running',
-          show_status: false,
+          show_status: true,
           open_messages: {
             thread_id: 'child-thread-1',
           },
@@ -489,11 +484,64 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Reading contracts');
   });
 
+  it.each([
+    ['spawn', 'Starting subagent', 'Started subagent', 'Spawn subagent · Failed'],
+    ['wait', 'Waiting for 2 subagents', '2 subagents completed', 'Wait for subagents · Failed'],
+    ['list', 'List subagents · Running', 'List subagents · Completed', 'List subagents · Failed'],
+    ['inspect', 'Inspect subagents · Running', 'Inspect subagents · Completed', 'Inspect subagents · Failed'],
+    ['send_input', 'Steer subagent · Running', 'Steer subagent · Completed', 'Steer subagent · Failed'],
+    ['close', 'Close subagent · Running', 'Close subagent · Completed', 'Close subagent · Failed'],
+    ['close_all', 'Close subagents · Running', 'Close subagents · Completed', 'Close subagents · Failed'],
+  ] as const)('formats %s titles from action and execution state', (action, runningTitle, successTitle, failedTitle) => {
+    const targets = [
+      { task_name: 'One', status: action === 'wait' ? 'running' : 'completed' },
+      { task_name: 'Two', status: action === 'wait' ? 'running' : 'completed' },
+    ];
+    const running = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      status: 'running',
+      payload: { action, targets, requested_count: 2 },
+    }));
+    const success = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      status: 'success',
+      payload: {
+        action,
+        targets: targets.map((target) => ({ ...target, status: 'completed' })),
+        requested_count: 2,
+        completed_count: 2,
+      },
+    }));
+    const failed = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      status: 'error',
+      payload: { action, error: { code: 'failed', message: 'failed' } },
+    }));
+
+    expect(running.label).toBe(runningTitle);
+    expect(success.label).toBe(successTitle);
+    expect(failed.label).toBe(failedTitle);
+  });
+
+  it('uses a neutral title for an unknown Subagent operation without guessing from its label', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      label: 'Wait for reviewer',
+      payload: { action: 'unknown_action' },
+    }));
+
+    expect(presentation.label).toBe('Subagent operation');
+  });
+
   it('renders subagent timeline activity from visible payload routing ids', () => {
     const presentation = presentFlowerActivityItem(item({
       item_id: 'subagent:review-api',
       tool_name: 'subagents',
-      renderer: 'structured',
+      renderer: 'subagent',
       label: 'Review API boundary',
       payload: {
         thread_id: 'child-thread-1',
@@ -505,7 +553,7 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('Subagents');
+    expect(presentation.label).toBe('Subagent');
     expect(presentation.meta).toBe('Review API boundary · Review the API boundary and identify contract risks.');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'subagents',
@@ -528,38 +576,18 @@ describe('presentFlowerActivityItem', () => {
   it('renders subagent wait details as concise task rows without handoff diagnostics', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'subagents',
-      renderer: 'structured',
+      renderer: 'subagent_operation',
       label: 'subagents',
       payload: {
         action: 'wait',
-        status: 'ok',
-        items: [{
+        status: 'success',
+        targets: [{
           task_name: 'Review API boundary',
           task_description: 'Review the API boundary and identify contract risks.',
-          agent_type: 'reviewer',
-          context_mode: 'mission_only',
           status: 'completed',
         }],
-        final_handoff_report: {
-          summary: 'Delegated subagents finished wait: 1 completed.',
-          reports: [{
-            thread_id: 'child-thread-1',
-            task_name: 'Review API boundary',
-            agent_type: 'reviewer',
-            status: 'completed',
-            handoff: 'Reviewed API boundary. No blocking risks remain.',
-          }],
-        },
-        progress_summary: {
-          summary: 'Should not be used for completed waits.',
-          progress: [{
-            thread_id: 'child-thread-1',
-            task_name: 'Review API boundary',
-            agent_type: 'reviewer',
-            status: 'running',
-            state: 'reading tests',
-          }],
-        },
+        requested_count: 1,
+        completed_count: 1,
       },
     }));
 
@@ -570,9 +598,9 @@ describe('presentFlowerActivityItem', () => {
       expect.objectContaining({
         name: 'Review API boundary',
         description: 'Review the API boundary and identify contract risks.',
-        agent_type: 'reviewer',
+        agent_type: '',
         raw_status: 'completed',
-        show_status: false,
+        show_status: true,
       }),
     ]);
     expect(JSON.stringify(block)).not.toContain('child-thread-1');
@@ -585,11 +613,11 @@ describe('presentFlowerActivityItem', () => {
   it('does not render unknown subagent diagnostics or control flags', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'subagents',
-      renderer: 'structured',
+      renderer: 'subagent_operation',
       label: 'subagents',
       payload: {
         action: 'inspect',
-        items: [{
+        targets: [{
           agent_type: 'custom-profile',
           status: 'paused_elsewhere',
           accepted: true,
@@ -599,11 +627,83 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.meta).toBe('');
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Subagent');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('custom-profile');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('paused_elsewhere');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('accepted');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('can_close');
+  });
+
+  it('names every target in a three-Subagent wait without exposing ids', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      status: 'running',
+      payload: {
+        action: 'wait',
+        targets: [
+          { thread_id: 'thread-big-tech' },
+          { thread_id: 'thread-models' },
+          { thread_id: 'thread-policy' },
+        ],
+        requested_count: 3,
+      },
+    }), undefined, {
+      subagentSummaries: [
+        subagentSummary({ thread_id: 'thread-big-tech', task_name: 'Big Tech AI News' }),
+        subagentSummary({ thread_id: 'thread-models', task_name: 'AI Models and Products' }),
+        subagentSummary({ thread_id: 'thread-policy', task_name: 'AI Policy and Business' }),
+      ],
+    });
+
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Waiting for 3 subagents' });
+    expect(presentation.meta).toBe('Big Tech AI News · AI Models and Products · +1');
+    const block = presentation.detailBlocks[0];
+    expect(block?.kind).toBe('subagents');
+    if (!block || block.kind !== 'subagents') return;
+    expect(block.subagents.items.map((entry) => entry.name)).toEqual([
+      'Big Tech AI News',
+      'AI Models and Products',
+      'AI Policy and Business',
+    ]);
+  });
+
+  it('uses terminal wait outcomes instead of the generic Subagents title', () => {
+    const completed = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      payload: {
+        action: 'wait',
+        targets: [{ task_name: 'One', status: 'completed' }, { task_name: 'Two', status: 'completed' }],
+        requested_count: 2,
+        completed_count: 2,
+      },
+    }));
+    expect(completed.label).toBe('2 subagents completed');
+
+    const timedOut = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      payload: {
+        action: 'wait',
+        targets: [{ task_name: 'One', status: 'completed' }, { task_name: 'Two', status: 'running' }],
+        requested_count: 2,
+        completed_count: 1,
+        timed_out: true,
+      },
+    }));
+    expect(timedOut.label).toBe('Wait timed out · 1/2 completed');
+
+    const partial = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'subagent_operation',
+      payload: {
+        action: 'wait',
+        targets: [{ task_name: 'One', status: 'completed' }, { task_name: 'Two', status: 'running' }],
+        requested_count: 2,
+        completed_count: 1,
+      },
+    }));
+    expect(partial.label).toBe('Wait timed out · 1/2 completed');
   });
 
   it('does not render unrelated nested result ids as delegation', () => {

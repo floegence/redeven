@@ -1059,16 +1059,18 @@
           "inspect": "Inspecter les sous-agents",
           "close": "Fermer le sous-agent",
           "closeAll": "Fermer les sous-agents",
-          "unknown": "Sous-agents"
+          "unknown": "Opération de sous-agent"
         },
-        "titleVerbs": {
-          "spawn": "Démarrer",
-          "sendInput": "Guider",
-          "wait": "Attendre",
-          "list": "Lister",
-          "inspect": "Inspecter",
-          "close": "Fermer",
-          "closeAll": "Fermer"
+        "titles": {
+          "operation": "Opération de sous-agent",
+          "failed": "Échec de l’opération de sous-agent",
+          "timedOut": "Délai du sous-agent dépassé",
+          "needsInput": "Le sous-agent attend une réponse",
+          "starting": "Démarrage du sous-agent",
+          "started": "Sous-agent démarré",
+          "waiting": "Attente de {count} sous-agents",
+          "completed": "{count} sous-agents terminés",
+          "waitTimedOut": "Délai d’attente dépassé · {completed}/{count} terminés"
         },
         "labels": {
           "approval": "approbation",
@@ -4045,16 +4047,18 @@
           "inspect": "Inspecter les sous-agents",
           "close": "Fermer le sous-agent",
           "closeAll": "Fermer les sous-agents",
-          "unknown": "Sous-agents"
+          "unknown": "Opération de sous-agent"
         },
-        "titleVerbs": {
-          "spawn": "Démarrer",
-          "sendInput": "Guider",
-          "wait": "Attendre",
-          "list": "Lister",
-          "inspect": "Inspecter",
-          "close": "Fermer",
-          "closeAll": "Fermer"
+        "titles": {
+          "operation": "Opération de sous-agent",
+          "failed": "Échec de l’opération de sous-agent",
+          "timedOut": "Délai du sous-agent dépassé",
+          "needsInput": "Le sous-agent attend une réponse",
+          "starting": "Démarrage du sous-agent",
+          "started": "Sous-agent démarré",
+          "waiting": "Attente de {count} sous-agents",
+          "completed": "{count} sous-agents terminés",
+          "waitTimedOut": "Délai d’attente dépassé · {completed}/{count} terminés"
         },
         "labels": {
           "approval": "approbation",

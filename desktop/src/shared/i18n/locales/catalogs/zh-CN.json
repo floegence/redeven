@@ -379,16 +379,18 @@
           "inspect": "查看子代理",
           "close": "关闭子代理",
           "closeAll": "关闭子代理",
-          "unknown": "子代理"
+          "unknown": "Subagent 操作"
         },
-        "titleVerbs": {
-          "spawn": "启动",
-          "sendInput": "引导",
-          "wait": "等待",
-          "list": "列出",
-          "inspect": "查看",
-          "close": "关闭",
-          "closeAll": "关闭"
+        "titles": {
+          "operation": "Subagent 操作",
+          "failed": "Subagent 操作失败",
+          "timedOut": "Subagent 已超时",
+          "needsInput": "Subagent 需要输入",
+          "starting": "正在启动 Subagent",
+          "started": "已启动 Subagent",
+          "waiting": "正在等待 {count} 个 Subagent",
+          "completed": "{count} 个 Subagent 已完成",
+          "waitTimedOut": "等待超时 · 已完成 {completed}/{count}"
         },
         "labels": {
           "approval": "审批",

@@ -1059,16 +1059,18 @@
           "inspect": "サブエージェントを確認",
           "close": "サブエージェントを閉じる",
           "closeAll": "サブエージェントを閉じる",
-          "unknown": "サブエージェント"
+          "unknown": "サブエージェント操作"
         },
-        "titleVerbs": {
-          "spawn": "起動",
-          "sendInput": "誘導",
-          "wait": "待機",
-          "list": "一覧",
-          "inspect": "確認",
-          "close": "閉じる",
-          "closeAll": "閉じる"
+        "titles": {
+          "operation": "サブエージェント操作",
+          "failed": "サブエージェント操作に失敗しました",
+          "timedOut": "サブエージェントがタイムアウトしました",
+          "needsInput": "サブエージェントは入力待ちです",
+          "starting": "サブエージェントを起動中",
+          "started": "サブエージェントを起動しました",
+          "waiting": "{count} 個のサブエージェントを待機中",
+          "completed": "{count} 個のサブエージェントが完了しました",
+          "waitTimedOut": "待機がタイムアウトしました · {completed}/{count} 完了"
         },
         "labels": {
           "approval": "承認",
@@ -4045,16 +4047,18 @@
           "inspect": "サブエージェントを確認",
           "close": "サブエージェントを閉じる",
           "closeAll": "サブエージェントを閉じる",
-          "unknown": "サブエージェント"
+          "unknown": "サブエージェント操作"
         },
-        "titleVerbs": {
-          "spawn": "起動",
-          "sendInput": "誘導",
-          "wait": "待機",
-          "list": "一覧",
-          "inspect": "確認",
-          "close": "閉じる",
-          "closeAll": "閉じる"
+        "titles": {
+          "operation": "サブエージェント操作",
+          "failed": "サブエージェント操作に失敗しました",
+          "timedOut": "サブエージェントがタイムアウトしました",
+          "needsInput": "サブエージェントは入力待ちです",
+          "starting": "サブエージェントを起動中",
+          "started": "サブエージェントを起動しました",
+          "waiting": "{count} 個のサブエージェントを待機中",
+          "completed": "{count} 個のサブエージェントが完了しました",
+          "waitTimedOut": "待機がタイムアウトしました · {completed}/{count} 完了"
         },
         "labels": {
           "approval": "承認",

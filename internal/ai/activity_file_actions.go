@@ -543,7 +543,7 @@ func sanitizeSubagentsActivityPayloadValue(payload map[string]any) (map[string]a
 			continue
 		}
 		switch key {
-		case "items":
+		case "items", "targets":
 			if items := sanitizeSubagentsActivityItems(value); len(items) > 0 {
 				out[key] = items
 			}
@@ -741,9 +741,9 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
 	return stringSet(
 		"action", "status", "thread_id", "parent_thread_id", "parent_turn_id",
-		"task_name", "task_description", "agent_type", "items", "counts",
+		"task_name", "task_description", "agent_type", "target", "ids", "target_ids", "requested_ids", "affected_ids", "items", "targets", "counts",
 		"started_at_ms", "created_at_ms", "updated_at_ms", "closed",
-		"agent_count", "requested_count", "found_count",
+		"agent_count", "requested_count", "completed_count", "found_count",
 		"missing_count", "closed_count", "stopped_count", "accepted", "running_only",
 		"total", "timed_out", "truncated", "omitted_count", "error",
 	)

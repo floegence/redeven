@@ -126,7 +126,6 @@ import { flowerActivityIdentity } from './flowerActivityIdentity';
 import {
   createFlowerActivityDisclosureController,
   createFlowerActivityDisclosureMotion,
-  flowerActivityDisclosureIntent,
 } from './activityDisclosure';
 import {
   createTerminalOutputViewportController,
@@ -1292,6 +1291,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestAnimationFrame: requestTranscriptAnimationFrame,
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
   });
+  let transcriptViewportRef: HTMLDivElement | undefined;
+  let activityViewportAnchorRevision = 0;
   const subagentDetailScroll = createFlowerScrollTailController({
     reducedMotionPreferred,
     requestAnimationFrame: requestTranscriptAnimationFrame,
@@ -5121,19 +5122,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     transcriptScroll.onScroll();
   };
   const updateTranscriptFollowFromWheel = (event: WheelEvent) => {
+    activityViewportAnchorRevision += 1;
     if (selectedThreadTailPreparing() && event.deltaY < 0) {
       cancelSelectedThreadTailReveal();
     }
     transcriptScroll.onWheel(event);
   };
   const updateTranscriptFollowFromTouch = () => {
+    activityViewportAnchorRevision += 1;
     if (selectedThreadTailPreparing()) {
       cancelSelectedThreadTailReveal();
     }
   };
+  const cancelActivityViewportAnchorFromPointer = () => {
+    activityViewportAnchorRevision += 1;
+  };
   const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => transcriptScroll.scrollToBottom(options);
   const measureTranscriptNearBottomAfterLayout = () => transcriptScroll.measureAfterLayout();
-  const scheduleTranscriptTailScroll = () => transcriptScroll.scheduleTailScroll();
   onCleanup(() => {
     cancelDeferredThreadSelection();
     cancelThreadSelectionTransaction();
@@ -7797,7 +7802,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>>;
     canonicalStatus: Accessor<FlowerActivityStatus>;
     approvalState: Accessor<FlowerActivityItem['approval_state']>;
-    onSettledPresentation: () => void;
   }>;
   type FlowerNonTerminalDetailBlock = Exclude<FlowerActivityDetailBlock, { kind: 'terminal_output' }>;
 
@@ -7807,14 +7811,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const [commandCopied, setCommandCopied] = createSignal(false);
     const [liveLastSeq, setLiveLastSeq] = createSignal(terminal().last_seq);
     const [liveError, setLiveError] = createSignal('');
-    const outputViewport = createTerminalOutputViewportController({
-      onPresentationFrame: () => {
-        const status = detailProps.canonicalStatus();
-        if (status === 'success' || status === 'canceled') {
-          detailProps.onSettledPresentation();
-        }
-      },
-    });
+    const outputViewport = createTerminalOutputViewportController();
     let commandCopyResetTimer: number | undefined;
     const command = () => trimString(terminal().command);
     const commandPanelID = () => `flower-terminal-command-${flowerActivityIdentity({
@@ -8511,14 +8508,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return new Map<string, FlowerActivityDetailBlock>(blocks.map((block) => [`${disclosureKey()}:${block.kind}`, block]));
     });
     const disclosureControl = createFlowerActivityDisclosureController({
-      intent: () => flowerActivityDisclosureIntent(item()),
       manualOpen: () => openActivityRuns()[disclosureKey()],
       onManualOpenChange: (open) => {
         const key = disclosureKey();
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
       },
-      reducedMotion: reducedMotionPreferred,
-      settle: { anchor: () => terminalDisclosure() ? 'presentation' : 'intent' },
     });
     const open = disclosureControl.open;
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
@@ -8530,12 +8524,47 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const expandable = createMemo(() => hasDetails() && !isReadActivity());
     let toggleButtonRef: HTMLButtonElement | undefined;
     let detailPanelRef: HTMLDivElement | undefined;
+    let anchoredTitleTop: number | undefined;
+    let anchorRevision = 0;
+    const beginActivityViewportAnchor = () => {
+      if (anchoredTitleTop !== undefined) return;
+      const viewport = transcriptViewportRef;
+      const title = toggleButtonRef;
+      if (!viewport || !title) return;
+      const viewportBounds = viewport.getBoundingClientRect();
+      const titleBounds = title.getBoundingClientRect();
+      if (titleBounds.bottom < viewportBounds.top || titleBounds.top > viewportBounds.bottom) return;
+      transcriptScroll.stopFollowing();
+      activityViewportAnchorRevision += 1;
+      anchorRevision = activityViewportAnchorRevision;
+      anchoredTitleTop = titleBounds.top;
+    };
+    const stabilizeActivityViewportAnchor = () => {
+      if (anchoredTitleTop === undefined || anchorRevision !== activityViewportAnchorRevision) {
+        anchoredTitleTop = undefined;
+        return;
+      }
+      const viewport = transcriptViewportRef;
+      const title = toggleButtonRef;
+      if (!viewport || !title) return;
+      const delta = title.getBoundingClientRect().top - anchoredTitleTop;
+      if (Math.abs(delta) > 0.01) viewport.scrollTop += delta;
+    };
+    const releaseActivityViewportAnchor = () => {
+      stabilizeActivityViewportAnchor();
+      anchoredTitleTop = undefined;
+    };
+    const toggleDisclosure = () => {
+      beginActivityViewportAnchor();
+      disclosureControl.toggle();
+    };
     const disclosure = createFlowerActivityDisclosureMotion(
       () => open() && expandable(),
       {
-        animateContentResize: true,
         reducedMotion: reducedMotionPreferred,
-        onLayoutFrame: scheduleTranscriptTailScroll,
+        onMotionStart: beginActivityViewportAnchor,
+        onLayoutFrame: stabilizeActivityViewportAnchor,
+        onMotionEnd: releaseActivityViewportAnchor,
         onBeforeClose: () => {
           if (detailPanelRef && detailPanelRef.contains(document.activeElement)) {
             toggleButtonRef?.focus();
@@ -8638,7 +8667,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               type="button"
               class="flower-activity-inline-button"
               aria-expanded={open()}
-              onClick={disclosureControl.toggle}
+              onClick={toggleDisclosure}
             >
               {activityRowContent()}
             </button>
@@ -8676,10 +8705,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             data-state={disclosure.state()}
             data-layout-motion={disclosure.layoutMotion()}
             style={{ height: disclosure.height() }}
-            onPointerDown={disclosureControl.retainOpen}
-            onFocusIn={disclosureControl.retainOpen}
-            onWheel={disclosureControl.retainOpen}
-            onTouchStart={disclosureControl.retainOpen}
           >
             <div class="flower-activity-inline-details-clip">
               <div
@@ -8720,7 +8745,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               block={value}
                               canonicalStatus={() => item().status}
                               approvalState={() => item().approval_state}
-                              onSettledPresentation={disclosureControl.markSettledPresentation}
                             />
                           )}
                         </Show>
@@ -10540,10 +10564,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       />
       <div class="flower-chat-main flower-chat-main">
         <div
-          ref={(node) => { transcriptScroll.bind(node); }}
+          ref={(node) => {
+            transcriptViewportRef = node;
+            transcriptScroll.bind(node);
+          }}
           class="flower-chat-transcript flower-chat-transcript"
           aria-hidden={companionCollapsed() ? 'true' : undefined}
           inert={companionCollapsed()}
+          onPointerDown={cancelActivityViewportAnchorFromPointer}
           data-flower-tail-preparing={selectedThreadTailPreparing() ? 'true' : undefined}
           aria-busy={selectedThreadTailPreparing() ? 'true' : undefined}
           onScroll={updateTranscriptNearBottom}

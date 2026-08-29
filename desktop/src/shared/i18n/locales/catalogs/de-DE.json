@@ -379,16 +379,18 @@
           "inspect": "Sub-Agenten prüfen",
           "close": "Sub-Agent schließen",
           "closeAll": "Sub-Agenten schließen",
-          "unknown": "Sub-Agenten"
+          "unknown": "Sub-Agent-Aktion"
         },
-        "titleVerbs": {
-          "spawn": "Starten",
-          "sendInput": "Steuern",
-          "wait": "Warten",
-          "list": "Auflisten",
-          "inspect": "Prüfen",
-          "close": "Schließen",
-          "closeAll": "Schließen"
+        "titles": {
+          "operation": "Sub-Agent-Aktion",
+          "failed": "Sub-Agent-Aktion fehlgeschlagen",
+          "timedOut": "Zeitüberschreitung beim Sub-Agenten",
+          "needsInput": "Sub-Agent benötigt eine Eingabe",
+          "starting": "Sub-Agent wird gestartet",
+          "started": "Sub-Agent gestartet",
+          "waiting": "Warte auf {count} Sub-Agenten",
+          "completed": "{count} Sub-Agenten abgeschlossen",
+          "waitTimedOut": "Wartezeit abgelaufen · {completed}/{count} abgeschlossen"
         },
         "labels": {
           "approval": "Genehmigung",

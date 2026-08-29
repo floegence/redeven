@@ -296,3 +296,56 @@ describe('mapFlowerActivityItem web fetch contract', () => {
     })).toThrow(message);
   });
 });
+
+describe('mapFlowerActivityItem Subagent operation contract', () => {
+  const activity = (payload: unknown) => ({
+    item_id: 'activity-subagents-wait',
+    tool_name: 'subagents',
+    kind: 'tool',
+    status: 'running',
+    severity: 'normal',
+    presentation: {
+      label: 'wait',
+      renderer: 'subagent_operation',
+      payload,
+    },
+  });
+
+  it('preserves the exact action, ordered targets, and outcome counts', () => {
+    const mapped = mapFlowerActivityItem(activity({
+      action: 'wait',
+      status: 'running',
+      targets: [
+        { thread_id: 'thread-one', task_name: 'One', status: 'completed' },
+        { thread_id: 'thread-two', task_name: 'Two', status: 'running' },
+      ],
+      requested_count: 2,
+      completed_count: 1,
+      missing_count: 0,
+      timed_out: false,
+    }));
+
+    expect(mapped?.renderer).toBe('subagent_operation');
+    expect(mapped?.payload).toEqual({
+      action: 'wait',
+      status: 'running',
+      targets: [
+        { thread_id: 'thread-one', task_name: 'One', status: 'completed' },
+        { thread_id: 'thread-two', task_name: 'Two', status: 'running' },
+      ],
+      requested_count: 2,
+      completed_count: 1,
+      missing_count: 0,
+      timed_out: false,
+    });
+  });
+
+  it('rejects unknown actions, duplicate targets, and legacy payload fields', () => {
+    expect(() => mapFlowerActivityItem(activity({ action: 'unknown' }))).toThrow('action is unsupported');
+    expect(() => mapFlowerActivityItem(activity({
+      action: 'wait',
+      targets: [{ thread_id: 'thread-one' }, { thread_id: 'thread-one' }],
+    }))).toThrow('thread_id is duplicated');
+    expect(() => mapFlowerActivityItem(activity({ action: 'wait', items: [] }))).toThrow('items is not part of the Subagent operation contract');
+  });
+});

@@ -164,8 +164,8 @@ describe('Flower activity running sheen', () => {
     expect(contentRule).toContain('box-sizing: border-box');
     expect(contentRule).toContain('max-height: min(42rem, 72vh)');
     expect(contentRule).toContain('overflow: auto');
-    expect(contentRule).toContain('content-visibility: auto');
-    expect(contentRule).toContain('contain-intrinsic-size: auto 12rem');
+    expect(contentRule).not.toContain('content-visibility');
+    expect(contentRule).not.toContain('contain-intrinsic-size');
     expect(contentRule).toContain('border-left: 1px solid');
     expect(contentRule).toContain('padding: 0.125rem 0 0.25rem 0.625rem');
     expect(terminalContentRule).toContain('border-left: 0');

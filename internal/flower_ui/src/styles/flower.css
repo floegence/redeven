@@ -5322,8 +5322,6 @@ html.dark .flower-component-shell {
   box-sizing: border-box;
   max-height: min(42rem, 72vh);
   overflow: auto;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 12rem;
   border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
   padding: 0.125rem 0 0.25rem 0.625rem;
 }

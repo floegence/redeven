@@ -6,15 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createFlowerActivityDisclosureController,
   createFlowerActivityDisclosureMotion,
-  FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS,
   FLOWER_ACTIVITY_CLOSE_DURATION_MS,
   FLOWER_ACTIVITY_OPEN_DURATION_MS,
   FLOWER_ACTIVITY_RESIZE_DURATION_MS,
-  FLOWER_ACTIVITY_SETTLE_HOLD_MS,
-  flowerActivityDisclosureIntent,
   type FlowerActivityDisclosureAnimation,
   type FlowerActivityDisclosureController,
-  type FlowerActivityDisclosureIntent,
   type FlowerActivityDisclosureMotion,
   type FlowerActivityDisclosureMotionPlatform,
   type FlowerActivityDisclosurePresentation,
@@ -23,32 +19,21 @@ import {
 type ControllerHarness = Readonly<{
   control: FlowerActivityDisclosureController;
   dispose: () => void;
-  setIntent: (intent: FlowerActivityDisclosureIntent) => void;
   setManualOpen: (open: boolean | undefined) => void;
-  setSettleAnchor: (anchor: 'intent' | 'presentation') => void;
 }>;
 
-function createControllerHarness(
-  initialIntent: FlowerActivityDisclosureIntent,
-  reducedMotion = false,
-  settleAnchor: 'intent' | 'presentation' = 'intent',
-): ControllerHarness {
-  const [intent, setIntent] = createSignal(initialIntent);
+function createControllerHarness(): ControllerHarness {
   const [manualOpen, setManualOpen] = createSignal<boolean | undefined>(undefined);
-  const [anchor, setSettleAnchor] = createSignal(settleAnchor);
   let dispose: () => void = () => undefined;
   let control!: FlowerActivityDisclosureController;
   createRoot((rootDispose) => {
     dispose = rootDispose;
     control = createFlowerActivityDisclosureController({
-      intent,
       manualOpen,
       onManualOpenChange: setManualOpen,
-      reducedMotion: () => reducedMotion,
-      settle: { anchor },
     });
   });
-  return { control, dispose, setIntent, setManualOpen, setSettleAnchor };
+  return { control, dispose, setManualOpen };
 }
 
 afterEach(() => {
@@ -57,21 +42,9 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('flowerActivityDisclosureIntent', () => {
-  it('separates routine active work from actionable attention states', () => {
-    expect(flowerActivityDisclosureIntent({ status: 'pending', needs_attention: true })).toBe('active');
-    expect(flowerActivityDisclosureIntent({ status: 'running', attention_reasons: ['running'] })).toBe('active');
-    expect(flowerActivityDisclosureIntent({ status: 'running', severity: 'blocking' })).toBe('attention');
-    expect(flowerActivityDisclosureIntent({ status: 'success', needs_attention: true })).toBe('attention');
-    expect(flowerActivityDisclosureIntent({ status: 'canceled' })).toBe('settled');
-  });
-});
-
 describe('createFlowerActivityDisclosureController', () => {
-  it.each(['active', 'attention'] as const)('keeps %s details closed until the user opens them', async (intent) => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness(intent);
-    await vi.advanceTimersByTimeAsync(5000);
+  it('keeps details closed until the user opens them', () => {
+    const harness = createControllerHarness();
     expect(harness.control.open()).toBe(false);
     harness.control.toggle();
     expect(harness.control.open()).toBe(true);
@@ -80,17 +53,18 @@ describe('createFlowerActivityDisclosureController', () => {
     harness.dispose();
   });
 
-  it('preserves a manual choice across later lifecycle transitions', async () => {
-    const harness = createControllerHarness('active');
+  it('uses the externally persisted manual choice as its only state', () => {
+    const harness = createControllerHarness();
     harness.control.toggle();
-    harness.setIntent('settled');
     expect(harness.control.open()).toBe(true);
+    harness.setManualOpen(false);
+    expect(harness.control.open()).toBe(false);
     harness.dispose();
   });
 
   it('does not schedule background timers for a closed activity row', () => {
     vi.useFakeTimers();
-    const harness = createControllerHarness('active');
+    const harness = createControllerHarness();
     expect(vi.getTimerCount()).toBe(0);
     harness.dispose();
   });
@@ -239,7 +213,6 @@ function createMotionHarness(initialOpen = false, initialReducedMotion = false):
   createRoot((rootDispose) => {
     dispose = rootDispose;
     motion = createFlowerActivityDisclosureMotion(open, {
-      animateContentResize: true,
       reducedMotion,
       platform: platform.platform,
     });
@@ -263,10 +236,8 @@ function createMotionHarness(initialOpen = false, initialReducedMotion = false):
 
 describe('createFlowerActivityDisclosureMotion', () => {
   it('uses the calm motion timing contract', () => {
-    expect(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS).toBe(400);
     expect(FLOWER_ACTIVITY_OPEN_DURATION_MS).toBe(360);
     expect(FLOWER_ACTIVITY_RESIZE_DURATION_MS).toBe(280);
-    expect(FLOWER_ACTIVITY_SETTLE_HOLD_MS).toBe(1200);
     expect(FLOWER_ACTIVITY_CLOSE_DURATION_MS).toBe(300);
   });
 
@@ -284,6 +255,10 @@ describe('createFlowerActivityDisclosureMotion', () => {
     harness.platform.animations[0]?.finish();
     await Promise.resolve();
     expect(harness.motion.state()).toBe('open');
+
+    harness.platform.triggerResize(harness.content);
+    harness.platform.flushFrame();
+    expect(harness.platform.animations).toHaveLength(1);
 
     harness.setContentHeight(210);
     harness.platform.triggerResize(harness.content);

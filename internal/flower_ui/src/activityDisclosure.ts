@@ -1,61 +1,17 @@
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 
-export const FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS = 400;
-export const FLOWER_ACTIVITY_SETTLE_HOLD_MS = 1200;
 export const FLOWER_ACTIVITY_OPEN_DURATION_MS = 360;
 export const FLOWER_ACTIVITY_RESIZE_DURATION_MS = 280;
 export const FLOWER_ACTIVITY_CLOSE_DURATION_MS = 300;
 
-export type FlowerActivityDisclosureIntent = 'settled' | 'active' | 'attention';
-
-export type FlowerActivityDisclosureActivity = Readonly<{
-  status?: string;
-  severity?: string;
-  needs_attention?: boolean;
-  attention_reasons?: readonly string[];
-}>;
-
-export function flowerActivityDisclosureIntent(
-  activity: FlowerActivityDisclosureActivity | null | undefined,
-): FlowerActivityDisclosureIntent {
-  const status = String(activity?.status ?? '').trim().toLowerCase();
-  const severity = String(activity?.severity ?? '').trim().toLowerCase();
-  const reasons = new Set((activity?.attention_reasons ?? []).map((reason) => String(reason).trim().toLowerCase()));
-  if (
-    status === 'error'
-    || status === 'waiting'
-    || severity === 'error'
-    || severity === 'blocking'
-    || reasons.has('error')
-    || reasons.has('waiting')
-    || reasons.has('approval')
-  ) {
-    return 'attention';
-  }
-  if (status === 'pending' || status === 'running') return 'active';
-  if (activity?.needs_attention === true) return 'attention';
-  return 'settled';
-}
-
-export type FlowerActivityDisclosureSettlePolicy = Readonly<{
-  anchor: Accessor<'intent' | 'presentation'>;
-  holdMs?: number;
-}>;
-
 export type FlowerActivityDisclosureController = Readonly<{
   open: Accessor<boolean>;
   toggle: () => void;
-  retainOpen: () => void;
-  markSettledPresentation: () => void;
 }>;
 
 export type FlowerActivityDisclosureControllerOptions = Readonly<{
-  intent: Accessor<FlowerActivityDisclosureIntent>;
   manualOpen: Accessor<boolean | null | undefined>;
   onManualOpenChange: (open: boolean) => void;
-  reducedMotion?: Accessor<boolean>;
-  openDelayMs?: number;
-  settle?: FlowerActivityDisclosureSettlePolicy;
 }>;
 
 function prefersReducedMotion(): boolean {
@@ -68,15 +24,10 @@ export function createFlowerActivityDisclosureController(
   options: FlowerActivityDisclosureControllerOptions,
 ): FlowerActivityDisclosureController {
   const open = createMemo(() => options.manualOpen() === true);
-  const retainOpen = () => {
-    if (open()) options.onManualOpenChange(true);
-  };
 
   return {
     open,
     toggle: () => options.onManualOpenChange(!open()),
-    retainOpen,
-    markSettledPresentation: () => undefined,
   };
 }
 
@@ -118,13 +69,14 @@ export type FlowerActivityDisclosureMotion = Readonly<{
 }>;
 
 export type FlowerActivityDisclosureMotionOptions = Readonly<{
-  animateContentResize?: boolean;
   reducedMotion?: Accessor<boolean>;
   openDurationMs?: number;
   resizeDurationMs?: number;
   closeDurationMs?: number;
   onBeforeClose?: () => void;
+  onMotionStart?: () => void;
   onLayoutFrame?: () => void;
+  onMotionEnd?: () => void;
   platform?: FlowerActivityDisclosureMotionPlatform;
 }>;
 
@@ -158,7 +110,6 @@ export function createFlowerActivityDisclosureMotion(
   open: Accessor<boolean>,
   options: FlowerActivityDisclosureMotionOptions = {},
 ): FlowerActivityDisclosureMotion {
-  const animateContentResize = options.animateContentResize === true;
   const reducedMotion = options.reducedMotion ?? prefersReducedMotion;
   const openDurationMs = Math.max(0, options.openDurationMs ?? FLOWER_ACTIVITY_OPEN_DURATION_MS);
   const resizeDurationMs = Math.max(0, options.resizeDurationMs ?? FLOWER_ACTIVITY_RESIZE_DURATION_MS);
@@ -198,6 +149,10 @@ export function createFlowerActivityDisclosureMotion(
   const measuredContentHeight = (): number => (
     content ? Math.max(0, content.getBoundingClientRect().height) : 0
   );
+  const committedHeight = (): number => Number.parseFloat(height()) || 0;
+  const heightChanged = (nextHeight: number): boolean => (
+    Math.abs(Math.max(0, nextHeight) - committedHeight()) > 0.5
+  );
   const notifyLayoutWhile = (owner: FlowerActivityDisclosureAnimation) => {
     options.onLayoutFrame?.();
     setLayoutMotion('resizing');
@@ -227,11 +182,14 @@ export function createFlowerActivityDisclosureMotion(
     const revision = animationRevision;
     const targetOpen = targetState !== 'closing' && targetState !== 'closed';
     setState(targetState);
-    commitHeight(targetHeight);
+    options.onMotionStart?.();
     if (reducedMotion() || durationMs === 0 || !viewport) {
+      commitHeight(targetHeight);
       onFinish();
+      options.onMotionEnd?.();
       return;
     }
+    setHeight(`${Math.max(0, start.height)}px`);
     const nextAnimation = platform.animate(
       viewport,
       [
@@ -249,6 +207,7 @@ export function createFlowerActivityDisclosureMotion(
       { duration: durationMs, easing },
     );
     animation = nextAnimation;
+    setHeight(`${Math.max(0, targetHeight)}px`);
     notifyLayoutWhile(nextAnimation);
     void nextAnimation.finished.then(
       () => {
@@ -256,6 +215,8 @@ export function createFlowerActivityDisclosureMotion(
         animation = undefined;
         stopLayoutFrames();
         onFinish();
+        options.onLayoutFrame?.();
+        options.onMotionEnd?.();
       },
       () => undefined,
     );
@@ -264,7 +225,6 @@ export function createFlowerActivityDisclosureMotion(
     if (!open() || !mounted()) return;
     setState('open');
     setLayoutMotion('idle');
-    options.onLayoutFrame?.();
   };
   const finishClose = () => {
     if (open()) return;
@@ -275,9 +235,13 @@ export function createFlowerActivityDisclosureMotion(
   };
   const syncMeasuredHeight = () => {
     if (!open() || !mounted() || !content) return;
+    const nextHeight = measuredContentHeight();
+    if (!heightChanged(nextHeight) && state() === 'open') return;
     cancelAnimation();
-    commitHeight(measuredContentHeight());
+    options.onMotionStart?.();
+    commitHeight(nextHeight);
     setState('open');
+    options.onMotionEnd?.();
   };
   const scheduleMeasuredHeight = (durationMs: number) => {
     measureFrame = clearFrame(measureFrame);
@@ -285,7 +249,8 @@ export function createFlowerActivityDisclosureMotion(
       measureFrame = undefined;
       if (!open() || !mounted() || state() === 'closing' || !content) return;
       const nextHeight = measuredContentHeight();
-      if (reducedMotion() || (!animateContentResize && state() === 'open')) {
+      if (!heightChanged(nextHeight)) return;
+      if (reducedMotion()) {
         syncMeasuredHeight();
         return;
       }
@@ -325,11 +290,15 @@ export function createFlowerActivityDisclosureMotion(
     measureFrame = clearFrame(measureFrame);
     if (!mounted()) {
       finishClose();
+      options.onMotionEnd?.();
       return;
     }
     if (reducedMotion()) {
       cancelAnimation();
+      options.onMotionStart?.();
       finishClose();
+      options.onLayoutFrame?.();
+      options.onMotionEnd?.();
       return;
     }
     const start = currentPresentation();
@@ -360,11 +329,7 @@ export function createFlowerActivityDisclosureMotion(
         scheduleMeasuredHeight(openDurationMs);
         return;
       }
-      if (animateContentResize) {
-        scheduleMeasuredHeight(resizeDurationMs);
-      } else {
-        syncMeasuredHeight();
-      }
+      scheduleMeasuredHeight(resizeDurationMs);
     });
     if (open() && mounted()) {
       if (reducedMotion()) syncMeasuredHeight();
