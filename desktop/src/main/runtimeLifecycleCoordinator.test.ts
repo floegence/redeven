@@ -179,9 +179,9 @@ describe('RuntimeLifecycleCoordinator', () => {
     );
   });
 
-  it('waits for ready-producing mutations but never waits through stop', async () => {
+  it('waits only for ready-producing mutations', async () => {
     const coordinator = new RuntimeLifecycleCoordinator();
-    const startGate = deferred<void>();
+    const startGate = deferred<'ready'>();
     const start = coordinator.run({
       target_key: 'runtime-a',
       intent: 'restart',
@@ -190,9 +190,9 @@ describe('RuntimeLifecycleCoordinator', () => {
       execute: () => startGate.promise,
     });
     const waiting = coordinator.waitForReadyMutation('runtime-a');
-    startGate.resolve();
+    startGate.resolve('ready');
     await start;
-    await expect(waiting).resolves.toMatchObject({ intent: 'restart' });
+    await expect(waiting).resolves.toBe('ready');
 
     const stopGate = deferred<void>();
     const stop = coordinator.run({
@@ -223,6 +223,23 @@ describe('RuntimeLifecycleCoordinator', () => {
     });
     reinstallGate.resolve();
     await reinstall;
+
+    for (const intent of ['open', 'refresh'] as const) {
+      const gate = deferred<void>();
+      const operation = coordinator.run({
+        target_key: 'runtime-a',
+        intent,
+        fingerprint: `${intent}-v1`,
+        operation_key: `operation-${intent}`,
+        execute: () => gate.promise,
+      });
+      await expect(coordinator.waitForReadyMutation('runtime-a')).rejects.toMatchObject({
+        name: 'RuntimeLifecycleInProgressError',
+        active_operation: { intent },
+      });
+      gate.resolve();
+      await operation;
+    }
   });
 
   it('rejects Open while a lifecycle mutation owns the target and never queues it', async () => {

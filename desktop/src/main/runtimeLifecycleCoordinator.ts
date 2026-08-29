@@ -232,17 +232,16 @@ export class RuntimeLifecycleCoordinator {
     return owner ? this.cancel(owner.target_key, reason) : null;
   }
 
-  async waitForReadyMutation(targetKeyValue: string): Promise<RuntimeLifecycleOperationSnapshot | null> {
+  async waitForReadyMutation<T = unknown>(targetKeyValue: string): Promise<T | null> {
     const key = required(targetKeyValue, 'Runtime lifecycle target key');
     const active = this.activeByTargetKey.get(key);
     if (!active) {
       return null;
     }
-    if (active.intent === 'stop' || active.intent === 'reinstall') {
+    if (active.intent !== 'start' && active.intent !== 'restart' && active.intent !== 'update') {
       throw new RuntimeLifecycleInProgressError(this.snapshot(active));
     }
-    await active.task;
-    return this.snapshot(active);
+    return await active.task as T;
   }
 
   run<T>(

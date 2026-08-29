@@ -10,6 +10,7 @@ import {
 	readRuntimeFlowerHTTPResponse,
 	runtimeFlowerDeleteQuery,
 	runtimeFlowerInvalidJSONError,
+	runtimeFlowerPrivateBridgeHeaders,
 } from './runtimeFlowerHTTP';
 
 function listen(server: http.Server): Promise<number> {
@@ -155,5 +156,25 @@ describe('invalidateRuntimeFlowerAccessOnStatus', () => {
 		expect(invalidateRuntimeFlowerAccessOnStatus(cache, 'http://runtime-a.test', 423)).toBe(true);
 		expect(cache.has('http://runtime-a.test')).toBe(false);
 		expect(cache.get('http://runtime-b.test')).toBe('other-cookie');
+	});
+});
+
+describe('runtimeFlowerPrivateBridgeHeaders', () => {
+	const token = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+	it('injects the validated private bridge token and replaces caller-supplied variants', () => {
+		expect(runtimeFlowerPrivateBridgeHeaders(
+			{ local_ui_bridge_token: token },
+			{ Accept: 'application/json', 'x-redeven-desktop-bridge-token': 'spoofed' },
+		)).toEqual({
+			Accept: 'application/json',
+			'X-Redeven-Desktop-Bridge-Token': token,
+		});
+	});
+
+	it('fails closed when the startup report has no valid private bridge token', () => {
+		expect(() => runtimeFlowerPrivateBridgeHeaders({})).toThrow(
+			/Desktop startup report is missing private Local UI bridge authorization/u,
+		);
 	});
 });
