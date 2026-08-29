@@ -403,6 +403,32 @@ func TestCLIClientPullImageTimeoutCancelsRunner(t *testing.T) {
 	}
 }
 
+func TestNewCLIClientUsesDedicatedImagePullTimeout(t *testing.T) {
+	t.Parallel()
+
+	runner := &deadlineCaptureRunner{}
+	client := NewCLIClient()
+	client.Runner = runner
+
+	if _, err := client.Status(context.Background(), EngineDocker); err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if _, err := client.PullImage(context.Background(), EngineDocker, "ghcr.io/acme/api:latest"); err != nil {
+		t.Fatalf("PullImage() error = %v", err)
+	}
+	if len(runner.deadlines) != 2 {
+		t.Fatalf("captured deadlines = %v", runner.deadlines)
+	}
+	commandBudget := time.Until(runner.deadlines[0])
+	pullBudget := time.Until(runner.deadlines[1])
+	if commandBudget < 9*time.Second || commandBudget > 11*time.Second {
+		t.Fatalf("command deadline budget = %s, want about 10s", commandBudget)
+	}
+	if pullBudget < 29*time.Minute || pullBudget > 31*time.Minute {
+		t.Fatalf("pull deadline budget = %s, want about 30m", pullBudget)
+	}
+}
+
 func TestExecRunnerReturnsContextErrorAfterCommandCancellation(t *testing.T) {
 	t.Parallel()
 
@@ -443,6 +469,33 @@ func TestCommandFailureClassificationReturnsOnlyStableDomainErrors(t *testing.T)
 	logs := classifyCommandFailure([]string{"logs", "container_1"}, errors.New("exit status 1"))
 	if !errors.Is(logs, ErrLogsUnavailable) || strings.Contains(logs.Error(), "secret") {
 		t.Fatalf("logs classification = %v", logs)
+	}
+}
+
+func TestCommandFailureClassificationReturnsStableImagePullErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		stderr string
+		want   error
+	}{
+		{name: "registry network", stderr: "TLS handshake timeout", want: ErrImageRegistryUnavailable},
+		{name: "registry EOF", stderr: "Head https://registry.example/v2/image: EOF", want: ErrImageRegistryUnavailable},
+		{name: "manifest missing", stderr: "manifest unknown: manifest unknown", want: ErrImageNotFound},
+		{name: "repository missing", stderr: "pull access denied for repository does not exist", want: ErrImageNotFound},
+		{name: "access denied", stderr: "unauthorized: authentication required", want: ErrImageAccessDenied},
+		{name: "rate limited", stderr: "toomanyrequests: You have reached your pull rate limit", want: ErrImageRateLimited},
+		{name: "storage exhausted", stderr: "write /var/lib/docker: no space left on device", want: ErrInsufficientStorage},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := classifyCommandFailure([]string{"pull", "ghcr.io/acme/api:latest"}, errors.New("exit status 1"), []byte(tt.stderr))
+			if !errors.Is(err, tt.want) || err.Error() != tt.want.Error() {
+				t.Fatalf("classifyCommandFailure() = %v, want %v", err, tt.want)
+			}
+		})
 	}
 }
 
@@ -661,6 +714,22 @@ func (e errFakeCommandNotFound) Error() string {
 
 type contextCancelRunner struct {
 	call string
+}
+
+type deadlineCaptureRunner struct {
+	deadlines []time.Time
+}
+
+func (r *deadlineCaptureRunner) Run(ctx context.Context, _ string, args ...string) ([]byte, error) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil, errors.New("command context has no deadline")
+	}
+	r.deadlines = append(r.deadlines, deadline)
+	if len(args) > 0 && args[0] == "version" {
+		return []byte(`{"Server":{"Version":"25.0.3"}}`), nil
+	}
+	return []byte("Digest: " + testSHA256Digest), nil
 }
 
 func (r *contextCancelRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {

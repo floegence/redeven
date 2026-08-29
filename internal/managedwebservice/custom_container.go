@@ -68,9 +68,9 @@ func (d *containerTemplateDriver) PrepareUpdateArtifact(ctx context.Context, spe
 	if d.adapter == nil || spec.Container == nil {
 		return "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
 	}
-	pulled, err := d.adapter.PullImage(ctx, containerengine.ImagePullRequest{Engine: containerengine.EngineDocker, ImageRef: spec.Container.Image})
-	if err != nil || !pulled.Completed {
-		return "", serviceError("IMAGE_PULL_FAILED", "The template image could not be pulled.", 503, true, err)
+	pulled, err := pullManagedImage(ctx, d.adapter, spec.Container.Image)
+	if err != nil {
+		return "", err
 	}
 	pinnedImage, err := pinnedImageReference(spec.Container.Image, pulled.Image.Digest)
 	if err != nil {

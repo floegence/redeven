@@ -208,16 +208,17 @@ type CreateResult struct {
 
 type ServiceView struct {
 	pfregistry.ManagedService
-	Name               string                       `json:"name"`
-	Description        string                       `json:"description,omitempty"`
-	BrandIcon          string                       `json:"brand_icon,omitempty"`
-	LocalizationKey    string                       `json:"localization_key,omitempty"`
-	UpdateAvailable    bool                         `json:"update_available"`
-	TargetRevision     int64                        `json:"target_revision,omitempty"`
-	TargetVersion      string                       `json:"target_version,omitempty"`
-	UpdateNotices      []TemplateNotice             `json:"update_notices,omitempty"`
-	ActiveOperation    *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
-	ContainerResources []ContainerResourceLink      `json:"container_resources,omitempty"`
+	Name                       string                       `json:"name"`
+	Description                string                       `json:"description,omitempty"`
+	BrandIcon                  string                       `json:"brand_icon,omitempty"`
+	LocalizationKey            string                       `json:"localization_key,omitempty"`
+	UpdateAvailable            bool                         `json:"update_available"`
+	TargetRevision             int64                        `json:"target_revision,omitempty"`
+	TargetVersion              string                       `json:"target_version,omitempty"`
+	UpdateNotices              []TemplateNotice             `json:"update_notices,omitempty"`
+	ActiveOperation            *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
+	OperationArtifactReference string                       `json:"operation_artifact_reference,omitempty"`
+	ContainerResources         []ContainerResourceLink      `json:"container_resources,omitempty"`
 }
 
 type ContainerResourceLink struct {

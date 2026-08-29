@@ -486,6 +486,45 @@ describe('web service metadata and template validation', () => {
       host.remove();
     }
   });
+
+  it('renders operation identity and the exact image inside its service row', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-retry', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness',
+          name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'docker',
+          workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
+          forward_id: 'pf-retry', runtime_port: 3000, update_available: false,
+          operation_artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed',
+        }}
+        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 }}
+        busy={false}
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onCancelOperation={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
+      const progress = row.querySelector<HTMLElement>('[data-testid="managed-operation-progress"]');
+      expect(progress?.textContent).toContain('DeepSeek Harness');
+      expect(progress?.textContent).toContain('Retry');
+      expect(progress?.textContent).toContain('Pulling image');
+      expect(progress?.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
+      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Retry')?.disabled).toBe(true);
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
 });
 
 describe('EnvPortForwardsPage', () => {
@@ -1172,8 +1211,8 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('restores an active managed operation and exposes cancellation after a page reload', async () => {
-    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
-    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, active_operation: activeOperation };
+    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
+    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, operation_artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed', active_operation: activeOperation };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
@@ -1190,6 +1229,8 @@ describe('EnvPortForwardsPage', () => {
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await waitForAssertion(() => expect(host.textContent).toContain('Pulling image'));
+      expect(host.querySelector('[data-testid="managed-service-row"] [data-testid="managed-operation-progress"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
       const cancel = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation');
       expect(cancel).toBeTruthy();
       cancel?.click();
@@ -1197,6 +1238,132 @@ describe('EnvPortForwardsPage', () => {
     } finally {
       dispose();
     }
+  });
+
+  it('tracks every resumed service operation without a global list footer', async () => {
+    const operationOne = { operation_id: 'mop-one', service_id: 'mws-one', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
+    const operationTwo = { operation_id: 'mop-two', service_id: 'mws-two', action: 'start' as const, state: 'running', stage: 'starting', progress_current: 4, progress_total: 7 };
+    const services = [
+      { service_id: 'mws-one', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', deployment: 'docker', workspace_path: '/one', version: '1', desired_state: 'running', observed_state: 'error', forward_id: 'pf-one', runtime_port: 3001, operation_artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:one', active_operation: operationOne },
+      { service_id: 'mws-two', template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'webtop-two', name: 'Debian desktop', deployment: 'container', workspace_path: '/two', version: '1', desired_state: 'running', observed_state: 'stopped', forward_id: 'pf-two', runtime_port: 3002, operation_artifact_reference: 'lscr.io/linuxserver/webtop@sha256:two', active_operation: operationTwo },
+      { service_id: 'mws-idle', template_id: 'custom-idle', service_family_id: 'idle', name: 'Idle service', deployment: 'container', workspace_path: '/idle', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-idle', runtime_port: 3003 },
+    ];
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockImplementation(async (url: string) => {
+      const operation = url.includes('mop-one') ? operationOne : url.includes('mop-two') ? operationTwo : null;
+      if (!operation) throw new Error(`Unexpected event stream: ${url}`);
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(operation)}\n\n`));
+        },
+      }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    });
+
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-operation-progress"]')).toHaveLength(2));
+      const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="managed-service-row"]'));
+      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-one')?.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('deepseek-harness');
+      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-two')?.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('linuxserver/webtop');
+      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
+      expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-one/events'), expect.objectContaining({ method: 'GET' }));
+      expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-two/events'), expect.objectContaining({ method: 'GET' }));
+      expect(host.querySelector('[data-testid="unified-web-services-list"]')?.parentElement?.querySelector(':scope > [data-testid="managed-operation-progress"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps simultaneous service actions on independent event streams', async () => {
+    const baseServices = [
+      { service_id: 'mws-first', template_id: 'custom-first', service_family_id: 'first', name: 'First service', deployment: 'container', workspace_path: '/first', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-first', runtime_port: 3001, update_available: false },
+      { service_id: 'mws-second', template_id: 'custom-second', service_family_id: 'second', name: 'Second service', deployment: 'container', workspace_path: '/second', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-second', runtime_port: 3002, update_available: false },
+    ];
+    const runningFirst = { operation_id: 'mop-first', service_id: 'mws-first', action: 'start' as const, state: 'running', stage: 'starting', progress_current: 4, progress_total: 7 };
+    const runningSecond = { ...runningFirst, operation_id: 'mop-second', service_id: 'mws-second' };
+    const operations = new Map<string, typeof runningFirst>();
+    const streamControllers = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+    const streamSignals = new Map<string, AbortSignal>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') {
+        return {
+          services: baseServices.map((service) => {
+            const active = operations.get(service.service_id);
+            return active ? { ...service, active_operation: active, operation_artifact_reference: `ghcr.io/example/${service.service_id}@sha256:exact` } : service;
+          }),
+        };
+      }
+      if (url.endsWith('/mws-first/operations') && init?.method === 'POST') {
+        operations.set(runningFirst.service_id, runningFirst);
+        return runningFirst;
+      }
+      if (url.endsWith('/mws-second/operations') && init?.method === 'POST') {
+        operations.set(runningSecond.service_id, runningSecond);
+        return runningSecond;
+      }
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockImplementation(async (url: string, init?: RequestInit) => {
+      const operation = url.includes('mop-first') ? runningFirst : url.includes('mop-second') ? runningSecond : null;
+      if (!operation) throw new Error(`Unexpected event stream: ${url}`);
+      if (init?.signal) streamSignals.set(operation.operation_id, init.signal);
+      return new Response(new ReadableStream({
+        start(controller) {
+          streamControllers.set(operation.operation_id, controller);
+          controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(operation)}\n\n`));
+        },
+      }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    });
+
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-row"]')).toHaveLength(2));
+      for (const serviceID of ['mws-first', 'mws-second']) {
+        Array.from(host.querySelectorAll<HTMLButtonElement>(`[data-managed-service-id="${serviceID}"] button`))
+          .find((button) => button.textContent?.trim() === 'Start')?.click();
+      }
+      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-operation-progress"]')).toHaveLength(2));
+      expect(streamSignals.get('mop-first')?.aborted).toBe(false);
+      expect(streamSignals.get('mop-second')?.aborted).toBe(false);
+
+      operations.clear();
+      for (const operation of [runningFirst, runningSecond]) {
+        const controller = streamControllers.get(operation.operation_id)!;
+        controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ ...operation, state: 'succeeded', stage: 'completed', progress_current: 7 })}\n\n`));
+        controller.close();
+      }
+      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-operation-progress"]')).toHaveLength(0));
+    } finally {
+      dispose();
+    }
+  });
+
+  it('reports retry failures with the retry action title', async () => {
+    const service = { service_id: 'mws-retry', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', template_source: 'builtin', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, update_available: false };
+    const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
+    const failed = { ...running, state: 'failed', stage: 'failed', error_code: 'IMAGE_REGISTRY_UNAVAILABLE', error_message: 'The container image registry is unavailable.' };
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-retry/operations' && init?.method === 'POST') return running;
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify(failed)}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-retry"]')).toBeTruthy());
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Retry')?.click();
+
+    await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith('Service retry failed', 'The image registry is unavailable. Check the network connection, then retry.'));
+    expect(notificationMocks.error).not.toHaveBeenCalledWith('Failed to open service', expect.anything());
   });
 
   it('uninstalls a managed service while retaining its data by default', async () => {

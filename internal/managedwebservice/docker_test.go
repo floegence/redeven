@@ -13,6 +13,9 @@ import (
 func TestAuditedDockerCatalogPinsReviewedPlatformDigests(t *testing.T) {
 	t.Parallel()
 	catalog := auditedDockerCatalog()
+	if auditedDockerImage != "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2" {
+		t.Fatalf("audited Docker image = %q", auditedDockerImage)
+	}
 	if catalog.TemplateID != DeepSeekHarnessTemplateID || catalog.Version != DeepSeekHarnessVersion {
 		t.Fatalf("audited Docker catalog identity = %+v", catalog)
 	}
@@ -34,6 +37,27 @@ func TestAuditedDockerCatalogPinsReviewedPlatformDigests(t *testing.T) {
 	artifact, ok := auditedDockerArtifact("linux-amd64")
 	if !ok || artifact.Digest == "" {
 		t.Fatal("audited Docker catalog returned a mutable digest map")
+	}
+}
+
+func TestDeepSeekOperationArtifactUsesCurrentAuditedRegistry(t *testing.T) {
+	t.Parallel()
+	service := pfregistry.ManagedService{
+		TemplateID:        DeepSeekHarnessContainerTemplateID,
+		Deployment:        string(DeploymentDocker),
+		ArtifactReference: "runzhliu/deepseek-harness:0.1.1-rc.2@sha256:" + strings.Repeat("f", 64),
+	}
+	operation := &pfregistry.ManagedOperation{Action: "retry_install"}
+	reference := operationArtifactReference(service, operation)
+	if !strings.HasPrefix(reference, "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:") {
+		t.Fatalf("operation artifact reference = %q", reference)
+	}
+	operation.Action = "stop"
+	if got := operationArtifactReference(service, operation); got != service.ArtifactReference {
+		t.Fatalf("stop operation artifact reference = %q, want installed %q", got, service.ArtifactReference)
+	}
+	if got := operationArtifactReference(service, nil); got != "" {
+		t.Fatalf("idle operation artifact reference = %q, want empty", got)
 	}
 }
 

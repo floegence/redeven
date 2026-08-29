@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	auditedDockerImage       = "runzhliu/deepseek-harness:0.1.1-rc.2"
+	auditedDockerImage       = "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2"
 	auditedDockerAMD64Digest = "sha256:7ab8875c68f3ecef18b21b8f04f72d914a4b86df9876064bb5af7d45a9224e9c"
 	auditedDockerARM64Digest = "sha256:53e8a997f09252b139b8e46c0c13eeb574074e6f17a732a4b57135ac5a6bc58a"
 	managedServiceLabel      = "com.floegence.redeven.managed-web-service"
@@ -79,9 +79,12 @@ func (d *dockerDriver) Install(ctx context.Context, service *pfregistry.ManagedS
 		service.RuntimeIdentity = ""
 	}
 	progress("pulling", 2)
-	pulled, err := d.adapter.PullImage(ctx, containerengine.ImagePullRequest{Engine: containerengine.EngineDocker, ImageRef: pinnedImage})
-	if err != nil || !pulled.Completed || !pulled.Image.DigestPinned {
-		return "", "", serviceError("IMAGE_PULL_FAILED", "The audited DeepSeek Harness image could not be pulled by digest.", 503, true, err)
+	pulled, err := pullManagedImage(ctx, d.adapter, pinnedImage)
+	if err != nil {
+		return "", "", err
+	}
+	if !pulled.Image.DigestPinned {
+		return "", "", serviceError("IMAGE_DIGEST_UNAVAILABLE", "The container engine did not preserve the reviewed image digest.", 502, false, nil)
 	}
 	progress("verifying", 3)
 	if pulled.Image.Digest != "" && pulled.Image.Digest != artifact.Digest {

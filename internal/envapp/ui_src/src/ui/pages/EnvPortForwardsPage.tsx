@@ -27,7 +27,7 @@ import {
   type DesktopSessionContextSnapshot,
 } from '../services/desktopSessionContext';
 import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
-import { fetchLocalApi, fetchLocalApiJSON } from '../services/localApi';
+import { fetchLocalApiJSON } from '../services/localApi';
 import { readUIStorageJSON, removeUIStorageItem } from '../services/uiStorage';
 import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
@@ -49,6 +49,10 @@ import {
   type ServiceTemplatePresentation,
 } from './ServiceTemplateCatalog';
 import { ManagedServiceShapingOrb } from './ManagedServiceShapingOrb';
+import {
+  createManagedServiceOperationController,
+  type ManagedOperation,
+} from './managedServiceOperationController';
 import {
   desktopShellWebServiceWindowOpenAvailable,
   openWebServiceWindowInDesktopShell,
@@ -112,6 +116,7 @@ type ManagedService = Readonly<{
   target_version?: string;
   update_notices?: ReadonlyArray<ManagedTemplateNotice>;
   active_operation?: ManagedOperation;
+  operation_artifact_reference?: string;
   container_resources?: ReadonlyArray<Readonly<{
     kind: 'container' | 'image' | 'compose_project';
     engine: 'docker';
@@ -174,7 +179,6 @@ type ManagedCatalogTemplate = Readonly<{
   spec?: ManagedTemplateSpec;
 }>;
 
-type ManagedOperation = Readonly<{ operation_id: string; service_id: string; state: string; stage: string; progress_current: number; progress_total: number; error_message?: string }>;
 type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
 type TemplateDrawerView = 'catalog' | 'install' | 'editor';
 export type TemplateEditorDraft = {
@@ -714,6 +718,72 @@ function managedStageLabel(stage: string, i18n: WebServicesI18n): string {
   }
 }
 
+function managedActionLabel(action: ManagedOperation['action'], i18n: WebServicesI18n): string {
+  switch (action) {
+    case 'install': return i18n.t('webServices.managed.stages.installing');
+    case 'start': return i18n.t('webServices.managed.start');
+    case 'stop': return i18n.t('webServices.managed.stop');
+    case 'restart': return i18n.t('webServices.managed.restart');
+    case 'retry_install': return i18n.t('webServices.managed.retryInstall');
+    case 'update': return i18n.t('webServices.managed.update');
+    case 'uninstall': return i18n.t('webServices.managed.uninstall');
+  }
+}
+
+function managedActionFailureTitle(action: ManagedOperation['action'], i18n: WebServicesI18n): string {
+  switch (action) {
+    case 'start': return i18n.t('webServices.managed.startFailed');
+    case 'stop': return i18n.t('webServices.managed.stopFailed');
+    case 'restart': return i18n.t('webServices.managed.restartFailed');
+    case 'retry_install': return i18n.t('webServices.managed.retryFailed');
+    case 'update': return i18n.t('webServices.managed.updateFailed');
+    case 'uninstall': return i18n.t('webServices.notifications.failedToDeleteTitle');
+    default: return i18n.t('webServices.notifications.failedToAddTitle');
+  }
+}
+
+function managedOperationFailureMessage(operation: ManagedOperation, fallback: string, i18n: WebServicesI18n): string {
+  switch (operation.error_code) {
+    case 'IMAGE_PULL_TIMEOUT': return i18n.t('webServices.managed.imagePullTimeout');
+    case 'IMAGE_REGISTRY_UNAVAILABLE': return i18n.t('webServices.managed.imageRegistryUnavailable');
+    case 'IMAGE_UNAVAILABLE': return i18n.t('webServices.managed.imageUnavailable');
+    case 'IMAGE_REGISTRY_ACCESS_DENIED': return i18n.t('webServices.managed.imageRegistryAccessDenied');
+    case 'IMAGE_REGISTRY_RATE_LIMITED': return i18n.t('webServices.managed.imageRegistryRateLimited');
+    case 'IMAGE_PULL_STORAGE_EXHAUSTED': return i18n.t('webServices.managed.imagePullStorageExhausted');
+    case 'IMAGE_PULL_FAILED': return i18n.t('webServices.managed.imagePullFailed');
+    default: return operation.error_message || fallback;
+  }
+}
+
+const managedOperationActive = (operation: ManagedOperation | null | undefined) => Boolean(operation && ['pending', 'running', 'cancelling'].includes(operation.state));
+
+export function ManagedOperationProgress(props: {
+  operation: ManagedOperation;
+  serviceName: string;
+  artifactReference?: string;
+  canCancel: boolean;
+  onCancel: () => void;
+}) {
+  const i18n = useI18n();
+  return (
+    <div class="flex min-w-0 items-center gap-2.5 border-t border-border/70 bg-muted/15 px-4 py-2.5 text-xs" role="status" aria-live="polite" data-testid="managed-operation-progress">
+      <ManagedServiceShapingOrb />
+      <div class="min-w-0 flex-1">
+        <div class="flex min-w-0 items-center gap-1.5">
+          <span class="truncate font-medium text-foreground">{props.serviceName}</span>
+          <span class="shrink-0 text-muted-foreground">· {managedActionLabel(props.operation.action, i18n)}</span>
+          <span class="shrink-0 text-muted-foreground">· {managedStageLabel(props.operation.stage, i18n)}</span>
+        </div>
+        <Show when={props.artifactReference}>
+          <div class="mt-0.5 truncate font-mono text-[10px] leading-4 text-muted-foreground" title={props.artifactReference} data-testid="managed-operation-artifact">{props.artifactReference}</div>
+        </Show>
+      </div>
+      <span class="shrink-0 font-mono text-[10px] text-muted-foreground">{Math.min(props.operation.progress_current, props.operation.progress_total)}/{props.operation.progress_total}</span>
+      <Button size="sm" variant="ghost" class="h-7 shrink-0 px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+    </div>
+  );
+}
+
 function managedDeploymentLabel(deployment: ManagedDeployment, i18n: WebServicesI18n): string {
   switch (deployment) {
     case 'native':
@@ -829,11 +899,12 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
   };
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
   const failed = () => props.service.observed_state === 'error';
+  const busy = () => props.busy || managedOperationActive(props.operation);
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
   const moreItems = (): DropdownItem[] => [
@@ -848,22 +919,22 @@ export function ManagedServiceRow(props: { service: ManagedService; busy: boolea
     ...(props.service.update_available ? [{
       id: 'update',
       label: i18n.t('webServices.managed.update'),
-      disabled: props.busy || !props.canManage,
+      disabled: busy() || !props.canManage,
     }] : []),
     {
       id: 'restart',
       label: i18n.t('webServices.managed.restart'),
-      disabled: props.busy || !props.canManage || !running(),
+      disabled: busy() || !props.canManage || !running(),
     },
     {
       id: 'logs',
       label: i18n.t('webServices.managed.logs'),
-      disabled: props.busy,
+      disabled: busy(),
     },
     {
       id: 'uninstall',
       label: i18n.t('webServices.managed.uninstall'),
-      disabled: props.busy || !props.canManage,
+      disabled: busy() || !props.canManage,
     },
   ];
   const selectMoreItem = (id: string) => {
@@ -878,50 +949,60 @@ export function ManagedServiceRow(props: { service: ManagedService; busy: boolea
   };
   return (
     <div
-      class={serviceRowGridClass}
       data-testid="managed-service-row"
       data-managed-service-id={props.service.service_id}
     >
-      <div class="min-w-0"><ServiceTemplateIdentity template={presentation()} compact /></div>
+      <div class={serviceRowGridClass}>
+        <div class="min-w-0"><ServiceTemplateIdentity template={presentation()} compact /></div>
 
-      <div class="col-start-1 row-start-2 flex min-w-0 items-center text-[11px] text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="managed-service-secondary">
-        <span class="truncate font-mono leading-5 text-foreground/70" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</span>
+        <div class="col-start-1 row-start-2 flex min-w-0 items-center text-[11px] text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="managed-service-secondary">
+          <span class="truncate font-mono leading-5 text-foreground/70" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</span>
+        </div>
+
+        <div class="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-0.5 lg:col-start-3 lg:row-start-1" data-testid="managed-service-status">
+          <ServiceStatusIndicator
+            label={managedStatusLabel(props.service.observed_state, i18n)}
+            tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
+          />
+          <Show when={props.service.update_available}><span class="text-[10px] font-medium text-warning">{i18n.t('webServices.managed.updateAvailable')}</span></Show>
+        </div>
+
+        <div class={serviceRowActionsClass} data-testid="managed-service-actions">
+          <Button size="sm" variant="default" class="h-8 w-full px-3" onClick={props.onOpen} disabled={!running() || busy() || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
+          <Button size="sm" variant="outline" class="h-8 w-full whitespace-nowrap px-3" onClick={() => props.onAction(primaryAction())} disabled={busy() || !props.canManage}>
+            <Show when={running()} fallback={<Show when={!failed()}><Play class="mr-1.5 h-3.5 w-3.5" /></Show>}>
+              <Stop class="mr-1.5 h-3.5 w-3.5" />
+            </Show>
+            {primaryLabel()}
+          </Button>
+          <Dropdown
+            align="end"
+            items={moreItems()}
+            onSelect={selectMoreItem}
+            triggerAriaLabel={`${props.service.name}: ${i18n.t('webServices.managed.moreActions')}`}
+            triggerClass="shrink-0 rounded-md"
+            trigger={(
+              <button
+                type="button"
+                class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="managed-service-more"
+                title={i18n.t('webServices.managed.moreActions')}
+              >
+                <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          />
+        </div>
       </div>
-
-      <div class="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-0.5 lg:col-start-3 lg:row-start-1" data-testid="managed-service-status">
-        <ServiceStatusIndicator
-          label={managedStatusLabel(props.service.observed_state, i18n)}
-          tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
+      <Show when={managedOperationActive(props.operation) ? props.operation : null} keyed>{(operation) => (
+        <ManagedOperationProgress
+          operation={operation}
+          serviceName={managedServiceLocalizedIdentity(props.service, i18n).name}
+          artifactReference={props.service.operation_artifact_reference}
+          canCancel={props.canManage}
+          onCancel={() => props.onCancelOperation?.()}
         />
-        <Show when={props.service.update_available}><span class="text-[10px] font-medium text-warning">{i18n.t('webServices.managed.updateAvailable')}</span></Show>
-      </div>
-
-      <div class={serviceRowActionsClass} data-testid="managed-service-actions">
-        <Button size="sm" variant="default" class="h-8 w-full px-3" onClick={props.onOpen} disabled={!running() || props.busy || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
-        <Button size="sm" variant="outline" class="h-8 w-full whitespace-nowrap px-3" onClick={() => props.onAction(primaryAction())} disabled={props.busy || !props.canManage}>
-          <Show when={running()} fallback={<Show when={!failed()}><Play class="mr-1.5 h-3.5 w-3.5" /></Show>}>
-            <Stop class="mr-1.5 h-3.5 w-3.5" />
-          </Show>
-          {primaryLabel()}
-        </Button>
-        <Dropdown
-          align="end"
-          items={moreItems()}
-          onSelect={selectMoreItem}
-          triggerAriaLabel={`${props.service.name}: ${i18n.t('webServices.managed.moreActions')}`}
-          triggerClass="shrink-0 rounded-md"
-          trigger={(
-            <button
-              type="button"
-              class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              data-testid="managed-service-more"
-              title={i18n.t('webServices.managed.moreActions')}
-            >
-              <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
-        />
-      </div>
+      )}</Show>
     </div>
   );
 }
@@ -1281,8 +1362,12 @@ export function EnvPortForwardsPage() {
   const [managedTemplates, setManagedTemplates] = createSignal<ManagedCatalogTemplate[]>([]);
   const [managedLoading, setManagedLoading] = createSignal(false);
   const [managedLoadError, setManagedLoadError] = createSignal(false);
-  const [managedBusy, setManagedBusy] = createSignal(false);
-  const [managedOperation, setManagedOperation] = createSignal<ManagedOperation | null>(null);
+  const managedOperations = createManagedServiceOperationController({
+    streamFailedMessage: () => i18n.t('webServices.managed.operationStreamFailed'),
+    timedOutMessage: () => i18n.t('webServices.managed.operationTimedOut'),
+  });
+  const [managedInstallServiceID, setManagedInstallServiceID] = createSignal<string | null>(null);
+  const [managedInstallSubmitting, setManagedInstallSubmitting] = createSignal(false);
   const [workspacePath, setWorkspacePath] = createSignal('');
   const [workspacePickerOpen, setWorkspacePickerOpen] = createSignal(false);
   const [templateDrawerOpen, setTemplateDrawerOpen] = createSignal(false);
@@ -1300,8 +1385,25 @@ export function EnvPortForwardsPage() {
   const [managedLogs, setManagedLogs] = createSignal<string[] | null>(null);
   const [managedUpdate, setManagedUpdate] = createSignal<ManagedService | null>(null);
   const [updateNoticeAcceptances, setUpdateNoticeAcceptances] = createSignal<Record<string, boolean>>({});
-  let managedStreamAbort: AbortController | null = null;
-  let resumedOperationID: string | null = null;
+  const [managedUninstall, setManagedUninstall] = createSignal<ManagedUninstallRequest | null>(null);
+  const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
+  const managedInstallOperation = () => {
+    const serviceID = managedInstallServiceID();
+    return serviceID ? managedOperations.ownedOperation(serviceID, 'install') : null;
+  };
+  const managedInstallBusy = () => managedInstallSubmitting() || managedOperationActive(managedInstallOperation());
+  const managedUpdateOperation = () => {
+    const service = managedUpdate();
+    return service ? managedOperations.ownedOperation(service.service_id, 'update') : null;
+  };
+  const managedUpdateBusy = () => managedOperationActive(managedUpdateOperation());
+  const managedUninstallOperation = () => {
+    const request = managedUninstall();
+    return request ? managedOperations.ownedOperation(request.service.service_id, 'uninstall') : null;
+  };
+  const managedUninstallBusy = () => managedOperationActive(managedUninstallOperation());
+  const managedRowOperation = (serviceID: string) => managedOperations.ownedOperation(serviceID, 'row');
+  const managedOperationArtifact = (serviceID: string) => managedState().find((service) => service.service_id === serviceID)?.operation_artifact_reference;
 
   const workspacePicker = createDirectoryPickerDataSource({
     homePath: () => '/',
@@ -1339,18 +1441,21 @@ export function EnvPortForwardsPage() {
       const nextServices = Array.isArray(services.services) ? services.services : [];
       setManagedState(nextServices);
       setManagedLoadError(false);
-      const activeOperation = nextServices.find((service) => service.active_operation)?.active_operation;
-      if (activeOperation && resumedOperationID !== activeOperation.operation_id) {
-        resumedOperationID = activeOperation.operation_id;
-        setManagedBusy(true);
-        setManagedOperation(activeOperation);
-        void waitManagedOperation(activeOperation.operation_id)
-          .then(() => loadManaged(false))
-          .catch((error) => notify.error(i18n.t('webServices.managed.operationStreamFailed'), error instanceof Error ? error.message : String(error)))
-          .finally(() => {
-            resumedOperationID = null;
-            setManagedBusy(false);
-            setManagedOperation(null);
+      for (const service of nextServices) {
+        const activeOperation = service.active_operation;
+        if (!activeOperation || managedOperations.knows(activeOperation.operation_id)) continue;
+        void managedOperations.track(activeOperation, 'row')
+          .then(async (terminal) => {
+            try {
+              await loadManaged(false);
+            } finally {
+              managedOperations.clear(terminal.operation_id);
+            }
+          })
+          .catch((error) => {
+            if (error instanceof DOMException && error.name === 'AbortError') return;
+            managedOperations.clear(activeOperation.operation_id);
+            notify.error(i18n.t('webServices.managed.operationStreamFailed'), error instanceof Error ? error.message : String(error));
           });
       }
     } catch {
@@ -1366,44 +1471,6 @@ export function EnvPortForwardsPage() {
       identity: link.identity,
     });
     ctx.goActivity('containers');
-  };
-
-  const waitManagedOperation = async (operationID: string) => {
-    const controller = new AbortController();
-    managedStreamAbort?.abort();
-    managedStreamAbort = controller;
-    const timeout = window.setTimeout(() => controller.abort(), 30 * 60_000);
-    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-    try {
-      const response = await fetchLocalApi(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operationID)}/events`, { method: 'GET', headers: { Accept: 'text/event-stream' }, signal: controller.signal });
-      if (!response.ok || !response.body) throw new Error(i18n.t('webServices.managed.operationStreamFailed'));
-      reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      for (;;) {
-        const result = await reader.read();
-        if (result.done) break;
-        buffer += decoder.decode(result.value, { stream: true });
-        const events = buffer.split(/\r?\n\r?\n/); buffer = events.pop() ?? '';
-        for (const event of events) {
-          const data = event.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
-          if (!data) continue;
-          try {
-            const operation = JSON.parse(data) as ManagedOperation;
-            setManagedOperation(operation);
-            if (['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)) return operation;
-          } catch { /* keep reading until a complete snapshot arrives */ }
-        }
-      }
-      throw new Error(i18n.t('webServices.managed.operationStreamFailed'));
-    } catch (error) {
-      if (controller.signal.aborted) throw new Error(i18n.t('webServices.managed.operationTimedOut'));
-      throw error;
-    } finally {
-      window.clearTimeout(timeout);
-      if (managedStreamAbort === controller) managedStreamAbort = null;
-      await reader?.cancel().catch(() => undefined);
-    }
   };
 
   const managedRequestID = () => `envapp-${crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
@@ -1426,15 +1493,21 @@ export function EnvPortForwardsPage() {
   const installManaged = async () => {
     const template = selectedTemplate();
     if (!template || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.service_family_id === template.service_family_id) || !canManageManagedService()) return;
-    setManagedBusy(true);
-    setManagedOperation(null);
+    setManagedInstallSubmitting(true);
+    setManagedInstallServiceID(null);
     const useDesktopWindow = desktopShellWebServiceWindowOpenAvailable();
     const reservedWindow = useDesktopWindow ? null : window.open('about:blank', `redeven_managed_${template.template_id}`);
+    let operationID = '';
     try {
       const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()) }) });
-      setManagedOperation(result.operation);
-      const operation = await waitManagedOperation(result.operation.operation_id);
-      if (operation.state !== 'succeeded') throw new Error(operation.error_message || i18n.t('webServices.notifications.failedToAddTitle'));
+      operationID = result.operation.operation_id;
+      setManagedInstallServiceID(result.service.service_id);
+      setManagedInstallSubmitting(false);
+      const operationPromise = managedOperations.track(result.operation, 'install');
+      await loadManaged(false);
+      const operation = await operationPromise;
+      await loadManaged(false);
+      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n.t('webServices.notifications.failedToAddTitle'), i18n));
       setTemplateDrawerView('catalog');
       setSelectedTemplateID(null);
       setInstallNoticeAcceptances({});
@@ -1458,28 +1531,30 @@ export function EnvPortForwardsPage() {
       try { reservedWindow?.close(); } catch { /* ignore */ }
       notify.error(i18n.t('webServices.notifications.failedToAddTitle'), error instanceof Error ? error.message : String(error));
     } finally {
-      setManagedBusy(false);
-      setManagedOperation(null);
+      setManagedInstallSubmitting(false);
+      setManagedInstallServiceID(null);
+      if (operationID) managedOperations.clear(operationID);
     }
   };
 
   const managedAction = async (serviceID: string, action: 'start' | 'stop' | 'restart' | 'retry_install' | 'update', noticeRevisions: Readonly<Record<string, number>> = {}) => {
     if (!canManageManagedService()) return;
-    setManagedBusy(true);
-    setManagedOperation(null);
+    let operationID = '';
     try {
       const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions }) });
-      setManagedOperation(result);
-      const operation = await waitManagedOperation(result.operation_id);
-      if (operation.state !== 'succeeded') throw new Error(operation.error_message || i18n.t('webServices.notifications.failedToOpenTitle'));
+      operationID = result.operation_id;
+      const operationPromise = managedOperations.track(result, action === 'update' ? 'update' : 'row');
       await loadManaged(false);
+      const operation = await operationPromise;
+      await loadManaged(false);
+      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, managedActionFailureTitle(action, i18n), i18n));
       if (action === 'update') {
         setManagedUpdate(null);
         setUpdateNoticeAcceptances({});
         notify.success(i18n.t('webServices.managed.updateComplete'), i18n.t('webServices.managed.updateCompleteMessage'));
       }
-    } catch (error) { notify.error(action === 'update' ? i18n.t('webServices.managed.updateFailed') : i18n.t('webServices.notifications.failedToOpenTitle'), error instanceof Error ? error.message : String(error)); }
-    finally { setManagedBusy(false); setManagedOperation(null); }
+    } catch (error) { notify.error(managedActionFailureTitle(action, i18n), error instanceof Error ? error.message : String(error)); }
+    finally { if (operationID) managedOperations.clear(operationID); }
   };
 
   const updateManagedService = () => {
@@ -1502,33 +1577,32 @@ export function EnvPortForwardsPage() {
 
   const uninstallManaged = async (request: ManagedUninstallRequest) => {
     if (!canManageManagedService()) return;
-    setManagedBusy(true);
-    setManagedOperation(null);
+    let operationID = '';
     try {
       const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(request.service.service_id)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action: 'uninstall', delete_data: request.deleteData }) });
-      setManagedOperation(result);
-      const operation = await waitManagedOperation(result.operation_id);
-      if (operation.state !== 'succeeded') throw new Error(operation.error_message || i18n.t('webServices.notifications.failedToDeleteTitle'));
+      operationID = result.operation_id;
+      setManagedDeleteConfirm(false);
+      const operationPromise = managedOperations.track(result, 'uninstall');
       await loadManaged(false);
+      const operation = await operationPromise;
+      await loadManaged(false);
+      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n.t('webServices.notifications.failedToDeleteTitle'), i18n));
       bumpRefresh();
       notify.success(i18n.t('webServices.managed.uninstallComplete'), i18n.t('webServices.managed.uninstallCompleteMessage'));
     } catch (error) {
       notify.error(i18n.t('webServices.notifications.failedToDeleteTitle'), error instanceof Error ? error.message : String(error));
     } finally {
-      setManagedBusy(false);
-      setManagedOperation(null);
+      if (operationID) managedOperations.clear(operationID);
       setManagedUninstall(null);
       setManagedDeleteConfirm(false);
     }
   };
 
-  const cancelManagedOperation = async () => {
+  const cancelManagedOperation = async (operation: ManagedOperation | null | undefined) => {
     if (!canManageManagedService()) return;
-    const operation = managedOperation();
     if (!operation || !['pending', 'running', 'cancelling'].includes(operation.state)) return;
     try {
-      const updated = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}/cancel`, { method: 'POST' });
-      setManagedOperation(updated);
+      await managedOperations.cancel(operation);
     } catch (error) {
       notify.error(i18n.t('webServices.managed.cancelFailed'), error instanceof Error ? error.message : String(error));
     }
@@ -1768,11 +1842,9 @@ export function EnvPortForwardsPage() {
   // Delete dialog state
   const [deleteID, setDeleteID] = createSignal<string | null>(null);
   const [deleting, setDeleting] = createSignal(false);
-  const [managedUninstall, setManagedUninstall] = createSignal<ManagedUninstallRequest | null>(null);
-  const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
 
   createEffect(() => { if (permissionReady() && canRead()) void loadManaged(); });
-  onCleanup(() => managedStreamAbort?.abort());
+  onCleanup(() => managedOperations.dispose());
 
   // Create service handler
   const doCreate = async (target: string, name: string, description: string) => {
@@ -2212,7 +2284,7 @@ export function EnvPortForwardsPage() {
                   }>
                     <div class={cn('overflow-hidden rounded-xl border divide-y', redevenSurfaceRoleClass('panel'))} data-testid="unified-web-services-list">
                       <For each={filteredManagedServices()}>{(service) => (
-                        <ManagedServiceRow service={service} busy={managedBusy() || busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onOpenResource={openManagedContainerResource} onAction={(action) => void managedAction(service.service_id, action)} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
+                        <ManagedServiceRow service={service} operation={managedRowOperation(service.service_id)} busy={busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onOpenResource={openManagedContainerResource} onAction={(action) => void managedAction(service.service_id, action)} onCancelOperation={() => void cancelManagedOperation(managedRowOperation(service.service_id))} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
                       )}</For>
                       <For each={filteredForwards()}>{(forward) => (
                         <PortForwardRow forward={forward} busy={busyID() === forward.forward_id} busyText={busyID() === forward.forward_id ? busyText() : undefined} onOpen={() => void doOpen(forward)} onEdit={() => setForwardMetadataTarget({ mode: 'edit', forward })} onDelete={() => setDeleteID(forward.forward_id)} />
@@ -2222,13 +2294,6 @@ export function EnvPortForwardsPage() {
                 </Show>
               </Show>
               <Show when={managedLoadError()}><p class="mt-3 text-xs text-warning">{i18n.t('webServices.errors.loadFailedPrefix')}</p></Show>
-              <Show when={managedOperation()} keyed>{(operation) => (
-                <div class="mt-3 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite">
-                  <Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><ManagedServiceShapingOrb /></Show>
-                  <span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span>
-                  <Show when={['pending', 'running', 'cancelling'].includes(operation.state)}><Button size="sm" variant="ghost" onClick={() => void cancelManagedOperation()} disabled={operation.state === 'cancelling' || !canManageManagedService()}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show>
-                </div>
-              )}</Show>
             </div>
           </section>
         </div>
@@ -2250,17 +2315,17 @@ export function EnvPortForwardsPage() {
       <EnvAppDrawer
         open={templateDrawerOpen()}
         class="service-template-explorer-drawer"
-        onOpenChange={(open) => { if (!managedBusy() && !templateSaving()) { setTemplateDrawerOpen(open); if (!open) { setInstallNoticeAcceptances({}); setTemplateValidationVisible(false); } } }}
+        onOpenChange={(open) => { if (!managedInstallBusy() && !templateSaving()) { setTemplateDrawerOpen(open); if (!open) { setInstallNoticeAcceptances({}); setTemplateValidationVisible(false); } } }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
         footer={templateDrawerView() === 'catalog' ? undefined : (
           <div class="flex w-full items-center justify-between gap-2">
-            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); }} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); }} disabled={managedInstallBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             <div class="ml-auto flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setTemplateDrawerOpen(false)} disabled={managedBusy() || templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button>
+              <Button size="sm" variant="outline" onClick={() => setTemplateDrawerOpen(false)} disabled={managedInstallBusy() || templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
-                <Show when={managedBusy()} fallback={<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={!canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{i18n.t('webServices.managed.installStart')}</Button>}>
-                  <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation()} disabled={!managedOperation() || managedOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+                <Show when={managedInstallBusy()} fallback={<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={!canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{i18n.t('webServices.managed.installStart')}</Button>}>
+                  <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation(managedInstallOperation())} disabled={!managedInstallOperation() || managedInstallOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
                 </Show>
               </Show>
               <Show when={templateDrawerView() === 'editor'}>
@@ -2328,7 +2393,7 @@ export function EnvPortForwardsPage() {
                       class="shrink-0 gap-1.5"
                       data-testid="managed-workspace-picker-trigger"
                       onClick={openWorkspacePicker}
-                      disabled={managedBusy()}
+                      disabled={managedInstallBusy()}
                     >
                       <FolderOpen class="h-3.5 w-3.5" aria-hidden="true" />
                       {i18n.t('webServices.managed.chooseWorkspace')}
@@ -2348,7 +2413,7 @@ export function EnvPortForwardsPage() {
                     variant="ghost"
                     class="mt-1.5 h-7 gap-1.5 px-2 text-xs"
                     onClick={() => setWorkspacePath(template.default_workspace_path)}
-                    disabled={managedBusy()}
+                    disabled={managedInstallBusy()}
                   >
                     <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
                     {i18n.t('webServices.managed.restoreRecommendedWorkspace')}
@@ -2368,12 +2433,12 @@ export function EnvPortForwardsPage() {
                 <ManagedTemplateNotices
                   notices={template.notices ?? []}
                   accepted={installNoticeAcceptances()}
-                  disabled={managedBusy()}
+                  disabled={managedInstallBusy()}
                   onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
                 />
               </Show>
               <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
-              <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><ManagedServiceShapingOrb /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
+              <Show when={managedInstallBusy() ? managedInstallOperation() : null} keyed>{(operation) => <ManagedOperationProgress operation={operation} serviceName={managedTemplateLocalizedIdentity(template, i18n).name} artifactReference={template.spec?.container?.image} canCancel={canManageManagedService()} onCancel={() => void cancelManagedOperation(operation)} />}</Show>
             </div>
           )}</Show>
 
@@ -2523,15 +2588,15 @@ export function EnvPortForwardsPage() {
 
       <Dialog
         open={managedUpdate() !== null}
-        onOpenChange={(open) => { if (!open && !managedBusy()) { setManagedUpdate(null); setUpdateNoticeAcceptances({}); } }}
+        onOpenChange={(open) => { if (!open && !managedUpdateBusy()) { setManagedUpdate(null); setUpdateNoticeAcceptances({}); } }}
         title={i18n.t('webServices.managed.updateTitle')}
         footer={(
           <div class="flex w-full justify-end gap-2">
-            <Show when={managedBusy()} fallback={<>
+            <Show when={managedUpdateBusy()} fallback={<>
               <Button size="sm" variant="outline" onClick={() => { setManagedUpdate(null); setUpdateNoticeAcceptances({}); }}>{i18n.t('webServices.actions.cancel')}</Button>
               <Button size="sm" variant="default" onClick={updateManagedService} disabled={!requiredNoticesAccepted(managedUpdate()?.update_notices, updateNoticeAcceptances())}>{i18n.t('webServices.managed.update')}</Button>
             </>}>
-              <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation()} disabled={!managedOperation() || managedOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+              <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation(managedUpdateOperation())} disabled={!managedUpdateOperation() || managedUpdateOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
             </Show>
           </div>
         )}
@@ -2552,11 +2617,11 @@ export function EnvPortForwardsPage() {
                 <ManagedTemplateNotices
                   notices={service.update_notices ?? []}
                   accepted={updateNoticeAcceptances()}
-                  disabled={managedBusy()}
+                  disabled={managedUpdateBusy()}
                   onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
                 />
               </Show>
-              <Show when={managedOperation()} keyed>{(operation) => <div class="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs" role="status" aria-live="polite"><Show when={!['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state)}><ManagedServiceShapingOrb /></Show><span>{managedStageLabel(operation.stage, i18n)}</span><span class="ml-auto font-mono text-muted-foreground">{Math.min(operation.progress_current, operation.progress_total)}/{operation.progress_total}</span></div>}</Show>
+              <Show when={managedUpdateBusy() ? managedUpdateOperation() : null} keyed>{(operation) => <ManagedOperationProgress operation={operation} serviceName={identity().name} artifactReference={managedOperationArtifact(service.service_id)} canCancel={canManageManagedService()} onCancel={() => void cancelManagedOperation(operation)} />}</Show>
             </div>
           );
         }}</Show>
@@ -2564,14 +2629,15 @@ export function EnvPortForwardsPage() {
 
       <Dialog
         open={managedUninstall() !== null && !managedDeleteConfirm()}
-        onOpenChange={(open) => { if (!open) setManagedUninstall(null); }}
+        onOpenChange={(open) => { if (!open && !managedUninstallBusy()) setManagedUninstall(null); }}
         title={i18n.t('webServices.managed.uninstallTitle')}
-        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setManagedUninstall(null)} disabled={managedBusy()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="destructive" onClick={confirmManagedUninstall} disabled={managedBusy()}>{i18n.t('webServices.managed.uninstall')}</Button></div>}
+        footer={<div class="flex justify-end gap-2"><Show when={managedUninstallBusy()} fallback={<><Button size="sm" variant="outline" onClick={() => setManagedUninstall(null)}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="destructive" onClick={confirmManagedUninstall}>{i18n.t('webServices.managed.uninstall')}</Button></>}><Button size="sm" variant="outline" onClick={() => void cancelManagedOperation(managedUninstallOperation())} disabled={!managedUninstallOperation() || managedUninstallOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show></div>}
       >
         <div class="space-y-3">
           <p class="text-sm">{i18n.t('webServices.managed.uninstallQuestion')}</p>
           <Checkbox checked={managedUninstall()?.deleteData ?? false} onChange={(checked) => setManagedUninstall((current) => current ? { ...current, deleteData: Boolean(checked) } : current)} label={i18n.t('webServices.managed.deleteData')} size="sm" disabled={!(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)} />
           <Show when={!(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)}><p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.adminRequired')}</p></Show>
+          <Show when={managedUninstallBusy() ? managedUninstallOperation() : null} keyed>{(operation) => <ManagedOperationProgress operation={operation} serviceName={managedServiceLocalizedIdentity(managedUninstall()!.service, i18n).name} artifactReference={managedOperationArtifact(operation.service_id)} canCancel={canManageManagedService()} onCancel={() => void cancelManagedOperation(operation)} />}</Show>
         </div>
       </Dialog>
 
@@ -2581,7 +2647,7 @@ export function EnvPortForwardsPage() {
         title={i18n.t('webServices.managed.deleteDataTitle')}
         confirmText={i18n.t('webServices.managed.deleteDataConfirm')}
         variant="destructive"
-        loading={managedBusy()}
+        loading={managedUninstallBusy()}
         onConfirm={() => { const request = managedUninstall(); if (request) void uninstallManaged(request); }}
       >
         <p class="text-sm">{i18n.t('webServices.managed.deleteDataWarning')}</p>
