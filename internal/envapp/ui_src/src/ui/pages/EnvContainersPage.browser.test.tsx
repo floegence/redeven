@@ -120,7 +120,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   subscribeContainerStatsCollection: vi.fn().mockImplementation(async (_engine: string, _endpoint: string, observe: (sample: unknown) => void) => {
     observe({ sampled_at_unix_ms: Date.now(), samples: [{ container_id: 'e2c83fcda485', cpu_percent: 38.2, memory_bytes: 275_000_000 }] });
   }),
-  tailContainerLogs: vi.fn(),
+  tailContainerLogs: vi.fn().mockResolvedValue([]),
 }));
 
 import { EnvContainersPage } from './EnvContainersPage';
@@ -158,11 +158,16 @@ describe('native Containers responsive product surface', () => {
 
   it('uses a flat sortable inventory and a dedicated detail page on desktop', async () => {
     await page.viewport(1440, 900);
-    const mounted = mount();
+    const mounted = mount('workbench');
     dispose = mounted.dispose;
     await settle();
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    expect(root.dataset.variant).toBe('workbench');
+    const resourceTabs = Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'));
+    expect(resourceTabs).toHaveLength(4);
+    expect(resourceTabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(resourceTabs.every((tab) => tab.querySelector('[data-lucide]') || tab.querySelector('svg'))).toBe(true);
     const table = root.querySelector<HTMLElement>('[data-container-resource-table]')!;
     const rows = Array.from(root.querySelectorAll<HTMLElement>('tbody tr'));
     expect(getComputedStyle(table).display).not.toBe('none');
@@ -196,6 +201,12 @@ describe('native Containers responsive product surface', () => {
     expect(detailPage.querySelector('[data-container-detail-grid]')?.textContent).toContain('Network mode');
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
 
+    const overviewTab = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Overview'))!;
+    overviewTab.focus();
+    overviewTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await settle();
+    expect(Array.from(detailPage.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Logs'))?.getAttribute('aria-selected')).toBe('true');
+
     const statsTab = Array.from(detailPage.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Stats'))!;
     statsTab.click();
     await settle();
@@ -213,6 +224,9 @@ describe('native Containers responsive product surface', () => {
     await settle();
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    const resourceTabs = root.querySelector<HTMLElement>('.container-resource-tabs__scroller')!;
+    expect(getComputedStyle(resourceTabs).overflowX).toBe('auto');
+    if (viewport.width === 320) expect(resourceTabs.scrollWidth).toBeGreaterThan(resourceTabs.clientWidth);
     const cards = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-container-mobile-list] > button'));
     expect(cards).toHaveLength(3);
     expect(getComputedStyle(root.querySelector<HTMLElement>('.container-resource-table-shell')!).display).toBe('none');

@@ -31,7 +31,7 @@ import {
   X,
 } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
-import { Button, Dropdown, Input, MonitoringChart, Tag, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, Input, MonitoringChart, Tabs, Tag, type DropdownItem, type TabItem } from '@floegence/floe-webapp-core/ui';
 
 import { Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
@@ -99,12 +99,24 @@ type ReviewState = Readonly<{
 }>;
 
 type ResourceFilter = 'all' | 'active' | 'inactive' | 'managed';
-type EndpointIssue = 'unavailable' | 'permission';
 type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'used-by' | 'containers';
 type ResourceSortKey = 'status' | 'name' | 'secondary' | 'created';
 type ResourceSortDirection = 'ascending' | 'descending';
 
 type DetailRecord = Readonly<Record<string, unknown>>;
+
+type ContainerConsoleTarget = Readonly<{
+  engine: ContainerEngine;
+  endpointID: string;
+  view: ContainerResourceView;
+  selectedIdentity: string;
+}>;
+
+type ContainerConsoleState =
+  | Readonly<{ phase: 'loading'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint | null }>
+  | Readonly<{ phase: 'ready'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint; inventory: readonly ContainerResourceInventoryItem[] }>
+  | Readonly<{ phase: 'unavailable' | 'permission'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint | null }>
+  | Readonly<{ phase: 'error'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint | null; message: string }>;
 
 const DEFAULT_STATE: PersistedContainersState = {
   version: 1,
@@ -155,10 +167,8 @@ function detailArray(record: DetailRecord, key: string): readonly unknown[] {
 function sanitizePersistedState(value: unknown): PersistedContainersState {
   const candidate = value as Partial<PersistedContainersState> | null;
   const engine = candidate?.engine === 'podman' ? 'podman' : 'docker';
-  const availableViews: readonly ContainerResourceView[] = engine === 'podman'
-    ? ['containers', 'images', 'volumes', 'pods']
-    : ['containers', 'images', 'volumes', 'compose-projects'];
-  const view = availableViews.includes(candidate?.view as ContainerResourceView)
+  const views = availableResourceViews(engine);
+  const view = views.includes(candidate?.view as ContainerResourceView)
     ? candidate?.view as ContainerResourceView
     : 'containers';
   return {
@@ -167,6 +177,22 @@ function sanitizePersistedState(value: unknown): PersistedContainersState {
     endpointID: compact(candidate?.endpointID),
     view,
     selectedIdentity: compact(candidate?.selectedIdentity),
+  };
+}
+
+function availableResourceViews(engine: ContainerEngine): readonly ContainerResourceView[] {
+  return engine === 'podman'
+    ? ['containers', 'images', 'volumes', 'pods']
+    : ['containers', 'images', 'volumes', 'compose-projects'];
+}
+
+function normalizeConsoleTarget(target: ContainerConsoleTarget): ContainerConsoleTarget {
+  const views = availableResourceViews(target.engine);
+  return {
+    engine: target.engine,
+    endpointID: compact(target.endpointID),
+    view: views.includes(target.view) ? target.view : target.engine === 'podman' ? 'pods' : 'compose-projects',
+    selectedIdentity: compact(target.selectedIdentity),
   };
 }
 
@@ -213,7 +239,7 @@ function resourceActive(view: ContainerResourceView, item: ContainerResourceInve
   return ['running', 'restarting', 'paused', 'up', 'healthy', 'partial'].includes(resourceStatus(view, item).toLowerCase());
 }
 
-function endpointIssueFromError(cause: unknown): EndpointIssue | null {
+function endpointIssueFromError(cause: unknown): 'unavailable' | 'permission' | null {
   const code = compact((cause as { code?: unknown } | null)?.code);
   if (code === 'ENGINE_PERMISSION_DENIED') return 'permission';
   if (code === 'ENGINE_UNAVAILABLE') return 'unavailable';
@@ -366,20 +392,16 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const env = useEnvContext();
   const storageKey = () => `containers:${compact(props.stateScope) || 'activity'}`;
   const restored = sanitizePersistedState(readUIStorageJSON(storageKey(), DEFAULT_STATE));
-  const [engine, setEngine] = createSignal<ContainerEngine>(restored.engine);
-  const [endpointID, setEndpointID] = createSignal(restored.endpointID);
-  const [view, setView] = createSignal<ContainerResourceView>(restored.view);
-  const [selectedIdentity, setSelectedIdentity] = createSignal(restored.selectedIdentity);
-  const [endpoints, setEndpoints] = createSignal<ContainerEndpoint[]>([]);
-  const [endpointStatus, setEndpointStatus] = createSignal<ContainerEndpoint | null>(null);
-  const [inventory, setInventory] = createSignal<ContainerResourceInventoryItem[]>([]);
+  const restoredTarget: ContainerConsoleTarget = normalizeConsoleTarget(restored);
+  const [consoleState, setConsoleState] = createSignal<ContainerConsoleState>({
+    phase: 'loading',
+    target: restoredTarget,
+    endpoints: [],
+    endpoint: null,
+  });
   const [details, setDetails] = createSignal<unknown>(null);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [resourceFilter, setResourceFilter] = createSignal<ResourceFilter>(defaultResourceFilter(restored.view));
-  const [loading, setLoading] = createSignal(true);
-  const [refreshing, setRefreshing] = createSignal(false);
-  const [error, setError] = createSignal('');
-  const [endpointIssue, setEndpointIssue] = createSignal<EndpointIssue | null>(null);
   const [operations, setOperations] = createSignal<ContainerOperation[]>([]);
   const [operationsOpen, setOperationsOpen] = createSignal(false);
   const [creationMode, setCreationMode] = createSignal<CreationMode | null>(null);
@@ -421,36 +443,32 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [filesLoading, setFilesLoading] = createSignal(false);
   const [filePreview, setFilePreview] = createSignal('');
   const [filePreviewName, setFilePreviewName] = createSignal('');
-  let endpointLoadSequence = 0;
-  let inventoryLoadSequence = 0;
+  let consoleLoadGeneration = 0;
+  let consoleLoadAbort: AbortController | null = null;
+  let waitingForEnvironment = false;
   let operationStreamAbort: AbortController | null = null;
   let logViewElement: HTMLDivElement | undefined;
   let inventoryScrollElement: HTMLDivElement | undefined;
   let storedInventoryScrollTop = 0;
-
-  onMount(() => {
-    if (compact(props.stateScope) && props.stateScope !== 'activity') return;
-    const unsubscribe = subscribeContainerResourceNavigation((request) => {
-      const next = sanitizePersistedState(request);
-      setEngine(next.engine);
-      setEndpointID(next.endpointID);
-      setView(next.view);
-      setSelectedIdentity(next.selectedIdentity);
-      setSearchQuery('');
-      setResourceFilter(defaultResourceFilter(next.view));
-      setDetailTab('overview');
-    });
-    onCleanup(unsubscribe);
-  });
 
   const permissions = createMemo(() => env.env()?.permissions);
   const canRead = createMemo(() => Boolean(permissions()?.can_read));
   const canExecute = createMemo(() => canRead() && Boolean(permissions()?.can_execute));
   const canRWX = createMemo(() => canExecute() && Boolean(permissions()?.can_write));
   const canAdmin = createMemo(() => Boolean(permissions()?.can_admin || permissions()?.is_owner));
-  const availableViews = createMemo<readonly ContainerResourceView[]>(() => engine() === 'podman'
-    ? ['containers', 'images', 'volumes', 'pods']
-    : ['containers', 'images', 'volumes', 'compose-projects']);
+  const readyConsole = createMemo(() => {
+    const state = consoleState();
+    return state.phase === 'ready' ? state : null;
+  });
+  const engine = () => consoleState().target.engine;
+  const endpointID = () => consoleState().target.endpointID;
+  const view = () => consoleState().target.view;
+  const selectedIdentity = () => consoleState().target.selectedIdentity;
+  const endpoints = () => consoleState().endpoints;
+  const endpointStatus = () => consoleState().endpoint;
+  const inventory = () => readyConsole()?.inventory ?? [];
+  const loading = () => consoleState().phase === 'loading';
+  const availableViews = createMemo<readonly ContainerResourceView[]>(() => availableResourceViews(engine()));
   const selected = createMemo(() => {
     const identity = selectedIdentity();
     if (!identity) return null;
@@ -522,107 +540,160 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     }
   };
 
-  const loadEndpointInventory = async () => {
-    const sequence = ++endpointLoadSequence;
-    setLoading(true);
-    setError('');
-    setEndpointIssue(null);
-    try {
-      const nextEndpoints = await listContainerEndpoints(engine());
-      if (sequence !== endpointLoadSequence) return;
-      setEndpoints(nextEndpoints);
-      const current = nextEndpoints.find((item) => item.endpoint_id === endpointID());
-      const nextEndpoint = current ?? nextEndpoints.find((item) => item.default) ?? nextEndpoints[0];
-      setEndpointID(nextEndpoint?.endpoint_id ?? '');
-      setEndpointStatus(nextEndpoint ?? null);
-      if (!nextEndpoint?.endpoint_id) {
-        setEndpointIssue('unavailable');
-        return;
-      }
-      const status = await getContainerEndpointStatus(engine(), nextEndpoint.endpoint_id);
-      if (sequence !== endpointLoadSequence) return;
-      setEndpointStatus(status);
-      if (!status.available) setEndpointIssue('unavailable');
-    } catch (cause) {
-      if (sequence !== endpointLoadSequence) return;
-      setEndpoints([]);
-      setEndpointStatus(null);
-      const issue = endpointIssueFromError(cause);
-      setEndpointIssue(issue);
-      if (!issue) setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      if (sequence === endpointLoadSequence) setLoading(false);
-    }
+  const resetResourceContext = () => {
+    setDetails(null);
+    setLogs(null);
+    setStats(null);
+    setStatsHistory([]);
+    setCollectionStats(new Map());
+    setRawInspect(null);
+    setRawInspectLoading(false);
+    setImageHistory([]);
+    setImageHistoryLoading(false);
+    setImageHistoryError('');
+    setStatsLoading(false);
+    setStatsError('');
+    setFilePath('/');
+    setFileEntries([]);
+    setFilesLoading(false);
+    setFilePreview('');
+    setFilePreviewName('');
+    setCreationMode(null);
+    setPendingConfirmation(null);
+    setConfirmation('');
+    setReview(null);
+    setMutationBusy(false);
   };
 
-  const loadInventory = async (quiet = false) => {
-    if (!canRead()) {
-      setInventory([]);
-      setError(i18n.t('containers.permissions.read'));
+  const loadConsole = async (
+    requestedTarget: ContainerConsoleTarget,
+    options: Readonly<{ forceConnectionCheck?: boolean; resetListControls?: boolean; notifyIfSelectionMissing?: boolean }> = {},
+  ) => {
+    const target = normalizeConsoleTarget(requestedTarget);
+    const previous = readyConsole();
+    const canReuseConnection = !options.forceConnectionCheck
+      && previous?.target.engine === target.engine
+      && (!target.endpointID || previous.target.endpointID === target.endpointID);
+    let nextEndpoints = canReuseConnection ? previous.endpoints : [];
+    let nextEndpoint = canReuseConnection ? previous.endpoint : null;
+    const loadingTarget = nextEndpoint
+      ? { ...target, endpointID: nextEndpoint.endpoint_id }
+      : target;
+
+    consoleLoadAbort?.abort();
+    const controller = new AbortController();
+    consoleLoadAbort = controller;
+    const generation = ++consoleLoadGeneration;
+    const current = () => generation === consoleLoadGeneration && !controller.signal.aborted;
+
+    setConsoleState({ phase: 'loading', target: loadingTarget, endpoints: nextEndpoints, endpoint: nextEndpoint });
+    resetResourceContext();
+    if (options.resetListControls) {
+      setSearchQuery('');
+      setResourceFilter(defaultResourceFilter(target.view));
+      setDetailTab('overview');
+      setChartsOpen(false);
+    }
+
+    if (env.env() === undefined) {
+      waitingForEnvironment = true;
       return;
     }
-    const sequence = ++inventoryLoadSequence;
-    if (quiet) setRefreshing(true); else setLoading(true);
-    setError('');
+    waitingForEnvironment = false;
+    if (!canRead()) {
+      if (current()) setConsoleState({ phase: 'permission', target: loadingTarget, endpoints: [], endpoint: null });
+      return;
+    }
+
     try {
-      const items = await listContainerResources(view(), engine(), endpointID());
-      if (sequence !== inventoryLoadSequence) return;
-      setEndpointIssue(null);
-      setInventory(items);
-      const currentIdentity = selectedIdentity();
-      if (currentIdentity && !items.some((item) => resourceIdentity(view(), item) === currentIdentity)) {
-        setSelectedIdentity('');
-        setDetails(null);
-        setLogs(null);
-        setStats(null);
+      if (!nextEndpoint) {
+        nextEndpoints = await listContainerEndpoints(target.engine, controller.signal);
+        if (!current()) return;
+        const preferred = nextEndpoints.find((item) => item.endpoint_id === target.endpointID);
+        if (target.endpointID && !preferred) {
+          setConsoleState({ phase: 'unavailable', target, endpoints: nextEndpoints, endpoint: null });
+          return;
+        }
+        nextEndpoint = preferred ?? nextEndpoints.find((item) => item.default) ?? nextEndpoints[0] ?? null;
+        if (!nextEndpoint) {
+          setConsoleState({ phase: 'unavailable', target: { ...target, endpointID: '' }, endpoints: nextEndpoints, endpoint: null });
+          return;
+        }
+        nextEndpoint = await getContainerEndpointStatus(target.engine, nextEndpoint.endpoint_id, controller.signal);
+        if (!current()) return;
+      }
+
+      const resolvedTarget = { ...target, endpointID: nextEndpoint.endpoint_id };
+      if (!nextEndpoint.available) {
+        setConsoleState({ phase: 'unavailable', target: resolvedTarget, endpoints: nextEndpoints, endpoint: nextEndpoint });
+        return;
+      }
+
+      const items = await listContainerResources(target.view, target.engine, nextEndpoint.endpoint_id, controller.signal);
+      if (!current()) return;
+      const selectedStillExists = !target.selectedIdentity
+        || items.some((item) => resourceIdentity(target.view, item) === target.selectedIdentity);
+      const readyTarget = selectedStillExists ? resolvedTarget : { ...resolvedTarget, selectedIdentity: '' };
+      setConsoleState({ phase: 'ready', target: readyTarget, endpoints: nextEndpoints, endpoint: nextEndpoint, inventory: items });
+      if (!selectedStillExists && options.notifyIfSelectionMissing) {
         notify.info(i18n.t('containers.notifications.inventoryChangedTitle'), i18n.t('containers.notifications.inventoryChangedMessage'));
       }
     } catch (cause) {
-      if (sequence !== inventoryLoadSequence) return;
+      if (!current()) return;
       const issue = endpointIssueFromError(cause);
-      if (issue && inventory().length === 0) {
-        setEndpointIssue(issue);
+      const failedTarget = nextEndpoint ? { ...target, endpointID: nextEndpoint.endpoint_id } : target;
+      if (issue) {
+        setConsoleState({ phase: issue, target: failedTarget, endpoints: nextEndpoints, endpoint: nextEndpoint });
       } else {
-        setError(cause instanceof Error ? cause.message : String(cause));
-      }
-    } finally {
-      if (sequence === inventoryLoadSequence) {
-        setLoading(false);
-        setRefreshing(false);
+        setConsoleState({
+          phase: 'error',
+          target: failedTarget,
+          endpoints: nextEndpoints,
+          endpoint: nextEndpoint,
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
       }
     }
   };
 
-  const retryContainerEngine = async () => {
-    await loadEndpointInventory();
-    if (endpointID()) await loadInventory();
+  const reloadConsole = (forceConnectionCheck = false) => loadConsole(
+    consoleState().target,
+    { forceConnectionCheck, notifyIfSelectionMissing: true },
+  );
+
+  const setSelectedIdentity = (identity: string) => {
+    setConsoleState((state) => ({ ...state, target: { ...state.target, selectedIdentity: compact(identity) } }));
   };
 
   createEffect(() => {
-    engine();
-    void loadEndpointInventory().then(loadOperations);
+    const environment = env.env();
+    if (environment === undefined || !waitingForEnvironment) return;
+    waitingForEnvironment = false;
+    void loadConsole(consoleState().target, { forceConnectionCheck: true });
+  });
+
+  onMount(() => {
+    void loadConsole(restoredTarget, { forceConnectionCheck: true });
+    if (compact(props.stateScope) && props.stateScope !== 'activity') return;
+    const unsubscribe = subscribeContainerResourceNavigation((request) => {
+      const next = normalizeConsoleTarget(sanitizePersistedState(request));
+      void loadConsole(next, { forceConnectionCheck: true, resetListControls: true });
+    });
+    onCleanup(unsubscribe);
   });
 
   createEffect(() => {
-    const currentEndpointID = endpointID();
-    view();
-    if (!currentEndpointID) {
-      setInventory([]);
-      return;
-    }
-    void loadInventory();
-  });
-
-  createEffect(() => {
-    const identity = selectedIdentity();
-    const currentView = view();
+    const ready = readyConsole();
+    const identity = ready?.target.selectedIdentity ?? '';
     if (!identity) {
       setDetails(null);
       return;
     }
-    getContainerResourceDetails(currentView, identity, engine(), endpointID())
-      .then(setDetails)
-      .catch(() => setDetails(null));
+    let active = true;
+    getContainerResourceDetails(ready!.target.view, identity, ready!.target.engine, ready!.target.endpointID)
+      .then((value) => active && setDetails(value))
+      .catch(() => active && setDetails(null));
+    onCleanup(() => { active = false; });
   });
 
   createEffect(() => {
@@ -632,26 +703,31 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   });
 
   createEffect(() => {
-    if (!chartsOpen() || view() !== 'containers' || !endpointID() || !endpointStatus()?.capabilities?.collection_stats) {
+    const ready = readyConsole();
+    if (!ready || !chartsOpen() || ready.target.view !== 'containers' || !ready.endpoint.capabilities?.collection_stats) {
       setCollectionStats(new Map());
       return;
     }
     const controller = new AbortController();
-    void subscribeContainerStatsCollection(engine(), endpointID(), (sample) => {
+    void subscribeContainerStatsCollection(ready.target.engine, ready.target.endpointID, (sample) => {
+      if (controller.signal.aborted) return;
       setCollectionStats(new Map(sample.samples.map((item) => [item.container_id, item])));
-    }, controller.signal).catch(() => setCollectionStats(new Map()));
+    }, controller.signal).catch(() => {
+      if (!controller.signal.aborted) setCollectionStats(new Map());
+    });
     onCleanup(() => controller.abort());
   });
 
   createEffect(() => {
-    if (detailTab() !== 'stats' || view() !== 'containers' || !selectedIdentity()) return;
+    const ready = readyConsole();
+    if (!ready || detailTab() !== 'stats' || ready.target.view !== 'containers' || !ready.target.selectedIdentity) return;
     const controller = new AbortController();
     let active = true;
     setStats(null);
     setStatsHistory([]);
     setStatsLoading(true);
     setStatsError('');
-    void subscribeContainerStats(selectedIdentity(), engine(), endpointID(), (sample) => {
+    void subscribeContainerStats(ready.target.selectedIdentity, ready.target.engine, ready.target.endpointID, (sample) => {
       if (!active) return;
       const normalized = normalizedStatsSample(sample);
       setStats(normalized);
@@ -670,22 +746,31 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   });
 
   createEffect(() => {
-    if (detailTab() !== 'logs' || view() !== 'containers' || !selectedIdentity()) return;
+    const ready = readyConsole();
+    if (!ready || detailTab() !== 'logs' || ready.target.view !== 'containers' || !ready.target.selectedIdentity) return;
     const controller = new AbortController();
-    void tailContainerLogs(selectedIdentity(), engine(), endpointID()).then(setLogs).catch(() => setLogs([]));
-    void subscribeContainerLogs(selectedIdentity(), engine(), endpointID(), (line) => {
+    let active = true;
+    void tailContainerLogs(ready.target.selectedIdentity, ready.target.engine, ready.target.endpointID)
+      .then((lines) => active && setLogs(lines))
+      .catch(() => active && setLogs([]));
+    void subscribeContainerLogs(ready.target.selectedIdentity, ready.target.engine, ready.target.endpointID, (line) => {
+      if (!active) return;
       if (!logsPaused()) setLogs((items) => [...(items ?? []).slice(-1999), line]);
     }, controller.signal).catch(() => undefined);
-    onCleanup(() => controller.abort());
+    onCleanup(() => {
+      active = false;
+      controller.abort();
+    });
   });
 
   createEffect(() => {
-    if (detailTab() !== 'layers' || view() !== 'images' || !selectedIdentity()) return;
+    const ready = readyConsole();
+    if (!ready || detailTab() !== 'layers' || ready.target.view !== 'images' || !ready.target.selectedIdentity) return;
     let active = true;
     setImageHistory([]);
     setImageHistoryLoading(true);
     setImageHistoryError('');
-    void getContainerImageHistory(selectedIdentity(), engine(), endpointID())
+    void getContainerImageHistory(ready.target.selectedIdentity, ready.target.engine, ready.target.endpointID)
       .then((history) => active && setImageHistory(history))
       .catch((cause) => {
         if (!active) return;
@@ -697,30 +782,33 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   });
 
   createEffect(() => {
-    const currentView = view();
-    if (detailTab() !== 'files' || currentView !== 'volumes' || !selectedIdentity()) return;
+    const ready = readyConsole();
+    if (!ready || detailTab() !== 'files' || ready.target.view !== 'volumes' || !ready.target.selectedIdentity) return;
     if (!canAdmin()) return;
-    if (currentView === 'volumes' && !endpointStatus()?.capabilities?.volume_files) return;
+    if (!ready.endpoint.capabilities?.volume_files) return;
+    let active = true;
     setFilesLoading(true);
-    void listContainerResourceFiles(currentView, selectedIdentity(), filePath(), engine(), endpointID())
-      .then((listing) => setFileEntries([...listing.entries]))
-      .catch(() => setFileEntries([]))
-      .finally(() => setFilesLoading(false));
+    void listContainerResourceFiles('volumes', ready.target.selectedIdentity, filePath(), ready.target.engine, ready.target.endpointID)
+      .then((listing) => active && setFileEntries([...listing.entries]))
+      .catch(() => active && setFileEntries([]))
+      .finally(() => active && setFilesLoading(false));
+    onCleanup(() => { active = false; });
   });
 
   onMount(() => void loadOperations());
-  onCleanup(() => operationStreamAbort?.abort());
+  onCleanup(() => {
+    consoleLoadAbort?.abort();
+    operationStreamAbort?.abort();
+  });
 
   const setCurrentEngine = (next: ContainerEngine) => {
-    setEngine(next);
-    setEndpointID('');
-    setSelectedIdentity('');
-    setDetails(null);
-    setSearchQuery('');
-    setResourceFilter(defaultResourceFilter(view()));
-    setChartsOpen(false);
-    if (next === 'podman' && view() === 'compose-projects') setView('pods');
-    if (next === 'docker' && view() === 'pods') setView('compose-projects');
+    if (engine() === next) return;
+    void loadConsole(normalizeConsoleTarget({
+      engine: next,
+      endpointID: '',
+      view: view(),
+      selectedIdentity: '',
+    }), { forceConnectionCheck: true, resetListControls: true });
   };
 
   const selectResource = (item: ContainerResourceInventoryItem) => {
@@ -854,16 +942,18 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   );
 
   const beginPreflight = async (draft: MutationDraft) => {
+    const generation = consoleLoadGeneration;
     setMutationBusy(true);
     try {
       const preflight = await preflightContainerOperation(draft.method, draft.request);
+      if (generation !== consoleLoadGeneration) return;
       setReview({ request: draft.request, preflight });
       setPendingConfirmation(null);
       setConfirmation('');
     } catch (cause) {
-      notify.error(i18n.t('containers.notifications.preflightFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+      if (generation === consoleLoadGeneration) notify.error(i18n.t('containers.notifications.preflightFailedTitle'), cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setMutationBusy(false);
+      if (generation === consoleLoadGeneration) setMutationBusy(false);
     }
   };
 
@@ -898,7 +988,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       void subscribeContainerOperation(operation.operation_id, (next) => {
         setOperations((previous) => [next, ...previous.filter((item) => item.operation_id !== next.operation_id)]);
         if (TERMINAL_OPERATION_STATES.has(next.state)) {
-          void loadInventory(true);
+          void reloadConsole();
           if (next.state === 'succeeded') {
             notify.success(i18n.t('containers.notifications.operationCompleteTitle'), i18n.t('containers.notifications.operationCompleteMessage'));
           }
@@ -1045,14 +1135,16 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   };
 
   const loadRawInspect = async () => {
-    if (!selectedIdentity() || !canAdmin()) return;
+    const ready = readyConsole();
+    if (!ready?.target.selectedIdentity || !canAdmin()) return;
     setRawInspectLoading(true);
     try {
-      setRawInspect(await getRawContainerInspect(selectedIdentity(), engine(), endpointID()));
+      const value = await getRawContainerInspect(ready.target.selectedIdentity, ready.target.engine, ready.target.endpointID);
+      if (readyConsole() === ready) setRawInspect(value);
     } catch (cause) {
-      notify.error(i18n.t('containers.notifications.detailsFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+      if (readyConsole() === ready) notify.error(i18n.t('containers.notifications.detailsFailedTitle'), cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setRawInspectLoading(false);
+      if (readyConsole() === ready) setRawInspectLoading(false);
     }
   };
 
@@ -1093,10 +1185,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       setFilePath(entry.path);
       return;
     }
-    const resourceView = view();
-    if (resourceView !== 'volumes' || !selectedIdentity()) return;
+    const ready = readyConsole();
+    if (ready?.target.view !== 'volumes' || !ready.target.selectedIdentity) return;
     try {
-      const blob = await readContainerResourceFile(resourceView, selectedIdentity(), entry.path, engine(), endpointID());
+      const blob = await readContainerResourceFile('volumes', ready.target.selectedIdentity, entry.path, ready.target.engine, ready.target.endpointID);
+      if (readyConsole() !== ready) return;
       if (download) {
         downloadBlob(blob, entry.name);
         return;
@@ -1105,7 +1198,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       setFilePreviewName(entry.name);
       setFilePreview(text.includes('\u0000') ? '' : text);
     } catch (cause) {
-      notify.error(i18n.t('containers.notifications.detailsFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+      if (readyConsole() === ready) notify.error(i18n.t('containers.notifications.detailsFailedTitle'), cause instanceof Error ? cause.message : String(cause));
     }
   };
 
@@ -1304,6 +1397,25 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   });
 
   const detailTabLabel = (tab: DetailTab) => i18n.t(`containers.detailTabs.${tab}` as Parameters<typeof i18n.t>[0]);
+  const resourceTabItems = createMemo<TabItem[]>(() => availableViews().map((item) => ({
+    id: item,
+    label: viewLabel(item),
+    icon: <ViewIcon view={item} class="h-4 w-4" />,
+    disabled: consoleState().phase !== 'ready',
+  })));
+  const detailTabItems = createMemo<TabItem[]>(() => detailTabs().map((tab) => ({
+    id: tab,
+    label: detailTabLabel(tab),
+  })));
+
+  const selectResourceView = (nextView: ContainerResourceView) => {
+    const ready = readyConsole();
+    if (!ready || ready.target.view === nextView) return;
+    void loadConsole(
+      { ...ready.target, view: nextView, selectedIdentity: '' },
+      { resetListControls: true },
+    );
+  };
 
   const renderReferences = () => {
     const record = selectedDetailRecord();
@@ -1317,9 +1429,12 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             return (
               <button type="button" class="container-reference-row" disabled={!identity} onClick={() => {
                 if (!identity) return;
-                setView('containers');
-                setSelectedIdentity(identity);
-                setDetailTab('overview');
+                const ready = readyConsole();
+                if (!ready) return;
+                void loadConsole(
+                  { ...ready.target, view: 'containers', selectedIdentity: identity },
+                  { resetListControls: true },
+                );
               }}>
                 <span class="container-status__dot" data-tone={resourceStatusTone(detailString(reference, 'state'))} />
                 <span class="truncate">{detailString(reference, 'name') || identity.slice(0, 12)}</span>
@@ -1391,6 +1506,26 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     return <div class="container-empty-inline"><Terminal class="h-5 w-5" />{i18n.t('containers.detail.execUnavailable')}</div>;
   };
 
+  const renderConsoleFallback = () => {
+    const state = consoleState();
+    if (state.phase === 'loading') {
+      return <div class="container-loading-list container-loading-list--page" aria-label={i18n.t('containers.loading')}><For each={[1, 2, 3, 4, 5]}>{() => <div />}</For></div>;
+    }
+    const permission = state.phase === 'permission';
+    const message = state.phase === 'error'
+      ? state.message
+      : i18n.t(permission ? 'containers.engineState.permissionDescription' : 'containers.engineState.unavailableDescription', { engine: state.target.engine });
+    return (
+      <div class="container-engine-state" data-container-engine-state={state.phase} role={state.phase === 'error' ? 'alert' : 'status'}>
+        <div class="container-empty-state__mark">{permission || state.phase === 'error' ? <AlertTriangle class="h-6 w-6" /> : <Layers class="h-6 w-6" />}</div>
+        <span>{state.target.engine}</span>
+        <strong>{i18n.t(permission ? 'containers.engineState.permissionTitle' : 'containers.engineState.unavailableTitle', { engine: state.target.engine })}</strong>
+        <p>{message}</p>
+        <Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.engineState.retry')}</Button>
+      </div>
+    );
+  };
+
   return (
     <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-variant={props.variant ?? 'activity'}>
       <header class="container-command-header shrink-0 px-3 md:px-5">
@@ -1405,7 +1540,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 <button type="button" role="radio" aria-checked={engine() === value} class="container-touch-target" onClick={() => setCurrentEngine(value)}>{value}</button>
               )}</For>
             </div>
-            <Show when={endpointID()}><div class="container-endpoint-control min-w-0">
+            <Show when={endpointStatus()}><div class="container-endpoint-control min-w-0">
               <span class="container-endpoint-status" data-available={endpointStatus()?.available ? 'true' : 'false'} aria-hidden="true" />
               <label class="sr-only" for={`container-endpoint-${props.stateScope ?? 'activity'}`}>{i18n.t('containers.endpoint')}</label>
               <select
@@ -1413,13 +1548,17 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 class="container-touch-target min-w-0 flex-1 bg-transparent px-2 text-sm font-medium outline-none"
                 title={`${endpointStatus()?.remote ? i18n.t('containers.endpointMeta.remote') : i18n.t('containers.endpointMeta.local')} · ${endpointStatus()?.engine_version ?? ''}`}
                 value={endpointID()}
-                onChange={(event) => setEndpointID(event.currentTarget.value)}
+                disabled={loading()}
+                onChange={(event) => void loadConsole(
+                  { ...consoleState().target, endpointID: event.currentTarget.value, selectedIdentity: '' },
+                  { forceConnectionCheck: true, resetListControls: true },
+                )}
               >
                 <For each={endpoints()}>{(endpoint) => <option value={endpoint.endpoint_id}>{endpoint.display_name}</option>}</For>
               </select>
               <span class="sr-only" role="status">{endpointStatus()?.available ? i18n.t('containers.status.connected') : i18n.t('containers.status.unavailable')}</span>
             </div></Show>
-            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void (endpointIssue() ? retryContainerEngine() : loadInventory(true))} disabled={refreshing() || loading()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${refreshing() || loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
+            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void reloadConsole(true)} disabled={loading()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
             <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setOperationsOpen(true)} aria-label={i18n.t('containers.operations.title')} title={i18n.t('containers.operations.title')}>
               <Activity class="h-4 w-4" aria-hidden="true" />
               <Show when={activeOperationCount() > 0}><span class="container-operation-count">{activeOperationCount()}</span></Show>
@@ -1427,26 +1566,20 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           </div>
         </div>
 
-        <Show when={!endpointIssue() && endpointID()}><nav class="container-resource-nav flex gap-1 overflow-x-auto" aria-label={i18n.t('containers.resourceNavigation')}>
-          <For each={availableViews()}>{(item) => (
-            <button type="button" class="container-touch-target" aria-current={view() === item ? 'page' : undefined} onClick={() => { setView(item); setSelectedIdentity(''); setSearchQuery(''); setResourceFilter(defaultResourceFilter(item)); setDetailTab('overview'); }}>
-              <ViewIcon view={item} class="h-4 w-4" />
-              <span>{viewLabel(item)}</span>
-            </button>
-          )}</For>
-        </nav></Show>
+        <Tabs
+          class="container-resource-tabs"
+          items={resourceTabItems()}
+          activeId={view()}
+          onChange={(id) => selectResourceView(id as ContainerResourceView)}
+          size="md"
+          ariaLabel={i18n.t('containers.resourceNavigation')}
+          features={{ indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false }, containerBorder: false, scrollButtons: 'auto' }}
+          slotClassNames={{ scrollContainer: 'container-resource-tabs__scroller', tab: 'container-resource-tabs__tab' }}
+        />
       </header>
 
       <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy={loading()}>
-        <Show when={!endpointIssue()} fallback={
-          <div class="container-engine-state" data-container-engine-state={endpointIssue()} role="status">
-            <div class="container-empty-state__mark"><Show when={endpointIssue() === 'permission'} fallback={<Layers class="h-6 w-6" />}><AlertTriangle class="h-6 w-6" /></Show></div>
-            <span>{engine()}</span>
-            <strong>{i18n.t(endpointIssue() === 'permission' ? 'containers.engineState.permissionTitle' : 'containers.engineState.unavailableTitle', { engine: engine() })}</strong>
-            <p>{i18n.t(endpointIssue() === 'permission' ? 'containers.engineState.permissionDescription' : 'containers.engineState.unavailableDescription', { engine: engine() })}</p>
-            <Button size="sm" variant="outline" onClick={() => void retryContainerEngine()} disabled={loading()}><Refresh class={`mr-1.5 h-3.5 w-3.5 ${loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} />{i18n.t('containers.engineState.retry')}</Button>
-          </div>
-        }>
+        <Show when={readyConsole()} fallback={renderConsoleFallback()}>
         <Show when={selected()} keyed fallback={
           <div class="container-list-page">
             <section class="container-resource-toolbar" data-container-summary>
@@ -1471,10 +1604,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
               </div>
             </section>
             <Show when={chartsOpen() && view() === 'containers'}><div class="container-metrics-strip"><div><span>{i18n.t('containers.stats.cpu')}</span><strong>{[...collectionStats().values()].reduce((sum, item) => sum + item.cpu_percent, 0).toFixed(1)}%</strong></div><div><span>{i18n.t('containers.stats.memory')}</span><strong>{formatBytes([...collectionStats().values()].reduce((sum, item) => sum + item.memory_bytes, 0))}</strong></div><div><span>{i18n.t('containers.filters.active')}</span><strong>{activeResourceCount()}</strong></div></div></Show>
-            <Show when={error()}><div class="container-error" role="alert"><AlertTriangle class="h-4 w-4" />{error()}</div></Show>
             <div class="container-inventory-scroll" ref={(element) => { inventoryScrollElement = element; }}>
-              <Show when={!loading()} fallback={<div class="container-loading-list" aria-label={i18n.t('containers.loading')}><For each={[1, 2, 3, 4, 5]}>{() => <div />}</For></div>}>
-                <Show when={filteredInventory().length > 0} fallback={<div class="container-empty-state"><Search class="h-6 w-6" /><strong>{inventory().length ? i18n.t('containers.empty.filteredTitle') : i18n.t('containers.empty.title')}</strong></div>}>
+              <Show when={filteredInventory().length > 0} fallback={<div class="container-empty-state"><Search class="h-6 w-6" /><strong>{inventory().length ? i18n.t('containers.empty.filteredTitle') : i18n.t('containers.empty.title')}</strong></div>}>
                   <div class="container-resource-table-shell" data-container-table-shell><table class="w-full text-left text-sm" data-container-resource-table><thead><tr>
                     <th aria-sort={sortKey() === 'status' ? sortDirection() : 'none'}><SortControl sort="status" label={i18n.t('containers.columns.status')} /></th>
                     <th aria-sort={sortKey() === 'name' ? sortDirection() : 'none'}><SortControl sort="name" label={i18n.t('containers.columns.name')} /></th>
@@ -1488,11 +1619,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                     return <tr tabindex={0} data-container-resource-row-index={index()} onClick={() => selectResource(item)} onKeyDown={(event) => handleTableKey(event, index())}><td><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item))}><span class="container-usage-dot" data-active={resourceActive(view(), item)} /></Show></td><td><div class="container-name-cell"><ViewIcon view={view()} class="h-4 w-4" /><span class="truncate">{resourceName(view(), item)}</span><Show when={resourceManagement(item)?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></td><Show when={showSecondaryColumn()}><td class="container-secondary-cell"><Show when={view() === 'containers'}>{container().image?.reference || '—'}</Show><Show when={view() === 'images'}>{formatBytes((item as ImageInventoryItem).size_bytes)}</Show><Show when={view() === 'volumes'}>{(item as VolumeInventoryItem).driver || '—'}</Show><Show when={view() === 'compose-projects' || view() === 'pods'}>{(item as ComposeProjectInventoryItem | PodInventoryItem).running_count} / {(item as ComposeProjectInventoryItem | PodInventoryItem).container_count}</Show></td></Show><Show when={view() === 'containers'}><Show when={showPortsColumn()}><td class="container-port-cell">{container().ports?.map(formatPort).filter(Boolean).slice(0, 2).join(', ') || '—'}</td></Show><Show when={chartsOpen()}><td class="tabular-nums">{sample() ? `${sample()!.cpu_percent.toFixed(1)}%` : '—'}</td><td class="tabular-nums">{formatBytes(sample()?.memory_bytes)}</td></Show></Show><Show when={view() !== 'containers' && showCreatedColumn()}><td>{formatDate((item as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms)}</td></Show><td><div class="container-row-actions"><Show when={resourceManagement(item)?.managed} fallback={<><Show when={view() === 'containers'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'containers.stop' : 'containers.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show><Show when={view() === 'images'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.actions.run')} disabled={!canRWX()} onClick={(event) => openImageRun(event, item)}><Play class="h-4 w-4" /></Button></Show><Show when={view() === 'compose-projects'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'compose.projects.stop' : 'compose.projects.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show><Show when={view() === 'pods'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, item, resourceActive(view(), item) ? 'pods.stop' : 'pods.start')}>{resourceActive(view(), item) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show>{renderRowOverflow(item)}<ChevronRight class="h-4 w-4 text-muted-foreground" /></>}><Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); selectResource(item); queueMicrotask(openManagedService); }}><ExternalLink class="h-4 w-4" /></Button></Show></div></td></tr>;
                   }}</For></tbody></table></div>
                   <div class="container-mobile-list" data-container-mobile-list><For each={filteredInventory()}>{(item) => <button type="button" class="container-mobile-card" onClick={() => selectResource(item)}><span class="container-resource-icon" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></span><span class="min-w-0 flex-1"><strong>{resourceName(view(), item)}</strong><small>{view() === 'containers' ? (item as ContainerInventoryItem).image?.reference || '—' : secondaryColumnLabel()}</small></span><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item))}><span class="text-xs">{Number(resourceStatus(view(), item))}</span></Show><ChevronRight class="h-4 w-4" /></button>}</For></div>
-                </Show>
               </Show>
             </div>
           </div>
-        }>{(item) => <article class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2>{resourceName(view(), item)}</h2><small>{resourceIdentity(view(), item).slice(0, 24)}</small></div><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><nav class="container-detail-tabs" role="tablist"><For each={detailTabs()}>{(tab) => <button type="button" role="tab" aria-selected={detailTab() === tab} onClick={() => setDetailTab(tab)}>{detailTabLabel(tab)}</button>}</For></nav><div class="container-detail-body">{renderDetailContent()}</div></article>}</Show>
+        }>{(item) => <article class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2>{resourceName(view(), item)}</h2><small>{resourceIdentity(view(), item).slice(0, 24)}</small></div><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><Tabs class="container-detail-tabs" items={detailTabItems()} activeId={detailTab()} onChange={(id) => setDetailTab(id as DetailTab)} size="md" ariaLabel={viewLabel(view())} features={{ indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false }, containerBorder: false, scrollButtons: 'auto' }} slotClassNames={{ scrollContainer: 'container-detail-tabs__scroller', tab: 'container-detail-tabs__tab' }} /><div class="container-detail-body">{renderDetailContent()}</div></article>}</Show>
         </Show>
       </main>
 
