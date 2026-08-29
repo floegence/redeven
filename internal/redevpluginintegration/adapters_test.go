@@ -549,6 +549,70 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 	}
 }
 
+func TestNewKeepsOfficialReleasePlatformModuleAvailableWhileMarketIsOffline(t *testing.T) {
+	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "market-lkg.json"),
+		HTTPClient: &http.Client{Transport: blockingMarketTransport(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("market offline")
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const channelID = "channel_release_features"
+	options := ownerScopeTestOptions(t, t.TempDir())
+	options.PluginMarket = market
+	options.ResolveSessionMeta = func(got string) (*session.Meta, bool) {
+		return &session.Meta{
+			ChannelID: channelID, EndpointID: "env_release_features", UserPublicID: "user_release_features",
+			FloeApp: "com.floegence.redeven.agent", CanRead: true,
+		}, got == channelID
+	}
+	integration, err := New(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := integration.Close(); err != nil {
+			t.Errorf("close integration: %v", err)
+		}
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/_redevplugin/api/plugins/features/query", strings.NewReader(`{}`))
+	request.Header.Set(sessionhop.HeaderChannelID, channelID)
+	request = WithRouteRole(request, RouteRoleEnvTrusted)
+	request.Host = "env.example.test"
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "https://env.example.test")
+	request.Header.Set(csrfHeader, csrfProof)
+	request, err = WithTrustedOrigin(request, "https://env.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	integration.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("features status = %d body = %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		OK   bool     `json:"ok"`
+		Data []string `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !payload.OK {
+		t.Fatalf("features response = %s", response.Body.String())
+	}
+	for _, feature := range payload.Data {
+		if feature == string(host.FeatureRelease) {
+			return
+		}
+	}
+	t.Fatalf("official release platform module is missing: %v", payload.Data)
+}
+
 func ownerScopeTestOptions(t *testing.T, stateDir string) Options {
 	t.Helper()
 	return Options{

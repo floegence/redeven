@@ -43,6 +43,7 @@ type Integration struct {
 	runtimeAuthority     *RuntimeProcessAuthority
 	marketSnapshot       *pluginmarket.Snapshot
 	marketService        *pluginmarket.Service
+	releaseProvider      *officialReleaseProvider
 	marketErr            error
 	marketMu             sync.RWMutex
 	marketRefreshMu      sync.Mutex
@@ -96,12 +97,34 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 
 	var closers []func() error
 	closeOnError := func() { _ = closeAll(closers) }
+	var releaseModule *host.ReleaseModule
+	var releaseProvider *officialReleaseProvider
 	var marketSnapshot *pluginmarket.Snapshot
 	var marketErr error
 	if opts.PluginMarket != nil {
+		releaseStage, releaseErr := externalsource.NewStageStore(filepath.Join(root, "release-artifacts"))
+		if releaseErr != nil {
+			closeOnError()
+			return nil, releaseErr
+		}
+		closers = append(closers, releaseStage.Close)
+		releaseFetcher, releaseErr := externalsource.NewFetcher(externalsource.FetcherOptions{
+			Stage: releaseStage, SourceID: "redeven.official-release",
+		})
+		if releaseErr != nil {
+			closeOnError()
+			return nil, releaseErr
+		}
+		releaseModule, releaseProvider, releaseErr = newOfficialReleaseModulePending(releaseFetcher)
+		if releaseErr != nil {
+			closeOnError()
+			return nil, releaseErr
+		}
 		if snapshot, ok := opts.PluginMarket.CachedSnapshot(); ok {
-			frozen := snapshot.Clone()
-			marketSnapshot = &frozen
+			if marketErr = releaseProvider.setSnapshot(snapshot); marketErr == nil {
+				frozen := snapshot.Clone()
+				marketSnapshot = &frozen
+			}
 		}
 	}
 
@@ -160,6 +183,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			Diagnostics:          observability,
 			Assets:               assetStore,
 		},
+		Release: releaseModule,
 		Runtime: runtimeModule,
 		IO:      ioModule,
 		Connectivity: &host.ConnectivityModule{
@@ -195,6 +219,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		runtimeAuthority: opts.RuntimeAuthority,
 		marketSnapshot:   marketSnapshot,
 		marketService:    opts.PluginMarket,
+		releaseProvider:  releaseProvider,
 		marketErr:        marketErr,
 		closers:          closers,
 	}
@@ -318,6 +343,14 @@ func (i *Integration) refreshMarket(ctx context.Context) (pluginmarket.Snapshot,
 		i.marketErr = err
 		i.marketMu.Unlock()
 		return pluginmarket.Snapshot{}, err
+	}
+	if i.releaseProvider != nil {
+		if err := i.releaseProvider.setSnapshot(snapshot); err != nil {
+			i.marketMu.Lock()
+			i.marketErr = err
+			i.marketMu.Unlock()
+			return pluginmarket.Snapshot{}, err
+		}
 	}
 	frozen := snapshot.Clone()
 	i.marketMu.Lock()

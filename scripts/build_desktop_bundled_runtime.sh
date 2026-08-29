@@ -167,7 +167,7 @@ bundle_from_tarball() {
   ui_pkg_log "Preparing desktop bundled runtime from release tarball..."
   ui_pkg_log "TARBALL: $tarball_path"
 
-  if [[ "$goos" == "linux" ]]; then
+  if [[ "$goos" != "windows" ]]; then
     allow_args+=(
       --allow-file redevplugin-runtime
       --allow-file REDEVPLUGIN_THIRD_PARTY_NOTICES.md
@@ -199,7 +199,7 @@ const expected = [
 ];
 if (process.env.BUNDLE_GOOS === "windows") expected.push("redeven_linux_amd64.tar.gz");
 else expected.push("redeven");
-if (process.env.BUNDLE_GOOS === "linux") expected.push(
+if (process.env.BUNDLE_GOOS !== "windows") expected.push(
   ".redevplugin-release-artifacts-verified.json",
   "REDEVPLUGIN_RUNTIME.spdx.json",
   "REDEVPLUGIN_THIRD_PARTY_NOTICES.md",
@@ -263,7 +263,7 @@ function descriptor(name, executable) {
 
 const runtimeFiles = platform === "windows"
   ? [["redeven_linux_amd64.tar.gz", false]]
-  : platform === "linux"
+  : platform !== "windows"
   ? [
       ["redeven", true],
       ["redevplugin-runtime", true],
@@ -448,7 +448,7 @@ main() {
     from_archive=0
     mkdir -p "$working_bundle"
     bundle_from_source "$goos" "$goarch" "$working_bundle_path" "$bundle_version" "$bundle_commit"
-    if [[ "$goos" == "linux" ]]; then
+    if [[ "$goos" != "windows" ]]; then
       stage_redevplugin_runtime "$working_bundle" "$goos" "$goarch"
     fi
   fi

@@ -35,6 +35,7 @@ jobs:
   build:
     name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
     needs: release-ref
+    environment: redeven-release
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
@@ -78,6 +79,13 @@ jobs:
 
       - name: Install cosign
         uses: sigstore/cosign-installer@874852de93c66509b01dc7cd80f7a5385182d017
+
+      - name: Import macOS runtime signing certificate
+        if: matrix.goos == 'darwin'
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.REDEVEN_DESKTOP_MAC_CERT_BASE64 }}
+          p12-password: ${{ secrets.REDEVEN_DESKTOP_MAC_CERT_PASSWORD }}
 
       - name: Validate runtime compatibility contract
         run: ./scripts/check_runtime_compatibility_contract.sh "${GITHUB_REF_NAME}"
@@ -124,6 +132,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          REDEVEN_REDEVPLUGIN_RUNTIME_CODESIGN_IDENTITY: ${{ secrets.REDEVEN_DESKTOP_MAC_IDENTITY }}
         run: |
           set -euo pipefail
 
@@ -132,23 +141,21 @@ jobs:
             LICENSE
             THIRD_PARTY_NOTICES.md
           )
-          if [[ "$GOOS" == "linux" ]]; then
-            ./scripts/stage_redevplugin_release_artifacts.sh \
-              --dest-dir "dist/redevplugin-release" \
-              --redeven-goos "$GOOS" \
-              --redeven-goarch "$GOARCH" \
-              --runtime-out "dist/redevplugin-runtime" \
-              --profile release
-            redeven_entries+=(
-              redevplugin-runtime
-              REDEVPLUGIN_THIRD_PARTY_NOTICES.md
-              REDEVPLUGIN_RUNTIME.spdx.json
-              redevplugin-runtime.provenance.json
-              redevplugin-runtime.sig
-              redevplugin-runtime.pem
-              .redevplugin-release-artifacts-verified.json
-            )
-          fi
+          ./scripts/stage_redevplugin_release_artifacts.sh \
+            --dest-dir "dist/redevplugin-release" \
+            --redeven-goos "$GOOS" \
+            --redeven-goarch "$GOARCH" \
+            --runtime-out "dist/redevplugin-runtime" \
+            --profile release
+          redeven_entries+=(
+            redevplugin-runtime
+            REDEVPLUGIN_THIRD_PARTY_NOTICES.md
+            REDEVPLUGIN_RUNTIME.spdx.json
+            redevplugin-runtime.provenance.json
+            redevplugin-runtime.sig
+            redevplugin-runtime.pem
+            .redevplugin-release-artifacts-verified.json
+          )
           (
             cd dist
             tar -czf "redeven_${GOOS}_${GOARCH}.tar.gz" "${redeven_entries[@]}"

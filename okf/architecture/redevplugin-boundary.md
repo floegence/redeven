@@ -196,12 +196,14 @@ second open gate and owns no catch-up identity state machine.
 
 ## Runtime and official capability
 
-On Linux, the runtime is exactly the `redevplugin-runtime` sibling of the
-canonical Redeven executable. Redeven builds it with Rust 1.88.0 from the
-attested release manifest as a static PIE, then emits SBOM, provenance, notices, and
-signature evidence. The released ProcessManager owns launch, health, heartbeat,
-shutdown, leases, hostcalls, and restart. Darwin packages omit the runtime and
-worker execution. No target searches `PATH` or alternate runtime names.
+On Linux and Darwin, the runtime is exactly the `redevplugin-runtime` sibling of
+the canonical Redeven executable. Redeven builds it with Rust 1.88.0 from the
+attested release manifest, using a static PIE on Linux and the exact native
+Mach-O target on Darwin, then emits SBOM, provenance, notices, and signature
+evidence. Darwin release builds Developer ID sign the nested executable before
+the product digest and Sigstore evidence are created; Desktop signing preserves
+those exact bytes. The released ProcessManager owns launch, health, heartbeat,
+shutdown, leases, hostcalls, and restart. No target searches `PATH` or alternate runtime names.
 The expected runtime digest comes from the product release marker; startup must
 not hash the field binary and accept that value as its own trust anchor.
 
@@ -215,9 +217,9 @@ other admission failures still fail closed.
 
 Desktop owns the product-managed slot that supplies the sibling executable. It
 installs the managed directories and executables with private `0700` metadata
-and the stamp, SBOM, provenance, signature, certificate, notices, and release
+and the marker, SBOM, provenance, signature, certificate, notices, and release
 descriptor with `0600` metadata before activation. This packaging rule does not
-replace ReDevPlugin admission: later ownership, permission, identity, ELF, or
+replace ReDevPlugin admission: later ownership, permission, identity, ELF or Mach-O, or
 digest drift is still rejected by the released Host without a fallback.
 
 Native Containers does not cross this boundary: it has no ReDevPlugin package,

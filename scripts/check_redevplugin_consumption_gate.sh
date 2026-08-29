@@ -17,8 +17,8 @@ Usage:
   ./scripts/check_redevplugin_consumption_gate.sh --self-test
 
 Validates every Redeven-built ReDevPlugin runtime and its package publication,
-SBOM, provenance, notices, and signature. Runtime payloads are accepted only for
-linux/amd64 and linux/arm64; Darwin payloads must omit ReDevPlugin runtime files.
+SBOM, provenance, notices, and signature for the closed Linux and Darwin target
+set.
 USAGE
 }
 
@@ -95,17 +95,6 @@ NODE
   fi
 }
 
-assert_absent_for_darwin() {
-  local root="$1"
-  for name in redevplugin-runtime "$RUNTIME_MARKER" "$RUNTIME_NOTICES" "$RUNTIME_SBOM" \
-    "$RUNTIME_PROVENANCE" "$RUNTIME_SIGNATURE" "$RUNTIME_CERTIFICATE"; do
-    if [[ -e "$root/$name" || -L "$root/$name" ]]; then
-      echo "[redevplugin-consumption] Darwin payload must not contain $name" >&2
-      return 1
-    fi
-  done
-}
-
 verify_runtime_directory() {
   local root="$1"
   local target="$2"
@@ -129,13 +118,7 @@ scan_root() {
 
   if [[ -e "$root/redevplugin-runtime" || -L "$root/redevplugin-runtime" || -e "$root/$RUNTIME_MARKER" || -L "$root/$RUNTIME_MARKER" ]]; then
     [[ -n "$direct_target" ]] || die "direct ReDevPlugin runtime requires --runtime-target"
-    case "$direct_target" in
-      linux/amd64|linux/arm64) verify_runtime_directory "$root" "$direct_target" ;;
-      darwin/amd64|darwin/arm64) assert_absent_for_darwin "$root" ;;
-    esac
-    direct_count=1
-  elif [[ "$direct_target" == darwin/* ]]; then
-    assert_absent_for_darwin "$root"
+    verify_runtime_directory "$root" "$direct_target"
     direct_count=1
   fi
 
@@ -153,45 +136,27 @@ scan_root() {
     extracted="$extract_parent/payload"
     goos=${target%/*}
     goarch=${target#*/}
-    if [[ "$goos" == "linux" ]]; then
-      if ! "$SCRIPT_DIR/safe_extract_tar.py" \
-        --archive "$archive" \
-        --dest "$extracted" \
-        --allow-file redeven \
-        --allow-file redevplugin-runtime \
-        --allow-file "$RUNTIME_MARKER" \
-        --allow-file "$RUNTIME_NOTICES" \
-        --allow-file "$RUNTIME_SBOM" \
-        --allow-file "$RUNTIME_PROVENANCE" \
-        --allow-file "$RUNTIME_SIGNATURE" \
-        --allow-file "$RUNTIME_CERTIFICATE" \
-        --allow-file LICENSE \
-        --allow-file THIRD_PARTY_NOTICES.md \
-        --max-files 10 \
-        --max-total-bytes 536870912; then
-        rm -rf "$extract_parent"
-        die "Linux runtime archive failed controlled extraction: $archive"
-      fi
-      if ! verify_runtime_directory "$extracted" "$target"; then
-        rm -rf "$extract_parent"
-        die "Linux runtime archive evidence is invalid: $archive"
-      fi
-    else
-      if ! "$SCRIPT_DIR/safe_extract_tar.py" \
-        --archive "$archive" \
-        --dest "$extracted" \
-        --allow-file redeven \
-        --allow-file LICENSE \
-        --allow-file THIRD_PARTY_NOTICES.md \
-        --max-files 3 \
-        --max-total-bytes 536870912; then
-        rm -rf "$extract_parent"
-        die "Darwin runtime archive failed controlled extraction: $archive"
-      fi
-      if ! assert_absent_for_darwin "$extracted"; then
-        rm -rf "$extract_parent"
-        die "Darwin runtime archive contains forbidden plugin runtime evidence: $archive"
-      fi
+    if ! "$SCRIPT_DIR/safe_extract_tar.py" \
+      --archive "$archive" \
+      --dest "$extracted" \
+      --allow-file redeven \
+      --allow-file redevplugin-runtime \
+      --allow-file "$RUNTIME_MARKER" \
+      --allow-file "$RUNTIME_NOTICES" \
+      --allow-file "$RUNTIME_SBOM" \
+      --allow-file "$RUNTIME_PROVENANCE" \
+      --allow-file "$RUNTIME_SIGNATURE" \
+      --allow-file "$RUNTIME_CERTIFICATE" \
+      --allow-file LICENSE \
+      --allow-file THIRD_PARTY_NOTICES.md \
+      --max-files 10 \
+      --max-total-bytes 536870912; then
+      rm -rf "$extract_parent"
+      die "runtime archive failed controlled extraction: $archive"
+    fi
+    if ! verify_runtime_directory "$extracted" "$target"; then
+      rm -rf "$extract_parent"
+      die "runtime archive evidence is invalid: $archive"
     fi
     rm -rf "$extract_parent"
   done < <(find "$root" -mindepth 1 -maxdepth 1 -type f -name 'redeven_*.tar.gz' -print | sort)

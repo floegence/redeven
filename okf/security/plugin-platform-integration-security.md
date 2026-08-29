@@ -184,9 +184,11 @@ Replacing or replaying any of those values requires a new confirmation.
 
 Runtime descriptors bind version, target, IPC, WASM ABI, and artifact hash.
 Handle grants also bind plugin fingerprint, runtime generation, owner audience,
-method, resource scope, policy/management revisions, and revoke epoch. Linux
-runtime evidence is rebuilt and verified from the attested source set; Darwin
-must omit runtime bytes and evidence.
+method, resource scope, policy/management revisions, and revoke epoch. Linux and
+Darwin runtime evidence is rebuilt and verified from the attested source set.
+Darwin release bytes receive their Developer ID signature before the product
+digest and Sigstore evidence, and later Desktop signing must preserve that exact
+nested executable.
 The expected runtime digest comes from the product release marker. Startup must
 not hash the field binary and accept that value as its own trust anchor.
 

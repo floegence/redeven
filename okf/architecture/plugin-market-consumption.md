@@ -115,6 +115,13 @@ signed release metadata, package signature, package hashes,
 publisher, plugin, version, channel, and host capability requirement, and only
 then changes registry state.
 
+Redeven constructs the released official-release Host module even when startup
+has no usable market snapshot, so a temporary market outage does not remove a
+platform feature. Each accepted remote or last-known-good snapshot atomically
+replaces the provider's complete multi-plugin release map before that snapshot
+is published to product readers. Removed releases become unresolvable, and a
+partial or invalid replacement leaves the prior complete binding unchanged.
+
 Official installation is a durable ReDevPlugin Execution. Redeven submits the
 snapshot-derived release reference and four preview digests with an idempotent
 request identity and observes ordered Events; it does not treat the market response, browser

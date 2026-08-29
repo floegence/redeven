@@ -2,6 +2,7 @@ package redevpluginruntime
 
 import (
 	"debug/elf"
+	"debug/macho"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestInstallAtCreatesAdmissionFixtureOnlyOnLinux(t *testing.T) {
+func TestInstallAtCreatesNativeAdmissionFixture(t *testing.T) {
 	root := t.TempDir()
 	cleanup, err := InstallAt(root)
 	if err != nil {
@@ -23,9 +24,9 @@ func TestInstallAtCreatesAdmissionFixtureOnlyOnLinux(t *testing.T) {
 	})
 
 	path := filepath.Join(root, binaryName)
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("non-Linux fixture stat error = %v, want not exist", err)
+			t.Fatalf("unsupported-platform fixture stat error = %v, want not exist", err)
 		}
 		return
 	}
@@ -36,26 +37,37 @@ func TestInstallAtCreatesAdmissionFixtureOnlyOnLinux(t *testing.T) {
 	if info.Mode().Perm() != 0o500 {
 		t.Fatalf("fixture mode = %o, want 500", info.Mode().Perm())
 	}
-	file, err := elf.Open(path)
+	if runtime.GOOS == "linux" {
+		file, err := elf.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		if file.Type != elf.ET_DYN {
+			t.Fatalf("fixture ELF type = %v, want ET_DYN", file.Type)
+		}
+		wantMachine := elf.EM_X86_64
+		if runtime.GOARCH == "arm64" {
+			wantMachine = elf.EM_AARCH64
+		}
+		if file.Machine != wantMachine {
+			t.Fatalf("fixture ELF machine = %v, want %v", file.Machine, wantMachine)
+		}
+		return
+	}
+	file, err := macho.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	if file.Type != elf.ET_DYN {
-		t.Fatalf("fixture ELF type = %v, want ET_DYN", file.Type)
-	}
-	wantMachine := elf.EM_X86_64
-	if runtime.GOARCH == "arm64" {
-		wantMachine = elf.EM_AARCH64
-	}
-	if file.Machine != wantMachine {
-		t.Fatalf("fixture ELF machine = %v, want %v", file.Machine, wantMachine)
+	if file.Type != macho.TypeExec {
+		t.Fatalf("fixture Mach-O type = %v, want executable", file.Type)
 	}
 }
 
 func TestInstallAtPreservesMatchingFixture(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Linux runtime admission fixture")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("native runtime admission fixture")
 	}
 	root := t.TempDir()
 	firstCleanup, err := InstallAt(root)
@@ -78,8 +90,8 @@ func TestInstallAtPreservesMatchingFixture(t *testing.T) {
 }
 
 func TestInstallAtCleanupIsConcurrentAndIdempotent(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Linux runtime admission fixture")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("native runtime admission fixture")
 	}
 	root := t.TempDir()
 	cleanup, err := InstallAt(root)
@@ -116,8 +128,8 @@ func TestInstallAtCleanupIsConcurrentAndIdempotent(t *testing.T) {
 }
 
 func TestInstallAtRejectsDifferentExistingFileWithoutReplacingIt(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Linux runtime admission fixture")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("native runtime admission fixture")
 	}
 	root := t.TempDir()
 	path := filepath.Join(root, binaryName)

@@ -63,26 +63,32 @@ func TestOfficialRuntimeTrustAnchorComesFromBundledDescriptor(t *testing.T) {
 }
 
 func TestOfficialRuntimeModuleKeepsHostAvailableWhenAdmissionIsUnsupported(t *testing.T) {
-	runtimeRoot := t.TempDir()
-	runtimePath := filepath.Join(runtimeRoot, "redevplugin-runtime")
-	if err := os.WriteFile(runtimePath, []byte("runtime fixture"), 0o500); err != nil {
-		t.Fatal(err)
-	}
-	writeRuntimeDescriptorFixture(t, runtimeRoot)
+	for _, target := range []string{"linux/amd64", "darwin/amd64", "darwin/arm64"} {
+		t.Run(target, func(t *testing.T) {
+			runtimeRoot := t.TempDir()
+			runtimePath := filepath.Join(runtimeRoot, "redevplugin-runtime")
+			if err := os.WriteFile(runtimePath, []byte("runtime fixture"), 0o500); err != nil {
+				t.Fatal(err)
+			}
+			writeRuntimeDescriptorFixture(t, runtimeRoot, target)
+			opened := false
 
-	module, err := newOfficialRuntimeModuleForPlatform(
-		context.Background(),
-		runtimeModuleDependencies{
-			Path:          runtimePath,
-			ExecutionRoot: filepath.Join(runtimeRoot, "runtime-exec"),
-		},
-		"linux/amd64",
-		func(context.Context, host.VerifiedExecutableOptions) (*host.VerifiedExecutable, error) {
-			return nil, host.ErrRuntimeAdmissionUnsupported
-		},
-	)
-	if err != nil || module != nil {
-		t.Fatalf("unsupported admission result = %#v, %v, want optional runtime disabled", module, err)
+			module, err := newOfficialRuntimeModuleForPlatform(
+				context.Background(),
+				runtimeModuleDependencies{
+					Path:          runtimePath,
+					ExecutionRoot: filepath.Join(runtimeRoot, "runtime-exec"),
+				},
+				target,
+				func(context.Context, host.VerifiedExecutableOptions) (*host.VerifiedExecutable, error) {
+					opened = true
+					return nil, host.ErrRuntimeAdmissionUnsupported
+				},
+			)
+			if err != nil || module != nil || !opened {
+				t.Fatalf("unsupported admission result = %#v, %v, opened=%v; want optional runtime disabled after admission", module, err, opened)
+			}
+		})
 	}
 }
 
@@ -92,7 +98,7 @@ func TestOfficialRuntimeModuleRejectsOtherAdmissionFailures(t *testing.T) {
 	if err := os.WriteFile(runtimePath, []byte("runtime fixture"), 0o500); err != nil {
 		t.Fatal(err)
 	}
-	writeRuntimeDescriptorFixture(t, runtimeRoot)
+	writeRuntimeDescriptorFixture(t, runtimeRoot, "linux/amd64")
 	want := errors.New("runtime digest mismatch")
 
 	module, err := newOfficialRuntimeModuleForPlatform(
@@ -111,13 +117,13 @@ func TestOfficialRuntimeModuleRejectsOtherAdmissionFailures(t *testing.T) {
 	}
 }
 
-func writeRuntimeDescriptorFixture(t *testing.T, root string) {
+func writeRuntimeDescriptorFixture(t *testing.T, root, target string) {
 	t.Helper()
 	marker := map[string]any{
 		"schema_version":   "redeven.redevplugin_runtime_build.v1",
 		"platform_release": map[string]any{"platform_version": officialRuntimeVersion},
 		"runtime": map[string]any{
-			"target": "linux/amd64",
+			"target": target,
 			"binary": map[string]any{
 				"path":   "redevplugin-runtime",
 				"sha256": strings.Repeat("a", 64),

@@ -561,25 +561,26 @@ describe('runtimePackageCache', () => {
 
   it('keeps source runtime packages separate by target platform', async () => {
     const fixture = await createSourceRuntimeFixture();
-    const amd64 = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
-    const arm64 = resolveDesktopSSHRemotePlatform('linux', 'aarch64');
+    const linux = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    const darwin = resolveDesktopSSHRemotePlatform('darwin', 'arm64');
     try {
-      const [amd64Asset, arm64Asset] = await Promise.all([
+      const [linuxAsset, darwinAsset] = await Promise.all([
         preparePackage({
           cacheRoot: fixture.cacheRoot,
-          platform: amd64,
+          platform: linux,
           sourceRuntimeRoot: fixture.root,
         }),
         preparePackage({
           cacheRoot: fixture.cacheRoot,
-          platform: arm64,
+          platform: darwin,
           sourceRuntimeRoot: fixture.root,
         }),
       ]);
 
-      expect(amd64Asset.source).toBe('source_build');
-      expect(arm64Asset.source).toBe('source_build');
-      expect(arm64Asset.archiveData).not.toEqual(amd64Asset.archiveData);
+      expect(linuxAsset.source).toBe('source_build');
+      expect(darwinAsset.source).toBe('source_build');
+      expect(darwinAsset.archiveData).not.toEqual(linuxAsset.archiveData);
+      expect(tarGzipEntryNames(darwinAsset.archiveData)).toContain('redevplugin-runtime');
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
       expect(buildLog.trim().split('\n')).toHaveLength(2);
       expect(buildLog).not.toContain(fixture.root);

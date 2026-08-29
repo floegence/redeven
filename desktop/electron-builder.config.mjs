@@ -89,7 +89,7 @@ function loadReleaseArtifactHelpers() {
 
 const bundledRuntimeArtifact = resolveBundledRuntimeArtifact();
 const bundledDesktopManifest = bundledBinaryCandidate('desktop-bundle-manifest.json');
-const bundledReDevPluginResources = resolveTargetGoos() === 'linux'
+const bundledReDevPluginResources = resolveTargetGoos() !== 'windows'
   ? [
       'redevplugin-runtime',
       'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
@@ -214,6 +214,7 @@ export default {
     target: ['dmg'],
     forceCodeSigning: true,
     identity: macIdentity || undefined,
+    signIgnore: ['**/Contents/Resources/bin/redevplugin-runtime'],
     icon: path.join(buildResourcesDir, 'icon.icns'),
     extendInfo: macUpdaterInfo,
   },

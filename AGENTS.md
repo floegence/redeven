@@ -527,9 +527,11 @@ The intended dependency shape is library consumption, not source sharing:
   bridge SDKs, generated clients, and host-neutral UI helpers.
 - Redeven builds `redevplugin-runtime` from the exact released Rust source crate
   with Rust 1.88.0, then owns the binary, SBOM, provenance, signature,
-  platform support, and product packaging. Runtime execution support is limited
-  to `linux/amd64` and `linux/arm64`; Darwin product packages must omit the
-  ReDevPlugin runtime and must not claim worker execution support.
+  platform support, and product packaging. Runtime execution support follows
+  ReDevPlugin's released closed target set: `linux/amd64`, `linux/arm64`,
+  `darwin/amd64`, and `darwin/arm64`. Darwin runtime bytes are Developer ID
+  signed before their product digest and Sigstore evidence are created; Desktop
+  packaging must preserve those exact nested-code bytes.
 - Redeven references released ReDevPlugin schemas, generated contracts, and
   compatibility hashes. It must not edit, fork, or hand-copy those contracts.
 - Redeven contributes product policy and concrete adapters around those
@@ -786,11 +788,11 @@ Redeven owns only product integration and business adapters:
   artifact resolution into `redevplugin` adapter interfaces;
 - integrating plugin surfaces into Env App, Activity Bar, Workbench, Settings,
   Desktop packaging, installer packaging, and runtime startup diagnostics;
-- pinning the released ReDevPlugin release manifest, building the Linux runtime from
-  its exact Rust source crates with the fixed product toolchain, emitting SBOM,
-  provenance, and signatures, and wiring the ReDevPlugin runtime manager into
-  Redeven process startup/shutdown without replacing its IPC, lease, quota, or
-  revocation logic;
+- pinning the released ReDevPlugin release manifest, building each supported
+  Linux or Darwin runtime from its exact Rust source crates with the fixed
+  product toolchain, emitting SBOM, provenance, and signatures, and wiring the
+  ReDevPlugin runtime manager into Redeven process startup/shutdown without
+  replacing its IPC, lease, quota, or revocation logic;
 - registering Redeven-owned business capabilities through
   `redevplugin.CapabilityAdapter` or the released equivalent interface;
 - wiring Flower/Floret tools to the `redevplugin` lifecycle APIs without

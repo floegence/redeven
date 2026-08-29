@@ -10,8 +10,7 @@ Usage:
 
 Inspects a native Redeven Desktop installer on its builder platform, verifies
 the Redeven Runtime target identity, verifies the product-built
-ReDevPlugin runtime on Linux or its required absence on Darwin, and writes a
-receipt bound to the exact installer bytes.
+ReDevPlugin runtime, and writes a receipt bound to the exact installer bytes.
 USAGE
 }
 
@@ -264,29 +263,20 @@ redeven_path="$runtime_dir/redeven"
 goos=${RUNTIME_TARGET%/*}
 goarch=${RUNTIME_TARGET#*/}
 assert_go_binary_target "$redeven_path" "$goos" "$goarch" "Redeven runtime"
-if [[ "$goos" == "linux" ]]; then
-  for required_name in \
-    redevplugin-runtime \
-    .redevplugin-release-artifacts-verified.json \
-    REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
-    REDEVPLUGIN_RUNTIME.spdx.json \
-    redevplugin-runtime.provenance.json \
-    redevplugin-runtime.sig \
-    redevplugin-runtime.pem; do
-    required="$runtime_dir/$required_name"
-    [[ -f "$required" && ! -L "$required" ]] || die "installer is missing a required ReDevPlugin file: $required_name"
-  done
-  "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
-    --scan-root "$runtime_dir" \
-    --runtime-target "$RUNTIME_TARGET" \
-    --require-release
-  publish_receipt "$PACKAGE_PATH" "$package_name" "$runtime_dir" "$RECEIPT_PATH" 1
-  echo "[INFO] Desktop installer ReDevPlugin runtime verified: $PACKAGE_PATH"
-else
-  "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
-    --scan-root "$runtime_dir" \
-    --runtime-target "$RUNTIME_TARGET" \
-    --require-release
-  publish_receipt "$PACKAGE_PATH" "$package_name" "$runtime_dir" "$RECEIPT_PATH" 0
-  echo "[INFO] Desktop installer correctly omits ReDevPlugin runtime: $PACKAGE_PATH"
-fi
+for required_name in \
+  redevplugin-runtime \
+  .redevplugin-release-artifacts-verified.json \
+  REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
+  REDEVPLUGIN_RUNTIME.spdx.json \
+  redevplugin-runtime.provenance.json \
+  redevplugin-runtime.sig \
+  redevplugin-runtime.pem; do
+  required="$runtime_dir/$required_name"
+  [[ -f "$required" && ! -L "$required" ]] || die "installer is missing a required ReDevPlugin file: $required_name"
+done
+"$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
+  --scan-root "$runtime_dir" \
+  --runtime-target "$RUNTIME_TARGET" \
+  --require-release
+publish_receipt "$PACKAGE_PATH" "$package_name" "$runtime_dir" "$RECEIPT_PATH" 1
+echo "[INFO] Desktop installer ReDevPlugin runtime verified: $PACKAGE_PATH"
