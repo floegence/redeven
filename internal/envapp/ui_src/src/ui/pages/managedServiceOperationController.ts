@@ -33,6 +33,27 @@ type ManagedOperationState = Readonly<{
 
 const operationTerminal = (operation: ManagedOperation) => ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state);
 
+function submittingStage(action: ManagedOperation['action']): string {
+  switch (action) {
+    case 'start': return 'starting';
+    case 'stop':
+    case 'restart':
+    case 'uninstall': return 'stopping';
+    case 'update': return 'update_preparing';
+    default: return 'environment_check';
+  }
+}
+
+function operationProgressTotal(action: ManagedOperation['action']): number {
+  switch (action) {
+    case 'start': return 3;
+    case 'stop': return 2;
+    case 'restart': return 4;
+    case 'uninstall': return 3;
+    default: return 7;
+  }
+}
+
 export function createManagedServiceOperationController(options: ManagedOperationControllerOptions) {
   const [states, setStates] = createSignal<Record<string, ManagedOperationState>>({});
   const streams = new Map<string, ActiveStream>();
@@ -45,6 +66,20 @@ export function createManagedServiceOperationController(options: ManagedOperatio
         : owner ?? 'row';
       return { ...current, [operation.service_id]: { operation, owner: resolvedOwner } };
     });
+  };
+
+  const begin = (serviceID: string, action: ManagedOperation['action'], owner: ManagedOperationOwner): ManagedOperation => {
+    const operation: ManagedOperation = {
+      operation_id: `submitting:${serviceID}:${action}`,
+      service_id: serviceID,
+      action,
+      state: 'submitting',
+      stage: submittingStage(action),
+      progress_current: 0,
+      progress_total: operationProgressTotal(action),
+    };
+    update(operation, owner);
+    return operation;
   };
 
   const track = (operation: ManagedOperation, owner: ManagedOperationOwner): Promise<ManagedOperation> => {
@@ -134,5 +169,5 @@ export function createManagedServiceOperationController(options: ManagedOperatio
     streams.clear();
   };
 
-  return { track, clear, cancel, ownedOperation, knows, dispose };
+  return { begin, track, clear, cancel, ownedOperation, knows, dispose };
 }

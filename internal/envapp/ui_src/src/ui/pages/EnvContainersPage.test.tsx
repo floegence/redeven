@@ -553,7 +553,8 @@ describe('native Containers page', () => {
 
     expect(host.textContent).not.toContain('Current API');
     expect(host.querySelector('[data-container-resource-table]')).toBeNull();
-    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
+    expect(host.querySelector('[data-container-list-loading]')).not.toBeNull();
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => !tab.disabled)).toBe(true);
 
     requestContainerResourceNavigation({
       engine: 'docker',
@@ -572,6 +573,47 @@ describe('native Containers page', () => {
     expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('containers.views.containers');
     expect(host.textContent).toContain('Current API');
     expect(host.textContent).not.toContain('stale:latest');
+  });
+
+  it('restores a visited resource view immediately while refreshing it in the background', async () => {
+    const refreshedContainers = deferred<any[]>();
+    let containerRequests = 0;
+    harness.listResources.mockImplementation((nextView: string) => {
+      if (nextView === 'images') {
+        return Promise.resolve([{ id: 'image-1', reference: 'nginx:latest', referenced_containers: 0 }]);
+      }
+      containerRequests += 1;
+      if (containerRequests === 1) {
+        return Promise.resolve([{ container_id: 'container-1', name: 'Cached API', state: 'running', management: { managed: false } }]);
+      }
+      return refreshedContainers.promise;
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((tab) => tab.textContent?.includes('containers.views.images'))
+      ?.click();
+    await settle();
+    expect(host.textContent).toContain('nginx:latest');
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((tab) => tab.textContent?.includes('containers.views.containers'))
+      ?.click();
+    await Promise.resolve();
+
+    expect(host.textContent).toContain('Cached API');
+    expect(host.querySelector('[data-container-list-loading]')).toBeNull();
+    expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
+    expect(host.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
+
+    refreshedContainers.resolve([{ container_id: 'container-2', name: 'Fresh API', state: 'running', management: { managed: false } }]);
+    await settle();
+    expect(host.textContent).toContain('Fresh API');
+    expect(host.textContent).not.toContain('Cached API');
+    expect(host.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
   });
 
   it('loads an endpoint change through the same ready-state boundary', async () => {

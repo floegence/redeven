@@ -487,9 +487,10 @@ describe('web service metadata and template validation', () => {
     }
   });
 
-  it('renders operation identity and the exact image inside its service row', () => {
+  it('replaces stale service status with contextual operation details', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+    const cancel = vi.fn();
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
@@ -506,7 +507,7 @@ describe('web service metadata and template validation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={() => undefined}
-        onCancelOperation={() => undefined}
+        onCancelOperation={cancel}
         onUpdate={() => undefined}
         onLogs={() => undefined}
         onUninstall={() => undefined}
@@ -514,12 +515,21 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
-      const progress = row.querySelector<HTMLElement>('[data-testid="managed-operation-progress"]');
-      expect(progress?.textContent).toContain('DeepSeek Harness');
-      expect(progress?.textContent).toContain('Retry');
-      expect(progress?.textContent).toContain('Pulling image');
-      expect(progress?.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
+      const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      expect(progress.textContent).toContain('Pulling image');
+      expect(progress.textContent).toContain('2/7');
+      expect(row.textContent).not.toContain('Error');
       expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Retry')?.disabled).toBe(true);
+
+      progress.click();
+      const details = row.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
+      expect(details.textContent).toContain('mop-retry');
+      expect(details.textContent).toContain('Retry');
+      expect(details.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
+      expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
+      expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
+      Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation')?.click();
+      expect(cancel).toHaveBeenCalledOnce();
     } finally {
       dispose();
       host.remove();
@@ -1229,7 +1239,10 @@ describe('EnvPortForwardsPage', () => {
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await waitForAssertion(() => expect(host.textContent).toContain('Pulling image'));
-      expect(host.querySelector('[data-testid="managed-service-row"] [data-testid="managed-operation-progress"]')).toBeTruthy();
+      const trigger = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      expect(trigger).toBeTruthy();
+      expect(host.textContent).not.toContain('Error');
+      trigger.click();
       expect(host.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
       const cancel = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation');
       expect(cancel).toBeTruthy();
@@ -1266,11 +1279,12 @@ describe('EnvPortForwardsPage', () => {
 
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
-      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-operation-progress"]')).toHaveLength(2));
+      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-operation-trigger"]')).toHaveLength(2));
       const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="managed-service-row"]'));
-      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-one')?.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('deepseek-harness');
-      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-two')?.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('linuxserver/webtop');
-      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
+      const firstRow = rows.find((row) => row.dataset.managedServiceId === 'mws-one')!;
+      firstRow.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
+      expect(firstRow.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('deepseek-harness');
+      expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeNull();
       expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-one/events'), expect.objectContaining({ method: 'GET' }));
       expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-two/events'), expect.objectContaining({ method: 'GET' }));
       expect(host.querySelector('[data-testid="unified-web-services-list"]')?.parentElement?.querySelector(':scope > [data-testid="managed-operation-progress"]')).toBeNull();
@@ -1329,7 +1343,7 @@ describe('EnvPortForwardsPage', () => {
         Array.from(host.querySelectorAll<HTMLButtonElement>(`[data-managed-service-id="${serviceID}"] button`))
           .find((button) => button.textContent?.trim() === 'Start')?.click();
       }
-      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-operation-progress"]')).toHaveLength(2));
+      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-operation-trigger"]')).toHaveLength(2));
       expect(streamSignals.get('mop-first')?.aborted).toBe(false);
       expect(streamSignals.get('mop-second')?.aborted).toBe(false);
 
@@ -1339,7 +1353,42 @@ describe('EnvPortForwardsPage', () => {
         controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ ...operation, state: 'succeeded', stage: 'completed', progress_current: 7 })}\n\n`));
         controller.close();
       }
-      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-operation-progress"]')).toHaveLength(0));
+      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-operation-trigger"]')).toHaveLength(0));
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows retry submission in the owning row before the operation request returns', async () => {
+    const service = { service_id: 'mws-retry', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', template_source: 'builtin', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, update_available: false };
+    const operationRequest = deferred<any>();
+    const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-retry/operations' && init?.method === 'POST') return operationRequest.promise;
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(running)}\n\n`));
+      },
+    }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-retry"]')).toBeTruthy());
+      Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Retry')?.click();
+      await flushMicrotasks();
+
+      const submitting = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      expect(submitting.textContent).toContain('Starting operation');
+      expect(submitting.textContent).toContain('0/7');
+      expect(host.querySelector('[data-managed-service-id="mws-retry"]')?.textContent).not.toContain('Error');
+
+      operationRequest.resolve(running);
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Pulling image'));
     } finally {
       dispose();
     }

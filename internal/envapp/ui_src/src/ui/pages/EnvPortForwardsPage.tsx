@@ -755,7 +755,37 @@ function managedOperationFailureMessage(operation: ManagedOperation, fallback: s
   }
 }
 
-const managedOperationActive = (operation: ManagedOperation | null | undefined) => Boolean(operation && ['pending', 'running', 'cancelling'].includes(operation.state));
+const managedOperationActive = (operation: ManagedOperation | null | undefined) => Boolean(operation && ['submitting', 'pending', 'running', 'cancelling'].includes(operation.state));
+
+function managedOperationStages(operation: ManagedOperation, deployment: ManagedDeployment): readonly string[] {
+  switch (operation.action) {
+    case 'start': return ['starting', 'health_check', 'completed'];
+    case 'stop': return ['stopping', 'completed'];
+    case 'restart': return ['stopping', 'starting', 'health_check', 'completed'];
+    case 'update': return ['update_preparing', 'pulling', 'stopping', 'installing', 'starting', 'health_check', 'completed'];
+    case 'uninstall': return ['stopping', 'uninstalling', 'completed'];
+    default:
+      return [
+        'environment_check',
+        deployment === 'native' || deployment === 'host' ? 'downloading' : 'pulling',
+        'verifying',
+        'installing',
+        'starting',
+        'health_check',
+        'completed',
+      ];
+  }
+}
+
+function managedOperationStepState(operation: ManagedOperation, steps: readonly string[], index: number): 'complete' | 'active' | 'pending' | 'failed' {
+  if (operation.state === 'succeeded') return 'complete';
+  const failed = ['failed', 'cancelled', 'interrupted'].includes(operation.state);
+  let activeIndex = steps.indexOf(operation.stage);
+  if (activeIndex < 0) activeIndex = Math.max(0, Math.min(steps.length - 1, operation.progress_current - 1));
+  if (index < activeIndex) return 'complete';
+  if (index === activeIndex) return failed ? 'failed' : 'active';
+  return 'pending';
+}
 
 export function ManagedOperationProgress(props: {
   operation: ManagedOperation;
@@ -779,7 +809,7 @@ export function ManagedOperationProgress(props: {
         </Show>
       </div>
       <span class="shrink-0 font-mono text-[10px] text-muted-foreground">{Math.min(props.operation.progress_current, props.operation.progress_total)}/{props.operation.progress_total}</span>
-      <Button size="sm" variant="ghost" class="h-7 shrink-0 px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+      <Button size="sm" variant="ghost" class="h-7 shrink-0 px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
     </div>
   );
 }
@@ -901,10 +931,19 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
 
 export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
+  const [operationDetailsOpen, setOperationDetailsOpen] = createSignal(false);
   const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
   const failed = () => props.service.observed_state === 'error';
+  const operation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
   const busy = () => props.busy || managedOperationActive(props.operation);
+  const operationLabel = (value: ManagedOperation) => value.state === 'submitting'
+    ? i18n.t('webServices.managed.operationStarting')
+    : managedStageLabel(value.stage, i18n);
+  const operationProgress = (value: ManagedOperation) => Math.max(0, Math.min(value.progress_current, value.progress_total));
+  const operationPercent = (value: ManagedOperation) => value.progress_total > 0
+    ? Math.round((operationProgress(value) / value.progress_total) * 100)
+    : 0;
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
   const moreItems = (): DropdownItem[] => [
@@ -960,10 +999,25 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
         </div>
 
         <div class="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-0.5 lg:col-start-3 lg:row-start-1" data-testid="managed-service-status">
-          <ServiceStatusIndicator
-            label={managedStatusLabel(props.service.observed_state, i18n)}
-            tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
-          />
+          <Show when={operation()} keyed fallback={(
+            <ServiceStatusIndicator
+              label={managedStatusLabel(props.service.observed_state, i18n)}
+              tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
+            />
+          )}>{(activeOperation) => (
+            <button
+              type="button"
+              class="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="managed-service-operation-trigger"
+              aria-haspopup="dialog"
+              aria-label={i18n.t('webServices.managed.operationDetailsTitle', { name: presentation().name })}
+              onClick={() => setOperationDetailsOpen(true)}
+            >
+              <ManagedServiceShapingOrb />
+              <span class="truncate">{operationLabel(activeOperation)}</span>
+              <span class="shrink-0 font-mono text-muted-foreground">{operationProgress(activeOperation)}/{activeOperation.progress_total}</span>
+            </button>
+          )}</Show>
           <Show when={props.service.update_available}><span class="text-[10px] font-medium text-warning">{i18n.t('webServices.managed.updateAvailable')}</span></Show>
         </div>
 
@@ -994,15 +1048,53 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
           />
         </div>
       </div>
-      <Show when={managedOperationActive(props.operation) ? props.operation : null} keyed>{(operation) => (
-        <ManagedOperationProgress
-          operation={operation}
-          serviceName={managedServiceLocalizedIdentity(props.service, i18n).name}
-          artifactReference={props.service.operation_artifact_reference}
-          canCancel={props.canManage}
-          onCancel={() => props.onCancelOperation?.()}
-        />
-      )}</Show>
+      <Show when={operation()} keyed>{(activeOperation) => {
+        const steps = () => managedOperationStages(activeOperation, props.service.deployment);
+        return (
+          <Dialog
+            open={operationDetailsOpen()}
+            onOpenChange={setOperationDetailsOpen}
+            title={i18n.t('webServices.managed.operationDetailsTitle', { name: presentation().name })}
+            footer={(
+              <div class="flex w-full justify-between gap-2">
+                <Show when={props.onCancelOperation}>
+                  <Button size="sm" variant="ghost" onClick={() => props.onCancelOperation?.()} disabled={!props.canManage || activeOperation.state === 'cancelling' || activeOperation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+                </Show>
+                <Button size="sm" variant="outline" class="ml-auto" onClick={() => setOperationDetailsOpen(false)}>{i18n.t('common.actions.close')}</Button>
+              </div>
+            )}
+          >
+            <div class="space-y-4" data-testid="managed-service-operation-details">
+              <div>
+                <div class="flex items-baseline gap-2">
+                  <strong class="text-sm text-foreground">{operationLabel(activeOperation)}</strong>
+                  <span class="ml-auto font-mono text-xs text-muted-foreground">{operationProgress(activeOperation)}/{activeOperation.progress_total}</span>
+                </div>
+                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={i18n.t('webServices.managed.operationProgress')} aria-valuemin="0" aria-valuemax={activeOperation.progress_total} aria-valuenow={operationProgress(activeOperation)}>
+                  <div class="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none" style={{ width: `${operationPercent(activeOperation)}%` }} />
+                </div>
+              </div>
+              <ol class="space-y-2">
+                <For each={steps()}>{(stage, index) => {
+                  const state = () => managedOperationStepState(activeOperation, steps(), index());
+                  return (
+                    <li class="flex items-center gap-2 text-xs" data-managed-operation-step data-state={state()}>
+                      <span data-state={state()} class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] data-[state=complete]:border-success data-[state=complete]:bg-success/10 data-[state=complete]:text-success data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=failed]:border-destructive data-[state=failed]:bg-destructive/10 data-[state=failed]:text-destructive">{state() === 'complete' ? '✓' : index() + 1}</span>
+                      <span class={state() === 'pending' ? 'text-muted-foreground' : 'font-medium text-foreground'}>{managedStageLabel(stage, i18n)}</span>
+                    </li>
+                  );
+                }}</For>
+              </ol>
+              <dl class="grid gap-2 rounded-lg bg-muted/30 p-3 text-xs sm:grid-cols-2">
+                <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationAction')}</dt><dd class="mt-0.5 font-medium text-foreground">{managedActionLabel(activeOperation.action, i18n)}</dd></div>
+                <Show when={activeOperation.operation_id && !activeOperation.operation_id.startsWith('submitting:')}><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationID')}</dt><dd class="mt-0.5 break-all font-mono text-foreground">{activeOperation.operation_id}</dd></div></Show>
+                <Show when={props.service.operation_artifact_reference}><div class="sm:col-span-2"><dt class="text-muted-foreground">{i18n.t('webServices.managed.containerImage')}</dt><dd class="mt-0.5 break-all font-mono text-foreground" data-testid="managed-operation-artifact">{props.service.operation_artifact_reference}</dd></div></Show>
+              </dl>
+              <Show when={activeOperation.error_message}><div class="rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive" role="alert">{activeOperation.error_message}</div></Show>
+            </div>
+          </Dialog>
+        );
+      }}</Show>
     </div>
   );
 }
@@ -1539,11 +1631,12 @@ export function EnvPortForwardsPage() {
 
   const managedAction = async (serviceID: string, action: 'start' | 'stop' | 'restart' | 'retry_install' | 'update', noticeRevisions: Readonly<Record<string, number>> = {}) => {
     if (!canManageManagedService()) return;
-    let operationID = '';
+    const owner = action === 'update' ? 'update' : 'row';
+    let operationID = managedOperations.begin(serviceID, action, owner).operation_id;
     try {
       const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions }) });
       operationID = result.operation_id;
-      const operationPromise = managedOperations.track(result, action === 'update' ? 'update' : 'row');
+      const operationPromise = managedOperations.track(result, owner);
       await loadManaged(false);
       const operation = await operationPromise;
       await loadManaged(false);
