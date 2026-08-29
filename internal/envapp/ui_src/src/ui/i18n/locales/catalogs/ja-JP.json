@@ -4459,6 +4459,7 @@
       "categoryAll": "すべて",
       "categoryDevelopment": "開発",
       "categoryInfrastructure": "インフラストラクチャ",
+      "categoryUtilities": "ユーティリティ",
       "categoryData": "データ",
       "categoryCollaboration": "コラボレーション",
       "categoryProductivity": "仕事効率化",
@@ -4534,6 +4535,10 @@
         "write": {
           "label": "データを書き込む",
           "description": "このプラグインを通じてデータを作成または変更します。"
+        },
+        "network": {
+          "label": "ネットワークアクセス",
+          "description": "検証済みのプラグインパッケージで宣言されたネットワーク接続先に接続します。"
         },
         "other": {
           "label": "プラグイン権限",

@@ -4459,6 +4459,7 @@
       "categoryAll": "全部",
       "categoryDevelopment": "開發工具",
       "categoryInfrastructure": "基礎架構",
+      "categoryUtilities": "實用工具",
       "categoryData": "資料",
       "categoryCollaboration": "協作",
       "categoryProductivity": "生產力",
@@ -4534,6 +4535,10 @@
         "write": {
           "label": "寫入資料",
           "description": "透過此外掛程式建立或變更資料。"
+        },
+        "network": {
+          "label": "網路存取",
+          "description": "連線至外掛程式已驗證套件中宣告的網路目的地。"
         },
         "other": {
           "label": "外掛程式權限",

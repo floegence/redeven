@@ -97,7 +97,9 @@ persist or expose a market version-history model.
 
 Plugin Center projects current entries from the current validated snapshot; names,
 summaries, keywords, and long descriptions are not compiled into the production
-catalog. An unavailable market
+catalog. Redeven owns the product category projection: market `utilities` or
+`weather` entries appear under the stable Utilities category, while the signed
+author presentation remains unchanged. An unavailable market
 does not hide installed instances. Availability `disabled` or `revoked` is a
 discovery and action constraint, while ReDevPlugin revocation evidence remains
 the installation and runtime authority.

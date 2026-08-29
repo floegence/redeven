@@ -27,6 +27,7 @@ const PANEL_CLOSE_DURATION_MS = 150;
 const CATEGORY_IDS: readonly PluginPresentationCategory[] = [
   'development',
   'infrastructure',
+  'utilities',
   'data',
   'collaboration',
   'productivity',
@@ -603,6 +604,7 @@ function categoryLabel(category: PluginPresentationCategory, i18n: I18nHelpers):
   switch (category) {
     case 'development': return i18n.t('uiCopy.plugin.categoryDevelopment');
     case 'infrastructure': return i18n.t('uiCopy.plugin.categoryInfrastructure');
+    case 'utilities': return i18n.t('uiCopy.plugin.categoryUtilities');
     case 'data': return i18n.t('uiCopy.plugin.categoryData');
     case 'collaboration': return i18n.t('uiCopy.plugin.categoryCollaboration');
     case 'productivity': return i18n.t('uiCopy.plugin.categoryProductivity');

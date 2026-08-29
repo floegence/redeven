@@ -30,9 +30,18 @@ export type PluginAttentionReason =
 export type PluginPresentationCategory =
   | 'development'
   | 'infrastructure'
+  | 'utilities'
   | 'data'
   | 'collaboration'
   | 'productivity'
+  | 'other';
+
+export type PluginPermissionGroup =
+  | 'read'
+  | 'execute'
+  | 'delete'
+  | 'write'
+  | 'network'
   | 'other';
 
 export type OfficialPluginDistribution = {
@@ -158,7 +167,7 @@ export type PluginAuthorPresentation = PluginRecord['presentation'];
 
 export type OfficialPluginPermission = {
   permissionID: string;
-  group: 'read' | 'execute' | 'delete' | 'write' | 'other';
+  group: PluginPermissionGroup;
   requiredToOpen: boolean;
   methods: readonly string[];
   requiredToOpenMethods?: readonly string[];
