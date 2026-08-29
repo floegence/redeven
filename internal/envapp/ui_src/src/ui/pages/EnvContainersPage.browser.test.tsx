@@ -8,6 +8,7 @@ import { I18nProvider } from '../i18n';
 
 const browserHarness = vi.hoisted(() => ({
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
+  listResources: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
@@ -47,29 +48,7 @@ vi.mock('../services/containerResourcesApi', () => ({
     remote: false, available: true, engine_version: '27.3.1', rootless: false,
     capabilities: { collection_stats: true, volume_files: false, exec: false },
   }),
-  listContainerResources: vi.fn().mockResolvedValue([
-    {
-      container_id: '8bbf320351e557285fe1f143ee14a6d2334f24f5', name: 'redeven-api',
-      image: { reference: 'ghcr.io/floegence/redeven-api:edge' }, state: 'running', health: 'healthy',
-      group_name: 'redeven-dev', created_at_unix_ms: 1_725_000_000_000,
-      management: { managed: true, owner: { kind: 'web_service', service_id: 'service-api', name: 'Redeven API' } },
-    },
-    {
-      container_id: 'e2c83fcda4850de717be32128754ce4764efb434', name: 'postgres-development',
-      image: { reference: 'postgres:17-alpine' }, state: 'running', health: 'healthy',
-      group_name: 'development', created_at_unix_ms: 1_724_000_000_000, management: { managed: false },
-    },
-    {
-      container_id: 'd8ce8083e6116de35aff5ca35abce727d1c87c9b', name: 'worker-build-cache',
-      image: { reference: 'debian:stable-slim' }, state: 'exited',
-      created_at_unix_ms: 1_723_000_000_000, management: { managed: false },
-    },
-    {
-      container_id: '8a90b48175ec71187b114e2d8f47ac9a78cf4fd9', name: 'metrics-collector',
-      image: { reference: 'otel/opentelemetry-collector:latest' }, state: 'paused',
-      group_name: 'observability', created_at_unix_ms: 1_722_000_000_000, management: { managed: false },
-    },
-  ]),
+  listContainerResources: browserHarness.listResources,
   getContainerResourceDetails: vi.fn().mockImplementation((_view: string, identity: string) => Promise.resolve({
     container_id: identity,
     name: identity.includes('8bbf') ? 'redeven-api' : 'postgres-development',
@@ -146,6 +125,29 @@ describe('native Containers responsive product surface', () => {
   beforeEach(() => {
     document.documentElement.classList.add('dark');
     window.localStorage.clear();
+    browserHarness.listResources.mockReset().mockResolvedValue([
+      {
+        container_id: '8bbf320351e557285fe1f143ee14a6d2334f24f5', name: 'redeven-api',
+        image: { reference: 'ghcr.io/floegence/redeven-api:edge' }, state: 'running', health: 'healthy',
+        group_name: 'redeven-dev', created_at_unix_ms: 1_725_000_000_000,
+        management: { managed: true, owner: { kind: 'web_service', service_id: 'service-api', name: 'Redeven API' } },
+      },
+      {
+        container_id: 'e2c83fcda4850de717be32128754ce4764efb434', name: 'postgres-development',
+        image: { reference: 'postgres:17-alpine' }, state: 'running', health: 'healthy',
+        group_name: 'development', created_at_unix_ms: 1_724_000_000_000, management: { managed: false },
+      },
+      {
+        container_id: 'd8ce8083e6116de35aff5ca35abce727d1c87c9b', name: 'worker-build-cache',
+        image: { reference: 'debian:stable-slim' }, state: 'exited',
+        created_at_unix_ms: 1_723_000_000_000, management: { managed: false },
+      },
+      {
+        container_id: '8a90b48175ec71187b114e2d8f47ac9a78cf4fd9', name: 'metrics-collector',
+        image: { reference: 'otel/opentelemetry-collector:latest' }, state: 'paused',
+        group_name: 'observability', created_at_unix_ms: 1_722_000_000_000, management: { managed: false },
+      },
+    ]);
   });
 
   afterEach(async () => {
@@ -247,5 +249,57 @@ describe('native Containers responsive product surface', () => {
     expect(detailPage.querySelectorAll('[data-container-monitor-panel]')).toHaveLength(3);
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it.each([
+    { width: 1440, height: 900, mode: 'table' },
+    { width: 390, height: 844, mode: 'cards' },
+  ])('keeps the $mode loading geometry aligned with loaded inventory at $width px', async ({ width, height, mode }) => {
+    await page.viewport(width, height);
+    let resolveInventory: ((items: readonly unknown[]) => void) | undefined;
+    browserHarness.listResources.mockReturnValue(new Promise((resolve) => { resolveInventory = resolve; }));
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    const loadingPage = root.querySelector<HTMLElement>('[data-container-list-loading]')!;
+    const loadingToolbar = loadingPage.querySelector<HTMLElement>('.container-resource-toolbar')!;
+    expect(loadingPage).not.toBeNull();
+    expect(loadingToolbar).not.toBeNull();
+    if (mode === 'table') {
+      expect(getComputedStyle(loadingPage.querySelector<HTMLElement>('[data-container-resource-skeleton-table]')!).display).not.toBe('none');
+      expect(loadingPage.querySelectorAll('[data-container-skeleton-row]')).toHaveLength(5);
+    } else {
+      expect(getComputedStyle(loadingPage.querySelector<HTMLElement>('[data-container-mobile-skeleton]')!).display).toBe('grid');
+      expect(loadingPage.querySelectorAll('[data-container-mobile-skeleton] > .container-mobile-card')).toHaveLength(5);
+    }
+    const loadingToolbarRect = loadingToolbar.getBoundingClientRect();
+    const loadingContentTop = loadingPage.querySelector<HTMLElement>('.container-inventory-scroll')!.getBoundingClientRect().top;
+    const loadingItemHeight = mode === 'table'
+      ? loadingPage.querySelector<HTMLElement>('[data-container-skeleton-row]')!.getBoundingClientRect().height
+      : loadingPage.querySelector<HTMLElement>('[data-container-mobile-skeleton] > .container-mobile-card')!.getBoundingClientRect().height;
+
+    resolveInventory?.([
+      {
+        container_id: 'e2c83fcda4850de717be32128754ce4764efb434', name: 'postgres-development',
+        image: { reference: 'postgres:17-alpine' }, state: 'running', health: 'healthy',
+        group_name: 'development', created_at_unix_ms: 1_724_000_000_000, management: { managed: false },
+      },
+    ]);
+    await settle();
+
+    const loadedToolbar = root.querySelector<HTMLElement>('.container-resource-toolbar')!;
+    const loadedToolbarRect = loadedToolbar.getBoundingClientRect();
+    const loadedContentTop = root.querySelector<HTMLElement>('.container-inventory-scroll')!.getBoundingClientRect().top;
+    expect(Math.abs(loadingToolbarRect.height - loadedToolbarRect.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(loadingContentTop - loadedContentTop)).toBeLessThanOrEqual(1);
+    if (mode === 'table') {
+      const loadedRowHeight = root.querySelector<HTMLElement>('[data-container-resource-row-index]')!.getBoundingClientRect().height;
+      expect(Math.abs(loadingItemHeight - loadedRowHeight)).toBeLessThanOrEqual(1);
+    } else {
+      const loadedCardHeight = root.querySelector<HTMLElement>('[data-container-mobile-list] > .container-mobile-card')!.getBoundingClientRect().height;
+      expect(Math.abs(loadingItemHeight - loadedCardHeight)).toBeLessThanOrEqual(1);
+    }
   });
 });
