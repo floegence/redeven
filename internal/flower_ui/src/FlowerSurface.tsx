@@ -72,8 +72,7 @@ import type {
   FlowerLiveStreamEnvelope,
   FlowerAttachmentCapability,
   FlowerAttachmentStagingScope,
-  FlowerModelIOPhase,
-  FlowerModelIOStatus,
+  FlowerRunProgressPhase,
   FlowerModelSourceStatus,
   FlowerSurfaceAction,
   FlowerPermissionType,
@@ -89,7 +88,7 @@ import { presentFlowerApproval } from './flowerApprovalPresentation';
 import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 import {
-  projectFlowerLiveProgress,
+  flowerRunProgress,
   type FlowerLiveProgress,
   type FlowerLiveProgressKind,
 } from './flowerLiveProgress';
@@ -5767,8 +5766,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     fallback: string,
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
-  const selectedLiveProgress = createMemo<FlowerLiveProgress | null>(() => (
-    selectedThreadTerminalSyncing() ? null : projectFlowerLiveProgress(selectedThread())
+  const selectedRunProgress = createMemo<FlowerLiveProgress | null>(() => (
+    selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread())
   ));
   const selectedContextUsage = createMemo<FlowerComposerContextUsageModel | null>(() => {
     const thread = selectedThread();
@@ -5780,7 +5779,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return { usage, freshness: 'last_known' };
   });
-  const selectedThreadHasLiveProgress = createMemo(() => selectedLiveProgress() != null);
+  const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null);
   const showScrollToLatestButton = createMemo(() => (
     (selectedThreadHasContent() || selectedThreadHasLiveProgress())
     && !selectedThreadTailPreparing()
@@ -5793,40 +5792,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     transcriptLayoutRevision();
     measureTranscriptNearBottomAfterLayout();
   });
-  function modelStatusLabel(phase: FlowerModelIOPhase): string {
+  function modelStatusLabel(phase: FlowerRunProgressPhase): string {
     const modelStatus = copy().chat.modelStatus;
     const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus;
-    const labels: Record<FlowerModelIOPhase, string> = {
+    const labels: Record<FlowerRunProgressPhase, string> = {
       preparing: trimString(modelStatus.preparing) || fallback.preparing,
       waiting_response: trimString(modelStatus.waitingResponse) || fallback.waitingResponse,
       streaming: trimString(modelStatus.streaming) || fallback.streaming,
       retrying: trimString(modelStatus.retrying) || fallback.retrying,
       finalizing: trimString(modelStatus.finalizing) || fallback.finalizing,
+      tool_execution: trimString(copy().chat.liveProgressTool) || DEFAULT_FLOWER_SURFACE_COPY.chat.liveProgressTool,
     };
     return labels[phase];
   }
   function liveProgressLabel(kind: FlowerLiveProgressKind): string {
-    switch (kind) {
-      case 'waiting':
-        return modelStatusLabel('waiting_response');
-      case 'thinking':
-        return modelStatusLabel('streaming');
-      case 'tool':
-        return trimString(copy().chat.liveProgressTool) || DEFAULT_FLOWER_SURFACE_COPY.chat.liveProgressTool;
-      case 'output':
-        return trimString(copy().chat.liveProgressOutput) || DEFAULT_FLOWER_SURFACE_COPY.chat.liveProgressOutput;
-    }
+    return modelStatusLabel(kind);
   }
-  const liveProgressIndicator = (progress: FlowerLiveProgress | null) => (
-    <FlowerProgressIndicator
-      progress={progress ? { kind: progress.kind, runID: progress.runID } : null}
-      label={progress ? liveProgressLabel(progress.kind) : ''}
-      threadID={selectedThreadID()}
-      activeRunID={progress?.runID}
-      running={selectedThreadLiveStatus() === 'running'}
-    />
-  );
-
   const formatMessageTime = (createdAtMs: number): string => {
     const value = Math.floor(Number(createdAtMs ?? 0));
     if (!Number.isFinite(value) || value <= 0) return '';
@@ -9494,19 +9475,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const liveProgressEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'live_progress' }>>) => (
-    <div
-      class="flower-live-progress-placeholder flower-message-row flower-message-row-assistant"
-      data-flower-live-progress-kind={entry().progress.kind}
-      data-flower-live-progress-run-id={entry().progress.runID}
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-    >
-      {liveProgressIndicator(entry().progress)}
-    </div>
-  );
-
   const timelineEntry = (entry: Accessor<FlowerTimelineEntry>) => {
     switch (entry().type) {
       case 'message':
@@ -9519,8 +9487,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return inputRequestEntry(entry);
       case 'error':
         return errorEntry(entry);
-      case 'live_progress':
-        return liveProgressEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'live_progress' }>);
     }
   };
 
@@ -9603,16 +9569,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? Math.max(startedAtMs, Number(detail?.summary.updated_at_ms || item?.updatedAtMs || startedAtMs))
       : activityClockNow();
     return formatActivityDuration(Math.max(0, endedAtMs - startedAtMs));
-  });
-  const subagentDetailModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => subagentDetail()?.model_io_status ?? null);
-  const subagentDetailProgress = createMemo(() => {
-    const status = subagentDetailModelIOStatus();
-    const runID = trimString(status?.run_id);
-    return status && runID ? { kind: status.phase, runID } : null;
-  });
-  const subagentDetailModelStatusLabel = createMemo(() => {
-    const status = subagentDetailModelIOStatus();
-    return status ? modelStatusLabel(status.phase) : '';
   });
   const subagentDropdownGroup = (
     kind: 'active' | 'completed',
@@ -9761,16 +9717,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       loadingMore={subagentDetailLoadingMore()}
       onLoadMore={() => void loadMoreSubagentDetail()}
       onRetryLoad={retrySubagentDetailLoad}
-      modelStatus={(
-        <FlowerProgressIndicator
-          progress={subagentDetailProgress()}
-          label={subagentDetailModelStatusLabel()}
-          threadID={subagentDetail()?.summary.thread_id ?? ''}
-          activeRunID={subagentDetailProgress()?.runID}
-          running={subagentDetailActiveStatus() === 'running'}
-        />
-      )}
-      modelStatusVisible={subagentDetailActiveStatus() === 'running'}
       tailLoading={subagentDetailTailLoading()}
       tailError={subagentDetailTailError()}
       onRetryTail={retrySubagentDetailTail}
@@ -10668,7 +10614,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
           <div class="flower-chat-bottom-dock-track flower-chat-bottom-dock-track">
             <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
-              {liveProgressIndicator(selectedLiveProgress()?.initialWait ? null : selectedLiveProgress())}
+              <FlowerProgressIndicator
+                progress={selectedRunProgress()
+                  ? { kind: selectedRunProgress()!.kind, runID: selectedRunProgress()!.runID }
+                  : null}
+                label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind) : ''}
+              />
             </div>
             <div class="flower-composer-anchor">
               <Show when={bottomActionMode() !== 'approval'}>
@@ -10794,17 +10745,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     aria-expanded="false"
                     onClick={() => props.onCompanionOpenRequest?.(props.companionSummary?.targetThreadID)}
                   >
-                    <span
-                      class={cn(
-                        'flower-companion-collapsed-icon',
-                        props.companionSummary?.running && 'flower-companion-collapsed-icon-running',
-                        props.companionSummary?.ephemeralKind === 'completion'
-                          && 'flower-companion-collapsed-icon-completion',
-                      )}
-                      aria-hidden="true"
-                    >
-                      <FlowerIcon />
-                    </span>
                     <span
                       class={cn(
                         'flower-companion-collapsed-status',

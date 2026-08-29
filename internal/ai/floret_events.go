@@ -87,7 +87,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
-		r.updateModelIOStatus(FlowerModelIOPhaseWaitingResponse, ev.Step)
 		r.recordRunDiagnostic("floret.provider.request", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
 			"provider":   strings.TrimSpace(ev.Provider),
@@ -95,7 +94,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"metadata":   ev.Metadata,
 		})
 	case floretEventProviderFinish:
-		r.updateModelIOStatus(FlowerModelIOPhaseFinalizing, ev.Step)
 		r.recordRunDiagnostic("floret.provider.finish", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":        ev.Step,
 			"finish_reason":     strings.TrimSpace(string(ev.FinishReason)),
@@ -104,16 +102,12 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"metadata":          ev.Metadata,
 		})
 	case floretEventProviderRetry:
-		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, ev.Step)
 		r.recordRunDiagnostic("floret.provider.retry", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
 			"message":    strings.TrimSpace(ev.Message),
 		})
 	case floretEventStepStart:
-		r.updateModelIOStatus(FlowerModelIOPhasePreparing, ev.Step)
 		r.touchActivity()
-	case floretEventRunEnd:
-		r.clearModelIOStatus()
 	case floretEventToolApprovalRequested, floretEventToolApprovalApproved, floretEventToolApprovalRejected, floretEventToolApprovalTimedOut, floretEventToolApprovalCanceled:
 		r.recordRunDiagnostic("floret."+string(ev.Type), RealtimeStreamKindLifecycle, map[string]any{
 			"tool_id":   strings.TrimSpace(ev.ToolID),
@@ -665,26 +659,21 @@ func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) 
 	}
 	switch stream.Type {
 	case flruntime.StreamObservationAssistantDelta:
-		r.updateModelIOStatus(FlowerModelIOPhaseStreaming, stream.Attempt)
 		if stream.Text != "" {
 			_ = r.appendTextDelta(stream.Text)
 		}
 	case flruntime.StreamObservationReasoningDelta:
-		r.updateModelIOStatus(FlowerModelIOPhaseStreaming, stream.Attempt)
 		if stream.Text != "" {
 			r.touchActivity()
 			_ = r.appendThinkingDelta(stream.Text)
 		}
 	case flruntime.StreamObservationToolCallStart, flruntime.StreamObservationToolCallDelta, flruntime.StreamObservationToolCallEnd:
-		r.updateModelIOStatus(FlowerModelIOPhaseStreaming, stream.Attempt)
 	case flruntime.StreamObservationModelRetry:
-		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, stream.Attempt)
 		r.recordRunDiagnostic("floret.provider.retry.stream", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt": stream.Attempt,
 			"reason":  strings.TrimSpace(stream.Reason),
 		})
 	case flruntime.StreamObservationModelStreamDone:
-		r.updateModelIOStatus(FlowerModelIOPhaseFinalizing, stream.Attempt)
 		r.recordRunDiagnostic("floret.provider.stream.done", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt":              stream.Attempt,
 			"finish_reason":        strings.TrimSpace(string(stream.FinishReason)),
@@ -693,7 +682,6 @@ func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) 
 			"stream_reason_detail": strings.TrimSpace(stream.Reason),
 		})
 	case flruntime.StreamObservationModelStreamAbort:
-		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, stream.Attempt)
 		r.recordRunDiagnostic("floret.provider.stream.abort", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt": stream.Attempt,
 			"reason":  strings.TrimSpace(stream.Reason),

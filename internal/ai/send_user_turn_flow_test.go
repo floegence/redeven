@@ -49,6 +49,9 @@ func TestSendUserTurnReturnsImmediateTypedCurrent(t *testing.T) {
 	if response.Kind != "start" || response.ClientRequestID != "request-immediate-current" || response.TurnID == "" {
 		t.Fatalf("typed response=%#v", response)
 	}
+	if response.RunID == "" || response.RunID != response.Current.RunID.String() || response.RunID == response.TurnID {
+		t.Fatalf("typed response identities=(turn=%q run=%q current_run=%q), want exact distinct RunID", response.TurnID, response.RunID, response.Current.RunID)
+	}
 	if response.Current.Activity != flruntime.ThreadActivityActive || response.Current.TurnID.String() != response.TurnID || len(response.Current.Items) != 1 || response.Current.Items[0].Kind != flruntime.ThreadItemUser {
 		t.Fatalf("command current=%#v, want immediate canonical user/running view", response.Current)
 	}
@@ -168,7 +171,7 @@ func TestConcurrentTypedSendDeduplicatesRequest(t *testing.T) {
 		response := <-results
 		if index == 0 {
 			first = response
-		} else if response.TurnID != first.TurnID || response.Kind != first.Kind {
+		} else if response.TurnID != first.TurnID || response.RunID != first.RunID || response.Kind != first.Kind {
 			t.Fatalf("deduplicated responses differ: first=%#v second=%#v", first, response)
 		}
 	}

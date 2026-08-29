@@ -74,7 +74,7 @@ describe('Flower status motion and thread menu', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const [progress, setProgress] = createSignal<FlowerProgressIndicatorState>({
-      kind: 'waiting',
+      kind: 'waiting_response',
       runID: 'run-1',
     });
     const [label, setLabel] = createSignal('Thinking...');
@@ -82,9 +82,6 @@ describe('Flower status motion and thread menu', () => {
       <FlowerProgressIndicator
         progress={progress()}
         label={label()}
-        threadID="thread-1"
-        activeRunID="run-1"
-        running
       />
     ), host));
     await nextFrame();
@@ -97,16 +94,24 @@ describe('Flower status motion and thread menu', () => {
     expect(dots).not.toBeNull();
     expect(dots?.textContent).toBe('...');
     expect(getComputedStyle(dots!).animationName).toBe('flower-model-status-dots-reveal');
+    const flowerAnimation = flower.getAnimations()[0];
+    const dotsAnimation = dots!.getAnimations()[0];
     const firstTransform = getComputedStyle(flower).transform;
     await new Promise((resolve) => window.setTimeout(resolve, 180));
     expect(getComputedStyle(flower).transform).not.toBe(firstTransform);
+    const flowerTimeBeforePhase = Number(flowerAnimation?.currentTime ?? 0);
+    const dotsTimeBeforePhase = Number(dotsAnimation?.currentTime ?? 0);
 
     batch(() => {
-      setProgress({ kind: 'output', runID: 'run-1' });
+      setProgress({ kind: 'streaming', runID: 'run-1' });
       setLabel('Replying...');
     });
-    await nextFrame();
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
     expect(host.querySelector('.flower-model-status-indicator')).toBe(indicator);
+    expect(flower.getAnimations()[0]).toBe(flowerAnimation);
+    expect(dots!.getAnimations()[0]).toBe(dotsAnimation);
+    expect(Number(flowerAnimation?.currentTime ?? 0)).toBeGreaterThan(flowerTimeBeforePhase);
+    expect(Number(dotsAnimation?.currentTime ?? 0)).toBeGreaterThan(dotsTimeBeforePhase);
 
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
     await nextFrame();

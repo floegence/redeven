@@ -71,12 +71,14 @@ function readStatus(status = 'idle') {
 }
 
 function liveBootstrap(threadID: string, status = 'canceled') {
+  const runID = `run:${threadID}`;
   const thread = {
     thread_id: threadID,
     title: 'Stopped thread',
     title_status: 'ready',
     model_id: 'default/gpt-4.1',
     status,
+    ...(status === 'running' ? { active_run_id: runID } : {}),
     permission_type: 'approval_required' as FlowerPermissionType,
     created_at_unix_ms: 1,
     updated_at_unix_ms: 2,
@@ -89,6 +91,7 @@ function liveBootstrap(threadID: string, status = 'canceled') {
       thread_id: threadID,
       view_version: 3,
       activity: status === 'running' ? 'active' : 'idle',
+      ...(status === 'running' ? { run_id: runID } : {}),
       ...(status === 'canceled' ? { last_outcome: 'cancelled' } : {}),
       items: [],
       queue: [],
@@ -110,6 +113,7 @@ function typedCommandResponse(
       thread_id: threadID,
       view_version: 1,
       activity: 'active',
+      run_id: `run:${turnID}`,
       turn_id: turnID,
       items: [{
         id: `user:${clientRequestID}`,
@@ -871,7 +875,9 @@ describe('Env local Flower surface adapter', () => {
         thread_id: 'thread_context',
         view_version: 11,
         activity: 'active' as const,
+        run_id: 'run_context',
         turn_id: 'turn_context',
+        run_progress: { phase: 'streaming' as const },
         items: [
           { id: 'user:req-context', turn_id: 'turn_context', kind: 'user' as const, text: 'Inspect context' },
           { id: 'assistant:turn-context', turn_id: 'turn_context', kind: 'assistant' as const, text: 'Working' },
@@ -896,7 +902,7 @@ describe('Env local Flower surface adapter', () => {
 
     expect(mapped.current.view_version).toBe(11);
     expect(mapped.thread.status).toBe('running');
-    expect(mapped.thread.active_run_id).toBe('turn_context');
+    expect(mapped.thread.active_run_id).toBe('run_context');
     expect(mapped.thread.messages).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'user:req-context', role: 'user', content: 'Inspect context' }),
       expect.objectContaining({ id: 'assistant:turn-context', role: 'assistant', content: 'Working' }),
@@ -974,7 +980,7 @@ describe('Env local Flower surface adapter', () => {
   it('returns the typed current view from the local approval API', async () => {
     const result: FlowerApprovalCommandResult = {
       ok: true,
-      current: { thread_id: 'thread_receipt', view_version: 42, activity: 'active', interactions: [{ id: 'approval_receipt', kind: 'approval', resolved: true, approved: true }] },
+      current: { thread_id: 'thread_receipt', view_version: 42, activity: 'active', run_id: 'run_receipt', interactions: [{ id: 'approval_receipt', kind: 'approval', resolved: true, approved: true }] },
     };
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_receipt/approvals' && init?.method === 'POST') {

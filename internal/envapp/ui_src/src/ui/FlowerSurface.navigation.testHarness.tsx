@@ -37,7 +37,6 @@ import type {
   FlowerSubmitInputReceipt,
   FlowerTurnLaunchReceipt,
   FlowerActivityStatus,
-  FlowerModelIOStatus,
   FlowerSubagentDetail,
   FlowerSubagentSummary,
   FlowerLiveStreamConnectInput,
@@ -384,7 +383,7 @@ export function readStatus(isUnread = false, revision = 2, status = 'idle'): Flo
 }
 
 export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnapshot {
-  return {
+  const value: FlowerThreadSnapshot = {
     thread_id: 'thread-1',
     title: 'Deploy plan',
     model_id: 'openai/gpt-5.2',
@@ -409,15 +408,10 @@ export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThr
     ...overrides,
     title_status: overrides.title_status ?? 'ready',
   };
-}
-
-export function modelIOStatus(overrides: Partial<FlowerModelIOStatus> = {}): FlowerModelIOStatus {
-  return {
-    phase: 'streaming',
-    run_id: 'run-live',
-    updated_at_ms: 3,
-    ...overrides,
-  };
+  if ((value.status === 'running' || value.status === 'waiting_approval' || value.status === 'waiting_user') && !value.active_run_id) {
+    return { ...value, active_run_id: `run:${value.thread_id}` };
+  }
+  return value;
 }
 
 export function liveBootstrap(threadValue: FlowerThreadSnapshot, version = 0): FlowerThreadView {
@@ -442,7 +436,9 @@ export function launchReceipt(
       ...(kind === 'queued'
         ? { queue: [{ id: canonicalID, request_key: clientRequestID, input: { text: '' } }] }
         : {
+            run_id: canonicalID,
             turn_id: canonicalID,
+            run_progress: { phase: 'preparing' as const },
             items: [{
               id: `user:${clientRequestID}`,
               turn_id: canonicalID,
@@ -498,13 +494,17 @@ export function runtimeCurrentView(
       text: message.content,
     }];
   });
+  const activeTurnID = threadValue.run_progress?.turn_id
+    ?? [...threadValue.messages].reverse().find((message) => Boolean(message.turn_id))?.turn_id;
   return {
     thread_id: threadValue.thread_id,
     view_version: version,
     activity: threadValue.status === 'idle' || threadValue.status === 'success' || threadValue.status === 'failed' || threadValue.status === 'canceled'
       ? 'idle'
       : 'active',
-    ...(threadValue.active_run_id ? { turn_id: threadValue.active_run_id } : {}),
+    ...(threadValue.active_run_id ? { run_id: threadValue.active_run_id } : {}),
+    ...(activeTurnID ? { turn_id: activeTurnID } : {}),
+    ...(threadValue.run_progress ? { run_progress: { phase: threadValue.run_progress.phase } } : {}),
     ...(threadValue.status === 'success' ? { last_outcome: 'completed' as const } : {}),
     ...(threadValue.status === 'failed' ? { last_outcome: 'failed' as const } : {}),
     ...(threadValue.status === 'canceled' ? { last_outcome: 'cancelled' as const } : {}),
@@ -521,8 +521,8 @@ export function runtimeCurrentView(
 export function inputAdmissionReceipt(
   threadID: string,
   promptID: string,
-  _turnID = 'turn-input-response',
-  _runID = 'run-input-response',
+  turnID = 'turn-input-response',
+  runID = 'run-input-response',
 ): FlowerSubmitInputReceipt {
   return {
     thread_id: threadID,
@@ -531,6 +531,9 @@ export function inputAdmissionReceipt(
       thread_id: threadID,
       view_version: 1,
       activity: 'active',
+      run_id: runID,
+      turn_id: turnID,
+      run_progress: { phase: 'preparing' },
       interactions: [],
     },
   };
@@ -548,6 +551,7 @@ export function approvalCommandResult(
       thread_id: threadID,
       view_version: version,
       activity: 'active',
+      run_id: `run:${interactionID}`,
       interactions: [{ id: interactionID, kind: 'approval', resolved: true, approved }],
     },
   };
@@ -1046,6 +1050,7 @@ const mountFlowerSurface = (
     transcriptVisible?: boolean;
     companionPresenceOwner?: boolean;
     companionCopy?: FlowerThreadSwitcherCopy;
+    companionSummary?: FlowerSurfaceProps['companionSummary'];
     onCompanionOpenRequest?: (threadID?: string) => void;
     onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
@@ -1068,6 +1073,7 @@ const mountFlowerSurface = (
       transcriptVisible={props.transcriptVisible}
       companionPresenceOwner={props.companionPresenceOwner}
       companionCopy={props.companionCopy}
+      companionSummary={props.companionSummary}
       onCompanionOpenRequest={props.onCompanionOpenRequest}
       onPresenceChange={props.onPresenceChange}
       onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
@@ -1125,6 +1131,7 @@ export function renderSurfaceWithAdapterProps(
     transcriptVisible?: boolean;
     companionPresenceOwner?: boolean;
     companionCopy?: FlowerThreadSwitcherCopy;
+    companionSummary?: FlowerSurfaceProps['companionSummary'];
     onCompanionOpenRequest?: (threadID?: string) => void;
     onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;

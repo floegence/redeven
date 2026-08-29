@@ -153,6 +153,7 @@ type ThreadView struct {
 	RunError             string                       `json:"run_error,omitempty"`
 	WaitingPrompt        *RequestUserInputPrompt      `json:"waiting_prompt,omitempty"`
 	ActiveRunID          string                       `json:"active_run_id,omitempty"`
+	RunProgress          *FlowerRunProgress           `json:"run_progress,omitempty"`
 	ApprovalPending      *bool                        `json:"approval_pending,omitempty"`
 	ApprovalPendingCount int                          `json:"approval_pending_count,omitempty"`
 	ReasoningSelection   config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
@@ -282,7 +283,6 @@ type FlowerSubagentDetailResponse struct {
 	Messages            []FlowerTimelineMessage     `json:"messages"`
 	Timeline            []FlowerSubagentTimelineRow `json:"timeline"`
 	Activity            *ActivityTimelineBlock      `json:"activity,omitempty"`
-	ModelIOStatus       *FlowerModelIOStatus        `json:"model_io_status,omitempty"`
 	ContextUsage        *FlowerContextUsage         `json:"context_usage,omitempty"`
 	ContextCompactions  []FlowerContextCompaction   `json:"context_compactions,omitempty"`
 	TimelineDecorations []FlowerTimelineDecoration  `json:"timeline_decorations,omitempty"`
@@ -606,14 +606,6 @@ type streamEventContextCompaction struct {
 	TimelineDecoration FlowerTimelineDecoration `json:"timelineDecoration,omitempty"`
 	EventType          string                   `json:"eventType,omitempty"`
 	Payload            map[string]any           `json:"payload,omitempty"`
-}
-
-type streamEventModelIOStatus struct {
-	Type        string `json:"type"`
-	Phase       string `json:"phase,omitempty"`
-	RunID       string `json:"runId,omitempty"`
-	StepIndex   int    `json:"stepIndex,omitempty"`
-	UpdatedAtMs int64  `json:"updatedAtMs,omitempty"`
 }
 
 // RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.

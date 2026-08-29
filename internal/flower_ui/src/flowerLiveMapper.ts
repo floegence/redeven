@@ -21,6 +21,8 @@ import type {
   FlowerThreadStatus,
   FlowerTitleStatus,
   FlowerPermissionType,
+  FlowerRunProgress,
+  FlowerRunProgressPhase,
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
 import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
@@ -116,6 +118,32 @@ function runStatus(raw: unknown): FlowerThreadStatus {
     default:
       throw new Error(`Flower contract error: thread.run_status is unsupported: ${trim(raw) || '<empty>'}.`);
   }
+}
+
+function runProgressPhase(raw: unknown): FlowerRunProgressPhase {
+  switch (trim(raw)) {
+    case 'preparing':
+    case 'waiting_response':
+    case 'streaming':
+    case 'retrying':
+    case 'finalizing':
+    case 'tool_execution':
+      return trim(raw) as FlowerRunProgressPhase;
+    default:
+      throw new Error(`Flower contract error: thread.run_progress.phase is unsupported: ${trim(raw) || '<empty>'}.`);
+  }
+}
+
+function mapRunProgress(raw: unknown, activeRunID: string): FlowerRunProgress | null {
+  if (raw === undefined || raw === null) return null;
+  const record = recordValue(raw);
+  if (!record) throw new Error('Flower contract error: thread.run_progress must be an object.');
+  const runID = trim(record.run_id);
+  const turnID = trim(record.turn_id);
+  if (!runID || !turnID || runID !== activeRunID) {
+    throw new Error('Flower contract error: thread.run_progress requires exact active run and turn identity.');
+  }
+  return { run_id: runID, turn_id: turnID, phase: runProgressPhase(record.phase) };
 }
 
 function inputResponseMode(raw: unknown): FlowerInputQuestion['response_mode'] {
@@ -1139,9 +1167,13 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const record = recordValue(raw) ?? {};
   const threadID = trim(record.thread_id);
   const status = runStatus(record.run_status);
-  const activeRunID = status === 'running' || status === 'waiting_approval'
+  const activeRunID = status === 'running' || status === 'waiting_approval' || status === 'waiting_user'
     ? trim(record.active_run_id)
     : '';
+  if ((status === 'running' || status === 'waiting_approval' || status === 'waiting_user') && !activeRunID) {
+    throw new Error('Flower contract error: an active thread requires active_run_id.');
+  }
+  const progress = mapRunProgress(record.run_progress, activeRunID);
   const waitingPrompt = record.waiting_prompt !== undefined ? mapInputRequest(record.waiting_prompt) : null;
   const inputRequest = status === 'waiting_user' ? waitingPrompt : null;
   const errorMessage = trim(record.run_error);
@@ -1172,6 +1204,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     updated_at_ms: unixMs(record.updated_at_unix_ms ?? record.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
     status,
     ...(activeRunID ? { active_run_id: activeRunID } : {}),
+    ...(progress ? { run_progress: progress } : {}),
     ...(record.approval_pending !== undefined ? { approval_pending: record.approval_pending } : {}),
     ...(approvalPendingCount !== undefined ? { approval_pending_count: approvalPendingCount } : {}),
     queued_turn_count: nonNegativeInteger(record.queued_turn_count ?? 0, 'thread.queued_turn_count'),

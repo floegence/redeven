@@ -174,7 +174,6 @@ const MAX_VIEWS = 12;
 function summaryOnly(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
   const summary = { ...thread, messages: [] };
   delete summary.queued_turns;
-  delete summary.model_io_status;
   delete summary.context_usage;
   delete summary.context_compactions;
   delete summary.timeline_decorations;

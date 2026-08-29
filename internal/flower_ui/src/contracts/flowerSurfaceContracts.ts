@@ -192,18 +192,18 @@ export type FlowerThreadError = Readonly<{
   code?: string;
 }>;
 
-export type FlowerModelIOPhase =
+export type FlowerRunProgressPhase =
   | 'preparing'
   | 'waiting_response'
   | 'streaming'
   | 'retrying'
-  | 'finalizing';
+  | 'finalizing'
+  | 'tool_execution';
 
-export type FlowerModelIOStatus = Readonly<{
-  phase: FlowerModelIOPhase;
-  run_id?: string;
-  step_index?: number;
-  updated_at_ms: number;
+export type FlowerRunProgress = Readonly<{
+  phase: FlowerRunProgressPhase;
+  run_id: string;
+  turn_id: string;
 }>;
 
 export type FlowerContextPressureStatus =
@@ -500,6 +500,7 @@ export type FlowerThreadSnapshot = Readonly<{
   updated_at_ms: number;
   status: FlowerThreadStatus;
   active_run_id?: string;
+  run_progress?: FlowerRunProgress | null;
   approval_pending?: boolean;
   approval_pending_count?: number;
   queued_turn_count?: number;
@@ -510,7 +511,6 @@ export type FlowerThreadSnapshot = Readonly<{
   read_only_reason?: string;
   parent_thread_id?: string;
   messages: readonly FlowerChatMessage[];
-  model_io_status?: FlowerModelIOStatus | null;
   reasoning_selection?: FlowerReasoningSelection;
   reasoning_capability?: FlowerReasoningCapability;
   context_usage?: FlowerContextUsage | null;
@@ -621,7 +621,6 @@ export type FlowerSubagentDetail = Readonly<{
   messages: readonly FlowerChatMessage[];
   timeline: readonly FlowerSubagentTimelineRow[];
   activity?: FlowerActivityTimelineBlock;
-  model_io_status?: FlowerModelIOStatus | null;
   context_usage?: FlowerContextUsage | null;
   context_compactions?: readonly FlowerContextCompaction[];
   timeline_decorations?: readonly FlowerTimelineDecoration[];
@@ -765,6 +764,8 @@ export type FlowerRuntimeCurrentView = Readonly<{
   view_version: number;
   activity?: 'idle' | 'active';
   turn_id?: string;
+  run_id?: string;
+  run_progress?: Readonly<{ phase: FlowerRunProgressPhase }> | null;
   last_outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   error?: string;
   run_error_code?: string;

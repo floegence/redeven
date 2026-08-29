@@ -88,7 +88,6 @@ function windowProps(open: boolean, onOpenChange: (open: boolean) => void): Suba
     loadingMore: false,
     onLoadMore: () => undefined,
     onRetryLoad: () => undefined,
-    modelStatus: null,
     tailLoading: true,
     tailError: '',
     onRetryTail: () => undefined,

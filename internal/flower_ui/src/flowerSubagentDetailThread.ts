@@ -78,7 +78,6 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null)
     read_only_reason: 'Subagent details are managed by the parent Flower thread.',
     parent_thread_id: trimString(summary.parent_thread_id),
     messages,
-    model_io_status: detail.model_io_status ?? null,
     context_usage: detail.context_usage ?? null,
     context_compactions: detail.context_compactions ?? [],
     timeline_decorations: detail.timeline_decorations ?? [],

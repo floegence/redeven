@@ -203,7 +203,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 			ClientRequestID: req.ClientRequestID,
 			ThreadID:        string(result.ThreadID),
 			TurnID:          string(result.TurnID),
-			RunID:           executionKey,
+			RunID:           string(result.RunID),
 			Kind:            "start",
 			Current:         result,
 		}
@@ -258,7 +258,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		ClientRequestID: req.ClientRequestID,
 		ThreadID:        string(result.ThreadID),
 		TurnID:          string(result.TurnID),
-		RunID:           executionKey,
+		RunID:           string(result.RunID),
 		Kind:            "start",
 		Current:         result,
 	}
@@ -331,7 +331,11 @@ func (s *Service) typedSendLookup(ctx context.Context, threadID, requestID strin
 		if item.ID != userID {
 			continue
 		}
-		return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, TurnID: string(item.TurnID), RunID: requestID, Kind: "start", Current: view}, true, nil
+		runID := ""
+		if view.TurnID == item.TurnID {
+			runID = string(view.RunID)
+		}
+		return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, TurnID: string(item.TurnID), RunID: runID, Kind: "start", Current: view}, true, nil
 	}
 	for _, queued := range view.Queue {
 		if queued.RequestKey == requestID {

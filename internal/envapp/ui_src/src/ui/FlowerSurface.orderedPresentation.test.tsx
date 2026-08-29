@@ -37,6 +37,7 @@ function orderedCurrent(stage: 'waiting' | 'running' | 'completed'): FlowerRunti
   return {
     thread_id: 'thread-ordered-dom',
     turn_id: 'turn-ordered-dom',
+    run_id: 'run-ordered-dom',
     view_version: stage === 'waiting' ? 1 : stage === 'running' ? 2 : 3,
     activity: terminal ? 'idle' : 'active',
     ...(terminal ? { last_outcome: 'completed' as const } : {}),

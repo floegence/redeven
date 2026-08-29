@@ -144,6 +144,7 @@ describe('Flower bottom decision surface', () => {
         thread_id: input.thread_id,
         view_version: 21,
         activity: 'active' as const,
+        run_id: waitingThread.active_run_id,
         interactions: [],
       },
     }));
@@ -200,6 +201,7 @@ describe('Flower bottom decision surface', () => {
         thread_id: waitingThread.thread_id,
         view_version: 21,
         activity: 'active' as const,
+        run_id: waitingThread.active_run_id,
         interactions: [
           { id: request.prompt_id, kind: 'input' as const, resolved: true },
           {
@@ -218,6 +220,7 @@ describe('Flower bottom decision surface', () => {
         thread_id: waitingThread.thread_id,
         view_version: 22,
         activity: 'active' as const,
+        run_id: waitingThread.active_run_id,
         interactions: [
           { id: request.prompt_id, kind: 'input' as const, resolved: true },
           { id: action.action_id, kind: 'approval' as const, tool_call_id: action.tool_id, resolved: true, approved: true },
@@ -345,6 +348,7 @@ describe('Flower bottom decision surface', () => {
         thread_id: input.thread_id,
         view_version: 22 + submitApproval.mock.calls.length,
         activity: 'active' as const,
+        run_id: approvalThread.active_run_id,
         turn_id: action.run_id,
         interactions: input.interaction_id === action.action_id
           ? [
@@ -472,6 +476,7 @@ describe('Flower bottom decision surface', () => {
         thread_id: approvalThread.thread_id,
         view_version: version,
         activity: 'active' as const,
+        run_id: approvalThread.active_run_id,
         interactions: [
           {
             id: firstAction.action_id,
@@ -583,6 +588,7 @@ describe('Flower bottom decision surface', () => {
         thread_id: approvalThread.thread_id,
         view_version: version,
         activity: 'active' as const,
+        run_id: approvalThread.active_run_id,
         interactions: [
           { id: firstAction.action_id, kind: 'approval' as const, resolved: true, approved: true },
           { id: secondAction.action_id, kind: 'approval' as const, resolved: true, approved: true },
@@ -669,6 +675,7 @@ describe('Flower bottom decision surface', () => {
             thread_id: input.thread_id,
             view_version: 22,
             activity: 'active' as const,
+            run_id: approvalThread.active_run_id,
             interactions: [
               { id: approvalAction.action_id, kind: 'approval' as const, tool_call_id: approvalAction.tool_id, resolved: true, approved: input.approved },
               {

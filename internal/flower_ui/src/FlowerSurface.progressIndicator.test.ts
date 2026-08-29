@@ -236,6 +236,21 @@ describe('Flower progress indicator', () => {
     expect(tailValueRule).not.toContain('position: absolute');
   });
 
+  it('keeps the collapsed Flower icon in the thread switcher only', () => {
+    const src = surfaceSource();
+    const switcherStart = src.indexOf('const companionHeaderIdentity = () => (');
+    const switcherIcon = src.indexOf('<FlowerIcon class="flower-companion-thread-trigger-icon', switcherStart);
+    const summaryStart = src.indexOf('<Show when={companionSummaryVisible()}>');
+    const summaryEnd = src.indexOf('</button>', summaryStart);
+
+    expect(switcherIcon).toBeGreaterThan(switcherStart);
+    expect(switcherIcon).toBeLessThan(summaryStart);
+    expect(src.slice(summaryStart, summaryEnd)).not.toContain('<FlowerIcon');
+    expect(src.slice(summaryStart, summaryEnd)).toContain('flower-companion-collapsed-status');
+    expect(src.slice(summaryStart, summaryEnd)).toContain('flower-companion-collapsed-summary-text');
+    expect(src).not.toContain('flower-companion-collapsed-icon-completion');
+  });
+
   it('renders compaction dividers as accessible timeline separators', () => {
     const css = flowerStyles();
     const dividerRule = cssRule(css, '.flower-compaction-divider');

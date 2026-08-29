@@ -66,8 +66,9 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	view.QueuedTurnCount = len(current.Queue)
 	view.WaitingPrompt = requestUserInputPromptFromCurrent(current)
 	if current.Activity == flruntime.ThreadActivityActive {
-		view.ActiveRunID = strings.TrimSpace(current.TurnID.String())
+		view.ActiveRunID = strings.TrimSpace(current.RunID.String())
 	}
+	view.RunProgress = flowerRunProgress(current.RunID, current.TurnID, current.RunProgress)
 	if view.LastMessagePreview == "" {
 		view.LastMessageAtUnixMs, view.LastMessagePreview = currentThreadPreview(current)
 	}
@@ -174,8 +175,9 @@ func (s *Service) threadViewFromSummary(ctx context.Context, th *threadstore.Thr
 		view.RunErrorCode, view.RunError = projectFloretTurnFailure(summary.Failure, floretThreadSummaryLegacyError(summary), "floret_turn_failed")
 	}
 	if summary.Activity == flruntime.ThreadActivityActive {
-		view.ActiveRunID = strings.TrimSpace(summary.TurnID.String())
+		view.ActiveRunID = strings.TrimSpace(summary.RunID.String())
 	}
+	view.RunProgress = flowerRunProgress(summary.RunID, summary.TurnID, summary.RunProgress)
 	view.FlowerActivity = FlowerThreadReadSnapshot{
 		ActivityRevision:    max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
 		LastMessageAtUnixMs: view.LastMessageAtUnixMs,
@@ -550,11 +552,19 @@ func applyThreadRuntimeSummary(view *ThreadView, current flruntime.ThreadView) {
 	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeCancelled:
 		view.RunStatus = string(RunStateCanceled)
 	}
-	if current.Activity == flruntime.ThreadActivityActive && current.TurnID != "" {
-		view.ActiveRunID = current.TurnID.String()
+	if current.Activity == flruntime.ThreadActivityActive && current.RunID != "" {
+		view.ActiveRunID = current.RunID.String()
 	} else if current.Activity != flruntime.ThreadActivityActive {
 		view.ActiveRunID = ""
 	}
+	view.RunProgress = flowerRunProgress(current.RunID, current.TurnID, current.RunProgress)
+}
+
+func flowerRunProgress(runID identity.RunID, turnID identity.TurnID, progress *flruntime.ThreadRunProgress) *FlowerRunProgress {
+	if progress == nil || strings.TrimSpace(runID.String()) == "" || strings.TrimSpace(turnID.String()) == "" {
+		return nil
+	}
+	return &FlowerRunProgress{RunID: runID.String(), TurnID: turnID.String(), Phase: progress.Phase}
 }
 
 func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, permissionType string, workingDir string) (*ThreadView, error) {
@@ -716,7 +726,9 @@ func threadSummaryFromRuntime(ctx context.Context, runtime flruntime.ThreadServi
 
 func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current flruntime.ThreadView, summary flruntime.ThreadSummary) ThreadView {
 	runStatus := string(RunStateIdle)
+	activeRunID := ""
 	if current.Activity == flruntime.ThreadActivityActive {
+		activeRunID = current.RunID.String()
 		switch {
 		case current.Attention.InputCount > 0:
 			runStatus = string(RunStateWaitingUser)
@@ -737,7 +749,8 @@ func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current f
 		ThreadID: current.ThreadID.String(), Title: strings.TrimSpace(summary.Title), TitleStatus: strings.TrimSpace(string(summary.TitleStatus)), ModelID: settings.ModelID,
 		PermissionType: settings.PermissionType, WorkingDir: settings.WorkingDir,
 		QueuedTurnCount: len(current.Queue), RunStatus: runStatus,
-		ApprovalPendingCount: current.Attention.ApprovalCount, ActiveRunID: current.TurnID.String(),
+		ApprovalPendingCount: current.Attention.ApprovalCount, ActiveRunID: activeRunID,
+		RunProgress:    flowerRunProgress(current.RunID, current.TurnID, current.RunProgress),
 		PinnedAtUnixMs: settings.PinnedAtUnixMs, CreatedAtUnixMs: settings.SettingsCreatedAtUnixMs,
 		UpdatedAtUnixMs: settings.SettingsUpdatedAtUnixMs, LastMessageAtUnixMs: settings.SettingsUpdatedAtUnixMs,
 		LastMessagePreview: preview,

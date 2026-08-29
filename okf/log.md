@@ -1,6 +1,13 @@
 # Redeven OKF Update Log
 
 ## 2026-08-29
+* **Exact Flower run progress and stable status animation**: Redeven adopts
+  Floret v5.0.15 as the sole owner of active RunID and process-local run phase.
+  Flower removes its model-I/O stream, message-derived lifecycle, and timeline
+  wait placeholder; one fixed indicator above the composer keeps the same DOM
+  nodes throughout a run. The collapsed Bottom Bar keeps only the left
+  thread-switcher Flower glyph, while the status button retains its marker,
+  text, target-thread action, and accessible name.
 * **Subagent admission latency and parent-only presentation**: Floret v5.0.14
   supplies segmented domain persistence and canonical task-name titles.
   Redeven removes post-admission child reads and title writes, treats wait

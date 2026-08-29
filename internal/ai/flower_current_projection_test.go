@@ -8,6 +8,7 @@ import (
 
 	"github.com/floegence/floret/v5/identity"
 	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestStopThreadResponseIsAcknowledgementOnly(t *testing.T) {
@@ -97,6 +98,46 @@ func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testi
 	}
 	if strings.Contains(strings.ToLower(currentMessage), "storage write") {
 		t.Fatalf("current message=%q exposed internal storage failure", currentMessage)
+	}
+}
+
+func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T) {
+	current := flruntime.ThreadView{
+		ThreadID:    identity.ThreadID("thread-progress"),
+		TurnID:      identity.TurnID("turn-progress"),
+		RunID:       identity.RunID("run-progress"),
+		Activity:    flruntime.ThreadActivityActive,
+		RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming},
+	}
+
+	encoded, err := flowerCurrentJSON(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["turn_id"] != "turn-progress" || payload["run_id"] != "run-progress" {
+		t.Fatalf("current identity=%#v", payload)
+	}
+	progress, _ := payload["run_progress"].(map[string]any)
+	if progress["phase"] != "streaming" {
+		t.Fatalf("current run progress=%#v", progress)
+	}
+
+	view := ThreadView{ThreadID: "thread-progress"}
+	applyThreadRuntimeSummary(&view, current)
+	if view.ActiveRunID != "run-progress" {
+		t.Fatalf("active run id=%q, want exact RunID", view.ActiveRunID)
+	}
+	if view.RunProgress == nil || view.RunProgress.RunID != "run-progress" || view.RunProgress.TurnID != "turn-progress" || view.RunProgress.Phase != flruntime.ThreadRunPhaseStreaming {
+		t.Fatalf("summary run progress=%#v", view.RunProgress)
+	}
+
+	projected := threadViewFromRuntimeCurrent(threadstore.ThreadSettings{ThreadID: "thread-progress"}, current, flruntime.ThreadSummary{})
+	if projected.ActiveRunID != "run-progress" || projected.RunProgress == nil || projected.RunProgress.TurnID != "turn-progress" {
+		t.Fatalf("runtime current projection=%#v", projected)
 	}
 }
 

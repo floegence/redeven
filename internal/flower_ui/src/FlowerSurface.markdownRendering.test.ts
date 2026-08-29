@@ -128,12 +128,13 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(compactContextIndicatorIndex).toBeGreaterThanOrEqual(0);
     expect(contextIndicatorIndex).toBe(-1);
     expect(submitIndex).toBeGreaterThan(compactContextIndicatorIndex);
-    expect(src).toContain('selectedThreadTerminalSyncing() ? null : projectFlowerLiveProgress(selectedThread())');
-    expect(src).toContain('const selectedThreadHasLiveProgress = createMemo(() => selectedLiveProgress() != null)');
-    expect(src).not.toContain('<Show when={selectedThreadHasLiveProgress()}>');
-    expect(src).toContain('const liveProgressIndicator = (progress: FlowerLiveProgress | null) => (');
+    expect(src).toContain('selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread())');
+    expect(src).not.toContain('projectFlowerLiveProgress');
+    expect(src).toContain('const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null)');
     expect(src).toContain('<FlowerProgressIndicator');
-    expect(src).toContain('{liveProgressIndicator(selectedLiveProgress()?.initialWait ? null : selectedLiveProgress())}');
+    expect(src).toContain('progress={selectedRunProgress()');
+    expect(src).not.toContain('const liveProgressIndicator');
+    expect(src).not.toContain('flower-live-progress-placeholder');
     expect(src).not.toContain('data-flower-composer-more-item="context"');
     expect(src).toContain('<Show when={selectedContextUsage()}>');
     expect(src).toContain('usage={contextUsage().usage}');
