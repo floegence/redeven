@@ -4459,6 +4459,7 @@
       "categoryAll": "Todas",
       "categoryDevelopment": "Desarrollo",
       "categoryInfrastructure": "Infraestructura",
+      "categoryUtilities": "Utilidades",
       "categoryData": "Datos",
       "categoryCollaboration": "Colaboración",
       "categoryProductivity": "Productividad",
@@ -4534,6 +4535,10 @@
         "write": {
           "label": "Escribir datos",
           "description": "Crear o modificar datos mediante este plugin."
+        },
+        "network": {
+          "label": "Acceso a la red",
+          "description": "Se conecta a los destinos de red declarados en el paquete verificado del plugin."
         },
         "other": {
           "label": "Permiso del plugin",

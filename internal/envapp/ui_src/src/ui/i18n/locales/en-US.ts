@@ -405,6 +405,7 @@ export const enUS = defineDictionary({
       categoryAll: 'All',
       categoryDevelopment: 'Development',
       categoryInfrastructure: 'Infrastructure',
+      categoryUtilities: 'Utilities',
       categoryData: 'Data',
       categoryCollaboration: 'Collaboration',
       categoryProductivity: 'Productivity',
@@ -480,6 +481,10 @@ export const enUS = defineDictionary({
         write: {
           label: 'Write data',
           description: 'Create or change data through this plugin.',
+        },
+        network: {
+          label: 'Network access',
+          description: 'Connect to the network destinations declared by the plugin\'s verified package.',
         },
         other: {
           label: 'Plugin permission',

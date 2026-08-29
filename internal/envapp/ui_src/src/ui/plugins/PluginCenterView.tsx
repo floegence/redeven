@@ -19,6 +19,7 @@ import type {
   PluginLifecycleCommand,
   PluginLifecycleState,
   PluginPendingCommandType,
+  PluginPermissionGroup,
   PluginPresentationCategory,
   PluginRuntimeRecoveryPresentation,
   PluginTrustBadge,
@@ -1397,6 +1398,7 @@ export function PluginCenterShell(props: {
               <CenterCategoryButton id="all" active={props.category} label={i18n.t('uiCopy.plugin.categoryAll')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="development" active={props.category} label={i18n.t('uiCopy.plugin.categoryDevelopment')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="infrastructure" active={props.category} label={i18n.t('uiCopy.plugin.categoryInfrastructure')} onSelect={props.onCategorySelect} />
+              <CenterCategoryButton id="utilities" active={props.category} label={i18n.t('uiCopy.plugin.categoryUtilities')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="data" active={props.category} label={i18n.t('uiCopy.plugin.categoryData')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="collaboration" active={props.category} label={i18n.t('uiCopy.plugin.categoryCollaboration')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="productivity" active={props.category} label={i18n.t('uiCopy.plugin.categoryProductivity')} onSelect={props.onCategorySelect} />
@@ -2006,22 +2008,24 @@ function humanizePermissionIdentifier(permissionID: string): string {
   return normalized.charAt(0).toLocaleUpperCase() + normalized.slice(1);
 }
 
-function permissionLabel(group: 'read' | 'execute' | 'delete' | 'write' | 'other', i18n: I18nHelpers): string {
+function permissionLabel(group: PluginPermissionGroup, i18n: I18nHelpers): string {
   switch (group) {
     case 'read': return i18n.t('uiCopy.plugin.permission.read.label');
     case 'execute': return i18n.t('uiCopy.plugin.permission.execute.label');
     case 'delete': return i18n.t('uiCopy.plugin.permission.delete.label');
     case 'write': return i18n.t('uiCopy.plugin.permission.write.label');
+    case 'network': return i18n.t('uiCopy.plugin.permission.network.label');
     case 'other': return i18n.t('uiCopy.plugin.permission.other.label');
   }
 }
 
-function permissionDescription(group: 'read' | 'execute' | 'delete' | 'write' | 'other', i18n: I18nHelpers): string {
+function permissionDescription(group: PluginPermissionGroup, i18n: I18nHelpers): string {
   switch (group) {
     case 'read': return i18n.t('uiCopy.plugin.permission.read.description');
     case 'execute': return i18n.t('uiCopy.plugin.permission.execute.description');
     case 'delete': return i18n.t('uiCopy.plugin.permission.delete.description');
     case 'write': return i18n.t('uiCopy.plugin.permission.write.description');
+    case 'network': return i18n.t('uiCopy.plugin.permission.network.description');
     case 'other': return i18n.t('uiCopy.plugin.permission.other.description');
   }
 }
@@ -2478,6 +2482,7 @@ function centerCategoryLabel(category: PluginPresentationCategory, i18n: I18nHel
   switch (category) {
     case 'development': return i18n.t('uiCopy.plugin.categoryDevelopment');
     case 'infrastructure': return i18n.t('uiCopy.plugin.categoryInfrastructure');
+    case 'utilities': return i18n.t('uiCopy.plugin.categoryUtilities');
     case 'data': return i18n.t('uiCopy.plugin.categoryData');
     case 'collaboration': return i18n.t('uiCopy.plugin.categoryCollaboration');
     case 'productivity': return i18n.t('uiCopy.plugin.categoryProductivity');

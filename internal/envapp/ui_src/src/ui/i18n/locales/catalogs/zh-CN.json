@@ -4459,6 +4459,7 @@
       "categoryAll": "全部",
       "categoryDevelopment": "开发工具",
       "categoryInfrastructure": "基础设施",
+      "categoryUtilities": "实用工具",
       "categoryData": "数据",
       "categoryCollaboration": "协作",
       "categoryProductivity": "效率",
@@ -4534,6 +4535,10 @@
         "write": {
           "label": "写入数据",
           "description": "通过此插件创建或更改数据。"
+        },
+        "network": {
+          "label": "网络访问",
+          "description": "连接到插件已验证软件包中声明的网络目标。"
         },
         "other": {
           "label": "插件权限",

@@ -4555,6 +4555,7 @@
       "categoryAll": "Все",
       "categoryDevelopment": "Разработка",
       "categoryInfrastructure": "Инфраструктура",
+      "categoryUtilities": "Утилиты",
       "categoryData": "Данные",
       "categoryCollaboration": "Совместная работа",
       "categoryProductivity": "Продуктивность",
@@ -4630,6 +4631,10 @@
         "write": {
           "label": "Запись данных",
           "description": "Создание или изменение данных через этот плагин."
+        },
+        "network": {
+          "label": "Доступ к сети",
+          "description": "Подключается к сетевым адресатам, объявленным в проверенном пакете плагина."
         },
         "other": {
           "label": "Разрешение плагина",

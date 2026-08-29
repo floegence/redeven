@@ -32,10 +32,11 @@ responsive icon grid, stable scrolling body, and fixed footer; mobile uses a
 bottom sheet with the same controls and at least 44px touch targets. Search normalizes Unicode with
 NFKC and locale-aware case folding, matches display name, canonical keywords,
 and the locale's explicit alias key, and intersects with the selected category.
-The category set is stable (`development`, `infrastructure`, `data`,
-`collaboration`, `productivity`, `other`) and never inferred from localized
-labels. Category controls stay hidden below six installed plugins and appear at
-six without changing category identity. Empty results provide a single
+The category set is stable (`development`, `infrastructure`, `utilities`,
+`data`, `collaboration`, `productivity`, `other`) and never inferred from
+localized labels. Market categories `utilities` and `weather` project to the
+product-owned `utilities` category. Category controls stay hidden below six
+installed plugins and appear at six without changing category identity. Empty results provide a single
 clear-filters action. A launchable plugin tile's primary action opens its
 declared default surface directly; plugins that cannot launch fall back to
 their exact management detail by `inventoryKey`.
@@ -387,7 +388,11 @@ Generic requirements come from the released Host projection of the active
 version's verified capability contracts, not manifest claims. Only an environment
 administrator may grant or revoke. An allowlist cap, denied method, active grant,
 and effective permission remain separate. Generic permission controls and their
-confirmation name the exact permission id. A stale grant remains revocable when
+confirmation preserve the exact permission id in technical evidence and the
+mutation payload. Stable capability namespaces use product-owned semantic copy:
+`network.client` and other `network.*` permissions are presented as network
+access even when their declared methods include write or delete effects. Method
+effects never rename the capability being granted. A stale grant remains revocable when
 policy blocks its use. Failure reloads inventory, grants, and policy and requires
 a new confirmation.
 

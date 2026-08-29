@@ -4459,6 +4459,7 @@
       "categoryAll": "전체",
       "categoryDevelopment": "개발",
       "categoryInfrastructure": "인프라",
+      "categoryUtilities": "유틸리티",
       "categoryData": "데이터",
       "categoryCollaboration": "협업",
       "categoryProductivity": "생산성",
@@ -4534,6 +4535,10 @@
         "write": {
           "label": "데이터 쓰기",
           "description": "이 플러그인을 통해 데이터를 만들거나 변경합니다."
+        },
+        "network": {
+          "label": "네트워크 액세스",
+          "description": "검증된 플러그인 패키지에 선언된 네트워크 대상에 연결합니다."
         },
         "other": {
           "label": "플러그인 권한",

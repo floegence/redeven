@@ -4459,6 +4459,7 @@
       "categoryAll": "Alle",
       "categoryDevelopment": "Entwicklung",
       "categoryInfrastructure": "Infrastruktur",
+      "categoryUtilities": "Dienstprogramme",
       "categoryData": "Daten",
       "categoryCollaboration": "Zusammenarbeit",
       "categoryProductivity": "Produktivität",
@@ -4534,6 +4535,10 @@
         "write": {
           "label": "Daten schreiben",
           "description": "Daten über dieses Plugin erstellen oder ändern."
+        },
+        "network": {
+          "label": "Netzwerkzugriff",
+          "description": "Stellt Verbindungen zu den Netzwerkzielen her, die im verifizierten Plugin-Paket deklariert sind."
         },
         "other": {
           "label": "Plugin-Berechtigung",

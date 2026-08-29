@@ -47,6 +47,32 @@ describe('official plugin catalog contracts', () => {
     });
   });
 
+  it('projects utility plugins and network access without mislabeling method effects', () => {
+    const weather = structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
+    weather.plugins[0]!.categories = ['utilities', 'weather'];
+    const preview = weather.plugins[0]!.latest.install_preview!;
+    weather.plugins[0]!.latest.install_preview = {
+      ...preview,
+      security_summary: {
+        ...preview.security_summary,
+        permissions: [{
+          permission_id: 'network.client',
+          methods: ['weather.forecast', 'weather.locations.remove'],
+          required: true,
+          effects: ['delete', 'read', 'write'],
+        }],
+      },
+    };
+
+    expect(officialPluginCatalog(weather)[0]).toMatchObject({
+      category: 'utilities',
+      permissions: [expect.objectContaining({
+        permissionID: 'network.client',
+        group: 'network',
+      })],
+    });
+  });
+
   it('accepts only bounded, digest-bound market icon metadata', () => {
     const sha256 = 'a'.repeat(64);
     const icon = {

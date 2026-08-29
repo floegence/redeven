@@ -57,7 +57,7 @@ function normalizedPermissions(
   const byID = new Map<string, OfficialPluginPermission>();
   for (const permission of preview.security_summary.permissions) {
     if (!/^[a-z][a-z0-9._:-]{0,127}$/u.test(permission.permission_id)) continue;
-    const group = permissionGroup(permission.effects);
+    const group = permissionGroup(permission.permission_id, permission.effects);
     const current = byID.get(permission.permission_id);
     if (!current) {
       byID.set(permission.permission_id, {
@@ -82,7 +82,11 @@ function packageURL(preview: PluginMarketInstallPreview): string {
   return packageAsset?.url ?? preview.release?.asset.url ?? '';
 }
 
-function permissionGroup(effects: readonly string[]): OfficialPluginPermission['group'] {
+function permissionGroup(
+  permissionID: string,
+  effects: readonly string[],
+): OfficialPluginPermission['group'] {
+  if (permissionID === 'network.client' || permissionID.startsWith('network.')) return 'network';
   if (effects.includes('delete')) return 'delete';
   if (effects.includes('execute')) return 'execute';
   if (effects.includes('write')) return 'write';
@@ -226,5 +230,6 @@ function marketRolloutState(status: 'visible' | 'disabled' | 'revoked'): Officia
 function marketCategory(categories: readonly string[]): PluginPresentationCategory {
   if (categories.includes('development')) return 'development';
   if (categories.includes('containers') || categories.includes('infrastructure')) return 'infrastructure';
+  if (categories.includes('utilities') || categories.includes('weather')) return 'utilities';
   return 'other';
 }
