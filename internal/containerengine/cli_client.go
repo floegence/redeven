@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	defaultCommandTimeout = 10 * time.Second
-	defaultLogTailLines   = 100
-	maxCommandOutputBytes = 8 * 1024 * 1024
-	maxLogLineBytes       = 1024 * 1024
-	maxLogTailLines       = 1000
+	defaultCommandTimeout   = 10 * time.Second
+	defaultImagePullTimeout = 30 * time.Minute
+	defaultLogTailLines     = 100
+	maxCommandOutputBytes   = 8 * 1024 * 1024
+	maxLogLineBytes         = 1024 * 1024
+	maxLogTailLines         = 1000
 )
 
 type CommandRunner interface {
@@ -48,11 +49,12 @@ func (f CommandRunnerFunc) Run(ctx context.Context, name string, args ...string)
 type CLIClient struct {
 	Runner        CommandRunner
 	Timeout       time.Duration
+	PullTimeout   time.Duration
 	StreamTimeout time.Duration
 }
 
 func NewCLIClient() *CLIClient {
-	return &CLIClient{Runner: execRunner{}, Timeout: defaultCommandTimeout}
+	return &CLIClient{Runner: execRunner{}, Timeout: defaultCommandTimeout, PullTimeout: defaultImagePullTimeout}
 }
 
 func (c *CLIClient) Status(ctx context.Context, engine Engine) (EngineStatus, error) {
@@ -190,7 +192,7 @@ func (c *CLIClient) PullImage(ctx context.Context, engine Engine, imageRef strin
 	if err := validateImageReference(imageRef); err != nil {
 		return EngineImageResult{}, err
 	}
-	raw, err := c.run(ctx, engine, "pull", imageRef)
+	raw, err := c.runWithTimeout(ctx, c.imagePullTimeout(), engine, "pull", imageRef)
 	if err != nil {
 		return EngineImageResult{}, err
 	}
@@ -209,11 +211,24 @@ func (c *CLIClient) PullImage(ctx context.Context, engine Engine, imageRef strin
 }
 
 func (c *CLIClient) run(ctx context.Context, engine Engine, args ...string) ([]byte, error) {
+	return c.runWithTimeout(ctx, c.Timeout, engine, args...)
+}
+
+func (c *CLIClient) imagePullTimeout() time.Duration {
+	if c.PullTimeout > 0 {
+		return c.PullTimeout
+	}
+	if c.Timeout > 0 {
+		return c.Timeout
+	}
+	return defaultImagePullTimeout
+}
+
+func (c *CLIClient) runWithTimeout(ctx context.Context, timeout time.Duration, engine Engine, args ...string) ([]byte, error) {
 	runner := c.Runner
 	if runner == nil {
 		runner = execRunner{}
 	}
-	timeout := c.Timeout
 	if timeout <= 0 {
 		timeout = defaultCommandTimeout
 	}
@@ -532,6 +547,33 @@ func classifyCommandFailure(args []string, cause error, stderr ...[]byte) error 
 	for _, marker := range []string{"is the docker daemon running", "daemon is not running", "podman socket is not running", "podman machine is not running"} {
 		if strings.Contains(detail, marker) {
 			return ErrDaemonStopped
+		}
+	}
+	if len(args) > 0 && args[0] == "pull" {
+		for _, marker := range []string{"no space left on device", "insufficient storage", "not enough space"} {
+			if strings.Contains(detail, marker) {
+				return ErrInsufficientStorage
+			}
+		}
+		for _, marker := range []string{"toomanyrequests", "too many requests", "rate limit"} {
+			if strings.Contains(detail, marker) {
+				return ErrImageRateLimited
+			}
+		}
+		for _, marker := range []string{"manifest unknown", "manifest not found", "no matching manifest", "pull access denied for repository does not exist"} {
+			if strings.Contains(detail, marker) {
+				return ErrImageNotFound
+			}
+		}
+		for _, marker := range []string{"unauthorized", "authentication required", "requested access to the resource is denied", "access denied"} {
+			if strings.Contains(detail, marker) {
+				return ErrImageAccessDenied
+			}
+		}
+		for _, marker := range []string{"tls handshake timeout", "i/o timeout", "temporary failure in name resolution", "connection reset by peer", "unexpected eof", ": eof", "network is unreachable", "no route to host", "connection refused", "x509:"} {
+			if strings.Contains(detail, marker) {
+				return ErrImageRegistryUnavailable
+			}
 		}
 	}
 	for _, marker := range []string{"cannot connect", "connection refused", "no route to host", "network is unreachable"} {

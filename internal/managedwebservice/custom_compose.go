@@ -78,9 +78,9 @@ func (d *composeTemplateDriver) generateCompose(ctx context.Context, service *pf
 			return nil, nil, serviceError("TEMPLATE_COMPOSE_INVALID", "A Compose service definition is invalid.", 400, false, nil)
 		}
 		image := strings.TrimSpace(fmt.Sprint(entry["image"]))
-		pulled, err := d.adapter.PullImage(ctx, containerengine.ImagePullRequest{Engine: containerengine.EngineDocker, ImageRef: image})
-		if err != nil || !pulled.Completed {
-			return nil, nil, serviceError("IMAGE_PULL_FAILED", "A Compose template image could not be pulled.", 503, true, err)
+		pulled, err := pullManagedImage(ctx, d.adapter, image)
+		if err != nil {
+			return nil, nil, err
 		}
 		pinnedImage, err := pinnedImageReference(image, pulled.Image.Digest)
 		if err != nil {

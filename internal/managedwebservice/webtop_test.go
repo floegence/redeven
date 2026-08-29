@@ -44,6 +44,28 @@ func TestWebtopArtifactsPinEverySupportedArchitecture(t *testing.T) {
 	}
 }
 
+func TestWebtopUpdateOperationProjectsTheTargetArtifact(t *testing.T) {
+	t.Parallel()
+	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+		t.Skip("Webtop artifacts support amd64 and arm64")
+	}
+	service := pfregistry.ManagedService{
+		TemplateID:        WebtopUbuntuKDETemplateID,
+		Deployment:        string(DeploymentContainer),
+		TemplateRevision:  0,
+		ArtifactReference: webtopImage + "@sha256:" + strings.Repeat("f", 64),
+	}
+	operation := &pfregistry.ManagedOperation{Action: "update"}
+	artifact, ok := auditedWebtopArtifact(service.TemplateID, "linux-"+runtime.GOARCH)
+	if !ok {
+		t.Fatal("current Webtop artifact is unavailable")
+	}
+	want := artifact.Image + "@" + artifact.Digest
+	if got := operationArtifactReference(service, operation); got != want {
+		t.Fatalf("update artifact reference = %q, want %q", got, want)
+	}
+}
+
 func TestCatalogIncludesIndependentWebtopTemplatesWithDeclarativeSafety(t *testing.T) {
 	t.Parallel()
 	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {

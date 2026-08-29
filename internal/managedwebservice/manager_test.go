@@ -300,6 +300,39 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 	}
 }
 
+func TestListProjectsTheCurrentOperationArtifactReference(t *testing.T) {
+	t.Parallel()
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	service := pfregistry.ManagedService{
+		ServiceID: "mws_artifact", TemplateID: DeepSeekHarnessContainerTemplateID, TemplateSource: "builtin",
+		Deployment: string(DeploymentDocker), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
+		DesiredState: "stopped", ObservedState: "error", ForwardID: "pf_artifact", RuntimePort: 3080,
+	}
+	operation := pfregistry.ManagedOperation{
+		OperationID: "mop_artifact", ServiceID: service.ServiceID, RequestID: "request-artifact",
+		RequestFingerprint: "fingerprint-artifact", Action: "retry_install", State: "running", Stage: "pulling",
+		ProgressCurrent: 2, ProgressTotal: 7,
+	}
+	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, operation); err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{registry: registry}
+	views, err := manager.List(context.Background())
+	if err != nil || len(views) != 1 {
+		t.Fatalf("List() = %+v, err=%v", views, err)
+	}
+	if !strings.HasPrefix(views[0].OperationArtifactReference, "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:") {
+		t.Fatalf("operation artifact reference = %q", views[0].OperationArtifactReference)
+	}
+	if views[0].ActiveOperation == nil || views[0].ActiveOperation.OperationID != operation.OperationID {
+		t.Fatalf("active operation = %+v", views[0].ActiveOperation)
+	}
+}
+
 func TestSubscribeReturnsTerminalSnapshotWithoutWaiting(t *testing.T) {
 	t.Parallel()
 	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
