@@ -362,6 +362,27 @@
 .container-loading-list { display: grid; gap: 1px; }
 .container-loading-list > div { height: 54px; background: color-mix(in srgb, var(--muted) 58%, transparent); animation: pulse 1.4s ease-in-out infinite; }
 .container-loading-list--page { padding: 18px 20px; }
+.container-loading-list--inventory { padding-top: 1px; }
+
+.container-toolbar-loading {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.container-toolbar-loading > span {
+  height: 30px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--muted) 68%, transparent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.container-toolbar-loading > span:first-child { width: min(220px, 28%); margin-right: auto; }
+.container-toolbar-loading > span:nth-child(2) { width: 138px; }
+.container-toolbar-loading > span:last-child { width: 96px; }
 
 .container-detail-header {
   display: flex;

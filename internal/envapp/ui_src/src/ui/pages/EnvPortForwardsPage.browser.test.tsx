@@ -224,4 +224,74 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(getComputedStyle(retryButton).whiteSpace).toBe('nowrap');
     expect(retryButton.scrollHeight).toBeLessThanOrEqual(retryButton.clientHeight);
   });
+
+  it('replaces a stale service error with contextual operation progress and details', async () => {
+    await page.viewport(1200, 800);
+    const host = document.createElement('div');
+    host.style.width = '1024px';
+    document.body.appendChild(host);
+    dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-failed',
+          template_id: 'deepseek-harness-container',
+          service_family_id: 'deepseek-harness',
+          name: 'DeepSeek Harness',
+          description: 'Run DeepSeek Harness in an isolated container.',
+          template_source: 'builtin',
+          deployment: 'container',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness',
+          version: '0.1.1-rc.2',
+          desired_state: 'running',
+          observed_state: 'error',
+          forward_id: 'pf-failed',
+          runtime_port: 3000,
+          brand_icon: 'deepseek-harness',
+          last_error_code: 'IMAGE_PULL_FAILED',
+          update_available: false,
+        }}
+        operation={{
+          operation_id: 'mop-retry',
+          service_id: 'mws-failed',
+          action: 'retry_install',
+          state: 'running',
+          stage: 'pulling',
+          progress_current: 2,
+          progress_total: 7,
+        }}
+        busy
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+        onCancelOperation={() => undefined}
+      />
+    ), host);
+    await settle();
+
+    const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
+    const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+    expect(progress.textContent).toContain('Pulling image');
+    expect(progress.textContent).toContain('2/7');
+    expect(row.textContent).not.toContain('Error');
+    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(72);
+
+    await userEvent.click(progress);
+    await settle();
+
+    const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
+    expect(details).toBeTruthy();
+    expect(details.textContent).toContain('mop-retry');
+    expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
+    expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
+    const dialog = details.closest<HTMLElement>('[role="dialog"]')!;
+    const dialogRect = dialog.getBoundingClientRect();
+    expect(dialogRect.left).toBeGreaterThanOrEqual(0);
+    expect(dialogRect.right).toBeLessThanOrEqual(1200);
+    expect(dialogRect.bottom).toBeLessThanOrEqual(800);
+  });
 });

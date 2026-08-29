@@ -114,7 +114,7 @@ type ContainerConsoleTarget = Readonly<{
 
 type ContainerConsoleState =
   | Readonly<{ phase: 'loading'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint | null }>
-  | Readonly<{ phase: 'ready'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint; inventory: readonly ContainerResourceInventoryItem[] }>
+  | Readonly<{ phase: 'ready'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint; inventory: readonly ContainerResourceInventoryItem[]; refreshing: boolean }>
   | Readonly<{ phase: 'unavailable' | 'permission'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint | null }>
   | Readonly<{ phase: 'error'; target: ContainerConsoleTarget; endpoints: readonly ContainerEndpoint[]; endpoint: ContainerEndpoint | null; message: string }>;
 
@@ -194,6 +194,10 @@ function normalizeConsoleTarget(target: ContainerConsoleTarget): ContainerConsol
     view: views.includes(target.view) ? target.view : target.engine === 'podman' ? 'pods' : 'compose-projects',
     selectedIdentity: compact(target.selectedIdentity),
   };
+}
+
+function inventoryCacheKey(target: Pick<ContainerConsoleTarget, 'engine' | 'endpointID' | 'view'>): string {
+  return `${target.engine}\u0000${target.endpointID}\u0000${target.view}`;
 }
 
 function resourceIdentity(view: ContainerResourceView, item: ContainerResourceInventoryItem): string {
@@ -446,6 +450,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   let consoleLoadGeneration = 0;
   let consoleLoadAbort: AbortController | null = null;
   let waitingForEnvironment = false;
+  const inventoryCache = new Map<string, readonly ContainerResourceInventoryItem[]>();
   let operationStreamAbort: AbortController | null = null;
   let logViewElement: HTMLDivElement | undefined;
   let inventoryScrollElement: HTMLDivElement | undefined;
@@ -468,6 +473,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const endpointStatus = () => consoleState().endpoint;
   const inventory = () => readyConsole()?.inventory ?? [];
   const loading = () => consoleState().phase === 'loading';
+  const refreshing = () => Boolean(readyConsole()?.refreshing);
+  const consoleBusy = () => loading() || refreshing();
   const availableViews = createMemo<readonly ContainerResourceView[]>(() => availableResourceViews(engine()));
   const selected = createMemo(() => {
     const identity = selectedIdentity();
@@ -570,9 +577,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     options: Readonly<{ forceConnectionCheck?: boolean; resetListControls?: boolean; notifyIfSelectionMissing?: boolean }> = {},
   ) => {
     const target = normalizeConsoleTarget(requestedTarget);
-    const previous = readyConsole();
+    const previous = consoleState();
     const canReuseConnection = !options.forceConnectionCheck
-      && previous?.target.engine === target.engine
+      && previous.endpoint?.available
+      && previous.target.engine === target.engine
       && (!target.endpointID || previous.target.endpointID === target.endpointID);
     let nextEndpoints = canReuseConnection ? previous.endpoints : [];
     let nextEndpoint = canReuseConnection ? previous.endpoint : null;
@@ -586,7 +594,14 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     const generation = ++consoleLoadGeneration;
     const current = () => generation === consoleLoadGeneration && !controller.signal.aborted;
 
-    setConsoleState({ phase: 'loading', target: loadingTarget, endpoints: nextEndpoints, endpoint: nextEndpoint });
+    const cachedInventory = nextEndpoint
+      ? inventoryCache.get(inventoryCacheKey({ ...loadingTarget, endpointID: nextEndpoint.endpoint_id }))
+      : undefined;
+    if (cachedInventory && nextEndpoint) {
+      setConsoleState({ phase: 'ready', target: loadingTarget, endpoints: nextEndpoints, endpoint: nextEndpoint, inventory: cachedInventory, refreshing: true });
+    } else {
+      setConsoleState({ phase: 'loading', target: loadingTarget, endpoints: nextEndpoints, endpoint: nextEndpoint });
+    }
     resetResourceContext();
     if (options.resetListControls) {
       setSearchQuery('');
@@ -634,7 +649,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       const selectedStillExists = !target.selectedIdentity
         || items.some((item) => resourceIdentity(target.view, item) === target.selectedIdentity);
       const readyTarget = selectedStillExists ? resolvedTarget : { ...resolvedTarget, selectedIdentity: '' };
-      setConsoleState({ phase: 'ready', target: readyTarget, endpoints: nextEndpoints, endpoint: nextEndpoint, inventory: items });
+      inventoryCache.set(inventoryCacheKey(readyTarget), items);
+      setConsoleState({ phase: 'ready', target: readyTarget, endpoints: nextEndpoints, endpoint: nextEndpoint, inventory: items, refreshing: false });
       if (!selectedStillExists && options.notifyIfSelectionMissing) {
         notify.info(i18n.t('containers.notifications.inventoryChangedTitle'), i18n.t('containers.notifications.inventoryChangedMessage'));
       }
@@ -1401,7 +1417,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     id: item,
     label: viewLabel(item),
     icon: <ViewIcon view={item} class="h-4 w-4" />,
-    disabled: consoleState().phase !== 'ready',
+    disabled: consoleState().phase !== 'ready' && !consoleState().endpoint?.available,
   })));
   const detailTabItems = createMemo<TabItem[]>(() => detailTabs().map((tab) => ({
     id: tab,
@@ -1409,10 +1425,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   })));
 
   const selectResourceView = (nextView: ContainerResourceView) => {
-    const ready = readyConsole();
-    if (!ready || ready.target.view === nextView) return;
+    const state = consoleState();
+    if ((!state.endpoint?.available && state.phase !== 'ready') || state.target.view === nextView) return;
     void loadConsole(
-      { ...ready.target, view: nextView, selectedIdentity: '' },
+      { ...state.target, view: nextView, selectedIdentity: '' },
       { resetListControls: true },
     );
   };
@@ -1509,6 +1525,19 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const renderConsoleFallback = () => {
     const state = consoleState();
     if (state.phase === 'loading') {
+      if (state.endpoint?.available) {
+        return (
+          <div class="container-list-page" data-container-list-loading>
+            <section class="container-resource-toolbar" data-container-summary>
+              <div class="container-list-heading"><strong>{viewLabel(state.target.view)}</strong><span aria-hidden="true">—</span></div>
+              <div class="container-toolbar-loading" aria-hidden="true"><span /><span /><span /></div>
+            </section>
+            <div class="container-inventory-scroll">
+              <div class="container-loading-list container-loading-list--inventory" aria-label={i18n.t('containers.loading')}><For each={[1, 2, 3, 4, 5]}>{() => <div />}</For></div>
+            </div>
+          </div>
+        );
+      }
       return <div class="container-loading-list container-loading-list--page" aria-label={i18n.t('containers.loading')}><For each={[1, 2, 3, 4, 5]}>{() => <div />}</For></div>;
     }
     const permission = state.phase === 'permission';
@@ -1578,7 +1607,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         />
       </header>
 
-      <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy={loading()}>
+      <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy={consoleBusy()}>
         <Show when={readyConsole()} fallback={renderConsoleFallback()}>
         <Show when={selected()} keyed fallback={
           <div class="container-list-page">
