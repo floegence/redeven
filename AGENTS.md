@@ -1009,13 +1009,13 @@ Use this checklist when reviewing any Redeven plugin integration change:
 
 ## Flower / Floret Boundary
 
-Redeven consumes the published `github.com/floegence/floret/v5` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, and restart recovery.
+Redeven consumes the published `github.com/floegence/floret/v6` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, and restart recovery.
 
-Product handlers perform authorization and DTO mapping, then call typed `View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`, or `Subscribe` operations. They must not wait for provider work or maintain receipt, admission, authority, recovery, projection, replay, or lifecycle mirrors. Effects execute only through the exact one-shot authorization supplied by the Floret invocation.
+Product handlers perform authorization and DTO mapping, then call typed `View`, `Send`, `Respond`, `Cancel`, `Retry`, or `Subscribe` operations. They must not wait for provider work or maintain receipt, admission, authority, recovery, projection, replay, or lifecycle mirrors. Effects execute only through the exact one-shot authorization supplied by the Floret invocation. An irreversible effect with an unknown outcome is a terminal `effect_outcome_unknown` failure; Redeven must not retry it or expose a retry command.
 
 Flower uses one workspace live transport, a summary/detail-separated bounded thread cache, composer drafts, and a short-lived request-key outbox. Summary updates never mutate detail. Thread selection never owns execution or reconnects transport. Approval, waiting, loading, and commands never disable thread navigation.
 
-Outside temporary Local Fast Debugging, Redeven must use the released v5 module with `GOWORK=off`; local sibling wiring is never a committed integration boundary.
+Outside temporary Local Fast Debugging, Redeven must use the released v6 module with `GOWORK=off`; local sibling wiring is never a committed integration boundary.
 
 ## UI Interaction Affordance
 

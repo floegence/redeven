@@ -3809,6 +3809,7 @@
       "runErrorFloretEngineFailed": "Flower n'a pas pu terminer ce tour en raison d'une panne du moteur d'orchestration.",
       "runErrorFloretControlContractFailed": "Flower n'a pas pu terminer ce tour, car le modèle a renvoyé un signal de contrôle d'interaction non valide.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower n'a pas pu terminer ce tour, car le résultat d'outil validé n'a pas pu être vérifié. L'outil n'a pas été réexécuté ; envoyez un nouveau message pour continuer.",
+      "runErrorFloretEffectOutcomeUnknown": "Impossible de confirmer si certaines opérations ont abouti. La tâche a été arrêtée pour éviter une double exécution.",
       "runErrorRuntimeRestarted": "L’environnement d’exécution local a redémarré avant la fin de cette réponse. Lancez une nouvelle réponse lorsqu’il est prêt.",
       "runtimeRestartedDivider": "L'environnement d'exécution Redeven a redémarré",
       "messageErrorTitle": "Échec du message",

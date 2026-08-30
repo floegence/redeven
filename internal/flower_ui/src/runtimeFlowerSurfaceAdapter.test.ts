@@ -104,7 +104,6 @@ function adapterOptions(
     patchThread: vi.fn(async () => ({ thread: undefined })),
     forkThread: vi.fn(async () => ({ thread: undefined })),
 	    submitApproval: vi.fn(async (input) => approvalResult(input.thread_id, input.interaction_id, input.approved)),
-	    retryEffect: vi.fn(async () => undefined),
     ...transportOverrides,
   };
   return {

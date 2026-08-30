@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/floret/v5/identity"
-	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v6/identity"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -550,7 +550,7 @@ func (runtime *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagent
 func subagentSnapshotFromSummary(summary flruntime.ThreadSummary) subagentSnapshot {
 	view := flruntime.ThreadView{
 		ThreadID: summary.ID, Activity: summary.Activity, Attention: summary.Attention,
-		LastOutcome: summary.LastOutcome, Failure: summary.Failure, Error: summary.Error,
+		LastOutcome: summary.LastOutcome, Failure: summary.Failure,
 		TurnID: summary.TurnID, Queue: make([]flruntime.QueuedInput, summary.QueueCount),
 	}
 	snapshot := subagentSnapshotFromThread(summary, view)

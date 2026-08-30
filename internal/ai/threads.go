@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/floret/v5/identity"
-	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v6/identity"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -151,26 +151,8 @@ func (s *Service) threadViewFromSummary(ctx context.Context, th *threadstore.Thr
 	approvalPending := summary.Attention.ApprovalCount > 0
 	view.ApprovalPending = &approvalPending
 	view.ApprovalPendingCount = summary.Attention.ApprovalCount
-	switch {
-	case summary.Attention.InputCount > 0:
-		view.RunStatus = string(RunStateWaitingUser)
-	case approvalPending:
-		view.RunStatus = string(RunStateWaitingApproval)
-	case summary.Activity == flruntime.ThreadActivityActive:
-		view.RunStatus = string(RunStateRunning)
-	case summary.LastOutcome == nil:
-		view.RunStatus = string(RunStateIdle)
-	case *summary.LastOutcome == flruntime.TurnOutcomeCompleted:
-		view.RunStatus = string(RunStateSuccess)
-	case *summary.LastOutcome == flruntime.TurnOutcomeCancelled:
-		view.RunStatus = string(RunStateCanceled)
-	case *summary.LastOutcome == flruntime.TurnOutcomeInterrupted:
-		view.RunStatus = string(RunStateFailed)
-		view.RunErrorCode, view.RunError = projectFloretTurnFailure(summary.Failure, floretThreadSummaryLegacyError(summary), "floret_turn_interrupted")
-	default:
-		view.RunStatus = string(RunStateFailed)
-		view.RunErrorCode, view.RunError = projectFloretTurnFailure(summary.Failure, floretThreadSummaryLegacyError(summary), "floret_turn_failed")
-	}
+	lifecycle := projectFlowerThreadLifecycle(summary.Activity, summary.Attention, summary.LastOutcome, summary.Failure)
+	view.RunStatus, view.RunErrorCode, view.RunError = lifecycle.RunStatus, lifecycle.RunErrorCode, lifecycle.RunError
 	if summary.Activity == flruntime.ThreadActivityActive {
 		view.ActiveRunID = strings.TrimSpace(summary.RunID.String())
 	}
@@ -248,35 +230,38 @@ func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpo
 }
 
 func threadViewRunState(current flruntime.ThreadView) (string, string, string) {
-	hasInput := false
-	hasApproval := false
-	for _, interaction := range current.Interactions {
-		if interaction.Resolved {
-			continue
-		}
-		hasInput = hasInput || interaction.Kind == flruntime.ThreadInteractionInput
-		hasApproval = hasApproval || interaction.Kind == flruntime.ThreadInteractionApproval || interaction.Kind == flruntime.ThreadInteractionEffectRetry
-	}
+	lifecycle := projectFlowerThreadLifecycle(current.Activity, current.Attention, current.LastOutcome, current.Failure)
+	return lifecycle.RunStatus, lifecycle.RunErrorCode, lifecycle.RunError
+}
+
+type flowerThreadLifecycleProjection struct {
+	RunStatus    string
+	RunErrorCode string
+	RunError     string
+}
+
+func projectFlowerThreadLifecycle(activity flruntime.ThreadActivity, attention flruntime.AttentionSummary, lastOutcome *flruntime.TurnOutcome, failure *flruntime.ThreadTurnFailure) flowerThreadLifecycleProjection {
+	projection := flowerThreadLifecycleProjection{RunStatus: string(RunStateIdle)}
 	switch {
-	case hasInput:
-		return string(RunStateWaitingUser), "", ""
-	case hasApproval:
-		return string(RunStateWaitingApproval), "", ""
-	case current.Activity == flruntime.ThreadActivityActive:
-		return string(RunStateRunning), "", ""
-	case current.LastOutcome == nil:
-		return string(RunStateIdle), "", ""
-	case *current.LastOutcome == flruntime.TurnOutcomeCompleted:
-		return string(RunStateSuccess), "", ""
-	case *current.LastOutcome == flruntime.TurnOutcomeCancelled:
-		return string(RunStateCanceled), "", ""
-	case *current.LastOutcome == flruntime.TurnOutcomeInterrupted:
-		code, message := projectFloretTurnFailure(current.Failure, floretThreadViewLegacyError(current), "floret_turn_interrupted")
-		return string(RunStateFailed), code, message
+	case attention.InputCount > 0:
+		projection.RunStatus = string(RunStateWaitingUser)
+	case attention.ApprovalCount > 0:
+		projection.RunStatus = string(RunStateWaitingApproval)
+	case activity == flruntime.ThreadActivityActive:
+		projection.RunStatus = string(RunStateRunning)
+	case lastOutcome == nil:
+	case *lastOutcome == flruntime.TurnOutcomeCompleted:
+		projection.RunStatus = string(RunStateSuccess)
+	case *lastOutcome == flruntime.TurnOutcomeCancelled:
+		projection.RunStatus = string(RunStateCanceled)
+	case *lastOutcome == flruntime.TurnOutcomeInterrupted:
+		projection.RunStatus = string(RunStateFailed)
+		projection.RunErrorCode, projection.RunError = projectFloretTurnFailure(failure, "floret_turn_interrupted")
 	default:
-		code, message := projectFloretTurnFailure(current.Failure, floretThreadViewLegacyError(current), "floret_turn_failed")
-		return string(RunStateFailed), code, message
+		projection.RunStatus = string(RunStateFailed)
+		projection.RunErrorCode, projection.RunError = projectFloretTurnFailure(failure, "floret_turn_failed")
 	}
+	return projection
 }
 
 func currentThreadPreview(current flruntime.ThreadView) (int64, string) {
@@ -509,37 +494,12 @@ func applyThreadRuntimeSummary(view *ThreadView, current flruntime.ThreadView) {
 	view.QueuedTurnCount = len(current.Queue)
 	view.RunErrorCode = ""
 	view.RunError = ""
-	hasInput := false
-	approvalCount := 0
-	for _, interaction := range current.Interactions {
-		if interaction.Resolved {
-			continue
-		}
-		switch interaction.Kind {
-		case flruntime.ThreadInteractionInput:
-			hasInput = true
-		case flruntime.ThreadInteractionApproval:
-			approvalCount++
-		}
-	}
+	approvalCount := current.Attention.ApprovalCount
 	pending := approvalCount > 0
 	view.ApprovalPending = &pending
 	view.ApprovalPendingCount = approvalCount
-	switch {
-	case hasInput:
-		view.RunStatus = string(RunStateWaitingUser)
-	case pending:
-		view.RunStatus = string(RunStateWaitingApproval)
-	case current.Activity == flruntime.ThreadActivityActive:
-		view.RunStatus = string(RunStateRunning)
-	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeCompleted:
-		view.RunStatus = string(RunStateSuccess)
-	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeFailed:
-		view.RunStatus = string(RunStateFailed)
-		view.RunErrorCode, view.RunError = projectFloretTurnFailure(current.Failure, floretThreadViewLegacyError(current), "floret_turn_failed")
-	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeCancelled:
-		view.RunStatus = string(RunStateCanceled)
-	}
+	lifecycle := projectFlowerThreadLifecycle(current.Activity, current.Attention, current.LastOutcome, current.Failure)
+	view.RunStatus, view.RunErrorCode, view.RunError = lifecycle.RunStatus, lifecycle.RunErrorCode, lifecycle.RunError
 	if current.Activity == flruntime.ThreadActivityActive && current.RunID != "" {
 		view.ActiveRunID = current.RunID.String()
 	} else if current.Activity != flruntime.ThreadActivityActive {
@@ -713,18 +673,10 @@ func threadSummaryFromRuntime(ctx context.Context, runtime flruntime.ThreadServi
 }
 
 func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current flruntime.ThreadView, summary flruntime.ThreadSummary) ThreadView {
-	runStatus := string(RunStateIdle)
+	lifecycle := projectFlowerThreadLifecycle(current.Activity, current.Attention, current.LastOutcome, current.Failure)
 	activeRunID := ""
 	if current.Activity == flruntime.ThreadActivityActive {
 		activeRunID = current.RunID.String()
-		switch {
-		case current.Attention.InputCount > 0:
-			runStatus = string(RunStateWaitingUser)
-		case current.Attention.ApprovalCount > 0:
-			runStatus = string(RunStateWaitingApproval)
-		default:
-			runStatus = string(RunStateRunning)
-		}
 	}
 	preview := ""
 	for index := len(current.Items) - 1; index >= 0; index-- {
@@ -736,7 +688,8 @@ func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current f
 	return ThreadView{
 		ThreadID: current.ThreadID.String(), Title: strings.TrimSpace(summary.Title), TitleStatus: strings.TrimSpace(string(summary.TitleStatus)), ModelID: settings.ModelID,
 		PermissionType: settings.PermissionType, WorkingDir: settings.WorkingDir,
-		QueuedTurnCount: len(current.Queue), RunStatus: runStatus,
+		QueuedTurnCount: len(current.Queue), RunStatus: lifecycle.RunStatus,
+		RunErrorCode: lifecycle.RunErrorCode, RunError: lifecycle.RunError,
 		ApprovalPendingCount: current.Attention.ApprovalCount, ActiveRunID: activeRunID,
 		RunProgress:    flowerRunProgress(current.RunID, current.TurnID, current.RunProgress),
 		PinnedAtUnixMs: settings.PinnedAtUnixMs, CreatedAtUnixMs: settings.SettingsCreatedAtUnixMs,

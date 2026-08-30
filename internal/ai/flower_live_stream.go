@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/floret/v5/identity"
-	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v6/identity"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )

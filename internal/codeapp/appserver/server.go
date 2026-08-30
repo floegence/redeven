@@ -4684,35 +4684,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
-		case action == "retry_effect" && r.Method == http.MethodPost:
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			if !g.requireAIService(w, aiSvc) {
-				return
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body ai.RetryThreadEffectRequest
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			resp, err := aiSvc.RetryThreadEffect(r.Context(), meta, threadID, body)
-			if err != nil {
-				g.appendAudit(meta, "ai_thread_effect_retry", "failure", map[string]any{"thread_id": threadID, "tool_call_id": body.ToolCallID}, err)
-				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			g.appendAudit(meta, "ai_thread_effect_retry", "success", map[string]any{"thread_id": threadID, "tool_call_id": body.ToolCallID}, nil)
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
-			return
-
 		case action == "cancel" && r.Method == http.MethodPost:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {

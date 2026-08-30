@@ -1,7 +1,7 @@
 ---
 type: Storage Contract
 title: Flower storage ownership and migrations
-description: Floret v5 canonical journal ownership and contiguous Redeven product migrations.
+description: Floret v6 canonical journal ownership and contiguous Redeven product migrations.
 tags: [ai, storage, sqlite, migrations, floret]
 timestamp: 2026-08-14T00:00:00Z
 ---
@@ -15,7 +15,7 @@ Fresh product databases initialize version 4 with thread settings, pending-input
 
 During service startup, after the Floret effect adapter is bound and before live subscriptions or maintenance start, the pending-input importer synchronously converts each migration row into Floret typed queue input. Only a successful canonical import is marked complete. If completion marking fails, startup fails and a restart repeats the same stable request keys; Floret idempotency prevents duplicates. Canonical import failure also stops startup and leaves staging intact. The legacy codecs live only beside that importer. Production handlers cannot create, read, reorder, settle, or recover a Redeven queue row.
 
-Published Floret v5.0.16 opens its own physical backend and migrates logical and session-tree domain state through its public runtime boundary. Domain schema v6 stores canonical records by thread, entry, artifact, and compact index; a mutation no longer rewrites a whole checkpoint or full root path. The strict v5 to v6 migration is atomic and leaves no production dual-read path. These layers remain opaque to Redeven: Redeven neither labels them as one product journal schema nor inspects their records. Canonical user input, queue intent, interactions, effect intent/results, assistant output, and terminal facts stay upstream. High-frequency deltas, subscribers, and execution tokens are in memory and are not mirrored into Redeven SQL.
+Published Floret v6.0.0 opens its own physical backend and migrates logical and session-tree domain state through its public runtime boundary. Domain schema v6 stores canonical records by thread, entry, artifact, and compact index; schema v7 restores exact RunID identity and terminates legacy dispatching, retrying, or unknown effects before the Host is available. The strict v5-to-v6 and v6-to-v7 migrations are atomic and leave no production dual-read path. These layers remain opaque to Redeven: Redeven neither labels them as one product journal schema nor inspects their records. Canonical user input, queue intent, interactions, effect intent/results, assistant output, and terminal facts stay upstream. High-frequency deltas, subscribers, and execution tokens are in memory and are not mirrored into Redeven SQL.
 
 # Boundaries
 
@@ -29,5 +29,5 @@ Every future product schema change appends a contiguous automatic migration and 
 - `redeven:internal/ai/pending_input_import_startup_test.go` - Covers completion failure, restart dedupe, ordering, and canonical failure.
 - `redeven:internal/ai/threadstore/reviewed_schema_manifest.json` - Reviewed product schema source.
 - `redeven:internal/boundarycontract/threadstore_sql.go` - Closed product SQL ownership inventory.
-- `redeven:go.mod` - Pins the released Floret v5.0.16 module without local source wiring.
-- `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces exact published-v5 adoption and rejects replacement or retired imports.
+- `redeven:go.mod` - Pins the released Floret v6.0.0 module without local source wiring.
+- `redeven:internal/session/floret_v6_dependency_contract_test.go` - Enforces exact published-v6 adoption and rejects replacement or retired imports.

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v5/runtime"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	openai "github.com/openai/openai-go"
 )
 
@@ -25,6 +25,7 @@ const (
 	runErrorCodeFloretControlContract      = "floret_control_contract_failed"
 	runErrorCodeFloretAdmissionBlocked     = "floret_thread_admission_blocked"
 	runErrorCodeFloretAuthorityConsistency = "floret_authority_consistency_failed"
+	runErrorCodeFloretEffectOutcomeUnknown = "floret_effect_outcome_unknown"
 )
 
 func userFacingRunError(code string, fallback string) string {
@@ -52,6 +53,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "Flower could not start the next turn because the runtime still reports an active turn. Restart recovery did not complete, so the turn was not admitted."
 	case runErrorCodeFloretAuthorityConsistency:
 		return "Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue."
+	case runErrorCodeFloretEffectOutcomeUnknown:
+		return "Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution."
 	default:
 		if fallback != "" {
 			return fallback
@@ -129,21 +132,20 @@ func projectRunFailure(raw string, fallbackCode string) (string, string) {
 	return code, userFacingRunError(code, raw)
 }
 
-// projectFloretTurnFailure is the single presentation boundary for canonical
-// Floret turn failures. Typed codes own classification; legacy text parsing is
-// retained only for historical views that do not carry Failure.
-func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, legacyRaw string, legacyFallbackCode string) (string, string) {
+// projectFloretTurnFailure is the only product presentation boundary for
+// canonical Floret turn failures. Floret v6 always supplies typed failures.
+func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode string) (string, string) {
 	if failure == nil {
-		return projectRunFailure(legacyRaw, legacyFallbackCode)
+		return fallbackCode, userFacingRunError(fallbackCode, "")
 	}
 	message := strings.TrimSpace(failure.Message)
 	switch failure.Code {
 	case flruntime.ThreadTurnFailureProvider:
-		return projectRunFailure(message, legacyFallbackCode)
+		return projectRunFailure(message, fallbackCode)
 	case flruntime.ThreadTurnFailureControlError:
 		return runErrorCodeFloretControlContract, userFacingRunError(runErrorCodeFloretControlContract, message)
 	case flruntime.ThreadTurnFailureEffectOutcomeUnknown:
-		return runErrorCodeFloretAuthorityConsistency, userFacingRunError(runErrorCodeFloretAuthorityConsistency, message)
+		return runErrorCodeFloretEffectOutcomeUnknown, userFacingRunError(runErrorCodeFloretEffectOutcomeUnknown, message)
 	case flruntime.ThreadTurnFailureInterrupted:
 		return "floret_turn_interrupted", "Flower's runtime stopped before this reply finished. Start a new reply to continue."
 	case flruntime.ThreadTurnFailureCancelled:
@@ -155,20 +157,10 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, legacyRaw st
 		flruntime.ThreadTurnFailureEngineContract:
 		return runErrorCodeFloretEngineFailed, userFacingRunError(runErrorCodeFloretEngineFailed, message)
 	case flruntime.ThreadTurnFailureLegacyUnclassified:
-		return projectRunFailure(message, legacyFallbackCode)
+		return projectRunFailure(message, fallbackCode)
 	default:
 		return runErrorCodeFloretEngineFailed, userFacingRunError(runErrorCodeFloretEngineFailed, message)
 	}
-}
-
-// These compatibility readers keep the deprecated v5 text mirror behind one
-// boundary while older Floret providers can still emit transient diagnostics.
-func floretThreadViewLegacyError(view flruntime.ThreadView) string {
-	return view.Error //nolint:staticcheck // Floret v5 retains Error as its documented compatibility mirror.
-}
-
-func floretThreadSummaryLegacyError(summary flruntime.ThreadSummary) string {
-	return summary.Error //nolint:staticcheck // Floret v5 retains Error as its documented compatibility mirror.
 }
 
 func providerHTTPStatusRunErrorCode(status int) string {

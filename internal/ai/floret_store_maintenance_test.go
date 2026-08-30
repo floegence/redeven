@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v5/runtime"
-	flstorage "github.com/floegence/floret/v5/storage"
+	flruntime "github.com/floegence/floret/v6/runtime"
+	flstorage "github.com/floegence/floret/v6/storage"
 )
 
 func TestOpenFloretRuntimeColdStart(t *testing.T) {

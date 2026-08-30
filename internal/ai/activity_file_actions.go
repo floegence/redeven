@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/floegence/floret/v5/observation"
-	fltools "github.com/floegence/floret/v5/tools"
+	"github.com/floegence/floret/v6/observation"
+	fltools "github.com/floegence/floret/v6/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 

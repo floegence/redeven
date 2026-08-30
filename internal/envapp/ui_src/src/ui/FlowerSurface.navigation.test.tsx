@@ -1187,6 +1187,34 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Run failed: provider rejected request.');
   });
 
+  it('shows unknown effect failure without any retry action', async () => {
+    const failedThread = thread({
+      thread_id: 'thread-unknown-effect',
+      title: 'Unknown effect',
+      status: 'failed',
+      error: {
+        code: 'floret_effect_outcome_unknown',
+        message: 'internal effect outcome detail',
+      },
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [failedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(failedThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-unknown-effect"] button')));
+    (runtime.querySelector('[data-thread-id="thread-unknown-effect"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
+
+    const errorText = runtime.querySelector('.flower-error-card')?.textContent ?? '';
+    expect(errorText).toContain('Some operations may have completed, but their results could not be confirmed.');
+    expect(errorText).not.toContain('internal effect outcome detail');
+    expect(runtime.querySelector('.flower-error-actions button')).toBeNull();
+    expect(runtime.querySelector('[data-flower-effect-retry]')).toBeNull();
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
   it('presents model gateway contract failures without exposing internal tool-call fields', async () => {
     const failedThread = thread({
       thread_id: 'thread-model-gateway-contract',

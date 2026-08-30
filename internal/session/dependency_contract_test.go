@@ -690,8 +690,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
 	const (
-		floretModule  = "github.com/floegence/floret/v5"
-		floretVersion = "v5.0.16"
+		floretModule  = "github.com/floegence/floret/v6"
+		floretVersion = "v6.0.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -769,9 +769,9 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedMarkers := map[string][]string{
 		filepath.Join("okf", "ai", "floret-thread-runtime.md"): {
-			"Floret v5 `ThreadService`",
+			"Floret v6 `ThreadService`",
 			"canonical journal is the only durable lifecycle fact source",
-			"`View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`",
+			"`View`, `Send`, `Respond`, `Cancel`, `Retry`",
 		},
 		filepath.Join("okf", "ui", "flower-live-timeline.md"): {
 			"one workspace SSE",
@@ -779,7 +779,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v5 v5.0.16",
+			"github.com/floegence/floret/v6 v6.0.0",
 			"desktop-placement-http2-v1",
 			"published Flowersec Go and Core v3.2.0 plus Floe Webapp v0.46.5",
 			"Floret ThreadService is the only lifecycle boundary",
@@ -958,7 +958,7 @@ func TestFloretCanonicalThreadCreationIsCreateCoordinatorOnly(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if importPath != "github.com/floegence/floret/v5/runtime" {
+			if importPath != "github.com/floegence/floret/v6/runtime" {
 				continue
 			}
 			alias := "runtime"
@@ -1128,7 +1128,7 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 
 	root := repoRootForTest(t)
 	forbidden := []string{
-		"github.com/floegence/floret/v5/" + "internal",
+		"github.com/floegence/floret/v6/" + "internal",
 		"Run" + "ProjectedTurn",
 		"ProjectedTurn" + "Request",
 		"ProjectedTurn" + "Result",

@@ -121,6 +121,7 @@ export const flowerSurfaceEnUS = {
     runErrorFloretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
     runErrorFloretControlContractFailed: 'Flower could not finish this turn because the model returned an invalid interaction control signal.',
     runErrorFloretAuthorityConsistencyFailed: 'Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.',
+    runErrorFloretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution.',
     runErrorRuntimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     messageErrorTitle: 'Message failed',
     messageErrorFallback: 'This message failed before Flower produced visible text.',

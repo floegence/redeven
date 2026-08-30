@@ -13,7 +13,7 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-func TestFloretDependencyIsExactPublishedV5(t *testing.T) {
+func TestFloretDependencyIsExactPublishedV6(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -25,8 +25,8 @@ func TestFloretDependencyIsExactPublishedV5(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const path = "github.com/floegence/floret/v5"
-	const version = "v5.0.16"
+	const path = "github.com/floegence/floret/v6"
+	const version = "v6.0.0"
 	found := false
 	for _, requirement := range module.Require {
 		if requirement.Mod.Path == path {
@@ -79,7 +79,7 @@ func TestFloretDependencyIsExactPublishedV5(t *testing.T) {
 			if unquoteErr != nil {
 				return unquoteErr
 			}
-			if path == "github.com/floegence/floret" || strings.HasPrefix(path, "github.com/floegence/floret/") && !strings.HasPrefix(path, "github.com/floegence/floret/v5/") {
+			if path == "github.com/floegence/floret" || strings.HasPrefix(path, "github.com/floegence/floret/") && !strings.HasPrefix(path, "github.com/floegence/floret/v6/") {
 				relative, _ := filepath.Rel(root, filePath)
 				t.Fatalf("%s imports retired Floret module path %q", relative, path)
 			}

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	flruntime "github.com/floegence/floret/v5/runtime"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	contextstore "github.com/floegence/redeven/internal/ai/context/store"

@@ -14,8 +14,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/floegence/floret/v5/identity"
-	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v6/identity"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -359,16 +359,6 @@ type StopThreadResponse struct {
 }
 
 type RetryThreadContinuationResponse struct {
-	OK bool `json:"ok"`
-}
-
-type RetryThreadEffectRequest struct {
-	EffectAttemptID        string `json:"effect_attempt_id"`
-	ToolCallID             string `json:"tool_call_id"`
-	AcknowledgeUnknownRisk bool   `json:"acknowledge_unknown_risk"`
-}
-
-type RetryThreadEffectResponse struct {
 	OK bool `json:"ok"`
 }
 

@@ -137,6 +137,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         floretEngineFailed: t(i18n, k('chat.runErrorFloretEngineFailed')),
         floretControlContractFailed: t(i18n, k('chat.runErrorFloretControlContractFailed')),
         floretAuthorityConsistencyFailed: t(i18n, k('chat.runErrorFloretAuthorityConsistencyFailed')),
+        floretEffectOutcomeUnknown: t(i18n, k('chat.runErrorFloretEffectOutcomeUnknown')),
         runtimeRestarted: t(i18n, k('chat.runErrorRuntimeRestarted')),
       },
       messageErrorTitle: t(i18n, k('chat.messageErrorTitle')),

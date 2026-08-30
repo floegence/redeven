@@ -328,10 +328,6 @@ export type FlowerActivityItem = Readonly<{
   target_refs?: readonly FlowerActivityTargetRef[];
   payload?: Readonly<Record<string, unknown>>;
   metadata?: Readonly<Record<string, string>>;
-  effect_retry?: Readonly<{
-    effect_attempt_id: string;
-    tool_call_id: string;
-  }>;
 }>;
 
 export type FlowerActivityFileAction = Readonly<{
@@ -707,7 +703,7 @@ export type FlowerRuntimeInteraction = Readonly<{
   id: string;
   turn_id: string;
   run_id: string;
-  kind: 'approval' | 'input' | 'effect_retry';
+  kind: 'approval' | 'input';
   tool_call_id?: string;
   resolved?: boolean;
   approved?: boolean;
@@ -731,11 +727,6 @@ export type FlowerRuntimeInteraction = Readonly<{
       write_label?: string;
       secret?: boolean;
     }>[];
-  }>;
-  effect_retry?: Readonly<{
-    effect_attempt_id: string;
-    tool_call_id: string;
-    tool_name: string;
   }>;
   resolution?: Readonly<{
     accepted: boolean;
@@ -782,8 +773,6 @@ export type FlowerRuntimeCurrentView = Readonly<{
     }>;
   }>[];
   interactions?: readonly FlowerRuntimeInteraction[];
-  assistant_draft?: string;
-  thinking_draft?: string;
 }>;
 
 // FlowerThreadView is one replaceable detail snapshot. Its version is the
@@ -813,13 +802,6 @@ export type FlowerSubmitApprovalRequest = Readonly<{
   interaction_id: string;
   approved: boolean;
   reject_all?: boolean;
-}>;
-
-export type FlowerRetryEffectRequest = Readonly<{
-  thread_id: string;
-  effect_attempt_id: string;
-  tool_call_id: string;
-  acknowledge_unknown_risk: true;
 }>;
 
 export type FlowerApprovalCommandResult = Readonly<{
@@ -1196,7 +1178,6 @@ export type FlowerSurfaceAdapter = Readonly<{
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<FlowerThreadView>;
-  retryEffect: (input: FlowerRetryEffectRequest) => Promise<void>;
   stopThread: (threadID: string) => Promise<void>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalCommandResult>;

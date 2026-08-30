@@ -1,42 +1,41 @@
 ---
 type: AI Runtime Contract
 title: Floret thread runtime integration
-description: Typed Floret v5 thread runtime ownership and Redeven product boundaries.
+description: Typed Floret v6 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
 timestamp: 2026-08-18T00:00:00Z
 ---
 # Summary
 
-Floret v5 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and RetryEffect return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
+Floret v6 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, and Retry return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
 
 # Contract
 
 ## Typed runtime
 
-One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced or canceled token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.
+One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced, canceled, or terminal token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.
 
-`Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch; an unknown effect outcome is never replayed automatically and exposes RetryEffect on the original tool row.
+`Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch. If an effect outcome cannot be confirmed, Floret atomically closes the Turn with `effect_outcome_unknown`; it never replays or exposes that effect for retry.
 
 Queue admission and mutation, `Respond`, and `Cancel` commit their minimum
 canonical fact before publishing success. `Respond` resolves the exact pending
 interaction, including one atomic Answers batch for Reject All. `Cancel` is
 idempotent for every known thread and atomically clears pending interactions,
-seals effect retries, records unresolved started effects as unknown, and writes
-one terminal aborted turn before returning. Late provider, tool, save-point, or
-retry work cannot reactivate that turn. `Retry` preserves
-logical request lineage without appending another user message. `RetryEffect`
-claims the stable unknown source once before any irreversible handler dispatch.
-Delete and shutdown fence new effect work, cancel and join the active subtree,
-and prevent late output from outranking a tombstone.
+closes unfinished tool work, and writes one terminal aborted turn before
+returning. Late provider, tool, or save-point work cannot reactivate a terminal
+turn. `Retry` preserves logical request lineage without appending another user
+message. Delete and shutdown fence new effect work, cancel and join the active
+subtree, and prevent late output from outranking a tombstone.
 
 Restart hydration restores accepted input, queue items, unresolved interactions,
-retry-specific input, and canonical outputs, then resumes provider-safe work
-from the last canonical boundary. Unknown effects remain unresolved. Floret owns
-the permanent domain migration lineage from v2 through v6. Version 6 stores the
-manifest, root index, threads, entries, artifacts, and supporting records
-separately, so one child admission writes only affected records. The v5 to v6
-migration verifies and replaces the old checkpoint atomically; normal execution
-has no old-format read or whole-state rewrite path.
+logical retry input, and canonical outputs, then resumes provider-safe work
+from the last canonical boundary. Before the Host becomes available, every
+legacy dispatching, retrying, or unknown effect is closed in one terminal failed
+Turn. Floret owns the permanent domain migration lineage from v2 through v7.
+Version 6 stores the manifest, root index, threads, entries, artifacts, and
+supporting records separately, so one child admission writes only affected
+records. Version 7 restores exact RunID identity and converges unknown effects.
+Each migration is atomic; normal execution has no old-format dual-read path.
 
 Child agents are ordinary child threads with parent identity and independent runtime ownership. No product-owned SubAgent lifecycle, recovery handle, or publication state may become a second authority.
 
@@ -63,7 +62,7 @@ canonical permission snapshot before model dispatch.
 
 ## Redeven adapter
 
-Redeven keeps one typed adapter over the published Floret v5 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
+Redeven keeps one typed adapter over the published Floret v6 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
 
 The product Stop boundary is an idempotent command acknowledgement, not a
 thread-read boundary. Redeven invokes typed `Cancel`, discards its returned
@@ -78,7 +77,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v5.0.16's public ordered `ThreadView.Items`, exact
+Redeven consumes Floret v6.0.0's public ordered `ThreadView.Items`, exact
 item and interaction `TurnID` plus `RunID`, exact active `ThreadView.RunID`,
 process-local `ThreadView.RunProgress`, and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
@@ -97,14 +96,14 @@ stream text. `TurnResult.Output` remains a run aggregate and is not another
 message source. Flower deduplicates exact item IDs only; equal text with
 different stable IDs remains visible.
 
-Canonical terminal failure classification comes from Floret v5.0.15
+Canonical terminal failure classification comes from Floret v6.0.0
 `ThreadView.Failure` and `ThreadSummary.Failure`. Redeven maps the typed code
 once for list, detail, live current, and command responses, then removes the
-upstream failure payload from the Flower wire view. The deprecated upstream
-`Error` mirror is not a second classifier; it is consulted only when reading a
-historical view without typed failure data.
+upstream failure payload from the Flower wire view. There is no error-text or
+historical-field classifier. `effect_outcome_unknown` has one product code and
+explains that execution stopped to avoid a duplicate operation.
 
-Floret v5 accumulates a tool result into the matching call Activity by stable
+Floret v6 accumulates a tool result into the matching call Activity by stable
 `tool_call_id`. Result status and output advance the item without clearing the
 call description, command, safe targets, or other presentation facts. The same
 merge rule is used during execution and canonical journal reconstruction.
@@ -113,7 +112,7 @@ Every public Activity item passes through one host projection before it reaches
 current view, timeline pagination, live stream, or historical replay. The
 projection removes host paths, working directories, pending handles, and
 nested private values while keeping renderer, operation, status, summary,
-stable IDs, and display names. Floret v5.0.5 `StructuredActivityPayload.Rows`
+stable IDs, and display names. Floret v6.0.0 `StructuredActivityPayload.Rows`
 is the only generic rich-detail contract: Redeven creates bounded, ordered,
 safe display rows before admission, and Flower expands only those rows, a
 meaningful summary, or an error. It never rebuilds detail from raw tool JSON.
@@ -130,7 +129,7 @@ database. Redeven never reads, copies, replaces, or compacts opaque Floret
 records itself.
 
 Redeven reports the `verifying` readiness phase immediately before the single
-`runtime.Open` call. Floret v5.0.5 atomically converges the exact legacy
+`runtime.Open` call. Floret v6.0.0 atomically converges the exact legacy
 tool-result Raw representation produced before UTF-8 normalization and maps
 all remaining session-tree authority failures to public
 `runtime.ErrAuthorityCorrupt`. Redeven classifies only that public error; it
@@ -184,8 +183,8 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v5.0.16 typed runtime without local replacement.
-- `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces exact published-v5 adoption and rejects retired imports.
+- `redeven:go.mod` - Pins the released Floret v6.0.0 typed runtime without local replacement.
+- `redeven:internal/session/floret_v6_dependency_contract_test.go` - Enforces exact published-v6 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.
 - `redeven:internal/ai/floret_thread_context.go` - Canonical compaction mapping and timeline anchoring.
@@ -199,7 +198,6 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/ai/threadstore/execution_authority.go` - Minimal host authorization facts for restart redispatch.
 - `redeven:internal/ai/execution_authority_continuity_test.go` - Retry and SubAgent authority continuity across accepted turns and restart.
 - `redeven:internal/ai/stop_thread.go` - Idempotent typed cancellation without handler lookup.
-- `redeven:internal/ai/retry_thread_effect.go` - Exact unknown-effect retry mapping.
 - `redeven:internal/ai/send_user_turn_flow_test.go` - Covers typed canonical send and queue behavior through the published runtime.
 - `redeven:internal/ai/floret_ask_user_integration_test.go` - Covers typed interaction settlement without waiting for provider continuation.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Latest-selection generation fence before detail cache mutation.

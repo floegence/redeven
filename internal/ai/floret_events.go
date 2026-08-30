@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/v5/observation"
-	flprovider "github.com/floegence/floret/v5/provider"
-	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v6/observation"
+	flprovider "github.com/floegence/floret/v6/provider"
+	flruntime "github.com/floegence/floret/v6/runtime"
 )
 
 const (

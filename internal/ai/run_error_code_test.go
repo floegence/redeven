@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v5/runtime"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	openai "github.com/openai/openai-go"
 )
 
@@ -147,7 +147,6 @@ func TestProjectFloretTurnFailureUsesTypedCanonicalCode(t *testing.T) {
 	tests := []struct {
 		name       string
 		failure    *flruntime.ThreadTurnFailure
-		legacy     string
 		wantCode   string
 		hiddenText string
 	}{
@@ -184,15 +183,18 @@ func TestProjectFloretTurnFailureUsesTypedCanonicalCode(t *testing.T) {
 			wantCode: runErrorCodeFloretAuthorityConsistency, hiddenText: "authority state is corrupt",
 		},
 		{
-			name:     "nil typed failure preserves historical classification",
-			legacy:   "Flower tool call requires id, name, and args",
-			wantCode: runErrorCodeModelGatewayContract, hiddenText: "requires id",
+			name: "unknown effect outcome",
+			failure: &flruntime.ThreadTurnFailure{
+				Code:    flruntime.ThreadTurnFailureEffectOutcomeUnknown,
+				Message: "Tool side effects could not be confirmed.",
+			},
+			wantCode: runErrorCodeFloretEffectOutcomeUnknown, hiddenText: "tool side effects",
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			code, message := projectFloretTurnFailure(testCase.failure, testCase.legacy, "floret_turn_failed")
+			code, message := projectFloretTurnFailure(testCase.failure, "floret_turn_failed")
 			if code != testCase.wantCode {
 				t.Fatalf("code=%q, want %q", code, testCase.wantCode)
 			}

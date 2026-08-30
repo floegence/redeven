@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-30
+* **Terminal unknown-effect lifecycle and Floret v6.0.0 adoption**: Redeven now
+  projects Floret's `effect_outcome_unknown` terminal failure through one shared
+  summary, detail, and live-current lifecycle mapper. Flower explains that the
+  task stopped to prevent duplicate operations, keeps the composer available,
+  and removes the retired effect retry route, transport, protocol, and control.
 * **Exact multi-turn Flower identity and bounded detail loading**: Redeven adopts
   Floret v5.0.16, requires each current item and interaction to carry its exact
   TurnID and RunID, and rejects malformed history before cache admission. One

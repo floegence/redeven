@@ -138,12 +138,12 @@ function itemAttachmentBlocks(item: FlowerRuntimeCurrentItem): NonNullable<Flowe
   return attachmentBlocks(item.attachments);
 }
 
-function activityItem(raw: Readonly<Record<string, unknown>>, effectRetry?: FlowerActivityItem['effect_retry']): FlowerActivityItem {
+function activityItem(raw: Readonly<Record<string, unknown>>): FlowerActivityItem {
   const mapped = mapFlowerActivityItem(raw);
   if (!mapped) {
     throw new Error('Flower contract error: typed current tool item requires an activity item identity.');
   }
-  return effectRetry ? { ...mapped, effect_retry: effectRetry } : mapped;
+  return mapped;
 }
 
 function resolvedApprovalState(interaction: FlowerRuntimeInteraction): ResolvedApprovalState | undefined {
@@ -186,19 +186,7 @@ function mergeResolvedApproval(activity: FlowerActivityItem, interaction: Flower
 }
 
 function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem, identity: RuntimeExecutionIdentity): FlowerActivityTimelineBlock {
-  const activityIdentity = trim(item.activity?.tool_id) || trim(item.id);
-  const retry = (view.interactions ?? []).find((interaction) => (
-    interaction.kind === 'effect_retry'
-    && !interaction.resolved
-    && trim(interaction.turn_id) === identity.turnID
-    && trim(interaction.run_id) === identity.runID
-    && interaction.effect_retry
-    && (trim(interaction.tool_call_id) || trim(interaction.effect_retry.tool_call_id)) === activityIdentity
-  ))?.effect_retry;
-  let activity = activityItem(item.activity ?? {}, retry ? {
-    effect_attempt_id: trim(retry.effect_attempt_id),
-    tool_call_id: trim(retry.tool_call_id),
-  } : undefined);
+  let activity = activityItem(item.activity ?? {});
   const toolCallID = trim(item.activity?.tool_id);
   const resolvedApproval = toolCallID ? (view.interactions ?? []).find((interaction) => (
     interaction.kind === 'approval'

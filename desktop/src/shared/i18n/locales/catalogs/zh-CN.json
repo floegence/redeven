@@ -125,6 +125,7 @@
       "runErrorFloretEngineFailed": "编排引擎失败，Flower 未能完成本轮回复。",
       "runErrorFloretControlContractFailed": "模型返回了无效的交互控制信号，Flower 未能完成本轮回复。",
       "runErrorFloretAuthorityConsistencyFailed": "已提交的工具结果无法完成一致性校验，Flower 未能完成本轮回复。工具不会重复执行；请发送新消息继续。",
+      "runErrorFloretEffectOutcomeUnknown": "部分操作是否完成无法确认。任务已停止，以避免重复执行。",
       "runErrorRuntimeRestarted": "本地运行时在本次回复完成前重启了。请在运行时就绪后重新开始回复。",
       "runtimeRestartedDivider": "Redeven 运行时已重启",
       "messageErrorTitle": "消息失败",

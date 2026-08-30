@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/v5/config"
-	"github.com/floegence/floret/v5/florettest"
-	flprovider "github.com/floegence/floret/v5/provider"
-	flruntime "github.com/floegence/floret/v5/runtime"
-	"github.com/floegence/floret/v5/storage"
-	fltools "github.com/floegence/floret/v5/tools"
+	flconfig "github.com/floegence/floret/v6/config"
+	"github.com/floegence/floret/v6/florettest"
+	flprovider "github.com/floegence/floret/v6/provider"
+	flruntime "github.com/floegence/floret/v6/runtime"
+	"github.com/floegence/floret/v6/storage"
+	fltools "github.com/floegence/floret/v6/tools"
 )
 
 func TestPublishedFloretDynamicRegistryDefinitionsReachProviderAndDispatch(t *testing.T) {

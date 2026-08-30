@@ -2350,6 +2350,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.floretControlContractFailed;
       case 'floret_authority_consistency_failed':
         return copy().chat.runErrors.floretAuthorityConsistencyFailed;
+      case 'floret_effect_outcome_unknown':
+        return copy().chat.runErrors.floretEffectOutcomeUnknown;
       case 'runtime_restarted':
         return copy().chat.runErrors.runtimeRestarted;
       default:
@@ -8625,22 +8627,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const webFetchActivity = createMemo(() => (
       item().renderer === 'web_fetch' || trimString(item().tool_name) === 'web_fetch'
     ));
-    const effectRetry = createMemo(() => item().effect_retry);
-    const retryUnknownEffect = async () => {
-      const threadID = trimString(selectedThreadID());
-      const retry = effectRetry();
-      if (!threadID || !retry) return;
-      try {
-        await props.adapter.retryEffect({
-          thread_id: threadID,
-          effect_attempt_id: retry.effect_attempt_id,
-          tool_call_id: retry.tool_call_id,
-          acknowledge_unknown_risk: true,
-        });
-      } catch (error) {
-        notifyThreadActionError(getErrorMessage(error));
-      }
-    };
     const controlError = createMemo(() => (
       item().kind === 'control'
       && trimString(item().metadata?.control_error_code) === 'control_error'
@@ -8721,21 +8707,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             rowFileAction(),
             rowAttachmentPreviewTarget(),
           )}
-          <Show when={effectRetry()}>
-            <button
-              type="button"
-              class="flower-activity-file-action-button"
-              aria-label={copy().chat.retryReply}
-              title={copy().chat.retryReply}
-              data-flower-effect-retry
-              onClick={(event) => {
-                event.stopPropagation();
-                void retryUnknownEffect();
-              }}
-            >
-              <Refresh class="h-3.5 w-3.5" />
-            </button>
-          </Show>
         </div>
         <Show when={disclosure.mounted() && expandable()}>
           <div

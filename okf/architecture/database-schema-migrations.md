@@ -65,7 +65,7 @@ gate and in-memory canonical-schema verification.
 
 ## Upstream-owned schemas
 
-Floret v5 owns the canonical Thread journal and its schema lifecycle. Redeven supplies
+Floret v6 owns the canonical Thread journal and its schema lifecycle. Redeven supplies
 the configured path to the published runtime startup API and consumes its typed
 readiness result. Floret owns inspection, migration, verification, exact open,
 and conflict classification; Redeven does not query, patch, version, migrate,
@@ -101,6 +101,6 @@ opens an upstream database directly to manufacture a cross-store transaction.
 - `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
 - `redeven:internal/ai/threadstore/store.go` - Verifies exact supported historical or current product shape before writable open.
 - `redeven:internal/ai/threadstore/schema.go` - Defines current v2 and the atomic reviewed v1-to-v2 migration.
-- `redeven:internal/ai/floret_bootstrap.go` - Opens the published Floret v5 runtime without direct storage access.
+- `redeven:internal/ai/floret_bootstrap.go` - Opens the published Floret v6 runtime without direct storage access.
 - `redeven:scripts/check_floret_dependency_boundary.sh:118` - Rejects Redeven access to Floret-owned storage schemas and raw SQL.
 - `redeven:okf/ai/flower-storage-ownership-and-migrations.md:1` - Defines the specialized cross-owner Flower product migration.

@@ -357,8 +357,8 @@ describe('main routing', () => {
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
     expect(helperSrc).toContain('const webSession = session.fromPartition(partition);');
     expect(helperSrc).toContain('await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });');
-    expect(helperSrc.indexOf('await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id);')).toBeLessThan(
-      helperSrc.indexOf('const controller = createWebServiceBrowserController(sessionRecord, request, partition);'),
+    expect(helperSrc.indexOf('await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id, loopbackGateway);')).toBeLessThan(
+      helperSrc.indexOf('const controller = createWebServiceBrowserController(sessionRecord, request, partition, loopbackGateway);'),
     );
     expect(helperSrc).toContain("role: 'web_service_child'");
     expect(helperSrc).toContain("preload: 'web_service_browser'");
@@ -1524,7 +1524,7 @@ describe('main routing', () => {
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/[^/]+\\/promote$/u');
     expect(routeSrc).not.toContain('followups');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/retry$/u');
-    expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/retry_effect$/u');
+    expect(routeSrc).not.toContain('retry_effect');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/cancel$/u');
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/runs\\/[^/]+\\/terminal\\/[^/]+\\/read$/u');
     expect(routeSrc).toContain('runtimeFlowerTerminalReadQuery');
@@ -1830,7 +1830,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('placementBridge: options.transportRecovery != null');
     expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport);');
     expect(mainSrc).toContain("await webSession.setProxy({ mode: 'direct' });");
-    expect(mainSrc).toContain('function installDesktopDiagnosticsHooks(webSession: Session, webServiceForwardID?: string): void');
+    expect(mainSrc).toContain('loopbackGateway?: WebServiceLoopbackGateway,\n): void');
     expect(mainSrc).toContain('desktopDiagnosticsHookSessions.has(webSession)');
     expect(mainSrc).toContain('shouldFailDesktopSessionMainDocument({');
     expect(mainSrc).toContain('details.resourceType');

@@ -845,11 +845,6 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         );
       },
 		submitApproval: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, body),
-		retryEffect: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/retry_effect`, {
-			effect_attempt_id: body.effect_attempt_id,
-			tool_call_id: body.tool_call_id,
-			acknowledge_unknown_risk: true,
-		}),
     },
     mapperOptions: localEnvironmentLiveMapperOptions(),
     loadSettings: () => loadSettingsSnapshot(bridge),

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	flruntime "github.com/floegence/floret/v5/runtime"
+	flruntime "github.com/floegence/floret/v6/runtime"
 )
 
 const flowerRuntimeCurrentPublishInterval = 50 * time.Millisecond
@@ -314,7 +314,7 @@ func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 		builder.add(current.Failure.Message)
 	} else {
 		builder.add("")
-		builder.add(floretThreadViewLegacyError(current))
+		builder.add("")
 	}
 	builder.addInt(int64(len(current.Items)))
 	for _, item := range current.Items {

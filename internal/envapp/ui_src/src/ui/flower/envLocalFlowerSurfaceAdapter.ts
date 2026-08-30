@@ -797,14 +797,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         method: 'POST',
         body: JSON.stringify(body),
       }),
-      retryEffect: (body) => fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/retry_effect`, {
-        method: 'POST',
-        body: JSON.stringify({
-          effect_attempt_id: body.effect_attempt_id,
-          tool_call_id: body.tool_call_id,
-          acknowledge_unknown_risk: true,
-        }),
-      }),
     },
     mapperOptions: envLiveMapperOptions(options),
     loadSettings: loadCachedSettings,
