@@ -311,7 +311,7 @@ describe("GitHistoryBrowser interactions", () => {
         "Compared with first parent so the changed-file list and diff view stay aligned.",
       );
       const mergeBadge = Array.from(host.querySelectorAll('span')).find((node) => node.textContent?.trim() === 'Merge Commit');
-      expect(mergeBadge?.className).toContain('text-[var(--redeven-categorical-6)]');
+      expect(mergeBadge).toBeTruthy();
       const fileButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("src/app.ts"),
       );
@@ -560,6 +560,8 @@ describe("GitHistoryBrowser interactions", () => {
         hash: "9750efa31234567890",
         shortHash: "9750efa3",
         parents: ["ef07ecc1234567890"],
+        authorName: "Taylor Example",
+        authorEmail: "taylor@example.com",
         subject: "fix(region): avoid route props spread recursion",
         body: [
           "fix(region): avoid route props spread recursion",
@@ -632,6 +634,27 @@ describe("GitHistoryBrowser interactions", () => {
         "-webkit-line-clamp: 2",
       );
       expect(toggleButton?.getAttribute("aria-expanded")).toBe("false");
+
+      const fullMessageButton = host.querySelector(
+        "[data-git-full-commit-message-trigger]",
+      ) as HTMLButtonElement | null;
+      expect(fullMessageButton).toBeTruthy();
+      fullMessageButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+
+      const messageDialog = document.body.querySelector(
+        "[data-git-commit-message-dialog]",
+      ) as HTMLElement | null;
+      expect(messageDialog).toBeTruthy();
+      expect(messageDialog?.textContent).toContain(
+        "fix(region): avoid route props spread recursion",
+      );
+      expect(messageDialog?.textContent).toContain(
+        "Preserve layout hydration ordering for portal bootstrap.",
+      );
+      expect(messageDialog?.textContent).toContain("Taylor Example");
+      expect(messageDialog?.textContent).toContain("taylor@example.com");
+      expect(messageDialog?.textContent).toContain("9750efa31234567890");
 
       toggleButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();

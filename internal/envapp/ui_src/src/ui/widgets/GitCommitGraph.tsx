@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, FileText, Folder, History, Terminal } from '@floegence/floe-webapp-core/icons';
-import type { GitCommitSummary } from '../protocol/redeven_v1';
+import type { GitCommitFileSummary, GitCommitSummary } from '../protocol/redeven_v1';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
@@ -263,6 +263,9 @@ export interface GitCommitGraphProps {
   switchDetachedBusy?: boolean;
   alreadyDetachedCommitHash?: string;
   onCopyText?: (value: string) => void;
+  location?: 'graph' | 'branch_history';
+  branchName?: string;
+  resolveCommitFiles?: (commit: GitCommitSummary) => GitCommitFileSummary[];
   class?: string;
 }
 
@@ -300,6 +303,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
     gap: `${ROW_GAP}px`,
   };
   const repoRootPath = () => exactGitPath(props.repoRootPath);
+  const interactionLocation = () => props.location ?? 'graph';
 
   const syncContainerWidth = () => {
     const nextWidth = containerElement?.clientWidth ?? 0;
@@ -320,7 +324,14 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
       items.push({
         id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
         label: i18n.t('git.contextMenu.askFlower'), icon: FlowerIcon,
-        onSelect: () => props.onAskFlower?.({ kind: 'commit', repoRootPath: target.repoRootPath, location: 'graph', commit, files: [] }),
+        onSelect: () => props.onAskFlower?.({
+          kind: 'commit',
+          repoRootPath: target.repoRootPath,
+          location: interactionLocation(),
+          branchName: props.branchName,
+          commit,
+          files: props.resolveCommitFiles?.(commit) ?? [],
+        }),
       });
     }
     if (props.onSelect) {
@@ -354,7 +365,12 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
           : target.commit.hash === props.alreadyDetachedCommitHash
             ? i18n.t('uiCopy.git.alreadyDetachedHere')
             : undefined,
-        onSelect: () => props.onSwitchDetached?.({ commitHash: commit.hash, shortHash: commit.shortHash, source: 'graph' }),
+        onSelect: () => props.onSwitchDetached?.({
+          commitHash: commit.hash,
+          shortHash: commit.shortHash,
+          source: interactionLocation(),
+          branchName: props.branchName,
+        }),
       });
     }
     if (props.onCopyText) {
