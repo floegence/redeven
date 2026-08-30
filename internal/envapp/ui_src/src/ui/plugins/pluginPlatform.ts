@@ -29,6 +29,7 @@ export type { PluginSurfaceInteractionEvent };
 
 type RedevenPluginOpenSurfaceOptions = Omit<PluginOpenSurfaceInSlotOptions, 'signal'> & Readonly<{
   onInteraction?: (event: PluginSurfaceInteractionEvent) => void;
+  onCleanupError?: (error: unknown) => void;
 }>;
 
 export function createRedevenPluginPlatform(options: Readonly<{
@@ -198,9 +199,10 @@ export function createPluginSurfacePlacementCoordinator(
         closeCompleted: false,
       };
       entries.set(slot, entry);
+      const { onCleanupError, ...openOptions } = options;
       try {
         const host = await client.openSurfaceInSlot(slot, request, {
-          ...options,
+          ...openOptions,
           signal: entry.opening.signal,
         });
         entry.host = host;
@@ -214,9 +216,18 @@ export function createPluginSurfacePlacementCoordinator(
         publishVisibility(entry, requestedVisibility.get(slot) ?? false);
         return host;
       } catch (error) {
+        const terminalError = entry.failure ?? error;
         if (entries.get(slot) === entry) entries.delete(slot);
-        await disposeInactiveSlot(slot);
-        throw error;
+        try {
+          await disposeInactiveSlot(slot);
+        } catch (cleanupError) {
+          try {
+            onCleanupError?.(cleanupError);
+          } catch {
+            // Diagnostic delivery must not replace the surface's terminal error.
+          }
+        }
+        throw terminalError;
       }
     },
     setVisible(slot, visible) {
@@ -226,13 +237,18 @@ export function createPluginSurfacePlacementCoordinator(
     },
     fail(slot, error) {
       const current = entries.get(slot);
-      if (current && current.status !== 'retiring') {
+      if (!current) return disposeInactiveSlot(slot);
+      if (current.status === 'opening') {
         current.status = 'failed';
-        current.failure = error;
-        current.opening.abort('plugin surface terminated');
+        current.failure ??= error;
+        return Promise.resolve();
       }
-      if (current) return retire(current);
-      return disposeInactiveSlot(slot);
+      if (current.status === 'failed') return retirementBySlot.get(slot) ?? Promise.resolve();
+      if (current.status === 'ready') {
+        current.status = 'failed';
+        current.failure ??= error;
+      }
+      return retire(current);
     },
     release(slot) {
       cancelledSlots.add(slot);
