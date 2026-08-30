@@ -1,6 +1,13 @@
 # Redeven OKF Update Log
 
 ## 2026-08-30
+* **Exact multi-turn Flower identity and bounded detail loading**: Redeven adopts
+  Floret v5.0.16, requires each current item and interaction to carry its exact
+  TurnID and RunID, and rejects malformed history before cache admission. One
+  per-thread coordinator deduplicates cold selection, coalesces only the latest
+  advancing revision, stops automatic retry after failure, preserves valid
+  cached content, and gives uncached failures and empty conversations explicit
+  states instead of leaving the transcript loading indefinitely.
 * **Revision-only Flower read acknowledgements**: Redeven advances the read-state
   store to schema v4, retains only each user's last seen activity revision, and
   removes signature, prompt, and message-time validation. Flower sends each

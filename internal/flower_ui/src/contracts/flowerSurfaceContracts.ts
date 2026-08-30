@@ -679,7 +679,8 @@ export type FlowerLiveStreamConnectInput = Readonly<{
 
 export type FlowerRuntimeCurrentItem = Readonly<{
   id: string;
-  turn_id?: string;
+  turn_id: string;
+  run_id: string;
   ordinal: number;
   kind: 'user' | 'thinking' | 'assistant' | 'tool' | 'interaction';
   text?: string;
@@ -704,9 +705,9 @@ export type FlowerRuntimeCurrentItem = Readonly<{
 
 export type FlowerRuntimeInteraction = Readonly<{
   id: string;
-  turn_id?: string;
+  turn_id: string;
+  run_id: string;
   kind: 'approval' | 'input' | 'effect_retry';
-  run_id?: string;
   tool_call_id?: string;
   resolved?: boolean;
   approved?: boolean;

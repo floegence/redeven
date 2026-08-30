@@ -142,6 +142,7 @@
       "loadErrorTitle": "Flower 加载失败。",
       "threadLoadErrorTitle": "对话加载失败。",
       "threadLoading": "正在加载对话...",
+      "threadEmpty": "此对话暂无内容。",
       "threadSyncingLatest": "正在同步最新回复...",
       "threadSyncFailed": "Flower 无法同步最新回复，请重试。",
       "activeTurnBusy": "上一条回复仍在运行。停止后即可再次发送。",

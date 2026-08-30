@@ -41,7 +41,7 @@ function approvalResult(threadID: string, interactionID = 'approval-1', approved
       view_version: version,
       activity: 'active',
       run_id: `run:${threadID}`,
-      interactions: [{ id: interactionID, kind: 'approval', resolved: true, approved }],
+      interactions: [{ id: interactionID, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval', resolved: true, approved }],
     },
   };
 }
@@ -191,7 +191,7 @@ describe('runtime Flower surface adapter read state', () => {
 					view_version: 7,
 				activity: 'active',
 				run_id: 'run_detail',
-				items: [{ id: 'user:req-1', ordinal: 1, kind: 'user', text: 'hello' }],
+				items: [{ id: 'user:req-1', turn_id: 'turn-fixture', run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'hello' }],
 			},
 		}));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }));
@@ -275,7 +275,14 @@ describe('runtime Flower surface adapter read state', () => {
 				last_message_at_unix_ms: 2,
 				read_status: readStatus(),
 				},
-				current: { thread: { id: 'thread_1' }, version: 4 },
+					current: {
+						thread_id: 'thread_1',
+						view_version: 4,
+						activity: 'active',
+						run_id: 'run_1',
+						turn_id: 'turn_1',
+						items: [],
+					},
 			}));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ deleteQueuedTurn, loadThread }));
 

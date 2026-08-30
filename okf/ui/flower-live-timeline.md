@@ -7,7 +7,7 @@ timestamp: 2026-08-18T00:00:00Z
 ---
 # Summary
 
-Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. A selected summary that advances beyond cached detail starts bounded detail revalidation without cursor replay or polling.
+Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. A selected summary that advances beyond cached detail requests that exact revision through one per-thread coordinator without cursor replay or polling.
 
 Env App retains one `EnvAIPage` and one `FlowerSurface` after access becomes
 available. Activity companion, Activity full page, and the selected Workbench
@@ -43,8 +43,12 @@ cadence and publish immediately. The final current is always a complete Floret
 view; Flower never accumulates reasoning text or restores the retired block
 delta protocol.
 
-Floret v5.0.15 publishes the exact active RunID and one process-local
-`RunProgress` phase. Flower renders that phase only in the fixed lane above the
+Floret v5.0.16 publishes the exact TurnID and RunID on every ordered current
+item and interaction, including historical rows after restart. It also retains
+the exact active RunID and one process-local `RunProgress` phase. Flower rejects
+an incomplete or conflicting identity before detail enters `ThreadCache`; it
+never assigns an empty identity or substitutes the latest run. Flower renders
+the active phase only in the fixed lane above the
 composer; it never inserts a transient timeline row. One RunID keeps the same
 indicator, Flower, and dots DOM nodes while phase text changes, so CSS animation
 time remains continuous. Only a different thread or exact RunID remounts the
@@ -86,11 +90,11 @@ selected thread, or navigates to a child. The top-right panel and Activity rows
 read this same canonical inventory, and both open the existing floating
 Subagent detail window.
 
-Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. When a selected summary is ahead, Flower issues a fresh detail request instead of reusing an older in-flight request. One recovery request runs per thread, tracks newer summary targets, and uses finite 100/300/900 ms retries for transient failure. Recovery succeeds when the summary/detail invariant is satisfied, including when only newer activity metadata was accepted or an unchanged response proves the cache is already current. Only a remaining mismatch or request failure advances the retry budget. Exhaustion preserves cached content and exposes an explicit retry action.
+Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. One detail request may run per thread and selection cycle. Updates received during that request retain only the greatest target revision and start at most one follow-up request. A cache hit with no newer summary renders immediately and does not revalidate. A failed revision is not retried automatically in the same display cycle; without cached detail Flower leaves loading and shows an explicit retry, while an update failure with valid cached detail is non-blocking. There is no retry delay, exhausted state, foreground reload, initial-request map, or message-content completeness guess.
 
 Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v5.0.15. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
 
-Summary runtime state only triggers revalidation. Product settings revisions do not enter that signature and cannot start runtime recovery. Exhausted finite recovery remains stopped until a newer runtime signature or an explicit user reload arrives. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, or an active-turn admission failure proves that a turn may still be active; an in-flight Stop request changes that control to its localized pending state without creating another lifecycle fact.
+Summary revision and runtime state only trigger detail loading. Product settings revisions and message content shape do not. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, or an active-turn admission failure proves that a turn may still be active; an in-flight Stop request changes that control to its localized pending state without creating another lifecycle fact.
 
 Runtime failures are classified once at the Redeven projection boundary before
 summary, detail, and typed current responses reach Flower. Published Floret
@@ -132,6 +136,7 @@ so a provider update cannot flash empty or wait for transcript replacement.
 - `redeven:internal/flower_ui/src/liveTransport.ts` - Single connection and epoch fencing.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation and bounded view cache.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.
+- `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Exact item and interaction identity validation with no current-run fallback.
 - `redeven:internal/flower_ui/src/flowerLiveProgress.ts` - Single truthful current-turn progress projection for expanded and companion presentation.
 - `redeven:internal/flower_ui/src/flowerLiveProgress.test.ts` - Waiting, thinking, tool, output, terminal, and stopped-turn isolation coverage.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Retained Flower product placement across Activity and Workbench hosts.
@@ -139,6 +144,6 @@ so a provider update cannot flash empty or wait for transcript replacement.
 - `redeven:internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts` - Single receiver and obsolete-path removal checks.
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts` - One context adjunct merge rule retains canonical whole-thread usage across partial live frames.
 - `redeven:internal/flower_ui/src/chat/flowerContextPresentation.test.ts` - Covers cache-hit formula, unavailable data, exact 100 percent, and near-perfect rounding.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Terminal loss, stale request, bounded retry, and first-load fixtures.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Cold-load deduplication, latest-revision coalescing, explicit failure, retry, and stale-selection coverage.
 - `redeven:internal/flower_ui/src/flowerThreadTitle.ts` - Shared canonical title consumption and legacy first-message derivation.
 - `redeven:internal/ai/flower_live_stream_test.go` - Complete baseline, byte-budget, oversized-frame, terminal-state, and reconnect coverage.

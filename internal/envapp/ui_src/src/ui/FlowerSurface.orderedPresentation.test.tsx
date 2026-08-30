@@ -42,10 +42,10 @@ function orderedCurrent(stage: 'waiting' | 'running' | 'completed'): FlowerRunti
     activity: terminal ? 'idle' : 'active',
     ...(terminal ? { last_outcome: 'completed' as const } : {}),
     items: [
-      { id: 'user:ordered', turn_id: 'turn-ordered-dom', ordinal: 1, kind: 'user', text: 'Run one tool' },
-      { id: 'thinking:ordered', turn_id: 'turn-ordered-dom', ordinal: 2, kind: 'thinking', text: 'Checking the command', live: false },
+      { id: 'user:ordered', turn_id: 'turn-ordered-dom', run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Run one tool' },
+      { id: 'thinking:ordered', turn_id: 'turn-ordered-dom', run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Checking the command', live: false },
       {
-        id: 'tool:ordered', turn_id: 'turn-ordered-dom', ordinal: 3, kind: 'tool',
+        id: 'tool:ordered', turn_id: 'turn-ordered-dom', run_id: 'run-fixture', ordinal: 3, kind: 'tool',
         activity: {
           item_id: 'tool:ordered', tool_id: 'call-ordered', tool_name: 'terminal.exec', kind: 'tool', status,
           severity: 'quiet', needs_attention: stage === 'waiting', requires_approval: stage === 'waiting',
@@ -53,13 +53,13 @@ function orderedCurrent(stage: 'waiting' | 'running' | 'completed'): FlowerRunti
         },
       },
       ...(terminal ? [{
-        id: 'assistant:ordered', turn_id: 'turn-ordered-dom', ordinal: 4, kind: 'assistant' as const, text: 'ordered', live: false,
+        id: 'assistant:ordered', turn_id: 'turn-ordered-dom', run_id: 'run-fixture', ordinal: 4, kind: 'assistant' as const, text: 'ordered', live: false,
       }] : []),
     ],
     interactions: stage === 'waiting' ? [{
-      id: 'approval:ordered', kind: 'approval', tool_call_id: 'call-ordered', resolved: false,
+      id: 'approval:ordered', turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval', tool_call_id: 'call-ordered', resolved: false,
     }] : [{
-      id: 'approval:ordered', kind: 'approval', tool_call_id: 'call-ordered', resolved: true, approved: true,
+      id: 'approval:ordered', turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval', tool_call_id: 'call-ordered', resolved: true, approved: true,
     }],
   };
 }

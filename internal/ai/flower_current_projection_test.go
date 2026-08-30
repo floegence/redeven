@@ -141,6 +141,53 @@ func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T
 	}
 }
 
+func TestFlowerCurrentJSONPreservesHistoricalItemAndInteractionRunIdentity(t *testing.T) {
+	current := flruntime.ThreadView{
+		ThreadID: identity.ThreadID("thread-multiturn"),
+		Items: []flruntime.ThreadItem{
+			{ID: "user-1", TurnID: "turn-1", RunID: "run-1", Ordinal: 1, Kind: flruntime.ThreadItemUser, Text: "first"},
+			{ID: "assistant-2", TurnID: "turn-2", RunID: "run-2", Ordinal: 2, Kind: flruntime.ThreadItemAssistant, Text: "second"},
+			{ID: "tool-3", TurnID: "turn-3", RunID: "run-3", Ordinal: 3, Kind: flruntime.ThreadItemTool},
+		},
+		Interactions: []flruntime.ThreadInteraction{{
+			ID: "approval-2", TurnID: "turn-2", RunID: "run-2", Kind: flruntime.ThreadInteractionApproval,
+		}},
+	}
+	encoded, err := flowerCurrentJSON(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Items []struct {
+			TurnID string `json:"turn_id"`
+			RunID  string `json:"run_id"`
+		} `json:"items"`
+		Interactions []struct {
+			TurnID string `json:"turn_id"`
+			RunID  string `json:"run_id"`
+		} `json:"interactions"`
+	}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if got := []string{payload.Items[0].RunID, payload.Items[1].RunID, payload.Items[2].RunID}; !reflect.DeepEqual(got, []string{"run-1", "run-2", "run-3"}) {
+		t.Fatalf("item RunIDs=%v", got)
+	}
+	if payload.Interactions[0].TurnID != "turn-2" || payload.Interactions[0].RunID != "run-2" {
+		t.Fatalf("interaction identity=%#v", payload.Interactions[0])
+	}
+}
+
+func TestFlowerCurrentJSONRejectsIncompleteRunIdentity(t *testing.T) {
+	_, err := flowerCurrentJSON(flruntime.ThreadView{
+		ThreadID: identity.ThreadID("thread-invalid"),
+		Items:    []flruntime.ThreadItem{{ID: "user-invalid", TurnID: "turn-invalid", Kind: flruntime.ThreadItemUser}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "exact id, turn_id, and run_id") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
 func TestThreadListSummaryConsumesTypedFailureCode(t *testing.T) {
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()

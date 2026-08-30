@@ -20,6 +20,34 @@ function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+type RuntimeExecutionIdentity = Readonly<{ turnID: string; runID: string }>;
+
+function runtimeInteractionIdentity(interaction: FlowerRuntimeInteraction): RuntimeExecutionIdentity {
+  const interactionID = trim(interaction.id);
+  const turnID = trim(interaction.turn_id);
+  const runID = trim(interaction.run_id);
+  if (!interactionID || !turnID || !runID) {
+    throw new Error('Flower contract error: current interaction requires exact id, turn_id, and run_id.');
+  }
+  return { turnID, runID };
+}
+
+function runtimeItemIdentity(item: FlowerRuntimeCurrentItem): RuntimeExecutionIdentity {
+  const itemID = trim(item.id);
+  const turnID = trim(item.turn_id);
+  const runID = trim(item.run_id);
+  if (!itemID || !turnID || !runID) {
+    throw new Error('Flower contract error: current item requires exact id, turn_id, and run_id.');
+  }
+  if (item.interaction) {
+    const interaction = runtimeInteractionIdentity(item.interaction);
+    if (interaction.turnID !== turnID || interaction.runID !== runID) {
+      throw new Error('Flower contract error: current item and interaction execution identity differ.');
+    }
+  }
+  return { turnID, runID };
+}
+
 function runtimeRunProgressPhase(value: unknown): FlowerRunProgressPhase {
   switch (trim(value)) {
     case 'preparing':
@@ -157,11 +185,13 @@ function mergeResolvedApproval(activity: FlowerActivityItem, interaction: Flower
   }
 }
 
-function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem): FlowerActivityTimelineBlock {
+function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem, identity: RuntimeExecutionIdentity): FlowerActivityTimelineBlock {
   const activityIdentity = trim(item.activity?.tool_id) || trim(item.id);
   const retry = (view.interactions ?? []).find((interaction) => (
     interaction.kind === 'effect_retry'
     && !interaction.resolved
+    && trim(interaction.turn_id) === identity.turnID
+    && trim(interaction.run_id) === identity.runID
     && interaction.effect_retry
     && (trim(interaction.tool_call_id) || trim(interaction.effect_retry.tool_call_id)) === activityIdentity
   ))?.effect_retry;
@@ -173,6 +203,8 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
   const resolvedApproval = toolCallID ? (view.interactions ?? []).find((interaction) => (
     interaction.kind === 'approval'
     && interaction.resolved
+    && trim(interaction.turn_id) === identity.turnID
+    && trim(interaction.run_id) === identity.runID
     && (trim(interaction.tool_call_id) || trim(interaction.approval?.tool_call_id)) === toolCallID
   )) : undefined;
   if (resolvedApproval) activity = mergeResolvedApproval(activity, resolvedApproval);
@@ -192,9 +224,8 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
     type: 'activity-timeline',
     schema_version: 1,
     thread_id: base.thread_id,
-    turn_id: trim(item.turn_id) || trim(view.turn_id),
-    run_id: trim(item.interaction?.run_id)
-      || (trim(item.turn_id) === trim(view.turn_id) ? trim(view.run_id) : ''),
+    turn_id: identity.turnID,
+    run_id: identity.runID,
     summary: {
       status: activity.status,
       severity: activity.severity,
@@ -211,6 +242,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
   const messages: FlowerChatMessage[] = [];
   const seenItemIDs = new Set<string>();
   for (const item of view.items ?? []) {
+    const identity = runtimeItemIdentity(item);
     const itemID = trim(item.id);
     if (!itemID || seenItemIDs.has(itemID)) continue;
     seenItemIDs.add(itemID);
@@ -228,7 +260,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
             .map(([, value]) => trim(String(value)))
             .filter(Boolean);
         messages.push({
-          id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'user',
+          id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'user',
           content: values.join('\n'), status: 'complete', created_at_ms: createdAtMs,
           ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),
           ...(references ? { references } : {}),
@@ -239,16 +271,16 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     }
     if (item.kind === 'tool') {
       messages.push({
-        id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'assistant',
+        id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'assistant',
         content: '', status: 'complete', created_at_ms: createdAtMs,
-        blocks: [activityBlock(base, view, item)],
+        blocks: [activityBlock(base, view, item, identity)],
         ...(references ? { references } : {}),
       });
       continue;
     }
     if (item.kind === 'thinking') {
       messages.push({
-        id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'assistant',
+        id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'assistant',
         content: '', status: messageStatus(view, item), created_at_ms: createdAtMs,
         blocks: [{ type: 'thinking', content: String(item.text ?? '') }],
         ...(item.live ? { live: true } : {}),
@@ -257,7 +289,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       continue;
     }
     messages.push({
-      id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id),
+      id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID,
       role: item.kind === 'user' ? 'user' : 'assistant', content: String(item.text ?? ''),
       status: messageStatus(view, item), created_at_ms: createdAtMs,
       ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),
@@ -276,13 +308,13 @@ function runtimeApprovalActions(
     interaction.kind === 'approval' && !interaction.resolved && interaction.approval
   ));
   return pending.map((interaction, index) => {
+    const identity = runtimeInteractionIdentity(interaction);
     const approval = interaction.approval!;
     return {
       action_id: trim(interaction.id),
       origin: 'main_tool' as const,
-      run_id: trim(interaction.run_id)
-        || (trim(interaction.turn_id) === trim(view.turn_id) ? trim(view.run_id) : ''),
-      turn_id: trim(interaction.turn_id) || trim(view.turn_id),
+      run_id: identity.runID,
+      turn_id: identity.turnID,
       tool_id: trim(interaction.tool_call_id) || trim(approval.tool_call_id),
       tool_name: trim(approval.tool_name),
       state: 'requested' as const,
@@ -313,12 +345,7 @@ function runtimeInputRequest(
     candidate.kind === 'input' && !candidate.resolved && candidate.input
   ));
   if (!interaction?.input) return undefined;
-  if (!trim(interaction.id)) {
-    throw new Error('Flower contract error: typed current input interaction requires an id.');
-  }
-  if (!trim(interaction.turn_id) && !trim(view.turn_id)) {
-    throw new Error('Flower contract error: typed current input interaction requires a turn id.');
-  }
+  const identity = runtimeInteractionIdentity(interaction);
   if (interaction.input.questions.length === 0) {
     throw new Error('Flower contract error: typed current input interaction requires at least one question.');
   }
@@ -332,7 +359,7 @@ function runtimeInputRequest(
     .find(Boolean);
   return {
     prompt_id: trim(interaction.id),
-    message_id: trim(interaction.turn_id) || trim(view.turn_id),
+    message_id: identity.turnID,
     tool_id: trim(interaction.id),
     tool_name: 'ask_user',
     required_from_user: interaction.input.questions.map((question) => trim(question.id)).filter(Boolean),
@@ -366,7 +393,10 @@ export function applyFlowerRuntimeCurrentView(
   current: FlowerRuntimeCurrentView,
 ): FlowerThreadSnapshot {
   const threadID = trim(current.thread_id);
-  if (!threadID || threadID !== base.thread_id) return base;
+  if (!threadID || threadID !== base.thread_id) {
+    throw new Error('Flower contract error: current thread_id does not match the selected thread.');
+  }
+  for (const interaction of current.interactions ?? []) runtimeInteractionIdentity(interaction);
   const pending = (current.interactions ?? []).filter((interaction) => !interaction.resolved);
   const approvalCount = pending.filter((interaction) => interaction.kind === 'approval').length;
   const hasInput = pending.some((interaction) => interaction.kind === 'input');

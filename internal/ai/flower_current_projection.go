@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"errors"
 	"net/url"
 	"strings"
 
@@ -30,6 +31,9 @@ func flowerAttachmentURL(uploadID, threadID, turnID, queueID string) string {
 }
 
 func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
+	if err := validateFlowerCurrentIdentity(current); err != nil {
+		return nil, err
+	}
 	// Keep all product-specific redaction in the existing public projection,
 	// then add only scoped preview URLs from the original opaque references.
 	public := publicFloretThreadView(current)
@@ -49,9 +53,6 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 				continue
 			}
 			turnID := strings.TrimSpace(current.Items[index].TurnID.String())
-			if turnID == "" {
-				turnID = strings.TrimSpace(current.TurnID.String())
-			}
 			projectCurrentAttachmentURLs(item, current.Items[index].Attachments, threadID, turnID, "")
 		}
 	}
@@ -83,6 +84,26 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 		root["error"] = message
 	}
 	return json.Marshal(root)
+}
+
+func validateFlowerCurrentIdentity(current flruntime.ThreadView) error {
+	if strings.TrimSpace(current.ThreadID.String()) == "" {
+		return errors.New("Flower current view requires thread_id")
+	}
+	for _, item := range current.Items {
+		if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.TurnID.String()) == "" || strings.TrimSpace(item.RunID.String()) == "" {
+			return errors.New("Flower current item requires exact id, turn_id, and run_id")
+		}
+		if item.Interaction != nil && (item.Interaction.TurnID != item.TurnID || item.Interaction.RunID != item.RunID) {
+			return errors.New("Flower current item and interaction identities differ")
+		}
+	}
+	for _, interaction := range current.Interactions {
+		if strings.TrimSpace(interaction.ID) == "" || strings.TrimSpace(interaction.TurnID.String()) == "" || strings.TrimSpace(interaction.RunID.String()) == "" {
+			return errors.New("Flower current interaction requires exact id, turn_id, and run_id")
+		}
+	}
+	return nil
 }
 
 // MarshalFlowerCurrentView is the appserver handoff for detail envelopes that

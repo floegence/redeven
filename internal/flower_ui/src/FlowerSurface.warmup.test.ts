@@ -24,7 +24,7 @@ describe('Flower warmup presentation', () => {
     expect(source).toContain('surfaceWarmupActive()');
     expect(source).toContain('? warmupPanel()');
     expect(source).toContain('when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}');
-    expect(source).toContain(': warmupCanReplaceTranscript()');
+    expect(source).toContain('return warmupCanReplaceTranscript()');
     expect(source).toContain('copy().chat.warmupComposerPlaceholder');
     expect(source).toContain('disabled={surfaceWarmupActive()}');
     expect(source).toContain('warmup={surfaceWarmupActive()}');

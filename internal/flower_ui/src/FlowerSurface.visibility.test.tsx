@@ -165,8 +165,8 @@ describe('Flower workspace stream visibility', () => {
         turn_id: turnID,
         run_progress: { phase: 'streaming' },
         items: [
-          { id: 'user-live-tail', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Report progress' },
-          { id: 'assistant-live-tail', turn_id: turnID, ordinal: 2, kind: 'assistant', text: 'The first visible tokens', live: true },
+          { id: 'user-live-tail', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Report progress' },
+          { id: 'assistant-live-tail', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'assistant', text: 'The first visible tokens', live: true },
         ],
       },
     });
@@ -192,8 +192,8 @@ describe('Flower workspace stream visibility', () => {
         turn_id: turnID,
         run_progress: { phase: 'streaming' },
         items: [
-          { id: 'user-live-tail', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Report progress' },
-          { id: 'assistant-live-tail', turn_id: turnID, ordinal: 2, kind: 'assistant', text: 'The first visible tokens now include the newest output', live: true },
+          { id: 'user-live-tail', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Report progress' },
+          { id: 'assistant-live-tail', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'assistant', text: 'The first visible tokens now include the newest output', live: true },
         ],
       },
     });

@@ -140,6 +140,7 @@
       "loadErrorTitle": "Flower を読み込めませんでした。",
       "threadLoadErrorTitle": "会話を読み込めませんでした。",
       "threadLoading": "会話を読み込み中...",
+      "threadEmpty": "この会話にはまだ内容がありません。",
       "threadSyncingLatest": "最新の返信を同期しています...",
       "threadSyncFailed": "Flower は最新の返信を同期できませんでした。もう一度お試しください。",
       "activeTurnBusy": "前の返信はまだ実行中です。もう一度送信する前に停止できます。",

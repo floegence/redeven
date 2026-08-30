@@ -72,10 +72,19 @@ func (service *Service) typedTimelineMessages(ctx context.Context, endpointID, t
 }
 
 func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.RawMessage, bool, error) {
+	threadID = strings.TrimSpace(threadID)
+	turnID := strings.TrimSpace(item.TurnID.String())
+	runID := strings.TrimSpace(item.RunID.String())
+	if threadID == "" || turnID == "" || runID == "" || strings.TrimSpace(item.ID) == "" {
+		return nil, false, errors.New("typed thread item has incomplete execution identity")
+	}
+	if item.Interaction != nil && (item.Interaction.TurnID != item.TurnID || item.Interaction.RunID != item.RunID) {
+		return nil, false, errors.New("typed thread item interaction has conflicting execution identity")
+	}
 	createdAt := item.CreatedAt.UnixMilli()
 	switch item.Kind {
 	case flruntime.ThreadItemUser:
-		raw, err := canonicalUserTimelineMessageForThread(threadID, item.TurnID.String(), item.ID, item.Text, item.Attachments, item.References, createdAt)
+		raw, err := canonicalUserTimelineMessageForThread(threadID, turnID, runID, item.ID, item.Text, item.Attachments, item.References, createdAt)
 		return raw, err == nil, err
 	case flruntime.ThreadItemInteraction:
 		return typedResolvedInputMessage(threadID, item, createdAt)
@@ -85,17 +94,19 @@ func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.Ra
 		}
 		timeline := observation.ActivityTimeline{
 			SchemaVersion: observation.ActivityTimelineSchemaVersion,
+			RunID:         item.RunID,
 			ThreadID:      identity.ThreadID(threadID),
 			TurnID:        item.TurnID,
 			Items:         []observation.ActivityItem{*item.Activity},
 		}
 		timeline.Summary = observation.RebuildActivitySummary(timeline)
 		block := newActivityTimelineBlockWithPublicIdentity(timeline, nil, activityTimelinePublicIdentity{
+			RunID:    runID,
 			ThreadID: threadID,
-			TurnID:   item.TurnID.String(),
+			TurnID:   turnID,
 		})
 		raw, err := json.Marshal(map[string]any{
-			"id": item.ID, "thread_id": threadID, "turn_id": item.TurnID.String(), "role": "assistant",
+			"id": item.ID, "thread_id": threadID, "turn_id": turnID, "run_id": runID, "role": "assistant",
 			"status": "complete", "timestamp": createdAt, "content": "", "blocks": []any{block},
 			"live": false, "active_cursor": false,
 		})
@@ -122,7 +133,7 @@ func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.Ra
 		activeCursor = false
 	}
 	raw, err := json.Marshal(map[string]any{
-		"id": item.ID, "thread_id": threadID, "turn_id": item.TurnID.String(), "role": "assistant",
+		"id": item.ID, "thread_id": threadID, "turn_id": turnID, "run_id": runID, "role": "assistant",
 		"status": status, "timestamp": createdAt, "content": content,
 		"blocks": blocks, "live": item.Live, "active_cursor": activeCursor,
 	})
@@ -145,7 +156,7 @@ func typedResolvedInputMessage(threadID string, item flruntime.ThreadItem, creat
 	if text == "" {
 		return nil, false, nil
 	}
-	raw, err := canonicalUserTimelineMessageForThread(threadID, item.TurnID.String(), item.ID, text, nil, nil, createdAt)
+	raw, err := canonicalUserTimelineMessageForThread(threadID, item.TurnID.String(), item.RunID.String(), item.ID, text, nil, nil, createdAt)
 	return raw, err == nil, err
 }
 
@@ -203,13 +214,9 @@ func (service *Service) buildCanonicalFlowerTimelineMessages(ctx context.Context
 	return out, nil
 }
 
-func canonicalUserTimelineMessage(turnID, entryID, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
-	return canonicalUserTimelineMessageForThread("", turnID, entryID, input, attachments, references, createdAt)
-}
-
-func canonicalUserTimelineMessageForThread(threadID, turnID, entryID, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
-	threadID, turnID, entryID = strings.TrimSpace(threadID), strings.TrimSpace(turnID), strings.TrimSpace(entryID)
-	if turnID == "" || entryID == "" {
+func canonicalUserTimelineMessageForThread(threadID, turnID, runID, entryID, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
+	threadID, turnID, runID, entryID = strings.TrimSpace(threadID), strings.TrimSpace(turnID), strings.TrimSpace(runID), strings.TrimSpace(entryID)
+	if threadID == "" || turnID == "" || runID == "" || entryID == "" {
 		return nil, errors.New("canonical user message has incomplete identity")
 	}
 	blocks := make([]any, 0, len(attachments)+1)
@@ -233,7 +240,7 @@ func canonicalUserTimelineMessageForThread(threadID, turnID, entryID, input stri
 		return nil, errors.New("canonical user message has no content")
 	}
 	message := map[string]any{
-		"id": entryID, "thread_id": threadID, "turn_id": turnID, "role": "user", "status": "complete",
+		"id": entryID, "thread_id": threadID, "turn_id": turnID, "run_id": runID, "role": "user", "status": "complete",
 		"timestamp": createdAt, "content": input, "blocks": blocks, "live": false, "active_cursor": false,
 	}
 	if len(publicReferences) > 0 {

@@ -358,7 +358,6 @@ const FLOWER_COMPOSER_MORE_PANEL_ESTIMATED_WIDTH = 352;
 const FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT = 44;
 const FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME = 12;
 const SELECTED_THREAD_TAIL_REVEAL_FALLBACK_MS = 120;
-const THREAD_DETAIL_RECOVERY_RETRY_DELAYS_MS = [100, 300, 900] as const;
 const FLOWER_TERMINAL_THREAD_STATUSES = new Set<FlowerThreadStatus>(['idle', 'failed', 'success', 'canceled', 'read_only']);
 const FLOWER_ACTIVE_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
 const SUBAGENT_DETAIL_PAGE_SIZE = 200;
@@ -919,6 +918,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [composerReferenceLoadingVisible, setComposerReferenceLoadingVisible] = createSignal(false);
   const [handlerState, setHandlerState] = createSignal<FlowerHandlerResolutionState>({ status: 'starting' });
   const [threadLoadError, setThreadLoadError] = createSignal('');
+  const [threadDetailLoadingIDs, setThreadDetailLoadingIDs] = createSignal<ReadonlySet<string>>(new Set());
   const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
   const forkRequestIDs = new Map<string, string>();
@@ -966,18 +966,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadLoadSequence = 0;
   let engagementBootstrapSequence = 0;
   let threadsRefreshSequence = 0;
-  let summaryDetailRecoveryGeneration = 0;
-  const summaryDetailRecoveryTargets = new Map<string, Readonly<{
-    generation: number;
+  type ThreadDetailLoadTarget = Readonly<{
+    cycle: number;
     revision: number;
-    signature: string;
-  }>>();
-  const summaryDetailRecoveryRuns = new Map<string, Promise<void>>();
-  const summaryDetailRecoveryExhaustedSignatures = new Map<string, string>();
-  const initialThreadDetailRequests = new Map<string, Readonly<{
     sequence: number;
-    summary: FlowerThreadSnapshot | undefined;
-  }>>();
+    source: ThreadDetailSource;
+    force: boolean;
+  }>;
+  type ThreadDetailLoadCoordinatorState = {
+    cycle: number;
+    failedRevision: number;
+    inFlightTarget: ThreadDetailLoadTarget | null;
+    inFlight: Promise<void> | null;
+    pending: ThreadDetailLoadTarget | null;
+  };
+  const threadDetailLoads = new Map<string, ThreadDetailLoadCoordinatorState>();
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
@@ -1559,7 +1562,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
   });
   const selectedThreadLoading = createMemo(() => (
-    selectedThreadDetailPending()
+    threadDetailLoadingIDs().has(trimString(selectedThreadID()))
   ));
   const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || PENDING_NEW_THREAD_ID);
 	const attachmentControllers = new Map<string, FlowerAttachmentController>();
@@ -1903,9 +1906,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   onCleanup(() => {
     surfaceDisposed = true;
-    summaryDetailRecoveryTargets.clear();
-    summaryDetailRecoveryExhaustedSignatures.clear();
-    initialThreadDetailRequests.clear();
+    threadDetailLoads.clear();
     composerAutosizeController?.dispose();
     composerAutosizeController = undefined;
     for (const unsubscribe of attachmentControllerUnsubscribers.values()) unsubscribe();
@@ -2367,7 +2368,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     | 'initial_load'
     | 'user_action'
     | 'background_refresh'
-    | 'summary_recovery'
+    | 'summary_update'
     | 'live_current';
   type ThreadDetailReceiveResult = Readonly<{
     state: ThreadViewAcceptance;
@@ -3154,7 +3155,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const reportThreadDetailDiagnostic = (
     threadID: string,
-    stage: 'request_or_mapping' | 'current_projection' | 'cache_receive' | 'recovery_exhausted',
+    stage: 'request_or_mapping' | 'current_projection' | 'cache_receive' | 'detail_not_converged',
     source: ThreadDetailSource,
     error: unknown,
     viewVersion = 0,
@@ -3209,7 +3210,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const summary = threadCache().summaries.get(threadID);
       result = threadCache().receiveView(candidate, {
-        preserveSummary: summaryDetailRecoveryTargets.has(threadID)
+        preserveSummary: source === 'summary_update'
           && threadSummaryNeedsDetail(summary, candidate.thread),
       });
     } catch (error) {
@@ -3272,10 +3273,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     const acceptedSummary = nextCache.summaries.get(threadID);
     const detailConverged = !threadSummaryNeedsDetail(acceptedSummary, retained);
-    if (detailConverged) {
-      summaryDetailRecoveryExhaustedSignatures.delete(threadID);
-      if (threadID === selectedThreadID()) setThreadLoadError('');
-    }
+    if (detailConverged && threadID === selectedThreadID()) setThreadLoadError('');
     if (
       busyAdmissionThreadIDs().has(threadID)
       && !flowerThreadHasActiveTurnEvidence(retained)
@@ -3307,10 +3305,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const receiveThreadView = (
     live: FlowerThreadView,
     source: ThreadDetailSource = 'background_refresh',
-  ): ThreadDetailReceiveResult => receiveThreadDetail({
-    thread: { ...live.thread },
-    version: Math.max(1, Math.floor(Number(live.current.view_version) || 0)),
-  }, source, live.current);
+  ): ThreadDetailReceiveResult => {
+    // Validate the complete presentation contract before this view can enter
+    // the cache. Rendering must never be the first place malformed history is
+    // discovered.
+    buildFlowerTimelineEntries(live.thread);
+    return receiveThreadDetail({
+      thread: { ...live.thread },
+      version: Math.max(1, Math.floor(Number(live.current.view_version) || 0)),
+    }, source, live.current);
+  };
   let queuedTurnReorderSequence = 0;
   const queuedTurnReorderEnabled = () => Boolean(
     props.adapter.reorderQueuedTurns
@@ -3435,160 +3439,176 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyThreadActionError(getErrorMessage(error));
     }
   };
-  const reloadSelectedThread = async (
-    threadID: string,
-    sequence = threadLoadSequence,
-    source: ThreadDetailSource = 'background_refresh',
-  ): Promise<ThreadDetailReceiveResult | null> => {
-    const tid = trimString(threadID);
-    if (!tid || retiredThreadIDs.has(tid)) return null;
-    const live = await props.adapter.loadThread(tid);
-    if (retiredThreadIDs.has(tid) || sequence !== threadLoadSequence || selectedThreadID() !== tid) {
-      return null;
-    }
-    return receiveThreadView(live, source);
+  const setThreadDetailLoading = (threadID: string, loading: boolean) => {
+    setThreadDetailLoadingIDs((current) => {
+      if (current.has(threadID) === loading) return current;
+      const next = new Set(current);
+      if (loading) next.add(threadID);
+      else next.delete(threadID);
+      return next;
+    });
   };
+
+  const threadDetailLoadState = (threadID: string): ThreadDetailLoadCoordinatorState => {
+    const existing = threadDetailLoads.get(threadID);
+    if (existing) return existing;
+    const created: ThreadDetailLoadCoordinatorState = {
+      cycle: 0,
+      failedRevision: -1,
+      inFlightTarget: null,
+      inFlight: null,
+      pending: null,
+    };
+    threadDetailLoads.set(threadID, created);
+    return created;
+  };
+
+  const beginThreadDetailDisplayCycle = (threadID: string) => {
+    const state = threadDetailLoadState(threadID);
+    state.cycle += 1;
+    state.failedRevision = -1;
+  };
+
+  const queueLatestThreadDetailTarget = (
+    state: ThreadDetailLoadCoordinatorState,
+    target: ThreadDetailLoadTarget,
+  ) => {
+    const current = state.pending;
+    if (
+      !current
+      || target.cycle > current.cycle
+      || (target.cycle === current.cycle && target.revision > current.revision)
+      || (target.cycle === current.cycle && target.revision === current.revision && target.force && !current.force)
+    ) {
+      state.pending = target;
+    }
+  };
+
+  const requestThreadDetail = (
+    threadID: string,
+    revision: number,
+    source: ThreadDetailSource,
+    force = false,
+  ): Promise<void> => {
+    const tid = trimString(threadID);
+    if (!tid || retiredThreadIDs.has(tid) || tid !== selectedThreadID()) return Promise.resolve();
+    const state = threadDetailLoadState(tid);
+    const targetRevision = Math.max(0, Math.floor(Number(revision) || 0));
+    const detail = threadCache().views.get(tid)?.thread;
+    const summary = threadCache().summaries.get(tid);
+    if (!force && detail && !threadSummaryNeedsDetail(summary, detail)) return Promise.resolve();
+    if (!force && state.failedRevision === targetRevision) return Promise.resolve();
+
+    const target: ThreadDetailLoadTarget = {
+      cycle: state.cycle,
+      revision: targetRevision,
+      sequence: threadLoadSequence,
+      source,
+      force,
+    };
+    if (state.inFlight && state.inFlightTarget) {
+      if (
+        target.cycle > state.inFlightTarget.cycle
+        || target.revision > state.inFlightTarget.revision
+        || (target.revision === state.inFlightTarget.revision && target.force && !state.inFlightTarget.force)
+      ) {
+        queueLatestThreadDetailTarget(state, target);
+      }
+      return state.inFlight;
+    }
+
+    if (selectedThreadID() === tid && !detail) setThreadLoadError('');
+    setThreadDetailLoading(tid, true);
+    state.inFlightTarget = target;
+    const request = (async () => {
+      try {
+        const live = await Promise.resolve().then(() => props.adapter.loadThread(tid));
+        if (
+          surfaceDisposed
+          || retiredThreadIDs.has(tid)
+          || target.sequence !== threadLoadSequence
+          || selectedThreadID() !== tid
+        ) return;
+        const result = receiveThreadView(live, source);
+        state.failedRevision = -1;
+        const latestSummary = threadCache().summaries.get(tid);
+        if (threadSummaryNeedsDetail(latestSummary, result.thread)) {
+          const latestRevision = threadSnapshotRevision(latestSummary);
+          if (latestRevision > target.revision) {
+            queueLatestThreadDetailTarget(state, {
+              ...target,
+              revision: latestRevision,
+              source: 'summary_update',
+              force: false,
+            });
+          } else {
+            const error = new Error('thread detail did not converge to the requested revision');
+            reportThreadDetailDiagnostic(
+              tid,
+              'detail_not_converged',
+              source,
+              error,
+              live.current.view_version,
+              result,
+            );
+            throw error;
+          }
+        }
+        if (selectedThreadID() === tid) setThreadLoadError('');
+      } catch (error) {
+        if (target.cycle === state.cycle) state.failedRevision = target.revision;
+        reportThreadDetailDiagnostic(tid, 'request_or_mapping', source, error);
+        if (target.cycle === state.cycle && selectedThreadID() === tid) {
+          setThreadLoadError(threadDetailUserError(error));
+        }
+      } finally {
+        if (state.inFlightTarget === target) {
+          state.inFlight = null;
+          state.inFlightTarget = null;
+          const pending = state.pending;
+          state.pending = null;
+          setThreadDetailLoading(tid, false);
+          if (
+            pending
+            && pending.cycle === state.cycle
+            && pending.sequence === threadLoadSequence
+            && selectedThreadID() === tid
+            && !retiredThreadIDs.has(tid)
+          ) {
+            void requestThreadDetail(tid, pending.revision, pending.source, pending.force);
+          }
+        }
+      }
+    })();
+    state.inFlight = request;
+    return request;
+  };
+
+  const requestSelectedThreadDetailFromSummary = (
+    threadID: string,
+    summary: FlowerThreadSnapshot | undefined,
+  ) => requestThreadDetail(threadID, threadSnapshotRevision(summary), 'summary_update');
+
   const recoverActiveTurnAdmission = (threadID: string): Promise<void> => {
     const tid = trimString(threadID);
     if (!tid) return Promise.resolve();
     const existing = activeTurnAdmissionRecoveryRequests.get(tid);
     if (existing) return existing;
-    const request = reloadSelectedThread(tid, threadLoadSequence, 'background_refresh')
-      .then(() => undefined)
-      .catch((error) => {
-        reportThreadDetailDiagnostic(tid, 'request_or_mapping', 'background_refresh', error);
-      })
-      .finally(() => activeTurnAdmissionRecoveryRequests.delete(tid));
+    const request = requestThreadDetail(
+      tid,
+      threadSnapshotRevision(threadCache().summaries.get(tid)),
+      'background_refresh',
+      true,
+    ).finally(() => activeTurnAdmissionRecoveryRequests.delete(tid));
     activeTurnAdmissionRecoveryRequests.set(tid, request);
     return request;
-  };
-
-  const waitForThreadDetailRecovery = (delayMS: number): Promise<void> => new Promise((resolve) => {
-    window.setTimeout(resolve, delayMS);
-  });
-
-  const summaryRecoveryStillNeeded = (threadID: string): boolean => {
-    const cache = threadCache();
-    return threadSummaryNeedsDetail(
-      cache.summaries.get(threadID),
-      cache.views.get(threadID)?.thread,
-    );
-  };
-
-  const summaryDetailRecoverySignature = (summary: FlowerThreadSnapshot): string => [
-    String(Math.max(0, Math.floor(Number(summary.read_status.snapshot.activity_revision) || 0))),
-    summary.status,
-    trimString(summary.active_run_id),
-    summary.approval_pending ? '1' : '0',
-    String(Math.max(0, Math.floor(Number(summary.approval_pending_count) || 0))),
-  ].join('\x1f');
-
-  const runSelectedThreadSummaryRecovery = (threadID: string): Promise<void> => {
-    const tid = trimString(threadID);
-    const sequence = threadLoadSequence;
-    return (async () => {
-      let observedGeneration = 0;
-      let attempt = 0;
-      let lastError: unknown = null;
-      let lastReceiveResult: ThreadDetailReceiveResult | undefined;
-      while (
-        !surfaceDisposed
-        && tid === selectedThreadID()
-        && !retiredThreadIDs.has(tid)
-        && sequence === threadLoadSequence
-      ) {
-        const target = summaryDetailRecoveryTargets.get(tid);
-        if (!target || !summaryRecoveryStillNeeded(tid)) {
-          summaryDetailRecoveryTargets.delete(tid);
-          return;
-        }
-        if (target.generation !== observedGeneration) {
-          observedGeneration = target.generation;
-          attempt = 0;
-          lastError = null;
-        }
-        if (attempt > THREAD_DETAIL_RECOVERY_RETRY_DELAYS_MS.length) {
-          reportThreadDetailDiagnostic(
-            tid,
-            'recovery_exhausted',
-            'summary_recovery',
-            lastError,
-            threadCache().views.get(tid)?.version,
-            lastReceiveResult,
-          );
-          if (tid === selectedThreadID()) setThreadLoadError(threadDetailUserError(lastError));
-          const exhaustedTarget = summaryDetailRecoveryTargets.get(tid);
-          if (exhaustedTarget) summaryDetailRecoveryExhaustedSignatures.set(tid, exhaustedTarget.signature);
-          summaryDetailRecoveryTargets.delete(tid);
-          return;
-        }
-        if (attempt > 0) {
-          await waitForThreadDetailRecovery(THREAD_DETAIL_RECOVERY_RETRY_DELAYS_MS[attempt - 1]!);
-          const refreshedTarget = summaryDetailRecoveryTargets.get(tid);
-          if (refreshedTarget && refreshedTarget.generation !== observedGeneration) continue;
-        }
-        try {
-          const result = await reloadSelectedThread(tid, sequence, 'summary_recovery');
-          lastReceiveResult = result ?? undefined;
-          if (!summaryRecoveryStillNeeded(tid)) {
-            summaryDetailRecoveryTargets.delete(tid);
-            return;
-          }
-          lastError = new Error(result
-            ? `thread detail did not converge (runtime=${result.runtimeState}, activity=${result.activityState}, settings=${result.settingsState})`
-            : 'thread detail response was discarded');
-        } catch (error) {
-          lastReceiveResult = undefined;
-          lastError = error;
-          if (getErrorMessage(error).startsWith('Flower contract error:')) {
-            reportThreadDetailDiagnostic(tid, 'request_or_mapping', 'summary_recovery', error);
-            if (tid === selectedThreadID()) setThreadLoadError(threadDetailUserError(error));
-            summaryDetailRecoveryTargets.delete(tid);
-            return;
-          }
-        }
-        attempt += 1;
-      }
-    })();
-  };
-
-  const recoverSelectedThreadFromSummary = (threadID: string, next: FlowerThreadSnapshot | undefined) => {
-    const tid = trimString(threadID);
-    if (
-      !tid
-      || tid !== selectedThreadID()
-      || retiredThreadIDs.has(tid)
-      || !next
-      || !summaryRecoveryStillNeeded(tid)
-    ) return;
-    const initialRequest = initialThreadDetailRequests.get(tid);
-    if (
-      !threadCache().views.has(tid)
-      && initialRequest
-      && !threadSummaryNeedsDetail(next, initialRequest.summary)
-    ) return;
-    const signature = summaryDetailRecoverySignature(next);
-    if (summaryDetailRecoveryExhaustedSignatures.get(tid) === signature) return;
-    summaryDetailRecoveryExhaustedSignatures.delete(tid);
-    const currentTarget = summaryDetailRecoveryTargets.get(tid);
-    if (currentTarget?.signature === signature && summaryDetailRecoveryRuns.has(tid)) return;
-    summaryDetailRecoveryTargets.set(tid, {
-      generation: ++summaryDetailRecoveryGeneration,
-      revision: threadSnapshotRevision(next),
-      signature,
-    });
-    if (summaryDetailRecoveryRuns.has(tid)) return;
-    const run = runSelectedThreadSummaryRecovery(tid).finally(() => {
-      summaryDetailRecoveryRuns.delete(tid);
-    });
-    summaryDetailRecoveryRuns.set(tid, run);
   };
 
   createEffect(() => {
     const threadID = trimString(selectedThreadID());
     const summary = selectedThreadSummary();
     if (!threadID || !summary || !selectedThreadSummaryNeedsDetail()) return;
-    untrack(() => recoverSelectedThreadFromSummary(threadID, summary));
+    untrack(() => { void requestSelectedThreadDetailFromSummary(threadID, summary); });
   });
 
   const scrollSelectedThreadToLatestAfterLayout = (threadID: string, sequence: number) => {
@@ -3886,66 +3906,49 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPresentedSelection(null);
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
     const detailAvailable = threadCache().views.has(tid);
-    const detailWarm = detailAvailable;
-    if (!detailWarm) {
-      initialThreadDetailRequests.set(tid, { sequence, summary: existing ?? undefined });
+    if (claimedSequence === undefined) {
+      beginThreadDetailDisplayCycle(tid);
+      setThreadLoadError('');
     }
     transcriptScroll.startFollowing();
     beginSelectedThreadTailReveal(tid, sequence);
-    // Commit the rail selection immediately. When detail is not cached, keep
-    // the previous detail selected as a read-only fallback until B's
-    // bootstrap arrives; changing the detail ID early would blank the
-    // transcript while the request is pending. The sequence fence below
-    // prevents a late A response from committing over B.
+    // Commit the rail selection immediately. The request coordinator keeps
+    // one load per revision and the sequence fence discards a late response
+    // after the user selects another thread.
     setSelectedThreadID(tid);
 	if (detailAvailable) {
 		scheduleThreadSelectionContentPresented(tid);
     }
     scheduleSelectedThreadTailReveal(tid, sequence);
-    setThreadLoadError('');
     returnToChat();
-    if (detailWarm) {
+    if (detailAvailable) {
       requestComposerFocus(focusOwner);
       if (revalidateWarmDetail) {
-        void reloadSelectedThread(tid, sequence, 'background_refresh').catch((error) => {
-          if (sequence === threadLoadSequence && selectedThreadDetailMatches(tid)) {
-            reportThreadDetailDiagnostic(tid, 'request_or_mapping', 'background_refresh', error);
-            setThreadLoadError(threadDetailUserError(error));
-          }
-        });
+        void requestThreadDetail(
+          tid,
+          threadSnapshotRevision(existing ?? undefined),
+          'background_refresh',
+        );
       }
       return;
     }
-    try {
-      const live = await props.adapter.loadThread(tid);
-      if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
-        return;
-      }
-      const result = receiveThreadView(live, 'initial_load');
-      if (result.state === 'accepted') {
-        setSelectedThreadWithDetail(result.thread.thread_id);
-        scheduleThreadSelectionContentPresented(result.thread.thread_id);
-        if (selectedThreadTailRevealIsCurrent(result.thread.thread_id, sequence)) {
-          scheduleSelectedThreadTailReveal(result.thread.thread_id, sequence);
-        } else {
-          scrollSelectedThreadToLatestAfterLayout(result.thread.thread_id, sequence);
-        }
+    await requestThreadDetail(tid, threadSnapshotRevision(existing ?? undefined), 'initial_load');
+    if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
+    const loaded = threadCache().views.get(tid)?.thread;
+    if (loaded) {
+      setSelectedThreadWithDetail(loaded.thread_id);
+      scheduleThreadSelectionContentPresented(loaded.thread_id);
+      if (selectedThreadTailRevealIsCurrent(loaded.thread_id, sequence)) {
+        scheduleSelectedThreadTailReveal(loaded.thread_id, sequence);
+      } else {
+        scrollSelectedThreadToLatestAfterLayout(loaded.thread_id, sequence);
       }
       requestComposerFocus(focusOwner);
-    } catch (error) {
-      if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
-        return;
-      }
+    } else {
       if (selectedThreadTailRevealIsCurrent(tid, sequence)) {
         cancelSelectedThreadTailReveal();
       }
       cancelThreadSelectionTransaction();
-      reportThreadDetailDiagnostic(tid, 'request_or_mapping', 'initial_load', error);
-      setThreadLoadError(threadDetailUserError(error));
-    } finally {
-      if (initialThreadDetailRequests.get(tid)?.sequence === sequence) {
-        initialThreadDetailRequests.delete(tid);
-      }
     }
   };
   const scheduleThreadSelectionAfterPaint = (threadID: string, claimedSequence: number) => {
@@ -4018,7 +4021,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setSelectedThreadID('');
       }
       if (effectiveEngagement() && selectedID && selectedSummary && selectedDetailCurrent) {
-        recoverSelectedThreadFromSummary(selectedID, selectedSummary);
+        void requestSelectedThreadDetailFromSummary(selectedID, selectedSummary);
       }
       return true;
     } catch (error) {
@@ -4143,8 +4146,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       cancelPresentedSelectionSchedule();
       setPresentedSelection(null);
       untrack(() => {
-        void reloadSelectedThread(threadID, sequence, 'background_refresh')
-          .then(() => {
+        void requestThreadDetail(
+          threadID,
+          threadSnapshotRevision(threadCache().summaries.get(threadID)),
+          'background_refresh',
+        ).then(() => {
             if (
               bootstrapSequence !== engagementBootstrapSequence
               || !foregroundEngagementRequested()
@@ -4155,11 +4161,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             ) return;
             setEngagementBootstrapReady(true);
             schedulePresentedSelection(threadID, sequence);
-          }, (error) => {
-            if (sequence === threadLoadSequence && selectedThreadID() === threadID) {
-              reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'background_refresh', error);
-              setThreadLoadError(threadDetailUserError(error));
-            }
           });
       });
     },
@@ -4215,6 +4216,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     try {
       const projected = applyFlowerRuntimeCurrentView(contextualBase, current);
+      buildFlowerTimelineEntries(projected);
       const received = receiveThreadDetail({
         thread: projected,
         version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
@@ -4230,7 +4232,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ))
       ) {
         const summary = threadCache().summaries.get(threadID);
-        if (summary) recoverSelectedThreadFromSummary(threadID, summary);
+        if (summary) void requestSelectedThreadDetailFromSummary(threadID, summary);
       }
       return received.runtimeState === 'accepted';
     } catch (error) {
@@ -4264,7 +4266,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       const selectedSummaryAfter = selectedID ? threadCache().summaries.get(selectedID) : undefined;
       if (selectedID) {
-        recoverSelectedThreadFromSummary(selectedID, selectedSummaryAfter);
+        void requestSelectedThreadDetailFromSummary(selectedID, selectedSummaryAfter);
       }
       return;
     }
@@ -5061,8 +5063,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     threadsRefreshSequence += 1;
     if (retiringSelected) engagementBootstrapSequence += 1;
 
-    summaryDetailRecoveryTargets.delete(tid);
-    summaryDetailRecoveryExhaustedSignatures.delete(tid);
+    threadDetailLoads.delete(tid);
+    setThreadDetailLoading(tid, false);
     threadReadAcknowledgements.delete(tid);
     releaseAttachmentStagingScope(tid);
 
@@ -5164,7 +5166,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     cancelDeferredThreadSelection();
     const claimedSequence = ++threadLoadSequence;
-    summaryDetailRecoveryExhaustedSignatures.delete(tid);
+    beginThreadDetailDisplayCycle(tid);
+    setThreadLoadError('');
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
     setSelectedThreadID(tid);
@@ -9778,20 +9781,59 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
+  const threadEmptyState = () => (
+    <div class="flower-thread-empty" role="status">
+      <div class="flower-thread-loading-panel">
+        <div class="flower-thread-loading-eyebrow" aria-hidden="true" data-label="Flower" />
+        <div class="flower-thread-empty-message">{copy().chat.threadEmpty}</div>
+      </div>
+    </div>
+  );
+
   const retrySelectedThreadDetail = () => {
     const threadID = trimString(selectedThreadID());
     if (!threadID || retiredThreadIDs.has(threadID)) return;
-    summaryDetailRecoveryExhaustedSignatures.delete(threadID);
+    beginThreadDetailDisplayCycle(threadID);
     setThreadLoadError('');
-    const summary = threadCache().summaries.get(threadID);
-    if (summaryRecoveryStillNeeded(threadID) && summary) {
-      recoverSelectedThreadFromSummary(threadID, summary);
-      return;
+    void requestThreadDetail(
+      threadID,
+      threadSnapshotRevision(threadCache().summaries.get(threadID)),
+      'user_action',
+      true,
+    );
+  };
+
+  const selectedThreadFallbackState = () => {
+    if (threadLoadError() && !selectedThread()) {
+      return (
+        <div class="flower-thread-load-error">
+          {errorNotice(
+            copy().chat.threadLoadErrorTitle,
+            threadLoadError(),
+            <Button
+              size="sm"
+              variant="outline"
+              icon={Refresh}
+              onClick={retrySelectedThreadDetail}
+            >
+              {copy().chat.handlerRetry}
+            </Button>,
+          )}
+        </div>
+      );
     }
-    void reloadSelectedThread(threadID, threadLoadSequence, 'user_action').catch((error) => {
-      reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
-      if (threadID === selectedThreadID()) setThreadLoadError(threadDetailUserError(error));
-    });
+    if (selectedThreadLoading() || (selectedThreadID() && !selectedThread())) return threadLoadingState();
+    if (selectedThread()) return threadEmptyState();
+    return warmupCanReplaceTranscript()
+      ? warmupPanel()
+      : (
+          <FlowerEmptyState
+            copy={copy().emptyState}
+            disabled={!readyForChat()}
+            showSuggestions={presentation() !== 'companion'}
+            onSuggestionClick={(prompt) => updateComposerSessionText(currentComposerSessionKey(), prompt)}
+          />
+        );
   };
 
   const threadSyncingLatestState = () => (
@@ -10586,7 +10628,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={loadError()}>
               {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
             </Show>
-            <Show when={threadLoadError()}>
+            <Show when={selectedThread() ? threadLoadError() : ''}>
               {(message) => errorNotice(
                 copy().chat.threadLoadErrorTitle,
                 message(),
@@ -10605,18 +10647,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </Show>
             <Show
               when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
-                fallback={selectedThreadLoading() || selectedThreadID()
-                  ? threadLoadingState()
-                  : warmupCanReplaceTranscript()
-                    ? warmupPanel()
-                  : (
-                      <FlowerEmptyState
-                        copy={copy().emptyState}
-                        disabled={!readyForChat()}
-                        showSuggestions={presentation() !== 'companion'}
-                        onSuggestionClick={(prompt) => updateComposerSessionText(currentComposerSessionKey(), prompt)}
-                      />
-                    )}
+              fallback={selectedThreadFallbackState()}
             >
               <For each={visibleTimelineEntryKeys()}>
                 {(entryKey) => {

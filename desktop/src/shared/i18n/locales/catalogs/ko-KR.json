@@ -140,6 +140,7 @@
       "loadErrorTitle": "Flower를 불러오지 못했습니다.",
       "threadLoadErrorTitle": "대화를 불러오지 못했습니다.",
       "threadLoading": "대화를 불러오는 중...",
+      "threadEmpty": "이 대화에는 아직 내용이 없습니다.",
       "threadSyncingLatest": "최신 답변을 동기화하는 중...",
       "threadSyncFailed": "Flower가 최신 답변을 동기화하지 못했습니다. 다시 시도하세요.",
       "activeTurnBusy": "이전 답변이 아직 실행 중입니다. 다시 보내기 전에 중지할 수 있습니다.",

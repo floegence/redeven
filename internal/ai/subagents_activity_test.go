@@ -126,7 +126,7 @@ func TestTypedThreadItemPreservesSubagentOperationAfterJSONReload(t *testing.T) 
 		t.Fatal(err)
 	}
 	original := flruntime.ThreadItem{
-		ID: "tool:wait", TurnID: "turn:wait", Ordinal: 1, Kind: flruntime.ThreadItemTool,
+		ID: "tool:wait", TurnID: "turn:wait", RunID: "run:wait", Ordinal: 1, Kind: flruntime.ThreadItemTool,
 		CreatedAt: time.UnixMilli(1_700_000_000_000),
 		Activity: &observation.ActivityItem{
 			ItemID: "tool-wait", ToolID: "tool-wait", ToolName: "subagents",

@@ -22,7 +22,7 @@ describe('TransportOutbox', () => {
     const reconciliation = outbox.reconcile({
       thread_id: 'thread-a',
       view_version: 2,
-      items: [{ id: 'user:request-1', ordinal: 1, kind: 'user', text: 'hello' }],
+      items: [{ id: 'user:request-1', turn_id: 'turn-fixture', run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'hello' }],
     });
     outbox = reconciliation.outbox;
     expect(reconciliation.admitted.map((entry) => entry.requestId)).toEqual(['request-1']);
@@ -40,7 +40,7 @@ describe('TransportOutbox', () => {
     const reconciliation = pending.reconcile({
       thread_id: 'thread-created',
       view_version: 1,
-      items: [{ id: 'user:req-new', ordinal: 1, kind: 'user', text: 'hello' }],
+      items: [{ id: 'user:req-new', turn_id: 'turn-fixture', run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'hello' }],
     });
 
     expect(reconciliation.admitted).toEqual([pending.entries.get('req-new')]);
@@ -58,7 +58,7 @@ describe('TransportOutbox', () => {
     const reconciliation = pending.reconcile({
       thread_id: 'thread-created',
       view_version: 1,
-      items: [{ id: 'user:req-new', ordinal: 1, kind: 'user', text: 'hello' }],
+      items: [{ id: 'user:req-new', turn_id: 'turn-fixture', run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'hello' }],
     }, {
       canConfirm: () => false,
     });
@@ -79,7 +79,7 @@ describe('TransportOutbox', () => {
     const reconciliation = pending.reconcile({
       thread_id: 'thread-b',
       view_version: 2,
-      items: [{ id: 'user:request-a', ordinal: 1, kind: 'user', text: 'same text' }],
+      items: [{ id: 'user:request-a', turn_id: 'turn-fixture', run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'same text' }],
     });
 
     expect(reconciliation.admitted).toEqual([]);
@@ -208,7 +208,7 @@ describe('TransportOutbox', () => {
     const recovered = outbox.reconcile({
       thread_id: 'thread-a',
       view_version: 2,
-      items: [{ id: 'user:transport-unknown', ordinal: 1, kind: 'user', text: 'keep me' }],
+      items: [{ id: 'user:transport-unknown', turn_id: 'turn-fixture', run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'keep me' }],
     }).outbox;
 
     await expect(recovered.flushPersistence()).resolves.toBeUndefined();

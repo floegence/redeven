@@ -203,9 +203,11 @@ describe('Flower bottom decision surface', () => {
         activity: 'active' as const,
         run_id: waitingThread.active_run_id,
         interactions: [
-          { id: request.prompt_id, kind: 'input' as const, resolved: true },
+          { id: request.prompt_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'input' as const, resolved: true },
           {
             id: action.action_id,
+            turn_id: 'turn-fixture',
+            run_id: 'run-fixture',
             kind: 'approval' as const,
             tool_call_id: action.tool_id,
             resolved: false,
@@ -222,8 +224,8 @@ describe('Flower bottom decision surface', () => {
         activity: 'active' as const,
         run_id: waitingThread.active_run_id,
         interactions: [
-          { id: request.prompt_id, kind: 'input' as const, resolved: true },
-          { id: action.action_id, kind: 'approval' as const, tool_call_id: action.tool_id, resolved: true, approved: true },
+          { id: request.prompt_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'input' as const, resolved: true },
+          { id: action.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, tool_call_id: action.tool_id, resolved: true, approved: true },
         ],
       },
     }));
@@ -352,9 +354,11 @@ describe('Flower bottom decision surface', () => {
         turn_id: action.run_id,
         interactions: input.interaction_id === action.action_id
           ? [
-              { id: action.action_id, kind: 'approval' as const, tool_call_id: action.tool_id, resolved: true, approved: input.approved },
+              { id: action.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, tool_call_id: action.tool_id, resolved: true, approved: input.approved },
               {
                 id: secondAction.action_id,
+                turn_id: 'turn-fixture',
+                run_id: 'run-fixture',
                 kind: 'approval' as const,
                 tool_call_id: secondAction.tool_id,
                 resolved: false,
@@ -367,8 +371,8 @@ describe('Flower bottom decision surface', () => {
               },
             ]
           : [
-              { id: action.action_id, kind: 'approval' as const, tool_call_id: action.tool_id, resolved: true, approved: true },
-              { id: secondAction.action_id, kind: 'approval' as const, tool_call_id: secondAction.tool_id, resolved: true, approved: input.approved },
+              { id: action.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, tool_call_id: action.tool_id, resolved: true, approved: true },
+              { id: secondAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, tool_call_id: secondAction.tool_id, resolved: true, approved: input.approved },
             ],
       },
     }));
@@ -480,6 +484,8 @@ describe('Flower bottom decision surface', () => {
         interactions: [
           {
             id: firstAction.action_id,
+            turn_id: 'turn-fixture',
+            run_id: 'run-fixture',
             kind: 'approval' as const,
             tool_call_id: firstAction.tool_id,
             resolved: firstResolved,
@@ -495,6 +501,8 @@ describe('Flower bottom decision surface', () => {
           },
           {
             id: secondAction.action_id,
+            turn_id: 'turn-fixture',
+            run_id: 'run-fixture',
             kind: 'approval' as const,
             tool_call_id: secondAction.tool_id,
             resolved: secondResolved,
@@ -590,8 +598,8 @@ describe('Flower bottom decision surface', () => {
         activity: 'active' as const,
         run_id: approvalThread.active_run_id,
         interactions: [
-          { id: firstAction.action_id, kind: 'approval' as const, resolved: true, approved: true },
-          { id: secondAction.action_id, kind: 'approval' as const, resolved: true, approved: true },
+          { id: firstAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, resolved: true, approved: true },
+          { id: secondAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, resolved: true, approved: true },
         ],
       },
     });
@@ -677,9 +685,11 @@ describe('Flower bottom decision surface', () => {
             activity: 'active' as const,
             run_id: approvalThread.active_run_id,
             interactions: [
-              { id: approvalAction.action_id, kind: 'approval' as const, tool_call_id: approvalAction.tool_id, resolved: true, approved: input.approved },
+              { id: approvalAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, tool_call_id: approvalAction.tool_id, resolved: true, approved: input.approved },
               {
                 id: secondApprovalAction.action_id,
+                turn_id: 'turn-fixture',
+                run_id: 'run-fixture',
                 kind: 'approval' as const,
                 tool_call_id: secondApprovalAction.tool_id,
                 resolved: false,
