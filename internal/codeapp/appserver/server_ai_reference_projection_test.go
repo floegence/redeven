@@ -12,9 +12,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/floegence/floret/v5/identity"
-	flprovider "github.com/floegence/floret/v5/provider"
-	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v6/identity"
+	flprovider "github.com/floegence/floret/v6/provider"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/session"
 )

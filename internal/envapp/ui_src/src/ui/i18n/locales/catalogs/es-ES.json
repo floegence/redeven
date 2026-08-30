@@ -3809,6 +3809,7 @@
       "runErrorFloretEngineFailed": "Flower no pudo finalizar este turno porque falló el motor de orquestación.",
       "runErrorFloretControlContractFailed": "Flower no pudo finalizar este turno porque el modelo devolvió una señal de control de interacción no válida.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower no pudo finalizar este turno porque no se pudo verificar el resultado confirmado de la herramienta. La herramienta no se volvió a ejecutar; envía un mensaje nuevo para continuar.",
+      "runErrorFloretEffectOutcomeUnknown": "No se pudo confirmar si algunas operaciones se completaron. La tarea se detuvo para evitar que se ejecutaran dos veces.",
       "runErrorRuntimeRestarted": "El entorno de ejecución local se reinició antes de que terminara esta respuesta. Vuelve a solicitar una respuesta cuando el entorno de ejecución esté listo.",
       "runtimeRestartedDivider": "El entorno de ejecución de Redeven se reinició",
       "messageErrorTitle": "Mensaje fallido",

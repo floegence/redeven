@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	flconfig "github.com/floegence/floret/v5/config"
+	flconfig "github.com/floegence/floret/v6/config"
 )
 
 const aiReasoningSourceCheckedAt = "2026-06-23"

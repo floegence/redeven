@@ -86,6 +86,35 @@ function completedTerminalThread() {
 }
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('presents an unknown effect as terminal failure without replay controls', async () => {
+    const failed = thread({
+      thread_id: 'thread-unknown-effect-browser',
+      title: 'Unknown effect',
+      status: 'failed',
+      error: {
+        code: 'floret_effect_outcome_unknown',
+        message: 'private effect dispatch state',
+      },
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [failed]),
+      loadThread: vi.fn(async () => liveBootstrap(failed)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${failed.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${failed.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
+
+    const errorText = runtime.querySelector('.flower-error-card')?.textContent ?? '';
+    expect(errorText).toContain('The task was stopped to avoid duplicate execution.');
+    expect(errorText).not.toContain('private effect dispatch state');
+    expect(runtime.querySelector('.flower-error-actions button')).toBeNull();
+    expect(runtime.querySelector('[data-flower-effect-retry]')).toBeNull();
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
   it('coalesces live read revisions while one acknowledgement is in flight', async () => {
     const initial = thread({
       thread_id: 'thread-read-ack-coalescing',

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	flprovider "github.com/floegence/floret/v5/provider"
+	flprovider "github.com/floegence/floret/v6/provider"
 )
 
 type fixedModelGatewayResult struct {

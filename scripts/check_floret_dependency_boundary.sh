@@ -18,13 +18,13 @@ fail() {
 require_source() {
   local file=$1
   local marker=$2
-  rg -Fq "$marker" "$file" || fail "$file is missing required Floret v5 boundary: $marker"
+  rg -Fq "$marker" "$file" || fail "$file is missing required Floret v6 boundary: $marker"
 }
 
-echo "[INFO] checking published Floret v5 dependency"
-rg -q '^\s*github\.com/floegence/floret/v5 v5\.0\.16$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v5 v5.0.16"
-if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v5\s*=>' go.mod; then
+echo "[INFO] checking published Floret v6 dependency"
+rg -q '^\s*github\.com/floegence/floret/v6 v6\.0\.0$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v6 v6.0.0"
+if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v6\s*=>' go.mod; then
   fail "Floret must not use a Go module replacement"
 fi
 for workspace in go.work go.work.sum; do
@@ -37,11 +37,11 @@ fi
 
 echo "[INFO] checking public imports and storage ownership"
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
-  'github\.com/floegence/floret(?:"$|/v[0-3](?:/|"$))' internal cmd; then
-  fail "production must import only the Floret v5 module"
+  'github\.com/floegence/floret(?:"$|/v[0-5](?:/|"$))' internal cmd; then
+  fail "production must import only the Floret v6 module"
 fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
-  'github\.com/floegence/floret/v5/internal/' internal cmd; then
+  'github\.com/floegence/floret/v6/internal/' internal cmd; then
   fail "Redeven must not import Floret internals"
 fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
@@ -56,7 +56,6 @@ require_source internal/ai/send_user_turn.go 's.threadRuntime.Send'
 require_source internal/ai/stop_thread.go 'typed.Cancel'
 require_source internal/ai/approval_command.go '.Respond('
 require_source internal/ai/retry_thread_continuation.go '.Retry('
-require_source internal/ai/retry_thread_effect.go '.RetryEffect('
 require_source internal/ai/service.go 's.threadRuntime.Subscribe'
 require_source internal/ai/floret_runtime.go 'floretEffectAuthorizationGateForRun'
 require_source internal/ai/subagents_floret.go 'ThreadScope{ParentID:'
@@ -82,4 +81,4 @@ echo "[INFO] checking product schema boundary"
 GOWORK=off go run ./internal/cmd/threadstore-boundary-contract --check --root .
 GOWORK=off go test ./internal/ai/threadstore ./internal/boundarycontract -count=1
 
-echo "[INFO] Floret v5 dependency boundary passed"
+echo "[INFO] Floret v6 dependency boundary passed"

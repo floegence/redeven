@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/floret/v5/identity"
-	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v6/identity"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -101,10 +101,6 @@ func TestForeignEndpointCannotMutateCanonicalThread(t *testing.T) {
 		}},
 		{name: "retry", call: func() error {
 			_, err := svc.RetryThreadContinuation(t.Context(), foreign, thread.ThreadID)
-			return err
-		}},
-		{name: "retry effect", call: func() error {
-			_, err := svc.RetryThreadEffect(t.Context(), foreign, thread.ThreadID, RetryThreadEffectRequest{EffectAttemptID: "foreign-attempt", ToolCallID: "foreign-tool", AcknowledgeUnknownRisk: true})
 			return err
 		}},
 		{name: "rename", call: func() error { return svc.RenameThread(t.Context(), foreign, thread.ThreadID, "foreign title") }},

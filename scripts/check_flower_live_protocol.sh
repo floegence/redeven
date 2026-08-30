@@ -45,3 +45,15 @@ if rg -n 'anchor_message_id|AnchorMessageID|context\.compaction\.(started|applie
   echo "old Flower context compaction timeline protocol is still present" >&2
   exit 1
 fi
+
+retired_effect_protocol_pattern='RetryEffect|retry_effect|effect_retry|retryEffect|AcknowledgeUnknownRisk|acknowledge_unknown_risk'
+if rg -n "$retired_effect_protocol_pattern" "${paths[@]}" -S -g '!**/*test*'; then
+  echo "retired Flower unknown-effect retry protocol is still present" >&2
+  exit 1
+fi
+
+retired_projection_pattern='assistant_draft|thinking_draft|\.AssistantDraft|\.ThinkingDraft'
+if rg -n "$retired_projection_pattern" "${paths[@]}" -S -g '!**/*test*'; then
+  echo "retired Floret projection fields are still present" >&2
+  exit 1
+fi

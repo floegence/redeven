@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v5/runtime"
+	flruntime "github.com/floegence/floret/v6/runtime"
 )
 
 // flowerAttachmentURL is the single URL construction rule used by both the
@@ -69,13 +69,12 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 			projectCurrentAttachmentURLs(input, current.Queue[index].Input.Attachments, threadID, "", current.Queue[index].ID)
 		}
 	}
-	// Floret's typed failure is consumed at this boundary. The internal message
-	// and deprecated Error mirror must not become a second public UI contract.
+	// Floret's typed failure is consumed at this boundary. Its internal message
+	// must not become a second public UI contract.
 	delete(root, "failure")
 	delete(root, "error")
-	legacyError := floretThreadViewLegacyError(current)
-	if current.Failure != nil || strings.TrimSpace(legacyError) != "" {
-		code, message := projectFloretTurnFailure(current.Failure, legacyError, "floret_turn_failed")
+	if current.Failure != nil {
+		code, message := projectFloretTurnFailure(current.Failure, "floret_turn_failed")
 		if code == "" && message == "" {
 			delete(root, "run_error_code")
 			return json.Marshal(root)

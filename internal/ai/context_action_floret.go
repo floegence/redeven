@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/v5/runtime"
+	flruntime "github.com/floegence/floret/v6/runtime"
 )
 
 const (

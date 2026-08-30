@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v5/observation"
-	flruntime "github.com/floegence/floret/v5/runtime"
-	fltools "github.com/floegence/floret/v5/tools"
+	"github.com/floegence/floret/v6/observation"
+	flruntime "github.com/floegence/floret/v6/runtime"
+	fltools "github.com/floegence/floret/v6/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	redevenokf "github.com/floegence/redeven/internal/okf"
 )

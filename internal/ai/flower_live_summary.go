@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/floegence/floret/v5/identity"
+	"github.com/floegence/floret/v6/identity"
 )
 
 // broadcastThreadSummary publishes one product summary derived from the

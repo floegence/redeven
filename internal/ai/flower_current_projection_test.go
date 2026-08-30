@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/floret/v5/identity"
-	flruntime "github.com/floegence/floret/v5/runtime"
+	"github.com/floegence/floret/v6/identity"
+	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -25,11 +25,13 @@ func TestStopThreadResponseIsAcknowledgementOnly(t *testing.T) {
 	}
 }
 
-func TestFlowerCurrentJSONClassifiesAuthorityFailureWithoutExposingRawError(t *testing.T) {
-	rawError := "floret authority state is corrupt: session tree authority state is corrupt"
+func TestFlowerCurrentJSONProjectsUnknownEffectFailureWithoutExposingRawError(t *testing.T) {
+	rawError := "Tool side effects could not be confirmed. The turn was stopped to avoid duplicate execution."
+	outcome := flruntime.TurnOutcomeFailed
 	encoded, err := flowerCurrentJSON(flruntime.ThreadView{
-		ThreadID: identity.ThreadID("thread-authority-failure"),
-		Error:    rawError,
+		ThreadID:    identity.ThreadID("thread-authority-failure"),
+		LastOutcome: &outcome,
+		Failure:     &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureEffectOutcomeUnknown, Message: rawError},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -38,11 +40,11 @@ func TestFlowerCurrentJSONClassifiesAuthorityFailureWithoutExposingRawError(t *t
 	if err := json.Unmarshal(encoded, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got["run_error_code"] != runErrorCodeFloretAuthorityConsistency {
+	if got["run_error_code"] != runErrorCodeFloretEffectOutcomeUnknown {
 		t.Fatalf("run_error_code=%#v", got["run_error_code"])
 	}
 	message, _ := got["error"].(string)
-	if message == "" || strings.Contains(strings.ToLower(message), "authority state is corrupt") {
+	if message == "" || strings.Contains(strings.ToLower(message), "tool side effects") {
 		t.Fatalf("projected error=%q exposed raw authority failure", message)
 	}
 }
@@ -57,7 +59,6 @@ func TestFlowerCurrentJSONConsumesTypedFailureWithoutExposingFloretPayload(t *te
 			Code:    flruntime.ThreadTurnFailureEngineContract,
 			Message: rawError,
 		},
-		Error: rawError,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -81,14 +82,14 @@ func TestFlowerCurrentJSONConsumesTypedFailureWithoutExposingFloretPayload(t *te
 func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testing.T) {
 	outcome := flruntime.TurnOutcomeFailed
 	failure := &flruntime.ThreadTurnFailure{
-		Code:    flruntime.ThreadTurnFailureStorage,
-		Message: "private storage write failed",
+		Code:    flruntime.ThreadTurnFailureEffectOutcomeUnknown,
+		Message: "private effect dispatch state",
 	}
 	current := flruntime.ThreadView{
-		ThreadID: identity.ThreadID("thread-typed-summary"), LastOutcome: &outcome, Failure: failure, Error: failure.Message,
+		ThreadID: identity.ThreadID("thread-typed-summary"), LastOutcome: &outcome, Failure: failure,
 	}
 	status, currentCode, currentMessage := threadViewRunState(current)
-	if status != string(RunStateFailed) || currentCode != runErrorCodeFloretEngineFailed {
+	if status != string(RunStateFailed) || currentCode != runErrorCodeFloretEffectOutcomeUnknown {
 		t.Fatalf("current state=(%q, %q, %q)", status, currentCode, currentMessage)
 	}
 	view := ThreadView{ThreadID: "thread-typed-summary"}
@@ -96,8 +97,12 @@ func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testi
 	if view.RunStatus != status || view.RunErrorCode != currentCode || view.RunError != currentMessage {
 		t.Fatalf("summary projection=%#v, want status=%q code=%q message=%q", view, status, currentCode, currentMessage)
 	}
-	if strings.Contains(strings.ToLower(currentMessage), "storage write") {
-		t.Fatalf("current message=%q exposed internal storage failure", currentMessage)
+	direct := threadViewFromRuntimeCurrent(threadstore.ThreadSettings{ThreadID: "thread-typed-summary"}, current, flruntime.ThreadSummary{})
+	if direct.RunStatus != status || direct.RunErrorCode != currentCode || direct.RunError != currentMessage {
+		t.Fatalf("direct projection=%#v, want status=%q code=%q message=%q", direct, status, currentCode, currentMessage)
+	}
+	if strings.Contains(strings.ToLower(currentMessage), "dispatch state") {
+		t.Fatalf("current message=%q exposed internal effect state", currentMessage)
 	}
 }
 
@@ -188,7 +193,7 @@ func TestFlowerCurrentJSONRejectsIncompleteRunIdentity(t *testing.T) {
 	}
 }
 
-func TestThreadListSummaryConsumesTypedFailureCode(t *testing.T) {
+func TestThreadListSummaryConsumesUnknownEffectFailureCode(t *testing.T) {
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()
 	created, err := svc.CreateThread(t.Context(), meta, "typed failure", "", "", "")
@@ -201,19 +206,19 @@ func TestThreadListSummaryConsumesTypedFailureCode(t *testing.T) {
 	}
 	outcome := flruntime.TurnOutcomeFailed
 	failure := &flruntime.ThreadTurnFailure{
-		Code:    flruntime.ThreadTurnFailureEngineContract,
-		Message: "provider attempt superseded with pending canonical tool batch",
+		Code:    flruntime.ThreadTurnFailureEffectOutcomeUnknown,
+		Message: "private effect attempt state",
 	}
 	view, err := svc.threadViewFromSummary(t.Context(), settings, flruntime.ThreadSummary{
-		ID: identity.ThreadID(created.ThreadID), LastOutcome: &outcome, Failure: failure, Error: failure.Message,
+		ID: identity.ThreadID(created.ThreadID), LastOutcome: &outcome, Failure: failure,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.RunStatus != string(RunStateFailed) || view.RunErrorCode != runErrorCodeFloretEngineFailed {
+	if view.RunStatus != string(RunStateFailed) || view.RunErrorCode != runErrorCodeFloretEffectOutcomeUnknown {
 		t.Fatalf("summary view=%#v", view)
 	}
-	if strings.Contains(strings.ToLower(view.RunError), "pending canonical tool batch") {
+	if strings.Contains(strings.ToLower(view.RunError), "effect attempt") {
 		t.Fatalf("summary error=%q exposed internal projection failure", view.RunError)
 	}
 }

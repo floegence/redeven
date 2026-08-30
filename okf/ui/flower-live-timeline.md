@@ -43,7 +43,7 @@ cadence and publish immediately. The final current is always a complete Floret
 view; Flower never accumulates reasoning text or restores the retired block
 delta protocol.
 
-Floret v5.0.16 publishes the exact TurnID and RunID on every ordered current
+Floret v6.0.0 publishes the exact TurnID and RunID on every ordered current
 item and interaction, including historical rows after restart. It also retains
 the exact active RunID and one process-local `RunProgress` phase. Flower rejects
 an incomplete or conflicting identity before detail enters `ThreadCache`; it
@@ -92,20 +92,19 @@ Subagent detail window.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. One detail request may run per thread and selection cycle. Updates received during that request retain only the greatest target revision and start at most one follow-up request. A cache hit with no newer summary renders immediately and does not revalidate. A failed revision is not retried automatically in the same display cycle; without cached detail Flower leaves loading and shows an explicit retry, while an update failure with valid cached detail is non-blocking. There is no retry delay, exhausted state, foreground reload, initial-request map, or message-content completeness guess.
 
-Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v5.0.15. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
+Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v6.0.0. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
 
 Summary revision and runtime state only trigger detail loading. Product settings revisions and message content shape do not. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, or an active-turn admission failure proves that a turn may still be active; an in-flight Stop request changes that control to its localized pending state without creating another lifecycle fact.
 
 Runtime failures are classified once at the Redeven projection boundary before
 summary, detail, and typed current responses reach Flower. Published Floret
-v5.0.15 supplies the canonical terminal `Failure.Code`; Redeven maps that code
-once and removes the upstream failure payload before serializing Flower data.
-Only historical failures without the typed field use the legacy text
-classifier. Known provider, gateway, control, and canonical-authority failures
-use stable codes and localized presentation; raw engine wording stays in
-internal diagnostics.
-Classification never changes canonical messages, retries an Effect, or creates
-a client recovery lifecycle.
+v6.0.0 supplies the canonical terminal `Failure.Code`; Redeven maps that code
+once for summary, detail, and live current, then removes the upstream failure
+payload before serializing Flower data. Known provider, gateway, control,
+canonical-authority, and unknown-effect failures use stable codes and localized
+presentation; raw engine wording stays in internal diagnostics. There is no
+error-text fallback. Classification never changes canonical messages, replays
+an Effect, or creates a client recovery lifecycle.
 
 Every product settings mutation advances `settings_revision` with `max(now,
 previous+1)`. A settings PATCH returns the complete thread and current view in

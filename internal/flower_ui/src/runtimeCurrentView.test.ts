@@ -17,8 +17,6 @@ describe('applyFlowerRuntimeCurrentView', () => {
       thread_id: 'thread-a', view_version: 7, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       run_progress: { phase: 'waiting_response' },
     items: [{ id: 'user-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'hello' }],
-      assistant_draft: 'deprecated assistant draft must not render',
-      thinking_draft: 'deprecated thinking draft must not render',
     };
     const result = applyFlowerRuntimeCurrentView(summary(), current);
     expect(result.model_id).toBe('deepseek/chat');
@@ -52,18 +50,18 @@ describe('applyFlowerRuntimeCurrentView', () => {
     });
   });
 
-  it('preserves the server-classified authority consistency error', () => {
+  it('preserves the server-classified unknown effect error', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 9, activity: 'idle', turn_id: 'turn-a',
       last_outcome: 'failed',
-      error: 'The committed tool result could not be verified.',
-      run_error_code: 'floret_authority_consistency_failed',
+      error: 'Some operations may have completed, but their results could not be confirmed.',
+      run_error_code: 'floret_effect_outcome_unknown',
     items: [{ id: 'user:turn-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'hello' }],
     });
 
     expect(result.error).toEqual({
-      code: 'floret_authority_consistency_failed',
-      message: 'The committed tool result could not be verified.',
+      code: 'floret_effect_outcome_unknown',
+      message: 'Some operations may have completed, but their results could not be confirmed.',
     });
   });
 
@@ -298,8 +296,6 @@ describe('applyFlowerRuntimeCurrentView', () => {
         ...(index === stages.length - 1 ? {} : { run_id: 'run-a' }),
         ...(index === stages.length - 1 ? { last_outcome: 'completed' as const } : {}),
         items,
-        assistant_draft: 'deprecated assistant draft must not render',
-        thinking_draft: 'deprecated thinking draft must not render',
       };
       const result = applyFlowerRuntimeCurrentView(summary(), current);
       const ids = result.messages.map((message) => message.id);

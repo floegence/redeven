@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v5/identity"
-	"github.com/floegence/floret/v5/observation"
-	flruntime "github.com/floegence/floret/v5/runtime"
-	"github.com/floegence/floret/v5/tools"
+	"github.com/floegence/floret/v6/identity"
+	"github.com/floegence/floret/v6/observation"
+	flruntime "github.com/floegence/floret/v6/runtime"
+	"github.com/floegence/floret/v6/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 

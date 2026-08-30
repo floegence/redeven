@@ -3809,6 +3809,7 @@
       "runErrorFloretEngineFailed": "編排引擎失敗，Flower 未能完成本輪回覆。",
       "runErrorFloretControlContractFailed": "模型傳回了無效的互動控制訊號，Flower 未能完成本輪回覆。",
       "runErrorFloretAuthorityConsistencyFailed": "已提交的工具結果無法完成一致性驗證，Flower 未能完成本輪回覆。工具不會重複執行；請傳送新訊息繼續。",
+      "runErrorFloretEffectOutcomeUnknown": "部分操作是否完成無法確認。任務已停止，以避免重複執行。",
       "runErrorRuntimeRestarted": "本機執行環境在這次回覆完成前重新啟動。請在執行環境就緒後重新開始回覆。",
       "runtimeRestartedDivider": "Redeven 執行環境已重新啟動",
       "messageErrorTitle": "訊息失敗",

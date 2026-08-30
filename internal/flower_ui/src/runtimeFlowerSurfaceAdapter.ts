@@ -6,7 +6,6 @@ import type {
   FlowerModelSourceRecovery,
   FlowerPermissionType,
   FlowerReasoningSelection,
-  FlowerRetryEffectRequest,
   FlowerResolveHandlerInput,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
@@ -102,7 +101,6 @@ export type FlowerRuntimeTransport = Readonly<{
   forkThread(threadID: string, input: Readonly<{ client_request_id: string }>): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<void>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalCommandResult>;
-  retryEffect(input: FlowerRetryEffectRequest): Promise<unknown>;
 }>;
 
 export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
@@ -381,19 +379,6 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       if (!tid) throw new Error(missingThreadIDMessage(options));
       await options.retryThread(tid);
       return loadThread(tid);
-    },
-    retryEffect: async (input) => {
-      const tid = trim(input.thread_id);
-      const effectAttemptID = trim(input.effect_attempt_id);
-      const toolCallID = trim(input.tool_call_id);
-      if (!tid) throw new Error(missingThreadIDMessage(options));
-      if (!effectAttemptID || !toolCallID) throw new Error('Missing effect retry identity.');
-      await options.transport.retryEffect({
-        thread_id: tid,
-        effect_attempt_id: effectAttemptID,
-        tool_call_id: toolCallID,
-        acknowledge_unknown_risk: true,
-      });
     },
     stopThread: async (threadID) => {
       const tid = trim(threadID);
