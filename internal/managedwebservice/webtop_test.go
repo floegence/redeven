@@ -98,7 +98,7 @@ func TestCatalogIncludesIndependentWebtopTemplatesWithDeclarativeSafety(t *testi
 		brand    string
 	}{{template: ubuntu, brand: BrandIconUbuntu}, {template: debian, brand: BrandIconDebian}} {
 		template := testCase.template
-		if template.BrandIcon != testCase.brand || template.LocalizationKey == "" || template.SourceURL != webtopSourceURL || !template.Available {
+		if template.BrandIcon != testCase.brand || template.LocalizationKey == "" || template.SourceURL != webtopSourceURL || !template.Available || !template.Duplicateable {
 			t.Fatalf("Webtop catalog metadata = %+v", template)
 		}
 		if len(template.Notices) != 1 || !template.Notices[0].AcknowledgementRequired || template.Notices[0].Revision != 1 {
@@ -111,7 +111,7 @@ func TestCatalogIncludesIndependentWebtopTemplatesWithDeclarativeSafety(t *testi
 		if spec.Container.ReadOnlyRoot || spec.Container.PIDsLimit != 2048 || !strings.Contains(spec.Container.Image, "@sha256:") {
 			t.Fatalf("Webtop runtime identity = %+v", spec.Container)
 		}
-		if !reflect.DeepEqual(spec.Container.Mounts, []ContainerMountSpec{{Type: "volume", Source: "config", Target: "/config"}, {Type: "workspace", Target: "/workspace"}}) {
+		if !reflect.DeepEqual(spec.Container.Mounts, []ContainerMountSpec{{ResourceID: "config", Type: "volume", Source: "config", Target: "/config"}, {ResourceID: "workspace", Type: "workspace", Target: "/workspace"}}) {
 			t.Fatalf("Webtop mounts = %+v", spec.Container.Mounts)
 		}
 		for key, want := range map[string]string{
@@ -160,6 +160,7 @@ func TestInteractiveDesktopCreateRequestUsesOnlyReviewedCapabilities(t *testing.
 	t.Parallel()
 	spec := webtopTemplateSpec(WebtopUbuntuKDETemplateID, dockerArtifact{Image: webtopImage, Digest: strings.Repeat("a", 64)})
 	spec.Container.Image = webtopImage + "@sha256:" + strings.Repeat("a", 64)
+	normalizeContainerTemplateDefaults(spec.Container)
 	service := &pfregistry.ManagedService{ServiceID: "mws_webtop", WorkspacePath: "/workspace/project", RuntimePort: 43123}
 	mounts := []containerengine.ContainerMount{
 		{Type: containerengine.MountTypeVolume, Source: "redeven-config", Target: "/config"},
@@ -237,6 +238,14 @@ func TestCustomTemplatesCannotOptIntoInteractiveDesktopProfile(t *testing.T) {
 	err := validateTemplateWriteRequest(TemplateWriteRequest{Name: "Unsafe desktop", Spec: spec})
 	if managedErrorCode(err) != "TEMPLATE_RUNTIME_PROFILE_RESERVED" {
 		t.Fatalf("custom interactive desktop error = %v", err)
+	}
+	artifact, ok := auditedWebtopArtifact(WebtopUbuntuKDETemplateID, "linux-amd64")
+	if !ok {
+		t.Fatal("reviewed Webtop artifact is unavailable")
+	}
+	reviewed := webtopTemplateSpec(WebtopUbuntuKDETemplateID, artifact)
+	if err := validateTemplateWriteRequest(TemplateWriteRequest{Name: "Reviewed desktop copy", Spec: reviewed}); err != nil {
+		t.Fatalf("reviewed Webtop copy rejected: %v", err)
 	}
 }
 

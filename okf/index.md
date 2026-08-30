@@ -17,6 +17,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.
 - [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Discover, define, duplicate, and deploy Environment-local host, single-container, and Compose service definitions.
 - [Managed Web Services](architecture/managed-web-services.md) - Operate immutable template snapshots with exact runtime identity, recovery, loopback-only access, and protected forwarding.
+- [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine immutable templates with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.
 - [LinuxServer Webtop](architecture/linuxserver-webtop.md) - Install and safely update two digest-pinned interactive desktop containers without granting host authority.
 - [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.
 - [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.

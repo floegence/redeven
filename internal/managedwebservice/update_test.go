@@ -200,10 +200,14 @@ func newContainerUpdateTestManager(t *testing.T, state string) (*Manager, *pfreg
 	if err != nil {
 		t.Fatal(err)
 	}
+	configuration, configurationHash, err := canonicalServiceConfiguration(newServiceConfiguration(nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
 	service := &pfregistry.ManagedService{
 		ServiceID: "mws_webtop_update", TemplateID: WebtopUbuntuKDETemplateID, TemplateSource: "builtin", TemplateRevision: 0,
 		TemplateSnapshotJSON: oldSnapshot, TemplateSnapshotSHA256: oldHash, ServiceFamilyID: WebtopUbuntuKDETemplateID,
-		Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), ConfigurationJSON: `{}`, Version: "previous",
+		Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, Version: "previous",
 		DesiredState: state, ObservedState: state, ForwardID: "pf_webtop_update", RuntimeIdentity: "old-container",
 		RuntimeManifestJSON: `{}`, RuntimePort: 43123, ArtifactReference: oldSpec.Container.Image,
 	}
@@ -231,11 +235,16 @@ func updateTestReleases(t *testing.T, manager *Manager, service pfregistry.Manag
 	}
 	old := containerUpdateRelease{
 		TemplateRevision: service.TemplateRevision, TemplateSnapshotJSON: service.TemplateSnapshotJSON, TemplateSnapshotSHA256: service.TemplateSnapshotSHA256,
-		ConfigurationJSON: service.ConfigurationJSON, Version: service.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
+		ConfigurationJSON: service.ConfigurationJSON, ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
+		Version: service.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
 		RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference,
 	}
+	targetConfiguration, targetHash, err := configurationWithAcceptedNotices(service.ConfigurationJSON, map[string]int64{"interactive-desktop-root-and-network": 1})
+	if err != nil {
+		t.Fatal(err)
+	}
 	targetRelease := containerUpdateRelease{
-		TemplateRevision: target.Revision, TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: hash, ConfigurationJSON: `{"accepted_notice_revisions":{"interactive-desktop-root-and-network":1}}`,
+		TemplateRevision: target.Revision, TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: hash, ConfigurationJSON: targetConfiguration, ConfigurationRevision: service.ConfigurationRevision + 1, ConfigurationSHA256: targetHash,
 		Version: target.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState, ArtifactReference: target.Spec.Container.Image,
 	}
 	return old, targetRelease

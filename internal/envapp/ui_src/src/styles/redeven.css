@@ -34,6 +34,10 @@
   width: min(68rem, calc(100vw - 4rem));
 }
 
+[data-floe-dialog-panel].env-app-drawer-panel.managed-service-settings-drawer {
+  width: min(72rem, calc(100vw - 4rem));
+}
+
 [data-floe-dialog-overlay-root]:has(.env-app-drawer-panel) {
   app-region: no-drag;
 }
@@ -50,6 +54,10 @@
   }
 
   [data-floe-dialog-panel].env-app-drawer-panel.service-template-explorer-drawer {
+    width: 100vw;
+  }
+
+  [data-floe-dialog-panel].env-app-drawer-panel.managed-service-settings-drawer {
     width: 100vw;
   }
 }

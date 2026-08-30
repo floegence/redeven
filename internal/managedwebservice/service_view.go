@@ -25,7 +25,7 @@ func operationArtifactReference(service pfregistry.ManagedService, operation *pf
 		}
 	}
 	if Deployment(service.Deployment) == DeploymentContainer {
-		spec, err := templateSpecFromService(&service)
+		spec, _, err := effectiveSpecFromService(&service)
 		if err == nil && spec.Container != nil {
 			return strings.TrimSpace(spec.Container.Image)
 		}

@@ -44,6 +44,7 @@ const (
 	ActionRestart      OperationAction = "restart"
 	ActionRetryInstall OperationAction = "retry_install"
 	ActionUpdate       OperationAction = "update"
+	ActionReconfigure  OperationAction = "reconfigure"
 	ActionUninstall    OperationAction = "uninstall"
 )
 
@@ -138,24 +139,53 @@ type HostTemplateSpec struct {
 }
 
 type ContainerMountSpec struct {
-	Type     string `json:"type"`
-	Source   string `json:"source,omitempty"`
-	Target   string `json:"target"`
-	ReadOnly bool   `json:"read_only,omitempty"`
+	ResourceID   string   `json:"resource_id,omitempty"`
+	Type         string   `json:"type"`
+	Source       string   `json:"source,omitempty"`
+	Target       string   `json:"target"`
+	ReadOnly     bool     `json:"read_only,omitempty"`
+	TmpfsOptions []string `json:"tmpfs_options,omitempty"`
+}
+
+type ContainerPortSpec struct {
+	ResourceID    string `json:"resource_id,omitempty"`
+	ContainerPort int    `json:"container_port"`
+	HostPort      int    `json:"host_port,omitempty"`
+	HostIP        string `json:"host_ip,omitempty"`
+	Protocol      string `json:"protocol,omitempty"`
+}
+
+type ContainerDeviceSpec struct {
+	ResourceID    string `json:"resource_id,omitempty"`
+	HostPath      string `json:"host_path"`
+	ContainerPath string `json:"container_path,omitempty"`
+	Permissions   string `json:"permissions,omitempty"`
 }
 
 type ContainerTemplateSpec struct {
-	Image          string               `json:"image"`
-	Entrypoint     []string             `json:"entrypoint,omitempty"`
-	Command        []string             `json:"command,omitempty"`
-	Environment    map[string]string    `json:"environment,omitempty"`
-	Mounts         []ContainerMountSpec `json:"mounts,omitempty"`
-	User           string               `json:"user,omitempty"`
-	ReadOnlyRoot   bool                 `json:"read_only_root"`
-	MemoryBytes    int64                `json:"memory_bytes,omitempty"`
-	CPUs           float64              `json:"cpus,omitempty"`
-	PIDsLimit      int64                `json:"pids_limit,omitempty"`
-	RuntimeProfile string               `json:"runtime_profile,omitempty"`
+	Image          string                `json:"image"`
+	Entrypoint     []string              `json:"entrypoint,omitempty"`
+	Command        []string              `json:"command,omitempty"`
+	Environment    map[string]string     `json:"environment,omitempty"`
+	Labels         map[string]string     `json:"labels,omitempty"`
+	RestartPolicy  string                `json:"restart_policy,omitempty"`
+	NetworkMode    string                `json:"network_mode,omitempty"`
+	PIDMode        string                `json:"pid_mode,omitempty"`
+	IPCMode        string                `json:"ipc_mode,omitempty"`
+	Ports          []ContainerPortSpec   `json:"ports,omitempty"`
+	Mounts         []ContainerMountSpec  `json:"mounts,omitempty"`
+	CapAdd         []string              `json:"cap_add,omitempty"`
+	CapDrop        []string              `json:"cap_drop,omitempty"`
+	Devices        []ContainerDeviceSpec `json:"devices,omitempty"`
+	Privileged     bool                  `json:"privileged,omitempty"`
+	SecurityOpts   []string              `json:"security_opts,omitempty"`
+	User           string                `json:"user,omitempty"`
+	ReadOnlyRoot   bool                  `json:"read_only_root"`
+	MemoryBytes    int64                 `json:"memory_bytes,omitempty"`
+	CPUs           float64               `json:"cpus,omitempty"`
+	PIDsLimit      int64                 `json:"pids_limit,omitempty"`
+	ShmSizeBytes   int64                 `json:"shm_size_bytes,omitempty"`
+	RuntimeProfile string                `json:"runtime_profile,omitempty"`
 }
 
 type ComposeTemplateSpec struct {
@@ -197,10 +227,111 @@ type TemplateDuplicateRequest struct {
 }
 
 type OperationRequest struct {
-	RequestID               string           `json:"request_id"`
-	Action                  OperationAction  `json:"action"`
-	DeleteData              bool             `json:"delete_data,omitempty"`
-	AcceptedNoticeRevisions map[string]int64 `json:"accepted_notice_revisions,omitempty"`
+	RequestID               string              `json:"request_id"`
+	Action                  OperationAction     `json:"action"`
+	DeleteData              bool                `json:"delete_data,omitempty"`
+	AcceptedNoticeRevisions map[string]int64    `json:"accepted_notice_revisions,omitempty"`
+	Reconfigure             *ReconfigureRequest `json:"reconfigure,omitempty"`
+}
+
+type ServiceMetadataPatch struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	AccessMode  string `json:"access_mode"`
+}
+
+type EnvironmentSetting struct {
+	Name     string `json:"name"`
+	Value    string `json:"value,omitempty"`
+	Secret   bool   `json:"secret,omitempty"`
+	HasValue bool   `json:"has_value,omitempty"`
+	Clear    bool   `json:"clear,omitempty"`
+}
+
+type ContainerRuntimeSettings struct {
+	Entrypoint    string                `json:"entrypoint,omitempty"`
+	Command       []string              `json:"command,omitempty"`
+	Environment   []EnvironmentSetting  `json:"environment,omitempty"`
+	Labels        map[string]string     `json:"labels,omitempty"`
+	RestartPolicy string                `json:"restart_policy,omitempty"`
+	NetworkMode   string                `json:"network_mode,omitempty"`
+	PIDMode       string                `json:"pid_mode,omitempty"`
+	IPCMode       string                `json:"ipc_mode,omitempty"`
+	Ports         []ContainerPortSpec   `json:"ports,omitempty"`
+	Mounts        []ContainerMountSpec  `json:"mounts,omitempty"`
+	CPUs          float64               `json:"cpus,omitempty"`
+	MemoryBytes   int64                 `json:"memory_bytes,omitempty"`
+	PIDsLimit     int64                 `json:"pids_limit,omitempty"`
+	ShmSizeBytes  int64                 `json:"shm_size_bytes,omitempty"`
+	CapAdd        []string              `json:"cap_add,omitempty"`
+	CapDrop       []string              `json:"cap_drop,omitempty"`
+	Devices       []ContainerDeviceSpec `json:"devices,omitempty"`
+	Privileged    bool                  `json:"privileged,omitempty"`
+	ReadOnlyRoot  bool                  `json:"read_only_root"`
+	SecurityOpts  []string              `json:"security_opts,omitempty"`
+	User          string                `json:"user,omitempty"`
+}
+
+type HostRuntimeSettings struct {
+	InstallScript   string `json:"install_script,omitempty"`
+	StartScript     string `json:"start_script"`
+	StopScript      string `json:"stop_script,omitempty"`
+	UninstallScript string `json:"uninstall_script,omitempty"`
+}
+
+type ServiceRuntimeSettings struct {
+	Container *ContainerRuntimeSettings           `json:"container,omitempty"`
+	Compose   map[string]ContainerRuntimeSettings `json:"compose,omitempty"`
+	Host      *HostRuntimeSettings                `json:"host,omitempty"`
+}
+
+type LockedSetting struct {
+	Path      string `json:"path"`
+	Reason    string `json:"reason"`
+	Duplicate bool   `json:"duplicate_to_edit,omitempty"`
+}
+
+type ServiceSettingsView struct {
+	ServiceID             string                 `json:"service_id"`
+	Name                  string                 `json:"name"`
+	Description           string                 `json:"description,omitempty"`
+	AccessMode            string                 `json:"access_mode"`
+	Deployment            Deployment             `json:"deployment"`
+	TemplateSource        string                 `json:"template_source"`
+	ObservedState         string                 `json:"observed_state"`
+	ConfigurationRevision int64                  `json:"configuration_revision"`
+	ConfigurationSHA256   string                 `json:"configuration_sha256"`
+	Parameters            map[string]string      `json:"parameters,omitempty"`
+	Runtime               ServiceRuntimeSettings `json:"runtime"`
+	Locked                []LockedSetting        `json:"locked,omitempty"`
+}
+
+type ReconfigureDraft struct {
+	ConfigurationRevision int64                  `json:"configuration_revision"`
+	Parameters            map[string]string      `json:"parameters,omitempty"`
+	Runtime               ServiceRuntimeSettings `json:"runtime"`
+}
+
+type RiskNotice struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	RequiresAdmin bool   `json:"requires_admin"`
+}
+
+type ReconfigurePlan struct {
+	ConfigurationRevision int64        `json:"configuration_revision"`
+	PlanDigest            string       `json:"plan_digest"`
+	ChangedSections       []string     `json:"changed_sections"`
+	Risks                 []RiskNotice `json:"risks,omitempty"`
+	RequiresRebuild       bool         `json:"requires_rebuild"`
+}
+
+type ReconfigureRequest struct {
+	Draft           ReconfigureDraft `json:"draft"`
+	PlanDigest      string           `json:"plan_digest"`
+	AcceptedRiskIDs []string         `json:"accepted_risk_ids,omitempty"`
+	Administrator   bool             `json:"-"`
 }
 
 type CreateResult struct {
@@ -281,6 +412,9 @@ type Backend interface {
 	DuplicateTemplate(context.Context, string, TemplateDuplicateRequest) (*Template, error)
 	ValidateTemplate(context.Context, TemplateWriteRequest) error
 	List(context.Context) ([]ServiceView, error)
+	Settings(context.Context, string) (*ServiceSettingsView, error)
+	UpdateSettings(context.Context, string, ServiceMetadataPatch) (*ServiceSettingsView, error)
+	PreflightReconfigure(context.Context, string, ReconfigureDraft) (*ReconfigurePlan, error)
 	Create(context.Context, CreateRequest) (*CreateResult, error)
 	Operate(context.Context, string, OperationRequest) (*pfregistry.ManagedOperation, error)
 	Cancel(context.Context, string) (*pfregistry.ManagedOperation, error)

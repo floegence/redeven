@@ -1482,6 +1482,53 @@ describe('EnvPortForwardsPage', () => {
     }
   });
 
+  it('opens the managed settings owner and runs reconfigure through the shared operation stream', async () => {
+    const service = {
+      service_id: 'mws-settings', template_id: 'custom-container', service_family_id: 'custom-container', template_source: 'custom',
+      name: 'Team dashboard', description: 'Managed dashboard', deployment: 'container', workspace_path: '/workspace', version: '1',
+      desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-settings', runtime_port: 3000, update_available: false,
+    };
+    const settings = {
+      service_id: service.service_id, name: service.name, description: service.description, access_mode: 'unified_proxy',
+      deployment: 'container', template_source: 'custom', observed_state: 'stopped', configuration_revision: 3,
+      configuration_sha256: 'configuration-sha', parameters: {},
+      runtime: { container: { entrypoint: '', command: [], environment: [], labels: {}, restart_policy: 'no', network_mode: 'bridge', ports: [], mounts: [], cpus: 0, memory_bytes: 0, pids_limit: 512, shm_size_bytes: 0, cap_add: [], cap_drop: ['ALL'], devices: [], privileged: false, read_only_root: true, security_opts: ['no-new-privileges:true'], user: '' } },
+    };
+    const running = { operation_id: 'mop-reconfigure', service_id: service.service_id, action: 'reconfigure' as const, state: 'running', stage: 'rebuilding_runtime', progress_current: 3, progress_total: 5 };
+    let preflightBody: Record<string, any> | null = null;
+    let operationBody: Record<string, any> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-settings/settings' && init?.method === 'GET') return settings;
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-settings/reconfigure/preflight' && init?.method === 'POST') {
+        preflightBody = JSON.parse(String(init.body));
+        return { configuration_revision: 3, plan_digest: 'exact-plan', changed_sections: ['runtime'], risks: [], requires_rebuild: true };
+      }
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-settings/operations' && init?.method === 'POST') {
+        operationBody = JSON.parse(String(init.body));
+        return running;
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ ...running, state: 'succeeded', stage: 'completed', progress_current: 5 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-settings"]')).toBeTruthy());
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-settings"] button')).find((button) => button.textContent?.trim() === 'Settings')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-settings"]')).toBeTruthy());
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Parameters')?.click();
+    const entrypoint = host.querySelector<HTMLInputElement>('input[placeholder="/usr/local/bin/start"]')!;
+    entrypoint.value = '/usr/local/bin/dashboard';
+    entrypoint.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review changes')?.click();
+    await waitForAssertion(() => expect(preflightBody).toMatchObject({ configuration_revision: 3, runtime: { container: { entrypoint: '/usr/local/bin/dashboard' } } }));
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Apply configuration')?.click();
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'reconfigure', reconfigure: { plan_digest: 'exact-plan', draft: { configuration_revision: 3 } } }));
+    expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-reconfigure/events'), expect.objectContaining({ method: 'GET' }));
+  });
+
   it('reports retry failures with the retry action title', async () => {
     const service = { service_id: 'mws-retry', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', template_source: 'builtin', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, update_available: false };
     const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };

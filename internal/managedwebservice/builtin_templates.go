@@ -141,7 +141,7 @@ func webtopTemplateSpec(templateID string, artifact dockerArtifact) TemplateSpec
 				"SELKIES_ENABLE_SHARING": "false|locked", "SELKIES_ENABLE_COLLAB": "false|locked", "SELKIES_ENABLE_SHARED": "false|locked",
 				"SELKIES_UI_SIDEBAR_SHOW_SHARING": "false|locked",
 			},
-			Mounts:       []ContainerMountSpec{{Type: "volume", Source: "config", Target: "/config"}, {Type: "workspace", Target: "/workspace"}},
+			Mounts:       []ContainerMountSpec{{ResourceID: "config", Type: "volume", Source: "config", Target: "/config"}, {ResourceID: "workspace", Type: "workspace", Target: "/workspace"}},
 			ReadOnlyRoot: false, PIDsLimit: 2048, RuntimeProfile: ContainerRuntimeProfileInteractiveDesktop,
 		},
 	}
@@ -156,7 +156,7 @@ func deepSeekContainerTemplateSpec(artifact dockerArtifact, available bool) Temp
 	if available {
 		image = artifact.Image + "@" + artifact.Digest
 	}
-	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: image, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {Type: "workspace", Target: "/workspace"}, {Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512}}
+	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: image, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{ResourceID: "data", Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {ResourceID: "workspace", Type: "workspace", Target: "/workspace"}, {ResourceID: "tmp", Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512}}
 }
 
 func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
@@ -204,7 +204,7 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 			DeveloperPreview: definition.DeveloperPreview, DiskBytes: definition.DiskBytes, DataLocation: filepath.Join(m.stateDir, definition.ServiceFamilyID, "data"),
 			SourceURL: definition.SourceURL, DockerSourceURL: definition.DockerSourceURL, Source: "builtin", Deployment: definition.Deployment,
 			ContainerMode: definition.ContainerMode, Revision: definition.Revision, Editable: false,
-			Duplicateable: definition.TemplateID != WebtopUbuntuKDETemplateID && definition.TemplateID != WebtopDebianXFCETemplateID && completeBuiltInDuplicateSpec(spec),
+			Duplicateable: completeBuiltInDuplicateSpec(spec),
 			Available:     available, ReasonCode: reasonCode, Reason: reason, SortOrder: definition.SortOrder,
 			Deployments:          []DeploymentAvailability{{Deployment: definition.Deployment, Available: available, ReasonCode: reasonCode, Reason: reason}},
 			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec,

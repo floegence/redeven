@@ -5,7 +5,7 @@ import { fetchLocalApi, fetchLocalApiJSON } from '../services/localApi';
 export type ManagedOperation = Readonly<{
   operation_id: string;
   service_id: string;
-  action: 'install' | 'start' | 'stop' | 'restart' | 'retry_install' | 'update' | 'uninstall';
+  action: 'install' | 'start' | 'stop' | 'restart' | 'retry_install' | 'update' | 'reconfigure' | 'uninstall';
   state: string;
   stage: string;
   progress_current: number;
@@ -14,7 +14,7 @@ export type ManagedOperation = Readonly<{
   error_message?: string;
 }>;
 
-export type ManagedOperationOwner = 'row' | 'install' | 'update' | 'uninstall';
+export type ManagedOperationOwner = 'row' | 'install' | 'update' | 'reconfigure' | 'uninstall';
 
 type ManagedOperationControllerOptions = Readonly<{
   streamFailedMessage: () => string;
@@ -40,6 +40,7 @@ function submittingStage(action: ManagedOperation['action']): string {
     case 'restart':
     case 'uninstall': return 'stopping';
     case 'update': return 'update_preparing';
+    case 'reconfigure': return 'reconfigure_preflight';
     default: return 'environment_check';
   }
 }
@@ -49,6 +50,7 @@ function operationProgressTotal(action: ManagedOperation['action']): number {
     case 'start': return 3;
     case 'stop': return 2;
     case 'restart': return 4;
+    case 'reconfigure': return 5;
     case 'uninstall': return 3;
     default: return 7;
   }

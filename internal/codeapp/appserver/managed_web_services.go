@@ -225,11 +225,60 @@ func templateAuditDetail(name string, deployment managedwebservice.Deployment) m
 func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Request) bool {
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, managedServicesAPIBase+"/"), "/")
 	parts := strings.Split(rest, "/")
+	if len(parts) == 3 && strings.TrimSpace(parts[0]) != "" && parts[1] == "reconfigure" && parts[2] == "preflight" && r.Method == http.MethodPost {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+			return true
+		}
+		var draft managedwebservice.ReconfigureDraft
+		if err := decodeManagedJSONLimit(r, &draft, 768*1024); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		plan, err := g.managed.PreflightReconfigure(r.Context(), strings.TrimSpace(parts[0]), draft)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: plan})
+		return true
+	}
 	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return true
 	}
 	serviceID, action := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if r.Method == http.MethodGet && action == "settings" {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
+			return true
+		}
+		settings, err := g.managed.Settings(r.Context(), serviceID)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settings})
+		return true
+	}
+	if r.Method == http.MethodPatch && action == "settings" {
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+		if !ok {
+			return true
+		}
+		var req managedwebservice.ServiceMetadataPatch
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		settings, err := g.managed.UpdateSettings(r.Context(), serviceID, req)
+		if err != nil {
+			g.appendAudit(meta, "managed_web_service_settings", "failure", map[string]any{"service_id": serviceID}, err)
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "managed_web_service_settings", "success", map[string]any{"service_id": serviceID}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settings})
+		return true
+	}
 	if r.Method == http.MethodGet && action == "logs" {
 		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
 			return true
@@ -260,7 +309,7 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	var req managedwebservice.OperationRequest
-	if err := decodeManagedJSON(r, &req); err != nil {
+	if err := decodeManagedJSONLimit(r, &req, 768*1024); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
 		return true
 	}
@@ -270,6 +319,9 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		g.appendAudit(meta, "managed_web_service_uninstall", "failure", detail, err)
 		writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: err.Error(), ErrorCode: "ADMIN_REQUIRED"})
 		return true
+	}
+	if req.Reconfigure != nil {
+		req.Reconfigure.Administrator = meta.CanAdmin
 	}
 	op, err := g.managed.Operate(r.Context(), serviceID, req)
 	auditAction := "managed_web_service_" + strings.TrimSpace(string(req.Action))

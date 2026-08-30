@@ -395,7 +395,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	configurationJSON, err := json.Marshal(configuration)
+	configurationJSON, configurationHash, err := canonicalServiceConfiguration(configuration)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +423,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: string(configurationJSON), Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
@@ -444,7 +444,8 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	m.requestMu.Lock()
 	defer m.requestMu.Unlock()
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
-	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), string(noticeJSON))
+	reconfigureJSON, _ := json.Marshal(req.Reconfigure)
+	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), string(noticeJSON), string(reconfigureJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -461,12 +462,29 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
 	switch req.Action {
-	case ActionStart, ActionStop, ActionRestart, ActionRetryInstall, ActionUpdate, ActionUninstall:
+	case ActionStart, ActionStop, ActionRestart, ActionRetryInstall, ActionUpdate, ActionReconfigure, ActionUninstall:
 	default:
 		return nil, serviceError("ACTION_INVALID", "The managed Web Service action is invalid.", 400, false, nil)
 	}
 	if req.DeleteData && req.Action != ActionUninstall {
 		return nil, serviceError("REQUEST_INVALID", "delete_data is valid only for uninstall.", 400, false, nil)
+	}
+	var reconfigure *reconfigureCandidate
+	if req.Action == ActionReconfigure {
+		if req.Reconfigure == nil {
+			return nil, serviceError("RECONFIGURE_REQUEST_REQUIRED", "Reconfigure settings are required.", 400, false, nil)
+		}
+		if service.DesiredState != "stopped" || service.ObservedState != "stopped" {
+			return nil, serviceError("RECONFIGURE_REQUIRES_STOPPED", "Stop the service before applying runtime settings.", 409, true, nil)
+		}
+		candidate, candidateErr := m.buildReconfigureCandidate(ctx, service, req.Reconfigure.Draft)
+		if candidateErr != nil {
+			return nil, candidateErr
+		}
+		if validationErr := validateReconfigureAuthorization(candidate, *req.Reconfigure); validationErr != nil {
+			return nil, validationErr
+		}
+		reconfigure = &candidate
 	}
 	if req.Action == ActionUpdate {
 		target, err := m.serviceUpdateTarget(ctx, *service)
@@ -491,7 +509,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 			if err = m.registry.CreateManagedOperation(ctx, op); err == nil {
 				m.mu.Unlock()
-				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions)})
+				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure})
 				return &op, nil
 			}
 		}
@@ -501,6 +519,25 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 		return nil, err
 	}
 	return nil, serviceError("OPERATION_CONFLICT", "Another operation is already running for this managed Web Service.", 409, true, nil)
+}
+
+func validateReconfigureAuthorization(candidate reconfigureCandidate, request ReconfigureRequest) error {
+	if candidate.Plan.PlanDigest != strings.TrimSpace(request.PlanDigest) {
+		return serviceError("RESOURCE_PLAN_STALE", "Service settings changed after preflight. Run preflight again.", 409, true, nil)
+	}
+	accepted := map[string]struct{}{}
+	for _, id := range request.AcceptedRiskIDs {
+		accepted[strings.TrimSpace(id)] = struct{}{}
+	}
+	for _, risk := range candidate.Plan.Risks {
+		if _, ok := accepted[risk.ID]; !ok {
+			return serviceError("RISK_ACKNOWLEDGEMENT_REQUIRED", "Accept every current runtime risk before applying these settings.", 409, false, nil)
+		}
+		if risk.RequiresAdmin && !request.Administrator {
+			return serviceError("ADMIN_REQUIRED", "Administrator permission is required for high-risk runtime settings.", 403, false, nil)
+		}
+	}
+	return nil
 }
 
 func initialStage(action OperationAction) string {
@@ -513,12 +550,16 @@ func initialStage(action OperationAction) string {
 	if action == ActionUpdate {
 		return "update_preparing"
 	}
+	if action == ActionReconfigure {
+		return "reconfigure_preflight"
+	}
 	return "environment_check"
 }
 
 type operationInputs struct {
 	DeleteData              bool
 	AcceptedNoticeRevisions map[string]int64
+	Reconfigure             *reconfigureCandidate
 }
 
 func (m *Manager) launch(service pfregistry.ManagedService, op pfregistry.ManagedOperation, inputs operationInputs) {
@@ -564,12 +605,22 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 		} else {
 			err = m.runUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, updateDriver)
 		}
+	case ActionReconfigure:
+		if inputs.Reconfigure == nil {
+			err = serviceError("RECONFIGURE_REQUEST_REQUIRED", "Reconfigure settings are required.", 400, false, nil)
+		} else {
+			err = m.runReconfigure(ctx, &service, &op, driver, *inputs.Reconfigure)
+		}
 	case ActionUninstall:
 		err = m.runUninstall(ctx, &service, &op, driver, inputs.DeleteData)
 	}
 	if err != nil {
 		if OperationAction(op.Action) == ActionUpdate {
 			m.finishUpdateFailure(&service, &op, err)
+			return
+		}
+		if OperationAction(op.Action) == ActionReconfigure {
+			m.finishReconfigureFailure(&service, &op, err)
 			return
 		}
 		if errors.Is(err, context.Canceled) {
@@ -759,6 +810,30 @@ func (m *Manager) finishUpdateFailure(service *pfregistry.ManagedService, op *pf
 	m.saveAndPublish(op)
 }
 
+func (m *Manager) finishReconfigureFailure(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, err error) {
+	cause, rollbackErr := err, error(nil)
+	var executionErr *reconfigureExecutionError
+	if errors.As(err, &executionErr) {
+		cause, rollbackErr = executionErr.Cause, executionErr.RollbackErr
+	}
+	if errors.Is(cause, context.Canceled) {
+		op.State, op.Stage = "cancelled", "cancelled"
+		op.ErrorCode, op.ErrorMessage = "OPERATION_CANCELLED", "The configuration change was cancelled and the previous stopped Runtime was restored."
+	} else {
+		op.State, op.Stage = "failed", "failed"
+		op.ErrorCode, op.ErrorMessage, _, _ = ErrorDetails(cause)
+	}
+	if rollbackErr != nil {
+		op.State, op.Stage = "failed", "failed"
+		op.ErrorCode, op.ErrorMessage = "RECONFIGURE_ROLLBACK_FAILED", "The configuration change failed and Redeven could not restore the previous stopped Runtime."
+		desired, observed := "stopped", "error"
+		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
+		m.log.Error("roll back managed Web Service reconfiguration", "service_id", service.ServiceID, "error", rollbackErr)
+	}
+	op.FinishedAtUnixMs = time.Now().UnixMilli()
+	m.saveAndPublish(op)
+}
+
 func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService, operation pfregistry.ManagedOperation) {
 	driver := m.driver(Deployment(service.Deployment))
 	if driver == nil {
@@ -780,6 +855,15 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 			desired, observed := "stopped", "error"
 			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
 			m.log.Error("recover interrupted managed Web Service update", "service_id", service.ServiceID, "error", err)
+		}
+		return
+	}
+	if OperationAction(operation.Action) == ActionReconfigure {
+		if err := m.recoverInterruptedReconfigure(service, &operation, driver); err != nil {
+			code, message := "RECONFIGURE_RECOVERY_FAILED", "The interrupted configuration change could not restore or finalize a verified stopped Runtime."
+			desired, observed := "stopped", "error"
+			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+			m.log.Error("recover interrupted managed Web Service reconfiguration", "service_id", service.ServiceID, "error", err)
 		}
 		return
 	}
@@ -978,7 +1062,7 @@ func (m *Manager) waitHealthy(ctx context.Context, service *pfregistry.ManagedSe
 		return m.healthCheck(ctx, service)
 	}
 	endpoint := WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 45}
-	if spec, err := templateSpecFromService(service); err == nil {
+	if spec, _, err := effectiveSpecFromService(service); err == nil {
 		endpoint = spec.Endpoint
 	}
 	if endpoint.Scheme == "" {

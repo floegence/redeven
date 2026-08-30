@@ -295,10 +295,23 @@ func validateTemplateWriteRequest(req TemplateWriteRequest) error {
 	if len(req.Description) > 1000 || len(req.Version) > 80 {
 		return serviceError("TEMPLATE_METADATA_INVALID", "Template description or version is too long.", 400, false, nil)
 	}
-	if req.Spec.Container != nil && req.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
+	if req.Spec.Container != nil && req.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop && !reviewedInteractiveDesktopImage(req.Spec.Container.Image) {
 		return serviceError("TEMPLATE_RUNTIME_PROFILE_RESERVED", "The interactive desktop runtime profile is reserved for reviewed Redeven templates.", 400, false, nil)
 	}
 	return validateTemplateSpec(req.Spec)
+}
+
+func reviewedInteractiveDesktopImage(reference string) bool {
+	reference = strings.TrimSpace(reference)
+	for _, templateID := range []string{WebtopUbuntuKDETemplateID, WebtopDebianXFCETemplateID} {
+		for _, platform := range []string{"linux-amd64", "linux-arm64"} {
+			artifact, ok := auditedWebtopArtifact(templateID, platform)
+			if ok && reference == artifact.Image+"@"+artifact.Digest {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateTemplateSpec(spec TemplateSpec) error {
@@ -550,11 +563,6 @@ func sortTemplates(items []Template) {
 	})
 }
 
-type serviceConfiguration struct {
-	Parameters              map[string]string `json:"parameters,omitempty"`
-	AcceptedNoticeRevisions map[string]int64  `json:"accepted_notice_revisions,omitempty"`
-}
-
 func resolveTemplateInputs(spec TemplateSpec, supplied map[string]string, acceptedNotices map[string]int64) (serviceConfiguration, map[string]string, error) {
 	definitions := make(map[string]TemplateParameter, len(spec.Parameters))
 	for _, parameter := range spec.Parameters {
@@ -589,7 +597,7 @@ func resolveTemplateInputs(spec TemplateSpec, supplied map[string]string, accept
 			plain[parameter.Name] = value
 		}
 	}
-	return serviceConfiguration{Parameters: plain, AcceptedNoticeRevisions: cloneNoticeRevisions(acceptedNotices)}, secrets, nil
+	return newServiceConfiguration(plain, acceptedNotices), secrets, nil
 }
 
 func validateAcceptedNotices(template Template, accepted map[string]int64) error {
@@ -628,10 +636,18 @@ func (m *Manager) serviceSecretPath(serviceID string) string {
 }
 
 func (m *Manager) writeServiceSecrets(serviceID string, values map[string]string) error {
-	if len(values) == 0 {
+	return m.writeServiceSecretDocument(serviceID, serviceSecrets{SchemaVersion: serviceConfigurationSchemaVersion, Parameters: values})
+}
+
+func (m *Manager) writeServiceSecretDocument(serviceID string, values serviceSecrets) error {
+	if len(values.Parameters) == 0 && len(values.Environment) == 0 {
+		if err := os.Remove(m.serviceSecretPath(serviceID)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 		return nil
 	}
-	raw, err := json.Marshal(serviceConfiguration{Parameters: values})
+	values.SchemaVersion = serviceConfigurationSchemaVersion
+	raw, err := json.Marshal(values)
 	if err != nil {
 		return err
 	}
@@ -653,9 +669,9 @@ func (m *Manager) writeServiceSecrets(serviceID string, values map[string]string
 func (m *Manager) serviceParameters(service *pfregistry.ManagedService) (map[string]string, error) {
 	values := map[string]string{}
 	if service != nil && strings.TrimSpace(service.ConfigurationJSON) != "" {
-		configuration := serviceConfiguration{}
-		if err := decodeStrictJSON([]byte(service.ConfigurationJSON), &configuration); err != nil {
-			return nil, serviceError("SERVICE_CONFIGURATION_INVALID", "The saved managed-service configuration is invalid.", 409, false, err)
+		configuration, err := decodeServiceConfiguration(service.ConfigurationJSON)
+		if err != nil {
+			return nil, err
 		}
 		for name, value := range configuration.Parameters {
 			values[name] = value
@@ -671,12 +687,33 @@ func (m *Manager) serviceParameters(service *pfregistry.ManagedService) (map[str
 	if err != nil {
 		return nil, err
 	}
-	secrets := serviceConfiguration{}
+	secrets := serviceSecrets{}
 	if err := decodeStrictJSON(raw, &secrets); err != nil {
 		return nil, serviceError("SERVICE_SECRETS_INVALID", "The managed-service secret file is invalid.", 409, false, err)
 	}
+	if secrets.SchemaVersion != serviceConfigurationSchemaVersion {
+		return nil, serviceError("SERVICE_SECRETS_VERSION_UNSUPPORTED", "The managed-service secret file version is unsupported.", 409, false, nil)
+	}
 	for name, value := range secrets.Parameters {
 		values[name] = value
+	}
+	return values, nil
+}
+
+func (m *Manager) serviceSecretDocument(serviceID string) (serviceSecrets, error) {
+	raw, err := os.ReadFile(m.serviceSecretPath(serviceID))
+	if errors.Is(err, os.ErrNotExist) {
+		return serviceSecrets{SchemaVersion: serviceConfigurationSchemaVersion}, nil
+	}
+	if err != nil {
+		return serviceSecrets{}, err
+	}
+	values := serviceSecrets{}
+	if err := decodeStrictJSON(raw, &values); err != nil {
+		return serviceSecrets{}, serviceError("SERVICE_SECRETS_INVALID", "The managed-service secret file is invalid.", 409, false, err)
+	}
+	if values.SchemaVersion != serviceConfigurationSchemaVersion {
+		return serviceSecrets{}, serviceError("SERVICE_SECRETS_VERSION_UNSUPPORTED", "The managed-service secret file version is unsupported.", 409, false, nil)
 	}
 	return values, nil
 }

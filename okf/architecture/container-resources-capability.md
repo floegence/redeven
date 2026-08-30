@@ -110,6 +110,11 @@ Containers page, so a menu action opens the requested detail immediately
 without a second state owner or a stale remount. The two surfaces share identity
 and observed state, never parallel lifecycle implementations.
 
+Managed Service settings reuse this package's typed requests and preflight.
+After baseline and instance overrides resolve, `containerengine` produces the
+exact Resource Plan for journaled stopped-state reconfigure. Renderer cannot
+construct argv, skip validation, or use native mutation on managed resources.
+
 ## Data and host safety
 
 DTOs expose only typed, redacted fields. They never return environment values,

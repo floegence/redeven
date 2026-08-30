@@ -75,6 +75,46 @@ func TestManagedWebServiceRoutesCarryNoticeRevisionsForInstallAndUpdate(t *testi
 	}
 }
 
+func TestManagedWebServiceSettingsAndReconfigureUseOnePermissionBoundary(t *testing.T) {
+	t.Parallel()
+	backend := &managedBackendStub{}
+	channelID := "ch_managed_settings"
+	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+
+	request := httptest.NewRequest(http.MethodGet, managedServicesAPIBase+"/mws_one/settings", nil)
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response := httptest.NewRecorder()
+	readServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusOK || backend.settingsCalls != 1 {
+		t.Fatalf("settings read status=%d calls=%d body=%s", response.Code, backend.settingsCalls, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPatch, managedServicesAPIBase+"/mws_one/settings", strings.NewReader(`{"name":"Renamed","description":"Notes","access_mode":"unified_proxy"}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	readServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusForbidden || backend.lastMetadata.Name != "" {
+		t.Fatalf("read-only settings write status=%d metadata=%+v", response.Code, backend.lastMetadata)
+	}
+
+	adminServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true})}
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/reconfigure/preflight", strings.NewReader(`{"configuration_revision":3,"parameters":{},"runtime":{}}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	adminServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusOK || backend.preflightCalls != 1 || backend.lastDraft.ConfigurationRevision != 3 {
+		t.Fatalf("preflight status=%d calls=%d draft=%+v body=%s", response.Code, backend.preflightCalls, backend.lastDraft, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/operations", strings.NewReader(`{"request_id":"request-reconfigure","action":"reconfigure","reconfigure":{"draft":{"configuration_revision":3,"parameters":{},"runtime":{}},"plan_digest":"plan","accepted_risk_ids":["devices"]}}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	adminServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusAccepted || backend.lastOperate.Reconfigure == nil || !backend.lastOperate.Reconfigure.Administrator {
+		t.Fatalf("reconfigure status=%d request=%+v body=%s", response.Code, backend.lastOperate, response.Body.String())
+	}
+}
+
 func TestManagedOperationEventsBeginWithSnapshotAndFinishAtTerminalState(t *testing.T) {
 	t.Parallel()
 	backend := &managedBackendStub{subscribeOperation: pfregistry.ManagedOperation{OperationID: "mop_one", ServiceID: "mws_one", State: "succeeded", Stage: "completed", ProgressCurrent: 7, ProgressTotal: 7}}
@@ -145,6 +185,10 @@ type managedBackendStub struct {
 	duplicateCalls     int
 	lastDuplicate      managedwebservice.TemplateDuplicateRequest
 	subscribeOperation pfregistry.ManagedOperation
+	settingsCalls      int
+	preflightCalls     int
+	lastMetadata       managedwebservice.ServiceMetadataPatch
+	lastDraft          managedwebservice.ReconfigureDraft
 }
 
 func (b *managedBackendStub) Catalog(context.Context) ([]managedwebservice.Template, error) {
@@ -176,6 +220,20 @@ func (b *managedBackendStub) ValidateTemplate(context.Context, managedwebservice
 }
 func (b *managedBackendStub) List(context.Context) ([]managedwebservice.ServiceView, error) {
 	return []managedwebservice.ServiceView{}, nil
+}
+func (b *managedBackendStub) Settings(_ context.Context, serviceID string) (*managedwebservice.ServiceSettingsView, error) {
+	b.settingsCalls++
+	return &managedwebservice.ServiceSettingsView{ServiceID: serviceID, Name: "Service", ConfigurationRevision: 1}, nil
+}
+func (b *managedBackendStub) UpdateSettings(_ context.Context, serviceID string, patch managedwebservice.ServiceMetadataPatch) (*managedwebservice.ServiceSettingsView, error) {
+	b.settingsCalls++
+	b.lastMetadata = patch
+	return &managedwebservice.ServiceSettingsView{ServiceID: serviceID, Name: patch.Name, Description: patch.Description, AccessMode: patch.AccessMode, ConfigurationRevision: 1}, nil
+}
+func (b *managedBackendStub) PreflightReconfigure(_ context.Context, _ string, draft managedwebservice.ReconfigureDraft) (*managedwebservice.ReconfigurePlan, error) {
+	b.preflightCalls++
+	b.lastDraft = draft
+	return &managedwebservice.ReconfigurePlan{ConfigurationRevision: draft.ConfigurationRevision, PlanDigest: "plan"}, nil
 }
 func (b *managedBackendStub) Create(_ context.Context, request managedwebservice.CreateRequest) (*managedwebservice.CreateResult, error) {
 	b.createCalls++
