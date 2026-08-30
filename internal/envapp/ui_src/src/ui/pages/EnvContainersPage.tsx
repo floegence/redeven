@@ -1523,12 +1523,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const renderInventoryToolbar = (pending = false): JSX.Element => (
     <section class="container-resource-toolbar" data-container-summary data-loading={pending ? 'true' : 'false'}>
-      <div class="container-list-heading">
-        <strong>{viewLabel(view())}</strong>
-        <Show when={!pending} fallback={<span class="container-skeleton container-skeleton--count" aria-hidden="true" />}>
-          <span>{inventory().length}</span>
-        </Show>
-      </div>
       <div class="container-search-control">
         <Search class="h-4 w-4" aria-hidden="true" />
         <Input

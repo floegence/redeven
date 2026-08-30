@@ -345,6 +345,7 @@ describe('native Containers page', () => {
     await settle();
 
     expect(host.querySelector('[data-container-summary]')?.textContent).toContain('containers.filters.active');
+    expect(host.querySelector('.container-list-heading')).toBeNull();
     expect(host.querySelector<HTMLButtonElement>('.container-filter-switch button[aria-pressed="true"]')?.textContent).toContain('containers.filters.active');
     expect(host.querySelector('.container-distribution__track')).toBeNull();
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.image');

@@ -175,6 +175,7 @@ describe('native Containers responsive product surface', () => {
     expect(getComputedStyle(table).display).not.toBe('none');
     expect(root.querySelector('.container-distribution__track')).toBeNull();
     expect(root.querySelector('.container-inspector')).toBeNull();
+    expect(root.querySelector('.container-list-heading')).toBeNull();
     expect(root.querySelectorAll('thead th')).toHaveLength(5);
     expect(rows).toHaveLength(3);
     expect(rows[0].textContent).not.toContain('8bbf320351e557285fe1f143ee14a6d2334f24f5');
@@ -185,8 +186,8 @@ describe('native Containers responsive product surface', () => {
     overflow!.click();
     await settle();
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
-    root.querySelector<HTMLElement>('.container-list-heading')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    root.querySelector<HTMLElement>('.container-list-heading')!.click();
+    root.querySelector<HTMLElement>('.container-resource-toolbar')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    root.querySelector<HTMLElement>('.container-resource-toolbar')!.click();
     await settle();
     expect(document.querySelector('[role="menu"]')?.getAttribute('aria-hidden')).toBe('true');
 
