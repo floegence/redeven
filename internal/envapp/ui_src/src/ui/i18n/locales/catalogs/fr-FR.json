@@ -4955,7 +4955,15 @@
       "localBranchesDescription": "Branches de cette copie de travail.",
       "remoteBranchesDescription": "Références suivies et partagées.",
       "reviewSelectedBranchStatusDiff": "Examiner les différences du fichier d’état de branche sélectionné.",
-      "selectBranchStatusFile": "Sélectionnez un fichier d’état de branche pour examiner ses différences."
+      "selectBranchStatusFile": "Sélectionnez un fichier d’état de branche pour examiner ses différences.",
+      "changeTypes": {
+        "added": "Ajouté",
+        "modified": "Modifié",
+        "deleted": "Supprimé",
+        "renamed": "Renommé",
+        "copied": "Copié",
+        "conflicted": "En conflit"
+      }
     },
     "shell": {
       "displayMode": "Mode d'affichage",

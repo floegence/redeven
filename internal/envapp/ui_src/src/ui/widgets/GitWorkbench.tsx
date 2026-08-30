@@ -1,7 +1,7 @@
-import { Show } from 'solid-js';
+import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Copy, Folder, History, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { Copy, Folder, History, MoreHorizontal, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import type {
   GitBranchSummary,
   GitCommitSummary,
@@ -36,14 +36,13 @@ import {
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
-import { gitSubviewTone, gitToneHeaderActionButtonClass } from './GitChrome';
-import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
+import { gitToneHeaderActionButtonClass } from './GitChrome';
+import { GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
 import { buildGitDirectoryShortcutRequest, type GitAskFlowerRequest, type GitDirectoryShortcutRequest, type GitFileShortcutTarget } from '../utils/gitBrowserShortcuts';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { Tooltip } from '../primitives/Tooltip';
 import { UIFirstKeepAlivePanel } from '../primitives/UIFirstKeepAlivePanel';
 import { useI18n } from '../i18n';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -148,24 +147,12 @@ export interface GitWorkbenchProps {
   class?: string;
 }
 
-function subviewLabel(view: GitWorkbenchSubview): string {
-  switch (view) {
-    case 'changes':
-      return 'Changes';
-    case 'branches':
-      return 'Branches';
-    case 'history':
-      return 'Graph';
-    default:
-      return 'Changes';
-  }
-}
-
 function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
   return view === 'overview' ? 'changes' : view;
 }
 
 const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
+type RepositoryHeaderActionId = 'stashes' | 'fetch' | 'pull' | 'push' | 'terminal' | 'files';
 
 export function GitWorkbench(props: GitWorkbenchProps) {
   const i18n = useI18n();
@@ -184,11 +171,12 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     if (activeSubview() === 'history') return Boolean(props.listLoading);
     return false;
   };
-  const subviewTone = () => gitSubviewTone(activeSubview());
   const detachedHead = () => headDisplay().detached;
   const stashCountLabel = () => {
     const count = Number(props.repoSummary?.stashCount ?? 0);
-    return count > 0 ? `Stashes · ${count}` : 'Stashes';
+    return count > 0
+      ? i18n.t('uiCopy.git.stashCount', { count })
+      : i18n.t('git.common.stashes');
   };
   const repoActionsDisabled = () => Boolean(
     props.repoInfoLoading
@@ -272,94 +260,140 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     }
     return items;
   };
+  const repositoryActionLabel = (action: RepositoryHeaderActionId): string => {
+    switch (action) {
+      case 'stashes':
+        return stashCountLabel();
+      case 'fetch':
+        return props.fetchBusy ? i18n.t('uiCopy.git.fetching') : i18n.t('uiCopy.git.fetch');
+      case 'pull':
+        return props.pullBusy
+          ? i18n.t('uiCopy.git.pulling')
+          : `${i18n.t('uiCopy.git.pull')}${Number(props.repoSummary?.behindCount ?? 0) > 0 ? ` ${props.repoSummary?.behindCount}` : ''}`;
+      case 'push':
+        return props.pushBusy
+          ? i18n.t('uiCopy.git.pushing')
+          : `${i18n.t('uiCopy.git.push')}${Number(props.repoSummary?.aheadCount ?? 0) > 0 ? ` ${props.repoSummary?.aheadCount}` : ''}`;
+      case 'terminal':
+        return i18n.t('git.contextMenu.openTerminal');
+      case 'files':
+        return i18n.t('git.contextMenu.browseFiles');
+    }
+  };
+  const repositoryActionDisabled = (action: RepositoryHeaderActionId): boolean => {
+    if (repoActionsDisabled()) return true;
+    switch (action) {
+      case 'fetch':
+        return Boolean(props.fetchBusy);
+      case 'pull':
+        return detachedHead() || Boolean(props.pullBusy);
+      case 'push':
+        return detachedHead() || Boolean(props.pushBusy);
+      case 'terminal':
+      case 'files':
+        return !repoDirRequest();
+      case 'stashes':
+      default:
+        return false;
+    }
+  };
+  const runRepositoryAction = (action: RepositoryHeaderActionId) => {
+    if (repositoryActionDisabled(action)) return;
+    switch (action) {
+      case 'stashes': {
+        const repoRootPath = exactGitPath(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath);
+        if (repoRootPath) props.onOpenStash?.({ tab: 'stashes', repoRootPath, source: 'header' });
+        return;
+      }
+      case 'fetch':
+        props.onFetch?.();
+        return;
+      case 'pull':
+        props.onPull?.();
+        return;
+      case 'push':
+        props.onPush?.();
+        return;
+      case 'terminal': {
+        const request = repoDirRequest();
+        if (request) props.onOpenInTerminal?.(request);
+        return;
+      }
+      case 'files': {
+        const request = repoDirRequest();
+        if (request) void props.onBrowseFiles?.(request);
+      }
+    }
+  };
+  const primaryRepositoryAction = (): RepositoryHeaderActionId | null => {
+    if (!detachedHead() && Number(props.repoSummary?.behindCount ?? 0) > 0 && props.onPull) return 'pull';
+    if (!detachedHead() && Number(props.repoSummary?.aheadCount ?? 0) > 0 && props.onPush) return 'push';
+    if (props.onFetch) return 'fetch';
+    if (!detachedHead() && props.onPull) return 'pull';
+    if (!detachedHead() && props.onPush) return 'push';
+    return null;
+  };
+  const repositoryHeaderMenuItems = createMemo<DropdownItem[]>(() => {
+    const primary = primaryRepositoryAction();
+    const items: DropdownItem[] = [];
+    if (props.onOpenStash) {
+      items.push({ id: 'stashes', label: repositoryActionLabel('stashes'), disabled: repositoryActionDisabled('stashes') });
+    }
+    const remoteActions: RepositoryHeaderActionId[] = ['fetch', 'pull', 'push'];
+    for (const action of remoteActions) {
+      const available = action === 'fetch' ? props.onFetch : action === 'pull' ? props.onPull : props.onPush;
+      if (!available || action === primary) continue;
+      items.push({ id: action, label: repositoryActionLabel(action), disabled: repositoryActionDisabled(action) });
+    }
+    if (props.onOpenInTerminal) {
+      items.push({ id: 'terminal', label: repositoryActionLabel('terminal'), disabled: repositoryActionDisabled('terminal') });
+    }
+    if (props.onBrowseFiles) {
+      items.push({ id: 'files', label: repositoryActionLabel('files'), disabled: repositoryActionDisabled('files') });
+    }
+    return items;
+  });
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col', redevenSurfaceRoleClass('main'), props.class)}>
-      {/* Simplified header — repo context only, individual panels own their toolbars */}
-      <div class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
-        <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <GitLabelBlock
-            class="min-w-0 flex-1"
-            label={subviewLabel(activeSubview())}
-            tone={subviewTone()}
-            meta={
-              <>
-                <Show when={headDisplay().detached} fallback={<GitMetaPill tone={subviewTone()}>{headRef() || 'HEAD'}</GitMetaPill>}>
-                  <>
-                    <GitMetaPill tone="warning">{headDisplay().label}</GitMetaPill>
-                    <Show when={headDisplay().detail}>
-                      <GitMetaPill tone="neutral">{headDisplay().detail}</GitMetaPill>
-                    </Show>
-                  </>
-                </Show>
-                <Show when={loadingBusy()}>
-                  <GitMetaPill tone="neutral">{i18n.t('files.refreshing')}</GitMetaPill>
-                </Show>
-              </>
-            }
+      <div
+        class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}
+        data-git-repository-header="compact"
+      >
+        <div class="flex min-w-0 items-center justify-between gap-3">
+          <div
+            class="min-w-0 flex-1 rounded-md px-1 py-0.5"
+            tabIndex={0}
+            data-git-repository-context-target="header"
+            onContextMenu={(event) => {
+              const target = repositoryContextTarget();
+              if (target) repositoryContextMenu.openFromContextMenu(event, target);
+            }}
+            onKeyDown={(event) => {
+              const target = repositoryContextTarget();
+              if (target) repositoryContextMenu.openFromKeyboard(event, target);
+            }}
           >
-                <div
-                  class="flex flex-wrap items-center gap-2.5"
-                  tabIndex={0}
-                  data-git-repository-context-target="header"
-                  onContextMenu={(event) => {
-                    const target = repositoryContextTarget();
-                    if (target) repositoryContextMenu.openFromContextMenu(event, target);
-                  }}
-                  onKeyDown={(event) => {
-                    const target = repositoryContextTarget();
-                    if (target) repositoryContextMenu.openFromKeyboard(event, target);
-                  }}
-                >
-              <GitPrimaryTitle class="min-w-0 max-w-full truncate">
-                {repoLabel()}
-              </GitPrimaryTitle>
+            <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+              <GitPrimaryTitle class="min-w-0 max-w-full truncate">{repoLabel()}</GitPrimaryTitle>
+              <span class="text-muted-foreground/45" aria-hidden="true">/</span>
+              <Show
+                when={headDisplay().detached}
+                fallback={<GitMetaPill tone="neutral">{headRef() || 'HEAD'}</GitMetaPill>}
+              >
+                <GitMetaPill tone="warning">{headDisplay().label}</GitMetaPill>
+              </Show>
               <Show when={props.repoSummary && (props.repoSummary.aheadCount || props.repoSummary.behindCount)}>
                 <GitMetaPill tone="info">{localizedSyncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount, i18n)}</GitMetaPill>
               </Show>
-            </div>
-            <div class="flex items-center gap-1.5 min-w-0">
-              <span class="min-w-0 max-w-full truncate text-[11px] text-muted-foreground">{repoPath()}</span>
-              <Show when={repoDirRequest()}>
-                {(request) => (
-                  <>
-                    <Show when={props.onBrowseFiles}>
-                      <Tooltip content="Browse files" placement="top" delay={0}>
-                        <button
-                          type="button"
-                          aria-label={i18n.t('git.changes.browseFiles')}
-                          class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-[var(--redeven-status-success)] transition-colors"
-                          onClick={() => void props.onBrowseFiles?.(request())}
-                        >
-                          <Folder class="size-3" />
-                        </button>
-                      </Tooltip>
-                    </Show>
-                    <Show when={props.onOpenInTerminal}>
-                      <Tooltip content="Open in terminal" placement="top" delay={0}>
-                        <button
-                          type="button"
-                          aria-label={i18n.t('git.changes.openInTerminal')}
-                          class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-[var(--redeven-status-info)] transition-colors"
-                          onClick={() => props.onOpenInTerminal?.(request())}
-                        >
-                          <Terminal class="size-3" />
-                        </button>
-                      </Tooltip>
-                    </Show>
-                  </>
-                )}
+              <Show when={loadingBusy()}>
+                <GitMetaPill tone="neutral">{i18n.t('files.refreshing')}</GitMetaPill>
               </Show>
             </div>
-            <Show when={headDisplay().detached}>
-              <div class="text-[11px] text-foreground">{detachedHeadSummary()}</div>
-              <Show when={reattachBranch()}>
-                <div class="text-[11px] text-muted-foreground">{reattachSummary()}</div>
-              </Show>
-            </Show>
-          </GitLabelBlock>
+            <div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={repoPath()}>{repoPath()}</div>
+          </div>
 
-          <div class="flex w-full flex-wrap items-center justify-start gap-1.5 xl:w-auto xl:justify-end">
+          <div class="flex shrink-0 items-center gap-1">
             <Show when={headDisplay().detached && reattachBranch() && props.onCheckoutBranch}>
               <Button
                 size="xs"
@@ -374,57 +408,19 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 {localizedDetachedHeadCheckoutActionLabel(reattachBranch(), Boolean(props.checkoutBusy), i18n)}
               </Button>
             </Show>
-            <Show when={props.onOpenStash}>
-              <Button
-                size="xs"
-                variant="ghost"
-                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
-                disabled={repoActionsDisabled()}
-                onClick={() => {
-                  const repoRootPath = exactGitPath(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath);
-                  if (!repoRootPath) return;
-                  props.onOpenStash?.({
-                    tab: 'stashes',
-                    repoRootPath,
-                    source: 'header',
-                  });
-                }}
-              >
-                {stashCountLabel()}
-              </Button>
-            </Show>
-            <Show when={props.onFetch}>
-              <Button
-                size="xs"
-                variant="ghost"
-                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
-                disabled={repoActionsDisabled() || props.fetchBusy}
-                onClick={props.onFetch}
-              >
-                {props.fetchBusy ? i18n.t('uiCopy.git.fetching') : i18n.t('uiCopy.git.fetch')}
-              </Button>
-            </Show>
-            <Show when={props.onPull}>
-              <Button
-                size="xs"
-                variant="ghost"
-                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
-                disabled={repoActionsDisabled() || detachedHead() || props.pullBusy}
-                onClick={props.onPull}
-              >
-                {props.pullBusy ? i18n.t('uiCopy.git.pulling') : i18n.t('uiCopy.git.pull')}
-              </Button>
-            </Show>
-            <Show when={props.onPush}>
-              <Button
-                size="xs"
-                variant="ghost"
-                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
-                disabled={repoActionsDisabled() || detachedHead() || props.pushBusy}
-                onClick={props.onPush}
-              >
-                {props.pushBusy ? i18n.t('uiCopy.git.pushing') : i18n.t('uiCopy.git.push')}
-              </Button>
+            <Show when={primaryRepositoryAction()}>
+              {(action) => (
+                <Button
+                  size="sm"
+                  variant="default"
+                  class="shrink-0 rounded-md"
+                  loading={action() === 'fetch' ? props.fetchBusy : action() === 'pull' ? props.pullBusy : props.pushBusy}
+                  disabled={repositoryActionDisabled(action())}
+                  onClick={() => runRepositoryAction(action())}
+                >
+                  {repositoryActionLabel(action())}
+                </Button>
+              )}
             </Show>
             <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
               <Button
@@ -439,12 +435,44 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               </Button>
             </Show>
             <Show when={props.onRefresh}>
-              <Button size="xs" variant="ghost" class={cn('shrink-0', gitToneHeaderActionButtonClass())} icon={Refresh} onClick={props.onRefresh}>
-                {i18n.t('common.actions.refresh')}
+              <Button
+                size="sm"
+                variant="ghost"
+                class={cn('shrink-0 px-2', gitToneHeaderActionButtonClass())}
+                aria-label={i18n.t('common.actions.refresh')}
+                title={i18n.t('common.actions.refresh')}
+                onClick={props.onRefresh}
+              >
+                <Refresh class="size-3.5" />
               </Button>
+            </Show>
+            <Show when={repositoryHeaderMenuItems().length > 0}>
+              <Dropdown
+                trigger={(
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class={cn('shrink-0 px-2', gitToneHeaderActionButtonClass())}
+                    aria-label={i18n.t('git.common.moreActions')}
+                    title={i18n.t('git.common.moreActions')}
+                  >
+                    <MoreHorizontal class="size-3.5" />
+                  </Button>
+                )}
+                items={repositoryHeaderMenuItems()}
+                onSelect={(id) => runRepositoryAction(id as RepositoryHeaderActionId)}
+                align="end"
+              />
             </Show>
           </div>
         </div>
+        <Show when={headDisplay().detached}>
+          <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[10px] text-muted-foreground">
+            <span class="text-foreground">{detachedHeadSummary()}</span>
+            <Show when={headDisplay().detail}><GitMetaPill tone="neutral">{headDisplay().detail}</GitMetaPill></Show>
+            <Show when={reattachBranch()}><span>{reattachSummary()}</span></Show>
+          </div>
+        </Show>
       </div>
 
       <GitEntityContextMenu controller={repositoryContextMenu} items={repositoryContextMenuItems} />

@@ -162,7 +162,6 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           class="w-full"
         />
       )}
-      navigationLabel="View"
       navigation={<GitViewNav value={props.navigationSubview ?? props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-2">

@@ -879,6 +879,14 @@ export const enUS = defineDictionary({
       remoteBranchesDescription: 'Tracking and shared refs.',
       reviewSelectedBranchStatusDiff: 'Review the selected branch status diff.',
       selectBranchStatusFile: 'Select a branch status file to inspect its diff.',
+      changeTypes: {
+        added: 'Added',
+        modified: 'Modified',
+        deleted: 'Deleted',
+        renamed: 'Renamed',
+        copied: 'Copied',
+        conflicted: 'Conflicted',
+      },
     },
     shell: {
       displayMode: 'Display mode',

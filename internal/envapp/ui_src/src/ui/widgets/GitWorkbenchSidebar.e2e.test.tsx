@@ -262,7 +262,6 @@ describe('GitWorkbenchSidebar interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Commit Graph');
       expect(host.textContent).toContain('Merge x2');
       const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]');
       expect(scrollRegion).toBeTruthy();
@@ -314,7 +313,6 @@ describe('GitWorkbenchSidebar interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Choose a branch from the sidebar to load compare context.');
       expect(host.textContent).toContain('Local');
       expect(host.textContent).toContain('Remote');
       expect(host.textContent).not.toContain('Compare');

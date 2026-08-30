@@ -434,12 +434,9 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
-      expect(host.textContent).toContain("Status");
-      expect(host.textContent).toContain("History");
+      expect(host.textContent).toContain("Workspace");
+      expect(host.textContent).toContain("Commit Graph");
       expect(host.querySelector('button[aria-label="Compare"]')).toBeTruthy();
-      expect(host.textContent).toContain("Checkout");
-      expect(host.textContent).toContain("Merge");
-      expect(host.textContent).toContain("Delete");
       expect(host.textContent).toContain("src/linked.ts");
       expect(host.textContent).toContain("notes.txt");
       expect(host.textContent).toContain("origin/feature/demo");
@@ -474,15 +471,6 @@ describe("GitBranchesPanel interactions", () => {
       const stagedButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("Staged"),
       ) as HTMLButtonElement | undefined;
-      const checkoutButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Checkout"),
-      ) as HTMLButtonElement | undefined;
-      const mergeButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Merge",
-      ) as HTMLButtonElement | undefined;
-      const deleteButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Delete",
-      ) as HTMLButtonElement | undefined;
       expect(changesButton).toBeTruthy();
       expect(changesButton?.getAttribute("aria-pressed")).toBe("true");
       expect(changesButton?.getAttribute("aria-label")).toBe(
@@ -499,12 +487,14 @@ describe("GitBranchesPanel interactions", () => {
       );
       expect(stagedButton?.getAttribute("aria-pressed")).toBe("false");
       expect(stagedButton?.getAttribute("aria-label")).toBe("Staged: 1 file");
-      expect(checkoutButton).toBeTruthy();
-      expect(mergeButton).toBeTruthy();
-      expect(deleteButton).toBeTruthy();
-      expect(checkoutButton?.disabled).toBe(true);
-      expect(mergeButton?.disabled).toBe(true);
-      expect(deleteButton?.disabled).toBe(true);
+      const moreButton = host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null;
+      expect(moreButton).toBeTruthy();
+      moreButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+      const branchMenuButtons = Array.from(document.body.querySelectorAll('[role="menu"] button')) as HTMLButtonElement[];
+      expect(branchMenuButtons.find((node) => node.textContent?.startsWith("Checkout"))?.disabled).toBe(true);
+      expect(branchMenuButtons.find((node) => node.textContent?.startsWith("Merge"))?.disabled).toBe(true);
+      expect(branchMenuButtons.find((node) => node.textContent?.startsWith("Delete Branch"))?.disabled).toBe(true);
       expect(checkoutCount).toBe(0);
       expect(mergeCount).toBe(0);
       expect(deleteCount).toBe(0);
@@ -791,19 +781,13 @@ describe("GitBranchesPanel interactions", () => {
       const checkoutButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("Checkout"),
       ) as HTMLButtonElement | undefined;
-      const mergeButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Merge",
-      ) as HTMLButtonElement | undefined;
-      const deleteButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Delete",
-      ) as HTMLButtonElement | undefined;
       expect(checkoutButton).toBeTruthy();
-      expect(mergeButton).toBeTruthy();
-      expect(deleteButton).toBeFalsy();
       expect(checkoutButton?.disabled).toBe(false);
-      expect(mergeButton?.disabled).toBe(false);
       checkoutButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      mergeButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await clickDropdownMenuItem(
+        host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null,
+        "Merge",
+      );
       expect(checkoutBranch).toBe("origin/feature/demo");
       expect(mergeBranch).toBe("origin/feature/demo");
       expect(deleteBranch).toBeUndefined();
@@ -1932,45 +1916,25 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      const shortcutDocks = host.querySelectorAll("[data-git-shortcut-dock]");
       const askFlowerButton = host.querySelector(
         'button[aria-label="Ask Flower"]',
       ) as HTMLButtonElement | null;
-      const openInTerminalButton = host.querySelector(
-        'button[aria-label="Terminal"]',
-      ) as HTMLButtonElement | null;
-      const browseFilesButton = host.querySelector(
-        'button[aria-label="Files"]',
-      ) as HTMLButtonElement | null;
 
-      expect(shortcutDocks.length).toBeGreaterThan(0);
-      expect(shortcutDocks[0]?.className).toContain("items-center");
       expect(askFlowerButton).toBeTruthy();
-      expect(openInTerminalButton).toBeTruthy();
-      expect(browseFilesButton).toBeTruthy();
       expect(askFlowerButton?.dataset.gitShortcutOrb).toBe("flower");
-      expect(openInTerminalButton?.dataset.gitShortcutOrb).toBe("terminal");
-      expect(browseFilesButton?.dataset.gitShortcutOrb).toBe("files");
       expect(askFlowerButton?.className).toContain("h-7");
-      expect(openInTerminalButton?.className).toContain("h-7");
-      expect(browseFilesButton?.className).toContain("h-7");
       expect(askFlowerButton?.textContent).toBe("");
-      expect(openInTerminalButton?.textContent).toBe("");
-      expect(browseFilesButton?.textContent).toBe("");
-
-      const statusBrowseButton = Array.from(host.querySelectorAll('button')).find((button) => button.className.includes('hover:text-[var(--redeven-status-success)]'));
-      const statusTerminalButton = Array.from(host.querySelectorAll('button')).find((button) => button.className.includes('hover:text-[var(--redeven-status-info)]'));
-      expect(statusBrowseButton?.className).toContain('hover:text-[var(--redeven-status-success)]');
-      expect(statusTerminalButton?.className).toContain('hover:text-[var(--redeven-status-info)]');
 
       askFlowerButton!.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
-      openInTerminalButton!.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
+      await clickDropdownMenuItem(
+        host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null,
+        "Open in Terminal",
       );
-      browseFilesButton!.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
+      await clickDropdownMenuItem(
+        host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null,
+        "Browse Files",
       );
 
       expect(onAskFlower).toHaveBeenCalledWith({
@@ -2088,13 +2052,9 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      const browseFilesButton = host.querySelector(
-        'button[aria-label="Files"]',
-      ) as HTMLButtonElement | null;
-      expect(browseFilesButton).toBeTruthy();
-
-      browseFilesButton!.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
+      await clickDropdownMenuItem(
+        host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null,
+        "Browse Files",
       );
 
       expect(onBrowseFiles).toHaveBeenCalledWith({
@@ -2391,16 +2351,7 @@ describe("GitBranchesPanel interactions", () => {
       const askFlowerButton = host.querySelector(
         'button[aria-label="Ask Flower"]',
       ) as HTMLButtonElement | undefined;
-      const terminalButton = host.querySelector(
-        'button[aria-label="Terminal"]',
-      ) as HTMLButtonElement | undefined;
-      const filesButton = host.querySelector('button[aria-label="Files"]') as
-        | HTMLButtonElement
-        | undefined;
-
       expect(askFlowerButton?.disabled).toBe(true);
-      expect(terminalButton?.disabled).toBe(true);
-      expect(filesButton?.disabled).toBe(true);
 
       const askTooltip = await revealTooltipForButton(askFlowerButton);
       expect(askTooltip?.textContent).toContain(
@@ -2413,21 +2364,17 @@ describe("GitBranchesPanel interactions", () => {
       )?.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
       await flush();
 
-      const terminalTooltip = await revealTooltipForButton(terminalButton);
-      expect(terminalTooltip?.textContent).toContain(
-        "Open this branch in a worktree first.",
-      );
-      (
-        terminalButton?.closest(
-          "[data-redeven-tooltip-anchor]",
-        ) as HTMLElement | null
-      )?.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+      const moreButton = host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null;
+      expect(moreButton).toBeTruthy();
+      moreButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
-
-      const filesTooltip = await revealTooltipForButton(filesButton);
-      expect(filesTooltip?.textContent).toContain(
-        "Open this branch in a worktree first.",
-      );
+      const menuButtons = Array.from(document.body.querySelectorAll('[role="menu"] button')) as HTMLButtonElement[];
+      const terminalButton = menuButtons.find((node) => node.textContent?.startsWith("Open in Terminal"));
+      const filesButton = menuButtons.find((node) => node.textContent?.startsWith("Browse Files"));
+      expect(terminalButton?.disabled).toBe(true);
+      expect(filesButton?.disabled).toBe(true);
+      expect(terminalButton?.textContent).toContain("Open this branch in a worktree first.");
+      expect(filesButton?.textContent).toContain("Open this branch in a worktree first.");
     } finally {
       dispose();
     }
@@ -2513,13 +2460,10 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      const deleteButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Delete",
-      ) as HTMLButtonElement | undefined;
-      expect(deleteButton).toBeTruthy();
-      expect(deleteButton?.disabled).toBe(false);
-      deleteButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
+      await clickDropdownMenuItem(
+        host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null,
+        "Delete Branch",
+      );
 
       expect(deleteCount).toBe(1);
       expect(document.body.textContent).toContain("Delete Branch");
@@ -2658,13 +2602,12 @@ describe("GitBranchesPanel interactions", () => {
       expect(mergeButton?.className).toContain("cursor-pointer");
       expect(visibleDeleteButton).toBeUndefined();
       expect(moreButton).toBeTruthy();
-      await clickDropdownMenuItem(moreButton, "Delete branch");
+      await clickDropdownMenuItem(moreButton, "Delete Branch");
       expect(deletedBranch).toBe("feature/mobile");
       expect(tablistRow).toBe(branchHeaderTopRow);
-      expect(tablist?.className).toContain("w-full");
-      expect(tablist?.className).toContain("grid");
-      expect(tablist?.className).toContain("w-full");
-      expect(tablist?.className).toContain("grid-cols-2");
+      expect(tablist?.className).toContain("inline-flex");
+      expect(tablist?.className).toContain("max-w-full");
+      expect(tablist?.className).not.toContain("grid-cols-2");
       expect(tablist?.className).toContain("rounded-md");
       expect(tablist?.className).not.toContain("w-[12rem]");
       const activeTab = host.querySelector(
@@ -2687,7 +2630,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("realigns the branch detail tabs inline when the measured header width becomes wide enough", async () => {
+  it("keeps the compact branch detail tabs stable across measured header widths", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -2748,22 +2691,22 @@ describe("GitBranchesPanel interactions", () => {
       triggerResizeObservers();
       await flush();
 
-      expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("inline");
-      expect(tablist?.className).toContain("w-full");
+      expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("compact");
+      expect(tablist?.className).toContain("inline-flex");
 
       defineElementWidth(branchHeaderTopRow!, 720);
       triggerResizeObservers();
       await flush();
 
-      expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("stacked");
-      expect(tablist?.className).toContain("w-full");
+      expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("compact");
+      expect(tablist?.className).toContain("inline-flex");
 
       defineElementWidth(branchHeaderTopRow!, 420);
       triggerResizeObservers();
       await flush();
 
       expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("compact");
-      expect(tablist?.className).toContain("w-full");
+      expect(tablist?.className).toContain("inline-flex");
     } finally {
       dispose();
     }
@@ -3006,12 +2949,10 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      const deleteButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Delete",
-      ) as HTMLButtonElement | undefined;
-      expect(deleteButton).toBeTruthy();
-      deleteButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
+      await clickDropdownMenuItem(
+        host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null,
+        "Delete Branch",
+      );
 
       expect(requestedBranch).toBe("feature/demo");
       expect(document.body.textContent).toContain("Delete Branch");
@@ -3034,7 +2975,7 @@ describe("GitBranchesPanel interactions", () => {
           node.className.includes("pb-4"),
       ) as HTMLDivElement | undefined;
       const confirmButton = Array.from(
-        document.body.querySelectorAll("button"),
+        document.body.querySelectorAll('[role="dialog"] button'),
       ).find((node) => node.textContent?.trim() === "Delete Branch") as
         | HTMLButtonElement
         | undefined;
@@ -5290,9 +5231,6 @@ describe("GitBranchesPanel interactions", () => {
       const commandRail = host.querySelector(
         "[data-git-branch-header-actions]",
       ) as HTMLElement | null;
-      const mergeButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.trim() === "Merge",
-      ) as HTMLButtonElement | undefined;
       const moreButton = host.querySelector(
         'button[aria-label="More actions"]',
       ) as HTMLButtonElement | null;
@@ -5305,12 +5243,16 @@ describe("GitBranchesPanel interactions", () => {
 
       expect(header?.dataset.gitBranchHeaderLayout).toBe("compact");
       expect(commandRail?.dataset.gitBranchHeaderActions).toBe("overflow");
-      expect(mergeButton).toBeTruthy();
-      expect(mergeButton?.disabled).toBe(true);
-      expect(mergeButton?.getAttribute("aria-busy")).toBe("true");
       expect(moreButton).toBeTruthy();
-      expect(moreButton?.disabled).toBe(true);
-      expect(moreButton?.getAttribute("aria-busy")).toBe("true");
+      expect(moreButton?.disabled).toBe(false);
+      moreButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+      const mergeMenuButton = Array.from(
+        document.body.querySelectorAll('[role="menu"] button'),
+      ).find((node) => node.textContent?.startsWith("Merge")) as HTMLButtonElement | undefined;
+      expect(mergeMenuButton).toBeTruthy();
+      expect(mergeMenuButton?.disabled).toBe(true);
+      expect(mergeMenuButton?.textContent).toContain("Checking");
       expect(verificationSlot).toBeTruthy();
       expect(inlineStatuses).toHaveLength(1);
       expect(inlineStatuses[0]?.textContent).toContain("Checking");
@@ -5338,8 +5280,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(host.querySelector("#git-branch-subview-tab-history")).toBeTruthy();
       expect(host.textContent).not.toContain("Refresh branches");
 
-      mergeButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      moreButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      mergeMenuButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
       expect(onMergeBranch).not.toHaveBeenCalled();
       expect(onCheckoutBranch).not.toHaveBeenCalled();

@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   gitBranchTone,
-  gitChangeLabel,
   gitChangePathClass,
   gitChangeTone,
   gitCompareTone,
@@ -45,11 +44,6 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitChangeTone('renamed')).toBe('violet');
     expect(gitChangeTone('copied')).toBe('brand');
     expect(gitChangeTone('modified')).toBe('brand');
-
-    expect(gitChangeLabel('added')).toBe('Added');
-    expect(gitChangeLabel('conflicted')).toBe('Conflicted');
-    expect(gitChangeLabel('modified')).toBe('Modified');
-    expect(gitChangeLabel('unknown')).toBe('Unknown');
 
     expect(gitCompareTone(0, 0)).toBe('success');
     expect(gitCompareTone(2, 0)).toBe('brand');
@@ -126,9 +120,10 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitSelectedChipClass(false)).toBe('');
 
     expect(gitNavigationItemClass(true)).toContain('git-browser-selection-surface');
-    expect(gitNavigationItemClass(true)).toContain('git-browser-selection-nav');
+    expect(gitNavigationItemClass(true)).toContain('border border-transparent');
+    expect(gitNavigationItemClass(true)).not.toContain('git-browser-selection-nav');
     expect(gitNavigationItemClass(false)).toContain('git-browser-interactive');
-    expect(gitNavigationItemClass(false)).toContain('border-l-transparent');
+    expect(gitNavigationItemClass(false)).toContain('border-transparent');
     expect(gitCurrentBranchChipClass()).toBe('git-browser-current-chip');
   });
 

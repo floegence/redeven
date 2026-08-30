@@ -4951,7 +4951,15 @@
       "localBranchesDescription": "このチェックアウト内のブランチです。",
       "remoteBranchesDescription": "追跡中および共有されている参照です。",
       "reviewSelectedBranchStatusDiff": "選択したブランチ状態ファイルの差分を確認します。",
-      "selectBranchStatusFile": "ブランチ状態ファイルを選択して差分を確認してください。"
+      "selectBranchStatusFile": "ブランチ状態ファイルを選択して差分を確認してください。",
+      "changeTypes": {
+        "added": "追加",
+        "modified": "変更",
+        "deleted": "削除",
+        "renamed": "名前変更",
+        "copied": "コピー",
+        "conflicted": "競合"
+      }
     },
     "shell": {
       "displayMode": "表示モード",

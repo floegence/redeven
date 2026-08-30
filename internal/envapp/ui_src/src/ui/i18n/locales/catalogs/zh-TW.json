@@ -1740,7 +1740,7 @@
       "head": "頭",
       "upstream": "上游",
       "checkout": "檢出",
-      "stashes": "隱藏",
+      "stashes": "儲藏",
       "context": "情境",
       "base": "基礎",
       "target": "目標",
@@ -4951,7 +4951,15 @@
       "localBranchesDescription": "目前簽出中的分支。",
       "remoteBranchesDescription": "追蹤分支和共用參照。",
       "reviewSelectedBranchStatusDiff": "檢視所選分支狀態檔案的差異。",
-      "selectBranchStatusFile": "選擇分支狀態檔案以檢視差異。"
+      "selectBranchStatusFile": "選擇分支狀態檔案以檢視差異。",
+      "changeTypes": {
+        "added": "已新增",
+        "modified": "已修改",
+        "deleted": "已刪除",
+        "renamed": "已重新命名",
+        "copied": "已複製",
+        "conflicted": "有衝突"
+      }
     },
     "shell": {
       "displayMode": "顯示方式",

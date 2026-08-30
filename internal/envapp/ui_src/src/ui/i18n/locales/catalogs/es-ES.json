@@ -4955,7 +4955,15 @@
       "localBranchesDescription": "Ramas de esta copia de trabajo.",
       "remoteBranchesDescription": "Referencias de seguimiento y compartidas.",
       "reviewSelectedBranchStatusDiff": "Revisar las diferencias del archivo de estado de rama seleccionado.",
-      "selectBranchStatusFile": "Selecciona un archivo de estado de rama para revisar sus diferencias."
+      "selectBranchStatusFile": "Selecciona un archivo de estado de rama para revisar sus diferencias.",
+      "changeTypes": {
+        "added": "Añadido",
+        "modified": "Modificado",
+        "deleted": "Eliminado",
+        "renamed": "Renombrado",
+        "copied": "Copiado",
+        "conflicted": "En conflicto"
+      }
     },
     "shell": {
       "displayMode": "Modo de visualización",
