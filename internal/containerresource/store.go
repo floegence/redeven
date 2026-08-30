@@ -316,6 +316,166 @@ LIMIT 500
 	return result, rows.Err()
 }
 
+func (s *store) appendEvent(ctx context.Context, operationID, eventType string, payload json.RawMessage) (Event, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Event{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	op, err := getOperationTx(ctx, tx, "operation_id", operationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Event{}, ErrOperationNotFound
+		}
+		return Event{}, err
+	}
+	if op.State.Terminal() {
+		return Event{}, ErrOperationTerminal
+	}
+	now := time.Now().UnixMilli()
+	if payload == nil {
+		payload = json.RawMessage{}
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE container_resource_operations SET updated_at_unix_ms = ? WHERE operation_id = ?
+`, now, operationID); err != nil {
+		return Event{}, err
+	}
+	result, err := tx.ExecContext(ctx, `
+INSERT INTO container_resource_operation_events(operation_id, event_type, state, payload_json, created_at_unix_ms)
+VALUES(?, ?, ?, ?, ?)
+`, operationID, sanitizeCode(eventType), op.State, string(payload), now)
+	if err != nil {
+		return Event{}, err
+	}
+	sequence, err := result.LastInsertId()
+	if err != nil {
+		return Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Event{}, err
+	}
+	return Event{Sequence: sequence, OperationID: operationID, Type: sanitizeCode(eventType), State: op.State, Payload: payload, CreatedAtUnixMs: now}, nil
+}
+
+func (s *store) composeProjectDefinitions(ctx context.Context, engine containerengine.Engine, endpointID containerengine.EndpointID) ([]ComposeProjectDefinition, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT project_id, engine, endpoint_id, name, config_paths_json, env_file_path, profiles_json, created_at_unix_ms, updated_at_unix_ms
+FROM container_compose_projects
+WHERE engine = ? AND endpoint_id = ?
+ORDER BY name COLLATE NOCASE ASC, project_id ASC
+`, engine, endpointID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var definitions []ComposeProjectDefinition
+	for rows.Next() {
+		definition, err := scanComposeProjectDefinition(rows)
+		if err != nil {
+			return nil, err
+		}
+		definitions = append(definitions, definition)
+	}
+	return definitions, rows.Err()
+}
+
+func (s *store) composeProjectDefinition(ctx context.Context, projectID string) (ComposeProjectDefinition, error) {
+	definition, err := scanComposeProjectDefinition(s.db.QueryRowContext(ctx, `
+SELECT project_id, engine, endpoint_id, name, config_paths_json, env_file_path, profiles_json, created_at_unix_ms, updated_at_unix_ms
+FROM container_compose_projects WHERE project_id = ?
+`, projectID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return ComposeProjectDefinition{}, ErrComposeProjectDefinitionNotFound
+	}
+	return definition, err
+}
+
+func (s *store) createComposeProjectDefinition(ctx context.Context, definition ComposeProjectDefinition) (ComposeProjectDefinition, error) {
+	configPaths, err := json.Marshal(definition.ConfigPaths)
+	if err != nil {
+		return ComposeProjectDefinition{}, err
+	}
+	profiles, err := json.Marshal(definition.Profiles)
+	if err != nil {
+		return ComposeProjectDefinition{}, err
+	}
+	_, err = s.db.ExecContext(ctx, `
+INSERT INTO container_compose_projects(
+  project_id, engine, endpoint_id, name, config_paths_json, env_file_path, profiles_json, created_at_unix_ms, updated_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, definition.ProjectID, definition.Engine, definition.EndpointID, definition.Name, string(configPaths), definition.EnvFilePath, string(profiles), definition.CreatedAtUnixMs, definition.UpdatedAtUnixMs)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return ComposeProjectDefinition{}, fmt.Errorf("%w: a saved Compose project already uses this name", ErrInvalidRequest)
+		}
+		return ComposeProjectDefinition{}, err
+	}
+	return definition, nil
+}
+
+func (s *store) updateComposeProjectDefinition(ctx context.Context, definition ComposeProjectDefinition) (ComposeProjectDefinition, error) {
+	configPaths, err := json.Marshal(definition.ConfigPaths)
+	if err != nil {
+		return ComposeProjectDefinition{}, err
+	}
+	profiles, err := json.Marshal(definition.Profiles)
+	if err != nil {
+		return ComposeProjectDefinition{}, err
+	}
+	result, err := s.db.ExecContext(ctx, `
+UPDATE container_compose_projects
+SET engine = ?, endpoint_id = ?, name = ?, config_paths_json = ?, env_file_path = ?, profiles_json = ?, updated_at_unix_ms = ?
+WHERE project_id = ?
+`, definition.Engine, definition.EndpointID, definition.Name, string(configPaths), definition.EnvFilePath, string(profiles), definition.UpdatedAtUnixMs, definition.ProjectID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return ComposeProjectDefinition{}, fmt.Errorf("%w: a saved Compose project already uses this name", ErrInvalidRequest)
+		}
+		return ComposeProjectDefinition{}, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return ComposeProjectDefinition{}, err
+	}
+	if count != 1 {
+		return ComposeProjectDefinition{}, ErrComposeProjectDefinitionNotFound
+	}
+	return definition, nil
+}
+
+func (s *store) deleteComposeProjectDefinition(ctx context.Context, projectID string) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM container_compose_projects WHERE project_id = ?`, projectID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrComposeProjectDefinitionNotFound
+	}
+	return nil
+}
+
+func scanComposeProjectDefinition(row rowScanner) (ComposeProjectDefinition, error) {
+	var definition ComposeProjectDefinition
+	var engine, endpointID, configPaths, profiles string
+	if err := row.Scan(&definition.ProjectID, &engine, &endpointID, &definition.Name, &configPaths, &definition.EnvFilePath, &profiles, &definition.CreatedAtUnixMs, &definition.UpdatedAtUnixMs); err != nil {
+		return ComposeProjectDefinition{}, err
+	}
+	definition.Engine = containerengine.Engine(engine)
+	definition.EndpointID = containerengine.EndpointID(endpointID)
+	if err := json.Unmarshal([]byte(configPaths), &definition.ConfigPaths); err != nil {
+		return ComposeProjectDefinition{}, errors.New("saved Compose project paths are invalid")
+	}
+	if err := json.Unmarshal([]byte(profiles), &definition.Profiles); err != nil {
+		return ComposeProjectDefinition{}, errors.New("saved Compose project profiles are invalid")
+	}
+	return definition, nil
+}
+
 const operationSelectSQL = `
 SELECT operation_id, request_id, request_hash, plan_hash, method, engine, endpoint_id,
        resource_kind, resource_identity, state, cancel_requested, error_code, error_message,

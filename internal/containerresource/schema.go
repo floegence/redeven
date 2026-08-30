@@ -10,17 +10,20 @@ import (
 
 const (
 	schemaKind           = "container_resources_product_v1"
-	currentSchemaVersion = 1
+	currentSchemaVersion = 2
 )
 
 func schemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           schemaKind,
 		CurrentVersion: currentSchemaVersion,
-		MinimumVersion: currentSchemaVersion,
+		MinimumVersion: 1,
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Initialize:     createSchema,
-		Verify:         verifySchema,
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
+		},
+		Verify: verifySchema,
 	}
 }
 
@@ -60,16 +63,60 @@ CREATE TABLE container_resource_operation_events (
 );
 CREATE INDEX idx_container_resource_operation_events_operation_sequence
   ON container_resource_operation_events(operation_id, sequence ASC);
+
+CREATE TABLE container_compose_projects (
+  project_id TEXT PRIMARY KEY,
+  engine TEXT NOT NULL,
+  endpoint_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  config_paths_json TEXT NOT NULL,
+  env_file_path TEXT NOT NULL DEFAULT '',
+  profiles_json TEXT NOT NULL DEFAULT '[]',
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX idx_container_compose_projects_target_name
+  ON container_compose_projects(engine, endpoint_id, name);
+`)
+	return err
+}
+
+func migrateToV2(tx *sql.Tx) error {
+	if err := verifyContainerResourceSchema(tx, false); err != nil {
+		return fmt.Errorf("verify container resources v1 schema: %w", err)
+	}
+	_, err := tx.Exec(`
+CREATE TABLE container_compose_projects (
+  project_id TEXT PRIMARY KEY,
+  engine TEXT NOT NULL,
+  endpoint_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  config_paths_json TEXT NOT NULL,
+  env_file_path TEXT NOT NULL DEFAULT '',
+  profiles_json TEXT NOT NULL DEFAULT '[]',
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX idx_container_compose_projects_target_name
+  ON container_compose_projects(engine, endpoint_id, name);
 `)
 	return err
 }
 
 func verifySchema(tx *sql.Tx) error {
+	return verifyContainerResourceSchema(tx, true)
+}
+
+func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects bool) error {
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
 	}
-	if !slices.Equal(tables, []string{"container_resource_operation_events", "container_resource_operations"}) {
+	wantTables := []string{"container_resource_operation_events", "container_resource_operations"}
+	if includeComposeProjects {
+		wantTables = []string{"container_compose_projects", "container_resource_operation_events", "container_resource_operations"}
+	}
+	if !slices.Equal(tables, wantTables) {
 		return fmt.Errorf("container resource table set mismatch: got %v", tables)
 	}
 	expected := map[string][]string{
@@ -79,6 +126,9 @@ func verifySchema(tx *sql.Tx) error {
 			"reconciliation_json", "created_at_unix_ms", "started_at_unix_ms", "finished_at_unix_ms", "updated_at_unix_ms",
 		},
 		"container_resource_operation_events": {"sequence", "operation_id", "event_type", "state", "payload_json", "created_at_unix_ms"},
+	}
+	if includeComposeProjects {
+		expected["container_compose_projects"] = []string{"project_id", "engine", "endpoint_id", "name", "config_paths_json", "env_file_path", "profiles_json", "created_at_unix_ms", "updated_at_unix_ms"}
 	}
 	for table, want := range expected {
 		columns, err := sqliteutil.TableColumnNamesTx(tx, table)
@@ -94,6 +144,9 @@ func verifySchema(tx *sql.Tx) error {
 		return err
 	}
 	wantIndexes := []string{"idx_container_resource_operation_events_operation_sequence", "idx_container_resource_operations_state_created"}
+	if includeComposeProjects {
+		wantIndexes = []string{"idx_container_compose_projects_target_name", "idx_container_resource_operation_events_operation_sequence", "idx_container_resource_operations_state_created"}
+	}
 	if !slices.Equal(indexes, wantIndexes) {
 		return fmt.Errorf("container resource index set mismatch: got %v, want %v", indexes, wantIndexes)
 	}

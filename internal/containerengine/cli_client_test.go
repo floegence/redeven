@@ -301,6 +301,41 @@ func TestCLIClientPullImageParsesDigest(t *testing.T) {
 	}
 }
 
+func TestCLIClientPullImageReportsObservedLayerProgress(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCommandRunner{streams: map[string][]string{
+		"docker pull ghcr.io/acme/api:latest": {
+			"a1b2c3: Pulling fs layer",
+			"d4e5f6: Pulling fs layer",
+			"a1b2c3: Download complete",
+			"a1b2c3: Pull complete",
+			"d4e5f6: Extracting",
+			"d4e5f6: Pull complete",
+			"Digest: " + testSHA256Digest,
+		},
+	}}
+	client := &CLIClient{Runner: runner}
+	progress := make([]ImagePullProgress, 0, 8)
+	result, err := client.PullImageWithProgress(context.Background(), EngineDocker, "ghcr.io/acme/api:latest", func(_ context.Context, item ImagePullProgress) error {
+		progress = append(progress, item)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("PullImageWithProgress() error = %v", err)
+	}
+	if result.Image.Digest != testSHA256Digest || !result.Completed {
+		t.Fatalf("pull result = %+v", result)
+	}
+	if len(progress) < 4 || progress[0].Phase != "resolving" {
+		t.Fatalf("progress = %+v, want resolving and observed pull phases", progress)
+	}
+	last := progress[len(progress)-1]
+	if last.Phase != "verifying" || last.Completed != 2 || last.Total != 2 || last.Unit != "layers" {
+		t.Fatalf("last progress = %+v, want verified 2/2 layers", last)
+	}
+}
+
 func TestCLIClientV3ResourcesParseDockerAndPodmanFormats(t *testing.T) {
 	t.Parallel()
 	runner := &fakeCommandRunner{outputs: map[string]string{

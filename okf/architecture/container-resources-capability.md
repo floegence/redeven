@@ -56,9 +56,14 @@ conflicting reuse fails visibly.
 The store kind is `container_resources_product_v1`. It persists operation
 identity, bounded state, sanitized errors, events, and redacted reconciliation
 evidence, but never raw mutation payloads, argv, engine output, secrets, URLs,
-or host paths. On startup, active records are observed through current engine
-inventory, then atomically marked interrupted. Startup never replays an
-operation whose terminal outcome was not recorded.
+or host paths. Schema v2 adds a separate saved Compose Project definition
+table. It stores exact canonical configuration file paths, an optional env-file
+path, profile names, and the internal target solely to reconstruct later
+user-requested lifecycle operations; these values never enter operation events,
+errors, reconciliation, or audit detail. The v1-to-v2 migration preserves every
+operation and fails atomically on drift. On startup, active records are observed
+through current engine inventory, then atomically marked interrupted. Startup
+never replays an operation whose terminal outcome was not recorded.
 
 Cancellation terminates the owned process group and transitions through the
 same operation record. A terminal state is published only after a fresh,
@@ -77,6 +82,13 @@ require Read, Write, and Execute. High-risk preflights additionally require
 Admin and exact-name confirmation.
 Server-side enforcement is authoritative; disabled UI controls are only a
 presentation aid.
+
+Creating, changing, reading, or forgetting a saved Compose definition requires
+Admin; mutation also requires full RWX. Redeven canonicalizes one to eight
+regular Compose files, bounds their size, optionally accepts one bounded env
+file and up to sixteen safe profile names, and runs `docker compose config
+--quiet` against the exact active Docker target before committing. Forgetting a
+definition does not stop or remove its containers.
 
 `GET /container-resources/runtimes` returns both engine detection states in one
 response. A ready item includes its internal endpoint ID and capabilities; a
@@ -182,13 +194,21 @@ Image details provide Overview, sanitized layers, references, Run, Tag, and
 Delete without vulnerability or package-analysis placeholders. Image history
 queries use the stable image ID so dangling images remain inspectable. Volume details
 provide Overview, references, and capability-gated files. Compose Projects and
-Pods expose overview, members, lifecycle, and member navigation. Managed
-resources replace mutation controls with one Web Services link.
+Pods expose overview, members, lifecycle, and member navigation. Users may save
+a Docker Compose Project from absolute Compose file paths, an optional env file,
+and profiles, then start, stop, restart, or down it through the same preflight,
+lock, operation, and reconciliation owner. A saved definition remains listed
+after down, and down retains volumes. Managed resources cannot be saved as a
+parallel native lifecycle owner and replace mutation controls with one Web
+Services link.
 
 Desktop uses a compact table, narrow Workbench hides secondary columns, and
 mobile uses cards plus a full-screen detail surface. Logs support timestamped
 search, follow/pause, wrapping, copy, current-buffer download, and browser full
-screen. A shared Operations drawer keeps endpoint and target identity visible.
+screen. A shared Operations drawer uses a master-detail layout: the list names
+the operation and resource once, while the detail shows current reported phase,
+observed unit progress, source service, duration, sanitized failure, durable
+event timeline, and cancellation. It does not expose endpoint presentation.
 
 The UI provides structured create dialogs and a separate risk review before
 submission. It supports keyboard operation, 44 px touch targets, forced colors,
@@ -217,6 +237,7 @@ logs, statistics, image history, and file reads commit only while their owning
 - `redeven:internal/containerengine/resources_v4_cli.go` - Constructs explicit Docker and Podman commands for bound targets.
 - `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe Podman volume archive reads.
 - `redeven:internal/containerresource/service.go` - Owns strict preflight admission, operations, cancellation, and startup observation.
+- `redeven:internal/containerresource/compose_projects.go` - Validates and binds saved Compose Project definitions to exact Docker targets.
 - `redeven:internal/containerresource/schema.go` - Defines the Redeven-owned product database lineage.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Enforces native Local API routes and RWX/Admin permissions.
 - `redeven:internal/managedwebservice/container_resources.go` - Resolves protected Web Services ownership.

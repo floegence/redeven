@@ -60,6 +60,9 @@ func (g *Server) handleContainerResourcesAPI(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: preflight})
 		return true
 	}
+	if strings.HasPrefix(r.URL.Path, containerResourcesAPIBase+"/compose-projects") && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
+		return g.handleComposeDefinitionMutation(w, r)
+	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return true
@@ -382,6 +385,96 @@ func (g *Server) handleComposeCollection(w http.ResponseWriter, r *http.Request,
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"project": item, "management": management}})
 		return true
 	}
+	if len(parts) == 3 && parts[2] == "definition" {
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return true
+		}
+		identity, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		definition, err := g.containers.ComposeProjectDefinition(r.Context(), identity)
+		if err != nil || definition.Engine != engine || definition.EndpointID != endpointID {
+			if err == nil {
+				err = containerresource.ErrComposeProjectDefinitionNotFound
+			}
+			writeContainerResourceError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: definition})
+		return true
+	}
+	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+	return true
+}
+
+func (g *Server) handleComposeDefinitionMutation(w http.ResponseWriter, r *http.Request) bool {
+	meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+	if !ok {
+		return true
+	}
+	if !meta.CanAdmin {
+		writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "admin permission denied", ErrorCode: "ADMIN_REQUIRED"})
+		return true
+	}
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, containerResourcesAPIBase+"/compose-projects"), "/")
+	if r.Method == http.MethodPost && rest == "" {
+		var input containerresource.ComposeProjectDefinitionInput
+		if err := decodeContainerResourceJSON(r, &input); err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		definition, err := g.containers.CreateComposeProjectDefinition(r.Context(), input)
+		detail := map[string]any{"engine": input.Engine, "endpoint_id": input.EndpointID, "resource_kind": "compose_project", "resource_identity": truncateString(input.Name, 160)}
+		if err != nil {
+			g.appendAudit(meta, "container_compose_project_save", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+			writeContainerResourceError(w, err)
+			return true
+		}
+		detail["resource_identity"] = definition.ProjectID
+		g.appendAudit(meta, "container_compose_project_save", "success", detail, nil)
+		writeJSON(w, http.StatusCreated, apiResp{OK: true, Data: definition})
+		return true
+	}
+	identity, err := decodeResourcePathSegment(rest)
+	if err != nil {
+		writeContainerResourceError(w, err)
+		return true
+	}
+	current, err := g.containers.ComposeProjectDefinition(r.Context(), identity)
+	if err != nil {
+		writeContainerResourceError(w, err)
+		return true
+	}
+	detail := map[string]any{"engine": current.Engine, "endpoint_id": current.EndpointID, "resource_kind": "compose_project", "resource_identity": current.ProjectID}
+	if r.Method == http.MethodDelete {
+		if err := g.containers.DeleteComposeProjectDefinition(r.Context(), identity); err != nil {
+			g.appendAudit(meta, "container_compose_project_forget", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "container_compose_project_forget", "success", detail, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"project_id": identity}})
+		return true
+	}
+	if r.Method == http.MethodPut {
+		var input containerresource.ComposeProjectDefinitionInput
+		if err := decodeContainerResourceJSON(r, &input); err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		definition, err := g.containers.UpdateComposeProjectDefinition(r.Context(), identity, input)
+		if err != nil {
+			g.appendAudit(meta, "container_compose_project_update", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "container_compose_project_update", "success", detail, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: definition})
+		return true
+	}
 	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 	return true
 }
@@ -527,6 +620,27 @@ func (g *Server) handleContainerOperationRoute(w http.ResponseWriter, r *http.Re
 			return true
 		}
 		g.streamContainerOperationEvents(w, r, operationID, after)
+		return true
+	}
+	if r.Method == http.MethodGet && len(parts) == 3 && parts[1] == "events" && parts[2] == "snapshot" {
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return true
+		}
+		if !containerQueryOnly(r.URL.Query(), "after_sequence") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		after, err := parseBoundedInt64(r.URL.Query().Get("after_sequence"), 0, 0, 1<<62)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		events, err := g.containers.Events(r.Context(), operationID, after)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"events": events}})
 		return true
 	}
 	writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
@@ -841,7 +955,7 @@ func writeContainerResourceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, containerengine.ErrResourceFileLimit), errors.Is(err, containerengine.ErrCommandOutputLimit):
 		status = http.StatusRequestEntityTooLarge
-	case errors.Is(err, containerresource.ErrOperationNotFound), errors.Is(err, containerengine.ErrContainerNotFound), errors.Is(err, containerengine.ErrImageNotFound), errors.Is(err, containerengine.ErrEndpointNotFound):
+	case errors.Is(err, containerresource.ErrOperationNotFound), errors.Is(err, containerresource.ErrComposeProjectDefinitionNotFound), errors.Is(err, containerengine.ErrContainerNotFound), errors.Is(err, containerengine.ErrImageNotFound), errors.Is(err, containerengine.ErrEndpointNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, containerresource.ErrManagedByWebService), errors.Is(err, containerengine.ErrPermissionDenied):
 		status = http.StatusForbidden
@@ -865,6 +979,8 @@ func publicContainerResourceCode(err error) string {
 		return "IDEMPOTENCY_CONFLICT"
 	case errors.Is(err, containerresource.ErrOperationNotFound):
 		return "OPERATION_NOT_FOUND"
+	case errors.Is(err, containerresource.ErrComposeProjectDefinitionNotFound):
+		return "COMPOSE_PROJECT_NOT_FOUND"
 	case errors.Is(err, containerresource.ErrOperationTerminal):
 		return "OPERATION_TERMINAL"
 	case errors.Is(err, containerresource.ErrManagedByWebService):
@@ -900,6 +1016,8 @@ func publicContainerResourceMessage(err error) string {
 		return "This request identifier is already used by another operation."
 	case "OPERATION_NOT_FOUND":
 		return "The container operation was not found."
+	case "COMPOSE_PROJECT_NOT_FOUND":
+		return "The saved Compose project was not found."
 	case "OPERATION_TERMINAL":
 		return "The container operation has already finished."
 	case "MANAGED_BY_WEB_SERVICE":

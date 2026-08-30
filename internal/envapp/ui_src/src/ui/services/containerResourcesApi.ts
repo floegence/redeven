@@ -74,6 +74,23 @@ export type ComposeProjectInventoryItem = Readonly<{
   container_count: number;
   running_count: number;
   management: ContainerManagement;
+  saved: boolean;
+  source?: string;
+}>;
+
+export type ComposeProjectDefinitionInput = Readonly<{
+  engine: 'docker';
+  endpoint_id: string;
+  name: string;
+  config_paths: readonly string[];
+  env_file_path?: string;
+  profiles?: readonly string[];
+}>;
+
+export type ComposeProjectDefinition = ComposeProjectDefinitionInput & Readonly<{
+  project_id: string;
+  created_at_unix_ms: number;
+  updated_at_unix_ms: number;
 }>;
 
 export type PodInventoryItem = Readonly<{
@@ -140,6 +157,15 @@ export type ContainerOperation = Readonly<{
   started_at_unix_ms?: number;
   finished_at_unix_ms?: number;
   updated_at_unix_ms: number;
+}>;
+
+export type ContainerOperationEvent = Readonly<{
+  sequence: number;
+  operation_id: string;
+  type: string;
+  state: ContainerOperationState;
+  payload?: Readonly<Record<string, unknown>>;
+  created_at_unix_ms: number;
 }>;
 
 export type ContainerLogLine = Readonly<{ timestamp_unix_ms?: number; message: string }>;
@@ -388,6 +414,46 @@ export async function listContainerOperations(): Promise<ContainerOperation[]> {
   return response.operations ?? [];
 }
 
+export async function listContainerOperationEvents(operationID: string): Promise<ContainerOperationEvent[]> {
+  const response = await fetchLocalApiJSON<{ events: ContainerOperationEvent[] }>(
+    `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}/events/snapshot?after_sequence=0`,
+    { method: 'GET' },
+  );
+  return response.events ?? [];
+}
+
+export async function createComposeProjectDefinition(input: ComposeProjectDefinitionInput): Promise<ComposeProjectDefinition> {
+  return fetchLocalApiJSON<ComposeProjectDefinition>('/_redeven_proxy/api/container-resources/compose-projects', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateComposeProjectDefinition(projectID: string, input: ComposeProjectDefinitionInput): Promise<ComposeProjectDefinition> {
+  return fetchLocalApiJSON<ComposeProjectDefinition>(
+    `/_redeven_proxy/api/container-resources/compose-projects/${encodeURIComponent(projectID)}`,
+    { method: 'PUT', body: JSON.stringify(input) },
+  );
+}
+
+export async function getComposeProjectDefinition(
+  projectID: string,
+  engine: ContainerEngine,
+  endpointID: string,
+): Promise<ComposeProjectDefinition> {
+  return fetchLocalApiJSON<ComposeProjectDefinition>(
+    `/_redeven_proxy/api/container-resources/compose-projects/${encodeURIComponent(projectID)}/definition?${query(engine, endpointID)}`,
+    { method: 'GET', cache: 'no-store' },
+  );
+}
+
+export async function deleteComposeProjectDefinition(projectID: string): Promise<void> {
+  await fetchLocalApiJSON<{ project_id: string }>(
+    `/_redeven_proxy/api/container-resources/compose-projects/${encodeURIComponent(projectID)}`,
+    { method: 'DELETE' },
+  );
+}
+
 export async function cancelContainerOperation(operationID: string): Promise<ContainerOperation> {
   return fetchLocalApiJSON<ContainerOperation>(
     `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}/cancel`,
@@ -434,4 +500,18 @@ export async function subscribeContainerOperation(
   } finally {
     await reader.cancel().catch(() => undefined);
   }
+}
+
+export async function subscribeContainerOperationEvents(
+  operationID: string,
+  onEvent: (event: ContainerOperationEvent) => void,
+  signal: AbortSignal,
+  afterSequence = 0,
+): Promise<void> {
+  await subscribeContainerSSE<ContainerOperationEvent>(
+    `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}/events?after_sequence=${afterSequence}`,
+    'operation',
+    onEvent,
+    signal,
+  );
 }

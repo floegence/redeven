@@ -8,15 +8,20 @@ const localApiMocks = vi.hoisted(() => ({
 vi.mock('./localApi', () => localApiMocks);
 
 import {
+  createComposeProjectDefinition,
   createContainerOperation,
+  deleteComposeProjectDefinition,
+  getComposeProjectDefinition,
   getContainerImageHistory,
   getRawContainerInspect,
   listContainerRuntimes,
+  listContainerOperationEvents,
   listContainerResourceFiles,
   readContainerResourceFile,
   listContainerResources,
   preflightContainerOperation,
   subscribeContainerOperation,
+  subscribeContainerOperationEvents,
   subscribeContainerStatsCollection,
   type ContainerOperation,
   type ContainerPreflight,
@@ -135,6 +140,66 @@ describe('native container resources API', () => {
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
       '/_redeven_proxy/api/container-resource-operations/container_operation_1',
       expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('loads and streams structured operation progress', async () => {
+    const event = {
+      sequence: 3,
+      operation_id: 'container_operation_1',
+      type: 'progress',
+      state: 'running' as const,
+      payload: { phase: 'pulling', completed: 2, total: 4, unit: 'layers' },
+      created_at_unix_ms: 3,
+    };
+    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ events: [event] });
+    await expect(listContainerOperationEvents('container_operation_1')).resolves.toEqual([event]);
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/container-resource-operations/container_operation_1/events/snapshot?after_sequence=0',
+      { method: 'GET' },
+    );
+
+    const encoded = new TextEncoder().encode(`id: 3\nevent: operation\ndata: ${JSON.stringify(event)}\n\n`);
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoded);
+        controller.close();
+      },
+    }), { status: 200 }));
+    const observed = vi.fn();
+    await subscribeContainerOperationEvents('container_operation_1', observed, new AbortController().signal, 2);
+    expect(observed).toHaveBeenCalledWith(event);
+    expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/container-resource-operations/container_operation_1/events?after_sequence=2',
+      expect.objectContaining({ method: 'GET', headers: { Accept: 'text/event-stream' } }),
+    );
+  });
+
+  it('uses explicit saved Compose project definition routes', async () => {
+    const input = {
+      engine: 'docker' as const,
+      endpoint_id: 'endpoint/primary',
+      name: 'saved-api',
+      config_paths: ['/workspace/compose.yaml'],
+      profiles: ['dev'],
+    };
+    const definition = { ...input, project_id: 'compose_saved_1', created_at_unix_ms: 1, updated_at_unix_ms: 1 };
+    localApiMocks.fetchLocalApiJSON
+      .mockResolvedValueOnce(definition)
+      .mockResolvedValueOnce(definition)
+      .mockResolvedValueOnce({ project_id: definition.project_id });
+
+    await expect(createComposeProjectDefinition(input)).resolves.toEqual(definition);
+    await expect(getComposeProjectDefinition(definition.project_id, 'docker', input.endpoint_id)).resolves.toEqual(definition);
+    await expect(deleteComposeProjectDefinition(definition.project_id)).resolves.toBeUndefined();
+
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenNthCalledWith(1,
+      '/_redeven_proxy/api/container-resources/compose-projects',
+      { method: 'POST', body: JSON.stringify(input) },
+    );
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenNthCalledWith(2,
+      '/_redeven_proxy/api/container-resources/compose-projects/compose_saved_1/definition?engine=docker&endpoint_id=endpoint%2Fprimary',
+      { method: 'GET', cache: 'no-store' },
     );
   });
 

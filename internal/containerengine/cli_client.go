@@ -210,6 +210,133 @@ func (c *CLIClient) PullImage(ctx context.Context, engine Engine, imageRef strin
 	}, nil
 }
 
+func (c *CLIClient) PullImageWithProgress(ctx context.Context, engine Engine, imageRef string, sink ImagePullProgressSink) (EngineImageResult, error) {
+	if err := validateEngine(engine); err != nil {
+		return EngineImageResult{}, err
+	}
+	imageRef = strings.TrimSpace(imageRef)
+	if err := validateImageReference(imageRef); err != nil {
+		return EngineImageResult{}, err
+	}
+	if sink == nil {
+		return EngineImageResult{}, errors.New("image pull progress sink is required")
+	}
+	if err := sink(ctx, ImagePullProgress{Phase: "resolving"}); err != nil {
+		return EngineImageResult{}, err
+	}
+
+	tracker := newImagePullProgressTracker(engine, sink)
+	pullCtx, cancel := context.WithTimeout(ctx, c.imagePullTimeout())
+	defer cancel()
+	err := c.stream(pullCtx, engine, []string{"pull", imageRef}, func(lineCtx context.Context, raw []byte) error {
+		return tracker.consume(lineCtx, string(raw))
+	})
+	if err != nil {
+		if pullCtx.Err() != nil {
+			if ctx.Err() != nil {
+				return EngineImageResult{}, ctx.Err()
+			}
+			return EngineImageResult{}, fmt.Errorf("%w: %s", ErrEngineTimeout, engine)
+		}
+		if errors.Is(err, ErrLogsFollowUnsupported) {
+			return c.PullImage(ctx, engine, imageRef)
+		}
+		return EngineImageResult{}, err
+	}
+	if err := sink(ctx, ImagePullProgress{Phase: "verifying", Completed: tracker.completedCount(), Total: tracker.totalCount(), Unit: tracker.unit()}); err != nil {
+		return EngineImageResult{}, err
+	}
+	return EngineImageResult{
+		Engine:    engine,
+		Image:     ImageInput{Reference: imageRef, Digest: tracker.digest},
+		Completed: true,
+	}, nil
+}
+
+type imagePullProgressTracker struct {
+	engine    Engine
+	sink      ImagePullProgressSink
+	layers    map[string]string
+	digest    string
+	lastPhase string
+	lastDone  int64
+	lastTotal int64
+}
+
+func newImagePullProgressTracker(engine Engine, sink ImagePullProgressSink) *imagePullProgressTracker {
+	return &imagePullProgressTracker{engine: engine, sink: sink, layers: make(map[string]string)}
+}
+
+func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) error {
+	line := strings.TrimSpace(raw)
+	if line == "" {
+		return nil
+	}
+	if digest := extractPullDigest([]byte(line)); digest != "" {
+		t.digest = digest
+	}
+	lower := strings.ToLower(line)
+	phase := "pulling"
+	if strings.Contains(lower, "extracting") || strings.Contains(lower, "writing manifest") {
+		phase = "extracting"
+	} else if strings.Contains(lower, "verifying checksum") || strings.Contains(lower, "getting image source signatures") || strings.HasPrefix(lower, "digest:") {
+		phase = "verifying"
+	}
+
+	if id, state, ok := parsePullLayerState(line); ok {
+		t.layers[id] = state
+	}
+	done, total := t.completedCount(), t.totalCount()
+	if phase == t.lastPhase && done == t.lastDone && total == t.lastTotal {
+		return nil
+	}
+	t.lastPhase, t.lastDone, t.lastTotal = phase, done, total
+	return t.sink(ctx, ImagePullProgress{Phase: phase, Completed: done, Total: total, Unit: t.unit()})
+}
+
+func (t *imagePullProgressTracker) completedCount() int64 {
+	var completed int64
+	for _, state := range t.layers {
+		if state == "complete" {
+			completed++
+		}
+	}
+	return completed
+}
+
+func (t *imagePullProgressTracker) totalCount() int64 { return int64(len(t.layers)) }
+
+func (t *imagePullProgressTracker) unit() string {
+	if len(t.layers) == 0 {
+		return ""
+	}
+	return "layers"
+}
+
+func parsePullLayerState(line string) (string, string, bool) {
+	parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	id := strings.TrimSpace(parts[0])
+	if id == "" || len(id) > 128 || hasControl(id) || strings.ContainsAny(id, " /\\") {
+		return "", "", false
+	}
+	status := strings.ToLower(strings.TrimSpace(parts[1]))
+	state := "active"
+	for _, marker := range []string{"pull complete", "already exists", "download complete", "skipped: already exists", "done"} {
+		if strings.Contains(status, marker) {
+			return id, "complete", true
+		}
+	}
+	for _, marker := range []string{"pulling fs layer", "waiting", "downloading", "extracting", "copying blob"} {
+		if strings.Contains(status, marker) {
+			return id, state, true
+		}
+	}
+	return "", "", false
+}
+
 func (c *CLIClient) run(ctx context.Context, engine Engine, args ...string) ([]byte, error) {
 	return c.runWithTimeout(ctx, c.Timeout, engine, args...)
 }
@@ -549,7 +676,7 @@ func classifyCommandFailure(args []string, cause error, stderr ...[]byte) error 
 			return ErrDaemonStopped
 		}
 	}
-	if len(args) > 0 && args[0] == "pull" {
+	if commandHasAction(args, "pull") {
 		for _, marker := range []string{"no space left on device", "insufficient storage", "not enough space"} {
 			if strings.Contains(detail, marker) {
 				return ErrInsufficientStorage
@@ -581,13 +708,22 @@ func classifyCommandFailure(args []string, cause error, stderr ...[]byte) error 
 			return ErrBackendUnreachable
 		}
 	}
-	if len(args) > 0 && args[0] == "inspect" && (strings.Contains(detail, "no such object:") || strings.Contains(detail, "no such container:")) {
+	if commandHasAction(args, "inspect") && (strings.Contains(detail, "no such object:") || strings.Contains(detail, "no such container:")) {
 		return ErrContainerNotFound
 	}
-	if len(args) > 0 && args[0] == "logs" {
+	if commandHasAction(args, "logs") {
 		return ErrLogsUnavailable
 	}
 	return fmt.Errorf("container command failed: %w", cause)
+}
+
+func commandHasAction(args []string, action string) bool {
+	for index, arg := range args {
+		if arg == action {
+			return index == 0 || (index == 2 && (args[0] == "--context" || args[0] == "--connection"))
+		}
+	}
+	return false
 }
 
 type inspectDocument struct {

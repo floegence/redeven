@@ -121,14 +121,22 @@ func (s *Service) observeInterruptedOperation(ctx context.Context, operation Ope
 				}
 			}
 		case ResourceComposeProject:
-			var items []containerengine.ComposeProject
-			items, err = s.engine.ListComposeProjects(bound, containerengine.ComposeProjectListRequest{Engine: operation.Engine, EndpointID: operation.EndpointID})
-			if err == nil {
-				result.Outcome = "absent"
-				for _, item := range items {
-					if item.ProjectID == operation.ResourceIdentity {
-						result.Outcome = "present"
-						break
+			request := containerengine.ComposeProjectRequest{Engine: operation.Engine, EndpointID: operation.EndpointID, ProjectID: operation.ResourceIdentity}
+			if strings.HasPrefix(operation.ResourceIdentity, "compose_saved_") {
+				err = s.hydrateSavedComposeRequest(ctx, &request)
+				if err == nil {
+					_, err = s.engine.InspectComposeProject(bound, request)
+				}
+			} else {
+				var items []containerengine.ComposeProject
+				items, err = s.engine.ListComposeProjects(bound, containerengine.ComposeProjectListRequest{Engine: operation.Engine, EndpointID: operation.EndpointID})
+				if err == nil {
+					result.Outcome = "absent"
+					for _, item := range items {
+						if item.ProjectID == operation.ResourceIdentity {
+							result.Outcome = "present"
+							break
+						}
 					}
 				}
 			}
@@ -236,6 +244,19 @@ func (s *Service) Operations(ctx context.Context, limit int) ([]Operation, error
 	return s.store.operations(ctx, limit)
 }
 
+func (s *Service) Events(ctx context.Context, operationID string, afterSequence int64) ([]Event, error) {
+	if !validPublicID(operationID) {
+		return nil, ErrOperationNotFound
+	}
+	if _, err := s.Operation(ctx, operationID); err != nil {
+		return nil, err
+	}
+	if afterSequence < 0 {
+		afterSequence = 0
+	}
+	return s.store.eventsAfter(ctx, strings.TrimSpace(operationID), afterSequence)
+}
+
 func (s *Service) CancelOperation(ctx context.Context, operationID string) (Operation, error) {
 	if !validPublicID(operationID) {
 		return Operation{}, ErrOperationNotFound
@@ -335,7 +356,8 @@ func (s *Service) run(ctx context.Context, operationID string, method containere
 		s.broadcast(event)
 	}
 
-	result, err := s.execute(ctx, decoded)
+	s.reportProgress(operationID, OperationProgress{Phase: "executing"})
+	result, err := s.execute(ctx, operationID, decoded)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
 			s.finishCanceled(operationID)
@@ -345,6 +367,7 @@ func (s *Service) run(ctx context.Context, operationID string, method containere
 		s.finishFailure(operationID, code, message, json.RawMessage(`{"status":"required"}`))
 		return
 	}
+	s.reportProgress(operationID, OperationProgress{Phase: "reconciling"})
 	reconciliation, err := s.reconcile(ctx, decoded, result)
 	if err != nil {
 		s.finishFailure(operationID, "reconciliation_required", "The engine result could not be authoritatively reconciled.", json.RawMessage(`{"status":"required"}`))
@@ -354,6 +377,35 @@ func (s *Service) run(ctx context.Context, operationID string, method containere
 	if err == nil {
 		s.broadcast(event)
 	}
+}
+
+func (s *Service) reportProgress(operationID string, progress OperationProgress) {
+	progress.Phase = sanitizeProgressToken(progress.Phase)
+	progress.Unit = sanitizeProgressToken(progress.Unit)
+	if progress.Phase == "" || progress.Completed < 0 || progress.Total < 0 || (progress.Total > 0 && progress.Completed > progress.Total) {
+		return
+	}
+	payload, err := json.Marshal(progress)
+	if err != nil {
+		return
+	}
+	event, err := s.store.appendEvent(context.Background(), operationID, "progress", payload)
+	if err == nil {
+		s.broadcast(event)
+	}
+}
+
+func sanitizeProgressToken(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if len(value) > 32 {
+		return ""
+	}
+	for _, r := range value {
+		if (r < 'a' || r > 'z') && r != '_' {
+			return ""
+		}
+	}
+	return value
 }
 
 func (s *Service) finishFailure(operationID, code, message string, reconciliation json.RawMessage) {
@@ -444,6 +496,11 @@ func (s *Service) decodeAndPreflight(ctx context.Context, method containerengine
 	canonical, err := json.Marshal(request)
 	if err != nil {
 		return decodedMutation{}, fmt.Errorf("%w: encode request", ErrInvalidRequest)
+	}
+	if composeRequest, ok := request.(*containerengine.ComposeProjectRequest); ok {
+		if err := s.hydrateSavedComposeRequest(ctx, composeRequest); err != nil {
+			return decodedMutation{}, err
+		}
 	}
 	engine, endpointID, kind, identity, identities := mutationIdentity(method, request)
 	bound, _, err := s.engine.BindEndpoint(ctx, engine, endpointID)
@@ -657,6 +714,16 @@ func publicOperationError(err error) (string, string) {
 		return "engine_permission_denied", "The container engine denied this operation."
 	case errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped):
 		return "engine_unavailable", "The selected container engine endpoint is unavailable."
+	case errors.Is(err, containerengine.ErrInsufficientStorage):
+		return "insufficient_storage", "The container engine does not have enough storage to pull this image."
+	case errors.Is(err, containerengine.ErrImageRateLimited):
+		return "registry_rate_limited", "The image registry rate limit was reached. Try again later or sign in to the registry."
+	case errors.Is(err, containerengine.ErrImageNotFound):
+		return "image_not_found", "The image or requested platform was not found in the registry."
+	case errors.Is(err, containerengine.ErrImageAccessDenied):
+		return "registry_access_denied", "The image registry denied access. Check the image name and registry sign-in."
+	case errors.Is(err, containerengine.ErrImageRegistryUnavailable):
+		return "registry_unavailable", "The image registry could not be reached. Check the network and try again."
 	case errors.Is(err, containerengine.ErrResourcePlanStale):
 		return "preflight_stale", "The reviewed resource state changed before the operation completed."
 	default:

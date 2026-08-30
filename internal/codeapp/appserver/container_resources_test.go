@@ -8,9 +8,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/containerengine"
@@ -140,6 +142,38 @@ func (f *appserverContainerEngine) RemoveVolume(_ context.Context, req container
 
 func (f *appserverContainerEngine) PruneVolumes(context.Context, containerengine.ResourcePruneRequest) error {
 	return nil
+}
+
+func (f *appserverContainerEngine) ValidateComposeDeployment(context.Context, containerengine.ComposeDeploymentRequest) error {
+	return nil
+}
+
+func (f *appserverContainerEngine) ApplyComposeDeployment(context.Context, containerengine.ComposeDeploymentRequest) error {
+	return nil
+}
+
+func (f *appserverContainerEngine) InspectComposeDeployment(_ context.Context, req containerengine.ComposeDeploymentRequest) (containerengine.ComposeProjectDetails, error) {
+	return containerengine.ComposeProjectDetails{ComposeProject: containerengine.ComposeProject{ProjectID: containerengine.ComposeProjectID(req.ProjectName), Name: req.ProjectName, Status: "stopped"}}, nil
+}
+
+func (f *appserverContainerEngine) StartComposeDeployment(context.Context, containerengine.ComposeDeploymentRequest) error {
+	return nil
+}
+
+func (f *appserverContainerEngine) StopComposeDeployment(context.Context, containerengine.ComposeDeploymentRequest) error {
+	return nil
+}
+
+func (f *appserverContainerEngine) RestartComposeDeployment(context.Context, containerengine.ComposeDeploymentRequest) error {
+	return nil
+}
+
+func (f *appserverContainerEngine) RemoveComposeDeployment(context.Context, containerengine.ComposeDeploymentRequest, bool) error {
+	return nil
+}
+
+func (f *appserverContainerEngine) TailComposeDeploymentLogs(context.Context, containerengine.ComposeDeploymentRequest, int) ([]string, error) {
+	return nil, nil
 }
 
 func newContainerAPITestService(t *testing.T) *containerresource.Service {
@@ -347,5 +381,92 @@ func TestContainerResourceStatsExposeSampleTimestamp(t *testing.T) {
 	response := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/containers/container-one/stats?engine=docker", "")
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"sampled_at_unix_ms":`) {
 		t.Fatalf("container stats status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestContainerComposeDefinitionsRequireAdminAndKeepPathsOutOfAudit(t *testing.T) {
+	service := newContainerAPITestService(t)
+	channelID := "ch_container_compose_definition"
+	configPath := filepath.Join(t.TempDir(), "compose.yaml")
+	if err := os.WriteFile(configPath, []byte("services:\n  api:\n    image: example/api:latest\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	input, err := json.Marshal(containerresource.ComposeProjectDefinitionInput{
+		Engine: containerengine.EngineDocker, Name: "saved-api", ConfigPaths: []string{configPath}, Profiles: []string{"dev"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nonAdmin := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
+	response := serveContainerAPI(t, nonAdmin, channelID, http.MethodPost, containerResourcesAPIBase+"/compose-projects", string(input))
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("non-admin save status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := &Server{containers: service, audit: auditStore, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true})}
+	response = serveContainerAPI(t, admin, channelID, http.MethodPost, containerResourcesAPIBase+"/compose-projects", string(input))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("admin save status=%d body=%s", response.Code, response.Body.String())
+	}
+	var created struct {
+		Data containerresource.ComposeProjectDefinition `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Data.ProjectID == "" {
+		t.Fatalf("created definition = %+v", created.Data)
+	}
+
+	target := containerResourcesAPIBase + "/compose-projects/" + created.Data.ProjectID + "/definition?engine=docker"
+	response = serveContainerAPI(t, admin, channelID, http.MethodGet, target, "")
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), "compose.yaml") {
+		t.Fatalf("definition status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
+	}
+	entries, err := auditStore.List(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawAudit, err := json.Marshal(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(rawAudit, []byte(configPath)) {
+		t.Fatalf("audit leaked Compose path: %s", rawAudit)
+	}
+}
+
+func TestContainerOperationEventSnapshotExposesStructuredProgress(t *testing.T) {
+	service := newContainerAPITestService(t)
+	request := json.RawMessage(`{"engine":"docker","name":"event-data","driver":"local"}`)
+	preflight, err := service.Preflight(context.Background(), containerresource.PreflightRequest{Method: containerengine.MethodVolumesCreate, Request: request})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := service.CreateOperation(context.Background(), containerresource.CreateOperationRequest{
+		RequestID: "request-operation-events", Method: containerengine.MethodVolumesCreate, Request: request,
+		RequestHash: preflight.RequestHash, PlanHash: preflight.PlanHash,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for !operation.State.Terminal() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+		operation, err = service.Operation(context.Background(), operation.OperationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	channelID := "ch_container_operation_events"
+	server := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+	response := serveContainerAPI(t, server, channelID, http.MethodGet, containerOperationsAPIBase+"/"+operation.OperationID+"/events/snapshot?after_sequence=0", "")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"type":"progress"`) || !strings.Contains(response.Body.String(), `"phase":"executing"`) {
+		t.Fatalf("operation event snapshot status=%d body=%s", response.Code, response.Body.String())
 	}
 }

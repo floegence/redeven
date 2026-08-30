@@ -100,10 +100,12 @@ type ComposeProjectDetails struct {
 }
 
 type ComposeProjectRequest struct {
-	Engine           Engine     `json:"engine"`
-	EndpointID       EndpointID `json:"endpoint_id"`
-	ProjectID        string     `json:"project_id"`
-	ConfirmationName string     `json:"confirmation_name,omitempty"`
+	Engine             Engine                    `json:"engine"`
+	EndpointID         EndpointID                `json:"endpoint_id"`
+	ProjectID          string                    `json:"project_id"`
+	ConfirmationName   string                    `json:"confirmation_name,omitempty"`
+	Deployment         *ComposeDeploymentRequest `json:"-"`
+	DefinitionRevision string                    `json:"-"`
 }
 
 type ComposeProjectListRequest struct {
@@ -316,6 +318,22 @@ func (a *Adapter) InspectComposeProject(ctx context.Context, req ComposeProjectR
 	if req.Engine != EngineDocker || invalidWorkspaceIdentity(req.ProjectID) {
 		return ComposeProjectDetails{}, errors.New("compose project identity is invalid")
 	}
+	if req.Deployment != nil {
+		bound, _, err := a.BindEndpoint(ctx, req.Engine, req.EndpointID)
+		if err != nil {
+			return ComposeProjectDetails{}, err
+		}
+		details, err := a.InspectComposeDeployment(bound, *req.Deployment)
+		if err != nil {
+			return ComposeProjectDetails{}, err
+		}
+		details.ProjectID = strings.TrimSpace(req.ProjectID)
+		details.Name = strings.TrimSpace(req.Deployment.ProjectName)
+		if details.Status == "" {
+			details.Status = "stopped"
+		}
+		return details, nil
+	}
 	bound, _, err := a.BindEndpoint(ctx, req.Engine, req.EndpointID)
 	if err != nil {
 		return ComposeProjectDetails{}, err
@@ -345,6 +363,9 @@ func (a *Adapter) ComposeProjectPreflight(ctx context.Context, method Method, re
 		flags = []RiskFlag{{ID: "compose_project_down", Severity: RiskSeverityHigh, Title: "Compose project removal", Detail: "The project containers and networks will be removed. Volumes are retained."}}
 	}
 	target := map[string]any{"engine": string(req.Engine), "endpoint_id": req.EndpointID, "resource_kind": "compose_project", "project_id": project.ProjectID, "name": project.Name, "container_count": project.ContainerCount}
+	if req.DefinitionRevision != "" {
+		target["definition_revision"] = req.DefinitionRevision
+	}
 	return BuildResourcePlan(method, target, req, risk, flags, method == MethodComposeProjectsDown, "Apply the reviewed action to this Compose project")
 }
 
@@ -356,11 +377,27 @@ func (a *Adapter) ComposeProjectAction(ctx context.Context, method Method, req C
 	if err != nil {
 		return WorkspaceActionResponse{}, err
 	}
-	client, err := a.workspaceClient()
-	if err != nil {
-		return WorkspaceActionResponse{}, err
+	if req.Deployment != nil {
+		switch method {
+		case MethodComposeProjectsStart:
+			err = a.ApplyComposeDeployment(bound, *req.Deployment)
+		case MethodComposeProjectsStop:
+			err = a.StopComposeDeployment(bound, *req.Deployment)
+		case MethodComposeProjectsRestart:
+			err = a.RestartComposeDeployment(bound, *req.Deployment)
+		case MethodComposeProjectsDown:
+			err = a.RemoveComposeDeployment(bound, *req.Deployment, false)
+		default:
+			err = ErrInvalidMethod
+		}
+	} else {
+		var client engineWorkspaceClient
+		client, err = a.workspaceClient()
+		if err == nil {
+			err = client.ComposeProjectAction(bound, method, strings.TrimSpace(req.ProjectID))
+		}
 	}
-	if err := client.ComposeProjectAction(bound, method, strings.TrimSpace(req.ProjectID)); err != nil {
+	if err != nil {
 		return WorkspaceActionResponse{}, err
 	}
 	return WorkspaceActionResponse{Accepted: true, Engine: req.Engine, EndpointID: req.EndpointID, Method: method, Identity: strings.TrimSpace(req.ProjectID)}, nil

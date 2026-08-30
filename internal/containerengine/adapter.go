@@ -208,6 +208,15 @@ type EngineImageResult struct {
 	Completed bool
 }
 
+type ImagePullProgress struct {
+	Phase     string `json:"phase"`
+	Completed int64  `json:"completed,omitempty"`
+	Total     int64  `json:"total,omitempty"`
+	Unit      string `json:"unit,omitempty"`
+}
+
+type ImagePullProgressSink func(context.Context, ImagePullProgress) error
+
 type EngineClient interface {
 	Status(ctx context.Context, engine Engine) (EngineStatus, error)
 	List(ctx context.Context, engine Engine, all bool) ([]EngineContainer, error)
@@ -215,6 +224,10 @@ type EngineClient interface {
 	Action(ctx context.Context, req EngineActionRequest) (EngineActionResult, error)
 	TailLogs(ctx context.Context, req EngineLogsRequest) (EngineLogsResult, error)
 	PullImage(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error)
+}
+
+type EngineImageProgressPuller interface {
+	PullImageWithProgress(context.Context, Engine, string, ImagePullProgressSink) (EngineImageResult, error)
 }
 
 type EngineLogFollower interface {
@@ -441,6 +454,33 @@ func (a *Adapter) PullImage(ctx context.Context, req ImagePullRequest) (ImagePul
 		return ImagePullResponse{}, err
 	}
 	return a.pullImage(ctx, engine, imageRef)
+}
+
+func (a *Adapter) PullImageWithProgress(ctx context.Context, req ImagePullRequest, sink ImagePullProgressSink) (ImagePullResponse, error) {
+	engine, imageRef, err := validateImagePull(req)
+	if err != nil {
+		return ImagePullResponse{}, err
+	}
+	if sink == nil {
+		return ImagePullResponse{}, errors.New("image pull progress sink is required")
+	}
+	puller, ok := a.client.(EngineImageProgressPuller)
+	if !ok || interfaceIsNil(puller) {
+		if err := sink(ctx, ImagePullProgress{Phase: "pulling"}); err != nil {
+			return ImagePullResponse{}, err
+		}
+		return a.pullImage(ctx, engine, imageRef)
+	}
+	result, err := puller.PullImageWithProgress(ctx, engine, imageRef, sink)
+	if err != nil {
+		return ImagePullResponse{}, err
+	}
+	return ImagePullResponse{
+		Engine:     result.Engine,
+		EndpointID: endpointIDFromContext(ctx, engine),
+		Image:      imageSummary(result.Image),
+		Completed:  result.Completed,
+	}, nil
 }
 
 func (a *Adapter) pullImage(ctx context.Context, engine Engine, imageRef string) (ImagePullResponse, error) {

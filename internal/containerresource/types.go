@@ -105,6 +105,13 @@ type Event struct {
 	CreatedAtUnixMs int64           `json:"created_at_unix_ms"`
 }
 
+type OperationProgress struct {
+	Phase     string `json:"phase"`
+	Completed int64  `json:"completed,omitempty"`
+	Total     int64  `json:"total,omitempty"`
+	Unit      string `json:"unit,omitempty"`
+}
+
 type ListOperationsRequest struct {
 	AfterSequence int64
 	Limit         int
@@ -160,4 +167,29 @@ type VolumeItem struct {
 type ComposeProjectItem struct {
 	containerengine.ComposeProject
 	Management Management `json:"management"`
+	Saved      bool       `json:"saved"`
+	Source     string     `json:"source,omitempty"`
 }
+
+type ComposeProjectDefinitionInput struct {
+	Engine      containerengine.Engine     `json:"engine"`
+	EndpointID  containerengine.EndpointID `json:"endpoint_id"`
+	Name        string                     `json:"name"`
+	ConfigPaths []string                   `json:"config_paths"`
+	EnvFilePath string                     `json:"env_file_path,omitempty"`
+	Profiles    []string                   `json:"profiles,omitempty"`
+}
+
+type ComposeProjectDefinition struct {
+	ProjectID       string                     `json:"project_id"`
+	Engine          containerengine.Engine     `json:"engine"`
+	EndpointID      containerengine.EndpointID `json:"endpoint_id"`
+	Name            string                     `json:"name"`
+	ConfigPaths     []string                   `json:"config_paths"`
+	EnvFilePath     string                     `json:"env_file_path,omitempty"`
+	Profiles        []string                   `json:"profiles,omitempty"`
+	CreatedAtUnixMs int64                      `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs int64                      `json:"updated_at_unix_ms"`
+}
+
+var ErrComposeProjectDefinitionNotFound = errors.New("saved Compose project was not found")

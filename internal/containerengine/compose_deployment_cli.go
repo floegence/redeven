@@ -8,7 +8,18 @@ import (
 )
 
 func composeDeploymentArgs(req ComposeDeploymentRequest) []string {
-	return []string{"compose", "--file", strings.TrimSpace(req.ConfigPath), "--project-name", strings.TrimSpace(req.ProjectName), "--env-file", strings.TrimSpace(req.EnvFilePath)}
+	args := []string{"compose"}
+	for _, path := range composeDeploymentConfigPaths(req) {
+		args = append(args, "--file", strings.TrimSpace(path))
+	}
+	args = append(args, "--project-name", strings.TrimSpace(req.ProjectName))
+	if envFile := strings.TrimSpace(req.EnvFilePath); envFile != "" {
+		args = append(args, "--env-file", envFile)
+	}
+	for _, profile := range req.Profiles {
+		args = append(args, "--profile", strings.TrimSpace(profile))
+	}
+	return args
 }
 
 func (c *CLIClient) ValidateComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {
@@ -72,6 +83,10 @@ func (c *CLIClient) StartComposeDeployment(ctx context.Context, req ComposeDeplo
 
 func (c *CLIClient) StopComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {
 	return c.runComposeDeploymentAction(ctx, req, "stop", nil)
+}
+
+func (c *CLIClient) RestartComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {
+	return c.runComposeDeploymentAction(ctx, req, "restart", nil)
 }
 
 func (c *CLIClient) RemoveComposeDeployment(ctx context.Context, req ComposeDeploymentRequest, removeVolumes bool) error {

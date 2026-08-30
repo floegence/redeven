@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -19,6 +20,7 @@ type fakeEngineClient struct {
 	createRelease   <-chan struct{}
 	createActive    int
 	maxCreateActive int
+	composeRunning  map[string]bool
 }
 
 func (f *fakeEngineClient) Status(context.Context, containerengine.Engine) (containerengine.EngineStatus, error) {
@@ -138,13 +140,64 @@ func (f *fakeEngineClient) PruneVolumes(context.Context, containerengine.Resourc
 	return nil
 }
 
+func (f *fakeEngineClient) ValidateComposeDeployment(context.Context, containerengine.ComposeDeploymentRequest) error {
+	return nil
+}
+
+func (f *fakeEngineClient) ApplyComposeDeployment(_ context.Context, req containerengine.ComposeDeploymentRequest) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.composeRunning[req.ProjectName] = true
+	return nil
+}
+
+func (f *fakeEngineClient) InspectComposeDeployment(_ context.Context, req containerengine.ComposeDeploymentRequest) (containerengine.ComposeProjectDetails, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	running := f.composeRunning[req.ProjectName]
+	project := containerengine.ComposeProject{ProjectID: containerengine.ComposeProjectID(req.ProjectName), Name: req.ProjectName, Status: "stopped"}
+	if running {
+		project.Status, project.ContainerCount, project.RunningCount, project.ServiceCount = "running", 1, 1, 1
+	}
+	return containerengine.ComposeProjectDetails{ComposeProject: project}, nil
+}
+
+func (f *fakeEngineClient) StartComposeDeployment(ctx context.Context, req containerengine.ComposeDeploymentRequest) error {
+	return f.ApplyComposeDeployment(ctx, req)
+}
+
+func (f *fakeEngineClient) StopComposeDeployment(_ context.Context, req containerengine.ComposeDeploymentRequest) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.composeRunning[req.ProjectName] = false
+	return nil
+}
+
+func (f *fakeEngineClient) RestartComposeDeployment(ctx context.Context, req containerengine.ComposeDeploymentRequest) error {
+	return f.ApplyComposeDeployment(ctx, req)
+}
+
+func (f *fakeEngineClient) RemoveComposeDeployment(_ context.Context, req containerengine.ComposeDeploymentRequest, _ bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.composeRunning, req.ProjectName)
+	return nil
+}
+
+func (f *fakeEngineClient) TailComposeDeploymentLogs(context.Context, containerengine.ComposeDeploymentRequest, int) ([]string, error) {
+	return nil, nil
+}
+
 func newTestService(t *testing.T, resolver ManagedOwnerResolver) *Service {
 	t.Helper()
-	return newTestServiceWithClient(t, &fakeEngineClient{volumes: make(map[string]containerengine.VolumeRecord)}, resolver)
+	return newTestServiceWithClient(t, &fakeEngineClient{volumes: make(map[string]containerengine.VolumeRecord), composeRunning: make(map[string]bool)}, resolver)
 }
 
 func newTestServiceWithClient(t *testing.T, client *fakeEngineClient, resolver ManagedOwnerResolver) *Service {
 	t.Helper()
+	if client.composeRunning == nil {
+		client.composeRunning = make(map[string]bool)
+	}
 	adapter, err := containerengine.NewAdapter(client)
 	if err != nil {
 		t.Fatal(err)
@@ -486,6 +539,158 @@ INSERT INTO container_resource_operations(
 	}
 }
 
+func TestSavedComposeProjectSupportsRepeatableLifecycleOperations(t *testing.T) {
+	service := newTestService(t, nil)
+	configPath := filepath.Join(t.TempDir(), "compose.yaml")
+	if err := os.WriteFile(configPath, []byte("services:\n  api:\n    image: example/api:latest\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	definition, err := service.CreateComposeProjectDefinition(context.Background(), ComposeProjectDefinitionInput{
+		Engine: containerengine.EngineDocker, Name: "saved-api", ConfigPaths: []string{configPath}, Profiles: []string{"dev"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalPath, err := filepath.EvalSymlinks(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if definition.ProjectID == "" || len(definition.ConfigPaths) != 1 || definition.ConfigPaths[0] != canonicalPath {
+		t.Fatalf("definition = %+v", definition)
+	}
+
+	raw, err := json.Marshal(containerengine.ComposeProjectRequest{Engine: containerengine.EngineDocker, ProjectID: definition.ProjectID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preflight, err := service.Preflight(context.Background(), PreflightRequest{Method: containerengine.MethodComposeProjectsStart, Request: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := service.CreateOperation(context.Background(), CreateOperationRequest{
+		RequestID: "request-compose-start", Method: containerengine.MethodComposeProjectsStart, Request: raw,
+		RequestHash: preflight.RequestHash, PlanHash: preflight.PlanHash,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation = waitOperationTerminal(t, service, operation)
+	if operation.State != OperationSucceeded {
+		t.Fatalf("operation = %+v", operation)
+	}
+	events, err := service.Events(context.Background(), operation.OperationID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phases := make([]string, 0, len(events))
+	for _, event := range events {
+		if event.Type != "progress" {
+			continue
+		}
+		var progress OperationProgress
+		if err := json.Unmarshal(event.Payload, &progress); err != nil {
+			t.Fatal(err)
+		}
+		phases = append(phases, progress.Phase)
+	}
+	if len(phases) != 2 || phases[0] != "executing" || phases[1] != "reconciling" {
+		t.Fatalf("progress phases = %v", phases)
+	}
+
+	details, _, err := service.ComposeProject(context.Background(), containerengine.ComposeProjectRequest{
+		Engine: containerengine.EngineDocker, ProjectID: definition.ProjectID,
+	})
+	if err != nil || details.Status != "running" {
+		t.Fatalf("saved project details = %+v, err=%v", details, err)
+	}
+	methods := []containerengine.Method{
+		containerengine.MethodComposeProjectsRestart,
+		containerengine.MethodComposeProjectsStop,
+		containerengine.MethodComposeProjectsStart,
+		containerengine.MethodComposeProjectsDown,
+	}
+	requestIDs := []string{"request-compose-restart", "request-compose-stop", "request-compose-start-again", "request-compose-down"}
+	for index, method := range methods {
+		request := containerengine.ComposeProjectRequest{Engine: containerengine.EngineDocker, ProjectID: definition.ProjectID}
+		if method == containerengine.MethodComposeProjectsDown {
+			request.ConfirmationName = definition.Name
+		}
+		raw, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		preflight, err := service.Preflight(context.Background(), PreflightRequest{Method: method, Request: raw})
+		if err != nil {
+			t.Fatalf("preflight %s: %v", method, err)
+		}
+		operation, err := service.CreateOperation(context.Background(), CreateOperationRequest{
+			RequestID: requestIDs[index], Method: method, Request: raw,
+			RequestHash: preflight.RequestHash, PlanHash: preflight.PlanHash,
+		})
+		if err != nil {
+			t.Fatalf("create %s: %v", method, err)
+		}
+		if operation = waitOperationTerminal(t, service, operation); operation.State != OperationSucceeded {
+			t.Fatalf("operation %s = %+v", method, operation)
+		}
+	}
+	if _, err := service.ComposeProjectDefinition(context.Background(), definition.ProjectID); err != nil {
+		t.Fatalf("saved definition after down: %v", err)
+	}
+	if err := service.DeleteComposeProjectDefinition(context.Background(), definition.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ComposeProjectDefinition(context.Background(), definition.ProjectID); !errors.Is(err, ErrComposeProjectDefinitionNotFound) {
+		t.Fatalf("definition after delete error = %v", err)
+	}
+}
+
+func TestSchemaMigratesV1AndPreservesOperations(t *testing.T) {
+	client := &fakeEngineClient{volumes: make(map[string]containerengine.VolumeRecord), composeRunning: make(map[string]bool)}
+	adapter, err := containerengine.NewAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(t.TempDir(), "container-resources.sqlite3")
+	service, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UnixMilli()
+	if _, err := service.store.db.Exec(`
+INSERT INTO container_resource_operations(
+ operation_id, request_id, request_hash, plan_hash, method, engine, endpoint_id, resource_kind,
+ resource_identity, state, created_at_unix_ms, updated_at_unix_ms
+) VALUES('container_operation_preserved', 'request-preserved', 'sha256:req', 'sha256:plan',
+ ?, 'docker', '', 'volume', 'cache', 'succeeded', ?, ?)
+`, containerengine.MethodVolumesCreate, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.store.db.Exec(`DROP TABLE container_compose_projects`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.store.db.Exec(`PRAGMA user_version = 1`); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if _, err := reopened.Operation(context.Background(), "container_operation_preserved"); err != nil {
+		t.Fatalf("preserved operation: %v", err)
+	}
+	var tableName string
+	if err := reopened.store.db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'container_compose_projects'`).Scan(&tableName); err != nil || tableName == "" {
+		t.Fatalf("Compose project table after migration = %q, err=%v", tableName, err)
+	}
+}
+
 func TestSchemaRejectsDrift(t *testing.T) {
 	service := newTestService(t, nil)
 	path := service.store.db
@@ -519,7 +724,7 @@ func TestSchemaRejectsWrongKindAndFutureVersion(t *testing.T) {
 		mutate string
 	}{
 		{name: "wrong kind", mutate: `UPDATE __redeven_db_meta SET db_kind = 'another_product' WHERE singleton = 1`},
-		{name: "future version", mutate: `PRAGMA user_version = 2`},
+		{name: "future version", mutate: `PRAGMA user_version = 3`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
