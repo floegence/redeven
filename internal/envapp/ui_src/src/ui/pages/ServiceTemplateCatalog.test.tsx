@@ -108,13 +108,13 @@ describe('ServiceTemplateCatalog', () => {
     return { onCategoryChange, onCreate, onDeploy, onDuplicate, onEdit, onDelete, onQueryChange };
   }
 
-  it('presents built-in and custom templates as a selectable gallery with a detail pane', () => {
+  it('presents built-in and custom templates as a selectable list with a detail pane', () => {
     mount();
 
     expect(host.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(2);
-    expect(host.querySelectorAll('[data-testid="service-template-card"]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(2);
     expect(host.querySelector('[data-testid="deepseek-harness-logo"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="service-template-gallery"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="service-template-list"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="service-template-details"]')).toBeTruthy();
     expect(host.querySelector('[data-template-id="deepseek-harness-host"]')?.getAttribute('aria-selected')).toBe('true');
     expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('DeepSeek Harness');
@@ -172,7 +172,7 @@ describe('ServiceTemplateCatalog', () => {
     expect(host.querySelector('[data-testid="service-template-details"]')?.getAttribute('aria-label')).toBe('Workspace dashboard');
   });
 
-  it('keeps unavailable and installed cards readable while disabling deployment', () => {
+  it('keeps unavailable and installed rows readable while disabling deployment', () => {
     const unavailable = { ...builtIn, available: false, availabilityReason: 'Docker is unavailable.' };
     const installed = { ...custom, installed: true };
     mount({ templates: [unavailable, installed] });
