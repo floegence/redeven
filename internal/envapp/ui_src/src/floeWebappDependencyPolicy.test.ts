@@ -147,9 +147,9 @@ describe('published npm dependency policy', () => {
       '@floegence/floeterm-terminal-web',
     ));
 
-    expect(version).toBe('0.18.0');
+    expect(version).toBe('0.18.1');
     expect(expectedTarballUrl('@floegence/floeterm-terminal-web', version)).toBe(
-      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.18.0.tgz',
+      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.18.1.tgz',
     );
 
     const previousReleaseMarkers = new Map([
@@ -167,7 +167,7 @@ describe('published npm dependency policy', () => {
       'node_modules/@floegence/floeterm-terminal-web/package.json',
     );
 
-    expect(packageManifest.version).toBe('0.18.0');
+    expect(packageManifest.version).toBe('0.18.1');
     expect(readInstalledFloetermDeclaration('dist/semantic/presentation.d.ts'))
       .toMatch(/windowRows\?: number/);
     expect(readInstalledFloetermDeclaration('dist/semantic/presentation.d.ts'))

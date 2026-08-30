@@ -206,6 +206,10 @@ export type ContainerResourceFileListing = Readonly<{
 	truncated: boolean;
 }>;
 
+export type ContainerExecSession = Readonly<{
+  session_id: string;
+}>;
+
 function query(engine: ContainerEngine, endpointID: string, extras: Readonly<Record<string, string>> = {}): string {
   const params = new URLSearchParams({ engine, ...extras });
   if (endpointID) params.set('endpoint_id', endpointID);
@@ -217,6 +221,28 @@ export async function listContainerRuntimes(signal?: AbortSignal): Promise<Conta
     { method: 'GET', signal },
   );
   return response.engines ?? [];
+}
+
+export async function createContainerExecSession(
+  identity: string,
+  engine: ContainerEngine,
+  endpointID: string,
+  argv: readonly string[],
+): Promise<ContainerExecSession> {
+  return fetchLocalApiJSON<ContainerExecSession>(
+    `/_redeven_proxy/api/container-resources/containers/${encodeURIComponent(identity)}/exec-sessions`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ engine, endpoint_id: endpointID, argv }),
+    },
+  );
+}
+
+export async function deleteContainerExecSession(sessionID: string): Promise<void> {
+  await fetchLocalApiJSON<{ session_id: string }>(
+    `/_redeven_proxy/api/container-resources/exec-sessions/${encodeURIComponent(sessionID)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function listContainerResources(

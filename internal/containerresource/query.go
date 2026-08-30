@@ -50,6 +50,21 @@ func (s *Service) Container(ctx context.Context, req containerengine.ContainerIn
 	return ContainerDetails{ContainerInspect: response.Container, Management: management}, nil
 }
 
+func (s *Service) PrepareContainerExec(ctx context.Context, req containerengine.ContainerExecRequest) (containerengine.ProgramSpec, error) {
+	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return containerengine.ProgramSpec{}, err
+	}
+	management, err := s.management(ctx, req.Engine, req.EndpointID, ResourceContainer, req.ContainerID, nil)
+	if err != nil {
+		return containerengine.ProgramSpec{}, err
+	}
+	if management.Managed {
+		return containerengine.ProgramSpec{}, &ManagedResourceError{Owner: *management.Owner}
+	}
+	return s.engine.ContainerExecProgram(bound, req)
+}
+
 func (s *Service) Images(ctx context.Context, req containerengine.ImageListRequest) ([]containerengine.ImageRecord, error) {
 	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
 	if err != nil {

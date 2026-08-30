@@ -36,7 +36,10 @@ const harness = vi.hoisted(() => ({
   subscribeStats: vi.fn(),
   subscribeCollectionStats: vi.fn(),
   preflight: vi.fn(),
+  createOperation: vi.fn(),
   fsList: vi.fn(),
+  createExecSession: vi.fn(),
+  deleteExecSession: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -57,6 +60,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Cpu: icon('cpu'),
   Database: icon('database'),
   ExternalLink: icon('external-link'),
+  Eye: icon('eye'),
+  EyeOff: icon('eye-off'),
   FileText: icon('file'),
   Filter: icon('filter'),
   Info: icon('info'),
@@ -88,6 +93,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => <button type="button" class={props.class} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
   Dropdown: (props: any) => <div class="test-dropdown">{props.trigger}<div data-test-dropdown-menu>{props.items.map((item: any) => <button type="button" disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.icon}{item.label}</button>)}</div></div>,
+  DirectoryPicker: (props: any) => <Show when={props.open}><section data-directory-picker>{props.title}<button type="button" data-directory-picker-confirm onClick={() => { props.onSelect?.('/workspace/data'); props.onOpenChange?.(false); }}>confirm folder</button></section></Show>,
   FileOpenPicker: (props: any) => <Show when={props.open}><section data-file-open-picker>{props.title}<button type="button" data-picker-confirm onClick={() => {
     props.onSelect?.(props.selectionMode === 'multiple'
       ? ['/workspace/my-app/compose.yaml', '/workspace/my-app/compose.override.yaml']
@@ -127,6 +133,10 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   </div>,
   Tag: (props: any) => <span>{props.children}</span>,
   Textarea: (props: any) => <textarea rows={props.rows} value={props.value} placeholder={props.placeholder} disabled={props.disabled} onInput={props.onInput} />,
+}));
+
+vi.mock('../widgets/ContainerExecTerminal', () => ({
+  ContainerExecTerminal: (props: any) => <div data-container-exec-terminal data-session-id={props.sessionID} />,
 }));
 
 vi.mock('../primitives/EnvAppModal', () => ({
@@ -186,9 +196,11 @@ vi.mock('../services/containerResourcesApi', () => ({
   subscribeContainerStats: harness.subscribeStats,
   subscribeContainerStatsCollection: harness.subscribeCollectionStats,
   cancelContainerOperation: vi.fn(),
-  createContainerOperation: vi.fn(),
+  createContainerOperation: harness.createOperation,
   getContainerStats: harness.getStats,
   preflightContainerOperation: harness.preflight,
+  createContainerExecSession: harness.createExecSession,
+  deleteContainerExecSession: harness.deleteExecSession,
   subscribeContainerOperation: vi.fn(),
   tailContainerLogs: vi.fn(),
 }));
@@ -278,6 +290,9 @@ describe('native Containers page', () => {
       plan: { method: 'containers.start', target: {}, plan_digest: 'plan', risk_level: 'low', risk_flags: [], requires_admin: false },
       management: { managed: false },
     });
+    harness.createOperation.mockReset().mockResolvedValue({ operation_id: 'operation-1', state: 'queued' });
+    harness.createExecSession.mockReset().mockResolvedValue({ session_id: 'exec-session-1' });
+    harness.deleteExecSession.mockReset().mockResolvedValue(undefined);
     harness.fsList.mockReset().mockResolvedValue({ entries: [] });
   });
 
@@ -986,6 +1001,104 @@ describe('native Containers page', () => {
 
     expect(host.querySelector('[data-container-detail-page]')).toBeNull();
     expect(harness.preflight).toHaveBeenCalledWith('containers.start', expect.objectContaining({ container_id: 'container-2' }));
+  });
+
+  it('serializes exact arguments and localhost-only port defaults from the run form', async () => {
+    harness.listResources.mockResolvedValue([]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.create.container'))?.click();
+    await settle();
+    const form = host.querySelector<HTMLElement>('.container-run-form')!;
+    const dialog = form.closest<HTMLElement>('[data-dialog]')!;
+    const setInput = (selector: string, value: string) => {
+      const input = dialog.querySelector<HTMLInputElement>(selector)!;
+      input.value = value;
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    };
+    const basics = form.querySelectorAll<HTMLInputElement>('.container-run-section:first-of-type input');
+    basics[0].value = 'alpine:3.22';
+    basics[0].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    basics[1].value = 'worker';
+    basics[1].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    basics[2].value = '/usr/bin/env';
+    basics[2].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('containers.run.addArgument'))?.click();
+    setInput('input[placeholder="--config"]', 'sh');
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('containers.run.addPort'))?.click();
+    setInput('.container-run-port-row input', '8080');
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('containers.run.addVariable'))?.click();
+    const environment = dialog.querySelectorAll<HTMLInputElement>('.container-run-key-value input');
+    environment[0].value = 'APP_ENV';
+    environment[0].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const environmentValue = dialog.querySelectorAll<HTMLInputElement>('.container-run-key-value input')[1];
+    environmentValue.value = 'production';
+    environmentValue.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('containers.actions.review'))?.click();
+    await settle();
+
+    expect(harness.preflight).toHaveBeenCalledWith('containers.create', expect.objectContaining({
+      engine: 'docker', endpoint_id: 'docker-primary', image: 'alpine:3.22', name: 'worker',
+      entrypoint: '/usr/bin/env', command: ['sh'], env: ['APP_ENV=production'],
+      restart_policy: 'no', network_mode: 'bridge',
+      ports: [{ container_port: 8080, host_ip: '127.0.0.1', protocol: 'tcp' }],
+    }));
+  });
+
+  it('offers image ports without publishing them until selected', async () => {
+    harness.listResources.mockImplementation(async (view: string) => view === 'images'
+      ? [{ id: 'image-1', reference: 'nginx:latest', referenced_containers: 0 }]
+      : []);
+    harness.resourceDetails.mockResolvedValue({ id: 'image-1', exposed_ports: ['80/tcp', '53/udp'] });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.images'))?.click();
+    await settle();
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.actions.run"]')?.click();
+    await settle();
+
+    const suggestion = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-run-port-suggestions button'))
+      .find((button) => button.textContent?.includes('80/tcp'));
+    expect(suggestion).not.toBeNull();
+    expect(host.querySelector('.container-run-port-row')).toBeNull();
+    suggestion?.click();
+    const inputs = host.querySelectorAll<HTMLInputElement>('.container-run-port-row input');
+    expect(inputs[0]?.value).toBe('80');
+    expect(inputs[1]?.value).toBe('');
+    expect(inputs[2]?.value).toBe('127.0.0.1');
+  });
+
+  it('opens an exact-argv Exec session only for a running unmanaged container', async () => {
+    harness.listRuntimes.mockResolvedValue([{
+      endpoint_id: 'docker-primary', engine: 'docker', state: 'ready',
+      capabilities: { collection_stats: true, volume_files: false, exec: true },
+    }]);
+    harness.listResources.mockResolvedValue([{
+      container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false },
+    }]);
+    harness.resourceDetails.mockResolvedValue({ container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false } });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.exec.open"]')?.click();
+    await settle();
+    expect(harness.createExecSession).toHaveBeenCalledWith('container-2', 'docker', 'docker-primary', ['/bin/sh']);
+    expect(host.querySelector('[data-container-exec-terminal]')?.getAttribute('data-session-id')).toBe('exec-session-1');
+    expect(host.querySelector('.container-detail-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('containers.detailTabs.exec');
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.detail.back"]')?.click();
+    await settle();
+    expect(harness.deleteExecSession).toHaveBeenCalledWith('exec-session-1');
   });
 
   it('clears stale inventory and presents refresh failure recovery', async () => {

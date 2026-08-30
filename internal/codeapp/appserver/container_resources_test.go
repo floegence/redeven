@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/containerresource"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/terminal"
 )
 
 type appserverContainerEngine struct {
@@ -49,6 +50,12 @@ func (f *appserverContainerEngine) TailLogs(context.Context, containerengine.Eng
 
 func (f *appserverContainerEngine) PullImage(context.Context, containerengine.Engine, string) (containerengine.EngineImageResult, error) {
 	return containerengine.EngineImageResult{}, nil
+}
+
+func (f *appserverContainerEngine) ContainerExecProgram(_ context.Context, req containerengine.ContainerExecRequest) (containerengine.ProgramSpec, error) {
+	args := []string{"exec", "--interactive", "--tty", req.ContainerID}
+	args = append(args, req.Argv...)
+	return containerengine.ProgramSpec{Executable: string(req.Engine), Args: args}, nil
 }
 
 func (f *appserverContainerEngine) CreateContainer(context.Context, containerengine.ContainerCreateRequest) (containerengine.ContainerActionResponse, error) {
@@ -229,6 +236,88 @@ func serveContainerAPI(t *testing.T, server *Server, channelID, method, target, 
 		t.Fatal("container API route was not handled")
 	}
 	return response
+}
+
+type appserverExecTerminalManager struct {
+	created terminal.ContainerExecSessionRequest
+	deleted string
+	owner   string
+}
+
+func (m *appserverExecTerminalManager) CreateSessionInGroup(string, string, string) (*terminal.SessionInfo, error) {
+	return nil, errors.New("not implemented")
+}
+func (m *appserverExecTerminalManager) DeleteSession(string) error { return nil }
+func (m *appserverExecTerminalManager) DeleteSessionForWidget(string, string) error {
+	return nil
+}
+func (m *appserverExecTerminalManager) AddSessionLifecycleHook(terminal.SessionLifecycleHook) func() {
+	return func() {}
+}
+func (m *appserverExecTerminalManager) CreateContainerExecSession(req terminal.ContainerExecSessionRequest) (*terminal.SessionInfo, error) {
+	m.created = req
+	return &terminal.SessionInfo{ID: "session-exec-one"}, nil
+}
+func (m *appserverExecTerminalManager) DeleteContainerExecSession(sessionID string, ownerUserID string) error {
+	if sessionID != "session-exec-one" || ownerUserID == "" {
+		return terminal.ErrSessionNotFound
+	}
+	m.deleted, m.owner = sessionID, ownerUserID
+	return nil
+}
+
+func TestContainerExecSessionUsesReadExecuteExactArgvAndRedactedAudit(t *testing.T) {
+	service := newContainerAPITestService(t)
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	channelID := "ch_container_exec"
+	termManager := &appserverExecTerminalManager{}
+	server := &Server{
+		containers: service, term: termManager, audit: auditStore,
+		resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanExecute: true, UserPublicID: "user-exec"}),
+	}
+	body := `{"engine":"docker","argv":["/bin/sh","-c","printf super-secret"]}`
+	response := serveContainerAPI(t, server, channelID, http.MethodPost, containerResourcesAPIBase+"/containers/container-one/exec-sessions", body)
+	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), `"session_id":"session-exec-one"`) {
+		t.Fatalf("create Exec status=%d body=%s", response.Code, response.Body.String())
+	}
+	if termManager.created.Executable != "docker" || strings.Join(termManager.created.Args, "|") != "exec|--interactive|--tty|container-one|/bin/sh|-c|printf super-secret" || termManager.created.OwnerUserID != "user-exec" {
+		t.Fatalf("terminal Exec request = %+v", termManager.created)
+	}
+	entries, err := auditStore.List(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawAudit, err := json.Marshal(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(rawAudit, []byte("super-secret")) || bytes.Contains(rawAudit, []byte("/bin/sh")) {
+		t.Fatalf("audit leaked Exec argv: %s", rawAudit)
+	}
+
+	response = serveContainerAPI(t, server, channelID, http.MethodDelete, containerResourcesAPIBase+"/exec-sessions/session-exec-one", "")
+	if response.Code != http.StatusOK || termManager.deleted != "session-exec-one" || termManager.owner != "user-exec" {
+		t.Fatalf("close Exec status=%d body=%s manager=%+v", response.Code, response.Body.String(), termManager)
+	}
+}
+
+func TestContainerExecSessionRequiresReadExecuteAndRejectsInvalidArgv(t *testing.T) {
+	service := newContainerAPITestService(t)
+	channelID := "ch_container_exec_permissions"
+	termManager := &appserverExecTerminalManager{}
+	readOnly := &Server{containers: service, term: termManager, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, UserPublicID: "user-exec"})}
+	response := serveContainerAPI(t, readOnly, channelID, http.MethodPost, containerResourcesAPIBase+"/containers/container-one/exec-sessions", `{"engine":"docker"}`)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("read-only Exec status=%d body=%s", response.Code, response.Body.String())
+	}
+	readExecute := &Server{containers: service, term: termManager, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanExecute: true, UserPublicID: "user-exec"})}
+	response = serveContainerAPI(t, readExecute, channelID, http.MethodPost, containerResourcesAPIBase+"/containers/container-one/exec-sessions", "{\"engine\":\"docker\",\"argv\":[\"/bin/sh\",\"line\\nbreak\"]}")
+	if response.Code != http.StatusBadRequest || termManager.created.Executable != "" {
+		t.Fatalf("invalid argv status=%d body=%s manager=%+v", response.Code, response.Body.String(), termManager)
+	}
 }
 
 func TestContainerRuntimeDiscoveryKeepsEngineFailuresIndependent(t *testing.T) {

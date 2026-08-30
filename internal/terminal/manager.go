@@ -69,17 +69,20 @@ type Manager struct {
 	groupOperationMu    sync.Mutex
 	groupCatalog        *groupCatalog
 
-	mu                    sync.Mutex
-	writers               map[flowersec.RPCPeer]*controlSink
-	sessionLifecycle      map[string]SessionLifecycleRecord
-	localPathCapabilities map[string]string
-	deleteOperations      map[string]*sessionDeleteOperation
-	lifecycleHooks        map[int]SessionLifecycleHook
-	nextLifecycleID       int
-	workloadAdmission     func() (func(), error)
-	workloadReleases      map[string]func()
-	sessionGroupIDs       map[string]string
-	deletingGroupIDs      map[string]struct{}
+	mu                            sync.Mutex
+	writers                       map[flowersec.RPCPeer]*controlSink
+	sessionLifecycle              map[string]SessionLifecycleRecord
+	localPathCapabilities         map[string]string
+	deleteOperations              map[string]*sessionDeleteOperation
+	lifecycleHooks                map[int]SessionLifecycleHook
+	nextLifecycleID               int
+	workloadAdmission             func() (func(), error)
+	workloadReleases              map[string]func()
+	sessionGroupIDs               map[string]string
+	deletingGroupIDs              map[string]struct{}
+	containerExecSessions         map[string]*containerExecSession
+	containerExecInitialTimeout   time.Duration
+	containerExecReconnectTimeout time.Duration
 }
 
 type SessionInfo struct {
@@ -231,17 +234,20 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 	}
 
 	m := &Manager{
-		agentHomeAbs:          scope.HomePathAbs(),
-		scope:                 scope,
-		log:                   log,
-		writers:               make(map[flowersec.RPCPeer]*controlSink),
-		sessionLifecycle:      make(map[string]SessionLifecycleRecord),
-		localPathCapabilities: make(map[string]string),
-		deleteOperations:      make(map[string]*sessionDeleteOperation),
-		lifecycleHooks:        make(map[int]SessionLifecycleHook),
-		workloadReleases:      make(map[string]func()),
-		sessionGroupIDs:       make(map[string]string),
-		deletingGroupIDs:      make(map[string]struct{}),
+		agentHomeAbs:                  scope.HomePathAbs(),
+		scope:                         scope,
+		log:                           log,
+		writers:                       make(map[flowersec.RPCPeer]*controlSink),
+		sessionLifecycle:              make(map[string]SessionLifecycleRecord),
+		localPathCapabilities:         make(map[string]string),
+		deleteOperations:              make(map[string]*sessionDeleteOperation),
+		lifecycleHooks:                make(map[int]SessionLifecycleHook),
+		workloadReleases:              make(map[string]func()),
+		sessionGroupIDs:               make(map[string]string),
+		deletingGroupIDs:              make(map[string]struct{}),
+		containerExecSessions:         make(map[string]*containerExecSession),
+		containerExecInitialTimeout:   30 * time.Second,
+		containerExecReconnectTimeout: 30 * time.Second,
 	}
 	m.groupCatalog = newMemoryGroupCatalog(m.agentHomeAbs)
 
@@ -276,6 +282,9 @@ func (m *Manager) CreateSessionInGroup(groupID string, name string, workingDir s
 }
 
 func (m *Manager) DeleteSession(sessionID string) error {
+	if m.isContainerExecSession(sessionID) {
+		return ErrSessionNotFound
+	}
 	return m.requestSessionDelete(sessionID, "", true, false)
 }
 
@@ -329,15 +338,18 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 	// History is projected by the server-side Ghostty actor for the current
 	// attachment. No raw PTY replay or browser checkpoint participates.
 	accessgate.RegisterTyped[terminalSemanticHistoryReq, termgo.SemanticHistoryChunk](r, TypeID_TERMINAL_HISTORY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalSemanticHistoryReq) (*termgo.SemanticHistoryChunk, error) {
-		if err := requireProcessLaunchPermission(meta); err != nil {
-			return nil, err
-		}
 		if req == nil {
 			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		sessionID := strings.TrimSpace(req.SessionID)
 		if sessionID == "" {
 			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
+		}
+		if _, err := m.authorizeSessionInteraction(meta, sessionID); err != nil {
+			if errors.Is(err, ErrSessionNotFound) {
+				return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
+			}
+			return nil, err
 		}
 		connectionID := strings.TrimSpace(req.ConnectionID)
 		if connectionID == "" || req.TransportGeneration == 0 {
@@ -427,9 +439,6 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 	// Clear is a semantic VT mutation owned by the same SessionActor as PTY
 	// output, input, resize, history, and presentation capture.
 	accessgate.RegisterTyped[terminalSemanticClearReq, terminalSemanticClearResp](r, TypeID_TERMINAL_CLEAR, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalSemanticClearReq) (*terminalSemanticClearResp, error) {
-		if err := requireProcessLaunchPermission(meta); err != nil {
-			return nil, err
-		}
 		if req == nil {
 			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
@@ -437,6 +446,12 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		connectionID := strings.TrimSpace(req.ConnectionID)
 		if sessionID == "" {
 			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
+		}
+		if _, err := m.authorizeSessionInteraction(meta, sessionID); err != nil {
+			if errors.Is(err, ErrSessionNotFound) {
+				return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
+			}
+			return nil, err
 		}
 		if connectionID == "" || req.TransportGeneration == 0 {
 			return nil, &sessionrpc.Error{Code: 400, Message: "current terminal attachment is required"}
@@ -505,16 +520,27 @@ func (m *Manager) ServeLiveStream(
 	if m == nil || stream == nil {
 		return errors.New("terminal live stream is unavailable")
 	}
+	var attachedMu sync.Mutex
+	attachedExecID := ""
 	backend := livev1.NewManagerBackend(m.term, livev1.ManagerBackendOptions{
 		Authorize: func(_ context.Context, _ *termgo.Session, attach livev1.Attach) error {
 			if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
 				return err
 			}
-			if err := requireProcessLaunchPermission(meta); err != nil {
+			sessionID := strings.TrimSpace(attach.SessionID)
+			isExec, err := m.authorizeSessionInteraction(meta, sessionID)
+			if errors.Is(err, ErrSessionNotFound) {
+				return livev1.ErrSessionNotFound
+			}
+			if err != nil {
 				return err
 			}
-			if !m.sessionAvailableForInteraction(strings.TrimSpace(attach.SessionID)) {
-				return livev1.ErrSessionNotFound
+			if isExec {
+				attachedMu.Lock()
+				if attachedExecID == "" && m.markContainerExecAttached(sessionID) {
+					attachedExecID = sessionID
+				}
+				attachedMu.Unlock()
 			}
 			return nil
 		},
@@ -526,7 +552,15 @@ func (m *Manager) ServeLiveStream(
 			return activate(activateCtx, sessionID, cols, rows)
 		},
 	})
-	return livev1.NewService(backend).Serve(ctx, stream)
+	err := livev1.NewService(backend).Serve(ctx, stream)
+	attachedMu.Lock()
+	sessionID := attachedExecID
+	attachedExecID = ""
+	attachedMu.Unlock()
+	if sessionID != "" {
+		m.markContainerExecDetached(sessionID)
+	}
+	return err
 }
 
 func requireProcessLaunchPermission(meta *session.Meta) error {
@@ -588,6 +622,18 @@ func (m *Manager) Cleanup() {
 	}
 	m.term.Cleanup()
 	m.mu.Lock()
+	for _, record := range m.containerExecSessions {
+		if record != nil && record.timer != nil {
+			record.timer.Stop()
+		}
+	}
+	for sessionID, release := range m.workloadReleases {
+		if release != nil {
+			release()
+		}
+		delete(m.workloadReleases, sessionID)
+	}
+	clear(m.containerExecSessions)
 	clear(m.sessionLifecycle)
 	clear(m.localPathCapabilities)
 	clear(m.sessionGroupIDs)
@@ -613,12 +659,14 @@ func (m *Manager) replayCurrentMetadata(writer *controlSink) {
 	if m == nil || m.term == nil || writer == nil {
 		return
 	}
+	m.groupOperationMu.Lock()
+	defer m.groupOperationMu.Unlock()
 	for _, terminalSession := range m.term.ListSessions() {
 		if terminalSession == nil {
 			continue
 		}
 		info := terminalSession.ToSessionInfo()
-		if strings.TrimSpace(info.ID) == "" || m.sessionHidden(info.ID) {
+		if strings.TrimSpace(info.ID) == "" || m.sessionHidden(info.ID) || m.isContainerExecSession(info.ID) {
 			continue
 		}
 		payloads := []struct {
@@ -1059,7 +1107,7 @@ var (
 )
 
 func (h *eventHandler) OnTerminalNameChanged(sessionID string, oldName string, newName string, workingDir string) {
-	if h == nil || h.m == nil {
+	if h == nil || h.m == nil || h.m.isContainerExecSession(sessionID) {
 		return
 	}
 	// Broadcast name/working directory update to all connected clients.
@@ -1068,21 +1116,21 @@ func (h *eventHandler) OnTerminalNameChanged(sessionID string, oldName string, n
 }
 
 func (h *eventHandler) OnTerminalSessionMetadataChanged(sessionID string, info termgo.TerminalSessionInfo) {
-	if h == nil || h.m == nil {
+	if h == nil || h.m == nil || h.m.isContainerExecSession(sessionID) {
 		return
 	}
 	h.m.broadcastForegroundCommandUpdate(sessionID, info.ForegroundCommand)
 }
 
 func (h *eventHandler) OnTerminalOutputActivityChanged(sessionID string, info termgo.TerminalOutputActivityInfo) {
-	if h == nil || h.m == nil {
+	if h == nil || h.m == nil || h.m.isContainerExecSession(sessionID) {
 		return
 	}
 	h.m.broadcastOutputActivityUpdate(sessionID, info)
 }
 
 func (h *eventHandler) OnTerminalExecutionContextChanged(sessionID string, info termgo.TerminalExecutionContextInfo) {
-	if h == nil || h.m == nil {
+	if h == nil || h.m == nil || h.m.isContainerExecSession(sessionID) {
 		return
 	}
 	if sess, ok := h.m.term.GetSession(sessionID); ok && sess != nil {
@@ -1099,7 +1147,7 @@ func (h *eventHandler) OnTerminalExecutionContextChanged(sessionID string, info 
 }
 
 func (h *eventHandler) OnTerminalSemanticWorkStateChanged(sessionID string, info termgo.TerminalWorkStateInfo) {
-	if h == nil || h.m == nil {
+	if h == nil || h.m == nil || h.m.isContainerExecSession(sessionID) {
 		return
 	}
 	h.m.broadcastWorkStateUpdate(sessionID, info)
@@ -1126,6 +1174,9 @@ func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
+		return
+	}
+	if h.m.finalizeContainerExecSession(sessionID) {
 		return
 	}
 	h.m.mu.Lock()

@@ -57,9 +57,7 @@ func endpointCapabilities(engine Engine) EndpointCapabilities {
 	return EndpointCapabilities{
 		CollectionStats: engine == EngineDocker || engine == EnginePodman,
 		VolumeFiles:     engine == EnginePodman,
-		// Floeterm v0.18.0 does not expose per-session argv. Keep this false until
-		// Redeven can consume a published upstream session-command contract.
-		Exec: false,
+		Exec:            engine == EngineDocker || engine == EnginePodman,
 	}
 }
 

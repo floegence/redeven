@@ -21,6 +21,8 @@ type fakeEngineClient struct {
 	createActive    int
 	maxCreateActive int
 	composeRunning  map[string]bool
+	containers      map[string]containerengine.EngineContainer
+	execCalls       int
 }
 
 func (f *fakeEngineClient) Status(context.Context, containerengine.Engine) (containerengine.EngineStatus, error) {
@@ -31,8 +33,17 @@ func (f *fakeEngineClient) List(context.Context, containerengine.Engine, bool) (
 	return nil, nil
 }
 
-func (f *fakeEngineClient) Inspect(context.Context, containerengine.Engine, string) (containerengine.EngineContainer, error) {
-	return containerengine.EngineContainer{}, containerengine.ErrContainerNotFound
+func (f *fakeEngineClient) Inspect(_ context.Context, engine containerengine.Engine, containerID string) (containerengine.EngineContainer, error) {
+	container, ok := f.containers[string(engine)+":"+containerID]
+	if !ok {
+		return containerengine.EngineContainer{}, containerengine.ErrContainerNotFound
+	}
+	return container, nil
+}
+
+func (f *fakeEngineClient) ContainerExecProgram(_ context.Context, req containerengine.ContainerExecRequest) (containerengine.ProgramSpec, error) {
+	f.execCalls++
+	return containerengine.ProgramSpec{Executable: string(req.Engine), Args: append([]string{"exec", req.ContainerID}, req.Argv...)}, nil
 }
 
 func (f *fakeEngineClient) Action(context.Context, containerengine.EngineActionRequest) (containerengine.EngineActionResult, error) {
@@ -370,6 +381,30 @@ func TestManagedWebServiceResourceIsReadOnly(t *testing.T) {
 	})
 	if !errors.Is(err, ErrManagedByWebService) {
 		t.Fatalf("managed resource error = %v, want managed protection", err)
+	}
+}
+
+func TestPrepareContainerExecRejectsManagedContainerBeforeProgramCreation(t *testing.T) {
+	client := &fakeEngineClient{
+		volumes: make(map[string]containerengine.VolumeRecord), composeRunning: make(map[string]bool),
+		containers: map[string]containerengine.EngineContainer{
+			"docker:managed-container": {Engine: containerengine.EngineDocker, ContainerID: "managed-container", State: containerengine.ContainerStateRunning},
+		},
+	}
+	service := newTestServiceWithClient(t, client, func(_ context.Context, _ containerengine.Engine, _ containerengine.EndpointID, kind ResourceKind, identity string) (*ManagedOwner, error) {
+		if kind == ResourceContainer && identity == "managed-container" {
+			return &ManagedOwner{Kind: "web_service", ServiceID: "service-1", Name: "Managed API"}, nil
+		}
+		return nil, nil
+	})
+	_, err := service.PrepareContainerExec(context.Background(), containerengine.ContainerExecRequest{
+		Engine: containerengine.EngineDocker, ContainerID: "managed-container", Argv: []string{"/bin/sh"},
+	})
+	if !errors.Is(err, ErrManagedByWebService) {
+		t.Fatalf("PrepareContainerExec() error = %v, want managed protection", err)
+	}
+	if client.execCalls != 0 {
+		t.Fatalf("program creation calls = %d, want 0", client.execCalls)
 	}
 }
 

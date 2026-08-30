@@ -123,6 +123,11 @@ type workbenchTerminalSessionManager interface {
 	AddSessionLifecycleHook(hook terminal.SessionLifecycleHook) func()
 }
 
+type containerExecTerminalSessionManager interface {
+	CreateContainerExecSession(req terminal.ContainerExecSessionRequest) (*terminal.SessionInfo, error)
+	DeleteContainerExecSession(sessionID string, ownerUserID string) error
+}
+
 const (
 	portForwardProxyErrorHeader         = "X-Redeven-Proxy-Error"
 	portForwardProxyUpstreamUnavailable = "port-forward-upstream-unavailable"

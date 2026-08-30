@@ -76,7 +76,10 @@ The Local API is under `/_redeven_proxy/api/container-resources` and
 `/_redeven_proxy/api/container-resource-operations`. Read covers inventory,
 redacted details, logs, statistics, operations, and streams. Raw container
 Inspect and every Podman volume file list, preview, or download require Read and
-Admin. Exec requires Read and Execute when a published Floeterm contract advertises it.
+Admin. Exec creation and closure use
+`/container-resources/containers/{id}/exec-sessions` and
+`/container-resources/exec-sessions/{session_id}`. They require Read and
+Execute, a running unmanaged container, and a runtime advertising Exec.
 Lifecycle requires Read and Execute. Creation, pull, removal, and cleanup
 require Read, Write, and Execute. High-risk preflights additionally require
 Admin and exact-name confirmation.
@@ -130,6 +133,18 @@ group termination. Redeven does not elevate privileges, change socket
 permissions, add users to system groups, or silently switch engines. Host
 administrators remain responsible for engine access.
 
+Container Exec uses Floeterm terminal-go v0.18.1 program sessions. The engine
+constructs exact Docker or Podman argv for the bound target; no shell parses the
+request and no initialization script is injected. The request accepts at most
+32 argv entries and 8 KiB, rejects control characters, and defaults to
+`/bin/sh`. Audit and application logs record session and redacted target
+identity but never argv. Product Exec sessions are absent from the ordinary
+terminal catalog, belong to the creating user, close after 30 seconds without
+an attachment, retain only a 30-second reconnect window, and release their
+process group and workload lease on explicit close, natural exit, timeout, or
+application cleanup. Ordinary terminal sessions retain their Write and Execute
+permission contract.
+
 ## Product surface
 
 The native Activity and Workbench interaction, loading, resource-navigation,
@@ -153,6 +168,8 @@ second routing, mutation, or ownership path.
 - `redeven:internal/containerengine/adapter.go` - Defines the shared typed engine boundary.
 - `redeven:internal/containerengine/resources_v4.go` - Discovers one active target per engine and resolves opaque endpoint routing.
 - `redeven:internal/containerengine/resources_v4_cli.go` - Constructs explicit Docker and Podman commands for bound targets.
+- `redeven:internal/containerengine/container_exec.go` - Validates running-container Exec and exact argv limits.
+- `redeven:internal/terminal/container_exec.go` - Owns hidden program-session access, attachment timeouts, and cleanup.
 - `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe Podman volume archive reads.
 - `redeven:internal/containerresource/service.go` - Owns strict preflight admission, operations, cancellation, and startup observation.
 - `redeven:internal/containerresource/compose_projects.go` - Validates and binds saved Compose Project definitions to exact Docker targets.

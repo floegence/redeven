@@ -117,6 +117,8 @@ func (m *Manager) visibleSessionInfos() []termgo.TerminalSessionInfo {
 	if m == nil || m.term == nil {
 		return nil
 	}
+	m.groupOperationMu.Lock()
+	defer m.groupOperationMu.Unlock()
 
 	sessions := m.term.ListSessions()
 	out := make([]termgo.TerminalSessionInfo, 0, len(sessions))
@@ -124,7 +126,7 @@ func (m *Manager) visibleSessionInfos() []termgo.TerminalSessionInfo {
 		if info == nil {
 			continue
 		}
-		if m.sessionHidden(info.ID) {
+		if m.sessionHidden(info.ID) || m.isContainerExecSession(info.ID) {
 			continue
 		}
 		out = append(out, info.ToSessionInfo())
@@ -161,7 +163,11 @@ func (m *Manager) sessionHidden(sessionID string) bool {
 }
 
 func (m *Manager) sessionAvailableForInteraction(sessionID string) bool {
-	return !m.sessionHidden(sessionID)
+	if m == nil || m.term == nil || m.sessionHidden(sessionID) {
+		return false
+	}
+	_, ok := m.term.GetSession(strings.TrimSpace(sessionID))
+	return ok
 }
 
 func (m *Manager) lifecycleRecord(sessionID string) (SessionLifecycleRecord, bool) {
