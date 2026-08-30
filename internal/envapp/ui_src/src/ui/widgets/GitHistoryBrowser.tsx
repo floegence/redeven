@@ -41,6 +41,7 @@ import {
 import { redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { gitChangePathClass } from "./GitChrome";
 import { GitDiffDialog } from "./GitDiffDialog";
+import { GitCommitMessageDialog, normalizedGitCommitBody } from './GitCommitMessageDialog';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
@@ -99,18 +100,6 @@ function selectedFileIdentity(
   file: GitCommitFileSummary | null | undefined,
 ): string {
   return gitDiffEntryIdentity(file);
-}
-
-function normalizeCommitBody(
-  detail: GitCommitDetail | null | undefined,
-): string {
-  const body = String(detail?.body ?? "").trim();
-  if (!body) return "";
-  const subject = String(detail?.subject ?? "").trim();
-  if (!subject) return body;
-  const lines = body.split(/\r?\n/);
-  if (lines[0]?.trim() !== subject) return body;
-  return lines.slice(1).join("\n").trim();
 }
 
 interface CommitFilesCompactListProps {
@@ -218,6 +207,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const [detailLoading, setDetailLoading] = createSignal(false);
   const [detailError, setDetailError] = createSignal("");
   const [commitBodyExpanded, setCommitBodyExpanded] = createSignal(false);
+  const [commitMessageDialogOpen, setCommitMessageDialogOpen] = createSignal(false);
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] =
     createSignal<GitCommitFileSummary | null>(null);
@@ -248,7 +238,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       props.repoSummary?.headCommit ?? props.repoInfo?.headCommit ?? "",
     ).trim(),
   );
-  const commitBodyText = createMemo(() => normalizeCommitBody(commitDetail()));
+  const commitBodyText = createMemo(() => normalizedGitCommitBody(commitDetail()));
   const hasExpandableCommitBody = createMemo(() => {
     const body = commitBodyText();
     if (!body) return false;
@@ -405,6 +395,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   createEffect(() => {
     commitHash();
     setCommitBodyExpanded(false);
+    setCommitMessageDialogOpen(false);
   });
 
   createEffect(() => {
@@ -506,70 +497,107 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                     <div class="space-y-3">
                         <GitPanelFrame as="section" class="!px-4 !py-3">
-                          <div class="space-y-3">
-                            <div
-                              ref={setCommitOverviewElement}
-                              tabIndex={0}
-                              data-git-commit-overview-layout={commitOverviewLayout()}
-                              class="space-y-3"
-                              onContextMenu={(event) => {
-                                const target = { repoRootPath: repoRootPath(), commit: detail, files: commitFiles() };
-                                if (commitContextMenuItems(target).length > 0) commitContextMenu.openFromContextMenu(event, target);
-                              }}
-                              onKeyDown={(event) => {
-                                const target = { repoRootPath: repoRootPath(), commit: detail, files: commitFiles() };
-                                if (commitContextMenuItems(target).length > 0) commitContextMenu.openFromKeyboard(event, target);
-                              }}
-                            >
-                              <div class="text-[15px] font-bold leading-6 tracking-tight text-foreground max-w-3xl break-words">
-                                {detail.subject || i18n.t('uiCopy.git.noSubject')}
-                              </div>
-                              <div class="flex flex-wrap items-center text-[11px] leading-4 text-muted-foreground">
-                                <span class="inline-flex items-center gap-1 whitespace-nowrap">
-                                  <Hash class="h-3 w-3 shrink-0 text-muted-foreground/45" />
-                                  <span>{detail.shortHash}</span>
-                                </span>
-                                <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
-                                <span class="inline-flex items-center gap-1 whitespace-nowrap">
-                                  <User class="h-3 w-3 shrink-0 text-muted-foreground/45" />
-                                  <span>{detail.authorName || i18n.t('uiCopy.git.unknownAuthor')}</span>
-                                </span>
-                                <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
-                                <span class="inline-flex items-center gap-1 whitespace-nowrap">
-                                  <Calendar class="h-3 w-3 shrink-0 text-muted-foreground/45" />
-                                  <span>{formatDetailTime(detail.authorTimeMs)}</span>
-                                </span>
-                                <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
-                                <span class="inline-flex items-center gap-1 whitespace-nowrap">
-                                  <FileText class="h-3 w-3 shrink-0 text-muted-foreground/45" />
-                                  <span>{i18n.tn('git.common.fileCount', commitFiles().length)}</span>
-                                </span>
-                                <Show when={commitPresentationBadge()}>
-                                  <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
-                                  <span class="inline-flex items-center gap-1 whitespace-nowrap text-[var(--redeven-categorical-6)] font-medium">
-                                    {commitPresentationBadge()}
+                          <div
+                            ref={setCommitOverviewElement}
+                            tabIndex={0}
+                            data-git-commit-overview-layout={commitOverviewLayout()}
+                            class="space-y-3"
+                            onContextMenu={(event) => {
+                              const target = { repoRootPath: repoRootPath(), commit: detail, files: commitFiles() };
+                              if (commitContextMenuItems(target).length > 0) commitContextMenu.openFromContextMenu(event, target);
+                            }}
+                            onKeyDown={(event) => {
+                              const target = { repoRootPath: repoRootPath(), commit: detail, files: commitFiles() };
+                              if (commitContextMenuItems(target).length > 0) commitContextMenu.openFromKeyboard(event, target);
+                            }}
+                          >
+                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div class="min-w-0 flex-1 space-y-2">
+                                <div class="max-w-4xl break-words text-[15px] font-bold leading-6 tracking-tight text-foreground">
+                                  {detail.subject || i18n.t('uiCopy.git.noSubject')}
+                                </div>
+                                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] leading-4 text-muted-foreground">
+                                  <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                    <Hash class="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                    <span>{detail.shortHash}</span>
                                   </span>
+                                  <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                    <User class="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                    <span>{detail.authorName || i18n.t('uiCopy.git.unknownAuthor')}</span>
+                                  </span>
+                                  <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                    <Calendar class="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                    <span>{formatDetailTime(detail.authorTimeMs)}</span>
+                                  </span>
+                                  <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                    <FileText class="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                    <span>{i18n.tn('git.common.fileCount', commitFiles().length)}</span>
+                                  </span>
+                                  <Show when={commitPresentationBadge()}>
+                                    <GitMetaPill tone="violet">{commitPresentationBadge()}</GitMetaPill>
+                                  </Show>
+                                </div>
+                                <Show when={commitBodyText()}>
+                                  <div data-git-commit-body-group class={commitBodyGroupClass()}>
+                                    <div class="border-l-2 border-border/70 pl-3 text-xs leading-5 text-muted-foreground">
+                                      <div
+                                        data-git-commit-body
+                                        class="whitespace-pre-wrap break-words"
+                                        style={
+                                          commitBodyExpanded()
+                                            ? undefined
+                                            : {
+                                                display: "-webkit-box",
+                                                "-webkit-box-orient": "vertical",
+                                                "-webkit-line-clamp": String(COMMIT_BODY_PREVIEW_LINES),
+                                                overflow: "hidden",
+                                              }
+                                        }
+                                      >
+                                        {commitBodyText()}
+                                      </div>
+                                    </div>
+                                    <Show when={hasExpandableCommitBody()}>
+                                      <div class="flex justify-start">
+                                        <button
+                                          type="button"
+                                          data-git-commit-body-toggle
+                                          aria-expanded={commitBodyExpanded()}
+                                          class="cursor-pointer rounded px-1 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/[0.12] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                          onClick={() => setCommitBodyExpanded((value) => !value)}
+                                        >
+                                          {commitBodyExpanded()
+                                            ? i18n.t('git.patchViewer.showLess')
+                                            : i18n.t('uiCopy.git.showMore')}
+                                        </button>
+                                      </div>
+                                    </Show>
+                                  </div>
                                 </Show>
                               </div>
-                              <div class="flex items-center gap-2 pt-1">
+
+                              <div class="flex shrink-0 flex-wrap items-center gap-1.5">
+                                <Button
+                                  size="xs"
+                                  variant="outline"
+                                  data-git-full-commit-message-trigger
+                                  class={cn("rounded-md", outlineControlClass)}
+                                  onClick={() => setCommitMessageDialogOpen(true)}
+                                >
+                                  <FileText class="mr-1 h-3.5 w-3.5" />
+                                  {i18n.t('uiCopy.git.viewFullCommitMessage')}
+                                </Button>
                                 <Show when={props.onSwitchDetached}>
                                   <Button
                                     size="xs"
                                     variant="outline"
                                     class={cn("rounded-md", outlineControlClass)}
-                                    disabled={
-                                      Boolean(props.switchDetachedBusy) ||
-                                      alreadyDetachedHere()
-                                    }
-                                    onClick={() =>
-                                      props.onSwitchDetached?.({
-                                        commitHash: detail.hash,
-                                        shortHash:
-                                          detail.shortHash ||
-                                          shortGitHash(detail.hash),
-                                        source: "graph",
-                                      })
-                                    }
+                                    disabled={Boolean(props.switchDetachedBusy) || alreadyDetachedHere()}
+                                    onClick={() => props.onSwitchDetached?.({
+                                      commitHash: detail.hash,
+                                      shortHash: detail.shortHash || shortGitHash(detail.hash),
+                                      source: "graph",
+                                    })}
                                   >
                                     {switchDetachedLabel()}
                                   </Button>
@@ -580,77 +608,22 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                     tone="flower"
                                     icon={FlowerIcon}
                                     size="sm"
-                                    onClick={() =>
-                                      props.onAskFlower?.({
-                                        kind: "commit",
-                                        repoRootPath: exactGitPath(
-                                          props.repoInfo?.repoRootPath,
-                                        ),
-                                        location: "graph",
-                                        commit: detail,
-                                        files: commitFiles(),
-                                      })
-                                    }
+                                    onClick={() => props.onAskFlower?.({
+                                      kind: "commit",
+                                      repoRootPath: exactGitPath(props.repoInfo?.repoRootPath),
+                                      location: "graph",
+                                      commit: detail,
+                                      files: commitFiles(),
+                                    })}
                                   />
                                 </Show>
                               </div>
                             </div>
-                            </div>
-                            <Show when={commitBodyText()}>
-                              <div
-                                data-git-commit-body-group
-                                class={commitBodyGroupClass()}
-                              >
-                                <GitSubtleNote class="max-w-full">
-                                  <div
-                                    data-git-commit-body
-                                    class="whitespace-pre-wrap break-words text-foreground"
-                                    style={
-                                      commitBodyExpanded()
-                                        ? undefined
-                                        : {
-                                            display: "-webkit-box",
-                                            "-webkit-box-orient": "vertical",
-                                            "-webkit-line-clamp": String(
-                                              COMMIT_BODY_PREVIEW_LINES,
-                                            ),
-                                            overflow: "hidden",
-                                          }
-                                    }
-                                  >
-                                    {commitBodyText()}
-                                  </div>
-                                </GitSubtleNote>
-                                <Show when={hasExpandableCommitBody()}>
-                                  <div class="flex justify-start">
-                                    <button
-                                      type="button"
-                                      data-git-commit-body-toggle
-                                      aria-expanded={commitBodyExpanded()}
-                                      class="cursor-pointer rounded px-1 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/[0.12] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-                                      onClick={() =>
-                                        setCommitBodyExpanded(
-                                          (value) => !value,
-                                        )
-                                      }
-                                    >
-                                      {commitBodyExpanded()
-                                        ? i18n.t('git.patchViewer.showLess')
-                                        : i18n.t('uiCopy.git.showMore')}
-                                    </button>
-                                  </div>
-                                </Show>
-                              </div>
+
+                            <Show when={props.onSwitchDetached && alreadyDetachedHere()}>
+                              <GitSubtleNote>{i18n.t('uiCopy.git.alreadyDetached')}</GitSubtleNote>
                             </Show>
-                          <Show
-                            when={
-                              props.onSwitchDetached && alreadyDetachedHere()
-                            }
-                          >
-                            <GitSubtleNote>
-                              {i18n.t('uiCopy.git.alreadyDetached')}
-                            </GitSubtleNote>
-                          </Show>
+                          </div>
                         </GitPanelFrame>
 
                         <GitPanelFrame as="section">
@@ -807,6 +780,12 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
             </Show>
       </Show>
 
+      <GitCommitMessageDialog
+        open={commitMessageDialogOpen()}
+        commit={commitDetail()}
+        onOpenChange={setCommitMessageDialogOpen}
+        onCopyText={props.onCopyText}
+      />
       <GitEntityContextMenu controller={commitContextMenu} items={commitContextMenuItems} />
       <GitEntityContextMenu controller={fileContextMenu} items={fileContextMenuItems} />
 

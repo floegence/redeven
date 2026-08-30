@@ -383,18 +383,13 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('perspective: 1400px;');
   });
 
-  it('keeps git branch history expansion quiet and motion-aware', () => {
+  it('keeps git branch graph details compact and responsive', () => {
     const src = readRedevenCss();
 
-    expect(src).toContain('.git-branch-history-row {');
-    expect(src).toContain('.git-branch-history-row--expanded {');
-    expect(src).toContain('.git-branch-history-details-row {');
-    expect(src).toContain('.git-branch-history-reveal {');
-    expect(src).toContain('grid-template-rows: 0fr;');
-    expect(src).toContain(".git-branch-history-reveal[data-state='open'] {");
-    expect(src).toContain('grid-template-rows: 1fr;');
-    expect(src).toContain(".git-branch-history-reveal[data-state='closing'] {");
-    expect(src).toContain('.git-branch-history-details::before {');
+    expect(src).toContain('.git-branch-history-details {');
+    expect(src).toContain('min-height: 100%;');
+    expect(src).toContain('.git-branch-history-summary {');
+    expect(src).toContain('.git-branch-history-summary-title {');
     expect(src).toContain('.git-branch-history-files {');
     expect(src).toContain('.git-branch-history-files__table :where(th, td):first-child');
     expect(src).toContain('.git-branch-header-verification-slot {');
@@ -412,13 +407,12 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-branch-stable-placeholder__header,');
     expect(src).toContain('.git-branch-stable-placeholder__row {');
     expect(src).toContain('.git-branch-stable-placeholder__cell {');
-    expect(src).toContain('html.dark .git-branch-history-details-row {');
     expect(src).toContain('html.dark .git-branch-detail-banner {');
     expect(src).toContain('html.dark .git-branch-detached-context {');
     expect(src).toContain('html.dark .git-branch-status-unavailable-summary {');
     expect(src).toContain('html.dark .git-branch-stable-placeholder {');
-    expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
-    expect(src).toContain('.git-branch-history-reveal[data-state=\'closing\']');
+    expect(src).toContain('@media (max-width: 640px) {');
+    expect(src).not.toContain('.git-branch-history-reveal');
   });
 
   it('defines a non-interactive terminal work indicator with reduced-motion support', () => {

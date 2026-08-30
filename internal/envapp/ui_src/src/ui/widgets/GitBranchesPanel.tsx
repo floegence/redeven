@@ -4,9 +4,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  onCleanup,
   type Component,
-  type JSX,
 } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { cn, useLayout, useNotification } from "@floegence/floe-webapp-core";
@@ -17,7 +15,6 @@ import {
   ArrowUp,
   CheckCircle,
   ChevronDown,
-  ChevronRight,
   Copy,
   Eye,
   FileText,
@@ -37,6 +34,7 @@ import {
   useRedevenRpc,
   type GitBranchSummary,
   type GitCommitDiffPresentation,
+  type GitCommitDetail,
   type GitCommitFileSummary,
   type GitCommitSummary,
   type GitGetBranchCompareResponse,
@@ -113,6 +111,8 @@ import {
 } from "./GitChrome";
 import { GitChangesBreadcrumb } from "./GitChangesBreadcrumb";
 import { GitDiffDialog } from "./GitDiffDialog";
+import { GitCommitGraph } from './GitCommitGraph';
+import { GitCommitMessageDialog } from './GitCommitMessageDialog';
 import { GitVirtualTable } from "./GitVirtualTable";
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from "./gitWorkbenchScrollRegion";
 import { Tooltip } from "../primitives/Tooltip";
@@ -1292,6 +1292,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
 }
 
 type BranchHistoryCommitDetailState = {
+  commit?: GitCommitDetail;
   files: GitCommitFileSummary[];
   presentation?: GitCommitDiffPresentation;
   loading: boolean;
@@ -1309,109 +1310,6 @@ function summarizeCommitFileChanges(files: GitCommitFileSummary[]): {
       deletions: acc.deletions + Number(file.deletions ?? 0),
     }),
     { additions: 0, deletions: 0 },
-  );
-}
-
-const BRANCH_HISTORY_REVEAL_CLOSE_MS = 220;
-
-type BranchHistoryRevealState = "opening" | "open" | "closing";
-
-interface BranchHistoryCommitDetailsRevealProps {
-  expanded: boolean;
-  children: JSX.Element;
-}
-
-function BranchHistoryCommitDetailsReveal(
-  props: BranchHistoryCommitDetailsRevealProps,
-) {
-  const [shouldRender, setShouldRender] = createSignal(props.expanded);
-  const [revealState, setRevealState] = createSignal<BranchHistoryRevealState>(
-    props.expanded ? "open" : "closing",
-  );
-  let closeTimer: number | undefined;
-  let openFrame: number | undefined;
-
-  const clearCloseTimer = () => {
-    if (closeTimer === undefined || typeof window === "undefined") return;
-    window.clearTimeout(closeTimer);
-    closeTimer = undefined;
-  };
-  const clearOpenFrame = () => {
-    if (
-      openFrame === undefined ||
-      typeof window === "undefined" ||
-      typeof window.cancelAnimationFrame !== "function"
-    ) {
-      return;
-    }
-    window.cancelAnimationFrame(openFrame);
-    openFrame = undefined;
-  };
-  const finishClose = () => {
-    if (props.expanded || revealState() !== "closing") return;
-    setShouldRender(false);
-    clearCloseTimer();
-  };
-
-  createEffect(() => {
-    if (props.expanded) {
-      clearCloseTimer();
-      setShouldRender(true);
-      setRevealState("opening");
-      clearOpenFrame();
-      if (
-        typeof window === "undefined" ||
-        typeof window.requestAnimationFrame !== "function"
-      ) {
-        setRevealState("open");
-        return;
-      }
-      openFrame = window.requestAnimationFrame(() => {
-        openFrame = undefined;
-        setRevealState("open");
-      });
-      return;
-    }
-
-    clearOpenFrame();
-    if (!shouldRender()) return;
-    setRevealState("closing");
-    clearCloseTimer();
-    if (typeof window === "undefined") {
-      finishClose();
-      return;
-    }
-    closeTimer = window.setTimeout(finishClose, BRANCH_HISTORY_REVEAL_CLOSE_MS);
-  });
-
-  onCleanup(() => {
-    clearCloseTimer();
-    clearOpenFrame();
-  });
-
-  return (
-    <Show when={shouldRender()}>
-      <tr
-        class="git-branch-history-details-row"
-        data-state={revealState()}
-        data-git-branch-history-details-row
-      >
-        <td colSpan={3} class="p-0 align-top">
-          <div
-            class="git-branch-history-reveal"
-            data-state={revealState()}
-            onTransitionEnd={(event) => {
-              if (event.target !== event.currentTarget) return;
-              finishClose();
-            }}
-          >
-            <div class="git-branch-history-reveal__content">
-              {props.children}
-            </div>
-          </div>
-        </td>
-      </tr>
-    </Show>
   );
 }
 
@@ -1438,41 +1336,45 @@ interface BranchHistoryCommitDetailsProps {
 
 function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
   const i18n = useI18n();
+  const [messageDialogOpen, setMessageDialogOpen] = createSignal(false);
   const presentationBadge = () =>
     localizedGitCommitDiffPresentationBadge(props.presentation, i18n);
   const presentationDetail = () =>
     localizedGitCommitDiffPresentationDetail(props.presentation, i18n);
   const fileCountLabel = () =>
     i18n.t('git.common.fileCount', { count: props.files.length });
+  const fullCommitDetail = (): GitCommitDetail => props.detail?.commit ?? {
+    hash: props.commit.hash,
+    shortHash: props.commit.shortHash,
+    parents: [...(props.commit.parents ?? [])],
+    authorName: props.commit.authorName,
+    authorEmail: props.commit.authorEmail,
+    authorTimeMs: props.commit.authorTimeMs,
+    subject: props.commit.subject,
+    body: props.commit.bodyPreview,
+  };
 
   return (
-    <div class="git-branch-history-details" data-git-branch-history-details>
-      <Show
-        when={props.detail && !props.detail.loading}
-        fallback={
-          <GitStatePane
-            loading
-            message={i18n.t('uiCopy.git.loadingChangedFiles')}
-            class="git-branch-history-state min-h-[5rem] px-1 py-2"
-          />
-        }
-      >
+    <>
+      <div class="git-branch-history-details" data-git-branch-history-details>
         <Show
-          when={!props.detail?.error}
+          when={props.detail && !props.detail.loading}
           fallback={
             <GitStatePane
-              tone="error"
-              message={props.detail?.error}
+              loading
+              message={i18n.t('uiCopy.git.loadingChangedFiles')}
               class="git-branch-history-state min-h-[5rem] px-1 py-2"
             />
           }
         >
           <Show
-            when={props.files.length > 0}
+            when={!props.detail?.error}
             fallback={
-              <div class="git-branch-history-note">
-                {i18n.t('uiCopy.git.noCommitFiles')}
-              </div>
+              <GitStatePane
+                tone="error"
+                message={props.detail?.error}
+                class="git-branch-history-state min-h-[5rem] px-1 py-2"
+              />
             }
           >
             <div class="git-branch-history-detail-stack">
@@ -1487,15 +1389,11 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                   />
                   <div class="min-w-0">
                     <div class="git-branch-history-summary-title">
-                      {i18n.t('uiCopy.git.filesInCommit')}
+                      {props.commit.subject || i18n.t('uiCopy.git.noSubject')}
                     </div>
-                    <Show when={presentationDetail()}>
-                      {(detail) => (
-                        <div class="git-branch-history-summary-detail">
-                          {detail()}
-                        </div>
-                      )}
-                    </Show>
+                    <div class="git-branch-history-summary-detail">
+                      {props.commit.shortHash} · {props.commit.authorName || i18n.t('uiCopy.git.unknownAuthor')} · {formatAbsoluteTime(props.commit.authorTimeMs)}
+                    </div>
                   </div>
                 </div>
                 <div class="git-branch-history-summary-meta">
@@ -1505,17 +1403,24 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                       <GitMetaPill tone="violet">{badge()}</GitMetaPill>
                     )}
                   </Show>
-                  <div class="git-branch-history-metrics">
-                    <GitChangeMetrics
-                      additions={props.fileTotals.additions}
-                      deletions={props.fileTotals.deletions}
-                    />
-                  </div>
                 </div>
               </div>
 
               <div class="git-branch-history-actions">
                 <div class="git-branch-history-action-group">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    data-git-full-commit-message-trigger
+                    class={cn(
+                      "rounded-md bg-background/70",
+                      redevenSurfaceRoleClass("control"),
+                    )}
+                    onClick={() => setMessageDialogOpen(true)}
+                  >
+                    <FileText class="mr-1 h-3.5 w-3.5" />
+                    {i18n.t('uiCopy.git.viewFullCommitMessage')}
+                  </Button>
                   <Show when={props.onSwitchDetached}>
                     <Button
                       size="sm"
@@ -1567,10 +1472,18 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                     </GitShortcutOrbDock>
                   </Show>
                 </div>
-                <div class="git-branch-history-hint">
-                  {i18n.t('uiCopy.git.selectFileDiff')}
-                </div>
+                <Show when={props.files.length > 0}>
+                  <div class="git-branch-history-hint">
+                    {i18n.t('uiCopy.git.selectFileDiff')}
+                  </div>
+                </Show>
               </div>
+
+              <Show when={presentationDetail()}>
+                {(detail) => (
+                  <div class="git-branch-history-note">{detail()}</div>
+                )}
+              </Show>
 
               <Show
                 when={props.onSwitchDetached && props.alreadyDetachedHere}
@@ -1580,32 +1493,54 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                 </div>
               </Show>
 
-              <BranchCompareFilesTable
-                surface="inline"
-                items={props.files}
-                selectedKey={props.selectedDiffKey}
-                context={{
-                  kind: 'commit',
-                  repoRootPath: props.repoRootPath,
-                  liveRootPath: props.repoRootPath,
-                  branchName: props.branchName,
-                  commit: props.commit,
-                }}
-                onOpenDiff={(item, context) => props.onOpenDiff?.(
-                  item,
-                  context.kind === 'commit' ? context.commit.hash : props.commit.hash,
+              <Show
+                when={props.files.length > 0}
+                fallback={(
+                  <div class="git-branch-history-note">
+                    {i18n.t('uiCopy.git.noCommitFiles')}
+                  </div>
                 )}
-                onAskFlower={props.onAskFlower}
-                onOpenInTerminal={props.onOpenInTerminal}
-                onBrowseFiles={props.onBrowseFiles}
-                onPreviewCurrentFile={props.onPreviewCurrentFile}
-                onCopyText={props.onCopyText}
-              />
+              >
+                <div class="flex items-center justify-between gap-2 text-[11px] font-medium text-foreground">
+                  <span>{i18n.t('uiCopy.git.filesInCommit')}</span>
+                  <GitChangeMetrics
+                    additions={props.fileTotals.additions}
+                    deletions={props.fileTotals.deletions}
+                  />
+                </div>
+                <BranchCompareFilesTable
+                  surface="inline"
+                  items={props.files}
+                  selectedKey={props.selectedDiffKey}
+                  context={{
+                    kind: 'commit',
+                    repoRootPath: props.repoRootPath,
+                    liveRootPath: props.repoRootPath,
+                    branchName: props.branchName,
+                    commit: props.commit,
+                  }}
+                  onOpenDiff={(item, context) => props.onOpenDiff?.(
+                    item,
+                    context.kind === 'commit' ? context.commit.hash : props.commit.hash,
+                  )}
+                  onAskFlower={props.onAskFlower}
+                  onOpenInTerminal={props.onOpenInTerminal}
+                  onBrowseFiles={props.onBrowseFiles}
+                  onPreviewCurrentFile={props.onPreviewCurrentFile}
+                  onCopyText={props.onCopyText}
+                />
+              </Show>
             </div>
           </Show>
         </Show>
-      </Show>
-    </div>
+      </div>
+      <GitCommitMessageDialog
+        open={messageDialogOpen()}
+        commit={fullCommitDetail()}
+        onOpenChange={setMessageDialogOpen}
+        onCopyText={props.onCopyText}
+      />
+    </>
   );
 }
 
@@ -1646,23 +1581,6 @@ function HistoryList(
     createSignal<GitCommitFileSummary | null>(null);
   const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal("");
   const requestedCommitDetailKeys = new Set<string>();
-  type BranchHistoryCommitContextTarget = Readonly<{
-    commit: GitCommitSummary;
-    files: GitCommitFileSummary[];
-    repoRootPath: string;
-    branchName?: string;
-    alreadyDetached: boolean;
-  }>;
-  const commitContextMenu = createGitEntityContextMenuController<BranchHistoryCommitContextTarget>({
-    snapshotTarget: (target) => ({
-      ...target,
-      commit: {
-        ...target.commit,
-        parents: Array.isArray(target.commit.parents) ? [...target.commit.parents] : target.commit.parents,
-      },
-      files: target.files.map((file) => ({ ...file })),
-    }),
-  });
 
   const expandedCommitHash = createMemo(() =>
     String(props.selectedCommitHash ?? "").trim(),
@@ -1693,107 +1611,19 @@ function HistoryList(
     if (!hash) return undefined;
     return commitDetails()[hash]?.presentation;
   });
+  const selectedCommit = createMemo(() =>
+    (props.commits ?? []).find((commit) => commit.hash === expandedCommitHash()) ?? null,
+  );
+  const selectedDetail = createMemo(() => {
+    const hash = expandedCommitHash();
+    return hash ? commitDetails()[hash] : undefined;
+  });
+  const selectedBranchName = () => props.selectedBranch
+    ? branchDisplayName(props.selectedBranch)
+    : undefined;
 
   const toggleCommit = (hash: string) => {
     props.onSelectCommit?.(expandedCommitHash() === hash ? "" : hash);
-  };
-  const commitContextMenuItems = (target: BranchHistoryCommitContextTarget): GitContextMenuActionItem[] => {
-    const commit = target.commit;
-    const rootRequest = buildGitDirectoryShortcutRequest({ rootPath: target.repoRootPath });
-    const actions: GitContextMenuActionItem[] = [];
-    if (props.onAskFlower) {
-      actions.push({
-        id: "ask-flower",
-        kind: "action",
-        group: "assistant",
-        rank: 10,
-        label: i18n.t("git.contextMenu.askFlower"),
-        icon: FlowerIcon,
-        onSelect: () => props.onAskFlower?.({
-          kind: "commit",
-          repoRootPath: target.repoRootPath,
-          location: "branch_history",
-          branchName: target.branchName,
-          commit,
-          files: target.files,
-        }),
-      });
-    }
-    actions.push({
-      id: "view-commit-details",
-      kind: "action",
-      group: "inspect",
-      rank: 10,
-      label: i18n.t("git.contextMenu.viewCommitDetails"),
-      icon: FileText,
-      onSelect: () => {
-        props.onSelectCommit?.(commit.hash);
-      },
-    });
-    if (props.onOpenInTerminal) {
-      actions.push({
-        id: "open-terminal",
-        kind: "action",
-        group: "navigate",
-        rank: 10,
-        label: i18n.t("git.contextMenu.openTerminal"),
-        icon: Terminal,
-        disabled: !rootRequest,
-        disabledReason: !rootRequest ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
-        onSelect: () => {
-          if (rootRequest) props.onOpenInTerminal?.(rootRequest);
-        },
-      });
-    }
-    if (props.onBrowseFiles) {
-      actions.push({
-        id: "browse-files",
-        kind: "action",
-        group: "navigate",
-        rank: 20,
-        label: i18n.t("git.contextMenu.browseFiles"),
-        icon: Folder,
-        disabled: !rootRequest,
-        disabledReason: !rootRequest ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
-        onSelect: () => {
-          if (rootRequest) void props.onBrowseFiles?.(rootRequest);
-        },
-      });
-    }
-    if (props.onSwitchDetached) {
-      actions.push({
-        id: "switch-detached",
-        kind: "action",
-        group: "modify",
-        rank: 10,
-        label: i18n.t("git.contextMenu.switchDetached"),
-        icon: History,
-        disabled: Boolean(props.switchDetachedBusy) || target.alreadyDetached,
-        disabledReason: props.switchDetachedBusy
-          ? i18n.t('uiCopy.git.switching')
-          : target.alreadyDetached
-            ? i18n.t("uiCopy.git.alreadyDetachedHere")
-            : undefined,
-        onSelect: () => props.onSwitchDetached?.({
-          commitHash: commit.hash,
-          shortHash: commit.shortHash || shortGitHash(commit.hash),
-          source: "branch_history",
-          branchName: target.branchName,
-        }),
-      });
-    }
-    if (props.onCopyText) {
-      actions.push({
-        id: "copy-commit-hash",
-        kind: "action",
-        group: "clipboard",
-        rank: 10,
-        label: i18n.t("git.contextMenu.copyCommitHash"),
-        icon: Copy,
-        onSelect: () => void props.onCopyText?.(commit.hash),
-      });
-    }
-    return actions;
   };
 
   createEffect(() => {
@@ -1837,6 +1667,7 @@ function HistoryList(
             [contextKey]: {
               ...currentContext,
               [hash]: {
+                commit: resp?.commit,
                 files,
                 presentation: resp?.presentation,
                 loading: false,
@@ -1917,206 +1748,88 @@ function HistoryList(
                       </GitSubtleNote>
                     }
                   >
-                    <GitTableFrame class="flex min-h-0 flex-1 flex-col">
-                      <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="min-h-0 flex-1 overflow-auto">
-                        <table class="w-full min-w-[30rem] text-xs xl:min-w-0">
-                          <thead class="sticky top-0 z-10 bg-background">
-                            <tr
-                              class={cn(
-                                "text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground",
-                                redevenDividerRoleClass("strong"),
-                                "border-b",
-                              )}
+                    <div
+                      class="grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-3 xl:grid-cols-[minmax(19rem,0.85fr)_minmax(26rem,1.15fr)] xl:grid-rows-1"
+                      data-git-branch-history-layout="graph-detail"
+                    >
+                      <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="min-h-0 overflow-auto">
+                        <GitCommitGraph
+                          commits={props.commits ?? []}
+                          selectedCommitHash={expandedCommitHash()}
+                          onSelect={toggleCommit}
+                          repoRootPath={repoRootPath()}
+                          location="branch_history"
+                          branchName={selectedBranchName()}
+                          resolveCommitFiles={(commit) => commitDetails()[commit.hash]?.files ?? []}
+                          onAskFlower={props.onAskFlower}
+                          onOpenInTerminal={props.onOpenInTerminal}
+                          onBrowseFiles={props.onBrowseFiles}
+                          onSwitchDetached={props.onSwitchDetached}
+                          switchDetachedBusy={props.switchDetachedBusy}
+                          alreadyDetachedCommitHash={headDisplay().detached ? currentHeadCommit() : undefined}
+                          onCopyText={props.onCopyText}
+                          class="rounded-md"
+                        />
+                        <Show when={props.hasMore}>
+                          <div class="pt-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              class={cn("w-full", gitToneActionButtonClass())}
+                              onClick={props.onLoadMore}
+                              loading={props.listLoadingMore}
+                              disabled={props.listLoadingMore}
                             >
-                              <th class="px-3 py-2.5 font-medium">{i18n.t('git.common.commit')}</th>
-                              <th class="hidden px-3 py-2.5 font-medium xl:table-cell">
-                                {i18n.t('uiCopy.git.author')}
-                              </th>
-                              <th class="hidden px-3 py-2.5 font-medium xl:table-cell">
-                                {i18n.t('debugConsole.fields.when')}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <For each={props.commits ?? []}>
-                              {(commit) => {
-                                const expanded = () =>
-                                  expandedCommitHash() === commit.hash;
-                                const detail = () =>
-                                  commitDetails()[commit.hash];
-                                const files = () => detail()?.files ?? [];
-                                const presentation = () =>
-                                  detail()?.presentation;
-                                const fileTotals = createMemo(() =>
-                                  summarizeCommitFileChanges(files()),
-                                );
-                                const alreadyDetachedHere = () =>
-                                  headDisplay().detached &&
-                                  currentHeadCommit() === commit.hash;
-                                const commitMenuTarget = (): BranchHistoryCommitContextTarget => ({
-                                  commit,
-                                  files: files(),
-                                  repoRootPath: repoRootPath(),
-                                  branchName: props.selectedBranch
-                                    ? branchDisplayName(props.selectedBranch)
-                                    : undefined,
-                                  alreadyDetached: alreadyDetachedHere(),
-                                });
-                                return (
-                                  <>
-                                    <tr
-                                      class={cn(
-                                        "git-branch-history-row cursor-pointer border-b",
-                                        redevenDividerRoleClass(),
-                                        expanded()
-                                          ? "git-branch-history-row--expanded"
-                                          : "hover:bg-muted/25",
-                                      )}
-                                      data-expanded={expanded() ? "true" : "false"}
-                                      tabIndex={0}
-                                      onContextMenu={(event) => commitContextMenu.openFromContextMenu(event, commitMenuTarget())}
-                                      onKeyDown={(event) => commitContextMenu.openFromKeyboard(event, commitMenuTarget())}
-                                      onClick={() => toggleCommit(commit.hash)}
-                                    >
-                                      <td class="px-3 py-2.5 align-top">
-                                        <div class="flex min-w-0 items-start gap-2">
-                                          <button
-                                            type="button"
-                                            aria-label={
-                                              expanded()
-                                                ? i18n.t('uiCopy.git.collapseCommit')
-                                                : i18n.t('uiCopy.git.expandCommit')
-                                            }
-                                            aria-expanded={expanded()}
-                                            class={cn(
-                                              "mt-0.5 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded bg-background/80 text-muted-foreground transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70",
-                                              redevenSurfaceRoleClass(
-                                                "control",
-                                              ),
-                                            )}
-                                            onClick={(event) => {
-                                              event.stopPropagation();
-                                              toggleCommit(commit.hash);
-                                            }}
-                                          >
-                                            <ChevronRight
-                                              class={cn(
-                                                "h-3 w-3 transition-transform duration-150",
-                                                expanded() && "rotate-90",
-                                              )}
-                                            />
-                                          </button>
-                                          <div class="min-w-0">
-                                            <div class="truncate text-xs font-medium text-foreground">
-                                              {commit.subject || i18n.t('uiCopy.git.noSubject')}
-                                            </div>
-                                            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                              <GitMetaPill tone="neutral">
-                                                {commit.shortHash}
-                                              </GitMetaPill>
-                                              <GitMetaPill
-                                                tone="info"
-                                                class="xl:hidden"
-                                              >
-                                                {commit.authorName || i18n.t('uiCopy.git.unknownAuthor')}
-                                              </GitMetaPill>
-                                              <GitMetaPill
-                                                tone="neutral"
-                                                class="xl:hidden"
-                                              >
-                                                {formatAbsoluteTime(
-                                                  commit.authorTimeMs,
-                                                )}
-                                              </GitMetaPill>
-                                              <Show
-                                                when={
-                                                  (commit.parents?.length ??
-                                                    0) > 1
-                                                }
-                                              >
-                                                <GitMetaPill tone="violet">
-                                                  {i18n.t('uiCopy.git.mergeCount', { count: commit.parents?.length ?? 0 })}
-                                                </GitMetaPill>
-                                              </Show>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td class="hidden px-3 py-2.5 align-top text-muted-foreground xl:table-cell">
-                                        {commit.authorName || i18n.t('uiCopy.git.unknownAuthor')}
-                                      </td>
-                                      <td class="hidden px-3 py-2.5 align-top text-muted-foreground xl:table-cell">
-                                        {formatAbsoluteTime(
-                                          commit.authorTimeMs,
-                                        )}
-                                      </td>
-                                    </tr>
-
-                                    <BranchHistoryCommitDetailsReveal
-                                      expanded={expanded()}
-                                    >
-                                      <BranchHistoryCommitDetails
-                                        commit={commit}
-                                        detail={detail()}
-                                        files={files()}
-                                        presentation={presentation()}
-                                        fileTotals={fileTotals()}
-                                        selectedDiffKey={selectedDiffKey()}
-                                        repoRootPath={repoRootPath()}
-                                        branchName={
-                                          props.selectedBranch
-                                            ? branchDisplayName(
-                                                props.selectedBranch,
-                                              )
-                                            : undefined
-                                        }
-                                        askFlowerLabel={i18n.t("git.changes.askFlower")}
-                                        switchDetachedBusy={
-                                          props.switchDetachedBusy
-                                        }
-                                        alreadyDetachedHere={
-                                          alreadyDetachedHere()
-                                        }
-                                        onSwitchDetached={
-                                          props.onSwitchDetached
-                                        }
-                                        onAskFlower={props.onAskFlower}
-                                        onOpenInTerminal={props.onOpenInTerminal}
-                                        onBrowseFiles={props.onBrowseFiles}
-                                        onPreviewCurrentFile={props.onPreviewCurrentFile}
-                                        onCopyText={props.onCopyText}
-                                        onOpenDiff={(item, commitHash) => {
-                                          setDiffDialogItem(item);
-                                          setDiffDialogCommitHash(commitHash);
-                                          setDiffDialogOpen(true);
-                                        }}
-                                      />
-                                    </BranchHistoryCommitDetailsReveal>
-                                  </>
-                                );
-                              }}
-                            </For>
-                          </tbody>
-                        </table>
+                              {i18n.t('uiCopy.git.loadMore')}
+                            </Button>
+                          </div>
+                        </Show>
                       </div>
-                    </GitTableFrame>
+
+                      <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class={cn('min-h-0 overflow-auto rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass())}>
+                        <Show
+                          when={selectedCommit()}
+                          fallback={(
+                            <div class="flex h-full min-h-[8rem] items-center justify-center px-5 text-center text-xs text-muted-foreground">
+                              {i18n.t('uiCopy.git.chooseCommit')}
+                            </div>
+                          )}
+                        >
+                          {(commit) => {
+                            const detail = () => selectedDetail();
+                            const files = () => detail()?.files ?? [];
+                            return (
+                              <BranchHistoryCommitDetails
+                                commit={commit()}
+                                detail={detail()}
+                                files={files()}
+                                presentation={detail()?.presentation}
+                                fileTotals={summarizeCommitFileChanges(files())}
+                                selectedDiffKey={selectedDiffKey()}
+                                repoRootPath={repoRootPath()}
+                                branchName={selectedBranchName()}
+                                askFlowerLabel={i18n.t("git.changes.askFlower")}
+                                switchDetachedBusy={props.switchDetachedBusy}
+                                alreadyDetachedHere={headDisplay().detached && currentHeadCommit() === commit().hash}
+                                onSwitchDetached={props.onSwitchDetached}
+                                onAskFlower={props.onAskFlower}
+                                onOpenInTerminal={props.onOpenInTerminal}
+                                onBrowseFiles={props.onBrowseFiles}
+                                onPreviewCurrentFile={props.onPreviewCurrentFile}
+                                onCopyText={props.onCopyText}
+                                onOpenDiff={(item, commitHash) => {
+                                  setDiffDialogItem(item);
+                                  setDiffDialogCommitHash(commitHash);
+                                  setDiffDialogOpen(true);
+                                }}
+                              />
+                            );
+                          }}
+                        </Show>
+                      </div>
+                    </div>
                   </Show>
                 </div>
-
-                <Show when={props.hasMore}>
-                  <div class="pt-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      class={cn("w-full", gitToneActionButtonClass())}
-                      onClick={props.onLoadMore}
-                      loading={props.listLoadingMore}
-                      disabled={props.listLoadingMore}
-                    >
-                      {i18n.t('uiCopy.git.loadMore')}
-                    </Button>
-                  </div>
-                </Show>
               </Show>
             </Show>
           </div>
@@ -2151,7 +1864,6 @@ function HistoryList(
         }
         emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
       />
-      <GitEntityContextMenu controller={commitContextMenu} items={commitContextMenuItems} />
     </>
   );
 }

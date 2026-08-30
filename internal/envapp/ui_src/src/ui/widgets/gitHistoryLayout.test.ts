@@ -148,11 +148,15 @@ describe('browser workspace layout wiring', () => {
     expect(shellSrc).toContain("aria-label={i18n.t('uiCopy.shell.closeSidebar')}");
 
     expect(navSrc).toContain('role="tablist"');
+    expect(navSrc).toContain('data-git-view-nav-label');
+    expect(navSrc).toContain('whitespace-nowrap');
+    expect(navSrc).not.toContain('<span class="truncate font-medium">{item.label}</span>');
     expect(navSrc).toContain("aria-label={i18n.t('uiCopy.git.views')}");
     expect(navSrc).toContain('aria-orientation="horizontal"');
     expect(navSrc).toContain("resolveRovingTabTargetId(itemIds(), currentId, event.key, 'horizontal')");
-    expect(navSrc).toContain('grid grid-cols-3 gap-0.5 rounded-md bg-muted/[0.12] p-0.5');
-    expect(navSrc).toContain('rounded px-2 py-1.5');
+    expect(navSrc).toContain('grid max-w-full gap-0.5 overflow-x-auto');
+    expect(navSrc).toContain('minmax(max-content, 1fr)');
+    expect(navSrc).toContain('rounded px-1.5 py-1.5');
     expect(navSrc).toContain('gitNavigationItemClass(active())');
     expect(navSrc).toContain('gitSelectedChipClass(true)');
     expect(navSrc).toContain("typeof item.count === 'number' && item.count > 0");
@@ -184,11 +188,14 @@ describe('browser workspace layout wiring', () => {
 
   it('stacks commit message details above changed files and clamps the preview', () => {
     const historySrc = read('./GitHistoryBrowser.tsx');
+    const messageSrc = read('./GitCommitMessageDialog.tsx');
 
     expect(historySrc).toContain('const COMMIT_BODY_PREVIEW_LINES = 2;');
     expect(historySrc).toContain('const COMMIT_BODY_PREVIEW_CHARS = 160;');
-    expect(historySrc).toContain('body.split(/\\r?\\n/)');
-    expect(historySrc).toMatch(/lines\.slice\(1\)\.join\(["']\\n["']\)\.trim\(\)/);
+    expect(messageSrc).toContain('body.split(/\\r?\\n/)');
+    expect(messageSrc).toMatch(/lines\.slice\(1\)\.join\(["']\\n["']\)\.trim\(\)/);
+    expect(historySrc).toContain('data-git-full-commit-message-trigger');
+    expect(messageSrc).toContain('data-git-commit-message-dialog');
     expect(historySrc).toContain('data-git-commit-overview-layout={commitOverviewLayout()}');
     expect(historySrc).toContain("i18n.t('uiCopy.git.filesInCommit')");
     expect(historySrc).not.toContain('Patch Preview');
@@ -218,15 +225,14 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain("selectedBranchSubview?: GitBranchSubview;");
     expect(branchesSrc).toContain('branchSummary');
     expect(branchesSrc).toContain('getCommitDetail');
-    expect(branchesSrc).toContain('ChevronRight');
+    expect(branchesSrc).toContain('<GitCommitGraph');
     expect(branchesSrc).toContain("i18n.t('uiCopy.git.filesInCommit')");
-    expect(branchesSrc).toContain('BranchHistoryCommitDetailsReveal');
     expect(branchesSrc).toContain('BranchHistoryCommitDetails');
     expect(branchesSrc).toContain('data-git-branch-history-details');
-    expect(branchesSrc).toContain('data-git-branch-history-details-row');
+    expect(branchesSrc).toContain('data-git-branch-history-layout="graph-detail"');
     expect(branchesSrc).toContain('data-git-branch-commit-files-surface="inline"');
     expect(branchesSrc).toContain('surface="inline"');
-    expect(branchesSrc).toContain('BRANCH_HISTORY_REVEAL_CLOSE_MS');
+    expect(branchesSrc).toContain('<GitCommitMessageDialog');
     expect(branchesSrc).toContain("i18n.t('uiCopy.git.compareBranches')");
     expect(branchesSrc).toContain("i18n.t('uiCopy.git.changedFiles')");
     expect(branchesSrc).toContain("i18n.t('uiCopy.git.loadMore')");

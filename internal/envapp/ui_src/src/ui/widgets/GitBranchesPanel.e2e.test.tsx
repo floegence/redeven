@@ -3878,6 +3878,7 @@ describe("GitBranchesPanel interactions", () => {
         shortHash: "22222222",
         parents: ["1111111111111111", "9999999999999999"],
         subject: "Merge feature",
+        body: "Merge feature\n\nPreserve the full merge rationale for reviewers.",
       },
       presentation: {
         mode: "first_parent",
@@ -3964,14 +3965,11 @@ describe("GitBranchesPanel interactions", () => {
         "#git-branch-subview-panel-history:not([hidden])",
       ) as HTMLElement | null;
       expect(historyPanel).toBeTruthy();
-      const expandedToggle = historyPanel!.querySelector(
-        'button[aria-label="Collapse commit"]',
-      ) as HTMLButtonElement | null;
-      expect(expandedToggle?.getAttribute("aria-expanded")).toBe("true");
-      const detailRow = historyPanel!.querySelector(
-        "[data-git-branch-history-details-row]",
-      ) as HTMLElement | null;
-      expect(detailRow).toBeTruthy();
+      expect(
+        historyPanel!.querySelector('[data-git-branch-history-layout="graph-detail"]'),
+      ).toBeTruthy();
+      expect(historyPanel!.querySelector('[data-commit-graph]')).toBeTruthy();
+      expect(historyPanel!.querySelector('[data-commit-graph-row="2222222222222222"]')).toBeTruthy();
       const details = historyPanel!.querySelector(
         "[data-git-branch-history-details]",
       ) as HTMLElement | null;
@@ -3988,6 +3986,17 @@ describe("GitBranchesPanel interactions", () => {
       ) as HTMLButtonElement | null;
       expect(askFlowerButton).toBeTruthy();
       expect(askFlowerButton?.textContent).toBe("");
+
+      const fullMessageButton = historyPanel!.querySelector(
+        "[data-git-full-commit-message-trigger]",
+      ) as HTMLButtonElement | null;
+      expect(fullMessageButton).toBeTruthy();
+      fullMessageButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+      expect(document.body.querySelector('[data-git-commit-message-dialog]')?.textContent).toContain(
+        "Preserve the full merge rationale for reviewers.",
+      );
+
       askFlowerButton!.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
@@ -4028,14 +4037,13 @@ describe("GitBranchesPanel interactions", () => {
       expect(document.body.textContent).toContain("Merge Commit");
       expect(document.body.textContent).toContain("history updated");
 
-      expandedToggle!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const selectedGraphRow = historyPanel!.querySelector(
+        '[data-commit-graph-row="2222222222222222"]',
+      ) as HTMLButtonElement;
+      selectedGraphRow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       expect(selectedCommitHash()).toBe("");
-      expect(
-        historyPanel!
-          .querySelector("[data-git-branch-history-details-row]")
-          ?.getAttribute("data-state"),
-      ).toBe("closing");
+      expect(historyPanel!.querySelector("[data-git-branch-history-details]")).toBeFalsy();
     } finally {
       dispose();
     }
@@ -4726,7 +4734,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
-      const commitRow = host.querySelector('.git-branch-history-row') as HTMLTableRowElement | null;
+      const commitRow = host.querySelector(`[data-commit-graph-row="${commit.hash}"]`) as HTMLButtonElement | null;
       commitRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
       commit.subject = 'Mutated subject';
