@@ -37,7 +37,7 @@ import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { gitToneHeaderActionButtonClass } from './GitChrome';
-import { GitInlineLoadingStatus, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
+import { GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
@@ -164,13 +164,6 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   const headDisplay = () => localizedGitHeadDisplay(describeGitHead(props.repoSummary, props.repoInfo), i18n);
   const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
   const activeSubview = () => normalizeSubview(props.subview);
-  const loadingBusy = () => {
-    if (props.repoInfoLoading) return true;
-    if (activeSubview() === 'changes') return Boolean(props.workspaceLoading);
-    if (activeSubview() === 'branches') return Boolean(props.branchesLoading);
-    if (activeSubview() === 'history') return Boolean(props.listLoading);
-    return false;
-  };
   const detachedHead = () => headDisplay().detached;
   const stashCountLabel = () => {
     const count = Number(props.repoSummary?.stashCount ?? 0);
@@ -385,9 +378,6 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               </Show>
               <Show when={props.repoSummary && (props.repoSummary.aheadCount || props.repoSummary.behindCount)}>
                 <GitMetaPill tone="info">{localizedSyncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount, i18n)}</GitMetaPill>
-              </Show>
-              <Show when={loadingBusy()}>
-                <GitInlineLoadingStatus class="w-16">{i18n.t('files.refreshing')}</GitInlineLoadingStatus>
               </Show>
             </div>
             <div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={repoPath()}>{repoPath()}</div>

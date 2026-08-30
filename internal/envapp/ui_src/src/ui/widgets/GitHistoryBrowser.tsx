@@ -52,7 +52,6 @@ import {
   GitChangeMetrics,
   GitChangeStatusPill,
   GitContentSkeleton,
-  GitInlineLoadingStatus,
   GitLabelBlock,
   GitMetaPill,
   GitPanelFrame,
@@ -384,6 +383,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       resetDetailState();
       return;
     }
+    resetDetailState();
     void loadCommitDetail(hash);
   });
 
@@ -504,11 +504,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
               };
               return (
                 <div class="relative flex-1 min-h-0">
-                  <Show when={detailLoading()}>
-                    <div class="absolute inset-x-0 top-0 z-10 mx-3 sm:mx-4">
-                      <GitInlineLoadingStatus class="w-24">{i18n.t('uiCopy.git.loadingCommitDetails')}</GitInlineLoadingStatus>
-                    </div>
-                  </Show>
                   <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                     <div class="space-y-3">
                         <GitPanelFrame as="section" class="!px-4 !py-3">

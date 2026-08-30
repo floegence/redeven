@@ -1137,31 +1137,6 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   padding-right: 0.25rem;
 }
 
-.git-branch-header-verification-slot {
-  inline-size: 7.25rem;
-  min-inline-size: 7.25rem;
-  min-height: 1.625rem;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex: 0 0 7.25rem;
-}
-
-.git-branch-header-verification-slot[data-git-branch-verification-state='idle'] {
-  pointer-events: none;
-}
-
-.git-branch-header-inline-status {
-  min-width: 0;
-  width: 100%;
-  flex: 0 0 100%;
-  padding: 0.25rem 0.5rem;
-}
-
-.git-branch-header-inline-status .git-inline-loading-status__skeleton {
-  width: 4.5rem;
-}
-
 .git-branch-detail-banner {
   display: flex;
   align-items: flex-start;
@@ -1526,20 +1501,6 @@ html.dark .git-branch-stable-placeholder {
   min-height: 1.875rem;
 }
 
-.git-changes-toolbar-loading-slot {
-  min-width: 9.5rem;
-  min-height: 1.625rem;
-  display: inline-flex;
-  align-items: center;
-  transition: opacity 140ms ease;
-}
-
-.git-changes-toolbar-loading-slot[data-visible='false'] {
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .git-changes-breadcrumb-slot {
   min-height: 1.875rem;
   display: flex;
@@ -1637,12 +1598,6 @@ html.dark .git-branch-stable-placeholder {
   color: color-mix(in srgb, var(--success) 60%, var(--foreground) 22%);
 }
 
-.git-changes-table-refresh-row {
-  min-height: 2.125rem;
-  display: flex;
-  align-items: center;
-}
-
 html.dark .git-changes-table-pending {
   background: color-mix(in srgb, var(--muted) 6%, transparent);
 }
@@ -1681,15 +1636,6 @@ html.dark .git-changes-table-pending {
     text-align: center;
   }
 
-  .git-branch-header-inline-status {
-    max-width: 9rem;
-  }
-
-  .git-branch-header-verification-slot {
-    inline-size: 6.75rem;
-    min-inline-size: 6.75rem;
-    flex-basis: 6.75rem;
-  }
 }
 
 .git-tone-dot {
