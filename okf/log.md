@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-30
+* **Floret v6.0.1 fork migration adoption**: Redeven now consumes the published
+  Floret release that automatically removes verified terminal Effect Attempt
+  history copied by legacy forks and prevents new forks from copying source-
+  thread effect authority. Redeven keeps the Floret Store opaque and adds no
+  SQL repair, downgrade, or migration fallback.
 * **Terminal unknown-effect lifecycle and Floret v6.0.0 adoption**: Redeven now
   projects Floret's `effect_outcome_unknown` terminal failure through one shared
   summary, detail, and live-current lifecycle mapper. Flower explains that the
