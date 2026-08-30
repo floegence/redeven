@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
+import { Show, createSignal, onCleanup, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
 import {
@@ -36,7 +36,6 @@ export interface GitEntityContextMenuController<TTarget> {
   openFromContextMenu: (event: MouseEvent, target: TTarget) => void;
   openFromKeyboard: (event: KeyboardEvent, target: TTarget) => void;
   close: () => void;
-  setMenuElement: (element: HTMLDivElement | null) => void;
 }
 
 export interface GitEntityContextMenuControllerOptions<TTarget> {
@@ -71,7 +70,6 @@ export function createGitEntityContextMenuController<TTarget>(
   options: GitEntityContextMenuControllerOptions<TTarget> = {},
 ): GitEntityContextMenuController<TTarget> {
   const [state, setState] = createSignal<GitEntityContextMenuState<TTarget> | null>(null);
-  let menuElement: HTMLDivElement | null = null;
 
   const close = () => setState(null);
 
@@ -97,26 +95,6 @@ export function createGitEntityContextMenuController<TTarget>(
     open(keyboardMenuPosition(element), target, element);
   };
 
-  createEffect(() => {
-    if (!state()) return;
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (menuElement?.contains(event.target as Node)) return;
-      close();
-    };
-    const onScroll = () => close();
-    const onBlur = () => close();
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    document.addEventListener('scroll', onScroll, true);
-    window.addEventListener('blur', onBlur);
-    onCleanup(() => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('blur', onBlur);
-    });
-  });
-
   onCleanup(() => {
     setState(null);
   });
@@ -126,9 +104,6 @@ export function createGitEntityContextMenuController<TTarget>(
     openFromContextMenu,
     openFromKeyboard,
     close,
-    setMenuElement: (element) => {
-      menuElement = element;
-    },
   };
 }
 
@@ -183,7 +158,6 @@ export function GitEntityContextMenu<TTarget>(props: GitEntityContextMenuProps<T
                 }
               : item
           ))}
-          menuRef={props.controller.setMenuElement}
           onDismiss={props.controller.close}
         />
       )}

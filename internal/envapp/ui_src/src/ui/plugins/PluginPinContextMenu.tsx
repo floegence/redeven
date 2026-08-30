@@ -17,7 +17,6 @@ export type PluginPinContextMenuProps = Readonly<{
 
 export function PluginPinContextMenu(props: PluginPinContextMenuProps): JSX.Element {
   const [busy, setBusy] = createSignal(false);
-  let menuRef: HTMLDivElement | null = null;
   let restoreFocus = false;
 
   const close = (shouldRestoreFocus = true) => {
@@ -62,13 +61,7 @@ export function PluginPinContextMenu(props: PluginPinContextMenuProps): JSX.Elem
     const request = props.request;
     if (!request) return;
     restoreFocus = false;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (menuRef?.contains(event.target as Node) || request.trigger.contains(event.target as Node)) return;
-      close();
-    };
-    document.addEventListener('pointerdown', handlePointerDown, true);
     onCleanup(() => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
       props.onLayerRef?.(null);
       if (restoreFocus && request.trigger.isConnected) {
         request.trigger.focus({ preventScroll: true });
@@ -90,12 +83,13 @@ export function PluginPinContextMenu(props: PluginPinContextMenuProps): JSX.Elem
             : ENV_APP_FLOATING_LAYER.pluginContextMenu}
           items={items()}
           menuRef={(element) => {
-            menuRef = element;
             props.onLayerRef?.(element);
           }}
           restoreFocusOnEscape
           restoreFocusOnTab
-          onDismiss={() => close()}
+          onDismiss={(reason) => close(
+            reason === 'escape' || reason === 'tab' || reason === 'shift-tab',
+          )}
         />
       )}
     </Show>

@@ -114,8 +114,10 @@ overflow menu replace overview cards, nested panels, repeated prose, and long
 identifiers. The active resource name appears only in the resource tab; the
 toolbar begins with search and filters instead of repeating the tab label or
 inventory count. The overflow menu follows shared outside-click, Escape, and
-focus behavior. Containers default to the Active filter while other resource
-views default to All. Column visibility is user-controlled. Metrics are off by default;
+focus behavior. Column visibility uses the released shared Dropdown, including
+the same outside-click and Escape dismissal, instead of a page-local floating
+panel. Containers default to the Active filter while other resource views
+default to All. Column visibility is user-controlled. Metrics are off by default;
 when requested, one endpoint-wide SSE sample updates aggregate values and row
 metrics and stops as soon as its owning view closes.
 

@@ -33,6 +33,14 @@ Activity Flower placement is outside this lifecycle; [Flower Activity companion]
 
 Projected Workbench surfaces must delegate pointer-anchored overlays to the shared surface floating layer. Menus opened from right-click, menu buttons, or keyboard anchors should pass client or anchor coordinates to `SurfaceFloatingLayer`, which owns surface-local projection, clamping, z-index, and local interaction markers. Context menus, dropdowns, popovers, hover cards, tooltips, autocomplete panels, command palettes, color pickers, date pickers, and equivalent floating UI must not treat Workbench as ordinary document flow. Their panel content may own role, focus, keyboard navigation, item layout, and visual styling, but must not own `position: fixed`, inline viewport `left` / `top`, `window.innerWidth` / `window.innerHeight` clamping, body portals, or component-local viewport-to-surface coordinate conversion inside a transformed projected surface.
 
+Redeven context menus use one dismissal owner. `FloatingContextMenu` closes on
+outside pointer or focus, Escape or Tab, external scroll or resize, and window
+blur; menu-local pointer, focus, and scrolling remain interactive. Opening
+layout is settled before viewport dismissal is armed, so initial projection or
+focus cannot close a menu immediately. Callers own only target snapshots,
+actions, and product-specific focus restoration and must not install parallel
+document listeners.
+
 Dock companion panels use `WorkbenchDockPopoverSurface`, which anchors to the
 exact Dock trigger, mounts in the same Workbench surface, and shares the Dock
 material variables across every preset and color mode. Product panels may
@@ -71,5 +79,5 @@ Connection recovery must not be implemented independently inside Workbench widge
 - `redeven:desktop/src/main/runtimePlacementBridgeObservation.ts:25` - Desktop health observation preserves the exact bridge during recovery and typed probe failure.
 - `redeven:desktop/src/main/main.ts:3495` - Welcome consumes structured recovery observations without replacing or retiring the Env App transport.
 - `redeven:internal/flower_ui/src/styles/flower.css:5153` - The thread context menu panel keeps visual styling without owning fixed positioning.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FloatingContextMenu.tsx:49` - The shared Git menu panel owns menu focus and keyboard interaction while delegating placement to the surface layer.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/GitEntityContextMenu.tsx:56` - Git menu controllers snapshot targets, close on outside interaction, scroll, or blur, and restore trigger focus for keyboard dismissal.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FloatingContextMenu.tsx:65` - The shared context-menu panel owns dismissal, focus, and keyboard interaction while delegating placement to the surface layer.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/GitEntityContextMenu.tsx:54` - Git menu controllers snapshot targets and route product actions without duplicating document dismissal listeners.

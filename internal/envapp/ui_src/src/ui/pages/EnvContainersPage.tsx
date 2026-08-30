@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
+  Check,
   ChevronRight,
   Copy,
   Cpu,
@@ -425,7 +426,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [statsHistory, setStatsHistory] = createSignal<ContainerStats[]>([]);
   const [collectionStats, setCollectionStats] = createSignal<ReadonlyMap<string, ContainerStats>>(new Map());
   const [chartsOpen, setChartsOpen] = createSignal(false);
-  const [columnsOpen, setColumnsOpen] = createSignal(false);
   const [showSecondaryColumn, setShowSecondaryColumn] = createSignal(true);
   const [showPortsColumn, setShowPortsColumn] = createSignal(true);
   const [showCreatedColumn, setShowCreatedColumn] = createSignal(true);
@@ -1542,12 +1542,42 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       </div>
       <div class="container-toolbar-actions">
         <div class="container-column-picker">
-          <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.columns.settings')} aria-expanded={!pending && columnsOpen()} onClick={() => setColumnsOpen(!columnsOpen())} disabled={pending}><Settings class="h-4 w-4" /></Button>
-          <Show when={!pending && columnsOpen()}><div class="container-column-menu" role="group" aria-label={i18n.t('containers.columns.settings')}>
-            <label><input type="checkbox" checked={showSecondaryColumn()} onChange={(event) => setShowSecondaryColumn(event.currentTarget.checked)} />{secondaryColumnLabel()}</label>
-            <Show when={view() === 'containers'}><label><input type="checkbox" checked={showPortsColumn()} onChange={(event) => setShowPortsColumn(event.currentTarget.checked)} />{i18n.t('containers.detail.ports')}</label></Show>
-            <Show when={view() !== 'containers'}><label><input type="checkbox" checked={showCreatedColumn()} onChange={(event) => setShowCreatedColumn(event.currentTarget.checked)} />{i18n.t('containers.columns.created')}</label></Show>
-          </div></Show>
+          <Dropdown
+            align="end"
+            disabled={pending}
+            items={[
+              {
+                id: 'secondary',
+                label: secondaryColumnLabel(),
+                keepOpen: true,
+                icon: () => showSecondaryColumn() ? <Check class="h-3.5 w-3.5" /> : <span class="h-3.5 w-3.5" />,
+              },
+              view() === 'containers'
+                ? {
+                    id: 'ports',
+                    label: i18n.t('containers.detail.ports'),
+                    keepOpen: true,
+                    icon: () => showPortsColumn() ? <Check class="h-3.5 w-3.5" /> : <span class="h-3.5 w-3.5" />,
+                  }
+                : {
+                    id: 'created',
+                    label: i18n.t('containers.columns.created'),
+                    keepOpen: true,
+                    icon: () => showCreatedColumn() ? <Check class="h-3.5 w-3.5" /> : <span class="h-3.5 w-3.5" />,
+                  },
+            ]}
+            onSelect={(column) => {
+              if (column === 'secondary') setShowSecondaryColumn((visible) => !visible);
+              if (column === 'ports') setShowPortsColumn((visible) => !visible);
+              if (column === 'created') setShowCreatedColumn((visible) => !visible);
+            }}
+            triggerAriaLabel={i18n.t('containers.columns.settings')}
+            trigger={(
+              <button type="button" class="container-icon-action inline-flex items-center justify-center" title={i18n.t('containers.columns.settings')}>
+                <Settings class="h-4 w-4" />
+              </button>
+            )}
+          />
         </div>
         <Show when={view() === 'containers' && (pending || endpointStatus()?.capabilities?.collection_stats)}><Button size="sm" variant="ghost" onClick={() => setChartsOpen(!chartsOpen())} aria-pressed={!pending && chartsOpen()} disabled={pending}><Activity class="mr-1.5 h-3.5 w-3.5" />{chartsOpen() ? i18n.t('containers.detail.hideCharts') : i18n.t('containers.detail.showCharts')}</Button></Show>
         <Show when={view() === 'images' || view() === 'volumes'}><Button size="sm" variant="ghost" onClick={prune} disabled={pending || !canRWX() || !canAdmin()}>{i18n.t('containers.actions.prune')}</Button></Show>

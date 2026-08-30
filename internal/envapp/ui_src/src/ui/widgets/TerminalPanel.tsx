@@ -98,7 +98,11 @@ import {
   normalizeTerminalForegroundCommand,
   type TerminalForegroundPresentation,
 } from '../services/terminalForegroundPresentation';
-import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
+import {
+  FloatingContextMenu,
+  type FloatingContextMenuDismissReason,
+  type FloatingContextMenuItem,
+} from './FloatingContextMenu';
 import { useI18n } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
@@ -1136,64 +1140,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         // ignore
       }
     })();
-  });
-
-  createEffect(() => {
-    const menu = terminalAskMenu();
-    if (!menu) return;
-
-    const closeMenu = () => {
-      setTerminalAskMenu(null);
-    };
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) {
-        closeMenu();
-        return;
-      }
-      if (terminalAskMenuEl?.contains(target)) return;
-      closeMenu();
-    };
-
-    window.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('resize', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
-
-    onCleanup(() => {
-      window.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('resize', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
-    });
-  });
-
-  createEffect(() => {
-    const menu = terminalSidebarMenu();
-    if (!menu) return;
-
-    const closeMenu = () => {
-      setTerminalSidebarMenu(null);
-    };
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) {
-        closeMenu();
-        return;
-      }
-      if (terminalSidebarMenuEl?.contains(target)) return;
-      closeMenu();
-    };
-
-    window.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('resize', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
-
-    onCleanup(() => {
-      window.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('resize', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
-    });
   });
 
   createEffect(() => {
@@ -4546,7 +4492,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
-  const dismissTerminalAskMenu = (reason: 'escape' | 'tab' | 'shift-tab') => {
+  const dismissTerminalAskMenu = (reason: FloatingContextMenuDismissReason) => {
     const menu = terminalAskMenu();
     const focusRestoreIntent = menu
       ? captureTerminalFocusRestoreIntent(menu.selection.sessionId, menu.triggerElement)
@@ -4557,7 +4503,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
-  const dismissTerminalSidebarMenu = (reason: 'escape' | 'tab' | 'shift-tab') => {
+  const dismissTerminalSidebarMenu = (reason: FloatingContextMenuDismissReason) => {
     const menu = terminalSidebarMenu();
     setTerminalSidebarMenu(null);
     if (reason !== 'escape' || !menu?.triggerElement?.isConnected) return;

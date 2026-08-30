@@ -192,7 +192,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   let lastSampleTs: number | null = null;
   let fetchInFlight: Promise<void> | null = null;
   let queuedFetchOpts: { silent?: boolean } | null = null;
-  let processContextMenuEl: HTMLDivElement | null = null;
 
   const stopPolling = () => {
     if (pollTimer) {
@@ -336,34 +335,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   });
 
   onCleanup(() => stopPolling());
-
-  createEffect(() => {
-    const menu = processContextMenu();
-    if (!menu) return;
-
-    const closeMenu = () => setProcessContextMenu(null);
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && processContextMenuEl?.contains(target)) return;
-      closeMenu();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeMenu();
-      }
-    };
-
-    window.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('resize', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
-    window.addEventListener('keydown', onKeyDown);
-    onCleanup(() => {
-      window.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('resize', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
-      window.removeEventListener('keydown', onKeyDown);
-    });
-  });
 
   const openProcessContextMenu = (event: MouseEvent, process: SysMonitorProcessInfo) => {
     event.preventDefault();
@@ -823,9 +794,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
               ariaLabel={i18n.t('runtimeMonitor.topProcesses')}
               items={buildProcessContextMenuItems(menu)}
               onDismiss={() => setProcessContextMenu(null)}
-              menuRef={(el) => {
-                processContextMenuEl = el;
-              }}
             />
           )}
         </Show>
