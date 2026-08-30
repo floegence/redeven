@@ -1328,13 +1328,14 @@ export function EnvAppShell() {
     // refresh so the UI does not start duplicate network work.
     if (pluginMarketRefreshPromise) return pluginMarketRefreshPromise;
     const refresh = (async () => {
+      let marketError: unknown;
       try {
         await pluginLifecycle.refreshMarketCatalog();
-      } catch {
-        // Keep the current inventory usable and let the projection expose a
-        // retryable market-unavailable state.
+      } catch (error) {
+        marketError = error;
       }
       await refetchPluginInventory();
+      if (marketError !== undefined) throw marketError;
     })();
     let tracked: Promise<void>;
     tracked = refresh.finally(() => {
@@ -1612,7 +1613,7 @@ export function EnvAppShell() {
     }
     if (lastPluginCenterRefreshOwner === owner) return;
     lastPluginCenterRefreshOwner = owner;
-    void refreshPluginMarket();
+    void refreshPluginMarket().catch(() => undefined);
   });
 
   const closePluginCenter = () => {

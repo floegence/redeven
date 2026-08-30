@@ -45,10 +45,14 @@ refresh succeeds.
 AppServer exposes the current snapshot at
 `/_redeven_proxy/api/plugins/market/catalog`. The route requires read
 permission and an Env App route. Codespace, port-forward, plugin, missing, and
-untrusted origins receive no market data. A background catalog request may join
-the service's single in-flight refresh, but the Plugin Center is already
-interactive and keeps its current or validated cached inventory while that work
-finishes. The browser cannot choose an origin, generation, or release.
+untrusted origins receive no market data. Startup and catalog requests share
+one in-flight refresh task. A catalog request joins or starts that task, waits
+for it, and receives the resulting snapshot rather than the previous in-memory
+generation. Startup remains non-blocking, and Plugin Center keeps its current
+or validated cached inventory interactive while that work finishes. A stale
+cache remains display-only evidence: it cannot prove that a user-initiated
+update check used the latest official release. The browser cannot choose an
+origin, generation, or release.
 
 Catalog and detail responses use the in-place `/v1` presentation contract.
 Catalog carries every compact locale record; selecting a plugin may load the
@@ -63,7 +67,12 @@ catalog snapshot generation. Missing, stale, or negative detail generations
 fail closed rather than allowing cross-generation presentation mixing.
 
 Plugin Center renders the current inventory immediately and refreshes the market
-in the background. Installation review reads the selected entry's cached
+in the background. User refresh and official update review use the same
+market-then-inventory refresh chain. Official update review opens immediately,
+waits for a fresh catalog, relocates the exact inventory key, and only then
+inspects the current release source. Refresh failure exposes one retry action
+and never reports a stale source as current or as `no update`. Installation
+review reads the selected entry's cached
 `install_preview` in one request; it never prefetches packages or Host inspection
 evidence. The preview is keyed by plugin instance, market generation, exact
 release reference, and its four binding digests. A generation or release change

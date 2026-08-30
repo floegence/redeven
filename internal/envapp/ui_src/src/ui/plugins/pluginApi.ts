@@ -34,55 +34,47 @@ export function createPluginLifecycleAPI(
   let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
   let marketUnavailable = false;
   let marketGeneration: number | undefined;
-  let marketRefreshPromise: Promise<boolean> | undefined;
   const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
   const listInstalledPlugins = async (options: PluginRequestOptions = {}): Promise<ReDevPluginRecord[]> => {
     const result = await client.catalog(options);
     return result.plugins;
   };
 
-  const refreshMarketCatalog = async (options: PluginRequestOptions = {}): Promise<boolean> => {
+  const refreshMarketCatalog = async (options: PluginRequestOptions = {}): Promise<void> => {
     if (catalogSeed !== undefined) {
       catalog = catalogSeed;
       marketUnavailable = false;
-      return false;
+      return;
     }
-    if (marketRefreshPromise) return marketRefreshPromise;
-    const refresh = withAbortTimeout(
-      (signal) => loadMarket(signal),
-      options.signal,
-      INVENTORY_MARKET_TIMEOUT_MS,
-      'Loading the plugin market',
-    ).then((snapshot) => {
+    try {
+      const snapshot = await withAbortTimeout(
+        (signal) => loadMarket(signal),
+        options.signal,
+        INVENTORY_MARKET_TIMEOUT_MS,
+        'Loading the plugin market',
+      );
       const nextCatalog = officialPluginCatalog(snapshot);
-      // A stale snapshot is still a valid read-only catalog. Keep it visible
-      // while the background refresh is retried; only an empty snapshot means
-      // there is no market data that the UI can safely present.
-      if ((snapshot.stale || snapshot.source === 'cache') && nextCatalog.length === 0) {
-        throw new Error('The plugin market is using stale cached data');
-      }
       // Never let a delayed or cached response roll the UI back to an older
       // generation after a newer catalog has already been accepted.
       if (marketGeneration !== undefined && snapshot.generation < marketGeneration) {
-        marketUnavailable = false;
-        return false;
+        return;
       }
-      const changed = marketGeneration !== snapshot.generation
-        || catalog.length !== nextCatalog.length;
       catalog = nextCatalog;
       marketGeneration = snapshot.generation;
       marketUnavailable = false;
-      return changed;
-    }).catch((error) => {
-      // Existing catalog entries remain usable when a background refresh
-      // fails. Surface the retry state only when there is no catalog at all.
+
+      // Cached catalog data remains useful for browsing, but it cannot prove
+      // that a manual update check used the current official release source.
+      if (snapshot.stale || snapshot.source === 'cache') {
+        marketUnavailable = catalog.length === 0;
+        throw new Error('The plugin market is using stale cached data');
+      }
+    } catch (error) {
+      // Keep the last usable catalog visible while callers receive an explicit
+      // failure and decide whether the action is background or user initiated.
       marketUnavailable = catalog.length === 0;
       throw error;
-    }).finally(() => {
-      marketRefreshPromise = undefined;
-    });
-    marketRefreshPromise = refresh;
-    return refresh;
+    }
   };
 
   const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => {

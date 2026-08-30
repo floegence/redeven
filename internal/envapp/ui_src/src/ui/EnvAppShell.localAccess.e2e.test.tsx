@@ -72,6 +72,7 @@ const activitySurfaceLifecycleState = vi.hoisted(() => ({
 const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
   const loadInventoryProjection = vi.fn();
+  const refreshMarketCatalog = vi.fn(async () => undefined);
   const recoverEnabled = vi.fn(async (): Promise<PluginRecoverySnapshot> => ({ revision: 1, complete: true, results: [] }));
   const retryRecovery = vi.fn(async (pluginInstanceID: string) => ({ plugin_instance_id: pluginInstanceID, status: 'ready' as const }));
   const execute = vi.fn(async (_command: any) => ({}));
@@ -91,6 +92,7 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   return {
     listInstalledPlugins,
     loadInventoryProjection,
+    refreshMarketCatalog,
     recoverEnabled,
     retryRecovery,
     execute,
@@ -105,6 +107,7 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     createPluginLifecycleAPI: vi.fn(() => ({
       listInstalledPlugins,
       loadInventoryProjection,
+      refreshMarketCatalog,
       recoverEnabled,
       retryRecovery,
       execute,
@@ -1534,6 +1537,8 @@ beforeEach(async () => {
   pluginLifecycleMocks.createPluginLifecycleAPI.mockClear();
   pluginLifecycleMocks.listInstalledPlugins.mockClear();
   pluginLifecycleMocks.loadInventoryProjection.mockReset();
+  pluginLifecycleMocks.refreshMarketCatalog.mockReset();
+  pluginLifecycleMocks.refreshMarketCatalog.mockResolvedValue(undefined);
   pluginLifecycleMocks.recoverEnabled.mockReset();
   pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: true, results: [] });
   pluginLifecycleMocks.retryRecovery.mockReset();
@@ -1960,6 +1965,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
       const refresh = pluginCenterViewState.lastProps.onRefresh();
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
+      expect(pluginLifecycleMocks.refreshMarketCatalog).toHaveBeenCalledOnce();
       expect(pluginPanelState.lastProps.model.loading).toBe(false);
       expect(pluginPanelState.lastProps.model.errorMessage).toBeUndefined();
       expect(pluginPanelState.lastProps.model.tiles).toContainEqual(

@@ -251,9 +251,15 @@ and progress projection.
 ## Update review and confirmation
 
 Plugin Center's Updates card and inspector expose one primary `Review update`
-action. Opening it creates an exact update intent and never submits a mutation,
-refreshes inventory, changes tabs, or replaces the current selection. Activity
-and Workbench remain overflow actions while an update is available. The dedicated
+action. Opening it creates an exact update intent, shows the loading review in
+the same interaction, and never submits a mutation, changes tabs, or replaces
+the current selection. For an official plugin, that loading state waits for the
+Shell's single market-then-inventory refresh, relocates the exact inventory key,
+and inspects only the refreshed release source. A missing item, changed source,
+changed generation during inspection, stale cache, or unavailable market stops
+the check and exposes one retry; none may produce `no update`. External plugins
+retain their explicit source-entry flow. Activity and Workbench remain overflow
+actions while an update is available. The dedicated
 update dialog owns source-required, loading-review, review, installing,
 reconciling, and complete states. Its fixed footer always exposes an explicit,
 single-line target action such as `Update to vX`, `Install new build`, or

@@ -323,7 +323,7 @@ describe('plugin lifecycle client integration', () => {
       marketUnavailable: false,
       items: [],
     });
-    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(true);
+    await expect(lifecycle.refreshMarketCatalog()).resolves.toBeUndefined();
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({
@@ -359,7 +359,7 @@ describe('plugin lifecycle client integration', () => {
     });
 
     resolveMarket(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
-    await expect(refresh).resolves.toBe(true);
+    await expect(refresh).resolves.toBeUndefined();
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       items: [expect.objectContaining({
         pluginID: 'com.example.metrics',
@@ -384,7 +384,7 @@ describe('plugin lifecycle client integration', () => {
     });
   });
 
-  it('does not show an unavailable banner when a stale snapshot still contains catalog entries', async () => {
+  it('keeps stale catalog entries visible without treating them as a current update check', async () => {
     const { mocks } = createClientHarness();
     const staleSnapshot = { ...OFFICIAL_PLUGIN_MARKET_SNAPSHOT, stale: true, source: 'cache' as const };
     const lifecycle = createPluginLifecycleAPI(
@@ -393,7 +393,7 @@ describe('plugin lifecycle client integration', () => {
       async () => staleSnapshot,
     );
 
-    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(true);
+    await expect(lifecycle.refreshMarketCatalog()).rejects.toThrow('stale cached data');
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({

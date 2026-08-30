@@ -96,10 +96,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
     setConfirmedRisk(false);
     const preset = item.officialCatalog?.distribution.installSource;
     if (preset) {
-      setSourceKind(preset.sourceKind);
-      setURL(preset.url);
-      setTag(preset.sourceKind === 'github_repository' ? preset.tag ?? '' : '');
-      void inspectPreset(item, preset);
+      void prepareOfficialReview(item.inventoryKey);
       return;
     }
     const provenance = item.externalPackage?.sourceProvenance;
@@ -112,11 +109,44 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
 
   onCleanup(() => operation?.abort('Update review disposed'));
 
-  async function inspectPreset(item: PluginInventoryItem, preset: ExternalPluginSourcePreset) {
+  async function prepareOfficialReview(inventoryKey: string) {
+    const controller = new AbortController();
+    operation?.abort('Official update review superseded');
+    operation = controller;
+    setStage('loading_review');
+    setCandidate(undefined);
+    setError(undefined);
+    try {
+      await props.onRefresh();
+      if (controller.signal.aborted) return;
+      const item = props.item;
+      const preset = item?.officialCatalog?.distribution.installSource;
+      if (!item || item.inventoryKey !== inventoryKey || !preset) {
+        throw new Error(i18n.t('uiCopy.plugin.updateReview.stale'));
+      }
+      setSourceKind(preset.sourceKind);
+      setURL(preset.url);
+      setTag(preset.sourceKind === 'github_repository' ? preset.tag ?? '' : '');
+      const request = requestForPreset(item, preset);
+      await inspectRequest(item, request, controller, {
+        generation: item.officialCatalog?.marketGeneration,
+        preset,
+      });
+    } catch {
+      if (!controller.signal.aborted) {
+        setError(i18n.t('uiCopy.plugin.marketUnavailable'));
+        setStage('review');
+      }
+    } finally {
+      if (operation === controller) operation = undefined;
+    }
+  }
+
+  function requestForPreset(item: PluginInventoryItem, preset: ExternalPluginSourcePreset): ExternalPluginInspectionRequest {
     const request: ExternalPluginInspectionRequest = preset.sourceKind === 'github_repository'
       ? { sourceKind: 'github_repository', url: preset.url, tag: preset.tag, intent: updateIntent(item) }
       : { sourceKind: 'package_url', url: preset.url, intent: updateIntent(item) };
-    await inspectRequest(item, request);
+    return request;
   }
 
   async function inspectSource() {
@@ -137,17 +167,29 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
     await inspectRequest(item, request);
   }
 
-  async function inspectRequest(item: PluginInventoryItem, request: ExternalPluginInspectionRequest) {
-    const controller = new AbortController();
-    operation?.abort('Update inspection superseded');
-    operation = controller;
+  async function inspectRequest(
+    item: PluginInventoryItem,
+    request: ExternalPluginInspectionRequest,
+    existingController?: AbortController,
+    officialEvidence?: { generation?: number; preset: ExternalPluginSourcePreset },
+  ) {
+    const controller = existingController ?? new AbortController();
+    if (!existingController) {
+      operation?.abort('Update inspection superseded');
+      operation = controller;
+    }
     setStage('loading_review');
     setError(undefined);
     try {
       const inspection = await props.onInspect(request, controller.signal);
-      if (props.item?.inventoryKey !== item.inventoryKey || props.item.managementRevision !== item.managementRevision) {
+      const current = props.item;
+      if (current?.inventoryKey !== item.inventoryKey || current.managementRevision !== item.managementRevision) {
         throw new Error(i18n.t('uiCopy.plugin.updateReview.stale'));
       }
+      if (officialEvidence && (
+        current.officialCatalog?.marketGeneration !== officialEvidence.generation
+        || !sameSourcePreset(current.officialCatalog?.distribution.installSource, officialEvidence.preset)
+      )) throw new Error(i18n.t('uiCopy.plugin.updateReview.stale'));
       setCandidate(createExternalUpdateCandidate(item, inspection));
       setConfirmedRisk(false);
       setStage('review');
@@ -157,7 +199,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
         setStage(sourcePreset() ? 'review' : 'source_required');
       }
     } finally {
-      if (operation === controller) operation = undefined;
+      if (!existingController && operation === controller) operation = undefined;
     }
   }
 
@@ -274,6 +316,14 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
                 {i18n.t('uiCopy.plugin.updateReview.reviewPackage')}
               </button>
             </Show>
+            <Show when={stage() === 'review' && !candidate() && sourcePreset()}>
+              <button data-plugin-update-retry type="button" class={primaryButtonClass} onClick={() => {
+                const item = props.item;
+                if (item) void prepareOfficialReview(item.inventoryKey);
+              }}>
+                {i18n.t('common.actions.retry')}
+              </button>
+            </Show>
             <Show keyed when={stage() === 'review' && candidate()?.kind !== 'noop' && candidate()?.kind !== 'blocked' ? candidate() : undefined}>
               {(current) => (
                 <button data-plugin-update-submit type="button" class={primaryButtonClass} disabled={!canSubmit()} onClick={() => void submit()}>
@@ -354,4 +404,12 @@ function submitLabel(candidate: PluginUpdateCandidate, t: ReturnType<typeof useI
 }
 function updateIntent(item: PluginInventoryItem) { return { action: 'update' as const, plugin_instance_id: item.pluginInstanceID!, expected_management_revision: item.managementRevision! }; }
 function isHTTPSURL(value: string): boolean { try { const parsed = new URL(value.trim()); return parsed.protocol === 'https:' && !parsed.username && !parsed.password; } catch { return false; } }
+
+function sameSourcePreset(left: ExternalPluginSourcePreset | undefined, right: ExternalPluginSourcePreset): boolean {
+  if (!left || left.sourceKind !== right.sourceKind || left.url !== right.url) return false;
+  if (left.sourceKind === 'github_repository' && right.sourceKind === 'github_repository') {
+    return left.tag === right.tag;
+  }
+  return true;
+}
 function messageFromUnknown(value: unknown): string { return value instanceof Error ? value.message : String(value); }
