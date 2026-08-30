@@ -8,12 +8,8 @@ import (
 	"github.com/floegence/redeven/internal/containerengine"
 )
 
-func (s *Service) Endpoints(ctx context.Context, engine containerengine.Engine) (containerengine.EndpointListResponse, error) {
-	return s.engine.ListEndpoints(ctx, containerengine.EndpointListRequest{Engine: engine})
-}
-
-func (s *Service) EndpointStatus(ctx context.Context, req containerengine.EndpointStatusRequest) (containerengine.EngineEndpoint, error) {
-	return s.engine.EndpointStatus(ctx, req)
+func (s *Service) Runtimes(ctx context.Context) (containerengine.ActiveRuntimeResponse, error) {
+	return s.engine.ActiveRuntimes(ctx)
 }
 
 func (s *Service) Containers(ctx context.Context, req containerengine.ContainerListRequest) ([]ContainerItem, error) {

@@ -2671,8 +2671,6 @@ export const enUS = defineDictionary({
   containers: {
     title: 'Containers',
     description: 'Inspect and safely manage Docker and Podman resources in this environment.',
-    engine: 'Container engine',
-    endpoint: 'Engine endpoint',
     resourceNavigation: 'Container resources',
     loading: 'Loading container resources...',
     engineState: {
@@ -2682,6 +2680,12 @@ export const enUS = defineDictionary({
       permissionDescription: 'Redeven cannot access {engine}. Check the current user’s engine permissions.',
       retry: 'Check again',
     },
+    runtimeStatus: { title: 'Container service status' },
+    runtimeNames: { docker: 'Docker', podman: 'Podman' },
+    runtimeStates: {
+      ready: 'Available', not_installed: 'Not installed', stopped: 'Not running', permission: 'Permission required',
+      unreachable: 'Unreachable', error: 'Detection failed',
+    },
     views: {
       containers: 'Containers',
       images: 'Images',
@@ -2689,8 +2693,6 @@ export const enUS = defineDictionary({
       'compose-projects': 'Compose Projects',
       pods: 'Pods',
     },
-    status: { connected: 'Connected', unavailable: 'Unavailable' },
-    endpointMeta: { local: 'Local', remote: 'Remote', rootless: 'Rootless' },
     columns: {
       name: 'Name', status: 'Status', details: 'Details', image: 'Image', size: 'Size', driver: 'Driver',
       running: 'Running', usage: 'Usage', ownership: 'Ownership', tags: 'Tags', services: 'Services',
@@ -2707,9 +2709,9 @@ export const enUS = defineDictionary({
     usage: { containers: 'Containers: {count}' },
     empty: {
       title: 'No resources found',
-      description: 'This endpoint does not currently expose resources in this category.',
+      description: 'No active container service currently exposes resources in this category.',
       filteredTitle: 'No matching resources',
-      filteredDescription: 'Adjust the search or filters to see resources in this endpoint.',
+      filteredDescription: 'Adjust the search or filters to see more resources.',
     },
     actions: {
       refresh: 'Refresh', start: 'Start', stop: 'Stop', restart: 'Restart', pause: 'Pause', resume: 'Resume',
@@ -2722,7 +2724,7 @@ export const enUS = defineDictionary({
     },
     fields: {
       name: 'Name', image: 'Image', driver: 'Driver', tag: 'New tag', command: 'Command',
-      restartPolicy: 'Restart policy', cpus: 'CPUs', memory: 'Memory (MiB)',
+      restartPolicy: 'Restart policy', cpus: 'CPUs', memory: 'Memory (MiB)', runtime: 'Container service',
     },
     detailTabs: {
       overview: 'Overview', logs: 'Logs', inspect: 'Inspect', mounts: 'Mounts', exec: 'Terminal',

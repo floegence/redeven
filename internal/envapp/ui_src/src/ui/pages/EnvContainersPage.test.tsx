@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { Show } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const harness = vi.hoisted(() => ({
@@ -15,9 +16,9 @@ const harness = vi.hoisted(() => ({
   goActivity: vi.fn(),
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   storageWrites: [] as Array<{ key: string; value: unknown }>,
-  listEndpoints: vi.fn(),
+  storageValues: new Map<string, unknown>(),
+  listRuntimes: vi.fn(),
   listResources: vi.fn(),
-  endpointStatus: vi.fn(),
   resourceDetails: vi.fn(),
   listOperations: vi.fn(),
   imageHistory: vi.fn(),
@@ -87,6 +88,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     data-point-count={props.series[0]?.data?.length ?? 0}
     data-y-max={props.yMax}
   />,
+  Select: (props: any) => <select class={props.class} value={props.value} disabled={props.disabled} onChange={(event) => props.onChange(event.currentTarget.value)}>{props.options.map((option: any) => <option value={option.value}>{option.label}</option>)}</select>,
   Tabs: (props: any) => <div class={props.class} role="tablist" aria-label={props.ariaLabel}>
     {props.items.map((item: any) => <button
       type="button"
@@ -112,7 +114,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 vi.mock('../primitives/EnvAppModal', () => ({
-  Dialog: (props: any) => props.open ? <section data-dialog>{props.title}{props.children}{props.footer}</section> : null,
+  Dialog: (props: any) => <Show when={props.open}><section data-dialog>{props.title}{props.children}{props.footer}</section></Show>,
 }));
 
 vi.mock('../primitives/EnvAppDrawer', () => ({
@@ -141,13 +143,16 @@ vi.mock('./EnvContext', async () => {
 });
 
 vi.mock('../services/uiStorage', () => ({
-  readUIStorageJSON: (_key: string, fallback: unknown) => fallback,
-  writeUIStorageJSON: (key: string, value: unknown) => harness.storageWrites.push({ key, value }),
+  readUIStorageJSON: (key: string, fallback: unknown) => harness.storageValues.get(key) ?? fallback,
+  removeUIStorageItem: (key: string) => harness.storageValues.delete(key),
+  writeUIStorageJSON: (key: string, value: unknown) => {
+    harness.storageValues.set(key, value);
+    harness.storageWrites.push({ key, value });
+  },
 }));
 
 vi.mock('../services/containerResourcesApi', () => ({
-  listContainerEndpoints: harness.listEndpoints,
-  getContainerEndpointStatus: harness.endpointStatus,
+  listContainerRuntimes: harness.listRuntimes,
   listContainerResources: harness.listResources,
   getContainerResourceDetails: harness.resourceDetails,
   listContainerOperations: harness.listOperations,
@@ -199,19 +204,13 @@ describe('native Containers page', () => {
     harness.setEnvironment({ permissions: harness.permissions });
     harness.goActivity.mockReset();
     harness.storageWrites.length = 0;
-    harness.listEndpoints.mockReset().mockResolvedValue([{
+    harness.storageValues.clear();
+    harness.listRuntimes.mockReset().mockResolvedValue([{
       endpoint_id: 'docker-primary',
       engine: 'docker',
-      display_name: 'Primary Docker',
-      default: true,
-      remote: false,
-      available: true,
+      state: 'ready',
       capabilities: { collection_stats: true, volume_files: false, exec: false },
-    }]);
-    harness.endpointStatus.mockReset().mockResolvedValue({
-      endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', available: true,
-      capabilities: { collection_stats: true, volume_files: false, exec: false },
-    });
+    }, { engine: 'podman', state: 'not_installed' }]);
     harness.listResources.mockReset().mockResolvedValue([{
       container_id: 'container-1',
       name: 'Managed API',
@@ -257,11 +256,11 @@ describe('native Containers page', () => {
 
     expect(host.querySelector('[data-container-page]')?.getAttribute('data-variant')).toBe('workbench');
     expect(host.querySelector('table')).not.toBeNull();
-    expect(host.querySelector<HTMLSelectElement>('[data-container-endpoint-bar] select')?.value).toBe('docker-primary');
+    expect(host.querySelector('[data-container-endpoint-bar]')).toBeNull();
     expect(host.querySelectorAll('.container-resource-tabs [role="tab"]')).toHaveLength(4);
     expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('containers.views.containers');
     expect(host.querySelector('[data-container-mobile-list] button')).not.toBeNull();
-    expect(host.querySelectorAll('.container-touch-target').length).toBeGreaterThanOrEqual(3);
+    expect(host.querySelectorAll('.container-touch-target')).toHaveLength(0);
     expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary', expect.anything());
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:widget-1')).toBe(true);
   });
@@ -273,14 +272,14 @@ describe('native Containers page', () => {
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
-    expect(harness.listEndpoints).not.toHaveBeenCalled();
+    expect(harness.listRuntimes).not.toHaveBeenCalled();
     expect(host.querySelector('[data-container-list-loading]')).not.toBeNull();
     expect(host.querySelector('[data-container-resource-skeleton-table]')).not.toBeNull();
     expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
 
     harness.setEnvironment({ permissions: harness.permissions });
     await settle();
-    expect(host.querySelector('[data-container-endpoint-bar] select')).not.toBeNull();
+    expect(host.querySelector('[data-container-endpoint-bar]')).toBeNull();
     expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
   });
 
@@ -299,7 +298,7 @@ describe('native Containers page', () => {
     await settle();
 
     expect(harness.storageWrites).toContainEqual({
-      key: 'containers:activity',
+      key: 'containers:navigation-request',
       value: {
         version: 1,
         engine: 'docker',
@@ -308,6 +307,7 @@ describe('native Containers page', () => {
         selectedIdentity: 'container-1',
       },
     });
+    expect(harness.storageWrites.some((entry) => entry.key === 'containers:activity' && (entry.value as { version?: number }).version === 2)).toBe(true);
     expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-1', 'docker', 'docker-primary');
   });
 
@@ -516,19 +516,19 @@ describe('native Containers page', () => {
   });
 
   it.each([
-    ['ENGINE_UNAVAILABLE', 'containers.engineState.unavailableTitle'],
-    ['ENGINE_PERMISSION_DENIED', 'containers.engineState.permissionTitle'],
-  ])('renders a calm engine detection state for %s', async (code, title) => {
-    harness.listEndpoints.mockRejectedValue(Object.assign(new Error('engine failure'), { code }));
+    ['stopped', 'containers.runtimeStates.stopped'],
+    ['permission', 'containers.runtimeStates.permission'],
+  ])('renders a calm engine detection state for %s', async (state, label) => {
+    harness.listRuntimes.mockResolvedValue([{ engine: 'docker', state }, { engine: 'podman', state: 'not_installed' }]);
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
-    expect(host.querySelector('[data-container-engine-state]')?.textContent).toContain(title);
+    expect(host.querySelector('[data-container-engine-state]')?.textContent).toContain(label);
     expect(host.querySelector('[data-container-resource-table]')).toBeNull();
     const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'));
-    expect(tabs).toHaveLength(4);
+    expect(tabs).toHaveLength(3);
     expect(tabs.every((tab) => tab.disabled && tab.getAttribute('aria-disabled') === 'true')).toBe(true);
   });
 
@@ -556,13 +556,13 @@ describe('native Containers page', () => {
     expect(host.textContent).not.toContain('Current API');
     expect(host.querySelector('[data-container-resource-table]')).toBeNull();
     expect(host.querySelector('[data-container-list-loading]')).not.toBeNull();
-    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => !tab.disabled)).toBe(true);
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
 
     requestContainerResourceNavigation({
       engine: 'docker',
       endpointID: 'docker-primary',
       view: 'containers',
-      identity: '',
+      identity: 'container-current',
     });
     await settle();
     delayedImages.resolve([{
@@ -619,17 +619,16 @@ describe('native Containers page', () => {
   });
 
   it('keeps the resolved inventory mounted while an explicit refresh revalidates the same endpoint', async () => {
-    const refreshedEndpoints = deferred<any[]>();
-    let endpointRequests = 0;
-    harness.listEndpoints.mockImplementation(() => {
-      endpointRequests += 1;
-      if (endpointRequests === 1) {
+    const refreshedRuntimes = deferred<any[]>();
+    let runtimeRequests = 0;
+    harness.listRuntimes.mockImplementation(() => {
+      runtimeRequests += 1;
+      if (runtimeRequests === 1) {
         return Promise.resolve([{
-          endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', default: true,
-          remote: false, available: true, capabilities: { collection_stats: true, volume_files: false, exec: false },
-        }]);
+          endpoint_id: 'docker-primary', engine: 'docker', state: 'ready', capabilities: { collection_stats: true, volume_files: false, exec: false },
+        }, { engine: 'podman', state: 'not_installed' }]);
       }
-      return refreshedEndpoints.promise;
+      return refreshedRuntimes.promise;
     });
     const host = document.createElement('div');
     document.body.append(host);
@@ -645,37 +644,25 @@ describe('native Containers page', () => {
     expect(host.querySelector('[data-container-list-loading]')).toBeNull();
     expect(host.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
 
-    refreshedEndpoints.resolve([{
-      endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', default: true,
-      remote: false, available: true, capabilities: { collection_stats: true, volume_files: false, exec: false },
-    }]);
+    refreshedRuntimes.resolve([{
+      endpoint_id: 'docker-primary', engine: 'docker', state: 'ready', capabilities: { collection_stats: true, volume_files: false, exec: false },
+    }, { engine: 'podman', state: 'not_installed' }]);
     await settle();
     expect(host.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
   });
 
-  it('loads an endpoint change through the same ready-state boundary', async () => {
-    harness.listEndpoints.mockResolvedValue([
+  it('aggregates active Docker and Podman resources without exposing endpoint controls', async () => {
+    harness.listRuntimes.mockResolvedValue([
       {
-        endpoint_id: 'docker-primary', engine: 'docker', display_name: 'Primary Docker', default: true,
-        remote: false, available: true, capabilities: { collection_stats: true, volume_files: false, exec: false },
+        endpoint_id: 'docker-primary', engine: 'docker', state: 'ready', capabilities: { collection_stats: true, volume_files: false, exec: false },
       },
       {
-        endpoint_id: 'docker-secondary', engine: 'docker', display_name: 'Secondary Docker', default: false,
-        remote: true, available: true, capabilities: { collection_stats: true, volume_files: false, exec: false },
+        endpoint_id: 'podman-primary', engine: 'podman', state: 'ready', capabilities: { collection_stats: true, volume_files: true, exec: false },
       },
     ]);
-    harness.endpointStatus.mockImplementation((_engine: string, nextEndpointID: string) => Promise.resolve({
-      endpoint_id: nextEndpointID,
-      engine: 'docker',
-      display_name: nextEndpointID === 'docker-secondary' ? 'Secondary Docker' : 'Primary Docker',
-      default: nextEndpointID === 'docker-primary',
-      remote: nextEndpointID === 'docker-secondary',
-      available: true,
-      capabilities: { collection_stats: true, volume_files: false, exec: false },
-    }));
-    harness.listResources.mockImplementation((_view: string, _engine: string, nextEndpointID: string) => Promise.resolve([{
-      container_id: `container-${nextEndpointID}`,
-      name: nextEndpointID === 'docker-secondary' ? 'Secondary API' : 'Primary API',
+    harness.listResources.mockImplementation((_view: string, nextEngine: string, _nextEndpointID: string) => Promise.resolve([{
+      container_id: `container-${nextEngine}`,
+      name: 'Shared name',
       state: 'running',
       management: { managed: false },
     }]));
@@ -684,20 +671,99 @@ describe('native Containers page', () => {
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
-    const select = host.querySelector<HTMLSelectElement>('[data-container-endpoint-bar] select')!;
-    select.value = 'docker-secondary';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(host.querySelector('[data-container-resource-table]')).toBeNull();
-    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
+    expect(host.querySelector('[data-container-endpoint-bar]')).toBeNull();
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(Array.from(host.querySelectorAll('.container-runtime-badge')).map((item) => item.textContent)).toEqual(['containers.runtimeNames.docker', 'containers.runtimeNames.podman']);
+    expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary', expect.anything());
+    expect(harness.listResources).toHaveBeenCalledWith('containers', 'podman', 'podman-primary', expect.anything());
+    expect(host.querySelectorAll('.container-resource-tabs [role="tab"]')).toHaveLength(5);
+  });
+
+  it('routes a row operation to the runtime that owns the resource', async () => {
+    harness.listRuntimes.mockResolvedValue([
+      { endpoint_id: 'docker-primary', engine: 'docker', state: 'ready', capabilities: { collection_stats: true, volume_files: false, exec: false } },
+      { endpoint_id: 'podman-primary', engine: 'podman', state: 'ready', capabilities: { collection_stats: true, volume_files: true, exec: false } },
+    ]);
+    harness.listResources.mockImplementation((_view: string, engine: string) => Promise.resolve([{
+      container_id: `${engine}-container`, name: `${engine} service`, state: 'running', management: { managed: false },
+    }]));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
-    expect(host.querySelector<HTMLSelectElement>('[data-container-endpoint-bar] select')?.value).toBe('docker-secondary');
-    expect(host.textContent).toContain('Secondary API');
-    expect(host.textContent).not.toContain('Primary API');
+    const podmanRow = Array.from(host.querySelectorAll<HTMLTableRowElement>('tbody tr')).find((row) => row.textContent?.includes('podman service'));
+    podmanRow?.querySelector<HTMLButtonElement>('button[aria-label="containers.actions.stop"]')?.click();
+    await settle();
+
+    expect(harness.preflight).toHaveBeenCalledWith('containers.stop', expect.objectContaining({
+      engine: 'podman', endpoint_id: 'podman-primary', container_id: 'podman-container',
+    }));
+  });
+
+  it('chooses a runtime only inside a multi-target pull dialog', async () => {
+    harness.listRuntimes.mockResolvedValue([
+      { endpoint_id: 'docker-primary', engine: 'docker', state: 'ready', capabilities: { collection_stats: true, volume_files: false, exec: false } },
+      { endpoint_id: 'podman-primary', engine: 'podman', state: 'ready', capabilities: { collection_stats: true, volume_files: true, exec: false } },
+    ]);
+    harness.listResources.mockResolvedValue([]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).find((tab) => tab.textContent?.includes('containers.views.images'))?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('containers.create.image'))?.click();
+    await settle();
+
+    const dialog = host.querySelector<HTMLElement>('[data-dialog]')!;
+    const target = dialog.querySelector<HTMLSelectElement>('select')!;
+    expect(target.options).toHaveLength(2);
+    expect(target.value).toBe('docker\u0000docker-primary');
+    target.value = 'podman\u0000podman-primary';
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+    const image = dialog.querySelector<HTMLInputElement>('input')!;
+    image.value = 'docker.io/library/alpine:latest';
+    image.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('containers.actions.review'))?.click();
+    await settle();
+
+    expect(harness.preflight).toHaveBeenCalledWith('images.pull', expect.objectContaining({
+      engine: 'podman', endpoint_id: 'podman-primary', image_ref: 'docker.io/library/alpine:latest',
+    }));
+  });
+
+  it('keeps usable resources visible and explains a partial runtime failure', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    expect(host.textContent).toContain('Managed API');
+    const warning = host.querySelector<HTMLButtonElement>('[aria-label="containers.runtimeStatus.title"]');
+    expect(warning).not.toBeNull();
+    warning?.click();
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.runtimeStates.not_installed');
+  });
+
+  it('ignores retired v1 page state instead of restoring an endpoint selection', async () => {
+    harness.storageValues.set('containers:activity', {
+      version: 1, engine: 'podman', endpointID: 'retired', view: 'pods', selectedIdentity: 'retired-pod',
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage stateScope="activity" />, host);
+    await settle();
+
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('containers.views.containers');
+    expect(harness.storageWrites).toContainEqual({
+      key: 'containers:activity', value: { version: 2, view: 'containers', selectedResourceKey: '' },
+    });
   });
 
   it('retries engine detection and reaches one coherent ready state', async () => {
-    harness.listEndpoints.mockRejectedValueOnce(Object.assign(new Error('missing engine'), { code: 'ENGINE_UNAVAILABLE' }));
+    harness.listRuntimes.mockResolvedValueOnce([{ engine: 'docker', state: 'stopped' }, { engine: 'podman', state: 'not_installed' }]);
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
@@ -710,12 +776,16 @@ describe('native Containers page', () => {
     await settle();
 
     expect(host.querySelector('[data-container-engine-state]')).toBeNull();
-    expect(host.querySelector('[data-container-endpoint-bar] select')).not.toBeNull();
+    expect(host.querySelector('[data-container-endpoint-bar]')).toBeNull();
     expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
     expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => !tab.disabled)).toBe(true);
   });
 
   it('uses resource-specific columns for images, volumes, Compose projects, and pods', async () => {
+    harness.listRuntimes.mockResolvedValue([
+      { endpoint_id: 'docker-primary', engine: 'docker', state: 'ready', capabilities: { collection_stats: true, volume_files: false, exec: false } },
+      { endpoint_id: 'podman-primary', engine: 'podman', state: 'ready', capabilities: { collection_stats: true, volume_files: true, exec: false } },
+    ]);
     harness.listResources.mockImplementation((nextView: string) => Promise.resolve({
       containers: [{ container_id: 'container-1', name: 'API', state: 'running', management: { managed: false } }],
       images: [{ id: 'image-1', reference: 'nginx:latest', tags: ['nginx:latest'], size_bytes: 1024, referenced_containers: 1 }],
@@ -797,7 +867,7 @@ describe('native Containers page', () => {
     refresh?.click();
     await settle();
 
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('engine temporarily unavailable');
+    expect(host.querySelector('[data-container-engine-state="unavailable"]')?.textContent).toContain('containers.runtimeStates.error');
     expect(host.textContent).not.toContain('Managed API');
     expect(host.querySelector('[data-container-resource-table]')).toBeNull();
   });

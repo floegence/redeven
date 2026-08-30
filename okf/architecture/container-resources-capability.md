@@ -1,7 +1,7 @@
 ---
 type: Architecture Contract
 title: Native container resources
-description: Expose endpoint-bound Docker and Podman resources through one Redeven-owned execution and operation boundary.
+description: Aggregate the active Docker and Podman runtimes behind one Redeven-owned execution and operation boundary.
 tags: [architecture, containers, docker, podman]
 timestamp: 2026-08-28T00:00:00Z
 ---
@@ -11,7 +11,7 @@ Redeven owns container management as a native product capability. The
 `containerengine` package is the only Docker and Podman execution layer shared
 by native Containers and Web Services; `containerresource` is the only native
 mutation, persistence, and reconciliation owner. Resources created by Web
-Services remain visible but read-only in Containers. Unknown endpoints, stale
+Services remain visible but read-only in Containers. Unknown runtime targets, stale
 preflights, ambiguous outcomes, and failed authoritative observation fail
 closed without replaying mutations.
 
@@ -20,11 +20,20 @@ closed without replaying mutations.
 ## Execution ownership
 
 Every request binds `(engine, endpoint_id, resource kind, canonical identity)`.
-Endpoint IDs are opaque projections over Docker contexts or Podman connections.
-The engine resolves them again before each read, mutation, stream, and
-reconciliation. Docker commands select the resolved context explicitly; Podman
-commands select the resolved connection explicitly. Redeven never changes the
-user's global engine selection.
+Endpoint IDs are opaque internal projections over Docker contexts or Podman
+connections. The product discovers at most one active target per engine:
+Docker's current context and Podman's default connection, falling back to the
+local Podman runtime when no default connection exists. Docker and Podman are
+detected independently and concurrently. Inactive contexts and connections are
+not probed, listed, or used as fallback targets.
+
+Discovery reports `ready`, `not_installed`, `stopped`, `permission`,
+`unreachable`, or `error` for each engine. One engine failure never suppresses
+the other engine's state or resources. The engine resolves every ready endpoint
+again before each read, mutation, stream, and reconciliation. Docker commands
+select the resolved context explicitly; Podman commands select the resolved
+connection explicitly. Redeven never changes the user's global engine
+selection.
 
 The engine supports endpoint status, containers, images, volumes, Docker
 Compose Projects, Podman Pods, bounded logs, endpoint-wide statistics, safe
@@ -69,6 +78,13 @@ Admin and exact-name confirmation.
 Server-side enforcement is authoritative; disabled UI controls are only a
 presentation aid.
 
+`GET /container-resources/runtimes` returns both engine detection states in one
+response. A ready item includes its internal endpoint ID and capabilities; a
+failed item never contains command output or endpoint presentation data. An
+individual engine failure still returns HTTP 200, while missing Redeven Read
+permission returns 403. Public endpoint-list and endpoint-detail routes do not
+exist; endpoint binding remains an internal routing and security contract.
+
 Web Services is the lifecycle owner of containers, images, Compose Projects,
 and volumes it creates. Native inventory labels owned mutable resources as
 managed, offers a direct jump to the owning service, and rejects mutation
@@ -105,10 +121,11 @@ administrators remain responsible for engine access.
 ## Native surfaces
 
 Containers has a fixed Activity entry and a multi-instance
-`redeven.containers` Workbench component. Each instance persists engine,
-endpoint, and selected resource view independently. One compact header owns
-engine, endpoint health, refresh, and Operations. Workbench hides the duplicate
-product title. Underlined resource tabs, a single toolbar, status color, icons,
+`redeven.containers` Workbench component. Each instance persists only the
+resource view and selected resource key. Stored v1 engine and endpoint state is
+ignored. One compact header owns refresh and Operations; it does not expose an
+engine or endpoint selector. Workbench hides the duplicate product title.
+Underlined resource tabs, a single toolbar, status color, icons,
 spacing, sortable type-specific columns, direct lifecycle actions, and an
 overflow menu replace overview cards, nested panels, repeated prose, and long
 identifiers. The active resource name appears only in the resource tab; the
@@ -117,33 +134,40 @@ inventory count. The overflow menu follows shared outside-click, Escape, and
 focus behavior. Column visibility uses the released shared Dropdown, including
 the same outside-click and Escape dismissal, instead of a page-local floating
 panel. Containers default to the Active filter while other resource views
-default to All. Column visibility is user-controlled. Metrics are off by default;
-when requested, one endpoint-wide SSE sample updates aggregate values and row
-metrics and stops as soon as its owning view closes.
+default to All. Column visibility is user-controlled. Metrics are off by
+default; when requested, the UI starts one endpoint-wide SSE per compatible
+ready runtime, merges samples by exact target, and closes every stream when
+charts or the owning view close.
 
-One discriminated console controller owns engine, endpoint, resource view,
-endpoint inventory, and resource inventory. Every engine, endpoint, view,
-retry, and Web Services navigation enters that controller. Engine and endpoint
-changes clear the rendered resource, detail, and stream context until the new
-connection resolves. View changes clear detail and streams. The controller
-retains a
-component-lifetime inventory cache keyed by the exact `(engine, endpoint,
-view)`: a visited view renders its cached inventory immediately while one
-background request refreshes it; a same-target manual refresh follows the same
-stable presentation path. A first visit keeps the header, tabs, and disabled
-toolbar in place, then uses the production table headers, row heights, mobile
-cards, and responsive breakpoints for its inventory skeleton. One request
-generation and one
-cancellation signal prevent any older response from committing. Only `ready`
-may render resource data or detail; a refreshing cache entry remains `ready`
-and cannot authorize mutation without current server preflight. `ready` always
-contains the resolved endpoint, enabled resource tabs, and inventory for its
-exact target. Endpoint-backed view loading keeps resource tabs enabled;
-connection detection, unavailable, permission-denied, and error states retain
-their position but disable navigation and mutation controls. Resource and
-detail navigation use the published Floe Webapp `Tabs` owner for icons,
-underlined selection, keyboard movement, and narrow-width overflow instead of
-Redeven-local tab behavior.
+One discriminated console controller owns runtime discovery, resource view,
+aggregated inventory, and selected resource. It keeps a component-lifetime
+cache per exact `(engine, endpoint, view)` and combines only entries from the
+current ready runtime set. Every resource entry retains its source target;
+same-name Docker and Podman resources stay separate and receive a runtime badge
+only when their displayed names conflict. Details, streams, preflights,
+mutations, Web Services navigation, and operation observation route through
+that source target.
+
+View changes reuse cached per-runtime inventory while refreshing in the
+background. Runtime rediscovery clears stale target ownership before a new set
+can commit. One request generation and cancellation signal fence older runtime,
+inventory, detail, log, history, file, and statistics responses. Only `ready`
+renders resource data or detail; a refreshing cache remains `ready` but cannot
+authorize mutation without a current server preflight. A first visit keeps the
+production tabs, toolbar, table headers, mobile cards, and responsive geometry
+in place during loading. Resource and detail navigation use the published Floe
+Webapp `Tabs` owner for icons, underlined selection, keyboard movement, and
+narrow-width overflow.
+
+Containers, Images, and Volumes aggregate every ready runtime. Compose Projects
+exists only while Docker is ready; Pods exists only while Podman is ready. With
+no ready runtime, the stable page reports each engine's concise detection state
+and offers retry. With partial failure, usable resources remain visible and one
+warning opens a shared Dialog containing status only; it cannot switch targets.
+Create, pull, volume creation, and cleanup use the sole compatible target
+directly. When both engines are compatible, the operation Dialog contains one
+Floe Select, defaults to Docker, and never exposes endpoint names. Actions from
+an existing resource always reuse its source target.
 
 Selecting a resource opens a component-local detail page, never a floating
 inspector. Returning preserves the list query, filter, sort, and scroll owner.
@@ -170,7 +194,7 @@ The UI provides structured create dialogs and a separate risk review before
 submission. It supports keyboard operation, 44 px touch targets, forced colors,
 reduced motion, and every shipped locale. A missing, stopped, unreachable, or
 permission-denied engine produces a dedicated detection state with retry instead
-of a broken resource table. Inventory from a different target is never shown in
+of a broken resource table. Inventory from an inactive target is never shown in
 a loading or failure state. An exact-target cached inventory is visual
 continuity only and cannot authorize destructive work. Detail reads,
 logs, statistics, image history, and file reads commit only while their owning
@@ -189,13 +213,14 @@ logs, statistics, image history, and file reads commit only while their owning
 # Evidence
 
 - `redeven:internal/containerengine/adapter.go` - Defines the shared typed engine boundary.
-- `redeven:internal/containerengine/resources_v4_cli.go` - Resolves opaque endpoints and constructs explicit Docker and Podman commands.
+- `redeven:internal/containerengine/resources_v4.go` - Discovers one active target per engine and resolves opaque endpoint routing.
+- `redeven:internal/containerengine/resources_v4_cli.go` - Constructs explicit Docker and Podman commands for bound targets.
 - `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe Podman volume archive reads.
 - `redeven:internal/containerresource/service.go` - Owns strict preflight admission, operations, cancellation, and startup observation.
 - `redeven:internal/containerresource/schema.go` - Defines the Redeven-owned product database lineage.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Enforces native Local API routes and RWX/Admin permissions.
 - `redeven:internal/managedwebservice/container_resources.go` - Resolves protected Web Services ownership.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Implements the native responsive product surface.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies request cancellation, stale-response rejection, exact-target view caching, retry, endpoint changes, permissions, and ready-only rendering.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies aggregation, target-routed actions, partial failure, exact-target caching, cancellation, and ready-only rendering.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Verifies desktop and narrow dedicated-detail layouts in Chromium.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Registers the multi-instance Workbench component.

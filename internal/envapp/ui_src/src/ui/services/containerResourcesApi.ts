@@ -4,21 +4,29 @@ export type ContainerEngine = 'docker' | 'podman';
 export type ContainerResourceView = 'containers' | 'images' | 'volumes' | 'compose-projects' | 'pods';
 export type ContainerOperationState = 'queued' | 'running' | 'canceling' | 'succeeded' | 'failed' | 'canceled' | 'interrupted';
 
-export type ContainerEndpoint = Readonly<{
-  endpoint_id: string;
+export type ContainerRuntimeState = 'ready' | 'not_installed' | 'stopped' | 'permission' | 'unreachable' | 'error';
+
+export type ContainerRuntimeCapabilities = Readonly<{
+  collection_stats: boolean;
+  volume_files: boolean;
+  exec: boolean;
+}>;
+
+export type ReadyContainerRuntime = Readonly<{
   engine: ContainerEngine;
-  display_name: string;
-  default: boolean;
-  remote: boolean;
-  available: boolean;
+  state: 'ready';
+  endpoint_id: string;
   engine_version?: string;
   rootless?: boolean;
-	capabilities?: Readonly<{
-		collection_stats: boolean;
-		volume_files: boolean;
-		exec: boolean;
-	}>;
+  capabilities?: ContainerRuntimeCapabilities;
 }>;
+
+export type ContainerRuntime =
+  | ReadyContainerRuntime
+  | Readonly<{
+      engine: ContainerEngine;
+      state: Exclude<ContainerRuntimeState, 'ready'>;
+    }>;
 
 export type ContainerManagement = Readonly<{
   managed: boolean;
@@ -176,19 +184,12 @@ function query(engine: ContainerEngine, endpointID: string, extras: Readonly<Rec
   if (endpointID) params.set('endpoint_id', endpointID);
   return params.toString();
 }
-export async function listContainerEndpoints(engine: ContainerEngine, signal?: AbortSignal): Promise<ContainerEndpoint[]> {
-  const response = await fetchLocalApiJSON<{ engines: readonly Readonly<{ engine: ContainerEngine; endpoints: ContainerEndpoint[] }>[] }>(
-    `/_redeven_proxy/api/container-resources/endpoints?engine=${encodeURIComponent(engine)}`,
+export async function listContainerRuntimes(signal?: AbortSignal): Promise<ContainerRuntime[]> {
+  const response = await fetchLocalApiJSON<{ engines: ContainerRuntime[] }>(
+    '/_redeven_proxy/api/container-resources/runtimes',
     { method: 'GET', signal },
   );
-  return response.engines?.[0]?.endpoints ?? [];
-}
-
-export async function getContainerEndpointStatus(engine: ContainerEngine, endpointID: string, signal?: AbortSignal): Promise<ContainerEndpoint> {
-  return fetchLocalApiJSON<ContainerEndpoint>(
-    `/_redeven_proxy/api/container-resources/endpoints/${encodeURIComponent(endpointID)}?engine=${encodeURIComponent(engine)}`,
-    { method: 'GET', signal },
-  );
+  return response.engines ?? [];
 }
 
 export async function listContainerResources(

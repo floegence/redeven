@@ -38,16 +38,10 @@ vi.mock('../services/uiStorage', async (importOriginal) => ({
 }));
 
 vi.mock('../services/containerResourcesApi', () => ({
-  listContainerEndpoints: vi.fn().mockResolvedValue([{
-    endpoint_id: 'desktop-linux', engine: 'docker', display_name: 'Desktop Linux', default: true,
-    remote: false, available: true, engine_version: '27.3.1', rootless: false,
+  listContainerRuntimes: vi.fn().mockResolvedValue([{
+    endpoint_id: 'desktop-linux', engine: 'docker', state: 'ready', engine_version: '27.3.1', rootless: false,
     capabilities: { collection_stats: true, volume_files: false, exec: false },
-  }]),
-  getContainerEndpointStatus: vi.fn().mockResolvedValue({
-    endpoint_id: 'desktop-linux', engine: 'docker', display_name: 'Desktop Linux', default: true,
-    remote: false, available: true, engine_version: '27.3.1', rootless: false,
-    capabilities: { collection_stats: true, volume_files: false, exec: false },
-  }),
+  }, { engine: 'podman', state: 'not_installed' }]),
   listContainerResources: browserHarness.listResources,
   getContainerResourceDetails: vi.fn().mockImplementation((_view: string, identity: string) => Promise.resolve({
     container_id: identity,
@@ -166,6 +160,8 @@ describe('native Containers responsive product surface', () => {
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
     expect(root.dataset.variant).toBe('workbench');
+    expect(root.querySelector('[data-container-endpoint-bar]')).toBeNull();
+    expect(root.textContent).not.toContain('Desktop Linux');
     const resourceTabs = Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'));
     expect(resourceTabs).toHaveLength(4);
     expect(resourceTabs[0].getAttribute('aria-selected')).toBe('true');
@@ -233,13 +229,17 @@ describe('native Containers responsive product surface', () => {
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
-  it.each([{ width: 390, height: 844 }, { width: 320, height: 568 }])('uses cards and a viewport-contained detail surface at $width x $height', async (viewport) => {
+  it.each([
+    { width: 390, height: 844, variant: 'workbench' as const },
+    { width: 320, height: 568, variant: 'activity' as const },
+  ])('uses cards and a viewport-contained $variant detail surface at $width x $height', async (viewport) => {
     await page.viewport(viewport.width, viewport.height);
-    const mounted = mount();
+    const mounted = mount(viewport.variant);
     dispose = mounted.dispose;
     await settle();
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    expect(root.dataset.variant).toBe(viewport.variant);
     const resourceTabs = root.querySelector<HTMLElement>('.container-resource-tabs__scroller')!;
     expect(getComputedStyle(resourceTabs).overflowX).toBe('auto');
     if (viewport.width === 320) expect(resourceTabs.scrollWidth).toBeGreaterThan(resourceTabs.clientWidth);

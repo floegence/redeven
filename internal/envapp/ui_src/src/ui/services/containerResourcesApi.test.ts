@@ -11,6 +11,7 @@ import {
   createContainerOperation,
   getContainerImageHistory,
   getRawContainerInspect,
+  listContainerRuntimes,
   listContainerResourceFiles,
   readContainerResourceFile,
   listContainerResources,
@@ -64,6 +65,25 @@ beforeEach(() => {
 });
 
 describe('native container resources API', () => {
+  it('discovers all active runtime states without endpoint selection parameters', async () => {
+    const signal = new AbortController().signal;
+    localApiMocks.fetchLocalApiJSON.mockResolvedValue({
+      engines: [
+        { engine: 'docker', state: 'ready', endpoint_id: 'opaque-docker' },
+        { engine: 'podman', state: 'permission' },
+      ],
+    });
+
+    await expect(listContainerRuntimes(signal)).resolves.toEqual([
+      { engine: 'docker', state: 'ready', endpoint_id: 'opaque-docker' },
+      { engine: 'podman', state: 'permission' },
+    ]);
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/container-resources/runtimes',
+      { method: 'GET', signal },
+    );
+  });
+
   it('keeps engine and opaque endpoint identity on inventory requests', async () => {
     localApiMocks.fetchLocalApiJSON.mockResolvedValue({ compose_projects: [{ project_id: 'project-1' }] });
     const signal = new AbortController().signal;
