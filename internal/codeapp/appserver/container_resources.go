@@ -16,6 +16,7 @@ import (
 	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/containerresource"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/terminal"
 )
 
 const (
@@ -33,6 +34,9 @@ func (g *Server) handleContainerResourcesAPI(w http.ResponseWriter, r *http.Requ
 	}
 	if strings.HasPrefix(r.URL.Path, containerOperationsAPIBase) {
 		return g.handleContainerOperationRoute(w, r)
+	}
+	if g.handleContainerExecSessionRoute(w, r) {
+		return true
 	}
 	if r.Method == http.MethodPost && r.URL.Path == containerResourcesAPIBase+"/preflights" {
 		var request containerresource.PreflightRequest
@@ -71,6 +75,88 @@ func (g *Server) handleContainerResourcesAPI(w http.ResponseWriter, r *http.Requ
 		return true
 	}
 	return g.handleContainerReadRoute(w, r)
+}
+
+func (g *Server) handleContainerExecSessionRoute(w http.ResponseWriter, r *http.Request) bool {
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, containerResourcesAPIBase), "/")
+	parts := []string{}
+	if rest != "" {
+		parts = strings.Split(rest, "/")
+	}
+	create := r.Method == http.MethodPost && len(parts) == 3 && parts[0] == "containers" && parts[2] == "exec-sessions"
+	remove := r.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "exec-sessions"
+	if !create && !remove {
+		return false
+	}
+	meta, ok := g.requirePermission(w, r, requiredPermissionReadExecute)
+	if !ok {
+		return true
+	}
+	manager, ok := g.term.(containerExecTerminalSessionManager)
+	if !ok || manager == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "Container Exec is unavailable", ErrorCode: "CAPABILITY_UNSUPPORTED"})
+		return true
+	}
+	if remove {
+		sessionID, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		detail := map[string]any{"session_id": sessionID, "resource_kind": "container_exec"}
+		if err := manager.DeleteContainerExecSession(sessionID, meta.UserPublicID); err != nil {
+			if errors.Is(err, terminal.ErrSessionNotFound) {
+				g.appendAudit(meta, "container_exec_session_close", "failure", detail, errors.New("container Exec session not found"))
+				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "Container Exec session not found", ErrorCode: "EXEC_SESSION_NOT_FOUND"})
+				return true
+			}
+			g.appendAudit(meta, "container_exec_session_close", "failure", detail, errors.New("failed to close container Exec session"))
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "Failed to close Container Exec session", ErrorCode: "EXEC_SESSION_CLOSE_FAILED"})
+			return true
+		}
+		g.appendAudit(meta, "container_exec_session_close", "success", detail, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"session_id": sessionID}})
+		return true
+	}
+
+	containerID, err := decodeResourcePathSegment(parts[1])
+	if err != nil {
+		writeContainerResourceError(w, err)
+		return true
+	}
+	var request struct {
+		Engine     containerengine.Engine     `json:"engine"`
+		EndpointID containerengine.EndpointID `json:"endpoint_id"`
+		Argv       []string                   `json:"argv,omitempty"`
+	}
+	if err := decodeContainerResourceJSON(r, &request); err != nil {
+		writeContainerResourceError(w, err)
+		return true
+	}
+	detail := map[string]any{
+		"engine": request.Engine, "endpoint_id": request.EndpointID,
+		"resource_kind": "container", "resource_identity": truncateString(containerID, 160),
+	}
+	program, err := g.containers.PrepareContainerExec(r.Context(), containerengine.ContainerExecRequest{
+		Engine: request.Engine, EndpointID: request.EndpointID, ContainerID: containerID, Argv: request.Argv,
+	})
+	if err != nil {
+		g.appendAudit(meta, "container_exec_session_create", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+		writeContainerResourceError(w, err)
+		return true
+	}
+	info, err := manager.CreateContainerExecSession(terminal.ContainerExecSessionRequest{
+		Name: "Container Exec", Executable: program.Executable, Args: program.Args, OwnerUserID: meta.UserPublicID,
+	})
+	if err != nil {
+		g.appendAudit(meta, "container_exec_session_create", "failure", detail, errors.New("failed to create container Exec session"))
+		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "Failed to create Container Exec session", ErrorCode: "EXEC_SESSION_CREATE_FAILED"})
+		return true
+	}
+	detail["session_id"] = info.ID
+	g.appendAudit(meta, "container_exec_session_create", "success", detail, nil)
+	writeJSON(w, http.StatusCreated, apiResp{OK: true, Data: map[string]any{"session_id": info.ID}})
+	return true
 }
 
 func (g *Server) handleContainerReadRoute(w http.ResponseWriter, r *http.Request) bool {
@@ -959,7 +1045,7 @@ func writeContainerResourceError(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, containerresource.ErrManagedByWebService), errors.Is(err, containerengine.ErrPermissionDenied):
 		status = http.StatusForbidden
-	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerresource.ErrIdempotencyConflict), errors.Is(err, containerresource.ErrOperationTerminal), errors.Is(err, containerengine.ErrResourcePlanStale):
+	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerresource.ErrIdempotencyConflict), errors.Is(err, containerresource.ErrOperationTerminal), errors.Is(err, containerengine.ErrResourcePlanStale), errors.Is(err, containerengine.ErrContainerNotRunning):
 		status = http.StatusConflict
 	case errors.Is(err, containerengine.ErrEngineUnavailable), errors.Is(err, containerengine.ErrCLIUnavailable), errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped), errors.Is(err, containerengine.ErrResourceCapabilityUnsupported):
 		status = http.StatusServiceUnavailable
@@ -987,6 +1073,8 @@ func publicContainerResourceCode(err error) string {
 		return "MANAGED_BY_WEB_SERVICE"
 	case errors.Is(err, containerengine.ErrContainerNotFound):
 		return "CONTAINER_NOT_FOUND"
+	case errors.Is(err, containerengine.ErrContainerNotRunning):
+		return "CONTAINER_NOT_RUNNING"
 	case errors.Is(err, containerengine.ErrImageNotFound):
 		return "IMAGE_NOT_FOUND"
 	case errors.Is(err, containerengine.ErrEndpointNotFound):
@@ -1024,6 +1112,8 @@ func publicContainerResourceMessage(err error) string {
 		return "This resource is managed by Web Services. Open its service to make lifecycle changes."
 	case "CONTAINER_NOT_FOUND":
 		return "The container was not found."
+	case "CONTAINER_NOT_RUNNING":
+		return "Start the container before opening Exec."
 	case "IMAGE_NOT_FOUND":
 		return "The image was not found."
 	case "ENDPOINT_NOT_FOUND":

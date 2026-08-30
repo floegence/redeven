@@ -13,6 +13,8 @@ import {
   Cpu,
   Database,
   Download,
+  Eye,
+  EyeOff,
   ExternalLink,
   Filter,
   Folder,
@@ -33,14 +35,16 @@ import {
   XCircle,
 } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
-import { Button, Dropdown, FileOpenPicker, Input, MonitoringChart, Select, Tabs, Tag, type DropdownItem, type TabItem } from '@floegence/floe-webapp-core/ui';
+import { Button, DirectoryPicker, Dropdown, FileOpenPicker, Input, MonitoringChart, Select, Tabs, Tag, type DropdownItem, type TabItem } from '@floegence/floe-webapp-core/ui';
 
 import { Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 import {
   cancelContainerOperation,
+  createContainerExecSession,
   createComposeProjectDefinition,
   createContainerOperation,
+  deleteContainerExecSession,
   deleteComposeProjectDefinition,
   getComposeProjectDefinition,
   getContainerImageHistory,
@@ -86,6 +90,7 @@ import { useRedevenRpc } from '../protocol/redeven_v1';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
 import { useEnvContext } from './EnvContext';
+import { ContainerExecTerminal } from '../widgets/ContainerExecTerminal';
 import './env-containers.css';
 
 type PersistedContainersState = Readonly<{
@@ -94,7 +99,68 @@ type PersistedContainersState = Readonly<{
   selectedResourceKey: string;
 }>;
 
-type CreationMode = 'container' | 'image' | 'volume' | 'pod' | 'image-tag';
+type CreationMode = 'image' | 'volume' | 'pod' | 'image-tag';
+
+type ContainerRunArgument = Readonly<{ id: string; value: string }>;
+type ContainerRunKeyValue = Readonly<{ id: string; key: string; value: string; revealed?: boolean }>;
+type ContainerRunPort = Readonly<{
+  id: string;
+  containerPort: string;
+  hostPort: string;
+  hostIP: string;
+  protocol: 'tcp' | 'udp' | 'sctp';
+}>;
+type ContainerRunMount = Readonly<{
+  id: string;
+  type: 'bind' | 'volume' | 'tmpfs';
+  source: string;
+  target: string;
+  readOnly: boolean;
+  tmpfsSizeMiB: string;
+  noexec: boolean;
+  nosuid: boolean;
+  nodev: boolean;
+}>;
+type ContainerRunDevice = Readonly<{
+  id: string;
+  hostPath: string;
+  containerPath: string;
+  permissions: string;
+}>;
+type ContainerRunDraft = Readonly<{
+  targetKey: string;
+  image: string;
+  name: string;
+  entrypoint: string;
+  arguments: readonly ContainerRunArgument[];
+  ports: readonly ContainerRunPort[];
+  mounts: readonly ContainerRunMount[];
+  environment: readonly ContainerRunKeyValue[];
+  cpuCount: string;
+  memory: string;
+  memoryUnit: 'MiB' | 'GiB';
+  networkMode: string;
+  restartPolicy: string;
+  user: string;
+  readOnlyRoot: boolean;
+  privileged: boolean;
+  pidMode: string;
+  ipcMode: string;
+  pidsLimit: string;
+  shmSize: string;
+  shmUnit: 'MiB' | 'GiB';
+  labels: readonly ContainerRunKeyValue[];
+  capAdd: readonly ContainerRunArgument[];
+  capDrop: readonly ContainerRunArgument[];
+  securityOptions: readonly ContainerRunArgument[];
+  devices: readonly ContainerRunDevice[];
+}>;
+
+type ContainerPathPickerTarget = Readonly<{
+  kind: 'file' | 'directory';
+  owner: 'mount' | 'device';
+  id: string;
+}>;
 
 type MutationDraft = Readonly<{
   method: string;
@@ -156,6 +222,13 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function hasControlCharacters(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127;
+  });
+}
+
 function isDetailRecord(value: unknown): value is DetailRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -182,6 +255,16 @@ function detailBoolean(record: DetailRecord, key: string): boolean | undefined {
 function detailArray(record: DetailRecord, key: string): readonly unknown[] {
   const value = record[key];
   return Array.isArray(value) ? value : [];
+}
+
+function containerRunSuggestedPorts(value: unknown): readonly ContainerRunPort[] {
+  const record = detailRecord(value);
+  return detailArray(record, 'exposed_ports').flatMap((entry) => {
+    const [portValue, protocolValue = 'tcp'] = compact(entry).toLowerCase().split('/', 2);
+    const port = Number(portValue);
+    if (!Number.isInteger(port) || port < 1 || port > 65535 || !['tcp', 'udp', 'sctp'].includes(protocolValue)) return [];
+    return [{ ...emptyContainerRunPort(), containerPort: String(port), protocol: protocolValue as ContainerRunPort['protocol'] }];
+  });
 }
 
 function sanitizePersistedState(value: unknown): PersistedContainersState {
@@ -275,6 +358,89 @@ function canonicalImageID(value: unknown): string {
 
 function absolutePath(value: string): boolean {
   return value.startsWith('/') || /^[a-z]:[\\/]/iu.test(value);
+}
+
+let containerRunRowSequence = 0;
+
+function containerRunRowID(prefix: string): string {
+  containerRunRowSequence += 1;
+  return `${prefix}-${containerRunRowSequence}`;
+}
+
+function emptyContainerRunPort(): ContainerRunPort {
+  return {
+    id: containerRunRowID('port'),
+    containerPort: '',
+    hostPort: '',
+    hostIP: '127.0.0.1',
+    protocol: 'tcp',
+  };
+}
+
+function emptyContainerRunMount(type: ContainerRunMount['type'] = 'bind'): ContainerRunMount {
+  return {
+    id: containerRunRowID('mount'),
+    type,
+    source: '',
+    target: '',
+    readOnly: false,
+    tmpfsSizeMiB: '',
+    noexec: true,
+    nosuid: true,
+    nodev: true,
+  };
+}
+
+function emptyContainerRunDraft(image = '', targetKey = ''): ContainerRunDraft {
+  return {
+    targetKey,
+    image,
+    name: '',
+    entrypoint: '',
+    arguments: [],
+    ports: [],
+    mounts: [],
+    environment: [],
+    cpuCount: '',
+    memory: '',
+    memoryUnit: 'MiB',
+    networkMode: 'bridge',
+    restartPolicy: 'no',
+    user: '',
+    readOnlyRoot: false,
+    privileged: false,
+    pidMode: '',
+    ipcMode: '',
+    pidsLimit: '',
+    shmSize: '',
+    shmUnit: 'MiB',
+    labels: [],
+    capAdd: [],
+    capDrop: [],
+    securityOptions: [],
+    devices: [],
+  };
+}
+
+function containerRunBytes(value: string, unit: 'MiB' | 'GiB'): number | undefined {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return undefined;
+  return Math.round(amount * (unit === 'GiB' ? 1024 * 1024 * 1024 : 1024 * 1024));
+}
+
+function containerRunInteger(value: string): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function containerRunArgv(values: readonly ContainerRunArgument[]): string[] {
+  return values.map((item) => item.value).filter((value) => value !== '');
+}
+
+function containerRunKeyValues(values: readonly ContainerRunKeyValue[]): string[] {
+  return values
+    .map((item) => `${compact(item.key)}=${item.value}`)
+    .filter((value) => value !== '=');
 }
 
 function validComposeProjectName(value: string): boolean {
@@ -529,11 +695,15 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [creationName, setCreationName] = createSignal('');
   const [creationImage, setCreationImage] = createSignal('');
   const [creationDriver, setCreationDriver] = createSignal('local');
-  const [creationCommand, setCreationCommand] = createSignal('');
-  const [creationRestart, setCreationRestart] = createSignal('no');
-  const [creationCPUs, setCreationCPUs] = createSignal('');
-  const [creationMemory, setCreationMemory] = createSignal('');
   const [creationTargetKey, setCreationTargetKey] = createSignal('');
+  const [containerRunOpen, setContainerRunOpen] = createSignal(false);
+  const [containerRunDraft, setContainerRunDraft] = createSignal<ContainerRunDraft>(emptyContainerRunDraft());
+  const [containerRunPortSuggestions, setContainerRunPortSuggestions] = createSignal<readonly ContainerRunPort[]>([]);
+  const [containerRunAdvanced, setContainerRunAdvanced] = createSignal(false);
+  const [containerPathPicker, setContainerPathPicker] = createSignal<ContainerPathPickerTarget | null>(null);
+  const [containerVolumeNames, setContainerVolumeNames] = createSignal<string[]>([]);
+  const [containerVolumeNamesLoading, setContainerVolumeNamesLoading] = createSignal(false);
+  const [pendingContainerCreateOperationID, setPendingContainerCreateOperationID] = createSignal('');
   const [composeEditorOpen, setComposeEditorOpen] = createSignal(false);
   const [composeEditingID, setComposeEditingID] = createSignal('');
   const [composeEditorTarget, setComposeEditorTarget] = createSignal<ReadyContainerRuntime | null>(null);
@@ -583,6 +753,12 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [filesLoading, setFilesLoading] = createSignal(false);
   const [filePreview, setFilePreview] = createSignal('');
   const [filePreviewName, setFilePreviewName] = createSignal('');
+  const [execSessionID, setExecSessionID] = createSignal('');
+  const [execBusy, setExecBusy] = createSignal(false);
+  const [execError, setExecError] = createSignal('');
+  const [execPreset, setExecPreset] = createSignal('/bin/sh');
+  const [execExecutable, setExecExecutable] = createSignal('/bin/sh');
+  const [execArguments, setExecArguments] = createSignal<ContainerRunArgument[]>([]);
   let consoleLoadGeneration = 0;
   let consoleLoadAbort: AbortController | null = null;
   let waitingForEnvironment = false;
@@ -595,6 +771,12 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   let relatedNavigationOrigin: RelatedNavigationOrigin | null = null;
 
   const composeFilePicker = createFilesystemPickerDataSource({
+    homePath: () => '/',
+    includeFiles: true,
+    listDirectory: async (path) => (await rpc.fs.list({ path, showHidden: true })).entries ?? [],
+  });
+
+  const containerPathDataSource = createFilesystemPickerDataSource({
     homePath: () => '/',
     includeFiles: true,
     listDirectory: async (path) => (await rpc.fs.list({ path, showHidden: true })).entries ?? [],
@@ -616,6 +798,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const selectedResourceKey = () => consoleState().target.selectedResourceKey;
   const runtimes = () => consoleState().runtimes;
   const readyRuntimes = createMemo(() => runtimes().filter((runtime): runtime is ReadyContainerRuntime => runtime.state === 'ready'));
+  const containerRunTargets = createMemo(() => readyRuntimes());
   const runtimeIssues = createMemo(() => runtimes().filter((runtime) => runtime.state !== 'ready'));
   const inventory = () => readyConsole()?.inventory ?? [];
   const loading = () => consoleState().phase === 'loading';
@@ -630,6 +813,61 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const selected = createMemo(() => selectedEntry()?.item ?? null);
   const selectedTarget = createMemo(() => selectedEntry()?.target ?? null);
   const selectedManagedOwner = createMemo(() => resourceManagement(selected())?.owner ?? null);
+  const containerExecAvailable = createMemo(() => {
+    const item = selected();
+    return view() === 'containers'
+      && Boolean(item)
+      && compact((item as ContainerInventoryItem).state).toLowerCase() === 'running'
+      && !selectedManagedOwner()
+      && canExecute()
+      && Boolean(selectedTarget()?.capabilities?.exec);
+  });
+  const containerRunErrors = createMemo<Record<string, string>>(() => {
+    const draft = containerRunDraft();
+    const errors: Record<string, string> = {};
+    const invalid = (key: string, message: string) => { errors[key] = message; };
+    if (!compact(draft.image)) invalid('image', i18n.t('containers.run.errors.imageRequired'));
+    if (compact(draft.name) && !/^[a-z0-9][a-z0-9_.-]{0,127}$/iu.test(compact(draft.name))) invalid('name', i18n.t('containers.run.errors.name'));
+    if (draft.entrypoint && (/^[\s]*-/u.test(draft.entrypoint) || hasControlCharacters(draft.entrypoint))) invalid('entrypoint', i18n.t('containers.run.errors.entrypoint'));
+    draft.arguments.forEach((argument) => {
+      if (hasControlCharacters(argument.value)) invalid(`argument:${argument.id}`, i18n.t('containers.run.errors.argument'));
+    });
+    draft.ports.forEach((port) => {
+      const containerPort = Number(port.containerPort);
+      const hostPort = port.hostPort === '' ? 0 : Number(port.hostPort);
+      if (!Number.isInteger(containerPort) || containerPort < 1 || containerPort > 65535) invalid(`port:${port.id}`, i18n.t('containers.run.errors.port'));
+      else if (!Number.isInteger(hostPort) || hostPort < 0 || hostPort > 65535) invalid(`port:${port.id}`, i18n.t('containers.run.errors.hostPort'));
+      else if (!compact(port.hostIP)) invalid(`port:${port.id}`, i18n.t('containers.run.errors.listenAddress'));
+    });
+    draft.mounts.forEach((mount) => {
+      if (!absolutePath(compact(mount.target))) invalid(`mount:${mount.id}`, i18n.t('containers.run.errors.containerPath'));
+      else if (mount.type === 'bind' && !absolutePath(compact(mount.source))) invalid(`mount:${mount.id}`, i18n.t('containers.run.errors.hostPath'));
+      else if (mount.type === 'volume' && !/^[a-z0-9][a-z0-9_.-]{0,127}$/iu.test(compact(mount.source))) invalid(`mount:${mount.id}`, i18n.t('containers.run.errors.volume'));
+      else if (mount.type === 'tmpfs' && compact(mount.tmpfsSizeMiB) && (!Number.isFinite(Number(mount.tmpfsSizeMiB)) || Number(mount.tmpfsSizeMiB) <= 0)) invalid(`mount:${mount.id}`, i18n.t('containers.run.errors.size'));
+    });
+    const seenEnvironment = new Set<string>();
+    draft.environment.forEach((entry) => {
+      const key = compact(entry.key);
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(key) || seenEnvironment.has(key)) invalid(`environment:${entry.id}`, i18n.t('containers.run.errors.environment'));
+      seenEnvironment.add(key);
+    });
+    const cpuCount = Number(draft.cpuCount);
+    if (draft.cpuCount !== '' && (!Number.isFinite(cpuCount) || cpuCount <= 0 || cpuCount > 256)) invalid('cpuCount', i18n.t('containers.run.errors.cpu'));
+    const memoryBytes = containerRunBytes(draft.memory, draft.memoryUnit);
+    if (draft.memory !== '' && (!memoryBytes || memoryBytes < 4 * 1024 * 1024)) invalid('memory', i18n.t('containers.run.errors.memory'));
+    const pidsLimit = containerRunInteger(draft.pidsLimit);
+    if (draft.pidsLimit !== '' && (pidsLimit === undefined || pidsLimit > 1_000_000)) invalid('pidsLimit', i18n.t('containers.run.errors.pids'));
+    const shmBytes = containerRunBytes(draft.shmSize, draft.shmUnit);
+    if (draft.shmSize !== '' && (!shmBytes || shmBytes < 1024 * 1024)) invalid('shmSize', i18n.t('containers.run.errors.shm'));
+    draft.labels.forEach((entry) => {
+      if (!/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$/u.test(compact(entry.key))) invalid(`label:${entry.id}`, i18n.t('containers.run.errors.label'));
+    });
+    draft.devices.forEach((device) => {
+      if (!absolutePath(compact(device.hostPath)) || (compact(device.containerPath) && !absolutePath(compact(device.containerPath)))) invalid(`device:${device.id}`, i18n.t('containers.run.errors.device'));
+    });
+    return errors;
+  });
+  const containerRunValid = createMemo(() => containerRunTargets().length > 0 && Object.keys(containerRunErrors()).length === 0);
   const activeOperationCount = createMemo(() => operations().filter(operationActive).length);
   const activeResourceCount = createMemo(() => inventory().filter((entry) => resourceActive(view(), entry.item)).length);
   const managedResourceCount = createMemo(() => inventory().filter((entry) => resourceManagement(entry.item)?.managed).length);
@@ -693,7 +931,18 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const loadOperations = async () => {
     if (!canRead()) return;
     try {
-      setOperations(await listContainerOperations());
+      const next = await listContainerOperations();
+      setOperations(next);
+      const pendingID = pendingContainerCreateOperationID();
+      const pendingCreate = pendingID ? next.find((operation) => operation.operation_id === pendingID) : undefined;
+      if (pendingCreate && TERMINAL_OPERATION_STATES.has(pendingCreate.state)) {
+        setPendingContainerCreateOperationID('');
+        if (pendingCreate.state === 'succeeded') {
+          setContainerRunDraft(emptyContainerRunDraft());
+          setContainerRunPortSuggestions([]);
+          setContainerRunAdvanced(false);
+        }
+      }
     } catch {
       // Inventory remains usable when operation history is temporarily unavailable.
     }
@@ -986,6 +1235,36 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   });
 
   createEffect(() => {
+    if (!containerRunOpen()) return;
+    const target = selectedContainerRunTarget();
+    if (!target) {
+      setContainerVolumeNames([]);
+      return;
+    }
+    const cached = inventoryCache.get(inventoryCacheKey(target, 'volumes'));
+    if (cached) {
+      setContainerVolumeNames(cached.map((item) => (item as VolumeInventoryItem).name).filter(Boolean));
+      return;
+    }
+    const controller = new AbortController();
+    setContainerVolumeNamesLoading(true);
+    void listContainerResources('volumes', target.engine, target.endpoint_id, controller.signal)
+      .then((items) => {
+        inventoryCache.set(inventoryCacheKey(target, 'volumes'), items);
+        setContainerVolumeNames(items.map((item) => (item as VolumeInventoryItem).name).filter(Boolean));
+      })
+      .catch(() => setContainerVolumeNames([]))
+      .finally(() => setContainerVolumeNamesLoading(false));
+    onCleanup(() => controller.abort());
+  });
+
+  createEffect(() => {
+    selectedResourceKey();
+    const available = containerExecAvailable();
+    if (!available && execSessionID()) void closeExecSession();
+  });
+
+  createEffect(() => {
     if (!operations().some(operationActive)) return;
     const timer = window.setInterval(() => void loadOperations(), 1200);
     onCleanup(() => window.clearInterval(timer));
@@ -1105,6 +1384,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     consoleLoadAbort?.abort();
     operationStreamAbort?.abort();
     operationDetailsAbort?.abort();
+    void closeExecSession();
   });
 
   const openRelatedResource = async (
@@ -1179,7 +1459,73 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setFileEntries([]);
   };
 
+  const closeExecSession = async () => {
+    const sessionID = execSessionID();
+    setExecSessionID('');
+    if (!sessionID) return;
+    await deleteContainerExecSession(sessionID).catch(() => undefined);
+  };
+
+  const startExecSession = async (argv: readonly string[]) => {
+    const entry = selectedEntry();
+    if (!entry || !containerExecAvailable() || execBusy()) return;
+    const container = entry.item as ContainerInventoryItem;
+    const selectedKey = entry.key;
+    setExecBusy(true);
+    setExecError('');
+    await closeExecSession();
+    try {
+      const result = await createContainerExecSession(
+        container.container_id,
+        entry.target.engine,
+        entry.target.endpoint_id,
+        argv,
+      );
+      if (selectedEntry()?.key !== selectedKey || !containerExecAvailable()) {
+        await deleteContainerExecSession(result.session_id).catch(() => undefined);
+        return;
+      }
+      setExecSessionID(result.session_id);
+    } catch (cause) {
+      setExecError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setExecBusy(false);
+    }
+  };
+
+  const openExecTab = (entry?: ContainerResourceEntry) => {
+    if (entry) selectResource(entry);
+    setDetailTab('exec');
+    setExecPreset('/bin/sh');
+    setExecExecutable('/bin/sh');
+    setExecArguments([]);
+    queueMicrotask(() => void startExecSession(['/bin/sh']));
+  };
+
+  const selectDetailTab = (tab: DetailTab) => {
+    setDetailTab(tab);
+    if (tab === 'exec' && !execSessionID() && !execBusy()) {
+      const argv = [compact(execExecutable()) || '/bin/sh', ...containerRunArgv(execArguments())];
+      void startExecSession(argv);
+    }
+  };
+
+  const chooseExecProgram = (program: string) => {
+    setExecPreset(program);
+    setExecExecutable(program);
+    setExecArguments([]);
+    void startExecSession([program]);
+  };
+
+  const runCustomExecProgram = () => {
+    const executable = compact(execExecutable());
+    if (!executable) return;
+    setExecPreset('custom');
+    void startExecSession([executable, ...containerRunArgv(execArguments())]);
+  };
+
   const closeDetails = () => {
+    void closeExecSession();
     const origin = relatedNavigationOrigin;
     if (origin) {
       relatedNavigationOrigin = null;
@@ -1346,7 +1692,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       setPendingConfirmation(null);
       setConfirmation('');
     } catch (cause) {
-      if (generation === consoleLoadGeneration) notify.error(i18n.t('containers.notifications.preflightFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+      if (generation === consoleLoadGeneration) {
+        if (draft.method === 'containers.create') setContainerRunOpen(true);
+        notify.error(i18n.t('containers.notifications.preflightFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+      }
     } finally {
       if (generation === consoleLoadGeneration) setMutationBusy(false);
     }
@@ -1374,6 +1723,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setMutationBusy(true);
     try {
       const operation = await createContainerOperation(current.preflight, current.request);
+      if (current.preflight.method === 'containers.create') {
+        setPendingContainerCreateOperationID(operation.operation_id);
+      }
       setReview(null);
       setOperationsOpen(true);
       setSelectedOperationID(operation.operation_id);
@@ -1385,16 +1737,29 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         setOperations((previous) => [next, ...previous.filter((item) => item.operation_id !== next.operation_id)]);
         if (TERMINAL_OPERATION_STATES.has(next.state)) {
           void reloadConsole();
+          const ownsContainerDraft = pendingContainerCreateOperationID() === next.operation_id;
+          if (ownsContainerDraft) setPendingContainerCreateOperationID('');
           if (next.state === 'succeeded') {
+            if (ownsContainerDraft) {
+              setContainerRunDraft(emptyContainerRunDraft());
+              setContainerRunPortSuggestions([]);
+              setContainerRunAdvanced(false);
+            }
             notify.success(i18n.t('containers.notifications.operationCompleteTitle'), i18n.t('containers.notifications.operationCompleteMessage'));
           }
         }
       }, controller.signal).catch(() => loadOperations());
     } catch (cause) {
+      if (current.preflight.method === 'containers.create') setContainerRunOpen(true);
       notify.error(i18n.t('containers.notifications.operationFailedTitle'), cause instanceof Error ? cause.message : String(cause));
     } finally {
       setMutationBusy(false);
     }
+  };
+
+  const cancelReview = () => {
+    if (review()?.preflight.method === 'containers.create') setContainerRunOpen(true);
+    setReview(null);
   };
 
   const actionRequest = (method: string, targetEntry?: ContainerResourceEntry | null): MutationDraft | null => {
@@ -1471,15 +1836,19 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const openImageRun = (event: MouseEvent, entry: ContainerResourceEntry) => {
     event.stopPropagation();
     const image = resourceIdentity('images', entry.item);
-    openCreation('container', entry.target);
-    setCreationImage(image);
+    openContainerRun(image, entry.target);
+    void getContainerResourceDetails('images', image, entry.target.engine, entry.target.endpoint_id)
+      .then((value) => {
+        if (!containerRunOpen() || containerRunDraft().image !== image || containerRunDraft().targetKey !== runtimeKey(entry.target)) return;
+        setContainerRunPortSuggestions(containerRunSuggestedPorts(value));
+      })
+      .catch(() => undefined);
   };
 
   const runSelectedImage = () => {
     const entry = selectedEntry();
     if (!entry) return;
-    openCreation('container', entry.target);
-    setCreationImage(resourceIdentity('images', entry.item));
+    openContainerRun(resourceIdentity('images', entry.item), entry.target, containerRunSuggestedPorts(selectedDetailRecord()));
   };
 
   const pruneCandidates = createMemo(() => readyRuntimesForView(runtimes(), view()).map((target) => {
@@ -1526,28 +1895,138 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     return readyRuntimes();
   });
 
+  const updateContainerRunDraft = (patch: Partial<ContainerRunDraft>) => {
+    setContainerRunDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const updateContainerRunArgument = (id: string, value: string) => {
+    updateContainerRunDraft({ arguments: containerRunDraft().arguments.map((item) => item.id === id ? { ...item, value } : item) });
+  };
+
+  const updateContainerRunPort = (id: string, patch: Partial<ContainerRunPort>) => {
+    updateContainerRunDraft({ ports: containerRunDraft().ports.map((item) => item.id === id ? { ...item, ...patch } : item) });
+  };
+
+  const updateContainerRunMount = (id: string, patch: Partial<ContainerRunMount>) => {
+    updateContainerRunDraft({ mounts: containerRunDraft().mounts.map((item) => item.id === id ? { ...item, ...patch } : item) });
+  };
+
+  const updateContainerRunEnvironment = (id: string, patch: Partial<ContainerRunKeyValue>) => {
+    updateContainerRunDraft({ environment: containerRunDraft().environment.map((item) => item.id === id ? { ...item, ...patch } : item) });
+  };
+
+  const updateContainerRunLabel = (id: string, patch: Partial<ContainerRunKeyValue>) => {
+    updateContainerRunDraft({ labels: containerRunDraft().labels.map((item) => item.id === id ? { ...item, ...patch } : item) });
+  };
+
+  const updateContainerRunDevice = (id: string, patch: Partial<ContainerRunDevice>) => {
+    updateContainerRunDraft({ devices: containerRunDraft().devices.map((item) => item.id === id ? { ...item, ...patch } : item) });
+  };
+
+  const selectedContainerRunTarget = () => {
+    const draft = containerRunDraft();
+    return containerRunTargets().find((runtime) => runtimeKey(runtime) === draft.targetKey) ?? containerRunTargets()[0] ?? null;
+  };
+
+  const openContainerRun = (image = '', forcedTarget?: ReadyContainerRuntime, suggestedPorts: readonly ContainerRunPort[] = []) => {
+    if (!image && containerRunDraft().image && !pendingContainerCreateOperationID()) {
+      setContainerRunOpen(true);
+      return;
+    }
+    const candidates = forcedTarget ? [forcedTarget] : containerRunTargets();
+    const preferred = candidates.find((runtime) => runtime.engine === 'docker') ?? candidates[0];
+    setContainerRunDraft(emptyContainerRunDraft(image, preferred ? runtimeKey(preferred) : ''));
+    setContainerRunPortSuggestions(suggestedPorts);
+    setContainerRunAdvanced(false);
+    setContainerRunOpen(true);
+    setContainerPathPicker(null);
+  };
+
+  const closeContainerRun = () => {
+    setContainerRunOpen(false);
+    setContainerPathPicker(null);
+    setContainerRunDraft(emptyContainerRunDraft());
+    setContainerRunPortSuggestions([]);
+    setContainerRunAdvanced(false);
+  };
+
+  const openContainerPathPicker = (target: ContainerPathPickerTarget) => {
+    containerPathDataSource.reset();
+    setContainerPathPicker(target);
+  };
+
+  const acceptContainerPath = (path: string) => {
+    const target = containerPathPicker();
+    if (!target || !compact(path)) return;
+    if (target.owner === 'mount') updateContainerRunMount(target.id, { source: path });
+    else updateContainerRunDevice(target.id, { hostPath: path });
+    setContainerPathPicker(null);
+  };
+
+  const submitContainerRun = () => {
+    const draft = containerRunDraft();
+    const target = selectedContainerRunTarget();
+    if (!target || !containerRunValid()) return;
+    const request: Record<string, unknown> = {
+      engine: target.engine,
+      endpoint_id: target.endpoint_id,
+      image: compact(draft.image),
+      name: compact(draft.name),
+      entrypoint: compact(draft.entrypoint),
+      command: containerRunArgv(draft.arguments),
+      env: containerRunKeyValues(draft.environment),
+      labels: Object.fromEntries(draft.labels.map((entry) => [compact(entry.key), entry.value]).filter(([key]) => Boolean(key))),
+      restart_policy: draft.restartPolicy,
+      network_mode: compact(draft.networkMode) || 'bridge',
+      ports: draft.ports.map((port) => ({
+        container_port: Number(port.containerPort),
+        ...(port.hostPort !== '' ? { host_port: Number(port.hostPort) } : {}),
+        host_ip: compact(port.hostIP) || '127.0.0.1',
+        protocol: port.protocol,
+      })),
+      mounts: draft.mounts.map((mount) => ({
+        type: mount.type,
+        ...(mount.type !== 'tmpfs' ? { source: compact(mount.source) } : {}),
+        target: compact(mount.target),
+        ...(mount.readOnly ? { read_only: true } : {}),
+        ...(mount.type === 'tmpfs' ? {
+          tmpfs_options: [
+            ...(compact(mount.tmpfsSizeMiB) ? [`size=${Math.round(Number(mount.tmpfsSizeMiB) * 1024 * 1024)}`] : []),
+            ...(mount.noexec ? ['noexec'] : []),
+            ...(mount.nosuid ? ['nosuid'] : []),
+            ...(mount.nodev ? ['nodev'] : []),
+          ],
+        } : {}),
+      })),
+      ...(draft.cpuCount !== '' ? { cpu_count: Number(draft.cpuCount) } : {}),
+      ...(draft.memory !== '' ? { memory_bytes: containerRunBytes(draft.memory, draft.memoryUnit) } : {}),
+      pid_mode: compact(draft.pidMode),
+      ipc_mode: compact(draft.ipcMode),
+      cap_add: containerRunArgv(draft.capAdd),
+      cap_drop: containerRunArgv(draft.capDrop),
+      devices: draft.devices.map((device) => ({
+        host_path: compact(device.hostPath),
+        ...(compact(device.containerPath) ? { container_path: compact(device.containerPath) } : {}),
+        ...(compact(device.permissions) ? { permissions: compact(device.permissions) } : {}),
+      })),
+      privileged: draft.privileged,
+      read_only_root: draft.readOnlyRoot,
+      security_opts: containerRunArgv(draft.securityOptions),
+      ...(draft.pidsLimit !== '' ? { pids_limit: Number(draft.pidsLimit) } : {}),
+      ...(draft.shmSize !== '' ? { shm_size_bytes: containerRunBytes(draft.shmSize, draft.shmUnit) } : {}),
+      user: compact(draft.user),
+    };
+    setContainerRunOpen(false);
+    beginMutation({ method: 'containers.create', request });
+  };
+
   const submitCreation = () => {
     const mode = creationMode();
     const target = creationTargets().find((runtime) => runtimeKey(runtime) === creationTargetKey()) ?? creationTargets()[0];
     if (!target) return;
     const base = { engine: target.engine, endpoint_id: target.endpoint_id };
     let draft: MutationDraft | null = null;
-    if (mode === 'container') {
-      const memoryMiB = Number(creationMemory());
-      const cpus = Number(creationCPUs());
-      draft = {
-        method: 'containers.create',
-        request: {
-          ...base,
-          name: compact(creationName()),
-          image: compact(creationImage()),
-          ...(compact(creationCommand()) ? { command: [compact(creationCommand())] } : {}),
-          ...(creationRestart() !== 'no' ? { restart_policy: creationRestart() } : {}),
-          ...(Number.isFinite(cpus) && cpus > 0 ? { cpu_count: cpus } : {}),
-          ...(Number.isFinite(memoryMiB) && memoryMiB > 0 ? { memory_bytes: Math.round(memoryMiB * 1024 * 1024) } : {}),
-        },
-      };
-    } else if (mode === 'image') {
+    if (mode === 'image') {
       draft = { method: 'images.pull', request: { ...base, image_ref: compact(creationImage()) } };
     } else if (mode === 'volume') {
       draft = { method: 'volumes.create', request: { ...base, name: compact(creationName()), driver: compact(creationDriver()) || 'local' } };
@@ -1565,10 +2044,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setCreationName('');
     setCreationImage('');
     setCreationDriver('local');
-    setCreationCommand('');
-    setCreationRestart('no');
-    setCreationCPUs('');
-    setCreationMemory('');
     setCreationMode(mode);
     const compatibleTargets = forcedTarget
       ? [forcedTarget]
@@ -1920,6 +2395,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       return (
         <>
           <Show when={state !== 'running'}><Button size="sm" onClick={() => runAction('containers.start')} disabled={!canExecute()}><ActionGlyph method="containers.start" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.start')}</Button></Show>
+          <Show when={containerExecAvailable()}><Button size="sm" onClick={() => openExecTab()}><Terminal class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.open')}</Button></Show>
           <Show when={state === 'running'}><Button size="sm" variant="outline" onClick={() => runAction('containers.stop')} disabled={!canExecute()}><ActionGlyph method="containers.stop" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button></Show>
           <Button size="sm" variant="outline" onClick={() => runAction('containers.restart')} disabled={!canExecute()}><ActionGlyph method="containers.restart" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.restart')}</Button>
           <Show when={state === 'running'}><Button size="sm" variant="ghost" onClick={() => runAction('containers.pause')} disabled={!canExecute()}><ActionGlyph method="containers.pause" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.pause')}</Button></Show>
@@ -1931,7 +2407,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     }
     if (view() === 'images') return (
       <>
-        <Button size="sm" onClick={runSelectedImage} disabled={!canRWX()}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.run')}</Button>
+        <Button size="sm" onClick={runSelectedImage} disabled={!canRWX() || Boolean(pendingContainerCreateOperationID())}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.run')}</Button>
         <Button size="sm" variant="outline" onClick={() => openCreation('image-tag')} disabled={!canRWX()}>{i18n.t('containers.actions.tag')}</Button>
         <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('images.remove')} disabled={!canRWX() || !canAdmin()}><ActionGlyph method="images.remove" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
       </>
@@ -2027,7 +2503,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const detailTabs = createMemo<DetailTab[]>(() => {
     if (view() === 'containers') {
       const tabs: DetailTab[] = ['overview', 'logs', 'inspect', 'mounts'];
-      if (selectedTarget()?.capabilities?.exec) tabs.push('exec');
+      if (containerExecAvailable()) tabs.push('exec');
       tabs.push('stats');
       return tabs;
     }
@@ -2047,6 +2523,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     id: tab,
     label: detailTabLabel(tab),
   })));
+
+  createEffect(() => {
+    if (selected() && !detailTabs().includes(detailTab())) setDetailTab('overview');
+  });
 
   const selectResourceView = (nextView: ContainerResourceView) => {
     const state = consoleState();
@@ -2151,8 +2631,37 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     }
     if (tab === 'layers') return <div class="container-layer-list"><Show when={!imageHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}><Show when={!imageHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.layersUnavailable')}</strong></div>}><Show when={imageHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyLayers')}</div>}><For each={imageHistory()}>{(layer, index) => <div class="container-layer-row"><span>{index() + 1}</span><span class="font-mono">{layer.id?.slice(0, 18) || `${i18n.t('containers.detail.layer')} ${index() + 1}`}</span><span>{formatBytes(layer.size_bytes)}</span><span>{formatDate(layer.created_at_unix_ms)}</span></div>}</For></Show></Show></Show></div>;
     if (tab === 'used-by' || tab === 'containers') return renderReferences();
-    return <div class="container-empty-inline"><Terminal class="h-5 w-5" />{i18n.t('containers.detail.execUnavailable')}</div>;
+    return null;
   };
+
+  const renderExecPanel = () => (
+    <section class="container-exec-panel" data-active={detailTab() === 'exec' ? 'true' : 'false'} aria-hidden={detailTab() === 'exec' ? undefined : 'true'}>
+      <div class="container-exec-toolbar">
+        <div class="container-exec-programs" role="group" aria-label={i18n.t('containers.exec.shell')}>
+          <For each={['/bin/sh', '/bin/bash', '/bin/ash']}>{(program) => (
+            <Button size="sm" variant={execPreset() === program ? 'default' : 'outline'} onClick={() => chooseExecProgram(program)} disabled={execBusy()}>{program.replace('/bin/', '')}</Button>
+          )}</For>
+          <Button size="sm" variant={execPreset() === 'custom' ? 'default' : 'outline'} onClick={() => setExecPreset('custom')} disabled={execBusy()}>{i18n.t('containers.exec.custom')}</Button>
+        </div>
+        <Show when={execSessionID()}><Button size="sm" variant="ghost" onClick={() => void closeExecSession()} disabled={execBusy()}><CircleStop class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.close')}</Button></Show>
+      </div>
+      <Show when={execPreset() === 'custom'}>
+        <div class="container-exec-custom">
+          <label><span>{i18n.t('containers.exec.executable')}</span><Input value={execExecutable()} onInput={(event) => setExecExecutable(event.currentTarget.value)} placeholder="/usr/bin/env" /></label>
+          <div class="container-exec-arguments">
+            <span>{i18n.t('containers.exec.arguments')}</span>
+            <For each={execArguments()}>{(argument) => <div><Input value={argument.value} onInput={(event) => setExecArguments((current) => current.map((item) => item.id === argument.id ? { ...item, value: event.currentTarget.value } : item))} placeholder="bash" /><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => setExecArguments((current) => current.filter((item) => item.id !== argument.id))}><X class="h-3.5 w-3.5" /></Button></div>}</For>
+            <Button size="sm" variant="ghost" onClick={() => setExecArguments((current) => [...current, { id: containerRunRowID('exec-arg'), value: '' }])}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.addArgument')}</Button>
+          </div>
+          <Button size="sm" onClick={runCustomExecProgram} disabled={execBusy() || !compact(execExecutable())}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.connect')}</Button>
+        </div>
+      </Show>
+      <Show when={execError()}><div class="container-exec-error" role="alert"><AlertTriangle class="h-4 w-4" /><span>{execError()}</span><Button size="sm" variant="outline" onClick={() => void startExecSession([compact(execExecutable()) || '/bin/sh', ...containerRunArgv(execArguments())])}>{i18n.t('containers.actions.retry')}</Button></div></Show>
+      <Show when={execBusy()}><div class="container-exec-waiting"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" />{i18n.t('containers.exec.connecting')}</div></Show>
+      <Show when={execSessionID()} keyed>{(sessionID) => <ContainerExecTerminal sessionID={sessionID} name={`${resourceName('containers', selected()!)} · Exec`} active={() => detailTab() === 'exec'} onSessionGone={() => { setExecSessionID(''); setExecError(i18n.t('containers.exec.sessionEnded')); }} />}</Show>
+      <Show when={!execSessionID() && !execBusy() && !execError()}><div class="container-exec-empty"><Terminal class="h-6 w-6" /><strong>{i18n.t('containers.exec.ready')}</strong><span>{i18n.t('containers.exec.readyHint')}</span></div></Show>
+    </section>
+  );
 
   const renderInventoryToolbar = (pending = false): JSX.Element => (
     <section class="container-resource-toolbar" data-container-summary data-loading={pending ? 'true' : 'false'}>
@@ -2214,7 +2723,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </div>
         <Show when={view() === 'containers' && (pending || readyRuntimes().some((runtime) => runtime.capabilities?.collection_stats))}><Button size="sm" variant="ghost" onClick={() => setChartsOpen(!chartsOpen())} aria-pressed={!pending && chartsOpen()} disabled={pending}><Activity class="mr-1.5 h-3.5 w-3.5" />{chartsOpen() ? i18n.t('containers.detail.hideCharts') : i18n.t('containers.detail.showCharts')}</Button></Show>
         <Show when={view() === 'images' || view() === 'volumes'}><Button size="sm" variant="ghost" onClick={prune} disabled={pending || !canRWX() || !canAdmin()}>{i18n.t('containers.actions.prune')}</Button></Show>
-        <Show when={view() === 'containers'}><Button size="sm" onClick={() => openCreation('container')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.container')}</Button></Show>
+        <Show when={view() === 'containers'}><Button size="sm" onClick={() => openContainerRun()} disabled={pending || !canRWX() || Boolean(pendingContainerCreateOperationID())}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.container')}</Button></Show>
         <Show when={view() === 'images'}><Button size="sm" onClick={() => openCreation('image')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.image')}</Button></Show>
         <Show when={view() === 'volumes'}><Button size="sm" onClick={() => openCreation('volume')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.volume')}</Button></Show>
         <Show when={view() === 'compose-projects'}><Button size="sm" onClick={() => void openComposeEditor()} disabled={pending || !canRWX() || !canAdmin()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.compose.add')}</Button></Show>
@@ -2343,7 +2852,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                           <Show when={showSecondaryColumn()}><td class="container-secondary-cell"><Show when={view() === 'containers'}><Show when={container().image_id || container().image?.reference || container().image?.digest} fallback="—"><button type="button" class="container-resource-link" onClick={(event) => { event.stopPropagation(); openContainerImage(entry); }}>{container().image?.reference || container().image?.digest || container().image_id}</button></Show></Show><Show when={view() === 'images'}>{formatBytes((item() as ImageInventoryItem).size_bytes)}</Show><Show when={view() === 'volumes'}>{(item() as VolumeInventoryItem).driver || '—'}</Show><Show when={view() === 'compose-projects' || view() === 'pods'}>{(item() as ComposeProjectInventoryItem | PodInventoryItem).running_count} / {(item() as ComposeProjectInventoryItem | PodInventoryItem).container_count}</Show></td></Show>
                           <Show when={view() === 'containers'}><Show when={showPortsColumn()}><td class="container-port-cell">{container().ports?.map(formatPort).filter(Boolean).slice(0, 2).join(', ') || '—'}</td></Show><Show when={chartsOpen()}><td class="tabular-nums">{sample() ? `${sample()!.cpu_percent.toFixed(1)}%` : '—'}</td><td class="tabular-nums">{formatBytes(sample()?.memory_bytes)}</td></Show></Show>
                           <Show when={view() !== 'containers' && showCreatedColumn()}><td>{formatDate((item() as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms)}</td></Show>
-                          <td><div class="container-row-actions"><Show when={resourceManagement(item())?.managed} fallback={<><Show when={view() === 'containers'}>{(() => { const method = resourceActive(view(), item()) ? 'containers.stop' : 'containers.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show><Show when={view() === 'images'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.actions.run')} disabled={!canRWX()} onClick={(event) => openImageRun(event, entry)}><Play class="h-4 w-4" /></Button></Show><Show when={view() === 'compose-projects'}>{(() => { const method = resourceActive(view(), item()) ? 'compose.projects.stop' : 'compose.projects.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show><Show when={view() === 'pods'}>{(() => { const method = resourceActive(view(), item()) ? 'pods.stop' : 'pods.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show>{renderRowOverflow(entry)}<ChevronRight class="h-4 w-4 text-muted-foreground" /></>}><Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); selectResource(entry); queueMicrotask(openManagedService); }}><ExternalLink class="h-4 w-4" /></Button></Show></div></td>
+                          <td><div class="container-row-actions"><Show when={resourceManagement(item())?.managed} fallback={<><Show when={view() === 'containers' && compact(container().state).toLowerCase() === 'running' && entry.target.capabilities?.exec}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.exec.open')} disabled={!canExecute()} onClick={(event) => { event.stopPropagation(); openExecTab(entry); }}><Terminal class="h-4 w-4" /></Button></Show><Show when={view() === 'containers'}>{(() => { const method = resourceActive(view(), item()) ? 'containers.stop' : 'containers.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show><Show when={view() === 'images'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.actions.run')} disabled={!canRWX() || Boolean(pendingContainerCreateOperationID())} onClick={(event) => openImageRun(event, entry)}><Play class="h-4 w-4" /></Button></Show><Show when={view() === 'compose-projects'}>{(() => { const method = resourceActive(view(), item()) ? 'compose.projects.stop' : 'compose.projects.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show><Show when={view() === 'pods'}>{(() => { const method = resourceActive(view(), item()) ? 'pods.stop' : 'pods.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show>{renderRowOverflow(entry)}<ChevronRight class="h-4 w-4 text-muted-foreground" /></>}><Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); selectResource(entry); queueMicrotask(openManagedService); }}><ExternalLink class="h-4 w-4" /></Button></Show></div></td>
                         </tr>;
                       }}</For></tbody>
                     </table>
@@ -2352,7 +2861,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
               </Show>
             </div>
           </div>
-        }>{(item) => <article class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2>{resourceName(view(), item)}</h2><small>{resourceIdentity(view(), item).slice(0, 24)}</small></div><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><Tabs class="container-detail-tabs" items={detailTabItems()} activeId={detailTab()} onChange={(id) => setDetailTab(id as DetailTab)} size="md" ariaLabel={viewLabel(view())} features={{ indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false }, containerBorder: false, scrollButtons: 'auto' }} slotClassNames={{ scrollContainer: 'container-detail-tabs__scroller', tab: 'container-detail-tabs__tab' }} /><div class="container-detail-body">{renderDetailContent()}</div></article>}</Show>
+        }>{(item) => <article class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2>{resourceName(view(), item)}</h2><small>{resourceIdentity(view(), item).slice(0, 24)}</small></div><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><Tabs class="container-detail-tabs" items={detailTabItems()} activeId={detailTab()} onChange={(id) => selectDetailTab(id as DetailTab)} size="md" ariaLabel={viewLabel(view())} features={{ indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false }, containerBorder: false, scrollButtons: 'auto' }} slotClassNames={{ scrollContainer: 'container-detail-tabs__scroller', tab: 'container-detail-tabs__tab' }} /><div class="container-detail-body"><Show when={detailTab() !== 'exec'}>{renderDetailContent()}</Show><Show when={view() === 'containers' && containerExecAvailable()}>{renderExecPanel()}</Show></div></article>}</Show>
         </Show>
       </main>
 
@@ -2436,10 +2945,114 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </label>
       </Dialog>
 
-      <Dialog open={creationMode() !== null} onOpenChange={(open) => !open && setCreationMode(null)} title={creationMode() === 'image-tag' ? i18n.t('containers.create.tagTitle') : i18n.t('containers.create.title')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setCreationMode(null)}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={submitCreation} disabled={mutationBusy() || creationTargets().length === 0 || (creationMode() === 'container' && !compact(creationImage())) || (creationMode() !== 'container' && !compact(creationName() || creationImage()))}>{i18n.t('containers.actions.review')}</Button></div>}>
+      <Dialog
+        open={containerRunOpen()}
+        onOpenChange={(open) => { if (!open && !mutationBusy()) closeContainerRun(); }}
+        class="container-run-dialog"
+        title={i18n.t('containers.run.title')}
+        description={i18n.t('containers.run.description')}
+        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={closeContainerRun} disabled={mutationBusy()}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={submitContainerRun} disabled={mutationBusy() || !containerRunValid()}>{i18n.t('containers.actions.review')}</Button></div>}
+      >
+        <div class="container-run-form">
+          <Show when={containerRunTargets().length > 1}><label class="container-run-field"><span>{i18n.t('containers.fields.runtime')}</span><Select value={containerRunDraft().targetKey} onChange={(value) => updateContainerRunDraft({ targetKey: value })} options={containerRunTargets().map((runtime) => ({ value: runtimeKey(runtime), label: runtimeName(runtime.engine) }))} /></label></Show>
+
+          <section class="container-run-section">
+            <header><div><strong>{i18n.t('containers.run.basics')}</strong><span>{i18n.t('containers.run.basicsHint')}</span></div></header>
+            <div class="container-run-grid">
+              <label class="container-run-field container-run-field--wide"><span>{i18n.t('containers.fields.image')} *</span><Input value={containerRunDraft().image} onInput={(event) => updateContainerRunDraft({ image: event.currentTarget.value })} placeholder="docker.io/library/nginx:latest" aria-invalid={containerRunErrors().image ? 'true' : undefined} /><small>{containerRunErrors().image}</small></label>
+              <label class="container-run-field"><span>{i18n.t('containers.fields.name')}</span><Input value={containerRunDraft().name} onInput={(event) => updateContainerRunDraft({ name: event.currentTarget.value })} placeholder="e.g. my-app" aria-invalid={containerRunErrors().name ? 'true' : undefined} /><small>{containerRunErrors().name || i18n.t('containers.run.optional')}</small></label>
+              <label class="container-run-field"><span>{i18n.t('containers.run.entrypoint')}</span><Input value={containerRunDraft().entrypoint} onInput={(event) => updateContainerRunDraft({ entrypoint: event.currentTarget.value })} placeholder="/docker-entrypoint.sh" aria-invalid={containerRunErrors().entrypoint ? 'true' : undefined} /><small>{containerRunErrors().entrypoint || i18n.t('containers.run.entrypointHint')}</small></label>
+            </div>
+            <div class="container-run-list-field">
+              <div class="container-run-list-heading"><div><strong>{i18n.t('containers.run.arguments')}</strong><span>{i18n.t('containers.run.argumentsHint')}</span></div><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ arguments: [...containerRunDraft().arguments, { id: containerRunRowID('arg'), value: '' }] })}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.run.addArgument')}</Button></div>
+              <For each={containerRunDraft().arguments}>{(argument, index) => <div class="container-run-inline-row"><span class="container-run-order">{index() + 1}</span><Input value={argument.value} onInput={(event) => updateContainerRunArgument(argument.id, event.currentTarget.value)} placeholder="--config" aria-invalid={containerRunErrors()[`argument:${argument.id}`] ? 'true' : undefined} /><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ arguments: containerRunDraft().arguments.filter((item) => item.id !== argument.id) })}><X class="h-3.5 w-3.5" /></Button><small>{containerRunErrors()[`argument:${argument.id}`]}</small></div>}</For>
+            </div>
+          </section>
+
+          <section class="container-run-section">
+            <header><div><strong>{i18n.t('containers.run.ports')}</strong><span>{i18n.t('containers.run.portsHint')}</span></div><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ ports: [...containerRunDraft().ports, emptyContainerRunPort()] })}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.run.addPort')}</Button></header>
+            <Show when={containerRunPortSuggestions().length > 0}>
+              <div class="container-run-port-suggestions" aria-label={i18n.t('containers.run.ports')}>
+                <For each={containerRunPortSuggestions()}>{(port) => <Button size="sm" variant="ghost" onClick={() => {
+                  updateContainerRunDraft({ ports: [...containerRunDraft().ports, { ...port, id: containerRunRowID('port') }] });
+                  setContainerRunPortSuggestions((current) => current.filter((candidate) => candidate.containerPort !== port.containerPort || candidate.protocol !== port.protocol));
+                }}><Plus class="h-3.5 w-3.5" />{port.containerPort}/{port.protocol}</Button>}</For>
+              </div>
+            </Show>
+            <Show when={containerRunDraft().ports.length > 0} fallback={<div class="container-run-empty">{i18n.t('containers.run.noPorts')}</div>}>
+              <For each={containerRunDraft().ports}>{(port) => <div class="container-run-port-row">
+                <label><span>{i18n.t('containers.run.containerPort')}</span><Input inputmode="numeric" value={port.containerPort} onInput={(event) => updateContainerRunPort(port.id, { containerPort: event.currentTarget.value })} placeholder="8080" /></label>
+                <label><span>{i18n.t('containers.run.hostPort')}</span><Input inputmode="numeric" value={port.hostPort} onInput={(event) => updateContainerRunPort(port.id, { hostPort: event.currentTarget.value })} placeholder={i18n.t('containers.run.autoPort')} /></label>
+                <label><span>{i18n.t('containers.run.listenAddress')}</span><Input value={port.hostIP} onInput={(event) => updateContainerRunPort(port.id, { hostIP: event.currentTarget.value })} placeholder="127.0.0.1" /></label>
+                <label><span>{i18n.t('containers.run.protocol')}</span><select value={port.protocol} onChange={(event) => updateContainerRunPort(port.id, { protocol: event.currentTarget.value as ContainerRunPort['protocol'] })}><option value="tcp">TCP</option><option value="udp">UDP</option><option value="sctp">SCTP</option></select></label>
+                <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ ports: containerRunDraft().ports.filter((item) => item.id !== port.id) })}><X class="h-3.5 w-3.5" /></Button>
+                <small>{containerRunErrors()[`port:${port.id}`]}</small>
+              </div>}</For>
+            </Show>
+          </section>
+
+          <section class="container-run-section">
+            <header><div><strong>{i18n.t('containers.run.storage')}</strong><span>{i18n.t('containers.run.storageHint')}</span></div><div class="container-run-add-group"><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ mounts: [...containerRunDraft().mounts, emptyContainerRunMount('bind')] })}>{i18n.t('containers.run.addBind')}</Button><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ mounts: [...containerRunDraft().mounts, emptyContainerRunMount('volume')] })}>{i18n.t('containers.run.addVolume')}</Button><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ mounts: [...containerRunDraft().mounts, emptyContainerRunMount('tmpfs')] })}>{i18n.t('containers.run.addTmpfs')}</Button></div></header>
+            <datalist id="container-run-volume-names"><For each={containerVolumeNames()}>{(name) => <option value={name} />}</For></datalist>
+            <Show when={containerRunDraft().mounts.length > 0} fallback={<div class="container-run-empty">{i18n.t('containers.run.noStorage')}</div>}>
+              <For each={containerRunDraft().mounts}>{(mount) => <div class="container-run-mount-row" data-type={mount.type}>
+                <div class="container-run-row-title"><Tag tone="soft" size="sm">{i18n.t(`containers.run.mountTypes.${mount.type}` as Parameters<typeof i18n.t>[0])}</Tag><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ mounts: containerRunDraft().mounts.filter((item) => item.id !== mount.id) })}><X class="h-3.5 w-3.5" /></Button></div>
+                <Show when={mount.type !== 'tmpfs'}><label class="container-run-field"><span>{mount.type === 'volume' ? i18n.t('containers.run.volumeName') : i18n.t('containers.run.hostPath')}</span><div class="container-run-path-input"><Input value={mount.source} list={mount.type === 'volume' ? 'container-run-volume-names' : undefined} onInput={(event) => updateContainerRunMount(mount.id, { source: event.currentTarget.value })} placeholder={mount.type === 'volume' ? 'app-data' : '/Users/me/data'} /><Show when={mount.type === 'bind'}><Button size="sm" variant="outline" onClick={() => openContainerPathPicker({ kind: 'file', owner: 'mount', id: mount.id })}>{i18n.t('containers.run.chooseFile')}</Button><Button size="sm" variant="outline" onClick={() => openContainerPathPicker({ kind: 'directory', owner: 'mount', id: mount.id })}>{i18n.t('containers.run.chooseFolder')}</Button></Show></div><Show when={mount.type === 'volume' && containerVolumeNamesLoading()}><small>{i18n.t('containers.loading')}</small></Show></label></Show>
+                <label class="container-run-field"><span>{i18n.t('containers.run.containerPath')}</span><Input value={mount.target} onInput={(event) => updateContainerRunMount(mount.id, { target: event.currentTarget.value })} placeholder="/data" /></label>
+                <Show when={mount.type === 'tmpfs'}><label class="container-run-field"><span>{i18n.t('containers.run.tmpfsSize')}</span><Input inputmode="decimal" value={mount.tmpfsSizeMiB} onInput={(event) => updateContainerRunMount(mount.id, { tmpfsSizeMiB: event.currentTarget.value })} placeholder="64" /></label><div class="container-run-checks"><label><input type="checkbox" checked={mount.noexec} onChange={(event) => updateContainerRunMount(mount.id, { noexec: event.currentTarget.checked })} />noexec</label><label><input type="checkbox" checked={mount.nosuid} onChange={(event) => updateContainerRunMount(mount.id, { nosuid: event.currentTarget.checked })} />nosuid</label><label><input type="checkbox" checked={mount.nodev} onChange={(event) => updateContainerRunMount(mount.id, { nodev: event.currentTarget.checked })} />nodev</label></div></Show>
+                <Show when={mount.type !== 'tmpfs'}><label class="container-run-check"><input type="checkbox" checked={mount.readOnly} onChange={(event) => updateContainerRunMount(mount.id, { readOnly: event.currentTarget.checked })} />{i18n.t('containers.detail.readOnly')}</label></Show>
+                <small>{containerRunErrors()[`mount:${mount.id}`]}</small>
+              </div>}</For>
+            </Show>
+          </section>
+
+          <section class="container-run-section">
+            <header><div><strong>{i18n.t('containers.run.environment')}</strong><span>{i18n.t('containers.run.environmentHint')}</span></div><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ environment: [...containerRunDraft().environment, { id: containerRunRowID('env'), key: '', value: '', revealed: false }] })}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.run.addVariable')}</Button></header>
+            <For each={containerRunDraft().environment}>{(entry) => <div class="container-run-key-value"><Input value={entry.key} onInput={(event) => updateContainerRunEnvironment(entry.id, { key: event.currentTarget.value })} placeholder="APP_ENV" /><div class="container-run-secret"><Input type={entry.revealed ? 'text' : 'password'} value={entry.value} onInput={(event) => updateContainerRunEnvironment(entry.id, { value: event.currentTarget.value })} placeholder="production" autocomplete="new-password" /><Button size="sm" variant="ghost" class="container-icon-action" aria-label={entry.revealed ? i18n.t('containers.run.hideValue') : i18n.t('containers.run.showValue')} onClick={() => updateContainerRunEnvironment(entry.id, { revealed: !entry.revealed })}>{entry.revealed ? <EyeOff class="h-3.5 w-3.5" /> : <Eye class="h-3.5 w-3.5" />}</Button></div><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ environment: containerRunDraft().environment.filter((item) => item.id !== entry.id) })}><X class="h-3.5 w-3.5" /></Button><small>{containerRunErrors()[`environment:${entry.id}`]}</small></div>}</For>
+          </section>
+
+          <section class="container-run-section">
+            <header><div><strong>{i18n.t('containers.run.resourcesAndRuntime')}</strong><span>{i18n.t('containers.run.resourcesHint')}</span></div></header>
+            <div class="container-run-grid">
+              <label class="container-run-field"><span>{i18n.t('containers.fields.cpus')}</span><Input inputmode="decimal" value={containerRunDraft().cpuCount} onInput={(event) => updateContainerRunDraft({ cpuCount: event.currentTarget.value })} placeholder={i18n.t('containers.run.unlimited')} aria-invalid={containerRunErrors().cpuCount ? 'true' : undefined} /><small>{containerRunErrors().cpuCount}</small></label>
+              <label class="container-run-field"><span>{i18n.t('containers.run.memory')}</span><div class="container-run-unit"><Input inputmode="decimal" value={containerRunDraft().memory} onInput={(event) => updateContainerRunDraft({ memory: event.currentTarget.value })} placeholder={i18n.t('containers.run.unlimited')} /><select value={containerRunDraft().memoryUnit} onChange={(event) => updateContainerRunDraft({ memoryUnit: event.currentTarget.value as 'MiB' | 'GiB' })}><option>MiB</option><option>GiB</option></select></div><small>{containerRunErrors().memory}</small></label>
+              <label class="container-run-field"><span>{i18n.t('containers.run.network')}</span><Input value={containerRunDraft().networkMode} onInput={(event) => updateContainerRunDraft({ networkMode: event.currentTarget.value })} placeholder="bridge" /></label>
+              <label class="container-run-field"><span>{i18n.t('containers.fields.restartPolicy')}</span><select value={containerRunDraft().restartPolicy} onChange={(event) => updateContainerRunDraft({ restartPolicy: event.currentTarget.value })}><option value="no">no</option><option value="always">always</option><option value="unless-stopped">unless-stopped</option><option value="on-failure">on-failure</option></select></label>
+            </div>
+          </section>
+
+          <Button size="sm" variant="ghost" class="container-run-advanced-toggle" aria-expanded={containerRunAdvanced()} onClick={() => setContainerRunAdvanced((open) => !open)}><ChevronRight class={`h-4 w-4 ${containerRunAdvanced() ? 'rotate-90' : ''}`} />{i18n.t('containers.run.advanced')}</Button>
+          <Show when={containerRunAdvanced()}>
+            <section class="container-run-section container-run-section--advanced">
+              <div class="container-run-grid">
+                <label class="container-run-field"><span>{i18n.t('containers.run.user')}</span><Input value={containerRunDraft().user} onInput={(event) => updateContainerRunDraft({ user: event.currentTarget.value })} placeholder="1000:1000" /></label>
+                <label class="container-run-field"><span>{i18n.t('containers.run.pidMode')}</span><Input value={containerRunDraft().pidMode} onInput={(event) => updateContainerRunDraft({ pidMode: event.currentTarget.value })} placeholder="host" /></label>
+                <label class="container-run-field"><span>{i18n.t('containers.run.ipcMode')}</span><Input value={containerRunDraft().ipcMode} onInput={(event) => updateContainerRunDraft({ ipcMode: event.currentTarget.value })} placeholder="private" /></label>
+                <label class="container-run-field"><span>{i18n.t('containers.run.pidsLimit')}</span><Input inputmode="numeric" value={containerRunDraft().pidsLimit} onInput={(event) => updateContainerRunDraft({ pidsLimit: event.currentTarget.value })} placeholder={i18n.t('containers.run.unlimited')} /><small>{containerRunErrors().pidsLimit}</small></label>
+                <label class="container-run-field"><span>{i18n.t('containers.run.sharedMemory')}</span><div class="container-run-unit"><Input inputmode="decimal" value={containerRunDraft().shmSize} onInput={(event) => updateContainerRunDraft({ shmSize: event.currentTarget.value })} placeholder="64" /><select value={containerRunDraft().shmUnit} onChange={(event) => updateContainerRunDraft({ shmUnit: event.currentTarget.value as 'MiB' | 'GiB' })}><option>MiB</option><option>GiB</option></select></div><small>{containerRunErrors().shmSize}</small></label>
+              </div>
+              <div class="container-run-checks container-run-checks--prominent"><label><input type="checkbox" checked={containerRunDraft().readOnlyRoot} onChange={(event) => updateContainerRunDraft({ readOnlyRoot: event.currentTarget.checked })} />{i18n.t('containers.inspector.readOnlyRoot')}</label><label class="container-run-danger-check"><input type="checkbox" checked={containerRunDraft().privileged} onChange={(event) => updateContainerRunDraft({ privileged: event.currentTarget.checked })} />{i18n.t('containers.inspector.privileged')}</label></div>
+
+              <div class="container-run-list-field"><div class="container-run-list-heading"><strong>{i18n.t('containers.run.labels')}</strong><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ labels: [...containerRunDraft().labels, { id: containerRunRowID('label'), key: '', value: '' }] })}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.run.addLabel')}</Button></div><For each={containerRunDraft().labels}>{(entry) => <div class="container-run-key-value"><Input value={entry.key} onInput={(event) => updateContainerRunLabel(entry.id, { key: event.currentTarget.value })} placeholder="com.example.role" /><Input value={entry.value} onInput={(event) => updateContainerRunLabel(entry.id, { value: event.currentTarget.value })} placeholder="worker" /><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ labels: containerRunDraft().labels.filter((item) => item.id !== entry.id) })}><X class="h-3.5 w-3.5" /></Button><small>{containerRunErrors()[`label:${entry.id}`]}</small></div>}</For></div>
+
+              <div class="container-run-advanced-lists">
+                <div class="container-run-list-field"><div class="container-run-list-heading"><strong>{i18n.t('containers.run.capAdd')}</strong><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ capAdd: [...containerRunDraft().capAdd, { id: containerRunRowID('cap-add'), value: '' }] })}><Plus class="h-3.5 w-3.5" /></Button></div><For each={containerRunDraft().capAdd}>{(entry) => <div class="container-run-inline-row"><Input value={entry.value} onInput={(event) => updateContainerRunDraft({ capAdd: containerRunDraft().capAdd.map((item) => item.id === entry.id ? { ...item, value: event.currentTarget.value } : item) })} placeholder="NET_ADMIN" /><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ capAdd: containerRunDraft().capAdd.filter((item) => item.id !== entry.id) })}><X class="h-3.5 w-3.5" /></Button></div>}</For></div>
+                <div class="container-run-list-field"><div class="container-run-list-heading"><strong>{i18n.t('containers.run.capDrop')}</strong><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ capDrop: [...containerRunDraft().capDrop, { id: containerRunRowID('cap-drop'), value: '' }] })}><Plus class="h-3.5 w-3.5" /></Button></div><For each={containerRunDraft().capDrop}>{(entry) => <div class="container-run-inline-row"><Input value={entry.value} onInput={(event) => updateContainerRunDraft({ capDrop: containerRunDraft().capDrop.map((item) => item.id === entry.id ? { ...item, value: event.currentTarget.value } : item) })} placeholder="ALL" /><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ capDrop: containerRunDraft().capDrop.filter((item) => item.id !== entry.id) })}><X class="h-3.5 w-3.5" /></Button></div>}</For></div>
+                <div class="container-run-list-field"><div class="container-run-list-heading"><strong>{i18n.t('containers.run.securityOptions')}</strong><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ securityOptions: [...containerRunDraft().securityOptions, { id: containerRunRowID('security'), value: '' }] })}><Plus class="h-3.5 w-3.5" /></Button></div><For each={containerRunDraft().securityOptions}>{(entry) => <div class="container-run-inline-row"><Input value={entry.value} onInput={(event) => updateContainerRunDraft({ securityOptions: containerRunDraft().securityOptions.map((item) => item.id === entry.id ? { ...item, value: event.currentTarget.value } : item) })} placeholder="no-new-privileges" /><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ securityOptions: containerRunDraft().securityOptions.filter((item) => item.id !== entry.id) })}><X class="h-3.5 w-3.5" /></Button></div>}</For></div>
+              </div>
+
+              <div class="container-run-list-field"><div class="container-run-list-heading"><div><strong>{i18n.t('containers.run.devices')}</strong><span>{i18n.t('containers.run.devicesHint')}</span></div><Button size="sm" variant="ghost" onClick={() => updateContainerRunDraft({ devices: [...containerRunDraft().devices, { id: containerRunRowID('device'), hostPath: '', containerPath: '', permissions: 'rwm' }] })}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.run.addDevice')}</Button></div><For each={containerRunDraft().devices}>{(device) => <div class="container-run-device-row"><label><span>{i18n.t('containers.run.hostPath')}</span><div class="container-run-path-input"><Input value={device.hostPath} onInput={(event) => updateContainerRunDevice(device.id, { hostPath: event.currentTarget.value })} placeholder="/dev/ttyUSB0" /><Button size="sm" variant="outline" onClick={() => openContainerPathPicker({ kind: 'file', owner: 'device', id: device.id })}>{i18n.t('containers.run.chooseFile')}</Button></div></label><label><span>{i18n.t('containers.run.containerPath')}</span><Input value={device.containerPath} onInput={(event) => updateContainerRunDevice(device.id, { containerPath: event.currentTarget.value })} placeholder="/dev/ttyUSB0" /></label><label><span>{i18n.t('containers.run.permissions')}</span><Input value={device.permissions} onInput={(event) => updateContainerRunDevice(device.id, { permissions: event.currentTarget.value })} placeholder="rwm" /></label><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.run.removeRow')} onClick={() => updateContainerRunDraft({ devices: containerRunDraft().devices.filter((item) => item.id !== device.id) })}><X class="h-3.5 w-3.5" /></Button><small>{containerRunErrors()[`device:${device.id}`]}</small></div>}</For></div>
+            </section>
+          </Show>
+        </div>
+      </Dialog>
+
+      <FileOpenPicker open={containerPathPicker()?.kind === 'file'} onOpenChange={(open) => { if (!open) setContainerPathPicker(null); }} files={containerPathDataSource.files()} homePath="/" selectionMode="single" initialSelectedPaths={[]} title={i18n.t('containers.run.chooseHostFile')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} emptyText={i18n.t('containers.run.noFiles')} onExpand={containerPathDataSource.expandPath} ensurePath={containerPathDataSource.ensurePath} onSelect={(paths) => acceptContainerPath(paths[0] ?? '')} />
+      <DirectoryPicker open={containerPathPicker()?.kind === 'directory'} onOpenChange={(open) => { if (!open) setContainerPathPicker(null); }} files={containerPathDataSource.files()} homePath="/" initialPath="/" title={i18n.t('containers.run.chooseHostFolder')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} onExpand={containerPathDataSource.expandPath} ensurePath={containerPathDataSource.ensurePath} onSelect={acceptContainerPath} />
+
+      <Dialog open={creationMode() !== null} onOpenChange={(open) => !open && setCreationMode(null)} title={creationMode() === 'image-tag' ? i18n.t('containers.create.tagTitle') : i18n.t('containers.create.title')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setCreationMode(null)}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={submitCreation} disabled={mutationBusy() || creationTargets().length === 0 || !compact(creationName() || creationImage())}>{i18n.t('containers.actions.review')}</Button></div>}>
         <div class="space-y-4">
           <Show when={creationTargets().length > 1}><label class="block text-sm font-medium">{i18n.t('containers.fields.runtime')}<Select class="mt-1.5 w-full" value={creationTargetKey()} onChange={setCreationTargetKey} options={creationTargets().map((runtime) => ({ value: runtimeKey(runtime), label: runtimeName(runtime.engine) }))} /></label></Show>
-          <Show when={creationMode() === 'container'}><label class="block text-sm font-medium">{i18n.t('containers.fields.name')}<Input class="mt-1.5" value={creationName()} onInput={(event) => setCreationName(event.currentTarget.value)} /></label><label class="block text-sm font-medium">{i18n.t('containers.fields.image')}<Input class="mt-1.5" value={creationImage()} onInput={(event) => setCreationImage(event.currentTarget.value)} placeholder="ghcr.io/example/app:latest" /></label><details class="rounded-lg border p-3"><summary class="cursor-pointer text-sm font-medium">{i18n.t('containers.create.advanced')}</summary><div class="mt-3 grid gap-3 sm:grid-cols-2"><label class="text-xs">{i18n.t('containers.fields.command')}<Input class="mt-1" value={creationCommand()} onInput={(event) => setCreationCommand(event.currentTarget.value)} /></label><label class="text-xs">{i18n.t('containers.fields.restartPolicy')}<select class="container-touch-target mt-1 w-full rounded-md border bg-background px-2" value={creationRestart()} onChange={(event) => setCreationRestart(event.currentTarget.value)}><option value="no">no</option><option value="always">always</option><option value="unless-stopped">unless-stopped</option><option value="on-failure">on-failure</option></select></label><label class="text-xs">{i18n.t('containers.fields.cpus')}<Input class="mt-1" inputmode="decimal" value={creationCPUs()} onInput={(event) => setCreationCPUs(event.currentTarget.value)} /></label><label class="text-xs">{i18n.t('containers.fields.memory')}<Input class="mt-1" inputmode="numeric" value={creationMemory()} onInput={(event) => setCreationMemory(event.currentTarget.value)} /></label></div></details></Show>
           <Show when={creationMode() === 'image'}><label class="block text-sm font-medium">{i18n.t('containers.fields.image')}<Input class="mt-1.5" value={creationImage()} onInput={(event) => setCreationImage(event.currentTarget.value)} placeholder="docker.io/library/nginx:latest" /></label></Show>
           <Show when={creationMode() === 'volume'}><label class="block text-sm font-medium">{i18n.t('containers.fields.name')}<Input class="mt-1.5" value={creationName()} onInput={(event) => setCreationName(event.currentTarget.value)} /></label><label class="block text-sm font-medium">{i18n.t('containers.fields.driver')}<Input class="mt-1.5" value={creationDriver()} onInput={(event) => setCreationDriver(event.currentTarget.value)} /></label></Show>
           <Show when={creationMode() === 'pod'}><label class="block text-sm font-medium">{i18n.t('containers.fields.name')}<Input class="mt-1.5" value={creationName()} onInput={(event) => setCreationName(event.currentTarget.value)} /></label></Show>
@@ -2452,7 +3065,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Input class="mt-4" value={confirmation()} onInput={(event) => setConfirmation(event.currentTarget.value)} autocomplete="off" />
       </Dialog>
 
-      <Dialog open={review() !== null} onOpenChange={(open) => !open && setReview(null)} title={i18n.t('containers.review.title')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setReview(null)}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin())}>{i18n.t('containers.actions.run')}</Button></div>}>
+      <Dialog open={review() !== null} onOpenChange={(open) => { if (!open) cancelReview(); }} title={i18n.t('containers.review.title')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelReview}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin())}>{i18n.t('containers.actions.run')}</Button></div>}>
         <Show when={review()} keyed>{(current) => <div class="space-y-3"><div class="flex items-center justify-between rounded-lg border p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div><div class="mt-1 font-mono text-sm">{current.preflight.method}</div></div><Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{current.preflight.plan.risk_level}</Tag></div><For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-sm text-muted-foreground">{summary}</p>}</For><For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3"><div class="text-sm font-medium text-[var(--redeven-status-warning-foreground)]">{flag.title}</div><p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.detail}</p></div>}</For><Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-sm text-destructive">{i18n.t('containers.permissions.admin')}</p></Show><div class="grid gap-1 rounded-lg bg-muted/40 p-3 font-mono text-[10px] text-muted-foreground"><span>{current.preflight.request_hash}</span><span>{current.preflight.plan_hash}</span></div></div>}</Show>
       </Dialog>
     </div>

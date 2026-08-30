@@ -66,7 +66,13 @@ volumes from bind, tmpfs, and redacted paths. Only a named volume opens the
 same-runtime volume detail.
 
 Container detail provides Overview, live logs, redacted Inspect, mounts,
-capability-gated Exec, and bounded statistics. Image detail provides Overview,
+capability-gated Exec, and bounded statistics. A running, unmanaged container
+shows one Terminal action when the user has Read and Execute. It opens the Exec
+tab with `/bin/sh`; `/bin/bash`, `/bin/ash`, and exact custom argv remain
+explicit choices, and a missing executable reports its real terminal error
+without a silent fallback. The terminal stays mounted while detail tabs change
+and closes when container detail closes. Managed, stopped, paused, and
+unsupported targets never expose Exec. Image detail provides Overview,
 sanitized layers, references, Run, Tag, and Delete without security-analysis
 placeholders. Volume detail provides Overview, references, and
 capability-gated files. Compose Projects and Pods provide overview, members,
@@ -103,6 +109,25 @@ permissions. Server-side canonicalization, size limits, and
 data source and lazy picker compatibility wrapper do not remain as alternate
 paths.
 
+## Container run input
+
+Container creation has one `ContainerRunDraft` and one serializer. The common
+section owns image, optional name, entrypoint, ordered argv, published ports,
+Bind/Volume/Tmpfs mounts, hidden environment values, CPU, memory, network, and
+restart policy. A port is not published until added; its initial listen address
+is `127.0.0.1`, protocol is TCP, and an empty host port asks the engine to
+allocate one. Host paths may be typed or selected with the published Floe file
+and directory pickers. Existing same-runtime volumes are offered without
+preventing a new valid volume name.
+
+Advanced input owns user, PID and IPC mode, PID limit, shared memory, read-only
+root, privileged mode, labels, capability changes, security options, and device
+mapping. Errors stay beside their owning row. Empty resource limits are
+unlimited. Environment values and host paths are never persisted as UI state.
+The draft survives preflight and confirmation, is cleared only after a
+successful operation or explicit close, and reaches the existing
+preflight/hash/operation path rather than a second creation protocol.
+
 ## Responsive and accessible behavior
 
 Desktop uses a compact sortable table, narrow Workbench hides secondary
@@ -122,8 +147,9 @@ state rather than stale inventory.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Owns the aggregated console, structured Compose form, action presentation, and exact-target navigation.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies file selection, ordered Compose requests, image and volume navigation, actions, and failure behavior.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Owns the aggregated console, structured Compose and container-run forms, Exec placement, action presentation, and exact-target navigation.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies exact run serialization, localhost port defaults, Exec lifecycle, file selection, ordered Compose requests, navigation, actions, and failure behavior.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/ContainerExecTerminal.tsx` - Adapts a product-owned Exec session to the existing terminal renderer and transport.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Verifies Activity, Workbench, and narrow responsive interaction in Chromium.
 - `redeven:internal/flower_ui/src/filePicker/createFilesystemPickerDataSource.ts` - Adapts the read-only product filesystem RPC to the shared picker.
 - `redeven:internal/containerengine/cli_client.go` - Preserves image runtime identity across list and detail reads.

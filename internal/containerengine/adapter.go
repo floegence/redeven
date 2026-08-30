@@ -30,6 +30,7 @@ var (
 	ErrImageReferenced          = errors.New("container image is referenced")
 	ErrVolumeInUse              = errors.New("container volume is in use")
 	ErrContainerRunning         = errors.New("container is running")
+	ErrContainerNotRunning      = errors.New("container is not running")
 	ErrResourcePlanStale        = errors.New("container resource plan is stale")
 	ErrReferenceStateIncomplete = errors.New("container resource reference state is incomplete")
 	ErrResourcePrunePartial     = errors.New("container resource prune partially completed")
@@ -112,6 +113,13 @@ type ContainerRunningError struct {
 	ContainerID   string
 	ContainerName string
 }
+
+type ContainerNotRunningError struct {
+	ContainerID string
+}
+
+func (e *ContainerNotRunningError) Error() string        { return ErrContainerNotRunning.Error() }
+func (e *ContainerNotRunningError) Is(target error) bool { return target == ErrContainerNotRunning }
 
 func (e *ContainerRunningError) Error() string        { return ErrContainerRunning.Error() }
 func (e *ContainerRunningError) Is(target error) bool { return target == ErrContainerRunning }

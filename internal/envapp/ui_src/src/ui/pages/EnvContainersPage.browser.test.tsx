@@ -68,6 +68,8 @@ vi.mock('../services/containerResourcesApi', () => ({
   readContainerResourceFile: vi.fn().mockResolvedValue(new Blob()),
   cancelContainerOperation: vi.fn(),
   createContainerOperation: vi.fn(),
+  createContainerExecSession: vi.fn().mockResolvedValue({ session_id: 'exec-session-1' }),
+  deleteContainerExecSession: vi.fn().mockResolvedValue(undefined),
   getContainerStats: vi.fn().mockResolvedValue({
     sampled_at_unix_ms: 1_725_000_000_000,
     container_id: 'e2c83fcda485',
@@ -195,7 +197,8 @@ describe('native Containers responsive product surface', () => {
     root.querySelector<HTMLElement>('.container-resource-toolbar')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     root.querySelector<HTMLElement>('.container-resource-toolbar')!.click();
     await settle();
-    expect(document.querySelector('[role="menu"]')?.getAttribute('aria-hidden')).toBe('true');
+    expect(Array.from(document.querySelectorAll<HTMLElement>('[role="menu"]'))
+      .some((menu) => menu.getAttribute('aria-hidden') !== 'true')).toBe(false);
 
     const columnSettings = root.querySelector<HTMLElement>(
       '.container-column-picker [data-floe-dropdown-trigger]',
