@@ -2872,7 +2872,7 @@
     "review": { "title": "审查操作", "operation": "操作" },
     "compose": { "add": "添加项目", "edit": "编辑项目", "forget": "移除项目", "saved": "已保存", "source": "Compose 文件", "editorAddTitle": "添加 Compose 项目", "editorEditTitle": "编辑 Compose 项目", "name": "项目名称", "configPaths": "Compose 文件", "configPathsHint": "每行输入一个绝对路径，后面的文件会覆盖前面的配置。", "envFile": "环境变量文件", "envFileHint": "可选的环境变量文件绝对路径。", "profiles": "Profiles", "profilesHint": "可选，使用逗号分隔。", "save": "保存项目", "forgetTitle": "移除 Compose 项目", "forgetMessage": "移除“{name}”的保存配置？正在运行的容器不会改变。" },
     "permissions": { "read": "查看容器资源需要读取权限。", "admin": "此高风险操作需要管理员权限。", "adminFiles": "查看卷文件需要 Read 和 Admin 权限。" },
-    "notifications": { "inventoryChangedTitle": "资源清单已变化", "inventoryChangedMessage": "所选资源已不可用。", "preflightFailedTitle": "预检失败", "operationFailedTitle": "操作失败", "operationCompleteTitle": "操作完成", "operationCompleteMessage": "已刷新权威资源清单。", "logsFailedTitle": "日志不可用", "detailsFailedTitle": "无法加载详情", "composeLoadFailedTitle": "无法加载项目", "composeSavedTitle": "项目已保存", "composeSavedMessage": "现在可以一键操作该 Compose 项目。", "composeSaveFailedTitle": "项目保存失败", "composeForgottenTitle": "项目已移除", "composeForgottenMessage": "已移除保存的 Compose 配置。" }
+    "notifications": { "inventoryChangedTitle": "资源清单已变化", "inventoryChangedMessage": "目标资源已不可用，或资源清单已变化。", "preflightFailedTitle": "预检失败", "operationFailedTitle": "操作失败", "operationCompleteTitle": "操作完成", "operationCompleteMessage": "已刷新权威资源清单。", "logsFailedTitle": "日志不可用", "detailsFailedTitle": "无法加载详情", "composeLoadFailedTitle": "无法加载项目", "composeSavedTitle": "项目已保存", "composeSavedMessage": "现在可以一键操作该 Compose 项目。", "composeSaveFailedTitle": "项目保存失败", "composeForgottenTitle": "项目已移除", "composeForgottenMessage": "已移除保存的 Compose 配置。" }
   },
   "webServices": {
     "title": "Web服务",
@@ -3024,7 +3024,7 @@
       "templates": {
         "deepSeekHarnessHost": { "name": "DeepSeek Harness", "description": "在当前环境中直接运行 DeepSeek Harness。" },
         "deepSeekHarnessContainer": { "name": "DeepSeek Harness", "description": "在 Docker 中运行经过审核的社区 DeepSeek Harness 镜像。" },
-        "linuxserverWebtopUbuntuKDE": { "name": "LinuxServer Webtop · Ubuntu KDE", "description": "在隔离容器中运行可持久化的 Ubuntu KDE 桌面。" },
+        "linuxserverWebtopUbuntuKDE": { "name": "LinuxServer Webtop · Ubuntu（KDE Plasma）", "description": "在隔离容器中运行基于 Ubuntu 的 KDE Plasma 桌面，外观与标准 Ubuntu Desktop（GNOME）不同。" },
         "linuxserverWebtopDebianXFCE": { "name": "LinuxServer Webtop · Debian XFCE", "description": "在隔离容器中运行可持久化的 Debian XFCE 桌面。" }
       },
       "notices": {

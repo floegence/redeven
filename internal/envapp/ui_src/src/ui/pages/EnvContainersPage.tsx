@@ -238,6 +238,39 @@ function resourceIdentity(view: ContainerResourceView, item: ContainerResourceIn
   }
 }
 
+function identityAliases(values: readonly unknown[]): ReadonlySet<string> {
+  const aliases = new Set<string>();
+  const add = (value: unknown) => {
+    const identity = compact(value);
+    if (!identity) return;
+    aliases.add(identity);
+    const digestSeparator = identity.lastIndexOf('@');
+    if (digestSeparator >= 0) {
+      const digest = compact(identity.slice(digestSeparator + 1));
+      if (digest) aliases.add(digest);
+    }
+  };
+  values.forEach(add);
+  return aliases;
+}
+
+function imageIdentityAliases(image: ImageInventoryItem): ReadonlySet<string> {
+  return identityAliases([image.id, image.reference, image.digest, ...(image.tags ?? [])]);
+}
+
+function resourceMatchesNavigation(
+  view: ContainerResourceView,
+  item: ContainerResourceInventoryItem,
+  requestedIdentity: string,
+): boolean {
+  const requested = compact(requestedIdentity);
+  if (!requested) return false;
+  if (view !== 'images') return resourceIdentity(view, item) === requested;
+  const requestedAliases = identityAliases([requested]);
+  const imageAliases = imageIdentityAliases(item as ImageInventoryItem);
+  return Array.from(requestedAliases).some((alias) => imageAliases.has(alias));
+}
+
 function resourceName(view: ContainerResourceView, item: ContainerResourceInventoryItem): string {
   switch (view) {
     case 'containers': return compact((item as ContainerInventoryItem).name) || resourceIdentity(view, item).slice(0, 12);
@@ -779,18 +812,21 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         return;
       }
       let nextSelectedResourceKey = target.selectedResourceKey;
+      let navigationSelectionMissing = false;
       if (options.navigation) {
         const navigation = options.navigation;
-        nextSelectedResourceKey = entries.find((entry) => (
+        const selectedEntry = entries.find((entry) => (
           entry.target.engine === navigation.engine
           && (!navigation.endpointID || entry.target.endpoint_id === navigation.endpointID)
-          && resourceIdentity(target.view, entry.item) === navigation.selectedIdentity
-        ))?.key ?? '';
+          && resourceMatchesNavigation(target.view, entry.item, navigation.selectedIdentity)
+        ));
+        nextSelectedResourceKey = selectedEntry?.key ?? '';
+        navigationSelectionMissing = !selectedEntry;
       }
       const selectedStillExists = !nextSelectedResourceKey || entries.some((entry) => entry.key === nextSelectedResourceKey);
       const readyTarget = { ...target, selectedResourceKey: selectedStillExists ? nextSelectedResourceKey : '' };
       setConsoleState({ phase: 'ready', target: readyTarget, runtimes: nextRuntimes, inventory: entries, refreshing: false });
-      if (!selectedStillExists && options.notifyIfSelectionMissing) {
+      if ((navigationSelectionMissing || !selectedStillExists) && options.notifyIfSelectionMissing) {
         notify.info(i18n.t('containers.notifications.inventoryChangedTitle'), i18n.t('containers.notifications.inventoryChangedMessage'));
       }
     } catch (cause) {

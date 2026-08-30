@@ -2782,7 +2782,7 @@ export const enUS = defineDictionary({
       adminFiles: 'Read and Admin permissions are required to browse volume files.',
     },
     notifications: {
-      inventoryChangedTitle: 'Inventory changed', inventoryChangedMessage: 'The selected resource is no longer available.',
+      inventoryChangedTitle: 'Inventory changed', inventoryChangedMessage: 'The target resource is unavailable or the inventory has changed.',
       preflightFailedTitle: 'Preflight failed', operationFailedTitle: 'Operation failed',
       operationCompleteTitle: 'Operation complete', operationCompleteMessage: 'The authoritative inventory has been refreshed.',
       logsFailedTitle: 'Logs unavailable', detailsFailedTitle: 'Details unavailable', composeLoadFailedTitle: 'Project unavailable',
@@ -2955,8 +2955,8 @@ export const enUS = defineDictionary({
           description: 'Run the reviewed community DeepSeek Harness image in Docker.',
         },
         linuxserverWebtopUbuntuKDE: {
-          name: 'LinuxServer Webtop · Ubuntu KDE',
-          description: 'Run a persistent Ubuntu KDE desktop inside an isolated container.',
+          name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)',
+          description: 'Run an Ubuntu-based KDE Plasma desktop inside an isolated container. Its appearance differs from standard Ubuntu Desktop (GNOME).',
         },
         linuxserverWebtopDebianXFCE: {
           name: 'LinuxServer Webtop · Debian XFCE',

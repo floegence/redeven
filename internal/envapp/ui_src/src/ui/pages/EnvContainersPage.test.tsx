@@ -217,6 +217,9 @@ describe('native Containers page', () => {
     });
     harness.setEnvironment({ permissions: harness.permissions });
     harness.goActivity.mockReset();
+    harness.notify.info.mockReset();
+    harness.notify.error.mockReset();
+    harness.notify.success.mockReset();
     harness.storageWrites.length = 0;
     harness.storageValues.clear();
     harness.listRuntimes.mockReset().mockResolvedValue([{
@@ -332,6 +335,99 @@ describe('native Containers page', () => {
     });
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:activity' && (entry.value as { version?: number }).version === 2)).toBe(true);
     expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-1', 'docker', 'docker-primary');
+  });
+
+  it.each([
+    ['image ID', 'sha256:config-image'],
+    ['image reference', 'ghcr.io/example/webtop:stable'],
+    ['image tag', 'ghcr.io/example/webtop:current'],
+    ['manifest digest', 'sha256:manifest-image'],
+    ['digest-pinned reference', 'ghcr.io/example/webtop@sha256:manifest-image'],
+  ])('opens an image detail from a pending navigation by %s', async (_label, identity) => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [{
+      id: 'sha256:config-image',
+      reference: 'ghcr.io/example/webtop:stable',
+      digest: 'sha256:manifest-image',
+      tags: ['ghcr.io/example/webtop:current'],
+      size_bytes: 1024,
+      referenced_containers: 1,
+    }] : [{
+      container_id: 'container-1', name: 'Managed API', state: 'running', management: { managed: false },
+    }]));
+    harness.resourceDetails.mockResolvedValue({ id: 'sha256:config-image' });
+    requestContainerResourceNavigation({
+      engine: 'docker',
+      endpointID: 'docker-primary',
+      view: 'images',
+      identity,
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    dispose = render(() => <EnvContainersPage stateScope="activity" variant="activity" />, host);
+    await settle();
+
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('containers.views.images');
+    expect(harness.resourceDetails).toHaveBeenCalledWith('images', 'sha256:config-image', 'docker', 'docker-primary');
+    expect(host.querySelector('[data-container-detail-page]')).not.toBeNull();
+  });
+
+  it('opens an image detail from live navigation without replacing the canonical image identity', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [{
+      id: 'sha256:config-image',
+      reference: 'ghcr.io/example/webtop:stable',
+      digest: 'sha256:manifest-image',
+      tags: ['ghcr.io/example/webtop:current'],
+      referenced_containers: 1,
+    }] : [{
+      container_id: 'container-1', name: 'Managed API', state: 'running', management: { managed: false },
+    }]));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    dispose = render(() => <EnvContainersPage stateScope="activity" variant="activity" />, host);
+    await settle();
+
+    requestContainerResourceNavigation({
+      engine: 'docker',
+      endpointID: 'docker-primary',
+      view: 'images',
+      identity: 'ghcr.io/example/webtop@sha256:manifest-image',
+    });
+    await settle();
+
+    expect(harness.resourceDetails).toHaveBeenCalledWith('images', 'sha256:config-image', 'docker', 'docker-primary');
+    expect(host.querySelector('[data-container-detail-page]')).not.toBeNull();
+  });
+
+  it('reports an explicit navigation target that is absent without matching a similar digest', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [{
+      id: 'sha256:config-image',
+      reference: 'ghcr.io/example/webtop:stable',
+      digest: 'sha256:manifest-image-other',
+      tags: ['ghcr.io/example/webtop:current'],
+      referenced_containers: 1,
+    }] : [{
+      container_id: 'container-1', name: 'Managed API', state: 'running', management: { managed: false },
+    }]));
+    requestContainerResourceNavigation({
+      engine: 'docker',
+      endpointID: 'docker-primary',
+      view: 'images',
+      identity: 'ghcr.io/example/webtop@sha256:manifest-image',
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    dispose = render(() => <EnvContainersPage stateScope="activity" variant="activity" />, host);
+    await settle();
+
+    expect(harness.resourceDetails).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-container-detail-page]')).toBeNull();
+    expect(harness.notify.info).toHaveBeenCalledTimes(1);
+    expect(harness.notify.info).toHaveBeenCalledWith(
+      'containers.notifications.inventoryChangedTitle',
+      'containers.notifications.inventoryChangedMessage',
+    );
   });
 
   it('makes a large inventory scannable without repeating identifiers or ownership text', async () => {

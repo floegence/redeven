@@ -8,7 +8,7 @@ timestamp: 2026-08-27T00:00:00Z
 # Summary
 
 - Authority: Redeven's built-in template registry owns the two reviewed Webtop identities, platform digests, runtime profile, safety notice, and target revision; [Managed Web Services](managed-web-services.md) owns their generic lifecycle and protected access.
-- Outcome: Ubuntu KDE and Debian XFCE appear as independent installable desktop services that persist configuration and expose one loopback-only Web endpoint.
+- Outcome: Ubuntu KDE Plasma and Debian XFCE are separate desktop services that persist configuration and expose one loopback-only Web endpoint.
 - Invariants: no mutable tag, public listener, host namespace, privileged mode, GPU, device, Docker socket, capability addition, or second lifecycle implementation is permitted.
 - Failure boundary: a missing acknowledgement, digest drift, runtime-policy mismatch, failed health check, or invalid update journal fails closed and preserves or restores the last verified release.
 
@@ -16,7 +16,7 @@ timestamp: 2026-08-27T00:00:00Z
 
 ## Reviewed templates
 
-The Runtime exposes **LinuxServer Webtop · Ubuntu KDE** at `654ea8e3-ls177` and **LinuxServer Webtop · Debian XFCE** at `7c4ebdc9-ls209`. Their official `lscr.io/linuxserver/webtop` amd64 and arm64 image digests are compiled into the built-in registry. Each has its own template and service-family identity, `/config` volume, and space-free recommended directory at `Redeven/workspaces/managed-services/<service-family-id>` below the writable root, so both may run together. A user-selected writable workspace may still contain spaces. Redeven never resolves `latest`, copies a brand image, or treats upstream labels as runtime authority.
+The Runtime exposes **LinuxServer Webtop · Ubuntu (KDE Plasma)** at `654ea8e3-ls177` and **LinuxServer Webtop · Debian XFCE** at `7c4ebdc9-ls209`. Ubuntu names the base distribution while KDE Plasma names the desktop environment; the catalog explains that this appearance differs from standard Ubuntu Desktop with GNOME. This clarification changes no image, runtime specification, template revision, or persisted service record. The official `lscr.io/linuxserver/webtop` amd64 and arm64 image digests are compiled into the built-in registry. Each template has its own service-family identity, `/config` volume, and space-free recommended directory at `Redeven/workspaces/managed-services/<service-family-id>` below the writable root, so both may run together. A user-selected writable workspace may still contain spaces. Redeven never resolves `latest`, copies a brand image, or treats upstream labels as runtime authority.
 
 Catalog identity, source, order, Ubuntu or Debian distribution mark, localized copy, notice, and runtime specification are declarative fields from that registry. Renderer code only projects them and uses the official distribution glyphs under their published icon-license terms; it does not infer a mark from a template identifier. Installation and update accept `accepted_notice_revisions`; the Runtime requires the current revision of `interactive-desktop-root-and-network` and rejects missing, stale, or unknown values. The warning states that anyone authorized to open the desktop can gain root inside its container and that the container has outbound network access.
 
@@ -45,7 +45,7 @@ Failure or cancellation removes only a verified target and recreates the previou
 
 # Boundaries
 
-This contract covers only the fixed Ubuntu KDE and Debian XFCE variants on amd64 and arm64. It does not provide GPU acceleration, host Docker administration, nested Docker, automatic updates, mutable tags, alternative desktop variants, direct LAN/public exposure, or trust for every image published by LinuxServer.io.
+This contract covers only the fixed Ubuntu KDE Plasma and Debian XFCE variants on amd64 and arm64. It does not provide a GNOME variant, GPU acceleration, host Docker administration, nested Docker, automatic updates, mutable tags, alternative desktop variants, direct LAN/public exposure, or trust for every image published by LinuxServer.io.
 
 # Evidence
 

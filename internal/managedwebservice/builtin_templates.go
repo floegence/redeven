@@ -59,7 +59,7 @@ func builtInTemplateDefinitions() []builtInTemplateDefinition {
 		},
 		{
 			TemplateID: WebtopUbuntuKDETemplateID, ServiceFamilyID: WebtopUbuntuKDETemplateID,
-			Name: "LinuxServer Webtop · Ubuntu KDE", Description: "Run an Ubuntu KDE desktop in an isolated Docker container.", Version: webtopUbuntuKDEVersion,
+			Name: "LinuxServer Webtop · Ubuntu (KDE Plasma)", Description: "Run an Ubuntu-based KDE Plasma desktop in an isolated Docker container; its appearance differs from standard Ubuntu Desktop (GNOME).", Version: webtopUbuntuKDEVersion,
 			LocalizationKey: "linuxserverWebtopUbuntuKDE", BrandIcon: BrandIconUbuntu, SourceURL: webtopSourceURL,
 			Deployment: DeploymentContainer, ContainerMode: "single", Revision: 1, SortOrder: 30, DiskBytes: 6 * 1024 * 1024 * 1024,
 			Notices: webtopNotices(),

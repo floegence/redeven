@@ -2872,7 +2872,7 @@
     "review": { "title": "檢閱操作", "operation": "操作" },
     "compose": { "add": "新增專案", "edit": "編輯專案", "forget": "移除專案", "saved": "已儲存", "source": "Compose 檔案", "editorAddTitle": "新增 Compose 專案", "editorEditTitle": "編輯 Compose 專案", "name": "專案名稱", "configPaths": "Compose 檔案", "configPathsHint": "每行輸入一個絕對路徑，後面的檔案會覆寫前面的設定。", "envFile": "環境變數檔案", "envFileHint": "選填的環境變數檔案絕對路徑。", "profiles": "Profiles", "profilesHint": "選填，請以逗號分隔。", "save": "儲存專案", "forgetTitle": "移除 Compose 專案", "forgetMessage": "要移除「{name}」的儲存設定嗎？執行中的容器不會變更。" },
     "permissions": { "read": "檢視容器資源需要讀取權限。", "admin": "此高風險操作需要管理員權限。", "adminFiles": "檢視磁碟區檔案需要 Read 和 Admin 權限。" },
-    "notifications": { "inventoryChangedTitle": "資源清單已變更", "inventoryChangedMessage": "所選資源已無法使用。", "preflightFailedTitle": "預檢失敗", "operationFailedTitle": "操作失敗", "operationCompleteTitle": "操作完成", "operationCompleteMessage": "已重新整理權威資源清單。", "logsFailedTitle": "無法使用記錄", "detailsFailedTitle": "無法載入詳細資料", "composeLoadFailedTitle": "無法載入專案", "composeSavedTitle": "專案已儲存", "composeSavedMessage": "現在可以一鍵操作此 Compose 專案。", "composeSaveFailedTitle": "專案儲存失敗", "composeForgottenTitle": "專案已移除", "composeForgottenMessage": "已移除儲存的 Compose 設定。" }
+    "notifications": { "inventoryChangedTitle": "資源清單已變更", "inventoryChangedMessage": "目標資源已無法使用，或資源清單已變更。", "preflightFailedTitle": "預檢失敗", "operationFailedTitle": "操作失敗", "operationCompleteTitle": "操作完成", "operationCompleteMessage": "已重新整理權威資源清單。", "logsFailedTitle": "無法使用記錄", "detailsFailedTitle": "無法載入詳細資料", "composeLoadFailedTitle": "無法載入專案", "composeSavedTitle": "專案已儲存", "composeSavedMessage": "現在可以一鍵操作此 Compose 專案。", "composeSaveFailedTitle": "專案儲存失敗", "composeForgottenTitle": "專案已移除", "composeForgottenMessage": "已移除儲存的 Compose 設定。" }
   },
   "webServices": {
     "title": "Web服務",
@@ -3024,7 +3024,7 @@
       "templates": {
         "deepSeekHarnessHost": { "name": "DeepSeek Harness", "description": "直接在目前環境中執行 DeepSeek Harness。" },
         "deepSeekHarnessContainer": { "name": "DeepSeek Harness", "description": "在 Docker 中執行經過審核的社群 DeepSeek Harness 映像。" },
-        "linuxserverWebtopUbuntuKDE": { "name": "LinuxServer Webtop · Ubuntu KDE", "description": "在隔離容器中執行可持久化的 Ubuntu KDE 桌面。" },
+        "linuxserverWebtopUbuntuKDE": { "name": "LinuxServer Webtop · Ubuntu（KDE Plasma）", "description": "在隔離容器中執行以 Ubuntu 為基礎的 KDE Plasma 桌面，外觀與標準 Ubuntu Desktop（GNOME）不同。" },
         "linuxserverWebtopDebianXFCE": { "name": "LinuxServer Webtop · Debian XFCE", "description": "在隔離容器中執行可持久化的 Debian XFCE 桌面。" }
       },
       "notices": {

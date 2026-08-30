@@ -21,6 +21,7 @@ const notificationMocks = vi.hoisted(() => ({
 
 const envContextMocks = vi.hoisted(() => ({
   env_id: () => 'env_demo',
+  goActivity: vi.fn(),
   env: Object.assign(
     () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
     { state: 'ready', loading: false, error: null },
@@ -48,6 +49,10 @@ const redevenRpcMocks = vi.hoisted(() => ({
 
 const sandboxWindowRegistryMocks = vi.hoisted(() => ({
   registerSandboxWindow: vi.fn(),
+}));
+
+const containerNavigationMocks = vi.hoisted(() => ({
+  request: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -158,6 +163,10 @@ vi.mock('../services/sandboxOrigins', () => ({
 
 vi.mock('../services/sandboxWindowRegistry', () => ({
   registerSandboxWindow: sandboxWindowRegistryMocks.registerSandboxWindow,
+}));
+
+vi.mock('../services/containerResourceNavigation', () => ({
+  requestContainerResourceNavigation: containerNavigationMocks.request,
 }));
 
 vi.mock('../primitives/Tooltip', () => ({
@@ -465,7 +474,7 @@ describe('web service metadata and template validation', () => {
       <ManagedServiceRow
         service={{
           service_id: 'mws-one', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'webtop-ubuntu',
-          name: 'LinuxServer Webtop · Ubuntu KDE', template_source: 'builtin', brand_icon: 'ubuntu', deployment: 'container',
+          name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)', template_source: 'builtin', brand_icon: 'ubuntu', deployment: 'container',
           workspace_path: '/workspace', version: '1', desired_state: 'running', observed_state: 'running', forward_id: 'pf-one', runtime_port: 3000,
           container_resources: [
             { kind: 'container', engine: 'docker', view: 'containers', identity: 'container-id' },
@@ -612,6 +621,8 @@ describe('EnvPortForwardsPage', () => {
       target_route: 'local_host',
     });
     sandboxWindowRegistryMocks.registerSandboxWindow.mockReset();
+    containerNavigationMocks.request.mockReset();
+    envContextMocks.goActivity.mockReset();
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true } }),
       { state: 'ready', loading: false, error: null },
@@ -853,12 +864,38 @@ describe('EnvPortForwardsPage', () => {
     expect(host.textContent).toContain('Running');
   });
 
+  it('hands a managed image destination to the single Containers navigation channel', async () => {
+    const imageIdentity = 'lscr.io/linuxserver/webtop@sha256:abcdef';
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{
+        service_id: 'mws-webtop', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde',
+        name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)', deployment: 'container', workspace_path: '/workspace', version: '654ea8e3-ls177',
+        desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3000,
+        container_resources: [{ kind: 'image', engine: 'docker', view: 'images', identity: imageIdentity }],
+      }] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'managed-forward', target_url: 'http://127.0.0.1:3000' }] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-row"]')).toBeTruthy());
+    const imageAction = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button'))
+      .find((button) => button.textContent?.trim() === 'Images');
+    imageAction?.click();
+
+    expect(containerNavigationMocks.request).toHaveBeenCalledWith({
+      engine: 'docker', endpointID: undefined, view: 'images', identity: imageIdentity,
+    });
+    expect(envContextMocks.goActivity).toHaveBeenCalledWith('containers');
+  });
+
   it('opens a managed service through a route-safe browser session', async () => {
     const service = {
       service_id: 'mws-legacy',
       template_id: 'linuxserver-webtop-ubuntu-kde',
       service_family_id: 'linuxserver-webtop-ubuntu-kde',
-      name: 'LinuxServer Webtop · Ubuntu KDE',
+      name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)',
       description: 'Managed desktop',
       template_source: 'builtin',
       deployment: 'container',
@@ -912,7 +949,7 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'LinuxServer Webtop · Ubuntu KDE', description: 'Managed desktop', template_source: 'builtin', brand_icon: 'ubuntu', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls177', desired_state: 'running', observed_state: 'running', forward_id: 'pf-managed', runtime_port: 54945, update_available: false }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)', description: 'Managed desktop', template_source: 'builtin', brand_icon: 'ubuntu', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls177', desired_state: 'running', observed_state: 'running', forward_id: 'pf-managed', runtime_port: 54945, update_available: false }] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'pf-managed', target_url: 'http://127.0.0.1:54945', name: 'Webtop', description: 'Managed by Redeven' }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
@@ -1125,7 +1162,7 @@ describe('EnvPortForwardsPage', () => {
 
     expect(host.querySelector('[data-brand-icon="ubuntu"], [data-template-brand="ubuntu"]')).toBeTruthy();
     expect(host.querySelector('[data-brand-icon="debian"], [data-template-brand="debian"]')).toBeTruthy();
-    expect(host.querySelector('[data-template-id="linuxserver-webtop-ubuntu-kde"]')?.textContent).toContain('LinuxServer Webtop · Ubuntu KDE');
+    expect(host.querySelector('[data-template-id="linuxserver-webtop-ubuntu-kde"]')?.textContent).toContain('LinuxServer Webtop · Ubuntu (KDE Plasma)');
     expect(host.querySelector('[data-template-id="linuxserver-webtop-debian-xfce"]')?.textContent).toContain('LinuxServer Webtop · Debian XFCE');
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
     await flushPage();
