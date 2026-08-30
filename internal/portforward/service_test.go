@@ -254,6 +254,64 @@ func TestService_SaveForwardSessionKeepsIDAndPersistsMetadata(t *testing.T) {
 	}
 }
 
+func TestService_PersistsAccessModeAcrossCreateSaveAndUpdate(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	created, err := svc.CreateForward(ctx, CreateForwardRequest{
+		Target:     "localhost:4173",
+		Name:       "Local app",
+		AccessMode: registry.AccessModeDesktopLoopback,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.AccessMode != registry.AccessModeDesktopLoopback {
+		t.Fatalf("created access mode = %q", created.AccessMode)
+	}
+
+	unified := registry.AccessModeUnifiedProxy
+	updated, err := svc.UpdateForward(ctx, created.ForwardID, UpdateForwardRequest{AccessMode: &unified})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.AccessMode != registry.AccessModeUnifiedProxy {
+		t.Fatalf("updated access mode = %q", updated.AccessMode)
+	}
+
+	opened, err := svc.OpenForwardSession(ctx, OpenForwardSessionRequest{Target: "localhost:8080"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := svc.SaveForwardSession(ctx, opened.Forward.ForwardID, SaveForwardSessionRequest{
+		Name:       "Saved app",
+		AccessMode: registry.AccessModeDesktopLoopback,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.AccessMode != registry.AccessModeDesktopLoopback {
+		t.Fatalf("saved access mode = %q", saved.AccessMode)
+	}
+}
+
+func TestService_RejectsDesktopLoopbackForHTTPS(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t)
+	ctx := context.Background()
+	if _, err := svc.CreateForward(ctx, CreateForwardRequest{Target: "https://localhost:8443", AccessMode: registry.AccessModeDesktopLoopback}); err == nil {
+		t.Fatal("CreateForward accepted desktop_loopback for HTTPS")
+	}
+	opened, err := svc.OpenForwardSession(ctx, OpenForwardSessionRequest{Target: "https://localhost:8443"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SaveForwardSession(ctx, opened.Forward.ForwardID, SaveForwardSessionRequest{Name: "HTTPS", AccessMode: registry.AccessModeDesktopLoopback}); err == nil {
+		t.Fatal("SaveForwardSession accepted desktop_loopback for HTTPS")
+	}
+}
+
 func TestService_EphemeralForwardExpiresClosed(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t)

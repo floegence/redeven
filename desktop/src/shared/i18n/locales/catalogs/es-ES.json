@@ -605,6 +605,7 @@
     "developerTools": "Herramientas para desarrolladores (F12)",
     "openInBrowser": "Abrir en el navegador",
     "openInBrowserFailed": "Redeven no pudo autorizar y abrir este Web Service en el navegador del sistema.",
+    "desktopLoopbackExternalUnavailable": "El modo de compatibilidad local usa una sesión de Desktop aislada y no puede abrirse en el navegador del sistema.",
     "secureRoute": "Esta página usa la ruta de Web Service del entorno actual",
     "invalidAddress": "Introduce una dirección HTTP(S) o una ruta dentro de este Web Service.",
     "loadFailed": "El Web Service no pudo cargar esta dirección.",

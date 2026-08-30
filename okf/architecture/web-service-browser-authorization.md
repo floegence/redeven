@@ -3,11 +3,11 @@ type: Runtime Contract
 title: Web Service system-browser authorization
 description: Hand Desktop-private Web Services to a system browser without exposing the bridge credential or creating a public fallback.
 tags: [architecture, desktop, local-ui, port-forward, security]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 # Summary
 
-Runtime Local UI is the sole authority for opening a Desktop-private Web Service in a system browser. Desktop obtains a short-lived, single-use entry for the exact forward and application path; Runtime redeems it into a Host-only browser session on the existing `pf-<forward_id>.localhost:<bridge_port>` origin. The bridge header never enters the system browser, the browser credential never enters the user service, and failures open no URL. There is no public Local UI fallback, `/pf/<id>` conversion, second listener, persistent session record, or alternate proxy path.
+Runtime Local UI is the sole authority for opening a `unified_proxy` Desktop-private Web Service in a system browser. Desktop obtains a short-lived, single-use entry for the exact forward and application path; Runtime redeems it into a Host-only browser session on the existing `pf-<forward_id>.localhost:<bridge_port>` origin. The bridge header never enters the system browser, the browser credential never enters the user service, and failures open no URL. A `desktop_loopback` service is Desktop-only and never enters this handoff. There is no public Local UI fallback, `/pf/<id>` conversion, persistent session record, or alternate Runtime proxy path.
 
 # Contract
 
@@ -27,11 +27,11 @@ After admission, Runtime removes every reserved browser cookie and the Desktop b
 
 Desktop derives the relative application location only from the exact private `pf-<forward_id>.localhost:<bridge_port>` route. It posts through the current native or placement bridge, then validates the returned scheme, Host, port, forward, path, query, fragment, and one shaped entry credential before invoking the operating system. Mint errors, oversized or malformed responses, response mismatches, timeouts, and OS-open failures stay in the current window and surface one localized error. The former public-URL conversion and private-route fallback do not exist.
 
-If the target view explicitly blocked an external HTTP(S) navigation, the user's Open in browser action opens that reviewed address directly. An already authorized remote Provider or Gateway `pf-*` route also opens on its existing origin. Neither case enters the Desktop-private mint flow.
+If a unified-proxy target view explicitly blocked an external HTTP(S) navigation, the user's Open in browser action opens that reviewed address directly. An already authorized remote Provider or Gateway `pf-*` route also opens on its existing origin. Neither case enters the Desktop-private mint flow. Local-compatibility mode disables the action and cannot silently switch access modes.
 
 # Boundaries
 
-The system-browser cookie authorizes one Web Service proxy origin; it is not a Local UI login, Flowersec artifact, Provider session, Gateway ticket, reusable Desktop credential, or public-access mechanism. Browser session state does not change the persistent port-forward registry or any database schema. The Desktop IPC action and Runtime startup report remain unchanged.
+The system-browser cookie authorizes one unified Web Service proxy origin; it is not a Local UI login, Flowersec artifact, Provider session, Gateway ticket, reusable Desktop credential, local-compatibility credential, or public-access mechanism. Browser session state does not change the persistent port-forward registry. The Desktop IPC action and Runtime startup report remain unchanged.
 
 # Evidence
 

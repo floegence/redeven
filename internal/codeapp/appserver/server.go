@@ -5280,6 +5280,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				Description:        f.Description,
 				HealthPath:         f.HealthPath,
 				InsecureSkipVerify: f.InsecureSkipVerify,
+				AccessMode:         f.AccessMode,
 				CreatedAtUnixMs:    f.CreatedAtUnixMs,
 				UpdatedAtUnixMs:    f.UpdatedAtUnixMs,
 				LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
@@ -5349,6 +5350,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			Description:        f.Description,
 			HealthPath:         f.HealthPath,
 			InsecureSkipVerify: f.InsecureSkipVerify,
+			AccessMode:         f.AccessMode,
 			CreatedAtUnixMs:    f.CreatedAtUnixMs,
 			UpdatedAtUnixMs:    f.UpdatedAtUnixMs,
 			LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
@@ -5500,7 +5502,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 					return
 				}
-				if req.Target == nil && req.Name == nil && req.Description == nil && req.HealthPath == nil && req.InsecureSkipVerify == nil {
+				if req.Target == nil && req.Name == nil && req.Description == nil && req.HealthPath == nil && req.InsecureSkipVerify == nil && req.AccessMode == nil {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 					return
 				}
@@ -5538,6 +5540,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					Description:        f.Description,
 					HealthPath:         f.HealthPath,
 					InsecureSkipVerify: f.InsecureSkipVerify,
+					AccessMode:         f.AccessMode,
 					CreatedAtUnixMs:    f.CreatedAtUnixMs,
 					UpdatedAtUnixMs:    f.UpdatedAtUnixMs,
 					LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
@@ -5577,6 +5580,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					Description:        f.Description,
 					HealthPath:         f.HealthPath,
 					InsecureSkipVerify: f.InsecureSkipVerify,
+					AccessMode:         f.AccessMode,
 					CreatedAtUnixMs:    f.CreatedAtUnixMs,
 					UpdatedAtUnixMs:    f.UpdatedAtUnixMs,
 					LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
@@ -5939,6 +5943,7 @@ type portForwardView struct {
 	Description        string `json:"description"`
 	HealthPath         string `json:"health_path"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	AccessMode         string `json:"access_mode"`
 
 	CreatedAtUnixMs    int64 `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs    int64 `json:"updated_at_unix_ms"`

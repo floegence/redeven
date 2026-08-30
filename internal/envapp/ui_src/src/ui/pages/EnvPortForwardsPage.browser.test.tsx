@@ -278,7 +278,11 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(progress.textContent).toContain('Pulling image');
     expect(progress.textContent).toContain('2/7');
     expect(row.textContent).not.toContain('Error');
-    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(72);
+    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(120);
+    const attached = row.querySelector<HTMLElement>('[data-testid="managed-operation-progress"]')!;
+    expect(attached.textContent).toContain('Retry');
+    expect(attached.textContent).toContain('Pulling image');
+    expect(attached.textContent).not.toContain('DeepSeek Harness');
 
     await userEvent.click(progress);
     await settle();

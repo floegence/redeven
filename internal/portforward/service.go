@@ -22,6 +22,7 @@ type CreateForwardRequest struct {
 	Description        string `json:"description"`
 	HealthPath         string `json:"health_path"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	AccessMode         string `json:"access_mode,omitempty"`
 }
 
 type UpdateForwardRequest struct {
@@ -30,15 +31,18 @@ type UpdateForwardRequest struct {
 	Description        *string `json:"description,omitempty"`
 	HealthPath         *string `json:"health_path,omitempty"`
 	InsecureSkipVerify *bool   `json:"insecure_skip_verify,omitempty"`
+	AccessMode         *string `json:"access_mode,omitempty"`
 }
 
 type OpenForwardSessionRequest struct {
-	Target string `json:"target"`
+	Target     string `json:"target"`
+	AccessMode string `json:"access_mode,omitempty"`
 }
 
 type SaveForwardSessionRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	AccessMode  string `json:"access_mode,omitempty"`
 }
 
 type ForwardSession struct {
@@ -130,6 +134,10 @@ func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSession
 	if err != nil {
 		return nil, err
 	}
+	accessMode, err := normalizeAccessMode(req.AccessMode, targetURL)
+	if err != nil {
+		return nil, err
+	}
 
 	s.ephemeralMu.Lock()
 	defer s.ephemeralMu.Unlock()
@@ -183,6 +191,7 @@ func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSession
 		CreatedAtUnixMs:    now.UnixMilli(),
 		UpdatedAtUnixMs:    now.UnixMilli(),
 		LastOpenedAtUnixMs: now.UnixMilli(),
+		AccessMode:         accessMode,
 	}
 	s.ephemeralByID[forward.ForwardID] = ephemeralForward{forward: forward, lastAccessedAt: now}
 	s.ephemeralIDByTarget[targetURL] = forward.ForwardID
@@ -220,8 +229,13 @@ func (s *Service) SaveForwardSession(ctx context.Context, forwardID string, req 
 	if !ok {
 		return nil, ErrForwardNotFound
 	}
+	accessMode, err := normalizeAccessMode(req.AccessMode, ephemeral.forward.TargetURL)
+	if err != nil {
+		return nil, err
+	}
 	ephemeral.forward.Name = name
 	ephemeral.forward.Description = description
+	ephemeral.forward.AccessMode = accessMode
 	ephemeral.forward.UpdatedAtUnixMs = s.currentTime().UnixMilli()
 	if err := s.reg.CreateForward(ctx, ephemeral.forward); err != nil {
 		return nil, err
@@ -240,6 +254,10 @@ func (s *Service) CreateForward(ctx context.Context, req CreateForwardRequest) (
 	}
 
 	targetURL, err := normalizeTargetURL(req.Target)
+	if err != nil {
+		return nil, err
+	}
+	accessMode, err := normalizeAccessMode(req.AccessMode, targetURL)
 	if err != nil {
 		return nil, err
 	}
@@ -263,6 +281,7 @@ func (s *Service) CreateForward(ctx context.Context, req CreateForwardRequest) (
 		Description:        description,
 		HealthPath:         strings.TrimSpace(req.HealthPath),
 		InsecureSkipVerify: req.InsecureSkipVerify,
+		AccessMode:         accessMode,
 		CreatedAtUnixMs:    0,
 		UpdatedAtUnixMs:    0,
 		LastOpenedAtUnixMs: 0,
@@ -286,7 +305,7 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 		return nil, errors.New("invalid forward_id")
 	}
 
-	if req.Target == nil && req.Name == nil && req.Description == nil && req.HealthPath == nil && req.InsecureSkipVerify == nil {
+	if req.Target == nil && req.Name == nil && req.Description == nil && req.HealthPath == nil && req.InsecureSkipVerify == nil && req.AccessMode == nil {
 		return nil, errors.New("missing fields")
 	}
 
@@ -308,6 +327,22 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 			return nil, err
 		}
 		targetURL = &v
+	}
+	nextTargetURL := cur.TargetURL
+	if targetURL != nil {
+		nextTargetURL = *targetURL
+	}
+	var accessMode *string
+	if req.AccessMode != nil {
+		value, err := normalizeAccessMode(*req.AccessMode, nextTargetURL)
+		if err != nil {
+			return nil, err
+		}
+		accessMode = &value
+	} else if targetURL != nil {
+		if _, err := normalizeAccessMode(cur.AccessMode, nextTargetURL); err != nil {
+			return nil, err
+		}
 	}
 
 	var name *string
@@ -345,6 +380,7 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 		Description:        description,
 		HealthPath:         healthPath,
 		InsecureSkipVerify: req.InsecureSkipVerify,
+		AccessMode:         accessMode,
 		UpdatedAtUnixMs:    time.Now().UnixMilli(),
 	}
 	if err := s.reg.UpdateForward(ctx, id, patch); err != nil {
@@ -358,6 +394,23 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 		return nil, ErrForwardNotFound
 	}
 	return updated, nil
+}
+
+func normalizeAccessMode(value, targetURL string) (string, error) {
+	mode := strings.TrimSpace(value)
+	if mode == "" {
+		mode = registry.AccessModeUnifiedProxy
+	}
+	if mode != registry.AccessModeUnifiedProxy && mode != registry.AccessModeDesktopLoopback {
+		return "", errors.New("invalid access_mode")
+	}
+	if mode == registry.AccessModeDesktopLoopback {
+		parsed, err := url.Parse(strings.TrimSpace(targetURL))
+		if err != nil || parsed == nil || parsed.Scheme != "http" {
+			return "", errors.New("desktop_loopback requires an HTTP target")
+		}
+	}
+	return mode, nil
 }
 
 func (s *Service) DeleteForward(ctx context.Context, forwardID string) error {

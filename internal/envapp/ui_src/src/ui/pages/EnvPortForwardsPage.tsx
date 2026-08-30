@@ -69,6 +69,8 @@ type Health = Readonly<{
   last_error: string;
 }>;
 
+type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
+
 type PortForward = Readonly<{
   forward_id: string;
   target_url: string;
@@ -79,6 +81,7 @@ type PortForward = Readonly<{
   created_at_unix_ms: number;
   updated_at_unix_ms: number;
   last_opened_at_unix_ms: number;
+  access_mode?: WebServiceAccessMode;
   health: Health;
 }>;
 
@@ -117,6 +120,7 @@ type ManagedService = Readonly<{
   update_notices?: ReadonlyArray<ManagedTemplateNotice>;
   active_operation?: ManagedOperation;
   operation_artifact_reference?: string;
+  access_mode?: WebServiceAccessMode;
   container_resources?: ReadonlyArray<Readonly<{
     kind: 'container' | 'image' | 'compose_project';
     engine: 'docker';
@@ -176,6 +180,7 @@ type ManagedCatalogTemplate = Readonly<{
   deployments: ReadonlyArray<{ deployment: ManagedDeployment; available: boolean; reason_code?: string; reason?: string }>;
   default_workspace_path: string;
   workspace_roots: ReadonlyArray<{ id: string; label: string; path: string }>;
+  default_access_mode?: WebServiceAccessMode;
   spec?: ManagedTemplateSpec;
 }>;
 
@@ -346,7 +351,6 @@ function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string)
 }
 
 export type WebServiceOpenRoute =
-  | Readonly<{ kind: 'browser_direct'; url: string; label: 'Direct' }>
   | Readonly<{ kind: 'local_proxy'; url: string; label: 'Local proxy' }>
   | Readonly<{ kind: 'e2ee_tunnel'; forward_id: string; label: 'Secure tunnel' }>;
 
@@ -427,11 +431,6 @@ function isLoopbackHostname(hostname: string): boolean {
     && octets.every((octet) => /^\d{1,3}$/u.test(octet) && Number(octet) <= 255);
 }
 
-function hasSameDeviceBrowserConfidence(desktopContext: DesktopSessionContextSnapshot | null | undefined): boolean {
-  if (!desktopContext?.target_kind) return true;
-  return desktopContext.target_kind === 'local_environment' && desktopContext.target_route === 'local_host';
-}
-
 function normalizeAppPath(value: string | undefined): string {
   const raw = compact(value) || '/';
   return raw.startsWith('/') ? raw : `/${raw}`;
@@ -441,11 +440,11 @@ function localWebServiceProxyURL(
   forwardID: string,
   appPath: string,
   locationLike: BrowserLocationLike,
-  isolatedDesktop: boolean,
+  desktopPrivateBridge: boolean,
 ): string {
   const navigation = new URL(normalizeAppPath(appPath), 'http://redeven.invalid');
   const base = new URL(locationLike.origin || locationLike.href);
-  if (isolatedDesktop) {
+  if (desktopPrivateBridge) {
     base.hostname = `pf-${forwardID}.localhost`;
     base.pathname = navigation.pathname;
   } else {
@@ -458,12 +457,11 @@ function localWebServiceProxyURL(
 
 export function resolveWebServiceOpenRoute(args: Readonly<{
   forwardID: string;
-  targetURL: string;
   localRuntime: LocalRuntimeInfo | null;
   desktopContext?: DesktopSessionContextSnapshot | null;
   browserLocation?: BrowserLocationLike;
   appPath?: string;
-  preferIsolatedDesktop?: boolean;
+  desktopWindowAvailable?: boolean;
 }>): WebServiceOpenRoute {
   const forwardID = compact(args.forwardID);
   if (!args.localRuntime) {
@@ -471,22 +469,8 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
   }
 
   const locationLike = args.browserLocation ?? window.location;
-  const targetURL = parseSupportedWebServiceTarget(args.targetURL);
-  const isolatedDesktop = args.preferIsolatedDesktop === true
+  const desktopPrivateBridge = args.desktopWindowAvailable === true
     && args.desktopContext?.document_transport === 'desktop_private_bridge_v2';
-  if (
-    targetURL
-    && !args.preferIsolatedDesktop
-    && hasSameDeviceBrowserConfidence(args.desktopContext)
-    && isLoopbackHostname(locationLike.hostname)
-    && isLoopbackHostname(targetURL.hostname)
-  ) {
-    return {
-      kind: 'browser_direct',
-      url: normalizeAppPath(args.appPath) === '/' ? targetURL.origin : new URL(normalizeAppPath(args.appPath), targetURL.origin).toString(),
-      label: 'Direct',
-    };
-  }
 
   return {
     kind: 'local_proxy',
@@ -494,7 +478,7 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
       forwardID,
       normalizeAppPath(args.appPath),
       locationLike,
-      isolatedDesktop,
+      desktopPrivateBridge,
     ),
     label: 'Local proxy',
   };
@@ -619,6 +603,8 @@ export function PortForwardRow(props: {
   forward: PortForward;
   busy: boolean;
   busyText?: string;
+  canOpen?: boolean;
+  openUnavailableReason?: string;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -641,10 +627,14 @@ export function PortForwardRow(props: {
         </div>
       </div>
 
-      <div class="col-start-1 row-start-2 min-w-0 truncate text-[11px] leading-5 text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="port-forward-secondary">
+      <div class="col-start-1 row-start-2 flex min-w-0 items-center gap-2 truncate text-[11px] leading-5 text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="port-forward-secondary">
         <Tooltip content={fmtTime(props.forward.last_opened_at_unix_ms, i18n)} placement="top">
           <span class="cursor-default whitespace-nowrap">{i18n.t('webServices.fields.lastOpened')} · {fmtRelativeTime(props.forward.last_opened_at_unix_ms, i18n)}</span>
         </Tooltip>
+        <span aria-hidden="true">·</span>
+        <span class="truncate" title={props.forward.access_mode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackDescription') : i18n.t('webServices.accessMode.unifiedProxyDescription')}>
+          {props.forward.access_mode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackShort') : i18n.t('webServices.accessMode.unifiedProxyShort')}
+        </span>
       </div>
 
       <div class="col-start-2 row-start-2 flex min-w-0 justify-end lg:col-start-3 lg:row-start-1" data-testid="port-forward-status">
@@ -652,8 +642,8 @@ export function PortForwardRow(props: {
       </div>
 
       <div class={serviceRowActionsClass} data-testid="port-forward-actions">
-        <Tooltip content={props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="col-start-1 w-full">
-          <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy} class="h-8 w-full px-3">
+        <Tooltip content={props.openUnavailableReason || props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="col-start-1 w-full">
+          <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy || props.canOpen === false} class="h-8 w-full px-3">
             <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
               <InlineButtonSnakeLoading class="mr-1.5" />
             </Show>
@@ -789,19 +779,24 @@ function managedOperationStepState(operation: ManagedOperation, steps: readonly 
 
 export function ManagedOperationProgress(props: {
   operation: ManagedOperation;
-  serviceName: string;
+  serviceName?: string;
   artifactReference?: string;
   canCancel: boolean;
   onCancel: () => void;
+  attached?: boolean;
 }) {
   const i18n = useI18n();
   return (
-    <div class="flex min-w-0 items-center gap-2.5 border-t border-border/70 bg-muted/15 px-4 py-2.5 text-xs" role="status" aria-live="polite" data-testid="managed-operation-progress">
+    <div class={cn('relative flex min-w-0 items-center gap-2.5 border-t border-border/70 bg-muted/15 px-4 py-2.5 text-xs', props.attached && 'pl-[4.25rem]')} role="status" aria-live="polite" data-testid="managed-operation-progress">
+      <Show when={props.attached}>
+        <span class="absolute bottom-0 left-8 top-0 w-px bg-border/80" aria-hidden="true" />
+        <span class="absolute left-8 top-1/2 h-px w-5 bg-border/80" aria-hidden="true" />
+      </Show>
       <ManagedServiceShapingOrb />
       <div class="min-w-0 flex-1">
         <div class="flex min-w-0 items-center gap-1.5">
-          <span class="truncate font-medium text-foreground">{props.serviceName}</span>
-          <span class="shrink-0 text-muted-foreground">· {managedActionLabel(props.operation.action, i18n)}</span>
+          <Show when={props.serviceName}><span class="truncate font-medium text-foreground">{props.serviceName}</span></Show>
+          <span class={cn('shrink-0 font-medium text-foreground', props.serviceName && 'text-muted-foreground')}><Show when={props.serviceName}>· </Show>{managedActionLabel(props.operation.action, i18n)}</span>
           <span class="shrink-0 text-muted-foreground">· {managedStageLabel(props.operation.stage, i18n)}</span>
         </div>
         <Show when={props.artifactReference}>
@@ -929,7 +924,7 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
   };
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onSettings?: () => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const [operationDetailsOpen, setOperationDetailsOpen] = createSignal(false);
   const presentation = () => managedServicePresentation(props.service, i18n);
@@ -960,6 +955,11 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
       label: i18n.t('webServices.managed.update'),
       disabled: busy() || !props.canManage,
     }] : []),
+    ...(props.onSettings ? [{
+      id: 'settings',
+      label: i18n.t('common.actions.settings'),
+      disabled: busy() || !props.canManage,
+    }] : []),
     {
       id: 'restart',
       label: i18n.t('webServices.managed.restart'),
@@ -982,6 +982,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
       if (resource) props.onOpenResource(resource);
     }
     else if (id === 'update') props.onUpdate();
+    else if (id === 'settings') props.onSettings?.();
     else if (id === 'restart') props.onAction('restart');
     else if (id === 'logs') props.onLogs();
     else if (id === 'uninstall') props.onUninstall();
@@ -994,8 +995,12 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
       <div class={serviceRowGridClass}>
         <div class="min-w-0"><ServiceTemplateIdentity template={presentation()} compact /></div>
 
-        <div class="col-start-1 row-start-2 flex min-w-0 items-center text-[11px] text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="managed-service-secondary">
+        <div class="col-start-1 row-start-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="managed-service-secondary">
           <span class="truncate font-mono leading-5 text-foreground/70" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</span>
+          <span aria-hidden="true">·</span>
+          <span class="shrink-0" title={props.service.access_mode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackDescription') : i18n.t('webServices.accessMode.unifiedProxyDescription')}>
+            {props.service.access_mode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackShort') : i18n.t('webServices.accessMode.unifiedProxyShort')}
+          </span>
         </div>
 
         <div class="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-0.5 lg:col-start-3 lg:row-start-1" data-testid="managed-service-status">
@@ -1014,7 +1019,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
               onClick={() => setOperationDetailsOpen(true)}
             >
               <ManagedServiceShapingOrb />
-              <span class="truncate">{operationLabel(activeOperation)}</span>
+              <span class="sr-only">{operationLabel(activeOperation)}</span>
               <span class="shrink-0 font-mono text-muted-foreground">{operationProgress(activeOperation)}/{activeOperation.progress_total}</span>
             </button>
           )}</Show>
@@ -1022,7 +1027,9 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
         </div>
 
         <div class={serviceRowActionsClass} data-testid="managed-service-actions">
-          <Button size="sm" variant="default" class="h-8 w-full px-3" onClick={props.onOpen} disabled={!running() || busy() || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
+          <Tooltip content={props.openUnavailableReason || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="w-full">
+            <Button size="sm" variant="default" class="h-8 w-full px-3" onClick={props.onOpen} disabled={!running() || busy() || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
+          </Tooltip>
           <Button size="sm" variant="outline" class="h-8 w-full whitespace-nowrap px-3" onClick={() => props.onAction(primaryAction())} disabled={busy() || !props.canManage}>
             <Show when={running()} fallback={<Show when={!failed()}><Play class="mr-1.5 h-3.5 w-3.5" /></Show>}>
               <Stop class="mr-1.5 h-3.5 w-3.5" />
@@ -1048,6 +1055,15 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
           />
         </div>
       </div>
+      <Show when={operation()} keyed>{(activeOperation) => (
+        <ManagedOperationProgress
+          operation={activeOperation}
+          artifactReference={props.service.operation_artifact_reference}
+          canCancel={props.canManage}
+          onCancel={() => props.onCancelOperation?.()}
+          attached
+        />
+      )}</Show>
       <Show when={operation()} keyed>{(activeOperation) => {
         const steps = () => managedOperationStages(activeOperation, props.service.deployment);
         return (
@@ -1099,6 +1115,72 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
   );
 }
 
+function AccessModePicker(props: Readonly<{
+  value: WebServiceAccessMode;
+  targetURL: string;
+  disabled?: boolean;
+  onChange: (mode: WebServiceAccessMode) => void;
+}>) {
+  const i18n = useI18n();
+  const loopbackAvailable = () => parseSupportedWebServiceTarget(props.targetURL)?.protocol !== 'https:';
+  const options = (): ReadonlyArray<Readonly<{
+    value: WebServiceAccessMode;
+    title: string;
+    description: string;
+    disabled: boolean;
+  }>> => [
+    {
+      value: 'unified_proxy',
+      title: i18n.t('webServices.accessMode.unifiedProxyTitle'),
+      description: i18n.t('webServices.accessMode.unifiedProxyDescription'),
+      disabled: false,
+    },
+    {
+      value: 'desktop_loopback',
+      title: i18n.t('webServices.accessMode.desktopLoopbackTitle'),
+      description: loopbackAvailable()
+        ? i18n.t('webServices.accessMode.desktopLoopbackDescription')
+        : i18n.t('webServices.accessMode.desktopLoopbackHTTPOnly'),
+      disabled: !loopbackAvailable(),
+    },
+  ];
+
+  createEffect(() => {
+    if (!loopbackAvailable() && props.value === 'desktop_loopback') props.onChange('unified_proxy');
+  });
+
+  return (
+    <fieldset data-testid="web-service-access-mode">
+      <legend class="mb-1.5 text-xs font-medium">{i18n.t('webServices.accessMode.label')}</legend>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <For each={options()}>{(option) => {
+          const selected = () => props.value === option.value;
+          return (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={selected()}
+              disabled={props.disabled || option.disabled}
+              class={cn(
+                'cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55',
+                selected() ? 'border-primary/55 bg-primary/[0.07]' : 'border-border bg-muted/15 hover:border-foreground/25 hover:bg-muted/30',
+              )}
+              data-access-mode={option.value}
+              onClick={() => props.onChange(option.value)}
+            >
+              <span class="flex items-center gap-2 text-xs font-medium text-foreground">
+                <span class={cn('h-2 w-2 rounded-full ring-2 ring-offset-2 ring-offset-background', selected() ? 'bg-primary ring-primary/35' : 'bg-muted-foreground/35 ring-transparent')} aria-hidden="true" />
+                {option.title}
+              </span>
+              <span class="mt-1 block pl-4 text-[11px] leading-4 text-muted-foreground">{option.description}</span>
+            </button>
+          );
+        }}</For>
+      </div>
+    </fieldset>
+  );
+}
+
 /**
  * CreateForwardDialog - Dialog for registering a new runtime web service
  */
@@ -1106,11 +1188,12 @@ export function CreateForwardDialog(props: {
   open: boolean;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (target: string, name: string, description: string) => void;
+  onCreate: (target: string, name: string, description: string, accessMode: WebServiceAccessMode) => void;
 }) {
   const [target, setTarget] = createSignal('');
   const [name, setName] = createSignal('');
   const [description, setDescription] = createSignal('');
+  const [accessMode, setAccessMode] = createSignal<WebServiceAccessMode>('unified_proxy');
   const outlineControlClass = redevenSurfaceRoleClass('control');
   const i18n = useI18n();
 
@@ -1119,6 +1202,7 @@ export function CreateForwardDialog(props: {
       setTarget('');
       setName('');
       setDescription('');
+      setAccessMode('unified_proxy');
     }
     props.onOpenChange(open);
   };
@@ -1126,7 +1210,7 @@ export function CreateForwardDialog(props: {
   const handleCreate = () => {
     const targetVal = target().trim();
     if (!targetVal || !isSupportedWebServiceTarget(targetVal) || !name().trim()) return;
-    props.onCreate(targetVal, name().trim(), description().trim());
+    props.onCreate(targetVal, name().trim(), description().trim(), accessMode());
   };
 
   const isValid = () => {
@@ -1220,6 +1304,7 @@ export function CreateForwardDialog(props: {
           />
           <p class="text-[11px] text-muted-foreground mt-1">{i18n.t('webServices.dialog.descriptionHelp')}</p>
         </div>
+        <AccessModePicker value={accessMode()} targetURL={target()} disabled={props.loading} onChange={setAccessMode} />
       </div>
     </Dialog>
   );
@@ -1231,13 +1316,16 @@ export function ForwardMetadataDialog(props: Readonly<{
   editorKey: string;
   initialName: string;
   initialDescription: string;
+  initialAccessMode?: WebServiceAccessMode;
+  targetURL?: string;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string, description: string) => void;
+  onSubmit: (name: string, description: string, accessMode: WebServiceAccessMode) => void;
 }>) {
   const i18n = useI18n();
   const [name, setName] = createSignal('');
   const [description, setDescription] = createSignal('');
+  const [accessMode, setAccessMode] = createSignal<WebServiceAccessMode>('unified_proxy');
   const [validationVisible, setValidationVisible] = createSignal(false);
   let loadedKey = '';
 
@@ -1251,6 +1339,7 @@ export function ForwardMetadataDialog(props: Readonly<{
     loadedKey = nextKey;
     setName(props.initialName);
     setDescription(props.initialDescription);
+    setAccessMode(props.initialAccessMode || 'unified_proxy');
     setValidationVisible(false);
   });
 
@@ -1266,7 +1355,7 @@ export function ForwardMetadataDialog(props: Readonly<{
   const submit = () => {
     setValidationVisible(true);
     if (nameError() || descriptionError()) return;
-    props.onSubmit(name().trim(), description().trim());
+    props.onSubmit(name().trim(), description().trim(), accessMode());
   };
 
   return (
@@ -1317,6 +1406,7 @@ export function ForwardMetadataDialog(props: Readonly<{
             {validationVisible() && descriptionError() ? descriptionError() : i18n.t('webServices.dialog.descriptionHelp')}
           </p>
         </div>
+        <AccessModePicker value={accessMode()} targetURL={props.targetURL || ''} disabled={props.loading} onChange={setAccessMode} />
       </div>
     </Dialog>
   );
@@ -1329,7 +1419,6 @@ export function ForwardMetadataDialog(props: Readonly<{
 type OpenWebServiceCopy = Readonly<{
   missingEnvContext: string;
   opening: string;
-  openingDirectly: string;
   openingLocalProxy: string;
   requestingEntryTicket: string;
   updating: string;
@@ -1372,6 +1461,7 @@ async function openWebServiceRoute(
   route: WebServiceOpenRoute,
   forwardID: string,
   serviceTargetURL: string,
+  accessMode: WebServiceAccessMode,
   appPath: string,
   useDesktopWindow: boolean,
   setStatus: (s: string) => void,
@@ -1385,7 +1475,7 @@ async function openWebServiceRoute(
     if (win) registerSandboxWindow(win, { origin: prepared.origin, floe_app: FLOE_APP_PORT_FORWARD, code_space_id: forwardID, app_path: normalizeAppPath(appPath) });
   } else {
     await touchWebService(forwardID, setStatus, copy);
-    setStatus(route.kind === 'browser_direct' ? copy.openingDirectly : copy.openingLocalProxy);
+    setStatus(copy.openingLocalProxy);
     browserTargetURL = route.url;
   }
 
@@ -1395,6 +1485,7 @@ async function openWebServiceRoute(
       url: browserTargetURL,
       forward_id: forwardID,
       target_url: serviceTargetURL,
+      access_mode: accessMode,
     });
     if (!response?.ok) throw new Error(response?.message || copy.desktopWindowFailed);
     return;
@@ -1461,6 +1552,7 @@ export function EnvPortForwardsPage() {
   const [managedInstallServiceID, setManagedInstallServiceID] = createSignal<string | null>(null);
   const [managedInstallSubmitting, setManagedInstallSubmitting] = createSignal(false);
   const [workspacePath, setWorkspacePath] = createSignal('');
+  const [managedAccessMode, setManagedAccessMode] = createSignal<WebServiceAccessMode>('unified_proxy');
   const [workspacePickerOpen, setWorkspacePickerOpen] = createSignal(false);
   const [templateDrawerOpen, setTemplateDrawerOpen] = createSignal(false);
   const [templateDrawerView, setTemplateDrawerView] = createSignal<TemplateDrawerView>('catalog');
@@ -1591,7 +1683,7 @@ export function EnvPortForwardsPage() {
     const reservedWindow = useDesktopWindow ? null : window.open('about:blank', `redeven_managed_${template.template_id}`);
     let operationID = '';
     try {
-      const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()) }) });
+      const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()) }) });
       operationID = result.operation.operation_id;
       setManagedInstallServiceID(result.service.service_id);
       setManagedInstallSubmitting(false);
@@ -1773,6 +1865,7 @@ export function EnvPortForwardsPage() {
     if (!template.available || templateInstalled(template)) return;
     setSelectedTemplateID(template.template_id);
     setWorkspacePath(template.default_workspace_path);
+    setManagedAccessMode(template.default_access_mode || 'unified_proxy');
     setInstallNoticeAcceptances({});
     setTemplateDrawerView('install');
   };
@@ -1940,7 +2033,7 @@ export function EnvPortForwardsPage() {
   onCleanup(() => managedOperations.dispose());
 
   // Create service handler
-  const doCreate = async (target: string, name: string, description: string) => {
+  const doCreate = async (target: string, name: string, description: string, accessMode: WebServiceAccessMode) => {
     if (!target) {
       notify.error(i18n.t('webServices.notifications.missingTargetTitle'), i18n.t('webServices.notifications.missingTargetMessage'));
       return;
@@ -1949,7 +2042,7 @@ export function EnvPortForwardsPage() {
     try {
       await fetchLocalApiJSON('/_redeven_proxy/api/forwards', {
         method: 'POST',
-        body: JSON.stringify({ target, name, description }),
+        body: JSON.stringify({ target, name, description, access_mode: accessMode }),
       });
       setCreateOpen(false);
       bumpRefresh();
@@ -1989,22 +2082,24 @@ export function EnvPortForwardsPage() {
     useDesktopWindow: boolean,
     win: Window | null,
   ) => {
+    const accessMode = f.access_mode || 'unified_proxy';
+    if (accessMode === 'desktop_loopback' && !useDesktopWindow) {
+      throw new Error(i18n.t('webServices.errors.desktopLoopbackRequiresDesktop'));
+    }
     const fid = String(f.forward_id).trim();
     setBusyText(i18n.t('webServices.status.resolvingRoute'));
     const localRuntime = await getLocalRuntime().catch(() => null);
     const desktopContext = readDesktopSessionContextSnapshot();
     const route = resolveWebServiceOpenRoute({
       forwardID: fid,
-      targetURL: f.target_url,
       localRuntime,
       desktopContext,
       appPath,
-      preferIsolatedDesktop: useDesktopWindow,
+      desktopWindowAvailable: useDesktopWindow,
     });
-    await openWebServiceRoute(route, fid, f.target_url, appPath, useDesktopWindow, (s) => setBusyText(s), {
+    await openWebServiceRoute(route, fid, f.target_url, accessMode, appPath, useDesktopWindow, (s) => setBusyText(s), {
       missingEnvContext: i18n.t('webServices.errors.missingEnvContext'),
       opening: i18n.t('webServices.status.opening'),
-      openingDirectly: i18n.t('webServices.status.openingDirectly'),
       openingLocalProxy: i18n.t('webServices.status.openingLocalProxy'),
       requestingEntryTicket: i18n.t('webServices.status.requestingEntryTicket'),
       updating: i18n.t('webServices.status.updating'),
@@ -2085,13 +2180,13 @@ export function EnvPortForwardsPage() {
     );
   };
 
-  const doSaveRecentSession = async (session: ForwardSession, name: string, description: string) => {
+  const doSaveRecentSession = async (session: ForwardSession, name: string, description: string, accessMode: WebServiceAccessMode) => {
     if (!session.ephemeral || forwardMetadataSaving()) return;
     setForwardMetadataSaving(true);
     try {
       const forward = await fetchLocalApiJSON<PortForward>(`/_redeven_proxy/api/forward-sessions/${encodeURIComponent(session.forward.forward_id)}/save`, {
         method: 'POST',
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({ name, description, access_mode: accessMode }),
       });
       setRecentSession({ ...session, forward, ephemeral: false });
       setForwardMetadataTarget(null);
@@ -2104,13 +2199,13 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  const doUpdateForwardMetadata = async (forward: PortForward, name: string, description: string) => {
+  const doUpdateForwardMetadata = async (forward: PortForward, name: string, description: string, accessMode: WebServiceAccessMode) => {
     if (forwardMetadataSaving()) return;
     setForwardMetadataSaving(true);
     try {
       await fetchLocalApiJSON<PortForward>(`/_redeven_proxy/api/forwards/${encodeURIComponent(forward.forward_id)}`, {
         method: 'PATCH',
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({ name, description, access_mode: accessMode }),
       });
       setForwardMetadataTarget(null);
       bumpRefresh();
@@ -2122,11 +2217,11 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  const submitForwardMetadata = (name: string, description: string) => {
+  const submitForwardMetadata = (name: string, description: string, accessMode: WebServiceAccessMode) => {
     const target = forwardMetadataTarget();
     if (!target) return;
-    if (target.mode === 'save') void doSaveRecentSession(target.session, name, description);
-    else void doUpdateForwardMetadata(target.forward, name, description);
+    if (target.mode === 'save') void doSaveRecentSession(target.session, name, description, accessMode);
+    else void doUpdateForwardMetadata(target.forward, name, description, accessMode);
   };
 
   // Find the service being deleted for the confirmation dialog
@@ -2146,6 +2241,8 @@ export function EnvPortForwardsPage() {
         editorKey: forward.forward_id,
         initialName: forward.name || new URL(forward.target_url).host,
         initialDescription: forward.description,
+        initialAccessMode: forward.access_mode || 'unified_proxy',
+        targetURL: forward.target_url,
       } as const;
     }
     return {
@@ -2153,6 +2250,8 @@ export function EnvPortForwardsPage() {
       editorKey: target.forward.forward_id,
       initialName: target.forward.name,
       initialDescription: target.forward.description,
+      initialAccessMode: target.forward.access_mode || 'unified_proxy',
+      targetURL: target.forward.target_url,
     } as const;
   });
 
@@ -2377,10 +2476,41 @@ export function EnvPortForwardsPage() {
                   }>
                     <div class={cn('overflow-hidden rounded-xl border divide-y', redevenSurfaceRoleClass('panel'))} data-testid="unified-web-services-list">
                       <For each={filteredManagedServices()}>{(service) => (
-                        <ManagedServiceRow service={service} operation={managedRowOperation(service.service_id)} busy={busyID() === `managed:${service.service_id}`} canOpen={canExecute()} canManage={canManageManagedService()} onOpen={() => void openManaged(service)} onOpenResource={openManagedContainerResource} onAction={(action) => void managedAction(service.service_id, action)} onCancelOperation={() => void cancelManagedOperation(managedRowOperation(service.service_id))} onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }} onLogs={() => void loadManagedLogs(service.service_id)} onUninstall={() => setManagedUninstall({ service, deleteData: false })} />
+                        <ManagedServiceRow
+                          service={service}
+                          operation={managedRowOperation(service.service_id)}
+                          busy={busyID() === `managed:${service.service_id}`}
+                          canOpen={canExecute() && (service.access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable())}
+                          openUnavailableReason={service.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
+                            ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
+                            : undefined}
+                          canManage={canManageManagedService()}
+                          onOpen={() => void openManaged(service)}
+                          onOpenResource={openManagedContainerResource}
+                          onAction={(action) => void managedAction(service.service_id, action)}
+                          onCancelOperation={() => void cancelManagedOperation(managedRowOperation(service.service_id))}
+                          onSettings={() => {
+                            const forward = forwards()?.find((item) => item.forward_id === service.forward_id);
+                            if (forward) setForwardMetadataTarget({ mode: 'edit', forward });
+                          }}
+                          onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }}
+                          onLogs={() => void loadManagedLogs(service.service_id)}
+                          onUninstall={() => setManagedUninstall({ service, deleteData: false })}
+                        />
                       )}</For>
                       <For each={filteredForwards()}>{(forward) => (
-                        <PortForwardRow forward={forward} busy={busyID() === forward.forward_id} busyText={busyID() === forward.forward_id ? busyText() : undefined} onOpen={() => void doOpen(forward)} onEdit={() => setForwardMetadataTarget({ mode: 'edit', forward })} onDelete={() => setDeleteID(forward.forward_id)} />
+                        <PortForwardRow
+                          forward={forward}
+                          busy={busyID() === forward.forward_id}
+                          busyText={busyID() === forward.forward_id ? busyText() : undefined}
+                          canOpen={forward.access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable()}
+                          openUnavailableReason={forward.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
+                            ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
+                            : undefined}
+                          onOpen={() => void doOpen(forward)}
+                          onEdit={() => setForwardMetadataTarget({ mode: 'edit', forward })}
+                          onDelete={() => setDeleteID(forward.forward_id)}
+                        />
                       )}</For>
                     </div>
                   </Show>
@@ -2400,6 +2530,8 @@ export function EnvPortForwardsPage() {
         editorKey={forwardMetadataDialog()?.editorKey ?? ''}
         initialName={forwardMetadataDialog()?.initialName ?? ''}
         initialDescription={forwardMetadataDialog()?.initialDescription ?? ''}
+        initialAccessMode={forwardMetadataDialog()?.initialAccessMode ?? 'unified_proxy'}
+        targetURL={forwardMetadataDialog()?.targetURL ?? ''}
         loading={forwardMetadataSaving()}
         onOpenChange={(open) => { if (!open && !forwardMetadataSaving()) setForwardMetadataTarget(null); }}
         onSubmit={submitForwardMetadata}
@@ -2521,6 +2653,14 @@ export function EnvPortForwardsPage() {
                   <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.version')}</dt><dd class="mt-1 font-mono text-foreground">{template.version || i18n.t('webServices.managed.customVersion')}</dd></div>
                   <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.dataLocation')}</dt><dd class="mt-1 text-foreground">{i18n.t('webServices.managed.managedPrivateData')}</dd></div>
                 </dl>
+              </section>
+              <section class="service-template-install-section border-t pt-4">
+                <AccessModePicker
+                  value={managedAccessMode()}
+                  targetURL={`${template.spec?.endpoint.scheme ?? 'http'}://127.0.0.1`}
+                  disabled={managedInstallBusy()}
+                  onChange={setManagedAccessMode}
+                />
               </section>
               <Show when={(template.notices?.length ?? 0) > 0}>
                 <ManagedTemplateNotices

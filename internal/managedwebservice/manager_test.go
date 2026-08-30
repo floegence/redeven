@@ -70,6 +70,15 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 	if hostTemplate == nil || containerTemplate == nil {
 		t.Fatalf("built-in templates = %+v", templates)
 	}
+	if hostTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback || containerTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback {
+		t.Fatalf("DeepSeek access modes = %q, %q", hostTemplate.DefaultAccessMode, containerTemplate.DefaultAccessMode)
+	}
+	for _, templateID := range []string{WebtopUbuntuKDETemplateID, WebtopDebianXFCETemplateID} {
+		template := templateByID(templates, templateID)
+		if template == nil || template.DefaultAccessMode != pfregistry.AccessModeUnifiedProxy {
+			t.Fatalf("template %q access mode = %+v", templateID, template)
+		}
+	}
 	canonicalHome, err := filepath.EvalSymlinks(home)
 	if err != nil {
 		t.Fatal(err)

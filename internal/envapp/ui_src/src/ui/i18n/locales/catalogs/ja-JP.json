@@ -2920,6 +2920,16 @@
       "invalid": "公開 Web サイトと LAN アドレスは Web Service のアクセス範囲外です。",
       "examples": "入力例: 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
+    "accessMode": {
+      "label": "アクセスモード",
+      "unifiedProxyTitle": "統合セキュアプロキシ",
+      "unifiedProxyShort": "セキュアプロキシ",
+      "unifiedProxyDescription": "Desktop、Web Env App、システムブラウザーで利用できます。",
+      "desktopLoopbackTitle": "Desktop ローカル互換",
+      "desktopLoopbackShort": "Desktop ローカル",
+      "desktopLoopbackDescription": "分離された 127.0.0.1 Origin を使用し、ローカル専用アプリを正しく動作させます。Redeven Desktop 専用です。",
+      "desktopLoopbackHTTPOnly": "ローカル互換モードは HTTP サービスでのみ利用できます。"
+    },
     "session": {
       "temporary": "一時"
     },
@@ -2965,7 +2975,6 @@
       "resolvingRoute": "ルートを解決中...",
       "updating": "サービスを更新中...",
       "requestingEntryTicket": "entry ticket を要求中...",
-      "openingDirectly": "直接開いています...",
       "openingLocalProxy": "Local UI proxy を開いています...",
       "working": "処理中...",
       "creatingSession": "一時 Web サービスセッションを準備しています..."
@@ -3234,7 +3243,8 @@
       "loadFailedPrefix": "Web サービスの読み込みに失敗しました",
       "popupBlocked": "ポップアップがブロックされました。ポップアップを許可してから再試行してください。",
       "missingEnvContext": "環境コンテキストが欠落しています。コントロールプレーンから再度開いてください。",
-      "desktopWindowFailed": "Desktop で隔離された Web サービスウィンドウを開けませんでした。"
+      "desktopWindowFailed": "Desktop で隔離された Web サービスウィンドウを開けませんでした。",
+      "desktopLoopbackRequiresDesktop": "ローカル互換モードには Redeven Desktop の分離ウィンドウが必要です。"
     }
   },
   "debugConsoleSettings": {

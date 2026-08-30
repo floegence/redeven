@@ -280,7 +280,7 @@ func TestServer_LocalUIOpensAndExplicitlySavesTemporaryForwardSession(t *testing
 	}
 
 	saveURL := "http://localhost:23998/_redeven_proxy/api/forward-sessions/" + opened.Data.Forward.ForwardID + "/save"
-	saveReq := httptest.NewRequest(http.MethodPost, saveURL, strings.NewReader(`{"name":"Preview","description":"Docs"}`))
+	saveReq := httptest.NewRequest(http.MethodPost, saveURL, strings.NewReader(`{"name":"Preview","description":"Docs","access_mode":"desktop_loopback"}`))
 	saveReq = WithLocalUIEnvRoute(saveReq)
 	saveRR := httptest.NewRecorder()
 	srv.serveHTTP(saveRR, saveReq)
@@ -288,7 +288,7 @@ func TestServer_LocalUIOpensAndExplicitlySavesTemporaryForwardSession(t *testing
 		t.Fatalf("save status = %d, body=%s", saveRR.Code, saveRR.Body.String())
 	}
 	persisted, err := service.ListForwards(context.Background())
-	if err != nil || len(persisted) != 1 || persisted[0].ForwardID != opened.Data.Forward.ForwardID || persisted[0].Name != "Preview" {
+	if err != nil || len(persisted) != 1 || persisted[0].ForwardID != opened.Data.Forward.ForwardID || persisted[0].Name != "Preview" || persisted[0].AccessMode != pfregistry.AccessModeDesktopLoopback {
 		t.Fatalf("persisted forwards = %#v, %v", persisted, err)
 	}
 }

@@ -13,6 +13,11 @@ import (
 
 var ErrForwardNotFound = errors.New("port forward not found")
 
+const (
+	AccessModeUnifiedProxy    = "unified_proxy"
+	AccessModeDesktopLoopback = "desktop_loopback"
+)
+
 type Forward struct {
 	ForwardID          string `json:"forward_id"`
 	TargetURL          string `json:"target_url"`
@@ -20,6 +25,7 @@ type Forward struct {
 	Description        string `json:"description"`
 	HealthPath         string `json:"health_path"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	AccessMode         string `json:"access_mode"`
 
 	CreatedAtUnixMs    int64 `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs    int64 `json:"updated_at_unix_ms"`
@@ -54,7 +60,7 @@ func (r *Registry) ListForwards(ctx context.Context) ([]Forward, error) {
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-SELECT forward_id, target_url, name, description, health_path, insecure_skip_verify, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms
+SELECT forward_id, target_url, name, description, health_path, insecure_skip_verify, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode
 FROM port_forwards
 ORDER BY created_at_unix_ms ASC
 `)
@@ -77,6 +83,7 @@ ORDER BY created_at_unix_ms ASC
 			&f.CreatedAtUnixMs,
 			&f.UpdatedAtUnixMs,
 			&f.LastOpenedAtUnixMs,
+			&f.AccessMode,
 		); err != nil {
 			return nil, err
 		}
@@ -101,7 +108,7 @@ func (r *Registry) GetForward(ctx context.Context, forwardID string) (*Forward, 
 	var f Forward
 	var insecure int
 	err := r.db.QueryRowContext(ctx, `
-SELECT forward_id, target_url, name, description, health_path, insecure_skip_verify, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms
+SELECT forward_id, target_url, name, description, health_path, insecure_skip_verify, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode
 FROM port_forwards
 WHERE forward_id = ?
 `, id).Scan(
@@ -114,6 +121,7 @@ WHERE forward_id = ?
 		&f.CreatedAtUnixMs,
 		&f.UpdatedAtUnixMs,
 		&f.LastOpenedAtUnixMs,
+		&f.AccessMode,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -137,6 +145,11 @@ func (r *Registry) CreateForward(ctx context.Context, f Forward) error {
 	f.Name = strings.TrimSpace(f.Name)
 	f.Description = strings.TrimSpace(f.Description)
 	f.HealthPath = strings.TrimSpace(f.HealthPath)
+	var err error
+	f.AccessMode, err = normalizedAccessMode(f.AccessMode)
+	if err != nil {
+		return err
+	}
 
 	id := strings.TrimSpace(f.ForwardID)
 	if id == "" {
@@ -154,11 +167,11 @@ func (r *Registry) CreateForward(ctx context.Context, f Forward) error {
 		f.UpdatedAtUnixMs = f.CreatedAtUnixMs
 	}
 
-	_, err := r.db.ExecContext(ctx, `
+	_, err = r.db.ExecContext(ctx, `
 INSERT INTO port_forwards(
   forward_id, target_url, name, description, health_path, insecure_skip_verify,
-  created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+  created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		f.ForwardID,
 		f.TargetURL,
@@ -169,6 +182,7 @@ INSERT INTO port_forwards(
 		f.CreatedAtUnixMs,
 		f.UpdatedAtUnixMs,
 		f.LastOpenedAtUnixMs,
+		f.AccessMode,
 	)
 	return err
 }
@@ -179,6 +193,7 @@ type UpdateForwardPatch struct {
 	Description        *string
 	HealthPath         *string
 	InsecureSkipVerify *bool
+	AccessMode         *string
 	UpdatedAtUnixMs    int64
 }
 
@@ -221,6 +236,14 @@ func (r *Registry) UpdateForward(ctx context.Context, forwardID string, patch Up
 	if patch.InsecureSkipVerify != nil {
 		set = append(set, "insecure_skip_verify = ?")
 		args = append(args, boolToInt(*patch.InsecureSkipVerify))
+	}
+	if patch.AccessMode != nil {
+		mode, err := normalizedAccessMode(*patch.AccessMode)
+		if err != nil {
+			return err
+		}
+		set = append(set, "access_mode = ?")
+		args = append(args, mode)
 	}
 	if len(set) == 0 {
 		return errors.New("no fields to update")
@@ -311,4 +334,15 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+func normalizedAccessMode(value string) (string, error) {
+	switch strings.TrimSpace(value) {
+	case "", AccessModeUnifiedProxy:
+		return AccessModeUnifiedProxy, nil
+	case AccessModeDesktopLoopback:
+		return AccessModeDesktopLoopback, nil
+	default:
+		return "", errors.New("invalid access_mode")
+	}
 }

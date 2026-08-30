@@ -2920,6 +2920,16 @@
       "invalid": "公网网站和局域网地址不在 Web Service 的访问范围内。",
       "examples": "可输入 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
+    "accessMode": {
+      "label": "访问模式",
+      "unifiedProxyTitle": "统一安全代理",
+      "unifiedProxyShort": "安全代理",
+      "unifiedProxyDescription": "可在 Desktop、Web Env App 和系统浏览器中使用。",
+      "desktopLoopbackTitle": "Desktop 本地兼容",
+      "desktopLoopbackShort": "Desktop 本地",
+      "desktopLoopbackDescription": "使用隔离的 127.0.0.1 Origin，让仅支持本机访问的应用正常工作；仅限 Redeven Desktop。",
+      "desktopLoopbackHTTPOnly": "本地兼容模式仅支持 HTTP 服务。"
+    },
     "session": {
       "temporary": "临时"
     },
@@ -2965,7 +2975,6 @@
       "resolvingRoute": "正在解析路由...",
       "updating": "正在更新服务...",
       "requestingEntryTicket": "正在请求 entry ticket...",
-      "openingDirectly": "正在直接打开...",
       "openingLocalProxy": "正在打开 Local UI proxy...",
       "working": "处理中...",
       "creatingSession": "正在准备临时 Web 服务会话..."
@@ -3234,7 +3243,8 @@
       "loadFailedPrefix": "加载 Web 服务失败",
       "popupBlocked": "弹窗被阻止。请允许弹窗后重试。",
       "missingEnvContext": "缺少环境上下文。请从控制平面重新打开。",
-      "desktopWindowFailed": "Desktop 无法打开隔离的 Web 服务窗口。"
+      "desktopWindowFailed": "Desktop 无法打开隔离的 Web 服务窗口。",
+      "desktopLoopbackRequiresDesktop": "本地兼容模式需要使用 Redeven Desktop 隔离窗口。"
     }
   },
   "debugConsoleSettings": {

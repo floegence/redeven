@@ -341,7 +341,11 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?)`, forward.ForwardID, forward.TargetURL, forward.Name, forward.Description, forward.HealthPath, boolToInt(forward.InsecureSkipVerify), forward.CreatedAtUnixMs, forward.UpdatedAtUnixMs, forward.LastOpenedAtUnixMs); err != nil {
+	forward.AccessMode, err = normalizedAccessMode(forward.AccessMode)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES(?,?,?,?,?,?,?,?,?,?)`, forward.ForwardID, forward.TargetURL, forward.Name, forward.Description, forward.HealthPath, boolToInt(forward.InsecureSkipVerify), forward.CreatedAtUnixMs, forward.UpdatedAtUnixMs, forward.LastOpenedAtUnixMs, forward.AccessMode); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.TemplateSource, service.TemplateRevision, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, service.ServiceFamilyID, service.Deployment, service.WorkspacePath, service.ConfigurationJSON, service.Version, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimeManifestJSON, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs); err != nil {

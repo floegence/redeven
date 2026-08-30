@@ -46,6 +46,9 @@ function bootstrap(): void {
     stopIcon?.toggleAttribute('hidden', !next.loading);
     progress.dataset.loading = String(next.loading);
     developerTools.setAttribute('aria-pressed', String(next.devtools_open));
+    openExternal.disabled = !next.open_external_available;
+    openExternal.title = next.open_external_unavailable_reason || openExternal.dataset.availableLabel || '';
+    openExternal.setAttribute('aria-label', openExternal.dataset.availableLabel || '');
     status.textContent = next.error_message ?? '';
     status.dataset.visible = String(Boolean(next.error_message));
     document.title = next.title ? `${next.title} - ${browserTitle}` : browserTitle;
@@ -53,6 +56,7 @@ function bootstrap(): void {
 
   reload.dataset.reloadLabel = reload.getAttribute('title') ?? '';
   reload.dataset.stopLabel = reload.getAttribute('data-stop-label') ?? '';
+  openExternal.dataset.availableLabel = openExternal.getAttribute('title') ?? '';
 
   const perform = async (action: DesktopWebServiceBrowserAction, showFailure = true): Promise<boolean> => {
     const response = normalizeDesktopWebServiceBrowserActionResponse(

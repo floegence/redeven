@@ -46,6 +46,7 @@ describe('desktopWebServiceBrowserIPC', () => {
       can_go_back: true,
       can_go_forward: false,
       devtools_open: true,
+      open_external_available: true,
     });
     expect(normalizeDesktopWebServiceBrowserActionResponse(null)).toEqual({
       ok: false,

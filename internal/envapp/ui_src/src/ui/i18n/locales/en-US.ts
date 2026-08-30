@@ -2820,6 +2820,16 @@ export const enUS = defineDictionary({
       invalid: 'Public websites and LAN addresses are outside the Web Service access scope.',
       examples: 'Try 3000 | localhost:3000 | 127.0.0.1:3000 | [::1]:3000',
     },
+    accessMode: {
+      label: 'Access mode',
+      unifiedProxyTitle: 'Unified secure proxy',
+      unifiedProxyShort: 'Secure proxy',
+      unifiedProxyDescription: 'Works in Desktop, the Web Env App, and your system browser.',
+      desktopLoopbackTitle: 'Desktop local compatibility',
+      desktopLoopbackShort: 'Desktop local',
+      desktopLoopbackDescription: 'Uses an isolated 127.0.0.1 origin so local-only apps work correctly. Available only in Redeven Desktop.',
+      desktopLoopbackHTTPOnly: 'Local compatibility is available only for HTTP services.',
+    },
     session: {
       temporary: 'Temporary',
     },
@@ -2865,7 +2875,6 @@ export const enUS = defineDictionary({
       resolvingRoute: 'Resolving route...',
       updating: 'Updating service...',
       requestingEntryTicket: 'Requesting entry ticket...',
-      openingDirectly: 'Opening directly...',
       openingLocalProxy: 'Opening local proxy...',
       working: 'Working...',
       creatingSession: 'Preparing a temporary Web Service session...',
@@ -2894,6 +2903,7 @@ export const enUS = defineDictionary({
       popupBlocked: 'Popup was blocked. Please allow popups and try again.',
       missingEnvContext: 'Missing env context. Please reopen from the control plane.',
       desktopWindowFailed: 'Desktop failed to open the isolated Web Service window.',
+      desktopLoopbackRequiresDesktop: 'Local compatibility requires the isolated Redeven Desktop window.',
     },
     managed: {
       title: 'Managed services',

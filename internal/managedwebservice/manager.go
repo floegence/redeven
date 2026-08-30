@@ -265,8 +265,20 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 	if err != nil {
 		return nil, err
 	}
+	forwards, err := m.registry.ListForwards(ctx)
+	if err != nil {
+		return nil, err
+	}
+	forwardByID := make(map[string]pfregistry.Forward, len(forwards))
+	for _, forward := range forwards {
+		forwardByID[forward.ForwardID] = forward
+	}
 	out := make([]ServiceView, 0, len(services))
 	for _, service := range services {
+		forward, ok := forwardByID[service.ForwardID]
+		if !ok {
+			return nil, serviceError("FORWARD_NOT_FOUND", "The managed Web Service route is unavailable.", 409, false, nil)
+		}
 		active, err := m.registry.GetActiveManagedOperation(ctx, service.ServiceID)
 		if err != nil {
 			return nil, err
@@ -278,6 +290,7 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			Description:                description,
 			ActiveOperation:            active,
 			OperationArtifactReference: operationArtifactReference(service, active),
+			AccessMode:                 forward.AccessMode,
 			ContainerResources:         containerResourceLinks(service),
 		}
 		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
@@ -310,7 +323,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	defer m.requestMu.Unlock()
 	parameterJSON, _ := json.Marshal(req.Parameters)
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
-	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), string(parameterJSON), string(noticeJSON))
+	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), strings.TrimSpace(req.AccessMode), string(parameterJSON), string(noticeJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -355,6 +368,16 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	if template.Spec == nil {
 		return nil, serviceError("TEMPLATE_UNAVAILABLE", "The template deployment definition is unavailable.", 409, true, nil)
+	}
+	accessMode := strings.TrimSpace(req.AccessMode)
+	if accessMode == "" {
+		accessMode = defaultAccessMode(template.DefaultAccessMode)
+	}
+	if accessMode != pfregistry.AccessModeUnifiedProxy && accessMode != pfregistry.AccessModeDesktopLoopback {
+		return nil, serviceError("ACCESS_MODE_INVALID", "The Web Service access mode is invalid.", 400, false, nil)
+	}
+	if accessMode == pfregistry.AccessModeDesktopLoopback && template.Spec.Endpoint.Scheme != "http" {
+		return nil, serviceError("ACCESS_MODE_UNAVAILABLE", "Desktop local compatibility requires an HTTP service.", 409, false, nil)
 	}
 	if req.Deployment != "" && req.TemplateID != DeepSeekHarnessTemplateID && req.Deployment != template.Deployment {
 		return nil, serviceError("DEPLOYMENT_INVALID", "The requested deployment type does not match the selected template.", 400, false, nil)
@@ -401,7 +424,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		return nil, err
 	}
 	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: string(configurationJSON), Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
-	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
 		return nil, serviceError("SERVICE_SECRETS_WRITE_FAILED", "The managed-service secret parameters could not be stored securely.", 500, false, err)

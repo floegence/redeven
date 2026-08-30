@@ -2920,6 +2920,16 @@
       "invalid": "Sites públicos e endereços da LAN estão fora do escopo de acesso do Web Service.",
       "examples": "Tente 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
+    "accessMode": {
+      "label": "Modo de acesso",
+      "unifiedProxyTitle": "Proxy seguro unificado",
+      "unifiedProxyShort": "Proxy seguro",
+      "unifiedProxyDescription": "Funciona no Desktop, Web Env App e navegador do sistema.",
+      "desktopLoopbackTitle": "Compatibilidade local do Desktop",
+      "desktopLoopbackShort": "Desktop local",
+      "desktopLoopbackDescription": "Usa um Origin 127.0.0.1 isolado para aplicativos que exigem acesso local. Disponível somente no Redeven Desktop.",
+      "desktopLoopbackHTTPOnly": "O modo de compatibilidade local está disponível apenas para serviços HTTP."
+    },
     "session": {
       "temporary": "Temporário"
     },
@@ -2965,7 +2975,6 @@
       "resolvingRoute": "Resolvendo rota...",
       "updating": "Atualizando serviço...",
       "requestingEntryTicket": "Solicitando entry ticket...",
-      "openingDirectly": "Abrindo diretamente...",
       "openingLocalProxy": "Abrindo Local UI proxy...",
       "working": "Trabalhando...",
       "creatingSession": "Preparando uma sessão temporária de serviço web..."
@@ -3234,7 +3243,8 @@
       "loadFailedPrefix": "Falha ao carregar serviços web",
       "popupBlocked": "O pop-up foi bloqueado. Permita pop-ups e tente novamente.",
       "missingEnvContext": "Contexto de ambiente ausente. Por favor, reabra a partir do plano de controle. Somente estado",
-      "desktopWindowFailed": "O Desktop não conseguiu abrir a janela isolada do serviço web."
+      "desktopWindowFailed": "O Desktop não conseguiu abrir a janela isolada do serviço web.",
+      "desktopLoopbackRequiresDesktop": "O modo de compatibilidade local requer a janela isolada do Redeven Desktop."
     }
   },
   "debugConsoleSettings": {

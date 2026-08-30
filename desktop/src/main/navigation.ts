@@ -269,6 +269,29 @@ export function isDesktopPrivateWebServiceURLForForward(input: string, forwardID
   }
 }
 
+export function desktopLoopbackProtectedRouteURL(
+  routeInput: string,
+  bridgeBaseInput: string,
+  forwardID: string,
+): string | null {
+  const expectedID = compactCodeSpaceID(forwardID);
+  if (!expectedID || !isPortForwardURLForForward(routeInput, expectedID)) return null;
+  try {
+    const routeURL = new URL(routeInput);
+    const bridgeBase = new URL(bridgeBaseInput);
+    if (bridgeBase.protocol !== 'http:' || !isWebServiceLoopbackHostname(bridgeBase.hostname)) return null;
+    const appPath = webServiceRouteAppPath(routeURL, expectedID);
+    if (!appPath) return null;
+    const protectedURL = new URL(`/pf/${encodeURIComponent(expectedID)}/`, bridgeBase);
+    protectedURL.pathname = `${protectedURL.pathname}${appPath.replace(/^\/+/, '')}`;
+    protectedURL.search = routeURL.search;
+    protectedURL.hash = routeURL.hash;
+    return protectedURL.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function isAllowedWebServiceWindowNavigation(input: string, allowedBaseURL: string, forwardID: string): boolean {
   try {
     const candidate = new URL(input);
@@ -313,6 +336,109 @@ function protocolFamily(protocol: string): 'http' | 'https' | null {
       return 'https';
     default:
       return null;
+  }
+}
+
+function exactOrigin(input: URL): string {
+  const family = protocolFamily(input.protocol);
+  const protocol = family === 'https' ? 'https:' : 'http:';
+  return `${protocol}//${input.host}`;
+}
+
+export function isDesktopLoopbackWebServiceURL(input: string, loopbackOriginInput: string): boolean {
+  try {
+    const candidate = new URL(input);
+    const loopbackOrigin = new URL(loopbackOriginInput);
+    const candidateFamily = protocolFamily(candidate.protocol);
+    return Boolean(candidateFamily)
+      && loopbackOrigin.protocol === 'http:'
+      && loopbackOrigin.hostname === '127.0.0.1'
+      && exactOrigin(candidate) === loopbackOrigin.origin;
+  } catch {
+    return false;
+  }
+}
+
+export function routeDesktopLoopbackTargetRequest(
+  input: string,
+  targetInput: string,
+  loopbackOriginInput: string,
+): string | null {
+  try {
+    const candidate = new URL(input);
+    const target = new URL(targetInput);
+    const loopback = new URL(loopbackOriginInput);
+    const candidateFamily = protocolFamily(candidate.protocol);
+    const targetFamily = protocolFamily(target.protocol);
+    if (!candidateFamily || candidateFamily !== targetFamily || targetFamily !== 'http') return null;
+    if (
+      !isWebServiceLoopbackHostname(candidate.hostname)
+      || !isWebServiceLoopbackHostname(target.hostname)
+      || normalizeHTTPPort(candidate) !== normalizeHTTPPort(target)
+      || loopback.protocol !== 'http:'
+      || loopback.hostname !== '127.0.0.1'
+    ) return null;
+    loopback.protocol = candidate.protocol === 'ws:' ? 'ws:' : 'http:';
+    loopback.pathname = candidate.pathname;
+    loopback.search = candidate.search;
+    loopback.hash = candidate.hash;
+    return loopback.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function desktopLoopbackBrowserDisplayURL(
+  localInput: string,
+  targetInput: string,
+  loopbackOriginInput: string,
+): string | null {
+  try {
+    const localURL = new URL(localInput);
+    const targetURL = new URL(targetInput);
+    if (!isDesktopLoopbackWebServiceURL(localURL.toString(), loopbackOriginInput)) return null;
+    if (localURL.pathname === '/_redeven_boot/' || localURL.pathname === '/_redeven_boot') {
+      targetURL.pathname = '/';
+      targetURL.search = '';
+      targetURL.hash = '';
+      return targetURL.toString();
+    }
+    targetURL.pathname = localURL.pathname;
+    targetURL.search = localURL.search;
+    targetURL.hash = localURL.hash;
+    return targetURL.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function resolveDesktopLoopbackBrowserAddress(
+  input: string,
+  currentLocalURL: string,
+  targetInput: string,
+  loopbackOriginInput: string,
+): string | null {
+  const address = String(input ?? '').trim();
+  if (!address) return null;
+  try {
+    const targetURL = new URL(targetInput);
+    const currentDisplay = desktopLoopbackBrowserDisplayURL(currentLocalURL, targetURL.toString(), loopbackOriginInput);
+    if (!currentDisplay) return null;
+    let displayCandidate: URL;
+    const expandedAddress = expandWebServicePortShorthand(address);
+    if (/^https?:\/\//iu.test(expandedAddress)) displayCandidate = new URL(expandedAddress);
+    else if (looksLikeWebServiceAuthority(expandedAddress)) displayCandidate = new URL(`${targetURL.protocol}//${expandedAddress}`);
+    else if (/^[a-z][a-z0-9+.-]*:/iu.test(expandedAddress)) return null;
+    else if (expandedAddress.startsWith('?') || expandedAddress.startsWith('#')) displayCandidate = new URL(expandedAddress, currentDisplay);
+    else displayCandidate = new URL(expandedAddress.replace(/^\/+/, ''), targetURL.origin + '/');
+    if (displayCandidate.origin !== targetURL.origin || displayCandidate.username || displayCandidate.password) return null;
+    const loopback = new URL(loopbackOriginInput);
+    loopback.pathname = displayCandidate.pathname;
+    loopback.search = displayCandidate.search;
+    loopback.hash = displayCandidate.hash;
+    return loopback.toString();
+  } catch {
+    return null;
   }
 }
 
