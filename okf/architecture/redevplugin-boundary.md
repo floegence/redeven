@@ -9,7 +9,7 @@ quality_exception: Cross-repository platform boundary spanning published artifac
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.17` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.18` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -43,17 +43,17 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v3.0.17` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.18` set:
 
-- `github.com/floegence/redevplugin/v3 v3.0.17`;
-- `@floegence/redevplugin-contracts@3.0.17` and
-  `@floegence/redevplugin-ui@3.0.17`;
-- `redevplugin-runtime@3.0.17` and `redevplugin-worker-sdk@3.0.17` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.18`;
+- `@floegence/redevplugin-contracts@3.0.18` and
+  `@floegence/redevplugin-ui@3.0.18`;
+- `redevplugin-runtime@3.0.18` and `redevplugin-worker-sdk@3.0.18` as the exact
   public Rust source-crate boundary;
 - the released contract registry, release-manifest contract, contract hashes, and
   attested `platform-release-manifest.json` registry readback, whose
   SHA-256 is
-  `cdc11693135fe967a1550ba9e971ff7ca942d9ecd322ee0a6f2d38be35263e74`.
+  `f6263f11223f5d42558ae76557e03dcd7f127a5d2aece3e19df65c189352d171`.
 
 Redeven release tooling verifies the exact-one publication manifest against its
 tag, source commit, workflow, GitHub attestation, Go proxy and SumDB sums, npm
@@ -95,7 +95,7 @@ carries its exact permission id, required status, and stable
 facts, but it must not parse the package, derive permissions itself, show method
 inventories in the primary UI, or treat the declaration as final verification.
 
-Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.17` Host
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.18` Host
 revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
 revocation, grants, policy fences, runtime admission, and session scope before it
 publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,
@@ -187,6 +187,12 @@ sibling surfaces. Management mutations are different: the released Host revokes
 affected authority, then the SDK tears down the shared scope for committed or
 unknown outcomes. Redeven must not issue a second close against those disposed
 slots or treat local disposal as the server-side revoke.
+
+When a surface fails during startup, ReDevPlugin owns terminal settlement and
+exact revocation. Redeven preserves the first SDK terminal error across
+`onError`, opening-promise rejection, and local cleanup, and does not abort the
+opening lease merely because that error was observed. Cleanup failure remains
+diagnostic evidence and never becomes the product-facing cause.
 
 Plugin Center cards, details, launchers, and placement commands consume the
 Host-projected `action_state` as their only lifecycle action authority. Redeven

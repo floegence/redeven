@@ -130,6 +130,36 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     expect(order).toEqual(['opening:close', 'opening:dispose']);
   });
 
+  it('keeps the first terminal error while the SDK settles an opening surface', async () => {
+    const order: string[] = [];
+    const slot = createSlot(order, 'opening-failure');
+    const cleanupFailure = new Error('local cleanup failed');
+    vi.mocked(slot.dispose).mockRejectedValue(cleanupFailure);
+    let observedSignal: AbortSignal | undefined;
+    let rejectOpen!: (error: Error) => void;
+    const client = createClient((_slot, _surfaceRequest, options) => {
+      observedSignal = options?.signal;
+      return new Promise((_resolve, reject) => {
+        rejectOpen = reject;
+      });
+    });
+    const coordinator = createPluginSurfacePlacementCoordinator(client);
+    const firstFailure = new Error('invalid input maxlength');
+    const onCleanupError = vi.fn();
+
+    const opening = coordinator.open(slot, request, { onCleanupError });
+    await Promise.resolve();
+    await expect(coordinator.fail(slot, firstFailure)).resolves.toBeUndefined();
+
+    expect(observedSignal?.aborted).toBe(false);
+    expect(slot.close).not.toHaveBeenCalled();
+    expect(slot.dispose).not.toHaveBeenCalled();
+
+    rejectOpen(new Error('Plugin surface host was disposed'));
+    await expect(opening).rejects.toBe(firstFailure);
+    expect(onCleanupError).toHaveBeenCalledWith(cleanupFailure);
+  });
+
   it('retires every registered slot exactly once during closeAll and coordinator disposal', async () => {
     const order: string[] = [];
     const firstSlot = createSlot(order, 'first');

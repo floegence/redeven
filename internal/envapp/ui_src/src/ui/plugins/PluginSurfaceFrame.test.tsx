@@ -405,6 +405,42 @@ describe('PluginSurfaceBody', () => {
     expect(mount.querySelector('[data-plugin-surface-error]')?.textContent).toContain('surface terminated');
   });
 
+  it('keeps the first opening error visible when cleanup and open settlement also fail', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    let rejectOpen!: (error: Error) => void;
+    vi.mocked(coordinator.open).mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectOpen = reject;
+    }));
+    const cleanupFailure = new Error('local cleanup failed');
+    vi.mocked(coordinator.fail).mockRejectedValue(cleanupFailure);
+    const onRetirementError = vi.fn();
+
+    dispose = render(() => (
+      <PluginSurfaceBody
+        coordinator={coordinator}
+        confirmationQueue={createConfirmationQueue()}
+        target={target}
+        visible
+        onRetirementError={onRetirementError}
+      />
+    ), mount);
+    await Promise.resolve();
+
+    const options = vi.mocked(coordinator.open).mock.calls[0]?.[2];
+    const firstFailure = Object.assign(new Error('invalid input maxlength'), { errorCode: 'PLUGIN_BRIDGE_PROTOCOL' });
+    options?.onError?.(firstFailure as PluginBridgeError);
+    rejectOpen(new Error('Plugin surface host was disposed'));
+    await flushAsync();
+
+    expect(coordinator.fail).toHaveBeenCalledOnce();
+    expect(onRetirementError).toHaveBeenCalledWith(cleanupFailure);
+    expect(mount.querySelector('[data-plugin-surface-error]')?.textContent).toContain('invalid input maxlength');
+    expect(mount.querySelector('[data-plugin-surface-error]')?.textContent).not.toContain('disposed');
+    expect(mount.querySelector('[data-plugin-surface-error]')?.textContent).not.toContain('local cleanup failed');
+  });
+
   it('releases a failed slot before retrying with a fresh slot', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);

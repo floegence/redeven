@@ -32,6 +32,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   let slot: PluginSurfaceSlot | undefined;
   let mounted = true;
   let closePromise: Promise<boolean> | undefined;
+  let firstTerminalError: Error | undefined;
   let themeObserver: MutationObserver | undefined;
   let surfaceContextRevision = 1;
   let currentSurfaceContext = createRedevenPluginSurfaceContext(surfaceContextRevision, i18n.locale());
@@ -50,19 +51,29 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     canConfirm: () => mounted && Boolean(host()) && props.visible && pageVisible(),
   };
 
+  const recordTerminalError = (ownedSlot: PluginSurfaceSlot, error: unknown): Readonly<{
+    error: Error;
+    first: boolean;
+  }> | undefined => {
+    if (!mounted || slot !== ownedSlot) return undefined;
+    const first = firstTerminalError === undefined;
+    firstTerminalError ??= error instanceof Error
+      ? error
+      : new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    const errorCode = 'errorCode' in firstTerminalError && typeof firstTerminalError.errorCode === 'string'
+      ? firstTerminalError.errorCode
+      : '';
+    setLoadState('error');
+    setErrorMessage(firstTerminalError.message || errorCode || i18n.t('uiCopy.plugin.surfaceFailed'));
+    return { error: firstTerminalError, first };
+  };
+
   const openFreshSurface = () => {
     setLoadState('opening');
     setErrorMessage('');
     setHost(undefined);
-    const ownedSlot = PluginSurfaceSlot.create({
-      stage,
-      onStateChange(state, error) {
-        if (slot !== ownedSlot) return;
-        if (state !== 'error') return;
-        setLoadState('error');
-        setErrorMessage(error?.message || i18n.t('uiCopy.plugin.surfaceFailed'));
-      },
-    });
+    firstTerminalError = undefined;
+    const ownedSlot = PluginSurfaceSlot.create({ stage });
     slot = ownedSlot;
     props.coordinator.setVisible(ownedSlot, props.visible && pageVisible());
     void props.coordinator.open(ownedSlot, {
@@ -72,18 +83,15 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     }, {
       confirm: props.confirmationQueue.createHandler(confirmationOwner),
       onInteraction: props.onInteraction,
+      onCleanupError: props.onRetirementError,
       surfaceContext: currentSurfaceContext,
       onError(error) {
-        if (!mounted || slot !== ownedSlot) return;
-        setLoadState('error');
-        setErrorMessage(error.message || error.errorCode || i18n.t('uiCopy.plugin.surfaceFailed'));
-        void props.coordinator.fail(ownedSlot, error).catch((cleanupError: unknown) => {
-          if (!mounted || slot !== ownedSlot) return;
-          setErrorMessage(cleanupError instanceof Error ? cleanupError.message : i18n.t('uiCopy.plugin.surfaceFailed'));
-        });
+        const terminal = recordTerminalError(ownedSlot, error);
+        if (!terminal?.first) return;
+        void props.coordinator.fail(ownedSlot, terminal.error).catch(props.onRetirementError);
       },
     }).then((openedHost) => {
-      if (!mounted || slot !== ownedSlot) return;
+      if (!mounted || slot !== ownedSlot || firstTerminalError) return;
       openedHost.element.dataset.pluginSurfaceIframe = '';
       setHost(openedHost);
       if (currentSurfaceContext.revision > initialSurfaceContextRevision) {
@@ -91,9 +99,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       }
       setLoadState('ready');
     }).catch((error: unknown) => {
-      if (!mounted || slot !== ownedSlot) return;
-      setLoadState('error');
-      setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+      recordTerminalError(ownedSlot, error);
     });
   };
 
@@ -188,7 +194,6 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       openFreshSurface();
     } catch (error) {
       if (!mounted || slot !== failedSlot) return;
-      setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
       props.onRetirementError(error);
     } finally {
       if (mounted) setRetrying(false);
