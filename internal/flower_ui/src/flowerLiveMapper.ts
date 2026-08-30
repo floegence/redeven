@@ -31,6 +31,7 @@ import {
   normalizeFlowerReasoningCapability,
   normalizeFlowerReasoningSelection,
 } from './reasoning';
+import { inputResponseVisibleText, mapFlowerInputResponseBlock } from './inputResponse';
 
 export type FlowerLiveThreadMapperOptions = Readonly<{
   runtimeID: string;
@@ -957,6 +958,7 @@ function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
 
 function messageBlockPreviewText(block: FlowerMessageBlock): string {
   if (block.type === 'markdown' || block.type === 'text') return trim(block.content);
+  if (block.type === 'input-response') return inputResponseVisibleText(block);
   return '';
 }
 
@@ -980,6 +982,9 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
     const size = Number(block.size);
     if (!name || !mimeType || !Number.isFinite(size) || size < 0) return null;
     return { type: 'file', name, mimeType, ...(url ? { url } : {}), size: Math.floor(size) };
+  }
+  if (type === 'input-response') {
+    return mapFlowerInputResponseBlock(blockValue);
   }
   if (type === 'activity-timeline') {
     return mapActivityTimelineBlock(blockValue);

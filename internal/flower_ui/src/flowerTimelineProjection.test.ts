@@ -121,6 +121,42 @@ describe('buildFlowerTimelineEntries', () => {
     expect(entries.filter((entry) => entry.type === 'message')).toHaveLength(1);
   });
 
+  it('keeps an input response as one ordered structured receipt', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [{
+        id: 'interaction-answer',
+        thread_id: 'thread-1',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        role: 'user',
+        content: 'Second question?\nsecond answer\n\nFirst question?\nfirst answer',
+        status: 'complete',
+        created_at_ms: 2,
+        blocks: [{
+          type: 'input-response',
+          questions: [
+            { question_id: 'second', question: 'Second question?', answer: 'second answer' },
+            { question_id: 'first', question: 'First question?', answer: 'first answer' },
+          ],
+        }],
+      }],
+    }));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      type: 'message',
+      blocks: [{
+        type: 'input_response',
+        block: {
+          questions: [
+            { question_id: 'second', question: 'Second question?', answer: 'second answer' },
+            { question_id: 'first', question: 'First question?', answer: 'first answer' },
+          ],
+        },
+      }],
+    });
+  });
+
   it('recognizes a canonical declined tool from the rendered timeline without an approval marker', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [{

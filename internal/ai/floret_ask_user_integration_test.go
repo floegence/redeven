@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionrpc"
@@ -279,6 +280,33 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 			result.response.ConsumedWaitingPromptID != prompt.PromptID ||
 			result.response.Current.ThreadID.String() != thread.ThreadID || result.response.Current.ViewVersion <= 0 {
 			t.Fatalf("command result=%#v err=%v", result.response, result.err)
+		}
+		var responseBlock *persistedInputResponseBlock
+		for _, item := range result.response.Current.Items {
+			if item.Kind != flruntime.ThreadItemInteraction {
+				continue
+			}
+			raw, ok, projectionErr := typedThreadItemMessage(thread.ThreadID, item)
+			if projectionErr != nil {
+				t.Fatalf("project accepted input: %v", projectionErr)
+			}
+			if !ok {
+				continue
+			}
+			var message struct {
+				Blocks []persistedInputResponseBlock `json:"blocks"`
+			}
+			if err := json.Unmarshal(raw, &message); err != nil {
+				t.Fatalf("decode accepted input projection: %v", err)
+			}
+			if len(message.Blocks) == 1 {
+				responseBlock = &message.Blocks[0]
+			}
+		}
+		if responseBlock == nil || len(responseBlock.Questions) != 1 ||
+			responseBlock.Questions[0].Question != "What value should continue the run?" ||
+			responseBlock.Questions[0].Answer != "accepted" {
+			t.Fatalf("accepted input projection=%#v", responseBlock)
 		}
 	case <-time.After(250 * time.Millisecond):
 		t.Fatal("structured response waited for provider execution after canonical admission")

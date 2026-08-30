@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mapContextUsage,
   mapFlowerActivityItem,
+  mapFlowerMessage,
   mapFlowerThread,
   mergeFlowerContextUsage,
 } from './flowerLiveMapper';
@@ -142,6 +143,50 @@ describe('Flower context usage contract', () => {
 
     expect(mergeFlowerContextUsage(live, restored)).toBe(restored);
     expect(restored.thread_usage).toEqual(live.thread_usage);
+  });
+});
+
+describe('Flower input response message contract', () => {
+  it('maps the structured question receipt and derives canonical visible text', () => {
+    const message = mapFlowerMessage({
+      id: 'interaction-answer',
+      thread_id: 'thread-a',
+      turn_id: 'turn-a',
+      run_id: 'run-a',
+      role: 'user',
+      status: 'complete',
+      timestamp: 10,
+      blocks: [{
+        type: 'input-response',
+        questions: [
+          { question_id: 'second', question: 'Second question?', answer: 'second answer' },
+          { question_id: 'first', question: 'First question?', answer: 'first answer' },
+        ],
+      }],
+    });
+
+    expect(message.content).toBe('Second question?\nsecond answer\n\nFirst question?\nfirst answer');
+    expect(message.blocks?.[0]).toMatchObject({
+      type: 'input-response',
+      questions: [
+        { question_id: 'second', question: 'Second question?', answer: 'second answer' },
+        { question_id: 'first', question: 'First question?', answer: 'first answer' },
+      ],
+    });
+  });
+
+  it('rejects invalid input response blocks instead of falling back to message content', () => {
+    expect(() => mapFlowerMessage({
+      id: 'interaction-answer',
+      thread_id: 'thread-a',
+      turn_id: 'turn-a',
+      run_id: 'run-a',
+      role: 'user',
+      status: 'complete',
+      timestamp: 10,
+      content: 'legacy answer',
+      blocks: [{ type: 'input-response', questions: [] }],
+    })).toThrow('input-response block requires at least one question');
   });
 });
 

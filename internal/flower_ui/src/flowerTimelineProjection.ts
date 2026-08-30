@@ -10,6 +10,7 @@ import type {
 import { flowerActivityIdentity } from './flowerActivityIdentity';
 import { trimString } from './flowerSurfaceModel';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
+import { inputResponseSignature } from './inputResponse';
 
 export type FlowerRenderableMessageBlock =
   | Readonly<{
@@ -24,6 +25,12 @@ export type FlowerRenderableMessageBlock =
     key: string;
     block_index: number;
     block: FlowerActivityTimelineBlock;
+  }>
+  | Readonly<{
+    type: 'input_response';
+    key: string;
+    block_index: number;
+    block: Extract<NonNullable<FlowerChatMessage['blocks']>[number], { type: 'input-response' }>;
   }>
   | Readonly<{
     type: 'image';
@@ -124,6 +131,7 @@ export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock)
 
 export function messageBlockSignature(block: NonNullable<FlowerChatMessage['blocks']>[number]): string {
   if (block.type === 'activity-timeline') return `activity:${activityTimelineSignature(block)}`;
+  if (block.type === 'input-response') return `input-response:${inputResponseSignature(block)}`;
   if (block.type === 'image') return `image:${block.src}:${block.alt ?? ''}`;
   if (block.type === 'file') return `file:${block.name}:${block.size}:${block.mimeType}:${block.url}`;
   return `${block.type}:${block.content ?? ''}`;
@@ -168,6 +176,9 @@ function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage):
     if (block.type === 'activity-timeline') {
       if (block.items.length === 0) return [];
       return [{ type: 'activity', key: activityRenderableKey(threadID, message.id, block), block_index: index, block }];
+    }
+    if (block.type === 'input-response') {
+      return [{ type: 'input_response', key: `${message.id}:block:${index}`, block_index: index, block }];
     }
     if (block.type === 'image') {
       return [{

@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -178,27 +179,46 @@ func TestTypedThreadItemRejectsIncompleteOrConflictingRunIdentity(t *testing.T) 
 	}
 }
 
-func TestTypedThreadItemMapsOnlyResolvedVisibleInputInteractions(t *testing.T) {
+func TestTypedThreadItemMapsAcceptedInputAsOrderedQuestionResponse(t *testing.T) {
 	t.Parallel()
 	resolved := flruntime.ThreadInteractionInput
 	item := flruntime.ThreadItem{
-		ID: "interaction:answer", TurnID: identity.TurnID("turn_answer"), RunID: identity.RunID("run_answer"), Ordinal: 1,
+		ID: "interaction:answer", TurnID: identity.TurnID("turn_answer"), RunID: identity.RunID("run_answer"), Ordinal: 1, CreatedAt: time.UnixMilli(1_000),
 		Kind: flruntime.ThreadItemInteraction,
 		Interaction: &flruntime.ThreadInteraction{
 			ID: "answer", TurnID: identity.TurnID("turn_answer"), RunID: identity.RunID("run_answer"), Kind: resolved, Resolved: true,
-			Resolution: &flruntime.InteractionResolution{Accepted: true, Input: map[string]string{"b": "second", "a": "first"}},
+			Input: &flruntime.InputPresentation{Questions: []flruntime.InputQuestion{
+				{ID: "b", Prompt: "Second question?", Kind: "write"},
+				{ID: "a", Prompt: "First question?", Kind: "write"},
+			}},
+			Resolution: &flruntime.InteractionResolution{Accepted: true, Input: map[string]string{"a": "first", "b": "second"}},
 		},
 	}
 	raw, ok, err := typedThreadItemMessage("thread_answer", item)
 	if err != nil || !ok {
 		t.Fatalf("resolved input: ok=%v err=%v", ok, err)
 	}
-	var message map[string]any
+	var message struct {
+		ID      string                        `json:"id"`
+		Role    string                        `json:"role"`
+		Content string                        `json:"content"`
+		Blocks  []persistedInputResponseBlock `json:"blocks"`
+	}
 	if err := json.Unmarshal(raw, &message); err != nil {
 		t.Fatal(err)
 	}
-	if message["id"] != item.ID || message["role"] != "user" || message["content"] != "first\nsecond" {
+	if message.ID != item.ID || message.Role != "user" || message.Content != "Second question?\nsecond\n\nFirst question?\nfirst" {
 		t.Fatalf("resolved input message=%#v", message)
+	}
+	if len(message.Blocks) != 1 || message.Blocks[0].Type != "input-response" || len(message.Blocks[0].Questions) != 2 {
+		t.Fatalf("resolved input blocks=%#v", message.Blocks)
+	}
+	if got := message.Blocks[0].Questions; got[0].QuestionID != "b" || got[0].Question != "Second question?" || got[0].Answer != "second" || got[1].QuestionID != "a" || got[1].Answer != "first" {
+		t.Fatalf("resolved input questions=%#v", got)
+	}
+	decoded, decodedOK, decodeErr := flowerTimelineMessageFromRaw("thread_answer", "turn_answer", "run_answer", item.ID, raw)
+	if decodeErr != nil || !decodedOK || decoded.Content != message.Content {
+		t.Fatalf("decoded input response=%#v ok=%v err=%v", decoded, decodedOK, decodeErr)
 	}
 
 	item.Interaction.Resolved = false
@@ -206,9 +226,91 @@ func TestTypedThreadItemMapsOnlyResolvedVisibleInputInteractions(t *testing.T) {
 		t.Fatalf("unresolved input: ok=%v err=%v", ok, err)
 	}
 	item.Interaction.Resolved = true
-	item.Interaction.Resolution.Redacted = true
+	item.Interaction.Resolution.Accepted = false
 	if _, ok, err := typedThreadItemMessage("thread_answer", item); err != nil || ok {
-		t.Fatalf("redacted input: ok=%v err=%v", ok, err)
+		t.Fatalf("unaccepted input: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestTypedThreadItemKeepsSecretQuestionAndRedactsAnswer(t *testing.T) {
+	t.Parallel()
+	item := flruntime.ThreadItem{
+		ID: "interaction:secret", TurnID: identity.TurnID("turn_secret"), RunID: identity.RunID("run_secret"), Ordinal: 1,
+		Kind: flruntime.ThreadItemInteraction,
+		Interaction: &flruntime.ThreadInteraction{
+			ID: "secret", TurnID: identity.TurnID("turn_secret"), RunID: identity.RunID("run_secret"),
+			Kind: flruntime.ThreadInteractionInput, Resolved: true,
+			Input: &flruntime.InputPresentation{Questions: []flruntime.InputQuestion{
+				{ID: "token", Prompt: "Paste the deployment token.", Kind: "write", Secret: true},
+			}},
+			Resolution: &flruntime.InteractionResolution{Accepted: true, Redacted: true},
+		},
+	}
+	raw, ok, err := typedThreadItemMessage("thread_secret", item)
+	if err != nil || !ok {
+		t.Fatalf("secret input: ok=%v err=%v", ok, err)
+	}
+	if strings.Contains(string(raw), "secret-value") {
+		t.Fatalf("secret input exposed answer: %s", raw)
+	}
+	var message struct {
+		Content string                        `json:"content"`
+		Blocks  []persistedInputResponseBlock `json:"blocks"`
+	}
+	if err := json.Unmarshal(raw, &message); err != nil {
+		t.Fatal(err)
+	}
+	if message.Content != "Paste the deployment token." || len(message.Blocks) != 1 || len(message.Blocks[0].Questions) != 1 {
+		t.Fatalf("secret input message=%#v", message)
+	}
+	question := message.Blocks[0].Questions[0]
+	if question.QuestionID != "token" || !question.Redacted || question.Answer != "" {
+		t.Fatalf("secret input question=%#v", question)
+	}
+}
+
+func TestTypedThreadItemRejectsInvalidAcceptedInputResponse(t *testing.T) {
+	t.Parallel()
+	base := flruntime.ThreadInteraction{
+		ID: "answer", TurnID: identity.TurnID("turn_answer"), RunID: identity.RunID("run_answer"),
+		Kind: flruntime.ThreadInteractionInput, Resolved: true,
+		Input:      &flruntime.InputPresentation{Questions: []flruntime.InputQuestion{{ID: "q", Prompt: "Question?", Kind: "write"}}},
+		Resolution: &flruntime.InteractionResolution{Accepted: true, Input: map[string]string{"q": "answer"}},
+	}
+	tests := []struct {
+		name   string
+		mutate func(*flruntime.ThreadInteraction)
+		want   string
+	}{
+		{name: "missing presentation", mutate: func(value *flruntime.ThreadInteraction) { value.Input = nil }, want: "missing its question presentation"},
+		{name: "duplicate question", mutate: func(value *flruntime.ThreadInteraction) {
+			value.Input.Questions = append(value.Input.Questions, value.Input.Questions[0])
+		}, want: "duplicate question"},
+		{name: "missing answer", mutate: func(value *flruntime.ThreadInteraction) { value.Resolution.Input = nil }, want: "missing answer"},
+		{name: "unknown answer", mutate: func(value *flruntime.ThreadInteraction) { value.Resolution.Input["other"] = "answer" }, want: "unknown question"},
+		{name: "noncanonical answer identity", mutate: func(value *flruntime.ThreadInteraction) {
+			value.Resolution.Input[" q "] = "answer"
+		}, want: "unknown question"},
+		{name: "inconsistent redaction", mutate: func(value *flruntime.ThreadInteraction) { value.Resolution.Redacted = true }, want: "inconsistent secret-answer redaction"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			interaction := base
+			presentation := *base.Input
+			presentation.Questions = append([]flruntime.InputQuestion(nil), base.Input.Questions...)
+			interaction.Input = &presentation
+			resolution := *base.Resolution
+			resolution.Input = maps.Clone(base.Resolution.Input)
+			interaction.Resolution = &resolution
+			tt.mutate(&interaction)
+			item := flruntime.ThreadItem{
+				ID: "interaction:answer", TurnID: interaction.TurnID, RunID: interaction.RunID,
+				Kind: flruntime.ThreadItemInteraction, Interaction: &interaction,
+			}
+			if _, _, err := typedThreadItemMessage("thread_answer", item); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error=%v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

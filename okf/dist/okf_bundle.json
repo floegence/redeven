@@ -9267,15 +9267,15 @@
         "title": "Flower interactions and context state",
         "type": "UI Contract"
       },
-      "body_length": 3714,
+      "body_length": 4602,
       "summary": "Approval and waiting-user prompts are projections of Floret typed pending interactions. The bottom action mode is one mutually exclusive surface with fixed priority `input_request` then `approval` then `chat`, while the ordinary thread rail always remains interactive; decision surfaces never make a shared ancestor inert or install a pointer-blocking overlay.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Ask User keeps explicit choice-versus-custom draft identity per question. Secret answers use a password field and are sent directly to Respond; they are excluded from ComposerDraft persistence, IndexedDB outbox, diagnostics, and timeline text. A successful response applies the returned current view immediately. Duplicate response requests resolve idempotently and never append duplicate user content.\n\nApproval actions share one compact action row for batch rejection, rejection, one-time approval, and Stop. Every pending, requested primary approval remains visible even when its action reports `can_approve=false`, the adapter cannot mutate, the selected thread is read-only, or detail is pending; those states disable every decision action and present the canonical unavailable or read-only reason instead of falling back to chat. Accept or Reject calls the typed interaction boundary and applies its current view. A resolved approval interaction never creates a standalone timeline row: its lifecycle state merges only into the canonical tool item with the same `tool_call_id`, and an unmatched resolved interaction renders no tool shell. Rejection is a quiet tool-row outcome. Batch rejection resolves only the listed pending interactions. The approval surface does not mount the ordinary textarea, password input, attachment or reference lane, working-directory, permission, model, reasoning, context-usage, or composer-footer controls. Per-thread text, attachment, and reference drafts remain owned by `ComposerDraftStore` while unmounted and return unchanged when the last approval resolves back to chat. Stop remains available directly in the approval action row instead of depending on the ordinary composer footer. No local handoff, consumed-interaction set, approval generation, or command busy reducer controls canonical visibility.\n\nApproval copy is semantic and target-specific: file mutations name the file as an edit, shell calls show the command, network calls name the resource, and unknown actions use a safe generic description. Internal tool names and target-encoding prefixes are never user-facing.\n\nRuntime restart recovery is quiet unless content cannot be recovered, in which case the affected row offers a nonblocking retry. Context usage, automatic compression, and the pure `/compact` mapping are owned by [AI model and context runtime](../ai/model-context-runtime.md), not by the approval surface.",
-          "char_count": 2429
+          "body": "Ask User keeps explicit choice-versus-custom draft identity per question. The Continue action is a compact capsule while the question surface and choice rows retain their content-shaped layout. Secret answers use a password field and are sent directly to Respond; they are excluded from ComposerDraft persistence, IndexedDB outbox, diagnostics, and timeline text. A successful response applies the returned current view immediately. Duplicate response requests resolve idempotently and never append duplicate user content.\n\nAn accepted input interaction becomes one structured user response receipt. It preserves Floret's original question order, shows each question with its public answer, omits settled choices, and shows only a localized hidden-answer marker for secret questions. Historical reads and live CurrentView updates map to the same `input-response` block; message text and copy output derive from that block rather than from an answer-only fallback. Missing presentation, duplicate question identity, unknown answers, missing public answers, and inconsistent redaction fail the projection explicitly. Unaccepted or cancelled input does not create a user receipt.\n\nApproval actions share one compact action row for batch rejection, rejection, one-time approval, and Stop. Every pending, requested primary approval remains visible even when its action reports `can_approve=false`, the adapter cannot mutate, the selected thread is read-only, or detail is pending; those states disable every decision action and present the canonical unavailable or read-only reason instead of falling back to chat. Accept or Reject calls the typed interaction boundary and applies its current view. A resolved approval interaction never creates a standalone timeline row: its lifecycle state merges only into the canonical tool item with the same `tool_call_id`, and an unmatched resolved interaction renders no tool shell. Rejection is a quiet tool-row outcome. Batch rejection resolves only the listed pending interactions. The approval surface does not mount the ordinary textarea, password input, attachment or reference lane, working-directory, permission, model, reasoning, context-usage, or composer-footer controls. Per-thread text, attachment, and reference drafts remain owned by `ComposerDraftStore` while unmounted and return unchanged when the last approval resolves back to chat. Stop remains available directly in the approval action row instead of depending on the ordinary composer footer. No local handoff, consumed-interaction set, approval generation, or command busy reducer controls canonical visibility.\n\nApproval copy is semantic and target-specific: file mutations name the file as an edit, shell calls show the command, network calls name the resource, and unknown actions use a safe generic description. Internal tool names and target-encoding prefixes are never user-facing.\n\nRuntime restart recovery is quiet unless content cannot be recovered, in which case the affected row offers a nonblocking retry. Context usage, automatic compression, and the pure `/compact` mapping are owned by [AI model and context runtime](../ai/model-context-runtime.md), not by the approval surface.",
+          "char_count": 3203
         },
         {
           "id": "boundaries",
@@ -9290,6 +9290,11 @@
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:input, approval, composer, and navigation behavior.",
           "source": "redeven:internal/flower_ui/src/FlowerSurface.tsx",
           "description": "Input, approval, composer, and navigation behavior."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/inputResponse.ts:0:strict settled-input response contract and live projection.",
+          "source": "redeven:internal/flower_ui/src/inputResponse.ts",
+          "description": "Strict settled-input response contract and live projection."
         },
         {
           "id": "redeven:internal/flower_ui/src/runtimeCurrentView.ts:0:canonical interaction and tool-row projection.",
@@ -11406,5 +11411,5 @@
       ]
     }
   ],
-  "source_sha256": "f02f80cd18e61852c7ede173eba7e0390517dfa0c03e2e0e78d366c5f4e561a0"
+  "source_sha256": "8ce9288bb0228d3cf3fbdecf9171c9f0dcf853e1129178e10752cfa2e6eb104c"
 }

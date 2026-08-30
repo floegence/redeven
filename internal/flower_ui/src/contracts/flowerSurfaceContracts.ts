@@ -366,6 +366,16 @@ export type FlowerActivityTimelineBlock = Readonly<{
   file_actions?: Readonly<Record<string, FlowerActivityFileAction>>;
 }>;
 
+export type FlowerInputResponseBlock = Readonly<{
+  type: 'input-response';
+  questions: readonly Readonly<{
+    question_id: string;
+    question: string;
+    answer?: string;
+    redacted?: true;
+  }>[];
+}>;
+
 export type FlowerChatMessageBlock =
   | Readonly<{
     type: 'markdown' | 'text' | 'thinking';
@@ -383,6 +393,7 @@ export type FlowerChatMessageBlock =
     mimeType: string;
     url?: string;
   }>
+  | FlowerInputResponseBlock
   | FlowerActivityTimelineBlock;
 
 export type FlowerInputRequestAction = Readonly<{
