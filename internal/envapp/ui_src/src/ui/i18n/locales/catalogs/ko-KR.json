@@ -2872,7 +2872,7 @@
     "review": { "title": "작업 검토", "operation": "작업" },
     "compose": { "add": "프로젝트 추가", "edit": "프로젝트 편집", "forget": "프로젝트 제거", "saved": "저장됨", "source": "Compose 파일", "editorAddTitle": "Compose 프로젝트 추가", "editorEditTitle": "Compose 프로젝트 편집", "name": "프로젝트 이름", "configPaths": "Compose 파일", "configPathsHint": "한 줄에 절대 경로 하나를 입력하세요. 뒤의 파일이 앞의 설정을 덮어씁니다.", "envFile": "환경 파일", "envFileHint": "선택 사항인 환경 파일의 절대 경로입니다.", "profiles": "프로필", "profilesHint": "선택 사항이며 쉼표로 구분합니다.", "save": "프로젝트 저장", "forgetTitle": "Compose 프로젝트 제거", "forgetMessage": "‘{name}’을(를) 제거할까요? 실행 중인 컨테이너는 변경되지 않습니다." },
     "permissions": { "read": "컨테이너 리소스를 보려면 읽기 권한이 필요합니다.", "admin": "이 고위험 작업에는 관리자 권한이 필요합니다.", "adminFiles": "볼륨 파일을 탐색하려면 Read 및 Admin 권한이 필요합니다." },
-    "notifications": { "inventoryChangedTitle": "인벤토리가 변경됨", "inventoryChangedMessage": "선택한 리소스를 더 이상 사용할 수 없습니다.", "preflightFailedTitle": "사전 확인 실패", "operationFailedTitle": "작업 실패", "operationCompleteTitle": "작업 완료", "operationCompleteMessage": "권한 있는 인벤토리를 새로 고쳤습니다.", "logsFailedTitle": "로그 사용 불가", "detailsFailedTitle": "세부 정보를 사용할 수 없음", "composeLoadFailedTitle": "프로젝트를 불러올 수 없음", "composeSavedTitle": "프로젝트 저장됨", "composeSavedMessage": "Compose 프로젝트를 바로 조작할 수 있습니다.", "composeSaveFailedTitle": "프로젝트 저장 실패", "composeForgottenTitle": "프로젝트 제거됨", "composeForgottenMessage": "저장된 Compose 정의를 제거했습니다." }
+    "notifications": { "inventoryChangedTitle": "인벤토리가 변경됨", "inventoryChangedMessage": "대상 리소스를 사용할 수 없거나 인벤토리가 변경되었습니다.", "preflightFailedTitle": "사전 확인 실패", "operationFailedTitle": "작업 실패", "operationCompleteTitle": "작업 완료", "operationCompleteMessage": "권한 있는 인벤토리를 새로 고쳤습니다.", "logsFailedTitle": "로그 사용 불가", "detailsFailedTitle": "세부 정보를 사용할 수 없음", "composeLoadFailedTitle": "프로젝트를 불러올 수 없음", "composeSavedTitle": "프로젝트 저장됨", "composeSavedMessage": "Compose 프로젝트를 바로 조작할 수 있습니다.", "composeSaveFailedTitle": "프로젝트 저장 실패", "composeForgottenTitle": "프로젝트 제거됨", "composeForgottenMessage": "저장된 Compose 정의를 제거했습니다." }
   },
   "webServices": {
     "title": "Web 서비스",
@@ -3024,7 +3024,7 @@
       "templates": {
         "deepSeekHarnessHost": { "name": "DeepSeek Harness", "description": "현재 환경에서 DeepSeek Harness를 직접 실행합니다." },
         "deepSeekHarnessContainer": { "name": "DeepSeek Harness", "description": "검토된 커뮤니티 DeepSeek Harness 이미지를 Docker에서 실행합니다." },
-        "linuxserverWebtopUbuntuKDE": { "name": "LinuxServer Webtop · Ubuntu KDE", "description": "영구 Ubuntu KDE 데스크톱을 격리된 컨테이너에서 실행합니다." },
+        "linuxserverWebtopUbuntuKDE": { "name": "LinuxServer Webtop · Ubuntu (KDE Plasma 데스크톱)", "description": "Ubuntu 기반 KDE Plasma 데스크톱을 격리된 컨테이너에서 실행합니다. 일반 Ubuntu Desktop(GNOME)과 모양이 다릅니다." },
         "linuxserverWebtopDebianXFCE": { "name": "LinuxServer Webtop · Debian XFCE", "description": "영구 Debian XFCE 데스크톱을 격리된 컨테이너에서 실행합니다." }
       },
       "notices": {

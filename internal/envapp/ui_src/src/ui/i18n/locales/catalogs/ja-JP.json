@@ -2872,7 +2872,7 @@
     "review": { "title": "操作を確認", "operation": "操作" },
     "compose": { "add": "プロジェクトを追加", "edit": "プロジェクトを編集", "forget": "プロジェクトを削除", "saved": "保存済み", "source": "Compose ファイル", "editorAddTitle": "Compose プロジェクトを追加", "editorEditTitle": "Compose プロジェクトを編集", "name": "プロジェクト名", "configPaths": "Compose ファイル", "configPathsHint": "1 行に 1 つ絶対パスを入力します。後のファイルが前の設定を上書きします。", "envFile": "環境ファイル", "envFileHint": "省略可能な環境ファイルの絶対パスです。", "profiles": "プロファイル", "profilesHint": "省略可能。名前をカンマで区切ります。", "save": "プロジェクトを保存", "forgetTitle": "Compose プロジェクトを削除", "forgetMessage": "「{name}」を削除しますか？実行中のコンテナは変更されません。" },
     "permissions": { "read": "コンテナリソースの表示には読み取り権限が必要です。", "admin": "この高リスク操作には管理者権限が必要です。", "adminFiles": "ボリュームのファイル参照には Read と Admin 権限が必要です。" },
-    "notifications": { "inventoryChangedTitle": "インベントリが変更されました", "inventoryChangedMessage": "選択したリソースは利用できなくなりました。", "preflightFailedTitle": "事前確認に失敗しました", "operationFailedTitle": "操作に失敗しました", "operationCompleteTitle": "操作が完了しました", "operationCompleteMessage": "正式なインベントリを更新しました。", "logsFailedTitle": "ログを利用できません", "detailsFailedTitle": "詳細を利用できません", "composeLoadFailedTitle": "プロジェクトを読み込めません", "composeSavedTitle": "プロジェクトを保存しました", "composeSavedMessage": "Compose プロジェクトをすぐに操作できます。", "composeSaveFailedTitle": "プロジェクトを保存できません", "composeForgottenTitle": "プロジェクトを削除しました", "composeForgottenMessage": "保存済みの Compose 定義を削除しました。" }
+    "notifications": { "inventoryChangedTitle": "インベントリが変更されました", "inventoryChangedMessage": "対象のリソースを利用できないか、インベントリが変更されています。", "preflightFailedTitle": "事前確認に失敗しました", "operationFailedTitle": "操作に失敗しました", "operationCompleteTitle": "操作が完了しました", "operationCompleteMessage": "正式なインベントリを更新しました。", "logsFailedTitle": "ログを利用できません", "detailsFailedTitle": "詳細を利用できません", "composeLoadFailedTitle": "プロジェクトを読み込めません", "composeSavedTitle": "プロジェクトを保存しました", "composeSavedMessage": "Compose プロジェクトをすぐに操作できます。", "composeSaveFailedTitle": "プロジェクトを保存できません", "composeForgottenTitle": "プロジェクトを削除しました", "composeForgottenMessage": "保存済みの Compose 定義を削除しました。" }
   },
   "webServices": {
     "title": "Webサービス",
@@ -3024,7 +3024,7 @@
       "templates": {
         "deepSeekHarnessHost": { "name": "DeepSeek Harness", "description": "現在の環境で DeepSeek Harness を直接実行します。" },
         "deepSeekHarnessContainer": { "name": "DeepSeek Harness", "description": "レビュー済みのコミュニティ製 DeepSeek Harness イメージを Docker で実行します。" },
-        "linuxserverWebtopUbuntuKDE": { "name": "LinuxServer Webtop · Ubuntu KDE", "description": "永続化された Ubuntu KDE デスクトップを分離コンテナ内で実行します。" },
+        "linuxserverWebtopUbuntuKDE": { "name": "LinuxServer Webtop · Ubuntu（KDE Plasma）", "description": "Ubuntu ベースの KDE Plasma デスクトップを分離コンテナ内で実行します。標準の Ubuntu Desktop（GNOME）とは外観が異なります。" },
         "linuxserverWebtopDebianXFCE": { "name": "LinuxServer Webtop · Debian XFCE", "description": "永続化された Debian XFCE デスクトップを分離コンテナ内で実行します。" }
       },
       "notices": {

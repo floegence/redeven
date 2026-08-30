@@ -81,8 +81,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
             service_id: 'mws-webtop',
             template_id: 'linuxserver-webtop-ubuntu-kde',
             service_family_id: 'linuxserver-webtop-ubuntu-kde',
-            name: 'LinuxServer Webtop · Ubuntu KDE',
-            description: 'Run an Ubuntu KDE desktop in an isolated Docker container.',
+            name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)',
+            description: 'Run an Ubuntu-based KDE Plasma desktop in an isolated Docker container.',
             template_source: 'builtin',
             deployment: 'container',
             workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde/very-long-project-directory',
@@ -167,7 +167,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
     expect(workspace.scrollWidth).toBeGreaterThan(workspace.clientWidth);
     expect(workspace.getBoundingClientRect().height).toBeLessThanOrEqual(20);
-    expect(identity.textContent).not.toContain('Run an Ubuntu KDE desktop');
+    expect(identity.textContent).not.toContain('Run an Ubuntu-based KDE Plasma desktop');
     expect(status.textContent).toContain('Running');
     expect(row.className).not.toContain('bg-[var(--redeven-status-success-soft)]');
     expect(actionButtons).toHaveLength(3);
