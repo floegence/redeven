@@ -88,10 +88,18 @@ resource, and cannot be presented as `ready`.
 ## Env App maintenance presentation
 
 Env App shares one readiness controller across Activity, Workbench, and
-Settings. Flower stays mounted while a sibling maintenance section occupies
-only its visible slot. The boundary never disables or hides the shell,
-Workbench, terminal, files, Settings, or a shared ancestor. Only the visible
-Flower placement may move or restore focus.
+Settings. Its snapshot is the only admission boundary for the Flower product
+subtree: `ready` and `degraded` mount one surface, while every other state leaves
+the surface unmounted and shows maintenance in its slot. Unmounting stops the
+workspace stream, invalidates unfinished bootstrap work, and discards local
+errors and caches. Returning to an operational state creates one clean surface
+from server data. The Shell-owned composer draft coordinator stays outside this
+boundary, so unsent drafts survive. No Flower-local readiness state machine,
+poller, or 503 suppression path exists.
+
+The boundary never disables or hides the shell, Workbench, terminal, files,
+Settings, or a shared ancestor. Only the visible Flower placement may move or
+restore focus.
 
 Env App begins readiness inspection only after the HTTP access status has been
 checked and access is granted. The readiness HTTP route remains available while
@@ -100,10 +108,11 @@ readiness refresh must not wait for RPC or access-resume UI state. Initial lock
 and every later grant revocation pause the controller, invalidate in-flight
 publication, clear polling and automatic retry state, and reject manual refresh
 or retry without issuing HTTP requests. A later grant resumes exactly one fresh
-inspection. When a Runtime restart invalidates local access, the password gate
-replaces the recovery presentation while the existing Activity Flower component
-remains mounted and inert; a successful regrant may complete the prior failed
-recovery generation.
+inspection. Until that inspection returns an operational snapshot, Flower does
+not request settings, threads, attachments, handler resolution, or the live
+stream. When a Runtime restart invalidates local access, the password gate
+replaces the recovery presentation; a successful regrant begins one fresh
+readiness and Flower initialization sequence.
 
 Transient inspection delays progress presentation and never invents a
 percentage. Typed busy or temporary I/O failures enter bounded `recovering`;
@@ -111,7 +120,8 @@ unsafe failures block. The process-level `agent.lock` remains the state-root
 owner, so another runtime attaches or reports conflict instead of opening an
 empty Store. Automatic retry requires typed safety and current admin authority;
 manual retry is single-flight. No force, reset, repair, ignore, or backend
-mutation action exists. Returning to `ready` reveals the retained Flower DOM.
+mutation action exists. Returning to `ready` mounts a fresh Flower DOM after the
+previous surface has completed cleanup.
 
 Displayed diagnostics and clipboard output use the same sanitized projection.
 A bounded trace id, startup phase, and retry reason may support diagnosis, but
@@ -150,7 +160,7 @@ integrity check succeeds. Readiness history is not recovery authority.
 - `redeven:internal/agent/ai_rpc_registration_test.go:13` - Proves the stable RPC inventory remains registered and returns structured unavailability without a service.
 - `redeven:internal/envapp/ui_src/src/ui/flower/aiReadiness.ts:1` - Strictly normalizes the sanitized wire facts and owns bounded, permission-aware polling and retry state.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:1` - Verifies initial lock, grant, revocation, stable Activity ownership, and one fresh readiness request after local or remote regrant.
-- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.tsx:1` - Keeps maintenance presentation local to Flower with focus restoration and same-source diagnostics.
+- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.tsx:1` - Lazily admits the Flower subtree only for operational readiness while keeping maintenance local and diagnostics on the same source.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx:1` - Groups store owners without claiming health for stores outside the readiness check.
 - `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1` - Verifies narrow reflow, zoom, forced colors, reduced motion, overflow, and local interaction behavior in Chromium.
 - `redeven:scripts/check_floret_dependency_boundary.sh:1` - Rejects fixed service pointers, raw accessors, misplaced constructors, and readiness storage coupling.

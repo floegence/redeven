@@ -4073,7 +4073,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const loadSurface = async () => {
     try {
       await refreshSettingsForRevision();
+      if (surfaceDisposed) return;
       await resolveHandlerDecision().catch(() => undefined);
+      if (surfaceDisposed) return;
       await refreshThreads();
     } catch {
       // refreshSettingsForRevision records the user-visible load error.

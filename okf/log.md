@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-30
+* **Flower readiness admission**: Env App now mounts Flower only for `ready` or
+  `degraded` AI readiness. Startup migration and recovery states issue no
+  Flower business requests; losing readiness cleans up the live surface, while
+  the Shell-owned composer coordinator preserves unsent drafts for one clean
+  remount.
 * **Floret v6.0.1 fork migration adoption**: Redeven now consumes the published
   Floret release that automatically removes verified terminal Effect Attempt
   history copied by legacy forks and prevents new forks from copying source-

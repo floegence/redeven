@@ -164,8 +164,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       canReviewIssues={Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
       canRetryGeneration={Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
       focusEnabled={props.engaged ?? true}
-    >
-      <FlowerSurface
+      renderContent={() => <FlowerSurface
         adapter={adapter()}
         notify={(notice: FlowerSurfaceNotification) => {
           const title = trim(notice.title) || (notice.tone === 'error'
@@ -204,7 +203,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
           source: (event) => event.metadata?.source ?? 'thread-list',
         })}
         class={`h-full min-h-0 ${props.class ?? ''}`}
-      />
-    </AIReadinessBoundary>
+      />}
+    />
   );
 }

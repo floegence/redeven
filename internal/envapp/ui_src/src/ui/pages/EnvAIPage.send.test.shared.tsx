@@ -1,4 +1,5 @@
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerComposerDraftCoordinator } from '../../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 
@@ -7,10 +8,16 @@ const mocks = vi.hoisted(() => {
     omitReadState: boolean;
     currentItems: unknown[] | null;
     currentInteractions: unknown[];
+    readinessSnapshot: () => Record<string, unknown>;
+    setReadinessSnapshot: (snapshot: Record<string, unknown>) => void;
+    settingsGate: Promise<void> | null;
   } = {
     omitReadState: false,
     currentItems: null,
     currentInteractions: [],
+    readinessSnapshot: () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
+    setReadinessSnapshot: () => undefined,
+    settingsGate: null,
   };
   const readStatus = (lastMessageAtUnixMs: number, _waitingPromptID = '') => {
     const activityRevision = lastMessageAtUnixMs;
@@ -47,6 +54,7 @@ const mocks = vi.hoisted(() => {
       };
     }
     if (url.includes('/_redeven_proxy/api/settings')) {
+      await state.settingsGate;
       return {
         ai: {
           current_model_id: 'openai/gpt-5.2',
@@ -179,6 +187,14 @@ const mocks = vi.hoisted(() => {
     subscribeThreadMock,
   };
 });
+
+function deferred<T>(): Readonly<{ promise: Promise<T>; resolve: (value: T) => void }> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -315,12 +331,14 @@ vi.mock('./EnvContext', () => ({
       },
     }),
     aiReadinessController: {
-      snapshot: () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
+      snapshot: () => mocks.state.readinessSnapshot(),
       loading: () => false,
       retryPending: () => false,
       nextCheckAt: () => null,
-      refresh: async () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
-      retry: async () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
+      refresh: async () => mocks.state.readinessSnapshot(),
+      retry: async () => mocks.state.readinessSnapshot(),
+      pause: () => undefined,
+      resume: async () => mocks.state.readinessSnapshot(),
       dispose: () => undefined,
     },
     aiThreadFocusRequest: () => null,
@@ -431,25 +449,28 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
-async function renderPage() {
+async function renderPage(waitForSurface = true) {
   const mod = await import('./EnvAIPage');
   const host = document.createElement('div');
+  const draftCoordinator = createFlowerComposerDraftCoordinator();
   document.body.appendChild(host);
   const dispose = render(() => (
     <mod.EnvAIPage
-      draftCoordinator={createFlowerComposerDraftCoordinator()}
+      draftCoordinator={draftCoordinator}
     />
   ), host);
-  // Settings, handler resolution, and thread bootstrap now settle through
-  // separate async boundaries. Wait for the observable model control instead
-  // of assuming a fixed number of microtasks.
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    await flush();
-    const modelLabel = host.querySelector('.flower-model-reasoning-model-label')?.textContent?.trim();
-    const submitButton = host.querySelector<HTMLButtonElement>('button.flower-composer-submit');
-    if (modelLabel && submitButton && !submitButton.disabled) break;
+  if (waitForSurface) {
+    // Settings, handler resolution, and thread bootstrap now settle through
+    // separate async boundaries. Wait for the observable model control instead
+    // of assuming a fixed number of microtasks.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await flush();
+      const modelLabel = host.querySelector('.flower-model-reasoning-model-label')?.textContent?.trim();
+      const submitButton = host.querySelector<HTMLButtonElement>('button.flower-composer-submit');
+      if (modelLabel && submitButton && !submitButton.disabled) break;
+    }
   }
-  return { host, dispose };
+  return { host, dispose, draftCoordinator };
 }
 
 function mockCurrentItems(items: unknown[]) {
@@ -483,6 +504,12 @@ export function registerEnvAIPageSendTests() {
       mocks.state.currentItems = null;
       mocks.state.currentInteractions = [];
       mocks.state.omitReadState = false;
+      mocks.state.settingsGate = null;
+      const [readinessSnapshot, setReadinessSnapshot] = createSignal<Record<string, unknown>>({
+        state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+      });
+      mocks.state.readinessSnapshot = readinessSnapshot;
+      mocks.state.setReadinessSnapshot = setReadinessSnapshot;
     });
 
     afterEach(() => {
@@ -499,6 +526,83 @@ export function registerEnvAIPageSendTests() {
         expect(chatHeader?.textContent).not.toContain('Ready');
         expect(host.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.2');
         expect(host.querySelector('button[aria-label="Flower settings"]')).toBeTruthy();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('admits Flower requests only while AI readiness is operational and preserves the external draft', async () => {
+      mocks.state.setReadinessSnapshot({
+        state: 'migrating', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+      });
+      const { host, dispose, draftCoordinator } = await renderPage(false);
+      try {
+        await flush();
+        expect(host.querySelector('.flower-component-thread-rail')).toBeNull();
+        expect(mocks.fetchLocalApiJSONMock).not.toHaveBeenCalled();
+        expect(mocks.subscribeThreadMock).not.toHaveBeenCalled();
+
+        mocks.state.setReadinessSnapshot({
+          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+        });
+        for (let attempt = 0; attempt < 20 && !host.querySelector('textarea'); attempt += 1) await flush();
+        expect(host.querySelector('.flower-component-thread-rail')).not.toBeNull();
+        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalled();
+
+        const composer = host.querySelector<HTMLTextAreaElement>('textarea')!;
+        composer.value = 'Keep this draft across AI maintenance.';
+        composer.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        await flush();
+        await flush();
+        expect(draftCoordinator.read('__new_thread__').value.text).toBe('Keep this draft across AI maintenance.');
+        const requestsAfterReady = mocks.fetchLocalApiJSONMock.mock.calls.length;
+
+        mocks.state.setReadinessSnapshot({
+          state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+        });
+        await flush();
+        expect(host.querySelector('.flower-component-thread-rail')).toBeNull();
+        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledTimes(requestsAfterReady);
+
+        mocks.state.setReadinessSnapshot({
+          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+        });
+        for (let attempt = 0; attempt < 20 && !host.querySelector('textarea'); attempt += 1) await flush();
+        await flush();
+        await flush();
+        expect(draftCoordinator.read('__new_thread__').value.text).toBe('Keep this draft across AI maintenance.');
+        expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('Keep this draft across AI maintenance.');
+        expect(mocks.fetchLocalApiJSONMock.mock.calls.length).toBeGreaterThan(requestsAfterReady);
+        expect(mocks.notificationMock.error).not.toHaveBeenCalled();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('stops bootstrap after an in-flight settings request when readiness is lost', async () => {
+      const settingsGate = deferred<void>();
+      mocks.state.settingsGate = settingsGate.promise;
+      mocks.state.setReadinessSnapshot({
+        state: 'migrating', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+      });
+      const { host, dispose } = await renderPage(false);
+      try {
+        mocks.state.setReadinessSnapshot({
+          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+        });
+        for (let attempt = 0; attempt < 20 && mocks.fetchLocalApiJSONMock.mock.calls.length === 0; attempt += 1) await flush();
+        expect(mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url)).toEqual(['/_redeven_proxy/api/settings']);
+
+        mocks.state.setReadinessSnapshot({
+          state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+        });
+        await flush();
+        expect(host.querySelector('.flower-component-thread-rail')).toBeNull();
+
+        settingsGate.resolve();
+        await flush();
+        await flush();
+        expect(mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url)).toEqual(['/_redeven_proxy/api/settings']);
       } finally {
         dispose();
       }

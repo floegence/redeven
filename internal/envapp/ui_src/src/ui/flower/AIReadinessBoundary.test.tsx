@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createSignal } from 'solid-js';
+import { createSignal, onCleanup, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -39,6 +39,7 @@ function mount(
     canRetryGeneration?: boolean;
     canReviewIssues?: boolean;
     nextCheckAt?: number | null;
+    renderContent?: () => JSX.Element;
   }> = {},
 ) {
   const [current, setCurrent] = createSignal(initial);
@@ -78,9 +79,8 @@ function mount(
         canReviewIssues={options.canReviewIssues ?? true}
         canRetryGeneration={options.canRetryGeneration ?? true}
         focusEnabled={options.focusEnabled ?? true}
-      >
-        <button type="button" data-testid="flower-child">Flower child</button>
-      </AIReadinessBoundary>
+        renderContent={options.renderContent ?? (() => <button type="button" data-testid="flower-child">Flower child</button>)}
+      />
     </I18nProvider>
   ), host);
   return { host, dispose, setCurrent, retry, openUpdate, openPermissions, reviewIssues };
@@ -103,12 +103,89 @@ afterEach(() => {
 });
 
 describe('AIReadinessBoundary', () => {
+  it.each([
+    'unavailable',
+    'inspecting',
+    'optimizing',
+    'migrating',
+    'verifying',
+    'recovering',
+    'blocked',
+  ] as const)('does not mount Flower while readiness is %s', (state) => {
+    const fixture = mount(snapshot(state === 'blocked' ? 'store_integrity_error' : '', {
+      state,
+      retryable: state === 'recovering',
+      safe_to_retry: state === 'recovering',
+    }));
+
+    expect(fixture.host.querySelector('[data-ai-readiness-content]')).toBeNull();
+    expect(fixture.host.querySelector('[data-testid="flower-child"]')).toBeNull();
+    fixture.dispose();
+  });
+
+  it('starts one Flower lifecycle per operational period and cleans it up when readiness is lost', async () => {
+    let starts = 0;
+    let cleanups = 0;
+    const fixture = mount(snapshot('', {
+      state: 'migrating',
+      retryable: false,
+      safe_to_retry: false,
+    }), undefined, {
+      renderContent: () => {
+        starts += 1;
+        onCleanup(() => {
+          cleanups += 1;
+        });
+        return <button type="button" data-testid="flower-child">Flower child</button>;
+      },
+    });
+
+    expect(starts).toBe(0);
+    expect(cleanups).toBe(0);
+
+    fixture.setCurrent(snapshot('', {
+      state: 'ready',
+      retryable: false,
+      safe_to_retry: false,
+    }));
+    await flushMicrotasks();
+
+    expect(starts).toBe(1);
+    expect(cleanups).toBe(0);
+    expect(fixture.host.querySelector('[data-ai-readiness-content]')).not.toBeNull();
+    expect(fixture.host.querySelector('[data-testid="flower-child"]')).not.toBeNull();
+
+    fixture.setCurrent(snapshot('store_integrity_error', {
+      state: 'blocked',
+      retryable: false,
+      safe_to_retry: false,
+    }));
+    await flushMicrotasks();
+    expect(starts).toBe(1);
+    expect(cleanups).toBe(1);
+    expect(fixture.host.querySelector('[data-testid="flower-child"]')).toBeNull();
+
+    fixture.setCurrent(snapshot('', {
+      state: 'degraded',
+      reason_code: 'host_thread_settings_missing',
+      issue_count: 1,
+      retryable: false,
+      safe_to_retry: false,
+    }));
+    await flushMicrotasks();
+    expect(starts).toBe(2);
+    expect(cleanups).toBe(1);
+
+    fixture.dispose();
+    expect(cleanups).toBe(2);
+  });
+
   it('keeps Flower usable in degraded state and exposes the review entry', () => {
     const fixture = mount(snapshot('host_thread_settings_missing', {
       state: 'degraded', issue_count: 2, retryable: false, safe_to_retry: false,
     }));
     const content = fixture.host.querySelector<HTMLElement>('[data-ai-readiness-content]');
-    expect(content?.hasAttribute('hidden')).toBe(false);
+    expect(content).not.toBeNull();
     expect(fixture.host.querySelector('[data-testid="flower-child"]')).not.toBeNull();
     buttonWithText(fixture.host, 'Review').click();
     expect(fixture.reviewIssues).toHaveBeenCalledOnce();
@@ -233,20 +310,21 @@ describe('AIReadinessBoundary', () => {
     const update = mount(snapshot('update_required', { retryable: false, safe_to_retry: false }));
     buttonWithText(update.host, 'Open runtime updates').click();
     expect(update.openUpdate).toHaveBeenCalledOnce();
-    expect(update.host.querySelector('[data-ai-readiness-content]')?.hasAttribute('hidden')).toBe(true);
+    expect(update.host.querySelector('[data-ai-readiness-content]')).toBeNull();
     update.dispose();
 
     const permission = mount(snapshot('environment_permission_error', { retryable: false, safe_to_retry: false }));
     buttonWithText(permission.host, 'Open environment access').click();
     expect(permission.openPermissions).toHaveBeenCalledOnce();
-    expect(permission.host.querySelector('[data-ai-readiness-content]')?.hasAttribute('hidden')).toBe(true);
+    expect(permission.host.querySelector('[data-ai-readiness-content]')).toBeNull();
     permission.dispose();
   });
 
-  it('exposes retry pending in the same event turn and preserves the child DOM identity when ready returns', async () => {
+  it('exposes retry pending in the same event turn and mounts Flower only when ready returns', async () => {
     const result = deferred<AIReadinessSnapshot>();
     const fixture = mount(snapshot(), result);
     const childBefore = fixture.host.querySelector('[data-testid="flower-child"]');
+    expect(childBefore).toBeNull();
     const retryButton = buttonWithText(fixture.host, 'Check again');
 
     retryButton.click();
@@ -259,13 +337,13 @@ describe('AIReadinessBoundary', () => {
     result.resolve(snapshot('', { state: 'ready', retryable: false, safe_to_retry: false }));
     await flushMicrotasks();
     const content = fixture.host.querySelector<HTMLElement>('[data-ai-readiness-content]');
-    expect(content?.hasAttribute('hidden')).toBe(false);
-    expect(fixture.host.querySelector('[data-testid="flower-child"]')).toBe(childBefore);
+    expect(content).not.toBeNull();
+    expect(fixture.host.querySelector('[data-testid="flower-child"]')).not.toBeNull();
     expect(fixture.host.querySelector('.ai-readiness-surface')).toBeNull();
     fixture.dispose();
   });
 
-  it('restores the same focused Flower node after a ready-blocked-ready transition', async () => {
+  it('unmounts Flower and creates a fresh surface after a ready-blocked-ready transition', async () => {
     const fixture = mount(snapshot('', {
       state: 'ready',
       retryable: false,
@@ -277,8 +355,8 @@ describe('AIReadinessBoundary', () => {
 
     fixture.setCurrent(snapshot('store_integrity_error', { retryable: false, safe_to_retry: false }));
     await flushMicrotasks();
-    expect(fixture.host.querySelector('[data-testid="flower-child"]')).toBe(child);
-    expect(fixture.host.querySelector('[data-ai-readiness-content]')?.hasAttribute('hidden')).toBe(true);
+    expect(fixture.host.querySelector('[data-testid="flower-child"]')).toBeNull();
+    expect(fixture.host.querySelector('[data-ai-readiness-content]')).toBeNull();
     expect(document.activeElement).toBe(fixture.host.querySelector('h1'));
 
     fixture.setCurrent(snapshot('', {
@@ -287,8 +365,9 @@ describe('AIReadinessBoundary', () => {
       safe_to_retry: false,
     }));
     await flushMicrotasks();
-    expect(fixture.host.querySelector('[data-testid="flower-child"]')).toBe(child);
-    expect(document.activeElement).toBe(child);
+    const remountedChild = fixture.host.querySelector('[data-testid="flower-child"]');
+    expect(remountedChild).not.toBeNull();
+    expect(remountedChild).not.toBe(child);
     fixture.dispose();
   });
 
@@ -408,7 +487,7 @@ describe('AIReadinessBoundary', () => {
 
     expect(boundary?.hasAttribute('inert')).toBe(false);
     expect(surface?.hasAttribute('inert')).toBe(false);
-    expect(content?.hasAttribute('inert')).toBe(false);
+    expect(content).toBeNull();
     expect(surface?.getAttribute('role')).toBeNull();
     expect(surface?.getAttribute('aria-modal')).toBeNull();
     expect(`${boundary?.className} ${surface?.className}`).not.toContain('fixed');
