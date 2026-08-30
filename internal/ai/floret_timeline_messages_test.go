@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -19,6 +20,7 @@ func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
 	const (
 		threadID = "thread_ordered_presentation"
 		turnID   = "turn_ordered_presentation"
+		runID    = "run_ordered_presentation"
 	)
 	createdAt := time.UnixMilli(1_700_000_000_000)
 	activity := func(id string, status observation.ActivityStatus) *observation.ActivityItem {
@@ -28,12 +30,12 @@ func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
 		}
 	}
 	items := []flruntime.ThreadItem{
-		{ID: "user:turn:1", TurnID: identity.TurnID(turnID), Ordinal: 1, Kind: flruntime.ThreadItemUser, Text: "run both", CreatedAt: createdAt},
-		{ID: "thinking:turn:1", TurnID: identity.TurnID(turnID), Ordinal: 2, Kind: flruntime.ThreadItemThinking, Text: "first reasoning", CreatedAt: createdAt, Live: true},
-		{ID: "tool:turn:call-1", TurnID: identity.TurnID(turnID), Ordinal: 3, Kind: flruntime.ThreadItemTool, Activity: activity("call-1", observation.ActivityStatusWaiting), CreatedAt: createdAt},
-		{ID: "thinking:turn:2", TurnID: identity.TurnID(turnID), Ordinal: 4, Kind: flruntime.ThreadItemThinking, Text: "second reasoning", CreatedAt: createdAt},
-		{ID: "tool:turn:call-2", TurnID: identity.TurnID(turnID), Ordinal: 5, Kind: flruntime.ThreadItemTool, Activity: activity("call-2", observation.ActivityStatusSuccess), CreatedAt: createdAt},
-		{ID: "assistant:turn:1", TurnID: identity.TurnID(turnID), Ordinal: 6, Kind: flruntime.ThreadItemAssistant, Text: "done", CreatedAt: createdAt, Live: true},
+		{ID: "user:turn:1", TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), Ordinal: 1, Kind: flruntime.ThreadItemUser, Text: "run both", CreatedAt: createdAt},
+		{ID: "thinking:turn:1", TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), Ordinal: 2, Kind: flruntime.ThreadItemThinking, Text: "first reasoning", CreatedAt: createdAt, Live: true},
+		{ID: "tool:turn:call-1", TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), Ordinal: 3, Kind: flruntime.ThreadItemTool, Activity: activity("call-1", observation.ActivityStatusWaiting), CreatedAt: createdAt},
+		{ID: "thinking:turn:2", TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), Ordinal: 4, Kind: flruntime.ThreadItemThinking, Text: "second reasoning", CreatedAt: createdAt},
+		{ID: "tool:turn:call-2", TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), Ordinal: 5, Kind: flruntime.ThreadItemTool, Activity: activity("call-2", observation.ActivityStatusSuccess), CreatedAt: createdAt},
+		{ID: "assistant:turn:1", TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), Ordinal: 6, Kind: flruntime.ThreadItemAssistant, Text: "done", CreatedAt: createdAt, Live: true},
 	}
 	projected := publicFloretThreadView(flruntime.ThreadView{Items: items})
 	for index := range items {
@@ -56,6 +58,9 @@ func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
 			t.Fatalf("decode %s: %v", item.ID, err)
 		}
 		gotIDs = append(gotIDs, message["id"].(string))
+		if message["turn_id"] != turnID || message["run_id"] != runID {
+			t.Fatalf("item %s identity=(%v, %v), want (%q, %q)", item.ID, message["turn_id"], message["run_id"], turnID, runID)
+		}
 		if message["role"] != map[flruntime.ThreadItemKind]string{
 			flruntime.ThreadItemUser: "user",
 		}[item.Kind] && message["role"] != "assistant" {
@@ -108,14 +113,79 @@ func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
 	}
 }
 
+func TestTypedThreadItemsPreserveEachHistoricalRun(t *testing.T) {
+	t.Parallel()
+	const threadID = "thread_multiturn"
+	items := make([]flruntime.ThreadItem, 0, 60)
+	createdAt := time.UnixMilli(1_700_000_000_000)
+	for index := range 60 {
+		turnNumber := index/20 + 1
+		turnID := identity.TurnID(fmt.Sprintf("turn-%d", turnNumber))
+		runID := identity.RunID(fmt.Sprintf("run-%d", turnNumber))
+		item := flruntime.ThreadItem{
+			ID: fmt.Sprintf("message-%d", index), TurnID: turnID, RunID: runID,
+			Ordinal: uint64(index + 1), Kind: flruntime.ThreadItemAssistant,
+			Text: fmt.Sprintf("message %d", index), CreatedAt: createdAt.Add(time.Duration(index) * time.Millisecond),
+		}
+		if index < 29 {
+			item.ID = fmt.Sprintf("tool-%d", index)
+			item.Kind = flruntime.ThreadItemTool
+			item.Activity = &observation.ActivityItem{
+				ItemID: item.ID, ToolID: fmt.Sprintf("call-%d", index), ToolName: "terminal.exec",
+				Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
+				Severity: observation.ActivitySeverityNormal,
+			}
+		}
+		items = append(items, item)
+	}
+
+	for index, item := range items {
+		raw, ok, err := typedThreadItemMessage(threadID, item)
+		if err != nil || !ok {
+			t.Fatalf("item %d: ok=%v err=%v", index, ok, err)
+		}
+		var identityFields struct {
+			TurnID string `json:"turn_id"`
+			RunID  string `json:"run_id"`
+		}
+		if err := json.Unmarshal(raw, &identityFields); err != nil {
+			t.Fatal(err)
+		}
+		if identityFields.TurnID != item.TurnID.String() || identityFields.RunID != item.RunID.String() {
+			t.Fatalf("item %d identity=(%q, %q), want (%q, %q)", index, identityFields.TurnID, identityFields.RunID, item.TurnID, item.RunID)
+		}
+	}
+}
+
+func TestTypedThreadItemRejectsIncompleteOrConflictingRunIdentity(t *testing.T) {
+	t.Parallel()
+	valid := flruntime.ThreadItem{
+		ID: "user-a", TurnID: "turn-a", RunID: "run-a", Ordinal: 1,
+		Kind: flruntime.ThreadItemUser, Text: "hello", CreatedAt: time.UnixMilli(1),
+	}
+	missing := valid
+	missing.RunID = ""
+	if _, _, err := typedThreadItemMessage("thread-a", missing); err == nil || !strings.Contains(err.Error(), "incomplete execution identity") {
+		t.Fatalf("missing RunID error=%v", err)
+	}
+	conflicting := valid
+	conflicting.Kind = flruntime.ThreadItemInteraction
+	conflicting.Interaction = &flruntime.ThreadInteraction{
+		ID: "input-a", TurnID: "turn-a", RunID: "run-b", Kind: flruntime.ThreadInteractionInput,
+	}
+	if _, _, err := typedThreadItemMessage("thread-a", conflicting); err == nil || !strings.Contains(err.Error(), "conflicting execution identity") {
+		t.Fatalf("conflicting RunID error=%v", err)
+	}
+}
+
 func TestTypedThreadItemMapsOnlyResolvedVisibleInputInteractions(t *testing.T) {
 	t.Parallel()
 	resolved := flruntime.ThreadInteractionInput
 	item := flruntime.ThreadItem{
-		ID: "interaction:answer", TurnID: identity.TurnID("turn_answer"), Ordinal: 1,
+		ID: "interaction:answer", TurnID: identity.TurnID("turn_answer"), RunID: identity.RunID("run_answer"), Ordinal: 1,
 		Kind: flruntime.ThreadItemInteraction,
 		Interaction: &flruntime.ThreadInteraction{
-			ID: "answer", TurnID: identity.TurnID("turn_answer"), Kind: resolved, Resolved: true,
+			ID: "answer", TurnID: identity.TurnID("turn_answer"), RunID: identity.RunID("run_answer"), Kind: resolved, Resolved: true,
 			Resolution: &flruntime.InteractionResolution{Accepted: true, Input: map[string]string{"b": "second", "a": "first"}},
 		},
 	}
@@ -174,7 +244,7 @@ func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.
 		Metadata: map[string]string{"display_name": "private.md", "path": "/workspace/private.md", "pending_token": "secret"},
 	}
 	view := publicFloretThreadView(flruntime.ThreadView{Items: []flruntime.ThreadItem{{
-		ID: "tool:write", TurnID: "turn:write", Ordinal: 1, Kind: flruntime.ThreadItemTool, Activity: activity,
+		ID: "tool:write", TurnID: "turn:write", RunID: "run:write", Ordinal: 1, Kind: flruntime.ThreadItemTool, Activity: activity,
 	}}})
 	if view.Items[0].Activity == nil || view.Items[0].Activity.Presentation == nil {
 		t.Fatal("public activity was dropped")
@@ -241,7 +311,7 @@ func TestFlowerCurrentProjectionScopesAttachmentURLs(t *testing.T) {
 		ThreadID:    identity.ThreadID("thread_preview"),
 		ViewVersion: 7,
 		Items: []flruntime.ThreadItem{{
-			ID: "user:item", TurnID: identity.TurnID("turn_preview"), Kind: flruntime.ThreadItemUser,
+			ID: "user:item", TurnID: identity.TurnID("turn_preview"), RunID: identity.RunID("run_preview"), Kind: flruntime.ThreadItemUser,
 			Attachments: []flruntime.MessageAttachment{{ResourceRef: resourceRef, Name: "photo.png", MIMEType: "image/png", SizeBytes: 12}},
 		}},
 		Queue: []flruntime.QueuedInput{{
@@ -289,7 +359,7 @@ func TestFlowerCurrentProjectionScopesAttachmentURLs(t *testing.T) {
 func TestCanonicalAttachmentWithoutSafeResourceFallsBackToFileBlock(t *testing.T) {
 	t.Parallel()
 	message, err := canonicalUserTimelineMessageForThread(
-		"thread_preview", "turn_preview", "entry_preview", "inspect", []flruntime.MessageAttachment{{
+		"thread_preview", "turn_preview", "run_preview", "entry_preview", "inspect", []flruntime.MessageAttachment{{
 			ResourceRef: "legacy-private-locator", Name: "photo.png", MIMEType: "image/png", SizeBytes: 12,
 		}}, nil, time.UnixMilli(1_700_000_000_000).UnixMilli(),
 	)

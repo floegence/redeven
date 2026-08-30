@@ -3924,7 +3924,9 @@ html.dark .flower-component-shell {
   animation: flower-thread-syncing-spin 0.9s linear infinite;
 }
 
-.flower-thread-loading {
+.flower-thread-loading,
+.flower-thread-empty,
+.flower-thread-load-error {
   display: grid;
   width: 100%;
   min-height: min(34rem, 62vh);
@@ -3978,7 +3980,8 @@ html.dark .flower-component-shell {
   will-change: transform;
 }
 
-.flower-thread-loading-message {
+.flower-thread-loading-message,
+.flower-thread-empty-message {
   color: color-mix(in srgb, var(--foreground) 55%, transparent);
   font-size: 0.8125rem;
   font-weight: 480;

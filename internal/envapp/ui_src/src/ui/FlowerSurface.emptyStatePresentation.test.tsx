@@ -174,9 +174,11 @@ describe('Flower empty-state presentation', () => {
     });
 
     await waitFor(() => runtime.querySelector('[data-flower-thread-active="true"]') !== null);
+    await waitFor(() => runtime.querySelector('.flower-thread-empty') !== null);
 
     expect(runtime.querySelector('.flower-empty-state')).toBeNull();
-    expect(runtime.querySelector('.flower-thread-loading')).not.toBeNull();
+    expect(runtime.querySelector('.flower-thread-loading')).toBeNull();
+    expect(runtime.querySelector('.flower-thread-empty')?.textContent).toContain('This conversation has no content yet.');
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toContain(snapshot.title);
   });
 });

@@ -23,8 +23,8 @@ func TestCanonicalReferencePerformanceBudgets(t *testing.T) {
 		references := canonicalReferenceBenchmarkFixture(100)
 		var wire []byte
 		project := func() error {
-			raw, err := canonicalUserTimelineMessage(
-				"turn_budget", "entry_budget", "", nil, references, 1783677600000,
+			raw, err := canonicalUserTimelineMessageForThread(
+				"thread_budget", "turn_budget", "run_budget", "entry_budget", "", nil, references, 1783677600000,
 			)
 			if err != nil {
 				return err
@@ -134,8 +134,10 @@ func BenchmarkCanonicalReferenceBrowserProjection(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
-				raw, err := canonicalUserTimelineMessage(
+				raw, err := canonicalUserTimelineMessageForThread(
+					"thread_benchmark",
 					"turn_benchmark",
+					"run_benchmark",
 					"entry_benchmark",
 					"",
 					nil,
@@ -183,8 +185,10 @@ func canonicalReferenceBenchmarkRawReferences(b *testing.B, count int) json.RawM
 
 func canonicalReferenceBenchmarkRawMessage(b *testing.B, count int) json.RawMessage {
 	b.Helper()
-	raw, err := canonicalUserTimelineMessage(
+	raw, err := canonicalUserTimelineMessageForThread(
+		"thread_benchmark",
 		"turn_benchmark",
+		"run_benchmark",
 		"entry_benchmark",
 		"",
 		nil,

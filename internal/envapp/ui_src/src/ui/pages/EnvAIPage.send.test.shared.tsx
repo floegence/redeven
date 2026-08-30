@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => {
   const currentItemsMock = vi.fn(async ({ threadId }: { threadId: string }): Promise<unknown[]> => [{
     id: `assistant-${threadId}`,
     turn_id: `turn-${threadId}`,
+    run_id: `run-${threadId}`,
+    ordinal: 1,
     kind: 'assistant',
     text: `Transcript for ${threadId}`,
     created_at: '1970-01-01T00:00:10Z',
@@ -79,6 +81,14 @@ const mocks = vi.hoisted(() => {
       const active = items.some((item) => (
         item && typeof item === 'object' && (item as Record<string, unknown>).live === true
       ));
+      const latestLiveItem = [...items].reverse().find((item) => (
+        item && typeof item === 'object' && (item as Record<string, unknown>).live === true
+      )) as Record<string, unknown> | undefined;
+      const activeRunID = String(
+        pendingInput?.run_id
+        ?? latestLiveItem?.run_id
+        ?? `run-${threadID}`,
+      ).trim();
       const thread = {
         thread_id: threadID,
         title: 'Loaded Env Flower thread',
@@ -89,6 +99,7 @@ const mocks = vi.hoisted(() => {
         created_at_unix_ms: 1,
         updated_at_unix_ms: 2,
         read_status: readStatus(2_000, waitingPromptID),
+        ...((waitingPromptID || active) ? { active_run_id: activeRunID } : {}),
       };
       return {
         thread,
@@ -97,6 +108,7 @@ const mocks = vi.hoisted(() => {
           view_version: 1,
           activity: waitingPromptID || active ? 'active' : 'idle',
           turn_id: `turn-${threadID}`,
+          ...((waitingPromptID || active) ? { run_id: activeRunID } : {}),
           ...(!active && !waitingPromptID ? { last_outcome: 'completed' } : {}),
           items,
           interactions: state.currentInteractions,
@@ -441,7 +453,16 @@ async function renderPage() {
 }
 
 function mockCurrentItems(items: unknown[]) {
-  mocks.state.currentItems = items;
+  mocks.state.currentItems = items.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    const record = item as Record<string, unknown>;
+    const turnID = String(record.turn_id ?? '').trim();
+    return {
+      ...record,
+      run_id: String(record.run_id ?? `run-${turnID || 'fixture'}`).trim(),
+      ordinal: Math.max(1, Math.floor(Number(record.ordinal) || index + 1)),
+    };
+  });
 }
 
 export function registerEnvAIPageSendTests() {
@@ -500,11 +521,11 @@ export function registerEnvAIPageSendTests() {
     it('shows live streaming output when transcript persistence has not caught up', async () => {
       mocks.state.currentItems = [
         {
-          id: 'thinking:turn-thread-1:1', turn_id: 'turn-thread-1', ordinal: 1,
+          id: 'thinking:turn-thread-1:1', turn_id: 'turn-thread-1', run_id: 'run-fixture', ordinal: 1,
           kind: 'thinking', text: 'Inspecting the workspace', live: true,
         },
         {
-          id: 'assistant:turn-thread-1:1', turn_id: 'turn-thread-1', ordinal: 2,
+          id: 'assistant:turn-thread-1:1', turn_id: 'turn-thread-1', run_id: 'run-fixture', ordinal: 2,
           kind: 'assistant', text: 'Live answer recovered from the typed current view.', live: true,
         },
       ];
@@ -832,6 +853,7 @@ export function registerEnvAIPageSendTests() {
       mocks.state.currentInteractions = [{
         id: '',
         turn_id: 'turn-thread-1',
+        run_id: 'run-fixture',
         kind: 'input',
         input: {
           summary: 'Need input',
@@ -843,7 +865,7 @@ export function registerEnvAIPageSendTests() {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        expect(host.textContent).toContain('Flower contract error: typed current input interaction requires an id.');
+        expect(host.textContent).toContain('Flower contract error: current interaction requires exact id, turn_id, and run_id.');
         expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
       } finally {
         dispose();

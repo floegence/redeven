@@ -12,7 +12,9 @@ import (
 func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID string, messageID string, raw json.RawMessage) (FlowerTimelineMessage, bool, error) {
 	var record struct {
 		ID         string            `json:"id"`
+		ThreadID   string            `json:"thread_id"`
 		TurnID     string            `json:"turn_id"`
+		RunID      string            `json:"run_id"`
 		Role       string            `json:"role"`
 		Status     string            `json:"status"`
 		Timestamp  int64             `json:"timestamp"`
@@ -22,11 +24,13 @@ func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID
 	if err := json.Unmarshal(raw, &record); err != nil {
 		return FlowerTimelineMessage{}, false, err
 	}
-	canonicalTurnID = strings.TrimSpace(canonicalTurnID)
-	threadID = strings.TrimSpace(threadID)
-	runID = strings.TrimSpace(runID)
-	if recordTurnID := strings.TrimSpace(record.TurnID); threadID == "" || runID == "" || canonicalTurnID == "" || recordTurnID == "" || recordTurnID != canonicalTurnID {
-		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message has invalid turn identity")
+	canonicalTurnID, threadID, runID = strings.TrimSpace(canonicalTurnID), strings.TrimSpace(threadID), strings.TrimSpace(runID)
+	recordThreadID, recordTurnID, recordRunID := strings.TrimSpace(record.ThreadID), strings.TrimSpace(record.TurnID), strings.TrimSpace(record.RunID)
+	if recordThreadID == "" || recordTurnID == "" || recordRunID == "" || recordThreadID != threadID {
+		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message has invalid execution identity")
+	}
+	if (canonicalTurnID != "" && recordTurnID != canonicalTurnID) || (runID != "" && recordRunID != runID) {
+		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message identity differs from its execution")
 	}
 	id := strings.TrimSpace(record.ID)
 	if messageID = strings.TrimSpace(messageID); id == "" {
@@ -61,7 +65,7 @@ func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID
 		blocks = append(blocks, value)
 	}
 	return FlowerTimelineMessage{
-		MessageID: id, ThreadID: threadID, TurnID: canonicalTurnID, RunID: runID,
+		MessageID: id, ThreadID: recordThreadID, TurnID: recordTurnID, RunID: recordRunID,
 		Role: role, Content: flowerTimelineTextFromBlocks(blocks), Status: status,
 		CreatedAtMs: record.Timestamp, Blocks: blocks, References: references,
 	}, true, nil

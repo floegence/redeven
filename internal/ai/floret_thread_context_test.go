@@ -151,8 +151,8 @@ func TestFlowerThreadContextProjectionRestoresOneTerminalCompactionDivider(t *te
 			Source: flowerManualCompactionSourceName, TokensBefore: 6354, ObservedAt: observedAt,
 		}},
 	}, flruntime.ThreadView{ThreadID: threadID, Items: []flruntime.ThreadItem{
-		{ID: "message-before", Kind: flruntime.ThreadItemUser, TurnID: "turn-before"},
-		{ID: "message-compact", Kind: flruntime.ThreadItemUser, TurnID: turnID},
+		{ID: "message-before", Kind: flruntime.ThreadItemUser, TurnID: "turn-before", RunID: "run-before"},
+		{ID: "message-compact", Kind: flruntime.ThreadItemUser, TurnID: turnID, RunID: "run-context"},
 	}})
 	if err != nil {
 		t.Fatal(err)

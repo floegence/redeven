@@ -435,6 +435,7 @@ export function launchReceipt(
             items: [{
               id: `user:${clientRequestID}`,
               turn_id: canonicalID,
+              run_id: canonicalID,
               ordinal: 1,
               kind: 'user' as const,
               text: '',
@@ -448,9 +449,17 @@ export function runtimeCurrentView(
   threadValue: FlowerThreadSnapshot,
   version = 1,
 ): FlowerRuntimeCurrentView {
+  const activeTurnID = threadValue.run_progress?.turn_id
+    ?? [...threadValue.messages].reverse().find((message) => Boolean(message.turn_id))?.turn_id
+    ?? 'turn-fixture';
+  const activeRunID = threadValue.active_run_id
+    ?? [...threadValue.messages].reverse().find((message) => Boolean(message.run_id))?.run_id
+    ?? 'run-fixture';
   const interactions = [
     ...(threadValue.approval_actions ?? []).map((action) => ({
       id: action.action_id,
+      turn_id: action.turn_id ?? activeTurnID,
+      run_id: action.run_id,
       kind: 'approval' as const,
       tool_call_id: action.tool_id,
       resolved: action.status !== 'pending' || action.state !== 'requested',
@@ -458,6 +467,8 @@ export function runtimeCurrentView(
     })),
     ...(threadValue.input_request ? [{
       id: threadValue.input_request.prompt_id,
+      turn_id: activeTurnID,
+      run_id: activeRunID,
       kind: 'input' as const,
       resolved: false,
       signal: {
@@ -473,7 +484,8 @@ export function runtimeCurrentView(
     if (activity?.type === 'activity-timeline') {
       return activity.items.map((item) => ({
         id: item.item_id,
-        turn_id: message.turn_id,
+        turn_id: message.turn_id ?? activeTurnID,
+        run_id: message.run_id ?? activeRunID,
         ordinal: ++nextOrdinal,
         kind: 'tool' as const,
         activity: item as unknown as Readonly<Record<string, unknown>>,
@@ -481,14 +493,13 @@ export function runtimeCurrentView(
     }
     return [{
       id: message.id,
-      turn_id: message.turn_id,
+      turn_id: message.turn_id ?? activeTurnID,
+      run_id: message.run_id ?? activeRunID,
       ordinal: ++nextOrdinal,
       kind: message.role === 'user' ? 'user' as const : 'assistant' as const,
       text: message.content,
     }];
   });
-  const activeTurnID = threadValue.run_progress?.turn_id
-    ?? [...threadValue.messages].reverse().find((message) => Boolean(message.turn_id))?.turn_id;
   return {
     thread_id: threadValue.thread_id,
     view_version: version,
@@ -545,7 +556,7 @@ export function approvalCommandResult(
       view_version: version,
       activity: 'active',
       run_id: `run:${interactionID}`,
-      interactions: [{ id: interactionID, kind: 'approval', resolved: true, approved }],
+      interactions: [{ id: interactionID, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval', resolved: true, approved }],
     },
   };
 }

@@ -247,8 +247,8 @@ describe('Flower final thread cache and workspace transport', () => {
         run_id: runID,
         turn_id: turnID,
         items: [
-          { id: 'user:thinking-wrap', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Inspect the workspace' },
-          { id: 'thinking:thinking-wrap', turn_id: turnID, ordinal: 2, kind: 'thinking', text: thinkingText, live: true },
+          { id: 'user:thinking-wrap', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Inspect the workspace' },
+          { id: 'thinking:thinking-wrap', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: thinkingText, live: true },
         ],
       },
     });
@@ -306,8 +306,8 @@ describe('Flower final thread cache and workspace transport', () => {
         run_id: runID,
         turn_id: turnID,
         items: [
-          { id: 'user:progressive-thinking', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
-          { id: 'thinking:progressive-thinking', turn_id: turnID, ordinal: 2, kind: 'thinking', text: 'Inspecting files', live: true },
+          { id: 'user:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting files', live: true },
         ],
       },
     });
@@ -325,8 +325,8 @@ describe('Flower final thread cache and workspace transport', () => {
         run_id: runID,
         turn_id: turnID,
         items: [
-          { id: 'user:progressive-thinking', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
-          { id: 'thinking:progressive-thinking', turn_id: turnID, ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration', live: true },
+          { id: 'user:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration', live: true },
         ],
       },
     });
@@ -344,9 +344,9 @@ describe('Flower final thread cache and workspace transport', () => {
         turn_id: turnID,
         last_outcome: 'completed',
         items: [
-          { id: 'user:progressive-thinking', turn_id: turnID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
-          { id: 'thinking:progressive-thinking', turn_id: turnID, ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration' },
-          { id: 'assistant:progressive-thinking', turn_id: turnID, ordinal: 3, kind: 'assistant', text: 'Final workspace explanation' },
+          { id: 'user:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration' },
+          { id: 'assistant:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 3, kind: 'assistant', text: 'Final workspace explanation' },
         ],
       },
     });
@@ -398,7 +398,7 @@ describe('Flower final thread cache and workspace transport', () => {
       thread_id: threadID,
       current: {
         thread_id: threadID, view_version: 2, activity: 'idle', turn_id: oldTurnID, last_outcome: 'cancelled',
-        items: [{ id: 'user:stopped', turn_id: oldTurnID, ordinal: 1, kind: 'user', text: 'Start the task' }],
+        items: [{ id: 'user:stopped', turn_id: oldTurnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Start the task' }],
       },
     });
     stream.push({
@@ -409,9 +409,9 @@ describe('Flower final thread cache and workspace transport', () => {
         thread_id: threadID, view_version: 3, activity: 'active', run_id: newRunID, turn_id: newTurnID,
         run_progress: { phase: 'waiting_response' },
         items: [
-          { id: 'user:stopped', turn_id: oldTurnID, ordinal: 1, kind: 'user', text: 'Start the task' },
-          { id: 'user:continued', turn_id: newTurnID, ordinal: 2, kind: 'user', text: '请继续' },
-          { id: 'assistant:continued', turn_id: newTurnID, ordinal: 3, kind: 'assistant', text: '', live: true },
+          { id: 'user:stopped', turn_id: oldTurnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Start the task' },
+          { id: 'user:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 2, kind: 'user', text: '请继续' },
+          { id: 'assistant:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 3, kind: 'assistant', text: '', live: true },
         ],
       },
     });
@@ -430,7 +430,7 @@ describe('Flower final thread cache and workspace transport', () => {
       thread_id: threadID,
       current: {
         thread_id: threadID, view_version: 2, activity: 'idle', turn_id: oldTurnID, last_outcome: 'cancelled',
-        items: [{ id: 'user:stopped', turn_id: oldTurnID, ordinal: 1, kind: 'user', text: 'Start the task' }],
+        items: [{ id: 'user:stopped', turn_id: oldTurnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Start the task' }],
       },
     });
     await waitFor(() => runtime.textContent?.includes('请继续') === true);
@@ -444,8 +444,8 @@ describe('Flower final thread cache and workspace transport', () => {
         thread_id: threadID, view_version: 4, activity: 'active', run_id: newRunID, turn_id: newTurnID,
         run_progress: { phase: 'streaming' },
         items: [
-          { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
-          { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step', live: true },
+          { id: 'user:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: '请继续' },
+          { id: 'thinking:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting the next step', live: true },
         ],
       },
     });
@@ -476,9 +476,9 @@ describe('Flower final thread cache and workspace transport', () => {
         thread_id: threadID, view_version: 5, activity: 'active', run_id: newRunID, turn_id: newTurnID,
         run_progress: { phase: 'tool_execution' },
         items: [
-          { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
-          { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
-          { id: 'tool:continued', turn_id: newTurnID, ordinal: 3, kind: 'tool', activity: toolActivity },
+          { id: 'user:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: '请继续' },
+          { id: 'thinking:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
+          { id: 'tool:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 3, kind: 'tool', activity: toolActivity },
         ],
       },
     });
@@ -516,10 +516,10 @@ describe('Flower final thread cache and workspace transport', () => {
         thread_id: threadID, view_version: version, activity: 'active', run_id: newRunID, turn_id: newTurnID,
         run_progress: { phase: 'streaming' },
         items: [
-          { id: 'user:continued', turn_id: newTurnID, ordinal: 1, kind: 'user', text: '请继续' },
-          { id: 'thinking:continued', turn_id: newTurnID, ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
-          { id: 'tool:continued', turn_id: newTurnID, ordinal: 3, kind: 'tool', activity: completedToolActivity },
-          { id: 'assistant:continued', turn_id: newTurnID, ordinal: 4, kind: 'assistant', text, live: true },
+          { id: 'user:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: '请继续' },
+          { id: 'thinking:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting the next step' },
+          { id: 'tool:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 3, kind: 'tool', activity: completedToolActivity },
+          { id: 'assistant:continued', turn_id: newTurnID, run_id: 'run-fixture', ordinal: 4, kind: 'assistant', text, live: true },
         ],
       },
     });
@@ -630,6 +630,7 @@ describe('Flower final thread cache and workspace transport', () => {
       items: [{
         id: `user:${requestID}`,
         turn_id: 'turn-new-race',
+        run_id: 'run-fixture',
         ordinal: 1,
         kind: 'user' as const,
         text: 'hi',
@@ -708,6 +709,7 @@ describe('Flower final thread cache and workspace transport', () => {
       items: [{
         id: `user:${requestID}`,
         turn_id: 'turn-late-admission',
+        run_id: 'run-fixture',
         ordinal: 1,
         kind: 'user' as const,
         text: 'first request',
@@ -1011,6 +1013,8 @@ describe('Flower final thread cache and workspace transport', () => {
         ...runtimeCurrentView(thread({ ...waiting, status: 'running', input_request: undefined }), 2),
         interactions: [{
           id: 'approval-a',
+          turn_id: 'turn-fixture',
+          run_id: 'run-fixture',
           kind: 'approval',
           tool_call_id: 'tool-a',
           resolved: false,
@@ -1081,8 +1085,13 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(surfaceAdapter.loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('retries a lost terminal current and converges without a thread switch', async () => {
+  it('waits for a higher revision after a terminal detail request fails', async () => {
     const completed = completedTerminalThread();
+    const advanced = thread({
+      ...completed,
+      updated_at_ms: 797,
+      read_status: readStatus(false, 797, 'success'),
+    });
     const running = thread({
       ...completed,
       status: 'running',
@@ -1114,10 +1123,16 @@ describe('Flower final thread cache and workspace transport', () => {
 
     stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [completed] });
 
+    await waitFor(() => runtime.textContent?.includes('Flower could not sync the latest reply. Try again.') ?? false);
+    expect(surfaceAdapter.loadThread).toHaveBeenCalledTimes(2);
+
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [completed] });
+    await wait(120);
+    expect(surfaceAdapter.loadThread).toHaveBeenCalledTimes(2);
+
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [advanced] });
     await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 3);
-    await waitFor(() => runtime.textContent?.includes('Syncing the latest reply...') ?? false);
-    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
-    recoveredRequest.resolve(liveBootstrap(completed, 796));
+    recoveredRequest.resolve(liveBootstrap(advanced, 797));
     await waitFor(() => runtime.querySelectorAll('[data-flower-message-id]').length === 6, 2_000);
     expect(runtime.textContent).toContain('Redeven 是一个本地开发环境产品。');
     expect(runtime.textContent).not.toContain("Cannot read properties of null");
@@ -1209,17 +1224,20 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 1);
     stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [completed] });
 
+    await wait(120);
+    expect(surfaceAdapter.loadThread).toHaveBeenCalledTimes(1);
+    staleRequest.resolve(liveBootstrap(running, 795));
     await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 2);
     await waitFor(() => runtime.querySelectorAll('[data-flower-message-id]').length === 6);
-    staleRequest.resolve(liveBootstrap(running, 795));
     await waitFor(() => runtime.textContent?.includes('Redeven 是一个本地开发环境产品。') ?? false);
     expect(runtime.querySelectorAll('[data-flower-message-id]')).toHaveLength(6);
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
   });
 
-  it('keeps existing content and offers manual retry after bounded recovery fails', async () => {
+  it('keeps existing content and offers manual retry after a detail refresh fails', async () => {
     const completed = completedTerminalThread();
     const running = thread({
       ...completed,
@@ -1256,7 +1274,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => runtime.textContent?.includes('Flower could not sync the latest reply. Try again.') ?? false, 2_500);
     expect(runtime.querySelectorAll('[data-flower-message-id]')).toHaveLength(1);
     expect(runtime.textContent).not.toContain("Cannot read properties of null");
-    expect(failedRecoveryCount).toBe(4);
+    expect(failedRecoveryCount).toBe(1);
 
     recoveryAvailable = true;
     (runtime.querySelector('.flower-error-actions button') as HTMLButtonElement).click();

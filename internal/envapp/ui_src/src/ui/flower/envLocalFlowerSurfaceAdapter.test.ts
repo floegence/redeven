@@ -871,8 +871,8 @@ describe('Env local Flower surface adapter', () => {
         turn_id: 'turn_context',
         run_progress: { phase: 'streaming' as const },
         items: [
-          { id: 'user:req-context', turn_id: 'turn_context', kind: 'user' as const, text: 'Inspect context' },
-          { id: 'assistant:turn-context', turn_id: 'turn_context', kind: 'assistant' as const, text: 'Working' },
+          { id: 'user:req-context', turn_id: 'turn_context', run_id: 'run_context', ordinal: 1, kind: 'user' as const, text: 'Inspect context' },
+          { id: 'assistant:turn-context', turn_id: 'turn_context', run_id: 'run_context', ordinal: 2, kind: 'assistant' as const, text: 'Working' },
         ],
         queue: [],
         interactions: [],
@@ -972,7 +972,7 @@ describe('Env local Flower surface adapter', () => {
   it('returns the typed current view from the local approval API', async () => {
     const result: FlowerApprovalCommandResult = {
       ok: true,
-      current: { thread_id: 'thread_receipt', view_version: 42, activity: 'active', run_id: 'run_receipt', interactions: [{ id: 'approval_receipt', kind: 'approval', resolved: true, approved: true }] },
+      current: { thread_id: 'thread_receipt', view_version: 42, activity: 'active', run_id: 'run_receipt', interactions: [{ id: 'approval_receipt', turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval', resolved: true, approved: true }] },
     };
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_receipt/approvals' && init?.method === 'POST') {

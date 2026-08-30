@@ -78,14 +78,15 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v5.0.15's public ordered `ThreadView.Items`, exact
-`ThreadView.RunID`, process-local `ThreadView.RunProgress`, and
+Redeven consumes Floret v5.0.16's public ordered `ThreadView.Items`, exact
+item and interaction `TurnID` plus `RunID`, exact active `ThreadView.RunID`,
+process-local `ThreadView.RunProgress`, and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
 maps the sequence directly and does not consume the deprecated global draft
-fields, infer order from timestamps or tool identity, or persist a second
-presentation order.
+fields, infer a historical identity from the active run, infer order from
+timestamps or tool identity, or persist a second presentation order.
 The Floret thread actor is the only active-run phase owner. Redeven passes the
 exact RunID and `preparing`, `waiting_response`, `streaming`, `retrying`,
 `finalizing`, or `tool_execution` phase to Flower. It does not derive RunID
@@ -183,7 +184,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v5.0.15 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v5.0.16 typed runtime without local replacement.
 - `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces exact published-v5 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.

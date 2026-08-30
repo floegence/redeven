@@ -86,8 +86,9 @@ func thinkingCurrent(version uint64, text string, live bool, activity flruntime.
 		ViewVersion: version,
 		Activity:    activity,
 		TurnID:      identity.TurnID("turn-thinking"),
+		RunID:       identity.RunID("run-thinking"),
 		Items: []flruntime.ThreadItem{{
-			ID: "thinking-1", TurnID: identity.TurnID("turn-thinking"), Ordinal: 2,
+			ID: "thinking-1", TurnID: identity.TurnID("turn-thinking"), RunID: identity.RunID("run-thinking"), Ordinal: 2,
 			Kind: flruntime.ThreadItemThinking, Text: text, Live: live,
 		}},
 	}
@@ -343,9 +344,9 @@ func TestResolveFlowerRuntimeRouteLoadsPersistedParentIdentity(t *testing.T) {
 func toolCurrent(version uint64, status observation.ActivityStatus) flruntime.ThreadView {
 	return flruntime.ThreadView{
 		ThreadID: identity.ThreadID("thread-tool"), ViewVersion: version,
-		Activity: flruntime.ThreadActivityActive, TurnID: identity.TurnID("turn-tool"),
+		Activity: flruntime.ThreadActivityActive, TurnID: identity.TurnID("turn-tool"), RunID: identity.RunID("run-tool"),
 		Items: []flruntime.ThreadItem{{
-			ID: "tool-1", TurnID: identity.TurnID("turn-tool"), Ordinal: 2, Kind: flruntime.ThreadItemTool,
+			ID: "tool-1", TurnID: identity.TurnID("turn-tool"), RunID: identity.RunID("run-tool"), Ordinal: 2, Kind: flruntime.ThreadItemTool,
 			Activity: &observation.ActivityItem{
 				ItemID: "tool-1", ToolID: "call-1", ToolName: "terminal.exec",
 				Kind: observation.ActivityKindTool, Status: status,

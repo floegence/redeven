@@ -63,6 +63,153 @@ function attachTranscriptScrollMetrics(transcript: HTMLElement, metrics: {
 }
 
 describe('FlowerSurface navigation', () => {
+  it('issues one cold detail request for one selected summary revision', async () => {
+    const summary = thread({
+      thread_id: 'thread-single-cold-load',
+      title: 'Single cold load',
+      messages: [],
+      updated_at_ms: 20,
+    });
+    const detail = deferred<ReturnType<typeof liveBootstrap>>();
+    const loadThread = vi.fn(() => detail.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [summary]),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${summary.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${summary.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => loadThread.mock.calls.length === 1);
+    await wait(40);
+
+    expect(loadThread).toHaveBeenCalledTimes(1);
+    detail.resolve(liveBootstrap(thread({
+      ...summary,
+      messages: [{
+        id: 'message-single-cold-load',
+        turn_id: 'turn-single-cold-load',
+        run_id: 'run-single-cold-load',
+        role: 'assistant',
+        content: 'Loaded once',
+        status: 'complete',
+        created_at_ms: 21,
+      }],
+    }), 20));
+    await waitFor(() => runtime.textContent?.includes('Loaded once') ?? false);
+    expect(loadThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves loading after a malformed detail and retries only on user action', async () => {
+    const summary = thread({
+      thread_id: 'thread-malformed-detail',
+      title: 'Malformed detail',
+      messages: [],
+      updated_at_ms: 30,
+    });
+    const validDetail = thread({
+      ...summary,
+      messages: [{
+        id: 'message-with-run',
+        turn_id: 'turn-malformed-detail',
+        run_id: 'run-malformed-detail',
+        role: 'assistant',
+        content: 'Recovered history',
+        status: 'complete',
+        created_at_ms: 32,
+      }],
+    });
+    const loadThread = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('Flower contract error: current item requires exact id, turn_id, and run_id.'); })
+      .mockResolvedValueOnce(liveBootstrap(validDetail, 31));
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [summary]),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${summary.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${summary.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-error-card') !== null);
+    await wait(40);
+
+    expect(runtime.querySelector('.flower-thread-loading')).toBeNull();
+    expect(runtime.textContent).toContain('Flower contract error: current item requires exact id, turn_id, and run_id.');
+    expect(loadThread).toHaveBeenCalledTimes(1);
+
+    const retry = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-error-card button'))
+      .find((button) => button.textContent?.includes('Retry'));
+    expect(retry).toBeTruthy();
+    retry?.click();
+    await waitFor(() => runtime.textContent?.includes('Recovered history') ?? false);
+    expect(loadThread).toHaveBeenCalledTimes(2);
+    diagnostic.mockRestore();
+  });
+
+  it('coalesces summary changes during a detail request into one latest request', async () => {
+    const initialSummary = thread({
+      thread_id: 'thread-coalesced-detail',
+      title: 'Coalesced detail',
+      messages: [],
+      updated_at_ms: 40,
+    });
+    const updatedSummary = thread({
+      ...initialSummary,
+      status: 'success',
+      updated_at_ms: 80,
+      read_status: {
+        is_unread: true,
+        snapshot: { activity_revision: 80 },
+        read_state: { last_seen_activity_revision: 40 },
+      },
+    });
+    const publishUpdate = deferred<void>();
+    const firstDetail = deferred<ReturnType<typeof liveBootstrap>>();
+    const latestDetail = deferred<ReturnType<typeof liveBootstrap>>();
+    const loadThread = vi.fn()
+      .mockImplementationOnce(() => firstDetail.promise)
+      .mockImplementationOnce(() => latestDetail.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [initialSummary]),
+      loadThread,
+      connectLiveStream: async function* ({ signal }) {
+        yield { schema_version: 1, kind: 'ready' as const, summaries: [initialSummary] };
+        await publishUpdate.promise;
+        yield { schema_version: 1, kind: 'summary.batch' as const, summaries: [updatedSummary] };
+        yield { schema_version: 1, kind: 'summary.batch' as const, summaries: [updatedSummary] };
+        await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initialSummary.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${initialSummary.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => loadThread.mock.calls.length === 1);
+    publishUpdate.resolve();
+    await flush();
+    expect(loadThread).toHaveBeenCalledTimes(1);
+
+    firstDetail.resolve(liveBootstrap(initialSummary, 40));
+    await waitFor(() => loadThread.mock.calls.length === 2);
+    latestDetail.resolve(liveBootstrap(thread({
+      ...updatedSummary,
+      messages: [{
+        id: 'message-coalesced-detail',
+        turn_id: 'turn-coalesced-detail',
+        run_id: 'run-coalesced-detail',
+        role: 'assistant',
+        content: 'Latest coalesced detail',
+        status: 'complete',
+        created_at_ms: 81,
+      }],
+    }), 80));
+    await waitFor(() => runtime.textContent?.includes('Latest coalesced detail') ?? false);
+    await wait(40);
+
+    expect(loadThread).toHaveBeenCalledTimes(2);
+  });
+
   it('attempts a failed read acknowledgement only once per displayed revision', async () => {
     const unreadThread = thread({
       thread_id: 'thread-read-ack-failure',
@@ -895,6 +1042,7 @@ describe('FlowerSurface navigation', () => {
           items: [{
             id: `user:${input.client_request_id}`,
             turn_id: acceptedTurnID,
+            run_id: 'run-fixture',
             ordinal: 1,
             kind: 'user' as const,
             text: input.prompt,

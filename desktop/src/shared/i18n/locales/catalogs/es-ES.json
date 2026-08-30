@@ -140,6 +140,7 @@
       "loadErrorTitle": "Flower no se pudo cargar.",
       "threadLoadErrorTitle": "La conversación no se pudo cargar.",
       "threadLoading": "Cargando conversación...",
+      "threadEmpty": "Esta conversación aún no tiene contenido.",
       "threadSyncingLatest": "Sincronizando la respuesta más reciente...",
       "threadSyncFailed": "Flower no pudo sincronizar la respuesta más reciente. Inténtalo de nuevo.",
       "activeTurnBusy": "La respuesta anterior sigue activa. Puedes detenerla antes de volver a enviar.",

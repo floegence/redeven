@@ -130,20 +130,7 @@ export function threadSummaryNeedsDetail(
   const detailRevision = threadSnapshotRevision(detail);
   if (summaryRevision > detailRevision) return true;
   if (summaryRevision < detailRevision) return false;
-  if (terminalDetailNeedsRecovery(summary, detail)) return true;
   return threadRuntimeStateKey(summary) !== threadRuntimeStateKey(detail);
-}
-
-function terminalDetailNeedsRecovery(
-  summary: FlowerThreadSnapshot,
-  detail: FlowerThreadSnapshot,
-): boolean {
-  if (summary.status !== 'success' || detail.status !== 'success' || detail.error) return false;
-  if (detail.messages.length === 0) return false;
-  return !detail.messages.some((message) => (
-    message.role === 'assistant'
-      && (message.content.trim() !== '' || (message.blocks?.length ?? 0) > 0)
-  ));
 }
 
 type CacheEntry = {

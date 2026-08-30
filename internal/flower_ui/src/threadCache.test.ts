@@ -191,13 +191,13 @@ describe('ThreadCache', () => {
     }, detail)).toBe(false);
   });
 
-  it('revalidates a successful detail that contains only the user message', () => {
+  it('does not infer staleness from the content shape of an equal-revision detail', () => {
     const summary = thread('a', 4, 'summary');
     const detail = {
       ...thread('a', 4, 'user only'),
       messages: [{ id: 'user-a', role: 'user' as const, content: 'hello', status: 'complete' as const, created_at_ms: 4 }],
     };
-    expect(threadSummaryNeedsDetail(summary, detail)).toBe(true);
+    expect(threadSummaryNeedsDetail(summary, detail)).toBe(false);
   });
 
   it('replaces the ordered summary collection without touching cached detail', () => {

@@ -140,6 +140,7 @@
       "loadErrorTitle": "Flower konnte nicht geladen werden.",
       "threadLoadErrorTitle": "Unterhaltung konnte nicht geladen werden.",
       "threadLoading": "Unterhaltung wird geladen...",
+      "threadEmpty": "Diese Unterhaltung enthält noch keine Inhalte.",
       "threadSyncingLatest": "Neueste Antwort wird synchronisiert...",
       "threadSyncFailed": "Flower konnte die neueste Antwort nicht synchronisieren. Versuche es erneut.",
       "activeTurnBusy": "Die vorherige Antwort ist noch aktiv. Du kannst sie stoppen, bevor du erneut sendest.",

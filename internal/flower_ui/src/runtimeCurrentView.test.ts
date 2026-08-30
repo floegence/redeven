@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
+import { buildFlowerTimelineEntries } from './flowerTimelineProjection';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 
 const summary = (): FlowerThreadSnapshot => ({
@@ -15,7 +16,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 7, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       run_progress: { phase: 'waiting_response' },
-      items: [{ id: 'user-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'hello' }],
+    items: [{ id: 'user-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'hello' }],
       assistant_draft: 'deprecated assistant draft must not render',
       thinking_draft: 'deprecated thinking draft must not render',
     };
@@ -31,7 +32,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('clears the derived model status after the runtime settles', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
-      items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'done' }],
+    items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'assistant', text: 'done' }],
     });
 
     expect(result.run_progress).toBeNull();
@@ -41,7 +42,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a',
       last_outcome: 'failed', error: 'Desktop model source disconnected.',
-      items: [{ id: 'user:turn-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'hello' }],
+    items: [{ id: 'user:turn-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'hello' }],
     });
 
     expect(result.status).toBe('failed');
@@ -57,7 +58,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
       last_outcome: 'failed',
       error: 'The committed tool result could not be verified.',
       run_error_code: 'floret_authority_consistency_failed',
-      items: [{ id: 'user:turn-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'hello' }],
+    items: [{ id: 'user:turn-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'hello' }],
     });
 
     expect(result.error).toEqual({
@@ -70,8 +71,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 9, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
       items: [
-        { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'same reply' },
-        { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: 'same reply' },
+    { id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'assistant', text: 'same reply' },
+    { id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'assistant', text: 'same reply' },
       ],
     });
 
@@ -84,8 +85,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 10, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
       items: [
-        { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: repeated },
-        { id: 'assistant:turn-a:2', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: repeated },
+    { id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'assistant', text: repeated },
+    { id: 'assistant:turn-a:2', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'assistant', text: repeated },
       ],
     });
 
@@ -96,19 +97,110 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 11, activity: 'active', run_id: 'run-b', turn_id: 'turn-b',
       items: [
-        { id: 'user:request-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'same message' },
-        { id: 'user:request-b', turn_id: 'turn-b', ordinal: 2, kind: 'user', text: 'same message' },
+    { id: 'user:request-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'same message' },
+    { id: 'user:request-b', turn_id: 'turn-b', run_id: 'run-b', ordinal: 2, kind: 'user', text: 'same message' },
       ],
     });
 
     expect(result.messages.map((message) => message.id)).toEqual(['user:request-a', 'user:request-b']);
   });
 
+  it('renders a 60-item three-turn history with every historical tool bound to its exact run', () => {
+    const items = Array.from({ length: 60 }, (_, index) => {
+      const turnIndex = Math.floor(index / 20) + 1;
+      const turnID = `turn-${turnIndex}`;
+      const runID = `run-${turnIndex}`;
+      if (index < 29) {
+        return {
+          id: `tool-${index}`,
+          turn_id: turnID,
+          run_id: runID,
+          ordinal: index + 1,
+          kind: 'tool' as const,
+          activity: {
+            item_id: `tool-${index}`,
+            tool_id: `call-${index}`,
+            tool_name: 'terminal.exec',
+            kind: 'tool',
+            status: 'success',
+            severity: 'normal',
+            needs_attention: false,
+            requires_approval: false,
+          },
+        };
+      }
+      return {
+        id: `message-${index}`,
+        turn_id: turnID,
+        run_id: runID,
+        ordinal: index + 1,
+        kind: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+        text: `message ${index}`,
+      };
+    });
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a',
+      view_version: 60,
+      activity: 'idle',
+      turn_id: 'turn-3',
+      last_outcome: 'completed',
+      items,
+    });
+
+    expect(result.messages).toHaveLength(60);
+    expect(result.messages.slice(0, 29).map((message) => message.run_id)).toEqual([
+      ...Array(20).fill('run-1'),
+      ...Array(9).fill('run-2'),
+    ]);
+    expect(() => buildFlowerTimelineEntries(result)).not.toThrow();
+  });
+
+  it('rejects an item without an exact run identity', () => {
+    const malformed = {
+      thread_id: 'thread-a',
+      view_version: 12,
+      items: [{ id: 'user-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'hello' }],
+    } as unknown as FlowerRuntimeCurrentView;
+
+    expect(() => applyFlowerRuntimeCurrentView(summary(), malformed)).toThrow(
+      'Flower contract error: current item requires exact id, turn_id, and run_id.',
+    );
+  });
+
+  it('rejects a current view for a different thread', () => {
+    expect(() => applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-b',
+      view_version: 12,
+      items: [],
+    })).toThrow('Flower contract error: current thread_id does not match the selected thread.');
+  });
+
+  it('rejects conflicting item and interaction identities', () => {
+    expect(() => applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a',
+      view_version: 13,
+      items: [{
+        id: 'interaction-a',
+        turn_id: 'turn-a',
+        run_id: 'run-a',
+        ordinal: 1,
+        kind: 'interaction',
+        interaction: {
+          id: 'input-a',
+          turn_id: 'turn-a',
+          run_id: 'run-b',
+          kind: 'input',
+          resolved: true,
+        },
+      }],
+    })).toThrow('Flower contract error: current item and interaction execution identity differ.');
+  });
+
   it('projects ordered current attachments as image and file blocks without duplicate reference chips', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 12, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
       items: [{
-        id: 'user:turn-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'inspect these',
+    id: 'user:turn-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'inspect these',
         attachments: [
           { name: 'screen.png', mime_type: 'image/png', size_bytes: 12, url: '/_redeven_proxy/api/ai/uploads/upl-image?thread_id=thread-a&turn_id=turn-a' },
           { name: 'notes.txt', mime_type: 'text/plain', size_bytes: 8 },
@@ -147,7 +239,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('projects an interrupted runtime outcome as a visible failed turn', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: 'interrupted',
-      items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'partial output' }],
+    items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'assistant', text: 'partial output' }],
     });
 
     expect(result.status).toBe('failed');
@@ -158,8 +250,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 9, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       items: [
-        { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'sealed segment' },
-        { id: 'assistant:turn-a:2', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: 'live segment', live: true },
+    { id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'assistant', text: 'sealed segment' },
+    { id: 'assistant:turn-a:2', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'assistant', text: 'live segment', live: true },
       ],
     });
 
@@ -171,7 +263,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('preserves Floret ordered segments and stable IDs through approval, completion, and reload', () => {
     const tool = (id: string, ordinal: number, status: 'waiting' | 'running' | 'success') => ({
-      id: `tool:turn-a:${id}`, turn_id: 'turn-a', ordinal, kind: 'tool' as const,
+    id: `tool:turn-a:${id}`, turn_id: 'turn-a', run_id: 'run-a', ordinal, kind: 'tool' as const,
       activity: {
         item_id: id, tool_id: id, tool_name: 'terminal.exec', kind: 'tool', status,
         severity: status === 'waiting' ? 'blocking' : 'normal', needs_attention: status === 'waiting',
@@ -179,12 +271,12 @@ describe('applyFlowerRuntimeCurrentView', () => {
       },
     });
     const ordered = [
-      { id: 'user:turn-a', turn_id: 'turn-a', ordinal: 1, kind: 'user' as const, text: 'run two tools' },
-      { id: 'thinking:turn-a:1', turn_id: 'turn-a', ordinal: 2, kind: 'thinking' as const, text: 'first reasoning', live: true },
+    { id: 'user:turn-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user' as const, text: 'run two tools' },
+    { id: 'thinking:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'thinking' as const, text: 'first reasoning', live: true },
       tool('call-1', 3, 'waiting'),
-      { id: 'thinking:turn-a:2', turn_id: 'turn-a', ordinal: 4, kind: 'thinking' as const, text: 'second reasoning', live: true },
+    { id: 'thinking:turn-a:2', turn_id: 'turn-a', run_id: 'run-a', ordinal: 4, kind: 'thinking' as const, text: 'second reasoning', live: true },
       tool('call-2', 5, 'waiting'),
-      { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 6, kind: 'assistant' as const, text: 'done', live: true },
+    { id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 6, kind: 'assistant' as const, text: 'done', live: true },
     ];
     const stages = [
       ordered.slice(0, 2),
@@ -233,8 +325,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a',
       interactions: [
-        { id: 'approval-a', kind: 'approval' },
-        { id: 'input-a', kind: 'input', signal: { name: 'ask_user', call_id: 'input-a' } },
+    { id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval' },
+    { id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', signal: { name: 'ask_user', call_id: 'input-a' } },
       ],
     };
     expect(applyFlowerRuntimeCurrentView(summary(), current).status).toBe('waiting_user');
@@ -243,7 +335,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('renders accepted busy input only in the typed runtime queue', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a',
-      items: [{ id: 'user:active', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'active work' }],
+    items: [{ id: 'user:active', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'active work' }],
       queue: [
         { id: 'queue:queued-first', request_key: 'queued-first', input: { text: 'first queued' } },
         { id: 'queue:queued-second', request_key: 'queued-second', input: { text: 'second queued' } },
@@ -262,7 +354,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('keeps declined tools quiet and terminal in their own timeline row', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 9, last_outcome: 'completed',
-      items: [{ id: 'tool-a', turn_id: 'turn-a', ordinal: 1, kind: 'tool', activity: {
+    items: [{ id: 'tool-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'tool', activity: {
         item_id: 'tool-a', kind: 'tool', status: 'declined', severity: 'quiet', needs_attention: false,
         requires_approval: true, approval_state: 'rejected',
       } }],
@@ -277,7 +369,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
       items: [{
-        id: 'tool-a', turn_id: 'turn-a', ordinal: 1, kind: 'tool',
+    id: 'tool-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'tool',
         activity: {
           item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
           status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
@@ -312,7 +404,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     { name: 'canceled', approved: undefined, outcome: 'cancelled', status: 'canceled', severity: 'warning', requiresApproval: true },
   ] as const)('merges a resolved $name approval into its canonical tool row', ({ name, approved, outcome, status, severity, requiresApproval }) => {
     const interaction = {
-      id: 'approval-a', turn_id: 'turn-a', kind: 'approval' as const, tool_call_id: 'call-a', resolved: true,
+    id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval' as const, tool_call_id: 'call-a', resolved: true,
       ...(approved !== undefined ? { approved } : {}),
       approval: { label: 'Run curl', tool_name: 'terminal.exec', tool_call_id: 'call-a' },
       resolution: {
@@ -325,9 +417,9 @@ describe('applyFlowerRuntimeCurrentView', () => {
       thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
       interactions: [interaction],
       items: [
-        { id: 'interaction-a', turn_id: 'turn-a', ordinal: 1, kind: 'interaction', interaction },
+    { id: 'interaction-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'interaction', interaction },
         {
-          id: 'tool-a', turn_id: 'turn-a', ordinal: 2, kind: 'tool', activity: {
+      id: 'tool-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'tool', activity: {
             item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
             status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
             presentation: {
@@ -354,7 +446,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('does not merge or render a resolved approval without a matching canonical tool id', () => {
     const interaction = {
-      id: 'approval-other', turn_id: 'turn-a', kind: 'approval' as const, tool_call_id: 'call-other', resolved: true,
+    id: 'approval-other', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval' as const, tool_call_id: 'call-other', resolved: true,
       approved: false,
       approval: { label: 'Other command', tool_name: 'terminal.exec', tool_call_id: 'call-other' },
       resolution: { accepted: true, approved: false },
@@ -363,9 +455,9 @@ describe('applyFlowerRuntimeCurrentView', () => {
       thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
       interactions: [interaction],
       items: [
-        { id: 'interaction-other', turn_id: 'turn-a', ordinal: 1, kind: 'interaction', interaction },
+    { id: 'interaction-other', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'interaction', interaction },
         {
-          id: 'tool-a', turn_id: 'turn-a', ordinal: 2, kind: 'tool', activity: {
+      id: 'tool-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'tool', activity: {
             item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
             status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
             presentation: {
@@ -388,7 +480,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
     const withoutCanonicalTool = applyFlowerRuntimeCurrentView(summary(), {
       ...current,
-      items: [{ id: 'interaction-other', turn_id: 'turn-a', ordinal: 1, kind: 'interaction', interaction }],
+    items: [{ id: 'interaction-other', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'interaction', interaction }],
     });
     expect(withoutCanonicalTool.messages).toEqual([]);
   });
@@ -397,7 +489,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 11, last_outcome: 'completed', turn_id: 'turn-a',
       items: [{
-        id: 'tool-entry-a', turn_id: 'turn-a', ordinal: 1, kind: 'tool',
+    id: 'tool-entry-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'tool',
         activity: {
           item_id: 'tool-a', tool_id: 'call-a', tool_name: 'file.read', kind: 'tool',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
@@ -424,9 +516,9 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
       items: [{
-        id: 'interaction-answer', turn_id: 'turn-a', ordinal: 1, kind: 'interaction',
+    id: 'interaction-answer', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'interaction',
         interaction: {
-          id: 'input-a', turn_id: 'turn-a', kind: 'input', resolved: true,
+      id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', resolved: true,
           resolution: { accepted: true, input: { zeta: 'second', alpha: 'first' } },
         },
       }],
@@ -442,7 +534,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 11, last_outcome: 'completed', turn_id: 'turn-a',
       items: [{
-        id: 'tool-a', turn_id: 'turn-a', ordinal: 1, kind: 'tool',
+    id: 'tool-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'tool',
         activity: {
           item_id: 'tool-a', kind: 'tool', status: 'success', severity: 'quiet',
           needs_attention: false, requires_approval: false,
@@ -479,12 +571,12 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 10, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       interactions: [
-        { id: 'approval-a', kind: 'approval', tool_call_id: 'tool-a', resolved: true, approved: false },
+    { id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval', tool_call_id: 'tool-a', resolved: true, approved: false },
         {
-          id: 'approval-b', kind: 'approval', tool_call_id: 'tool-b',
+      id: 'approval-b', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval', tool_call_id: 'tool-b',
           approval: { label: 'second', tool_name: 'terminal.exec', tool_call_id: 'tool-b' },
         },
-        { id: 'input-a', kind: 'input', resolved: true },
+    { id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', resolved: true },
       ],
     };
 
@@ -499,7 +591,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 11, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       interactions: [{
-        id: 'approval-a', kind: 'approval', tool_call_id: 'tool-a',
+    id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval', tool_call_id: 'tool-a',
         approval: { label: 'Run command', tool_name: 'terminal.exec', tool_call_id: 'tool-a' },
       }],
     });
@@ -515,7 +607,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 12, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
       interactions: [{
-        id: 'approval-file', turn_id: 'turn-a', kind: 'approval', tool_call_id: 'tool-file',
+    id: 'approval-file', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval', tool_call_id: 'tool-file',
         approval: {
           label: 'Edit file', tool_name: 'file.write', tool_call_id: 'tool-file', effects: ['write'],
           targets: ['file:回声之王.md', 'working_directory:/workspace:with:colons'],
