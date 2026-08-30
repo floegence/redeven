@@ -54,7 +54,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     await page.viewport(1280, 720);
   });
 
-  function mount(): void {
+  function mount(templates: readonly ServiceTemplatePresentation[] = [template]): void {
     const host = document.createElement('div');
     host.className = 'mx-auto w-[900px] max-w-full bg-card p-4';
     document.body.appendChild(host);
@@ -64,7 +64,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
         query=""
         hostCount={1}
         containerCount={0}
-        templates={[template]}
+        templates={templates}
         loading={false}
         canManage
         onCategoryChange={() => undefined}
@@ -78,39 +78,39 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     ), host);
   }
 
-  it('uses aligned master-detail columns and lets a single template fill the gallery', async () => {
+  it('uses aligned master-detail columns and lets a single template fill the list', async () => {
     await page.viewport(1280, 720);
     mount();
 
-    const gallery = document.querySelector<HTMLElement>('[data-testid="service-template-gallery"]')!;
-    const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
+    const list = document.querySelector<HTMLElement>('[data-testid="service-template-list"]')!;
+    const row = document.querySelector<HTMLElement>('[data-testid="service-template-row"]')!;
     const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
-    expect(card.getBoundingClientRect().width / gallery.getBoundingClientRect().width).toBeGreaterThan(0.95);
-    expect(details.getBoundingClientRect().width / gallery.getBoundingClientRect().width).toBeGreaterThan(0.72);
-    expect(details.getBoundingClientRect().width / gallery.getBoundingClientRect().width).toBeLessThan(0.9);
-    expect(details.getBoundingClientRect().top).toBeCloseTo(gallery.getBoundingClientRect().top, 0);
-    expect(details.getBoundingClientRect().left).toBeGreaterThan(gallery.getBoundingClientRect().right);
-    expect(card.getAttribute('aria-selected')).toBe('true');
+    expect(row.getBoundingClientRect().width / list.getBoundingClientRect().width).toBeGreaterThan(0.95);
+    expect(details.getBoundingClientRect().width / list.getBoundingClientRect().width).toBeGreaterThan(0.72);
+    expect(details.getBoundingClientRect().width / list.getBoundingClientRect().width).toBeLessThan(0.9);
+    expect(details.getBoundingClientRect().top).toBeCloseTo(list.getBoundingClientRect().top, 0);
+    expect(details.getBoundingClientRect().left).toBeGreaterThan(list.getBoundingClientRect().right);
+    expect(row.getAttribute('aria-selected')).toBe('true');
 
     await userEvent.tab();
     expect(document.activeElement?.getAttribute('role')).toBe('tab');
     expect((document.activeElement as HTMLElement).className).toContain('focus-visible');
   });
 
-  it('keeps the catalog and details flat while preserving a themed interactive tile', () => {
+  it('keeps the catalog and details flat while preserving a themed interactive row', () => {
     document.documentElement.classList.add('light');
     mount();
     const catalogSurface = document.querySelector<HTMLElement>('.service-template-catalog__canvas')!;
-    const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
+    const row = document.querySelector<HTMLElement>('[data-testid="service-template-row"]')!;
     const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
-    const lightBackground = getComputedStyle(card).backgroundColor;
+    const lightBackground = getComputedStyle(row).backgroundColor;
     const lightCatalogBackground = getComputedStyle(catalogSurface).backgroundColor;
     const lightDetailsBackground = getComputedStyle(details).backgroundColor;
     const catalogStyle = getComputedStyle(catalogSurface);
     const detailsStyle = getComputedStyle(details);
 
     document.documentElement.classList.replace('light', 'dark');
-    const darkBackground = getComputedStyle(card).backgroundColor;
+    const darkBackground = getComputedStyle(row).backgroundColor;
 
     expect(lightBackground).not.toBe('rgba(0, 0, 0, 0)');
     expect(lightBackground).not.toBe(lightCatalogBackground);
@@ -125,6 +125,34 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(darkBackground).not.toBe(lightBackground);
   });
 
+  it('uses compact neutral rows and reserves emphasis for the current selection', () => {
+    document.documentElement.classList.add('dark');
+    mount([
+      { ...template, id: 'selected-template', name: 'Selected template' },
+      { ...template, id: 'installed-template', name: 'Installed template', installed: true },
+      { ...template, id: 'available-template', name: 'Available template' },
+    ]);
+
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="service-template-row"]'));
+    const [selected, installed, available] = rows;
+    const description = installed!.querySelector<HTMLElement>('.service-template-row__description')!;
+    const installedStatus = installed!.querySelector<HTMLElement>('.service-template-status')!;
+    const detailsIcon = document.querySelector<HTMLElement>('.service-template-details__icon')!;
+    const detailsTitle = document.querySelector<HTMLElement>('.service-template-details__title')!;
+
+    expect(rows).toHaveLength(3);
+    expect(installed!.getBoundingClientRect().height).toBeLessThanOrEqual(92);
+    expect(available!.getBoundingClientRect().height).toBeCloseTo(installed!.getBoundingClientRect().height, 0);
+    expect(description.getBoundingClientRect().height).toBeLessThanOrEqual(20);
+    expect(getComputedStyle(installed!).backgroundColor).toBe(getComputedStyle(available!).backgroundColor);
+    expect(getComputedStyle(selected!).backgroundColor).not.toBe(getComputedStyle(available!).backgroundColor);
+    expect(getComputedStyle(installedStatus).color).not.toBe(getComputedStyle(installed!).color);
+    expect(Math.abs(
+      (detailsIcon.getBoundingClientRect().top + detailsIcon.getBoundingClientRect().height / 2)
+      - (detailsTitle.getBoundingClientRect().top + detailsTitle.getBoundingClientRect().height / 2),
+    )).toBeLessThan(18);
+  });
+
   it('stacks the selected template detail pane with touchable actions on narrow screens', async () => {
     await page.viewport(390, 760);
     mount();
@@ -134,20 +162,20 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const deploy = document.querySelector<HTMLElement>('[data-testid="service-template-primary"]')!;
     const more = document.querySelector<HTMLElement>('[data-testid="service-template-more"]')!;
     expect(getComputedStyle(layout).gridTemplateColumns.split(' ')).toHaveLength(1);
-    expect(details.getBoundingClientRect().top).toBeGreaterThan(document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!.getBoundingClientRect().bottom);
+    expect(details.getBoundingClientRect().top).toBeGreaterThan(document.querySelector<HTMLElement>('[data-testid="service-template-row"]')!.getBoundingClientRect().bottom);
     expect(getComputedStyle(details).borderLeftWidth).toBe('0px');
     expect(getComputedStyle(details).borderTopWidth).toBe('1px');
     expect(deploy.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     expect(more.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   });
 
-  it('removes decorative card and icon motion when reduced motion is requested', async () => {
+  it('removes decorative row and icon motion when reduced motion is requested', async () => {
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
     mount();
 
-    const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
+    const row = document.querySelector<HTMLElement>('[data-testid="service-template-row"]')!;
     const icon = document.querySelector<HTMLElement>('.service-template-identity__icon')!;
-    expect(getComputedStyle(card).transitionDuration).toBe('0s');
+    expect(getComputedStyle(row).transitionDuration).toBe('0s');
     expect(getComputedStyle(icon).transitionDuration).toBe('0s');
   });
 
@@ -155,10 +183,10 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     mount();
 
     const tab = document.querySelector<HTMLElement>('[role="tab"]')!;
-    const card = document.querySelector<HTMLElement>('[data-testid="service-template-card"]')!;
+    const row = document.querySelector<HTMLElement>('[data-testid="service-template-row"]')!;
     const search = document.querySelector<HTMLInputElement>('input[aria-label="Search templates"]')!;
     expect(getComputedStyle(tab).cursor).toBe('pointer');
-    expect(getComputedStyle(card).cursor).toBe('pointer');
+    expect(getComputedStyle(row).cursor).toBe('pointer');
     expect(getComputedStyle(search).cursor).toBe('text');
   });
 

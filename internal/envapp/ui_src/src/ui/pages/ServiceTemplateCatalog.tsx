@@ -118,6 +118,7 @@ export function ServiceTemplateIdentity(props: {
 function ServiceTemplateStatus(props: {
   template: ServiceTemplatePresentation;
   detailed?: boolean;
+  compact?: boolean;
 }): JSX.Element {
   const i18n = useI18n();
   const label = () => props.template.installed
@@ -133,7 +134,8 @@ function ServiceTemplateStatus(props: {
   return (
     <div
       class={cn(
-        'service-template-status flex min-w-0 items-start gap-2 text-xs leading-5',
+        'service-template-status flex min-w-0 items-start',
+        props.compact ? 'items-center gap-1.5 text-[11px] leading-4' : 'gap-2 text-xs leading-5',
         props.template.installed
           ? 'service-template-status--installed text-[var(--redeven-status-success-foreground)]'
           : props.template.available
@@ -145,17 +147,17 @@ function ServiceTemplateStatus(props: {
       <Show
         when={props.template.installed}
         fallback={props.template.available
-          ? <span class="service-template-status-dot mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden="true" />
-          : <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />}
+          ? <span class={cn('service-template-status-dot shrink-0 rounded-full', props.compact ? 'h-1.5 w-1.5' : 'mt-[7px] h-1.5 w-1.5')} aria-hidden="true" />
+          : <AlertTriangle class={cn('shrink-0', props.compact ? 'h-3.5 w-3.5' : 'mt-0.5 h-4 w-4')} aria-hidden="true" />}
       >
-        <CheckCircle class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <CheckCircle class={cn('shrink-0', props.compact ? 'h-3.5 w-3.5' : 'mt-0.5 h-4 w-4')} aria-hidden="true" />
       </Show>
       <span class="min-w-0">{label()}</span>
     </div>
   );
 }
 
-export function ServiceTemplateTile(props: {
+export function ServiceTemplateRow(props: {
   template: ServiceTemplatePresentation;
   selected: boolean;
   onSelect: () => void;
@@ -170,41 +172,40 @@ export function ServiceTemplateTile(props: {
       aria-selected={props.selected}
       tabIndex={props.selected ? 0 : -1}
       class={cn(
-        'service-template-card service-template-tile min-w-0 rounded-xl p-4 text-left text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        props.selected && 'service-template-card--selected',
-        props.template.installed && 'service-template-card--installed',
-        !props.template.available && 'service-template-card--unavailable',
+        'service-template-row min-w-0 px-3 py-2.5 text-left text-card-foreground focus-visible:z-[1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+        props.selected && 'service-template-row--selected',
       )}
-      data-testid="service-template-card"
+      data-testid="service-template-row"
       data-template-id={props.template.id}
       data-template-state={props.template.installed ? 'installed' : props.template.available ? 'available' : 'unavailable'}
       onClick={props.onSelect}
       onKeyDown={props.onKeyDown}
     >
-      <div class="flex min-w-0 items-start gap-3">
+      <div class="flex min-w-0 items-center gap-3">
         <div
-          class={cn('service-template-identity__icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', props.template.brandIcon && 'service-template-identity__icon--brand')}
+          class={cn('service-template-identity__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', props.template.brandIcon && 'service-template-identity__icon--brand')}
           data-template-kind={props.template.kind}
           data-template-brand={props.template.brandIcon}
         >
           <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={templateIconClass(props.template.brandIcon, true)} />
         </div>
-        <div class="min-w-0 flex-1 pt-0.5">
-          <span class="service-template-tile__source block truncate text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-            {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : i18n.t('webServices.managed.custom')}
-          </span>
-          <h3 class="mt-0.5 truncate text-sm font-semibold leading-5 text-foreground" dir="auto">{props.template.name}</h3>
-        </div>
-      </div>
-      <p class="service-template-tile__description mt-3 text-xs leading-5 text-muted-foreground" dir="auto">{props.template.description}</p>
-      <div class="mt-3 flex min-w-0 items-end justify-between gap-3">
-        <ServiceTemplateStatus template={props.template} />
-        <div class="flex shrink-0 items-center gap-1.5 text-[10px] text-muted-foreground" data-template-metadata>
-          <span>{props.template.deploymentLabel}</span>
-          <Show when={props.template.version}>
-            <span aria-hidden="true">·</span>
-            <span class="font-mono">v{props.template.version}</span>
-          </Show>
+        <div class="min-w-0 flex-1">
+          <h3 class="truncate text-sm font-semibold leading-5 text-foreground" dir="auto">{props.template.name}</h3>
+          <p class="service-template-row__description mt-0.5 truncate text-xs leading-4 text-muted-foreground" dir="auto">{props.template.description}</p>
+          <div class="mt-1 flex min-w-0 items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-1.5 truncate text-[10px] leading-4 text-muted-foreground" data-template-metadata>
+              <span class="service-template-row__source truncate">
+                {props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span class="shrink-0">{props.template.deploymentLabel}</span>
+              <Show when={props.template.version}>
+                <span aria-hidden="true">·</span>
+                <span class="shrink-0 font-mono">v{props.template.version}</span>
+              </Show>
+            </div>
+            <ServiceTemplateStatus template={props.template} compact />
+          </div>
         </div>
       </div>
     </button>
@@ -251,28 +252,29 @@ export function ServiceTemplateDetailsPane(props: {
       data-template-id={props.template.id}
       aria-label={props.template.name}
     >
-      <div class="flex min-w-0 items-start justify-between gap-3">
+      <div class="service-template-details__header flex min-w-0 items-start gap-3.5">
         <div
-          class={cn('service-template-details__icon flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl', props.template.brandIcon && 'service-template-identity__icon--brand')}
+          class={cn('service-template-details__icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', props.template.brandIcon && 'service-template-identity__icon--brand')}
           data-template-kind={props.template.kind}
           data-template-brand={props.template.brandIcon}
         >
-          <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={props.template.brandIcon ? 'h-auto w-8' : 'h-6 w-6'} />
+          <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={props.template.brandIcon ? 'h-auto w-7' : 'h-6 w-6'} />
         </div>
-        <Show when={props.template.developerPreview}>
-          <Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag>
-        </Show>
+        <div class="min-w-0 flex-1">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <span class="text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
+              {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : i18n.t('webServices.managed.custom')}
+            </span>
+            <Show when={props.template.developerPreview}>
+              <Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag>
+            </Show>
+          </div>
+          <h2 class="service-template-details__title mt-0.5 text-base font-semibold leading-6 text-foreground" dir="auto">{props.template.name}</h2>
+          <p class="mt-1 text-xs leading-5 text-muted-foreground" dir="auto">{props.template.description}</p>
+        </div>
       </div>
 
-      <div class="mt-4 min-w-0">
-        <span class="text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-          {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : i18n.t('webServices.managed.custom')}
-        </span>
-        <h2 class="mt-1 text-base font-semibold leading-6 text-foreground" dir="auto">{props.template.name}</h2>
-        <p class="mt-2 text-xs leading-5 text-muted-foreground" dir="auto">{props.template.description}</p>
-      </div>
-
-      <dl class="service-template-details__metadata mt-5 grid grid-cols-2 gap-x-5 gap-y-4 border-y py-4 text-xs">
+      <dl class="service-template-details__metadata mt-4 grid grid-cols-2 gap-x-5 gap-y-3 border-y py-3 text-xs">
         <div class="min-w-0">
           <dt class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.deployment')}</dt>
           <dd class="mt-1 truncate font-medium text-foreground">{props.template.deploymentLabel}</dd>
@@ -283,11 +285,11 @@ export function ServiceTemplateDetailsPane(props: {
         </div>
       </dl>
 
-      <div class="mt-4">
+      <div class="mt-3.5">
         <ServiceTemplateStatus template={props.template} detailed />
       </div>
 
-      <div class="service-template-details__actions mt-5 flex items-center gap-2">
+      <div class="service-template-details__actions mt-4 flex items-center gap-2">
         <Button
           size="sm"
           variant="default"
@@ -344,23 +346,23 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
       { id: 'container', label: i18n.t('webServices.managed.newContainerTemplate'), disabled: !props.canManage },
       { id: 'compose', label: i18n.t('webServices.managed.newComposeTemplate'), disabled: !props.canManage },
     ];
-  const moveTileSelection: JSX.EventHandler<HTMLButtonElement, KeyboardEvent> = (event) => {
+  const moveRowSelection: JSX.EventHandler<HTMLButtonElement, KeyboardEvent> = (event) => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-    const gallery = event.currentTarget.closest('[data-testid="service-template-gallery"]');
-    const tiles = Array.from(gallery?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
-    const currentIndex = tiles.indexOf(event.currentTarget);
-    if (currentIndex < 0 || tiles.length === 0) return;
+    const list = event.currentTarget.closest('[data-testid="service-template-list"]');
+    const rows = Array.from(list?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+    const currentIndex = rows.indexOf(event.currentTarget);
+    if (currentIndex < 0 || rows.length === 0) return;
 
     event.preventDefault();
     const nextIndex = event.key === 'Home'
       ? 0
       : event.key === 'End'
-        ? tiles.length - 1
+        ? rows.length - 1
         : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-          ? (currentIndex - 1 + tiles.length) % tiles.length
-          : (currentIndex + 1) % tiles.length;
-    tiles[nextIndex]?.click();
-    tiles[nextIndex]?.focus();
+          ? (currentIndex - 1 + rows.length) % rows.length
+          : (currentIndex + 1) % rows.length;
+    rows[nextIndex]?.click();
+    rows[nextIndex]?.focus();
   };
 
   return (
@@ -442,7 +444,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                     class="service-template-catalog__canvas min-w-0"
                     role="listbox"
                     aria-label={i18n.t('webServices.managed.serviceTemplates')}
-                    data-testid="service-template-gallery"
+                    data-testid="service-template-list"
                   >
                     <div class="space-y-7">
                       <TemplateGroup
@@ -451,7 +453,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                         templates={builtInTemplates()}
                         selectedTemplateID={selectedTemplate()?.id}
                         onSelect={setRequestedTemplateID}
-                        onKeyDown={moveTileSelection}
+                        onKeyDown={moveRowSelection}
                       />
                       <TemplateGroup
                         title={i18n.t('webServices.managed.customTemplates')}
@@ -459,7 +461,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                         templates={customTemplates()}
                         selectedTemplateID={selectedTemplate()?.id}
                         onSelect={setRequestedTemplateID}
-                        onKeyDown={moveTileSelection}
+                        onKeyDown={moveRowSelection}
                       />
                     </div>
                   </div>
@@ -503,9 +505,9 @@ function TemplateGroup(props: {
             <p class="mt-0.5 text-[11px] leading-4 text-muted-foreground">{props.description}</p>
           </div>
         </div>
-        <div class="service-template-grid grid gap-3">
+        <div class="service-template-list grid">
           <For each={props.templates}>{(template) => (
-            <ServiceTemplateTile
+            <ServiceTemplateRow
               template={template}
               selected={props.selectedTemplateID === template.id}
               onSelect={() => props.onSelect(template.id)}
