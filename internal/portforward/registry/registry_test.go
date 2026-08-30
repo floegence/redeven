@@ -2,16 +2,21 @@ package registry
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestOpen_CreatesV4SchemaForFreshDB(t *testing.T) {
+func TestOpen_CreatesV5SchemaForFreshDB(t *testing.T) {
 	t.Parallel()
 
 	p := filepath.Join(t.TempDir(), "registry.sqlite")
@@ -25,8 +30,8 @@ func TestOpen_CreatesV4SchemaForFreshDB(t *testing.T) {
 	if err := r.db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	if v != 4 {
-		t.Fatalf("user_version = %d, want 4", v)
+	if v != 5 {
+		t.Fatalf("user_version = %d, want 5", v)
 	}
 
 	cols, err := tableColumns(r.db, "port_forwards")
@@ -48,6 +53,15 @@ func TestOpen_CreatesV4SchemaForFreshDB(t *testing.T) {
 	for _, c := range want {
 		if !slices.Contains(cols, c) {
 			t.Fatalf("missing column %q in %+v", c, cols)
+		}
+	}
+	managedColumns, err := tableColumns(r.db, "managed_web_services")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []string{"configuration_revision", "configuration_sha256"} {
+		if !slices.Contains(managedColumns, column) {
+			t.Fatalf("missing managed service column %q in %v", column, managedColumns)
 		}
 	}
 }
@@ -77,7 +91,7 @@ func TestOpen_MigratesV1AndPreservesForwards(t *testing.T) {
 		t.Fatalf("preserved forward = %+v, err=%v", forward, err)
 	}
 	var version int
-	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 4 {
+	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 5 {
 		t.Fatalf("migrated version=%d, err=%v", version, err)
 	}
 }
@@ -248,6 +262,59 @@ func TestOpen_RejectsV4AccessModeConstraintDrift(t *testing.T) {
 	}
 	if version != 4 || !slices.Contains(columns, "access_mode") {
 		t.Fatalf("drifted v4 database changed: version=%d columns=%v", version, columns)
+	}
+}
+
+func TestOpen_MigratesV4ManagedConfigurationAtomically(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV4TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES('pf_config','http://127.0.0.1:3080','Configured','','',0,1,2,3,'unified_proxy')`); err != nil {
+		t.Fatal(err)
+	}
+	legacySpec := `{"schema_version":1,"kind":"container","endpoint":{"scheme":"http","container_port":3000},"container":{"image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","read_only_root":true,"mounts":[{"type":"volume","source":"data","target":"/data"}],"ports":[{"container_port":8080,"host_ip":"127.0.0.1"}],"devices":[{"host_path":"/dev/null","container_path":"/dev/null"}]}}`
+	if _, err := db.Exec(`INSERT INTO managed_web_service_templates(template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES('template','Template','','custom','container','1',1,?,'','','0','family',1,1)`, legacySpec); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES('mws_config','template','custom',1,?,'','family','container','/workspace','{"parameters":{"TOKEN":"kept"},"accepted_notice_revisions":{"risk":2}}','1','stopped','stopped','pf_config','','{}',3080,'','','',4,5)`, legacySpec); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	service, err := r.GetManagedService(context.Background(), "mws_config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if service == nil || service.ConfigurationRevision != 1 || len(service.ConfigurationSHA256) != 64 || service.ConfigurationJSON != `{"schema_version":2,"parameters":{"TOKEN":"kept"},"accepted_notice_revisions":{"risk":2}}` {
+		t.Fatalf("migrated service = %+v", service)
+	}
+	var snapshot map[string]any
+	if err := json.Unmarshal([]byte(service.TemplateSnapshotJSON), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	container := snapshot["container"].(map[string]any)
+	for _, field := range []string{"mounts", "ports", "devices"} {
+		item := container[field].([]any)[0].(map[string]any)
+		if !strings.HasPrefix(fmt.Sprint(item["resource_id"]), "legacy-") {
+			t.Fatalf("%s resource identity was not migrated: %v", field, item)
+		}
+	}
+	if len(service.TemplateSnapshotSHA256) != 64 {
+		t.Fatalf("migrated snapshot digest = %q", service.TemplateSnapshotSHA256)
+	}
+	resources, err := r.ListManagedServiceResources(context.Background(), service.ServiceID)
+	if err != nil || len(resources) != 0 {
+		t.Fatalf("resources=%v err=%v", resources, err)
 	}
 }
 
@@ -431,7 +498,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 		_ = r.Close()
 		t.Fatal(err)
 	}
-	if _, err := r.db.Exec(`PRAGMA user_version=5`); err != nil {
+	if _, err := r.db.Exec(`PRAGMA user_version=6`); err != nil {
 		_ = r.Close()
 		t.Fatal(err)
 	}
@@ -453,7 +520,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE forward_id='keep'`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if version != 5 || count != 1 {
+	if version != 6 || count != 1 {
 		t.Fatalf("future database changed: version=%d forward_count=%d", version, count)
 	}
 }
@@ -715,6 +782,37 @@ func TestUpdateManagedServiceCommitsTemplateAndRuntimeIdentityTogether(t *testin
 	}
 }
 
+func TestManagedServiceConfigurationUsesRevisionCASAndStableResources(t *testing.T) {
+	t.Parallel()
+	r, err := Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	service := ManagedService{ServiceID: "mws_config", TemplateID: "template", TemplateSource: "custom", TemplateRevision: 1, TemplateSnapshotJSON: `{}`, TemplateSnapshotSHA256: "snapshot", ServiceFamilyID: "family", Deployment: "container", WorkspacePath: t.TempDir(), ConfigurationJSON: `{"schema_version":2}`, DesiredState: "stopped", ObservedState: "stopped", ForwardID: "pf_config"}
+	if err := r.CreateManagedService(context.Background(), service, Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}); err != nil {
+		t.Fatal(err)
+	}
+	next := `{"schema_version":2,"parameters":{"PORT":"3000"}}`
+	digestBytes := sha256.Sum256([]byte(next))
+	digest := hex.EncodeToString(digestBytes[:])
+	revision, err := r.UpdateManagedServiceConfiguration(context.Background(), service.ServiceID, 1, next, digest)
+	if err != nil || revision != 2 {
+		t.Fatalf("revision=%d err=%v", revision, err)
+	}
+	if _, err := r.UpdateManagedServiceConfiguration(context.Background(), service.ServiceID, 1, next, digest); err == nil {
+		t.Fatal("stale configuration revision was accepted")
+	}
+	resource := ManagedServiceResource{ServiceID: service.ServiceID, ResourceID: "data", Kind: "volume", EngineIdentity: "redeven-data", CreatedAtUnixMs: 123}
+	if err := r.PutManagedServiceResource(context.Background(), resource); err != nil {
+		t.Fatal(err)
+	}
+	resources, err := r.ListManagedServiceResources(context.Background(), service.ServiceID)
+	if err != nil || len(resources) != 1 || resources[0] != resource {
+		t.Fatalf("resources=%v err=%v", resources, err)
+	}
+}
+
 func registryV1TestSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           registrySchemaKind,
@@ -768,6 +866,22 @@ func registryV3TestSpec() sqliteutil.Spec {
 		},
 		Verify: func(tx *sql.Tx) error {
 			return verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms"}, "v3")
+		},
+	}
+}
+
+func registryV4TestSpec() sqliteutil.Spec {
+	return sqliteutil.Spec{
+		Kind: registrySchemaKind, CurrentVersion: 4,
+		Pragmas: []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 0, ToVersion: 1, Apply: migrateRegistryToV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryToV4},
+		},
+		Verify: func(tx *sql.Tx) error {
+			return verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v4")
 		},
 	}
 }

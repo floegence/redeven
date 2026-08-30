@@ -30,6 +30,13 @@ type ComposeDeploymentClient interface {
 	TailComposeDeploymentLogs(context.Context, ComposeDeploymentRequest, int) ([]string, error)
 }
 
+// ComposeCreateClient is the optional stopped-runtime capability. Keeping it
+// separate preserves compatibility for engine clients that only support the
+// established start/apply lifecycle.
+type ComposeCreateClient interface {
+	CreateComposeDeployment(context.Context, ComposeDeploymentRequest) error
+}
+
 func validateComposeDeploymentRequest(req ComposeDeploymentRequest) error {
 	if !composeDeploymentNamePattern.MatchString(strings.TrimSpace(req.ProjectName)) {
 		return errors.New("compose project name is invalid")
@@ -83,6 +90,17 @@ func (a *Adapter) SupportsComposeDeployment() bool {
 	}
 	_, ok := a.client.(ComposeDeploymentClient)
 	return ok
+}
+
+func (a *Adapter) CreateComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {
+	if err := validateComposeDeploymentRequest(req); err != nil {
+		return err
+	}
+	client, ok := a.client.(ComposeCreateClient)
+	if !ok || client == nil {
+		return ErrResourceCapabilityUnsupported
+	}
+	return client.CreateComposeDeployment(ctx, req)
 }
 
 func (a *Adapter) ValidateComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {

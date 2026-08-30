@@ -22,7 +22,7 @@ type hostScriptDriver struct {
 }
 
 func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress func(string, int64)) (string, string, error) {
-	spec, err := templateSpecFromService(service)
+	spec, _, err := effectiveSpecFromService(service)
 	if err != nil {
 		return "", "", err
 	}
@@ -108,7 +108,7 @@ func validateCustomHostArtifact(artifact nativeArtifact) error {
 }
 
 func (d *hostScriptDriver) Start(ctx context.Context, service *pfregistry.ManagedService) (string, error) {
-	spec, err := templateSpecFromService(service)
+	spec, _, err := effectiveSpecFromService(service)
 	if err != nil {
 		return "", err
 	}
@@ -184,7 +184,7 @@ func (d *hostScriptDriver) Stop(ctx context.Context, service *pfregistry.Managed
 	if current.identity != service.RuntimeIdentity {
 		return serviceError("RUNTIME_IDENTITY_MISMATCH", "Redeven will not stop a custom host process whose identity changed.", 409, false, nil)
 	}
-	spec, err := templateSpecFromService(service)
+	spec, _, err := effectiveSpecFromService(service)
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.Ma
 	if err := d.Stop(ctx, service); err != nil {
 		return err
 	}
-	spec, err := templateSpecFromService(service)
+	spec, _, err := effectiveSpecFromService(service)
 	if err != nil {
 		return err
 	}

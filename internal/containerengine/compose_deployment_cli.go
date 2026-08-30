@@ -38,6 +38,14 @@ func (c *CLIClient) ApplyComposeDeployment(ctx context.Context, req ComposeDeplo
 	return err
 }
 
+func (c *CLIClient) CreateComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {
+	if err := validateComposeDeploymentRequest(req); err != nil {
+		return err
+	}
+	_, err := c.run(ctx, EngineDocker, append(composeDeploymentArgs(req), "create", "--remove-orphans")...)
+	return err
+}
+
 func (c *CLIClient) InspectComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) (ComposeProjectDetails, error) {
 	if err := validateComposeDeploymentRequest(req); err != nil {
 		return ComposeProjectDetails{}, err

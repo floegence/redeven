@@ -38,11 +38,11 @@ A definition contains display metadata, a Web endpoint, optional input parameter
 - Single container: one image, one container Web port, optional entrypoint, arguments, environment, user, resource bounds, and workspace, named-volume, bind, or tmpfs mounts.
 - Compose: one inline document, one entry service, and one container Web port.
 
-Host scripts are trusted executable user content and therefore require execute authority. Redeven never asks for or stores sudo credentials. Compose validation rejects builds, published ports, privileged/host namespaces, capability additions, devices, engine sockets, host env/label files, arbitrary binds, external or host-backed volumes, external named networks, scaling, profiles, includes, configs, and secrets. Only `${REDEVEN_WORKSPACE}`, project-owned named volumes, and tmpfs are allowed mount sources.
+Host scripts are trusted executable user content and therefore require execute authority. Redeven never asks for or stores sudo credentials. The template editor validates the initial topology, immutable images, and managed Web endpoint. Installed custom instances may add typed per-service command, environment, storage, resource, network, and security overrides through [Managed Web Services](managed-web-services.md), but cannot add, remove, or rename a Compose service or replace a template-owned image. Every expanded capability is revalidated as a Runtime Resource Plan; no raw Docker or Compose CLI is accepted.
 
 Every custom edit increments its revision. Duplicate creates an editable custom template at revision 1, records source template and revision, and assigns a new service-family identity. It copies no instance, operation, data, runtime identity, configuration, or secret. Original and duplicate can therefore be installed together. A built-in can be duplicated only when its release-locked runtime bundle or exact image digest is present; an incomplete release manifest never creates a broken copy.
 
-The optional container `runtime_profile` defaults to the strict restricted policy. The `interactive_desktop` profile is reserved for the audited [LinuxServer Webtop](linuxserver-webtop.md) built-ins; custom definitions cannot select it.
+The optional container `runtime_profile` defaults to the strict restricted policy. The `interactive_desktop` profile is reserved for the exact audited [LinuxServer Webtop](linuxserver-webtop.md) image digests. A duplicate may retain that profile only while it keeps one of those exact images; it is still a custom definition, loses built-in/audited identity in presentation, and remains subject to instance Resource Plan confirmation.
 
 An installed service retains its canonical definition and SHA-256. Editing its source affects only a future deployment. Deleting a definition is blocked while that definition owns an installed service.
 
@@ -63,7 +63,7 @@ Catalog responses include declarative `brand_icon` and `notices`. Install reques
 
 # Boundaries
 
-Template presentation and defaults do not expand the Environment filesystem scope, grant a service access to the whole home directory, or make a custom path safe by implication. A custom workspace remains an explicit user choice and must pass the same writable-root validation as every deployment. Templates do not manage application credentials, public listeners, arbitrary container privileges, or cross-Environment scheduling.
+Template presentation and defaults do not expand the Environment filesystem scope, grant a service access to the whole home directory, or make a custom path safe by implication. A custom workspace remains an explicit user choice and must pass the same writable-root validation as every deployment. Templates do not manage application credentials or cross-Environment scheduling. Additional listeners, host paths, devices, namespaces, sockets, and container privileges are permitted only after duplication to a custom template and the installed-service Admin-confirmed Resource Plan; built-in identity never survives that duplication.
 
 # Evidence
 
@@ -81,6 +81,6 @@ Template presentation and defaults do not expand the Environment filesystem scop
 - `redeven:internal/managedwebservice/templates_test.go` - Covers independent duplication, immutable hash identity, and Compose host-escape rejection.
 - `redeven:internal/codeapp/appserver/managed_web_services_test.go` - Covers template route authority and duplicate API behavior.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx` - Covers discovery, container unavailability, duplication, unified cards, and uninstall interaction.
-- `redeven:internal/managedwebservice/webtop_test.go` - Covers Webtop identity, ordering, independent families, immutable digests, notices, runtime policy, and custom-profile rejection.
+- `redeven:internal/managedwebservice/webtop_test.go` - Covers Webtop identity, ordering, independent families, immutable digests, notices, runtime policy, duplication, and exact-image profile admission.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx` - Covers grouping, selection, keyboard movement, counts, state presentation, permissions, search, and selected-template actions.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.browser.test.tsx` - Verifies list density, installed-state neutrality, selection contrast, detail alignment, narrow layouts, floating layers, and outside-click dismissal in Chromium.

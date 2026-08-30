@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -27,6 +26,8 @@ type containerUpdateRelease struct {
 	TemplateSnapshotJSON   string `json:"template_snapshot_json"`
 	TemplateSnapshotSHA256 string `json:"template_snapshot_sha256"`
 	ConfigurationJSON      string `json:"configuration_json"`
+	ConfigurationRevision  int64  `json:"configuration_revision"`
+	ConfigurationSHA256    string `json:"configuration_sha256"`
 	Version                string `json:"version"`
 	DesiredState           string `json:"desired_state"`
 	ObservedState          string `json:"observed_state"`
@@ -97,7 +98,7 @@ func (m *Manager) runUpdate(ctx context.Context, service *pfregistry.ManagedServ
 	if err := validateAcceptedNotices(*target, accepted); err != nil {
 		return err
 	}
-	targetConfiguration, err := configurationWithAcceptedNotices(service.ConfigurationJSON, accepted)
+	targetConfiguration, targetConfigurationHash, err := configurationWithAcceptedNotices(service.ConfigurationJSON, accepted)
 	if err != nil {
 		return err
 	}
@@ -111,12 +112,14 @@ func (m *Manager) runUpdate(ctx context.Context, service *pfregistry.ManagedServ
 		Old: containerUpdateRelease{
 			TemplateRevision: service.TemplateRevision, TemplateSnapshotJSON: service.TemplateSnapshotJSON,
 			TemplateSnapshotSHA256: service.TemplateSnapshotSHA256, ConfigurationJSON: service.ConfigurationJSON,
+			ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
 			Version: service.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
 			RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference,
 		},
 		Target: containerUpdateRelease{
 			TemplateRevision: target.Revision, TemplateSnapshotJSON: targetSnapshotJSON, TemplateSnapshotSHA256: targetSnapshotHash,
-			ConfigurationJSON: targetConfiguration, Version: target.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
+			ConfigurationJSON: targetConfiguration, ConfigurationRevision: service.ConfigurationRevision + 1, ConfigurationSHA256: targetConfigurationHash,
+			Version: target.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
 		},
 	}
 	if (journal.Old.DesiredState != "running" || journal.Old.ObservedState != "running") && (journal.Old.DesiredState != "stopped" || journal.Old.ObservedState != "stopped") {
@@ -169,12 +172,16 @@ func (m *Manager) runUpdate(ctx context.Context, service *pfregistry.ManagedServ
 	}
 
 	targetService := serviceFromUpdateRelease(*service, journal.Target)
+	targetEffectiveSpec, _, err := effectiveSpecFromService(&targetService)
+	if err != nil {
+		return serviceError("TEMPLATE_UPDATE_CONFIGURATION_CONFLICT", "The saved service overrides conflict with the updated template. Review service settings before updating.", 409, false, err)
+	}
 	journal.Phase = updatePhaseTargetCreating
 	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
 		return err
 	}
 	m.progress(op, "installing", 4)
-	runtimeID, err := driver.CreateRuntime(ctx, &targetService, *target.Spec, artifact)
+	runtimeID, err := driver.CreateRuntime(ctx, &targetService, targetEffectiveSpec, artifact)
 	if err != nil {
 		return err
 	}
@@ -209,19 +216,13 @@ func (m *Manager) runUpdate(ctx context.Context, service *pfregistry.ManagedServ
 	return nil
 }
 
-func configurationWithAcceptedNotices(raw string, accepted map[string]int64) (string, error) {
-	configuration := serviceConfiguration{}
-	if strings.TrimSpace(raw) != "" && strings.TrimSpace(raw) != "{}" {
-		if err := decodeStrictJSON([]byte(raw), &configuration); err != nil {
-			return "", serviceError("SERVICE_CONFIGURATION_INVALID", "The saved managed-service configuration is invalid.", 409, false, err)
-		}
+func configurationWithAcceptedNotices(raw string, accepted map[string]int64) (string, string, error) {
+	configuration, err := decodeServiceConfiguration(raw)
+	if err != nil {
+		return "", "", err
 	}
 	configuration.AcceptedNoticeRevisions = cloneNoticeRevisions(accepted)
-	encoded, err := json.Marshal(configuration)
-	if err != nil {
-		return "", err
-	}
-	return string(encoded), nil
+	return canonicalServiceConfiguration(configuration)
 }
 
 func (m *Manager) writeContainerUpdateJournal(ctx context.Context, serviceID string, journal containerUpdateJournal) error {
@@ -249,6 +250,8 @@ func serviceFromUpdateRelease(base pfregistry.ManagedService, release containerU
 	base.TemplateSnapshotJSON = release.TemplateSnapshotJSON
 	base.TemplateSnapshotSHA256 = release.TemplateSnapshotSHA256
 	base.ConfigurationJSON = release.ConfigurationJSON
+	base.ConfigurationRevision = release.ConfigurationRevision
+	base.ConfigurationSHA256 = release.ConfigurationSHA256
 	base.Version = release.Version
 	base.DesiredState = release.DesiredState
 	base.ObservedState = release.ObservedState
@@ -262,6 +265,7 @@ func (m *Manager) commitContainerUpdate(ctx context.Context, service *pfregistry
 	patch := pfregistry.ManagedServicePatch{
 		TemplateRevision: &release.TemplateRevision, TemplateSnapshotJSON: &release.TemplateSnapshotJSON,
 		TemplateSnapshotSHA256: &release.TemplateSnapshotSHA256, ConfigurationJSON: &release.ConfigurationJSON,
+		ConfigurationRevision: &release.ConfigurationRevision, ConfigurationSHA256: &release.ConfigurationSHA256,
 		Version: &release.Version, DesiredState: &release.DesiredState, ObservedState: &release.ObservedState,
 		RuntimeIdentity: &release.RuntimeIdentity, ArtifactReference: &release.ArtifactReference,
 		RuntimeManifestJSON: &emptyManifest, LastErrorCode: &blank, LastErrorMessage: &blank,
@@ -285,7 +289,7 @@ func (m *Manager) rollbackContainerUpdate(ctx context.Context, service *pfregist
 		target.RuntimeIdentity = identity
 	}
 	if target.RuntimeIdentity != "" {
-		targetSpec, err := templateSpecFromService(&target)
+		targetSpec, _, err := effectiveSpecFromService(&target)
 		if err != nil {
 			return err
 		}
@@ -298,7 +302,7 @@ func (m *Manager) rollbackContainerUpdate(ctx context.Context, service *pfregist
 	}
 
 	old := serviceFromUpdateRelease(*service, journal.Old)
-	oldSpec, err := templateSpecFromService(&old)
+	oldSpec, _, err := effectiveSpecFromService(&old)
 	if err != nil {
 		return err
 	}
@@ -357,7 +361,7 @@ func (m *Manager) recoverInterruptedContainerUpdate(service *pfregistry.ManagedS
 				return err
 			}
 		}
-		spec, specErr := templateSpecFromService(&target)
+		spec, _, specErr := effectiveSpecFromService(&target)
 		if specErr == nil {
 			specErr = driver.VerifyRuntime(context.Background(), &target, spec)
 		}

@@ -1,7 +1,10 @@
 package registry
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,7 +14,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry"
-	registryCurrentSchemaVersion = 4
+	registryCurrentSchemaVersion = 5
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -24,9 +27,149 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryToV5},
 		},
 		Verify: verifyRegistrySchema,
 	}
+}
+
+type legacyManagedServiceConfiguration struct {
+	Parameters              map[string]string `json:"parameters,omitempty"`
+	AcceptedNoticeRevisions map[string]int64  `json:"accepted_notice_revisions,omitempty"`
+}
+
+type managedServiceConfigurationV2 struct {
+	SchemaVersion           int               `json:"schema_version"`
+	Parameters              map[string]string `json:"parameters,omitempty"`
+	AcceptedNoticeRevisions map[string]int64  `json:"accepted_notice_revisions,omitempty"`
+}
+
+func migrateRegistryToV5(tx *sql.Tx) error {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v4"); err != nil {
+		return err
+	}
+	rows, err := tx.Query(`SELECT service_id, configuration_json FROM managed_web_services ORDER BY service_id`)
+	if err != nil {
+		return err
+	}
+	type migratedConfiguration struct{ serviceID, encoded, digest string }
+	var migrated []migratedConfiguration
+	for rows.Next() {
+		var serviceID, raw string
+		if err := rows.Scan(&serviceID, &raw); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		legacy := legacyManagedServiceConfiguration{}
+		if strings.TrimSpace(raw) != "" && strings.TrimSpace(raw) != "{}" {
+			decoder := json.NewDecoder(strings.NewReader(raw))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&legacy); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("managed Web Service %s configuration migration: %w", serviceID, err)
+			}
+		}
+		current := managedServiceConfigurationV2{SchemaVersion: 2, Parameters: legacy.Parameters, AcceptedNoticeRevisions: legacy.AcceptedNoticeRevisions}
+		encoded, err := json.Marshal(current)
+		if err != nil {
+			_ = rows.Close()
+			return err
+		}
+		sum := sha256.Sum256(encoded)
+		migrated = append(migrated, migratedConfiguration{serviceID: serviceID, encoded: string(encoded), digest: hex.EncodeToString(sum[:])})
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	serviceSpecs, err := migrateRegistryRuntimeSpecs(tx, `SELECT service_id, template_snapshot_json FROM managed_web_services ORDER BY service_id`)
+	if err != nil {
+		return err
+	}
+	templateSpecs, err := migrateRegistryRuntimeSpecs(tx, `SELECT template_id, spec_json FROM managed_web_service_templates ORDER BY template_id`)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+ALTER TABLE managed_web_services ADD COLUMN configuration_revision INTEGER NOT NULL DEFAULT 1 CHECK(configuration_revision > 0);
+ALTER TABLE managed_web_services ADD COLUMN configuration_sha256 TEXT NOT NULL DEFAULT '';
+CREATE TABLE managed_web_service_resources (
+  service_id TEXT NOT NULL REFERENCES managed_web_services(service_id) ON DELETE CASCADE,
+  resource_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  engine_identity TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY(service_id, resource_id)
+);
+`); err != nil {
+		return err
+	}
+	for _, item := range migrated {
+		if _, err := tx.Exec(`UPDATE managed_web_services SET configuration_json=?, configuration_sha256=? WHERE service_id=?`, item.encoded, item.digest, item.serviceID); err != nil {
+			return err
+		}
+	}
+	for _, item := range serviceSpecs {
+		if _, err := tx.Exec(`UPDATE managed_web_services SET template_snapshot_json=?, template_snapshot_sha256=? WHERE service_id=?`, item.encoded, item.digest, item.owner); err != nil {
+			return err
+		}
+	}
+	for _, item := range templateSpecs {
+		if _, err := tx.Exec(`UPDATE managed_web_service_templates SET spec_json=?, spec_sha256=? WHERE template_id=?`, item.encoded, item.digest, item.owner); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type registryMigratedRuntimeSpec struct{ owner, encoded, digest string }
+
+func migrateRegistryRuntimeSpecs(tx *sql.Tx, query string) ([]registryMigratedRuntimeSpec, error) {
+	rows, err := tx.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []registryMigratedRuntimeSpec
+	for rows.Next() {
+		var owner, raw string
+		if err := rows.Scan(&owner, &raw); err != nil {
+			return nil, err
+		}
+		var document map[string]any
+		if err := json.Unmarshal([]byte(raw), &document); err != nil {
+			return nil, fmt.Errorf("managed Web Service %s runtime spec migration: %w", owner, err)
+		}
+		container, _ := document["container"].(map[string]any)
+		for _, kind := range []string{"mounts", "ports", "devices"} {
+			items, _ := container[kind].([]any)
+			for index, rawItem := range items {
+				item, ok := rawItem.(map[string]any)
+				resourceID, hasResourceID := item["resource_id"].(string)
+				if !ok || hasResourceID && strings.TrimSpace(resourceID) != "" {
+					continue
+				}
+				canonical, err := json.Marshal(item)
+				if err != nil {
+					return nil, err
+				}
+				sum := sha256.Sum256([]byte(owner + "\n" + kind + "\n" + fmt.Sprint(index) + "\n" + string(canonical)))
+				item["resource_id"] = "legacy-" + strings.TrimSuffix(kind, "s") + "-" + hex.EncodeToString(sum[:6])
+			}
+		}
+		encoded, err := json.Marshal(document)
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(encoded)
+		result = append(result, registryMigratedRuntimeSpec{owner: owner, encoded: string(encoded), digest: hex.EncodeToString(sum[:])})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func migrateRegistryToV4(tx *sql.Tx) error {
@@ -235,7 +378,7 @@ func migrateRegistryToV1(tx *sql.Tx) error {
 }
 
 func verifyRegistrySchema(tx *sql.Tx) error {
-	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v4"); err != nil {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v5"); err != nil {
 		return err
 	}
 	if err := verifyRegistryAccessModeColumn(tx); err != nil {
@@ -301,7 +444,11 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 	if err != nil {
 		return err
 	}
-	if !slices.Equal(tables, []string{"managed_web_service_operations", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}) {
+	expectedTables := []string{"managed_web_service_operations", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}
+	if version == "v5" {
+		expectedTables = []string{"managed_web_service_operations", "managed_web_service_resources", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}
+	}
+	if !slices.Equal(tables, expectedTables) {
 		return fmt.Errorf("port forward registry table set mismatch: got %v", tables)
 	}
 	columns, err := sqliteutil.TableColumnNamesTx(tx, "port_forwards")
@@ -328,6 +475,9 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return fmt.Errorf("managed Web Service template request column mismatch: got %v, want %v", columns, templateRequestColumns)
 	}
 	managedServiceColumns := []string{"service_id", "template_id", "template_source", "template_revision", "template_snapshot_json", "template_snapshot_sha256", "service_family_id", "deployment", "workspace_path", "configuration_json", "version", "desired_state", "observed_state", "forward_id", "runtime_identity", "runtime_manifest_json", "runtime_port", "artifact_reference", "last_error_code", "last_error_message", "created_at_unix_ms", "updated_at_unix_ms"}
+	if version == "v5" {
+		managedServiceColumns = append(managedServiceColumns, "configuration_revision", "configuration_sha256")
+	}
 	columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_services")
 	if err != nil {
 		return err
@@ -342,6 +492,23 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 	}
 	if !slices.Equal(columns, operationColumns) {
 		return fmt.Errorf("managed web service operation column mismatch: got %v, want %v", columns, operationColumns)
+	}
+	if version == "v5" {
+		resourceColumns := []string{"service_id", "resource_id", "kind", "engine_identity", "created_at_unix_ms"}
+		columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_service_resources")
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(columns, resourceColumns) {
+			return fmt.Errorf("managed web service resource column mismatch: got %v, want %v", columns, resourceColumns)
+		}
+		var invalidConfiguration int
+		if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_services WHERE configuration_revision <= 0 OR length(configuration_sha256) <> 64`).Scan(&invalidConfiguration); err != nil {
+			return err
+		}
+		if invalidConfiguration != 0 {
+			return fmt.Errorf("managed Web Service registry has %d invalid configuration identities", invalidConfiguration)
+		}
 	}
 	indexes, err := sqliteutil.ListUserIndexesTx(tx)
 	if err != nil {

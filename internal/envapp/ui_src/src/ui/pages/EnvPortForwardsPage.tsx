@@ -50,6 +50,10 @@ import {
 } from './ServiceTemplateCatalog';
 import { ManagedServiceShapingOrb } from './ManagedServiceShapingOrb';
 import {
+  ManagedServiceSettingsDrawer,
+  type ManagedServiceReconfigureDraft,
+} from './ManagedServiceSettingsDrawer';
+import {
   createManagedServiceOperationController,
   type ManagedOperation,
 } from './managedServiceOperationController';
@@ -185,6 +189,11 @@ type ManagedCatalogTemplate = Readonly<{
 }>;
 
 type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
+type ManagedReconfigureRequest = Readonly<{
+  draft: ManagedServiceReconfigureDraft;
+  plan_digest: string;
+  accepted_risk_ids: string[];
+}>;
 type TemplateDrawerView = 'catalog' | 'install' | 'editor';
 export type TemplateEditorDraft = {
   templateID?: string;
@@ -701,6 +710,11 @@ function managedStageLabel(stage: string, i18n: WebServicesI18n): string {
     case 'stopping': return i18n.t('webServices.managed.stages.stopping');
     case 'uninstalling': return i18n.t('webServices.managed.stages.uninstalling');
     case 'update_preparing': return i18n.t('webServices.managed.stages.updatePreparing');
+    case 'reconfigure_preflight': return i18n.t('webServices.managed.stages.reconfigurePreflight');
+    case 'applying_configuration': return i18n.t('webServices.managed.stages.applyingConfiguration');
+    case 'removing_runtime': return i18n.t('webServices.managed.stages.removingRuntime');
+    case 'rebuilding_runtime': return i18n.t('webServices.managed.stages.rebuildingRuntime');
+    case 'verifying_runtime': return i18n.t('webServices.managed.stages.verifyingRuntime');
     case 'cancelled': return i18n.t('webServices.managed.stages.cancelled');
     case 'interrupted': return i18n.t('webServices.managed.stages.interrupted');
     case 'failed': return i18n.t('webServices.managed.stages.failed');
@@ -716,6 +730,7 @@ function managedActionLabel(action: ManagedOperation['action'], i18n: WebService
     case 'restart': return i18n.t('webServices.managed.restart');
     case 'retry_install': return i18n.t('webServices.managed.retryInstall');
     case 'update': return i18n.t('webServices.managed.update');
+    case 'reconfigure': return i18n.t('webServices.managed.reconfigure');
     case 'uninstall': return i18n.t('webServices.managed.uninstall');
   }
 }
@@ -727,6 +742,7 @@ function managedActionFailureTitle(action: ManagedOperation['action'], i18n: Web
     case 'restart': return i18n.t('webServices.managed.restartFailed');
     case 'retry_install': return i18n.t('webServices.managed.retryFailed');
     case 'update': return i18n.t('webServices.managed.updateFailed');
+    case 'reconfigure': return i18n.t('webServices.managed.reconfigureFailed');
     case 'uninstall': return i18n.t('webServices.notifications.failedToDeleteTitle');
     default: return i18n.t('webServices.notifications.failedToAddTitle');
   }
@@ -753,6 +769,7 @@ function managedOperationStages(operation: ManagedOperation, deployment: Managed
     case 'stop': return ['stopping', 'completed'];
     case 'restart': return ['stopping', 'starting', 'health_check', 'completed'];
     case 'update': return ['update_preparing', 'pulling', 'stopping', 'installing', 'starting', 'health_check', 'completed'];
+    case 'reconfigure': return ['reconfigure_preflight', 'removing_runtime', 'rebuilding_runtime', 'verifying_runtime', 'completed'];
     case 'uninstall': return ['stopping', 'uninstalling', 'completed'];
     default:
       return [
@@ -1570,6 +1587,7 @@ export function EnvPortForwardsPage() {
   const [managedUpdate, setManagedUpdate] = createSignal<ManagedService | null>(null);
   const [updateNoticeAcceptances, setUpdateNoticeAcceptances] = createSignal<Record<string, boolean>>({});
   const [managedUninstall, setManagedUninstall] = createSignal<ManagedUninstallRequest | null>(null);
+  const [managedSettingsService, setManagedSettingsService] = createSignal<ManagedService | null>(null);
   const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
   const managedInstallOperation = () => {
     const serviceID = managedInstallServiceID();
@@ -1586,6 +1604,10 @@ export function EnvPortForwardsPage() {
     return request ? managedOperations.ownedOperation(request.service.service_id, 'uninstall') : null;
   };
   const managedUninstallBusy = () => managedOperationActive(managedUninstallOperation());
+  const managedSettingsOperation = () => {
+    const service = managedSettingsService();
+    return service ? managedOperations.ownedOperation(service.service_id, 'reconfigure') : null;
+  };
   const managedRowOperation = (serviceID: string) => managedOperations.ownedOperation(serviceID, 'row');
   const managedOperationArtifact = (serviceID: string) => managedState().find((service) => service.service_id === serviceID)?.operation_artifact_reference;
 
@@ -1740,6 +1762,25 @@ export function EnvPortForwardsPage() {
       }
     } catch (error) { notify.error(managedActionFailureTitle(action, i18n), error instanceof Error ? error.message : String(error)); }
     finally { if (operationID) managedOperations.clear(operationID); }
+  };
+
+  const reconfigureManagedService = async (serviceID: string, request: ManagedReconfigureRequest) => {
+    if (!canManageManagedService()) throw new Error(i18n.t('webServices.permission.executeRequired'));
+    let operationID = managedOperations.begin(serviceID, 'reconfigure', 'reconfigure').operation_id;
+    try {
+      const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, {
+        method: 'POST',
+        body: JSON.stringify({ request_id: managedRequestID(), action: 'reconfigure', reconfigure: request }),
+      });
+      operationID = result.operation_id;
+      const operationPromise = managedOperations.track(result, 'reconfigure');
+      await loadManaged(false);
+      const operation = await operationPromise;
+      await loadManaged(false);
+      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, managedActionFailureTitle('reconfigure', i18n), i18n));
+    } finally {
+      if (operationID) managedOperations.clear(operationID);
+    }
   };
 
   const updateManagedService = () => {
@@ -2489,10 +2530,7 @@ export function EnvPortForwardsPage() {
                           onOpenResource={openManagedContainerResource}
                           onAction={(action) => void managedAction(service.service_id, action)}
                           onCancelOperation={() => void cancelManagedOperation(managedRowOperation(service.service_id))}
-                          onSettings={() => {
-                            const forward = forwards()?.find((item) => item.forward_id === service.forward_id);
-                            if (forward) setForwardMetadataTarget({ mode: 'edit', forward });
-                          }}
+                          onSettings={() => setManagedSettingsService(service)}
                           onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }}
                           onLogs={() => void loadManagedLogs(service.service_id)}
                           onUninstall={() => setManagedUninstall({ service, deleteData: false })}
@@ -2535,6 +2573,39 @@ export function EnvPortForwardsPage() {
         loading={forwardMetadataSaving()}
         onOpenChange={(open) => { if (!open && !forwardMetadataSaving()) setForwardMetadataTarget(null); }}
         onSubmit={submitForwardMetadata}
+      />
+
+      <ManagedServiceSettingsDrawer
+        open={managedSettingsService() !== null}
+        serviceID={managedSettingsService()?.service_id ?? ''}
+        serviceName={managedSettingsService()?.name ?? ''}
+        canManage={canManageManagedService()}
+        operation={managedSettingsOperation()}
+        onOpenChange={(open) => { if (!open) setManagedSettingsService(null); }}
+        onChanged={() => { void loadManaged(false); bumpRefresh(); }}
+        onRequestStop={() => {
+          const service = managedSettingsService();
+          if (!service) return;
+          setManagedSettingsService(null);
+          void managedAction(service.service_id, 'stop');
+        }}
+        onApply={async (request) => {
+          const service = managedSettingsService();
+          if (!service) return;
+          await reconfigureManagedService(service.service_id, request);
+        }}
+        onCancelOperation={() => {
+          const operation = managedSettingsOperation();
+          if (operation) void cancelManagedOperation(operation);
+        }}
+        onDuplicateTemplate={() => {
+          const service = managedSettingsService();
+          const template = service ? managedTemplates().find((item) => item.template_id === service.template_id) : null;
+          if (!template) return;
+          setManagedSettingsService(null);
+          setTemplateDuplicate(template);
+          setTemplateDuplicateName(i18n.t('webServices.managed.copyName', { name: template.name }));
+        }}
       />
 
       <EnvAppDrawer

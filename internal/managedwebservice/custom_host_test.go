@@ -27,9 +27,13 @@ func TestHostStopScriptFailureStillCleansManagedProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	configuration, configurationDigest, err := canonicalServiceConfiguration(newServiceConfiguration(nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
 	service := &pfregistry.ManagedService{
 		ServiceID: "mws_host_cleanup", ServiceFamilyID: "family_host_cleanup", WorkspacePath: root, RuntimePort: 39191,
-		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest, ConfigurationJSON: `{}`,
+		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest, ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
 	}
 	driver := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]nativeProcess{}}
 	if _, _, err := driver.Install(context.Background(), service, catalogPayload{}, func(string, int64) {}); err != nil {
