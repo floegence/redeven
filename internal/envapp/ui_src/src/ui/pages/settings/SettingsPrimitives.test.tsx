@@ -33,7 +33,7 @@ describe('settings surface primitives', () => {
     return host;
   }
 
-  it('keeps the section as the only elevated settings container', () => {
+  it('keeps the section as a borderless layout group while inset content owns the boundary', () => {
     const host = mount(() => (
       <SettingsSection
         icon={(props) => <span class={props.class} />}
@@ -47,9 +47,12 @@ describe('settings surface primitives', () => {
     ));
 
     const section = host.querySelector('.redeven-settings-section');
+    const list = host.querySelector('.redeven-settings-list');
     expect(section).not.toBeNull();
-    expect(section?.classList.contains('border')).toBe(true);
+    expect(section?.classList.contains('border')).toBe(false);
+    expect(section?.classList.contains('p-5')).toBe(false);
     expect(section?.classList.contains('shadow-sm')).toBe(false);
+    expect(list?.classList.contains('border')).toBe(true);
     expect(section?.querySelector('.redeven-surface-panel')).toBeNull();
   });
 

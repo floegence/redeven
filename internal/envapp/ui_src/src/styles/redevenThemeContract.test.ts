@@ -174,7 +174,7 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-sidebar-bg: color-mix(in srgb, var(--sidebar) 82%, var(--redeven-surface-main) 18%);',
       '--redeven-settings-sidebar-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-sidebar-bg));',
       '--redeven-settings-content-bg: var(--redeven-surface-main);',
-      '--redeven-settings-card-bg: var(--redeven-surface-panel);',
+      '--redeven-settings-panel-bg: var(--redeven-surface-panel);',
       '--redeven-settings-sidebar-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 76%, var(--redeven-settings-sidebar-bg) 24%);',
       '--redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-sidebar-bg));',
       '--redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-sidebar-bg));',
@@ -182,18 +182,17 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);',
       '--redeven-settings-sidebar-note-fg: var(--muted-foreground);',
       '--redeven-settings-sidebar-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-sidebar-inset-bg));',
-      '--redeven-settings-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, var(--redeven-settings-card-bg) 18%);',
+      '--redeven-settings-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, var(--redeven-settings-panel-bg) 18%);',
       '--redeven-settings-row-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));',
-      '--redeven-settings-card-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-card-bg));',
+      '--redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-inset-bg));',
       '--redeven-settings-divider: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));',
       '--redeven-settings-label-fg: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);',
       '--redeven-settings-note-fg: var(--muted-foreground);',
-      '--redeven-settings-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-card-bg));',
+      '--redeven-settings-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-panel-bg));',
       '--redeven-settings-selection-fg: color-mix(in srgb, var(--foreground) 78%, var(--redeven-settings-contrast-source) 22%);',
       '--redeven-settings-choice-selected-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 8%, var(--redeven-settings-inset-bg));',
       '--redeven-settings-choice-selected-border: color-mix(in srgb, var(--foreground) 18%, var(--redeven-settings-inset-bg));',
       '--redeven-settings-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-inset-bg));',
-      '--redeven-settings-section-shadow: var(--redeven-shadow-soft);',
     ]) {
       expect(sharedRoot).toContain(token);
     }
@@ -216,6 +215,12 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('inset-inline-start: 0.25rem;');
     expect(src).toContain('width: 3px;');
     expect(src).toContain(":not([type='range']):not(.redeven-settings-search),");
+    expect(src).toContain('.redeven-settings-section {');
+    expect(src).toContain('border: 0;');
+    expect(src).toContain('background: transparent;');
+    expect(src).not.toContain('--redeven-settings-section-shadow:');
+    expect(src).not.toContain('--redeven-settings-card-border:');
+    expect(src).not.toContain('--redeven-settings-card-bg:');
   });
 
   it('uses neutral selection surfaces for large Flower choices without weakening focused settings selection', () => {
@@ -239,11 +244,15 @@ describe('Redeven Env App surface theme contract', () => {
     const forcedColorsEnd = src.indexOf('\n}\n\n.redeven-settings-alert--danger', forcedColorsStart);
     const forcedColorsScope = src.slice(forcedColorsStart, forcedColorsEnd);
 
-    expect(highContrastScope).toContain('--redeven-settings-card-border: var(--border);');
+    expect(highContrastScope).toContain('--redeven-settings-inset-border: var(--border);');
     expect(highContrastScope).toContain('--redeven-settings-divider: var(--border);');
     expect(highContrastScope).toContain('--redeven-settings-sidebar-selection-bg: var(--selection-bg);');
     expect(highContrastScope).toContain('--redeven-settings-sidebar-selection-fg: var(--selection-fg);');
+    expect(src).toContain(":root[data-floe-shell-theme='hc-light'] .redeven-settings-section {");
+    expect(src).toContain('border: 1px solid var(--redeven-settings-inset-border);');
     expect(forcedColorsScope).toContain('border-color: CanvasText !important;');
+    expect(forcedColorsScope).toContain('border: 1px solid CanvasText !important;');
+    expect(forcedColorsScope).toContain('background: Canvas !important;');
     expect(forcedColorsScope).toContain('background: Highlight !important;');
     expect(forcedColorsScope).toContain('color: HighlightText !important;');
   });

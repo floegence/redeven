@@ -250,7 +250,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                               data-provider-type={item.value}
                             >
                               <div class="flex items-start gap-3">
-                                <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--redeven-settings-card-bg)]">
+                                <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--redeven-settings-panel-bg)]">
                                   <ProviderBrandIcon type={item.value} class="h-5 w-5" />
                                 </span>
                                 <span class="min-w-0">

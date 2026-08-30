@@ -406,7 +406,7 @@
   --redeven-settings-sidebar-bg: color-mix(in srgb, var(--sidebar) 82%, var(--redeven-surface-main) 18%);
   --redeven-settings-sidebar-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-sidebar-bg));
   --redeven-settings-content-bg: var(--redeven-surface-main);
-  --redeven-settings-card-bg: var(--redeven-surface-panel);
+  --redeven-settings-panel-bg: var(--redeven-surface-panel);
   --redeven-settings-sidebar-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 76%, var(--redeven-settings-sidebar-bg) 24%);
   --redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-sidebar-bg));
   --redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-sidebar-bg));
@@ -414,20 +414,19 @@
   --redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);
   --redeven-settings-sidebar-note-fg: var(--muted-foreground);
   --redeven-settings-sidebar-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-sidebar-inset-bg));
-  --redeven-settings-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, var(--redeven-settings-card-bg) 18%);
+  --redeven-settings-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, var(--redeven-settings-panel-bg) 18%);
   --redeven-settings-row-bg: var(--redeven-settings-inset-bg);
   --redeven-settings-row-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));
-  --redeven-settings-card-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-card-bg));
+  --redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-inset-bg));
   --redeven-settings-divider: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));
   --redeven-settings-label-fg: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
   --redeven-settings-note-fg: var(--muted-foreground);
-  --redeven-settings-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-card-bg));
+  --redeven-settings-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-panel-bg));
   --redeven-settings-selection-fg: color-mix(in srgb, var(--foreground) 78%, var(--redeven-settings-contrast-source) 22%);
   --redeven-settings-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);
   --redeven-settings-choice-selected-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 8%, var(--redeven-settings-inset-bg));
   --redeven-settings-choice-selected-border: color-mix(in srgb, var(--foreground) 18%, var(--redeven-settings-inset-bg));
   --redeven-settings-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-inset-bg));
-  --redeven-settings-section-shadow: var(--redeven-shadow-soft);
   --git-table-gridline: var(--redeven-stroke-divider);
   --git-browser-selection-source: var(--selection-bg, var(--ring));
   --git-browser-selection-accent: var(--ring);
@@ -676,7 +675,7 @@
   --redeven-settings-sidebar-bg: var(--sidebar);
   --redeven-settings-sidebar-border: var(--border);
   --redeven-settings-content-bg: var(--background);
-  --redeven-settings-card-bg: var(--card);
+  --redeven-settings-panel-bg: var(--card);
   --redeven-settings-sidebar-inset-bg: var(--background);
   --redeven-settings-sidebar-hover-bg: var(--accent);
   --redeven-settings-sidebar-selection-bg: var(--selection-bg);
@@ -686,7 +685,7 @@
   --redeven-settings-sidebar-control-border: var(--input);
   --redeven-settings-inset-bg: var(--card);
   --redeven-settings-row-hover-bg: var(--accent);
-  --redeven-settings-card-border: var(--border);
+  --redeven-settings-inset-border: var(--border);
   --redeven-settings-divider: var(--border);
   --redeven-settings-label-fg: var(--foreground);
   --redeven-settings-note-fg: var(--foreground);
@@ -696,7 +695,17 @@
   --redeven-settings-choice-selected-bg: var(--selection-bg);
   --redeven-settings-choice-selected-border: var(--primary);
   --redeven-settings-control-border: var(--input);
-  --redeven-settings-section-shadow: none;
+}
+
+:root[data-floe-shell-theme='hc-light'] .redeven-settings-section {
+  border: 1px solid var(--redeven-settings-inset-border);
+  border-radius: 0.5rem;
+  background: var(--redeven-settings-panel-bg);
+  padding: 1.25rem;
+}
+
+:root[data-floe-shell-theme='hc-light'] .redeven-settings-section__icon {
+  border-color: var(--redeven-settings-divider);
 }
 
 @media (max-width: 960px) {
@@ -2256,7 +2265,7 @@ html.dark .git-changes-table-skeleton__row > span {
 }
 
 .redeven-settings-search:focus {
-  background: var(--redeven-settings-card-bg);
+  background: var(--redeven-settings-panel-bg);
   border-color: var(--redeven-settings-selection-indicator);
 }
 
@@ -2286,20 +2295,27 @@ html.dark .git-changes-table-skeleton__row > span {
 }
 
 .redeven-settings-section {
-  border-color: var(--redeven-settings-card-border);
-  background: var(--redeven-settings-card-bg);
-  box-shadow: var(--redeven-settings-section-shadow);
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .redeven-settings-section + .redeven-settings-section {
-  margin-top: 1rem;
+  margin-top: 2.5rem;
 }
 
 .redeven-settings-section__icon,
 .redeven-setting-row__icon {
-  border: 1px solid var(--redeven-settings-divider);
   background: var(--redeven-settings-inset-bg);
   color: var(--redeven-settings-label-fg);
+}
+
+.redeven-settings-section__icon {
+  border: 1px solid transparent;
+}
+
+.redeven-setting-row__icon {
+  border: 1px solid var(--redeven-settings-divider);
 }
 
 .redeven-settings-label {
@@ -2382,7 +2398,7 @@ html.dark .git-changes-table-skeleton__row > span {
 }
 
 .redeven-settings-inset {
-  border-color: var(--redeven-settings-card-border) !important;
+  border-color: var(--redeven-settings-inset-border) !important;
   background: var(--redeven-settings-inset-bg) !important;
 }
 
@@ -2398,7 +2414,7 @@ html.dark .git-changes-table-skeleton__row > span {
 }
 
 .redeven-settings-choice {
-  border-color: var(--redeven-settings-card-border) !important;
+  border-color: var(--redeven-settings-inset-border) !important;
   background: var(--redeven-settings-inset-bg) !important;
   transition:
     border-color 150ms ease,
@@ -2423,13 +2439,13 @@ html.dark .git-changes-table-skeleton__row > span {
 }
 
 .redeven-settings-list {
-  border-color: var(--redeven-settings-card-border);
+  border-color: var(--redeven-settings-inset-border);
   background: var(--redeven-settings-inset-bg);
 }
 
 .redeven-setting-row {
   min-height: 4.5rem;
-  border-color: var(--redeven-settings-card-border);
+  border-color: var(--redeven-settings-inset-border);
   background: var(--redeven-settings-inset-bg);
 }
 
@@ -2472,37 +2488,37 @@ html.dark .git-changes-table-skeleton__row > span {
 }
 
 .redeven-setting-row--info {
-  border-color: color-mix(in srgb, var(--info) 30%, var(--redeven-settings-card-border));
+  border-color: color-mix(in srgb, var(--info) 30%, var(--redeven-settings-inset-border));
   background: color-mix(in srgb, var(--info) 10%, var(--redeven-settings-inset-bg));
 }
 
 .redeven-setting-row--success {
-  border-color: color-mix(in srgb, var(--success) 30%, var(--redeven-settings-card-border));
+  border-color: color-mix(in srgb, var(--success) 30%, var(--redeven-settings-inset-border));
   background: color-mix(in srgb, var(--success) 10%, var(--redeven-settings-inset-bg));
 }
 
 .redeven-setting-row--warning {
-  border-color: color-mix(in srgb, var(--warning) 34%, var(--redeven-settings-card-border));
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--redeven-settings-inset-border));
   background: color-mix(in srgb, var(--warning) 12%, var(--redeven-settings-inset-bg));
 }
 
 .redeven-setting-row--danger {
-  border-color: color-mix(in srgb, var(--error) 32%, var(--redeven-settings-card-border));
+  border-color: color-mix(in srgb, var(--error) 32%, var(--redeven-settings-inset-border));
   background: color-mix(in srgb, var(--error) 10%, var(--redeven-settings-inset-bg));
 }
 
 .redeven-settings-table {
-  border-color: var(--redeven-settings-card-border);
+  border-color: var(--redeven-settings-inset-border);
   background: var(--redeven-settings-inset-bg);
 }
 
 .redeven-settings-table thead {
-  background: color-mix(in srgb, var(--redeven-settings-inset-bg) 82%, var(--redeven-settings-card-bg) 18%);
+  background: color-mix(in srgb, var(--redeven-settings-inset-bg) 82%, var(--redeven-settings-panel-bg) 18%);
   color: var(--redeven-settings-label-fg);
 }
 
 .redeven-settings-table__header-row {
-  border-color: var(--redeven-settings-card-border);
+  border-color: var(--redeven-settings-inset-border);
 }
 
 .redeven-settings-table__row {
@@ -2524,6 +2540,13 @@ html.dark .git-changes-table-skeleton__row > span {
 }
 
 @media (forced-colors: active) {
+  .redeven-settings-section {
+    border: 1px solid CanvasText !important;
+    border-radius: 0.5rem;
+    background: Canvas !important;
+    padding: 1.25rem;
+  }
+
   .redeven-settings-header,
   .redeven-settings-sidebar,
   .redeven-settings-search,
@@ -2537,6 +2560,10 @@ html.dark .git-changes-table-skeleton__row > span {
   .redeven-settings-table__header-row,
   .redeven-settings-table__row {
     border-color: CanvasText !important;
+  }
+
+  .redeven-settings-section__icon {
+    border-color: CanvasText;
   }
 
   .redeven-settings-nav-item--active,
@@ -2566,7 +2593,7 @@ html.dark .git-changes-table-skeleton__row > span {
   gap: 0.375rem;
   border: 1px solid color-mix(in srgb, var(--redeven-stroke-control) 82%, transparent);
   border-radius: 0.375rem;
-  background: color-mix(in srgb, var(--redeven-settings-card-bg) 70%, transparent);
+  background: color-mix(in srgb, var(--redeven-settings-panel-bg) 70%, transparent);
   color: var(--muted-foreground);
   padding: 0.25rem 0.5rem;
   font-size: 0.6875rem;
@@ -2585,7 +2612,7 @@ html.dark .git-changes-table-skeleton__row > span {
 
 .redeven-permission-segment--active {
   border-color: color-mix(in srgb, var(--success) 36%, var(--redeven-stroke-control));
-  background: color-mix(in srgb, var(--success) 12%, var(--redeven-settings-card-bg));
+  background: color-mix(in srgb, var(--success) 12%, var(--redeven-settings-panel-bg));
   color: color-mix(in srgb, var(--success) 74%, var(--foreground));
 }
 

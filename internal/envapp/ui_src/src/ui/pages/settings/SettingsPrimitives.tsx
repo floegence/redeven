@@ -95,7 +95,7 @@ export interface SettingsCardProps {
 
 export function SettingsSection(props: SettingsCardProps) {
   return (
-    <section class="redeven-settings-section rounded-lg border p-5" data-settings-card={props.title}>
+    <section class="redeven-settings-section" data-settings-card={props.title}>
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex min-w-0 items-start gap-3">
           <span class="redeven-settings-section__icon mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">

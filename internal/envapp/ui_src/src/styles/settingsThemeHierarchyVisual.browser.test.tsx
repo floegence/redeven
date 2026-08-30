@@ -79,7 +79,9 @@ function mountSettingsFixture(): Readonly<{
   sidebar: HTMLElement;
   hovered: HTMLButtonElement;
   selected: HTMLButtonElement;
-  card: HTMLElement;
+  content: HTMLElement;
+  section: HTMLElement;
+  secondSection: HTMLElement;
   table: HTMLElement;
   divider: HTMLElement;
   control: HTMLButtonElement;
@@ -136,15 +138,13 @@ function mountSettingsFixture(): Readonly<{
   content.className = 'redeven-settings-content';
   content.style.padding = '32px';
 
-  const card = document.createElement('article');
-  card.className = 'redeven-settings-section';
-  Object.assign(card.style, { padding: '20px', borderRadius: '8px' });
-  setBorder(card);
+  const section = document.createElement('article');
+  section.className = 'redeven-settings-section';
 
   const title = document.createElement('h2');
   title.textContent = 'Browser Editor';
   Object.assign(title.style, { margin: '0 0 16px', fontSize: '16px' });
-  card.appendChild(title);
+  section.appendChild(title);
 
   const table = document.createElement('div');
   table.className = 'redeven-settings-table';
@@ -171,7 +171,7 @@ function mountSettingsFixture(): Readonly<{
   divider.style.padding = '12px';
   setBorder(divider, 'top');
   table.appendChild(divider);
-  card.appendChild(table);
+  section.appendChild(table);
 
   const control = document.createElement('button');
   control.type = 'button';
@@ -179,12 +179,27 @@ function mountSettingsFixture(): Readonly<{
   control.textContent = 'Refresh inventory';
   Object.assign(control.style, { marginTop: '16px', padding: '8px 12px', borderRadius: '6px' });
   setBorder(control);
-  card.appendChild(control);
+  section.appendChild(control);
 
-  content.appendChild(card);
+  const secondSection = document.createElement('article');
+  secondSection.className = 'redeven-settings-section';
+
+  const secondTitle = document.createElement('h2');
+  secondTitle.textContent = 'Codespaces ports';
+  Object.assign(secondTitle.style, { margin: '0 0 16px', fontSize: '16px' });
+  secondSection.appendChild(secondTitle);
+
+  const portsList = document.createElement('div');
+  portsList.className = 'redeven-settings-list';
+  Object.assign(portsList.style, { padding: '12px', borderRadius: '8px' });
+  setBorder(portsList);
+  portsList.textContent = 'Port range 20000–21000';
+  secondSection.appendChild(portsList);
+
+  content.append(section, secondSection);
   host.append(sidebar, content);
   document.body.appendChild(host);
-  return { host, sidebar, hovered, selected, card, table, divider, control };
+  return { host, sidebar, hovered, selected, content, section, secondSection, table, divider, control };
 }
 
 afterEach(() => {
@@ -209,7 +224,9 @@ describe('Settings theme hierarchy', () => {
       const hoverStyle = getComputedStyle(fixture.hovered);
       const selectedStyle = getComputedStyle(fixture.selected);
       const indicatorStyle = getComputedStyle(fixture.selected, '::before');
-      const cardStyle = getComputedStyle(fixture.card);
+      const contentStyle = getComputedStyle(fixture.content);
+      const sectionStyle = getComputedStyle(fixture.section);
+      const secondSectionStyle = getComputedStyle(fixture.secondSection);
       const tableStyle = getComputedStyle(fixture.table);
       const dividerStyle = getComputedStyle(fixture.divider);
       const controlStyle = getComputedStyle(fixture.control);
@@ -217,13 +234,19 @@ describe('Settings theme hierarchy', () => {
       const sidebarBackground = paintedColor(sidebarStyle.backgroundColor);
       const selectedBackground = paintedColor(selectedStyle.backgroundColor, sidebarStyle.backgroundColor);
       const hoverBackground = paintedColor(hoverStyle.backgroundColor, sidebarStyle.backgroundColor);
-      const cardBackground = paintedColor(cardStyle.backgroundColor);
-      const tableBackground = paintedColor(tableStyle.backgroundColor, cardStyle.backgroundColor);
-      const controlBackground = paintedColor(controlStyle.backgroundColor, cardStyle.backgroundColor);
-      const cardBorder = paintedColor(cardStyle.borderTopColor, cardStyle.backgroundColor);
+      const contentBackground = paintedColor(contentStyle.backgroundColor);
+      const sectionSurface = sectionStyle.backgroundColor === 'rgba(0, 0, 0, 0)'
+        ? contentStyle.backgroundColor
+        : sectionStyle.backgroundColor;
+      const sectionBackground = paintedColor(sectionStyle.backgroundColor, contentStyle.backgroundColor);
+      const tableBackground = paintedColor(tableStyle.backgroundColor, sectionSurface);
+      const controlBackground = paintedColor(controlStyle.backgroundColor, sectionSurface);
+      const sectionBorder = paintedColor(sectionStyle.borderTopColor, sectionSurface);
+      const tableBorder = paintedColor(tableStyle.borderTopColor, tableStyle.backgroundColor);
       const dividerBorder = paintedColor(dividerStyle.borderTopColor, tableStyle.backgroundColor);
       const controlBorder = paintedColor(controlStyle.borderTopColor, controlStyle.backgroundColor);
-      const cardBorderContrast = contrastRatio(cardBorder, cardBackground);
+      const sectionBorderContrast = contrastRatio(sectionBorder, sectionBackground);
+      const tableBorderContrast = contrastRatio(tableBorder, tableBackground);
       const dividerContrast = contrastRatio(dividerBorder, tableBackground);
       const controlContrast = contrastRatio(controlBorder, controlBackground);
 
@@ -235,16 +258,23 @@ describe('Settings theme hierarchy', () => {
         contrastRatio(paintedColor(indicatorStyle.backgroundColor), selectedBackground),
         `${preset.name} selected indicator`,
       ).toBeGreaterThanOrEqual(3);
+      expect(secondSectionStyle.marginTop, `${preset.name} section spacing`).toBe('40px');
 
       if (preset.name === 'hc-light') {
-        expect(cardBorderContrast, `${preset.name} card boundary`).toBeGreaterThanOrEqual(3);
+        expect(sectionStyle.borderTopWidth, `${preset.name} section boundary`).toBe('1px');
+        expect(sectionStyle.paddingTop, `${preset.name} section padding`).toBe('20px');
+        expect(sectionBorderContrast, `${preset.name} section boundary`).toBeGreaterThanOrEqual(3);
+        expect(tableBorderContrast, `${preset.name} table boundary`).toBeGreaterThanOrEqual(3);
         expect(dividerContrast, `${preset.name} divider`).toBeGreaterThanOrEqual(3);
       } else {
+        expect(sectionStyle.borderTopWidth, `${preset.name} section boundary`).toBe('0px');
+        expect(sectionStyle.paddingTop, `${preset.name} section padding`).toBe('0px');
+        expect(deltaEOK(sectionBackground, contentBackground), `${preset.name} section/content surface`).toBeLessThanOrEqual(0.001);
         expect(
           dividerContrast,
-          `${preset.name} divider/card ordering (${dividerStyle.borderTopColor} on ${tableStyle.backgroundColor}; ${cardStyle.borderTopColor} on ${cardStyle.backgroundColor})`,
-        ).toBeLessThan(cardBorderContrast);
-        expect(cardBorderContrast, `${preset.name} card/control ordering`).toBeLessThan(controlContrast);
+          `${preset.name} divider/table ordering (${dividerStyle.borderTopColor} on ${tableStyle.backgroundColor}; ${tableStyle.borderTopColor} on ${tableStyle.backgroundColor})`,
+        ).toBeLessThan(tableBorderContrast);
+        expect(tableBorderContrast, `${preset.name} table/control ordering`).toBeLessThan(controlContrast);
         expect(deltaEOK(selectedBackground, sidebarBackground), `${preset.name} selected/idle`).toBeGreaterThanOrEqual(0.025);
         expect(deltaEOK(selectedBackground, hoverBackground), `${preset.name} selected/hover`).toBeGreaterThanOrEqual(0.015);
       }
