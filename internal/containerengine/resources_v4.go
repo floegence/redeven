@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 var ErrEndpointNotFound = errors.New("container engine endpoint was not found")
@@ -26,6 +27,30 @@ type EndpointCapabilities struct {
 	CollectionStats bool `json:"collection_stats"`
 	VolumeFiles     bool `json:"volume_files"`
 	Exec            bool `json:"exec"`
+}
+
+type RuntimeState string
+
+const (
+	RuntimeStateReady        RuntimeState = "ready"
+	RuntimeStateNotInstalled RuntimeState = "not_installed"
+	RuntimeStateStopped      RuntimeState = "stopped"
+	RuntimeStatePermission   RuntimeState = "permission"
+	RuntimeStateUnreachable  RuntimeState = "unreachable"
+	RuntimeStateError        RuntimeState = "error"
+)
+
+type RuntimeEngineState struct {
+	Engine        Engine                `json:"engine"`
+	State         RuntimeState          `json:"state"`
+	EndpointID    EndpointID            `json:"endpoint_id,omitempty"`
+	EngineVersion string                `json:"engine_version,omitempty"`
+	Rootless      *bool                 `json:"rootless,omitempty"`
+	Capabilities  *EndpointCapabilities `json:"capabilities,omitempty"`
+}
+
+type ActiveRuntimeResponse struct {
+	Engines []RuntimeEngineState `json:"engines"`
 }
 
 func endpointCapabilities(engine Engine) EndpointCapabilities {
@@ -205,6 +230,71 @@ func (a *Adapter) EndpointStatus(ctx context.Context, req EndpointStatusRequest)
 	}
 	endpoint.Capabilities = endpointCapabilities(req.Engine)
 	return endpoint, nil
+}
+
+// ActiveRuntimes reports one effective target per supported engine. Endpoint
+// inventory remains an internal routing detail; inactive contexts and
+// connections are never probed by this product-facing discovery operation.
+func (a *Adapter) ActiveRuntimes(ctx context.Context) (ActiveRuntimeResponse, error) {
+	engines := [...]Engine{EngineDocker, EnginePodman}
+	states := make([]RuntimeEngineState, len(engines))
+	var wait sync.WaitGroup
+	wait.Add(len(engines))
+	for index, engine := range engines {
+		go func() {
+			defer wait.Done()
+			states[index] = a.activeRuntime(ctx, engine)
+		}()
+	}
+	wait.Wait()
+	if err := ctx.Err(); err != nil {
+		return ActiveRuntimeResponse{}, err
+	}
+	return ActiveRuntimeResponse{Engines: states}, nil
+}
+
+func (a *Adapter) activeRuntime(ctx context.Context, engine Engine) RuntimeEngineState {
+	response, err := a.ListEndpoints(ctx, EndpointListRequest{Engine: engine})
+	if err != nil {
+		return RuntimeEngineState{Engine: engine, State: runtimeStateFromError(err)}
+	}
+	var active *EngineEndpoint
+	for index := range response.Endpoints {
+		if response.Endpoints[index].Default {
+			active = &response.Endpoints[index]
+			break
+		}
+	}
+	if active == nil {
+		return RuntimeEngineState{Engine: engine, State: RuntimeStateStopped}
+	}
+	endpoint, err := a.EndpointStatus(ctx, EndpointStatusRequest{Engine: engine, EndpointID: active.EndpointID})
+	if err != nil {
+		return RuntimeEngineState{Engine: engine, State: runtimeStateFromError(err)}
+	}
+	if !endpoint.Available {
+		return RuntimeEngineState{Engine: engine, State: RuntimeStateStopped}
+	}
+	capabilities := endpoint.Capabilities
+	return RuntimeEngineState{
+		Engine: engine, State: RuntimeStateReady, EndpointID: endpoint.EndpointID,
+		EngineVersion: endpoint.EngineVersion, Rootless: endpoint.Rootless, Capabilities: &capabilities,
+	}
+}
+
+func runtimeStateFromError(err error) RuntimeState {
+	switch {
+	case errors.Is(err, ErrCLIUnavailable):
+		return RuntimeStateNotInstalled
+	case errors.Is(err, ErrDaemonStopped), errors.Is(err, ErrEngineUnavailable):
+		return RuntimeStateStopped
+	case errors.Is(err, ErrPermissionDenied):
+		return RuntimeStatePermission
+	case errors.Is(err, ErrBackendUnreachable), errors.Is(err, ErrEngineTimeout), errors.Is(err, context.DeadlineExceeded):
+		return RuntimeStateUnreachable
+	default:
+		return RuntimeStateError
+	}
 }
 
 func (a *Adapter) ListComposeProjects(ctx context.Context, req ComposeProjectListRequest) ([]ComposeProject, error) {

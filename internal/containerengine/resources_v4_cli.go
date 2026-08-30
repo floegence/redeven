@@ -101,7 +101,7 @@ func (c *CLIClient) listDockerContexts(ctx context.Context) ([]EngineEndpoint, e
 		if invalidEndpointName(name) {
 			continue
 		}
-		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, name), Engine: EngineDocker, DisplayName: name, Default: item.Current, Remote: name != "default", Capabilities: endpointCapabilities(EngineDocker)})
+		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, name), Engine: EngineDocker, DisplayName: name, Default: item.Current, Capabilities: endpointCapabilities(EngineDocker)})
 	}
 	if len(out) == 0 {
 		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, "default"), Engine: EngineDocker, DisplayName: "default", Default: true, Capabilities: endpointCapabilities(EngineDocker)})

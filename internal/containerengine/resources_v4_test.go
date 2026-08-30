@@ -6,8 +6,211 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
+
+type runtimeDiscoveryRunner struct {
+	mu      sync.Mutex
+	outputs map[string]string
+	errors  map[string]error
+	calls   []string
+}
+
+func (r *runtimeDiscoveryRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	key := strings.TrimSpace(name + " " + strings.Join(args, " "))
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, key)
+	if err := r.errors[key]; err != nil {
+		return nil, err
+	}
+	value, ok := r.outputs[key]
+	if !ok {
+		return nil, errFakeCommandNotFound(key)
+	}
+	return []byte(value), nil
+}
+
+func (r *runtimeDiscoveryRunner) called(fragment string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, call := range r.calls {
+		if strings.Contains(call, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestAdapterV4DiscoversOnlyTheActiveRuntimeForEachEngine(t *testing.T) {
+	t.Parallel()
+	runner := &runtimeDiscoveryRunner{outputs: map[string]string{
+		"docker context ls --format {{json .}}":                      "{\"Name\":\"default\",\"Current\":false}\n{\"Name\":\"desktop-linux\",\"Current\":true}\n{\"Name\":\"production\",\"Current\":false}\n",
+		"docker --context desktop-linux version --format {{json .}}": `{"Client":{"Version":"27.1.0"},"Server":{"Version":"27.1.0"}}`,
+		"podman system connection list --format json":                `[{"Name":"machine","Default":true,"ReadWrite":true}]`,
+		"podman --connection machine version --format {{json .}}":    `{"Client":{"Version":"5.4.0"},"Server":{"Version":"5.4.0"}}`,
+		"podman --connection machine info --format json":             `{"host":{"security":{"rootless":true}}}`,
+	}}
+	adapter, err := NewAdapter(&CLIClient{Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := adapter.ActiveRuntimes(context.Background())
+	if err != nil {
+		t.Fatalf("ActiveRuntimes() error = %v", err)
+	}
+	if len(response.Engines) != 2 {
+		t.Fatalf("runtime states = %+v", response.Engines)
+	}
+	if docker := response.Engines[0]; docker.Engine != EngineDocker || docker.State != RuntimeStateReady || !docker.EndpointID.Valid() {
+		t.Fatalf("Docker runtime = %+v", docker)
+	}
+	if podman := response.Engines[1]; podman.Engine != EnginePodman || podman.State != RuntimeStateReady || podman.Rootless == nil || !*podman.Rootless {
+		t.Fatalf("Podman runtime = %+v", podman)
+	}
+	if runner.called("--context production version") || runner.called("--context default version") {
+		t.Fatalf("inactive Docker context was probed: %v", runner.calls)
+	}
+}
+
+func TestAdapterV4KeepsRuntimeDiscoveryFailuresIndependent(t *testing.T) {
+	t.Parallel()
+	runner := &runtimeDiscoveryRunner{
+		outputs: map[string]string{
+			"podman system connection list --format json": `[]`,
+			"podman version --format {{json .}}":          `{"Client":{"Version":"5.4.0"},"Server":{"Version":"5.4.0"}}`,
+			"podman info --format json":                   `{"host":{"security":{"rootless":false}}}`,
+		},
+		errors: map[string]error{
+			"docker context ls --format {{json .}}": ErrCLIUnavailable,
+		},
+	}
+	adapter, err := NewAdapter(&CLIClient{Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := adapter.ActiveRuntimes(context.Background())
+	if err != nil {
+		t.Fatalf("ActiveRuntimes() error = %v", err)
+	}
+	if docker := response.Engines[0]; docker.Engine != EngineDocker || docker.State != RuntimeStateNotInstalled || docker.EndpointID != "" {
+		t.Fatalf("Docker runtime = %+v", docker)
+	}
+	if podman := response.Engines[1]; podman.Engine != EnginePodman || podman.State != RuntimeStateReady || !podman.EndpointID.Valid() {
+		t.Fatalf("Podman runtime = %+v", podman)
+	}
+}
+
+func TestAdapterV4KeepsPermissionFailuresIndependent(t *testing.T) {
+	t.Parallel()
+	runner := &runtimeDiscoveryRunner{
+		outputs: map[string]string{
+			"docker context ls --format {{json .}}":                `{"Name":"default","Current":true}`,
+			"docker --context default version --format {{json .}}": `{"Client":{"Version":"27.1.0"},"Server":{"Version":"27.1.0"}}`,
+		},
+		errors: map[string]error{
+			"podman system connection list --format json": ErrPermissionDenied,
+		},
+	}
+	adapter, err := NewAdapter(&CLIClient{Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := adapter.ActiveRuntimes(context.Background())
+	if err != nil {
+		t.Fatalf("ActiveRuntimes() error = %v", err)
+	}
+	if docker := response.Engines[0]; docker.State != RuntimeStateReady || !docker.EndpointID.Valid() {
+		t.Fatalf("Docker runtime = %+v", docker)
+	}
+	if podman := response.Engines[1]; podman.State != RuntimeStatePermission || podman.EndpointID != "" {
+		t.Fatalf("Podman runtime = %+v", podman)
+	}
+}
+
+func TestAdapterV4KeepsTimeoutFailuresIndependent(t *testing.T) {
+	t.Parallel()
+	runner := &runtimeDiscoveryRunner{
+		outputs: map[string]string{
+			"podman system connection list --format json": `[]`,
+			"podman version --format {{json .}}":          `{"Client":{"Version":"5.4.0"},"Server":{"Version":"5.4.0"}}`,
+			"podman info --format json":                   `{"host":{"security":{"rootless":true}}}`,
+		},
+		errors: map[string]error{
+			"docker context ls --format {{json .}}": ErrEngineTimeout,
+		},
+	}
+	adapter, err := NewAdapter(&CLIClient{Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := adapter.ActiveRuntimes(context.Background())
+	if err != nil {
+		t.Fatalf("ActiveRuntimes() error = %v", err)
+	}
+	if docker := response.Engines[0]; docker.State != RuntimeStateUnreachable {
+		t.Fatalf("Docker runtime = %+v", docker)
+	}
+	if podman := response.Engines[1]; podman.State != RuntimeStateReady {
+		t.Fatalf("Podman runtime = %+v", podman)
+	}
+}
+
+func TestAdapterV4ReportsAllRuntimeFailures(t *testing.T) {
+	t.Parallel()
+	runner := &runtimeDiscoveryRunner{
+		outputs: map[string]string{},
+		errors: map[string]error{
+			"docker context ls --format {{json .}}":       ErrCLIUnavailable,
+			"podman system connection list --format json": ErrPermissionDenied,
+		},
+	}
+	adapter, err := NewAdapter(&CLIClient{Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := adapter.ActiveRuntimes(context.Background())
+	if err != nil {
+		t.Fatalf("ActiveRuntimes() error = %v", err)
+	}
+	if len(response.Engines) != 2 ||
+		response.Engines[0].State != RuntimeStateNotInstalled ||
+		response.Engines[1].State != RuntimeStatePermission {
+		t.Fatalf("runtime states = %+v", response.Engines)
+	}
+}
+
+func TestRuntimeStateFromError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		want RuntimeState
+	}{
+		{name: "not installed", err: ErrCLIUnavailable, want: RuntimeStateNotInstalled},
+		{name: "stopped", err: ErrDaemonStopped, want: RuntimeStateStopped},
+		{name: "unavailable", err: ErrEngineUnavailable, want: RuntimeStateStopped},
+		{name: "permission", err: ErrPermissionDenied, want: RuntimeStatePermission},
+		{name: "unreachable", err: ErrBackendUnreachable, want: RuntimeStateUnreachable},
+		{name: "timeout", err: ErrEngineTimeout, want: RuntimeStateUnreachable},
+		{name: "deadline", err: context.DeadlineExceeded, want: RuntimeStateUnreachable},
+		{name: "unexpected", err: errors.New("private socket path"), want: RuntimeStateError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := runtimeStateFromError(tt.err); got != tt.want {
+				t.Fatalf("runtimeStateFromError() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestCLIClientV4BatchesPodInspectionWithinResourceLimits(t *testing.T) {
 	t.Parallel()
@@ -68,7 +271,7 @@ func TestCLIClientV4BindsOpaqueDockerEndpointWithoutChangingGlobalContext(t *tes
 	if err != nil {
 		t.Fatalf("ListEndpoints() error = %v", err)
 	}
-	if len(endpoints) != 2 || endpoints[1].DisplayName != "production" || !endpoints[1].Default {
+	if len(endpoints) != 2 || endpoints[1].DisplayName != "production" || !endpoints[1].Default || endpoints[1].Remote {
 		t.Fatalf("endpoints = %+v", endpoints)
 	}
 	if capabilities := endpoints[1].Capabilities; !capabilities.CollectionStats || capabilities.VolumeFiles || capabilities.Exec {

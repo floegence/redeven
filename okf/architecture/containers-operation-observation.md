@@ -56,20 +56,20 @@ never replayed, regardless of whether the resource appears present or absent.
 
 ## UI observation
 
-Inventory requests and streams are fenced by engine, endpoint, and request
-generation. A superseded response cannot replace current data. Existing data
-may remain visible as stale, but stale data cannot enable a mutation or release
-an operation lock.
+Inventory requests and streams are fenced by source runtime, endpoint, resource
+view, and request generation. A superseded response cannot replace current
+data. Cached data may remain visible while its exact runtime refreshes, but
+stale data cannot enable a mutation or release an operation lock.
 
-Changing engine, endpoint, resource view, or detail tool closes the stream that
-lost ownership, clears endpoint-specific detail, and fences prior responses.
-List metrics are opt-in and use one endpoint-wide batch statistics process per
-sample instead of one process per row. Detail statistics select their container
-from the same endpoint-wide engine primitive rather than relying on inconsistent
-targeted CLI output. Statistics and logs retain only a bounded browser window. The Operations drawer
-persists within its native surface instance and always shows engine, endpoint,
-resource identity, state, and recovery guidance. Mobile and desktop expose the
-same state and cancellation authority.
+Runtime rediscovery, resource-view changes, and detail-tool changes close every
+stream that lost ownership and fence prior responses. List metrics are opt-in
+and use one endpoint-wide batch statistics process per ready runtime and sample
+instead of one process per row. Detail statistics select their container from
+the same endpoint-wide engine primitive rather than relying on inconsistent
+targeted CLI output. Statistics and logs retain only a bounded browser window.
+The Operations drawer persists within its native surface instance and shows the
+internal source target only where exact operation identity is necessary. Mobile
+and desktop expose the same state and cancellation authority.
 
 # Boundaries
 

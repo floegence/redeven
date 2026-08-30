@@ -76,48 +76,17 @@ func (g *Server) handleContainerReadRoute(w http.ResponseWriter, r *http.Request
 	if rest != "" {
 		parts = strings.Split(rest, "/")
 	}
-	if len(parts) == 1 && parts[0] == "endpoints" {
-		if !containerQueryOnly(r.URL.Query(), "engine") {
+	if len(parts) == 1 && parts[0] == "runtimes" {
+		if !containerQueryOnly(r.URL.Query()) {
 			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
 			return true
 		}
-		engines := []containerengine.Engine{containerengine.EngineDocker, containerengine.EnginePodman}
-		if raw := strings.TrimSpace(r.URL.Query().Get("engine")); raw != "" {
-			engine, err := parseContainerEngine(raw)
-			if err != nil {
-				writeContainerResourceError(w, err)
-				return true
-			}
-			engines = []containerengine.Engine{engine}
-		}
-		responses := make([]containerengine.EndpointListResponse, 0, len(engines))
-		for _, engine := range engines {
-			response, err := g.containers.Endpoints(r.Context(), engine)
-			if err != nil {
-				writeContainerResourceError(w, err)
-				return true
-			}
-			responses = append(responses, response)
-		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"engines": responses}})
-		return true
-	}
-	if len(parts) == 2 && parts[0] == "endpoints" {
-		if !containerQueryOnly(r.URL.Query(), "engine") {
-			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
-			return true
-		}
-		engine, endpointID, err := containerRouteTarget(r, parts[1])
+		response, err := g.containers.Runtimes(r.Context())
 		if err != nil {
 			writeContainerResourceError(w, err)
 			return true
 		}
-		endpoint, err := g.containers.EndpointStatus(r.Context(), containerengine.EndpointStatusRequest{Engine: engine, EndpointID: endpointID})
-		if err != nil {
-			writeContainerResourceError(w, err)
-			return true
-		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: endpoint})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: response})
 		return true
 	}
 	if len(parts) == 0 {

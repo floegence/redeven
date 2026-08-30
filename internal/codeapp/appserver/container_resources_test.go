@@ -157,6 +157,35 @@ func newContainerAPITestService(t *testing.T) *containerresource.Service {
 	return service
 }
 
+func newContainerRuntimeAPITestService(t *testing.T) *containerresource.Service {
+	t.Helper()
+	runner := containerengine.CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+		command := strings.TrimSpace(name + " " + strings.Join(args, " "))
+		switch command {
+		case "docker context ls --format {{json .}}":
+			return nil, containerengine.ErrCLIUnavailable
+		case "podman system connection list --format json":
+			return []byte(`[]`), nil
+		case "podman version --format {{json .}}":
+			return []byte(`{"Client":{"Version":"5.4.0"},"Server":{"Version":"5.4.0"}}`), nil
+		case "podman info --format json":
+			return []byte(`{"host":{"security":{"rootless":true}}}`), nil
+		default:
+			return nil, errors.New("unexpected container command")
+		}
+	})
+	adapter, err := containerengine.NewAdapter(&containerengine.CLIClient{Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := containerresource.Open(containerresource.Options{DatabasePath: filepath.Join(t.TempDir(), "containers.sqlite"), Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	return service
+}
+
 func serveContainerAPI(t *testing.T, server *Server, channelID, method, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, target, strings.NewReader(body))
@@ -166,6 +195,41 @@ func serveContainerAPI(t *testing.T, server *Server, channelID, method, target, 
 		t.Fatal("container API route was not handled")
 	}
 	return response
+}
+
+func TestContainerRuntimeDiscoveryKeepsEngineFailuresIndependent(t *testing.T) {
+	service := newContainerRuntimeAPITestService(t)
+	channelID := "ch_container_runtimes"
+	server := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+
+	response := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/runtimes", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("runtime discovery status=%d body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, expected := range []string{`"engine":"docker"`, `"state":"not_installed"`, `"engine":"podman"`, `"state":"ready"`} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("runtime discovery body=%s, want %s", body, expected)
+		}
+	}
+	if strings.Contains(body, `"display_name"`) || strings.Contains(body, `"remote"`) {
+		t.Fatalf("runtime discovery leaked endpoint presentation: %s", body)
+	}
+	if strings.Contains(body, "unexpected container command") {
+		t.Fatalf("runtime discovery leaked engine error detail: %s", body)
+	}
+
+	deniedChannelID := "ch_container_runtimes_denied"
+	denied := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(deniedChannelID, session.Meta{})}
+	response = serveContainerAPI(t, denied, deniedChannelID, http.MethodGet, containerResourcesAPIBase+"/runtimes", "")
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("runtime discovery without Read status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	legacy := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/endpoints?engine=podman", "")
+	if legacy.Code != http.StatusNotFound {
+		t.Fatalf("legacy endpoint route status=%d body=%s", legacy.Code, legacy.Body.String())
+	}
 }
 
 func TestContainerResourcePermissionsFollowRWXMatrix(t *testing.T) {
