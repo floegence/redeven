@@ -111,9 +111,11 @@ engine, endpoint health, refresh, and Operations. Workbench hides the duplicate
 product title. Underlined resource tabs, a single toolbar, status color, icons,
 spacing, sortable type-specific columns, direct lifecycle actions, and an
 overflow menu replace overview cards, nested panels, repeated prose, and long
-identifiers. The overflow menu follows shared outside-click, Escape, and focus
-behavior. Containers default to the Active filter while other resource views
-default to All. Column visibility is user-controlled. Metrics are off by default;
+identifiers. The active resource name appears only in the resource tab; the
+toolbar begins with search and filters instead of repeating the tab label or
+inventory count. The overflow menu follows shared outside-click, Escape, and
+focus behavior. Containers default to the Active filter while other resource
+views default to All. Column visibility is user-controlled. Metrics are off by default;
 when requested, one endpoint-wide SSE sample updates aggregate values and row
 metrics and stops as soon as its owning view closes.
 
