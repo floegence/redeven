@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Services
 description: Deploy, operate, recover, and expose immutable Web Service template snapshots through one Redeven-owned lifecycle boundary.
 tags: [architecture, web-services, runtime, containers, security]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 # Summary
 
@@ -18,7 +18,7 @@ timestamp: 2026-08-27T00:00:00Z
 
 A deployment reports environment check, download/pull, verification, installation, start, health, forward registration, and open through an authenticated Local API stream. The managed card owns Start, Stop, Restart, Retry, Update, Logs, and Uninstall; its backing forward is hidden from manual controls. The card presents template identity, service state, workspace, two aligned primary actions, and visually subordinate maintenance actions inside the same responsive collection frame as search. Container-backed cards also expose exact Container and Image destinations supplied by the Runtime service view; Renderer code never derives either identity from a template identifier.
 
-One Runtime operation record and event stream own each lifecycle action, including update. Renderer tracks every active operation independently by service and operation identity. Direct and recovered lifecycle work replaces stale observed status with compact progress inside the owning service row from submission onward; clicking it opens the action, exact artifact, operation identity, ordered stages, current position, and permitted cancellation. Install, update, and uninstall progress stays inside its owning disclosure. An operation has exactly one presentation owner, so no global list-tail progress, cross-service cancellation, or duplicate progress projection exists. The Runtime supplies the current operation artifact reference; the UI shows that exact value instead of inferring an image from a template identifier. The shared compact working indicator uses the `thinking-orbs` Shaping preset, respects reduced motion and visibility, and adds no second progress state machine.
+One Runtime operation record and event stream own each lifecycle action, including update. Renderer tracks every active operation independently by service and operation identity. Direct and recovered lifecycle work replaces stale observed status from submission onward. The compact progress is clipped inside the owning service's border, aligned below its information column, and connected by a quiet track; it shows only action, stage, exact artifact, position, and cancellation instead of repeating the service identity or creating a second card. Clicking the row indicator opens the operation identity and ordered stages. Install, update, and uninstall progress stays inside its owning disclosure. An operation has exactly one presentation owner, so no global list-tail progress, cross-service cancellation, or duplicate progress projection exists. The Runtime supplies the current operation artifact reference; the UI never infers an image from a template identifier. The shared compact working indicator uses the `thinking-orbs` Shaping preset, respects reduced motion and visibility, and adds no second progress state machine.
 
 The instance saves the exact template revision, canonical definition, SHA-256, service-family identity, selected workspace, non-secret configuration, and runtime manifest before execution. Later template edits do not alter it. Redeven prepares a family-specific directory under the Environment home as the explicit default, so installation never grants the whole home directory merely because it is the first writable filesystem root. A user-selected replacement must still resolve to an existing writable directory inside the Environment filesystem scope. Secret inputs live only in a private `0600` Runtime file and are removed on uninstall.
 
@@ -36,6 +36,8 @@ Host deployment supports Linux and macOS on amd64 and arm64. The Redeven release
 
 Container deployment identifies `ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2` as community packaging, not a DeepSeek official distribution. The signed Redeven release pins the separately reviewed amd64 and arm64 OCI manifest digests in the Runtime, so deployment never resolves a mutable tag. Existing service retries use this current audited GHCR source with the platform digest; no Docker Hub or mutable-tag fallback exists. The container runs non-root under the hardened policy, mounts a private data volume and selected workspace, publishes only Harness port `3080` to loopback, and never publishes `6080`/noVNC.
 
+Both DeepSeek templates declare `desktop_loopback` as their default access mode. This does not widen container privileges or change Harness configuration: it gives the isolated Desktop target view a real `127.0.0.1` Origin while the Desktop gateway still traverses the protected Runtime forward. Models and other upstream local-browser checks therefore see a local browser without modifying Harness. Web Env App and system-browser opening are unavailable for this mode; users may explicitly switch the persisted forward to `unified_proxy` when broad client access matters more than local-browser compatibility.
+
 Changing either built-in deployment requires reviewed source/version, licenses, architecture, immutable identities, persistence, WebSocket, loopback, and protected-routing smoke tests. Host availability is derived only from the complete platform manifest compiled into the Redeven release, so an unrelated version-service response cannot disable the card. Container deployment remains gated by the exact per-platform digest compiled into the same release. Third-party notices distinguish on-demand software from code embedded in Redeven.
 
 ## Built-in interactive desktops and updates
@@ -44,7 +46,7 @@ The two independent Webtop templates, their reserved `interactive_desktop` profi
 
 ## Persistence and recovery
 
-Port-forward registry schema v3 is the contiguous successor of v1 and v2. It preserves existing forwards and v2 DeepSeek Harness instances, adds template persistence, and expands managed services with source, revision, definition hash, immutable snapshot, service family, configuration, and runtime manifest. Every edge verifies the exact historical shape before applying and commits migration, data, metadata, version, and final verification atomically. Drift, future versions, or failure leave the prior database unchanged.
+Port-forward registry schema v4 is the contiguous successor of v1 through v3. The v3-to-v4 edge adds the constrained `port_forwards.access_mode` column, defaults ordinary records to `unified_proxy`, and selects `desktop_loopback` for an existing managed forward only when its preserved service-family identity is `deepseek-harness`. It does not duplicate the mode in managed-service state. Every edge verifies the exact historical shape before applying and commits migration, data, metadata, version, and final verification atomically. Drift, future versions, or failure leave the prior database unchanged.
 
 Service, stable protected forward, and initial install operation are created in one transaction. New protected forward identities are DNS-safe because the same value crosses the Runtime proxy, secure sandbox host, and Desktop browser route. Install-and-open and later card Open both resolve that record through the Web Service browser-session boundary; previously installed underscore-delimited records receive a temporary DNS-safe browser alias without changing lifecycle ownership or persistent data. Repeated request identities return the original operation only for the same fingerprint; conflicting reuse fails. At most one operation is pending, running, or cancelling per service.
 
@@ -56,7 +58,7 @@ Health succeeds only after the application responds on its assigned loopback por
 
 ## Local API and authorization
 
-Catalog/list/create live under `/_redeven_proxy/api/managed-web-services`; lifecycle/logs use its `{id}` routes; cancellation/events use `.../managed-web-service-operations/{id}`. Catalogs expose declarative brand and notices; install/update requests carry accepted notice revisions; service views expose a Runtime-derived update target and optional current-operation artifact reference. Reads require Web Service read permission. Mutations require read, write, and execute; data deletion also requires administrator or owner. Bodies and audits are bounded and exclude definitions, scripts, values, notice text, and secrets.
+Catalog/list/create live under `/_redeven_proxy/api/managed-web-services`; lifecycle/logs use its `{id}` routes; cancellation/events use `.../managed-web-service-operations/{id}`. Catalogs expose declarative brand, notices, and default access mode; install requests accept the selected mode; service views project the backing forward's current mode alongside a Runtime-derived update target and optional current-operation artifact reference. Saved-service settings update that same forward record. Reads require Web Service read permission. Mutations require read, write, and execute; data deletion also requires administrator or owner. Bodies and audits are bounded and exclude definitions, scripts, values, notice text, and secrets.
 
 # Boundaries
 
@@ -75,7 +77,7 @@ This contract does not include Windows host deployment, cross-Environment schedu
 - `redeven:internal/managedwebservice/builtin_templates.go` - Pins the two Webtop releases and declares their independent families, notices, environment, mounts, and interactive desktop profile.
 - `redeven:internal/managedwebservice/update.go` - Owns pull-before-stop updates, persisted phases, exact target commit, rollback, and interrupted recovery.
 - `redeven:internal/managedwebservice/custom_compose.go` - Generates and verifies hardened exact-project Compose deployments.
-- `redeven:internal/portforward/registry/schema.go` - Defines contiguous v1-to-v3 migrations and exact historical/target verification.
+- `redeven:internal/portforward/registry/schema.go` - Defines contiguous v1-to-v4 migrations, access-mode convergence, and exact historical/target verification.
 - `redeven:internal/portforward/registry/managed.go` - Persists snapshots, operations, families, and protected-forward ownership.
 - `redeven:internal/codeapp/appserver/managed_web_services.go` - Enforces Local API permissions, strict bodies, audit events, and authenticated progress.
 - `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationController.ts` - Tracks independent service operations and their single presentation owner.

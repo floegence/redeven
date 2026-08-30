@@ -2920,6 +2920,16 @@
       "invalid": "公網網站和區域網路位址不在 Web Service 的存取範圍內。",
       "examples": "可輸入 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
+    "accessMode": {
+      "label": "存取模式",
+      "unifiedProxyTitle": "統一安全代理",
+      "unifiedProxyShort": "安全代理",
+      "unifiedProxyDescription": "可在 Desktop、Web Env App 與系統瀏覽器中使用。",
+      "desktopLoopbackTitle": "Desktop 本機相容",
+      "desktopLoopbackShort": "Desktop 本機",
+      "desktopLoopbackDescription": "使用隔離的 127.0.0.1 Origin，讓僅支援本機存取的應用正常運作；僅限 Redeven Desktop。",
+      "desktopLoopbackHTTPOnly": "本機相容模式僅支援 HTTP 服務。"
+    },
     "session": {
       "temporary": "暫時"
     },
@@ -2965,7 +2975,6 @@
       "resolvingRoute": "正在解析路由...",
       "updating": "正在更新服務...",
       "requestingEntryTicket": "正在請求 entry ticket...",
-      "openingDirectly": "正在直接開啟...",
       "openingLocalProxy": "正在開啟 Local UI proxy...",
       "working": "處理中...",
       "creatingSession": "正在準備暫時 Web 服務會話..."
@@ -3234,7 +3243,8 @@
       "loadFailedPrefix": "載入 Web 服務失敗",
       "popupBlocked": "彈出視窗被阻擋。請允許彈出視窗後再試。",
       "missingEnvContext": "缺少環境上下文。請從控制平面重新開啟。",
-      "desktopWindowFailed": "Desktop 無法開啟隔離的 Web 服務視窗。"
+      "desktopWindowFailed": "Desktop 無法開啟隔離的 Web 服務視窗。",
+      "desktopLoopbackRequiresDesktop": "本機相容模式需要使用 Redeven Desktop 隔離視窗。"
     }
   },
   "debugConsoleSettings": {

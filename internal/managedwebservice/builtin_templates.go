@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
 const (
@@ -18,22 +20,23 @@ const (
 )
 
 type builtInTemplateDefinition struct {
-	TemplateID       string
-	ServiceFamilyID  string
-	Name             string
-	Description      string
-	Version          string
-	LocalizationKey  string
-	BrandIcon        string
-	SourceURL        string
-	DockerSourceURL  string
-	Deployment       Deployment
-	ContainerMode    string
-	Revision         int64
-	SortOrder        int
-	DeveloperPreview bool
-	DiskBytes        int64
-	Notices          []TemplateNotice
+	TemplateID        string
+	ServiceFamilyID   string
+	Name              string
+	Description       string
+	Version           string
+	LocalizationKey   string
+	BrandIcon         string
+	SourceURL         string
+	DockerSourceURL   string
+	Deployment        Deployment
+	ContainerMode     string
+	Revision          int64
+	SortOrder         int
+	DeveloperPreview  bool
+	DiskBytes         int64
+	Notices           []TemplateNotice
+	DefaultAccessMode string
 }
 
 func builtInTemplateDefinitions() []builtInTemplateDefinition {
@@ -43,7 +46,8 @@ func builtInTemplateDefinitions() []builtInTemplateDefinition {
 			Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessHost", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
 			Deployment: DeploymentNative, Revision: 1, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
-			Notices: deepSeekHarnessNotices(false),
+			Notices:           deepSeekHarnessNotices(false),
+			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
 		},
 		{
 			TemplateID: DeepSeekHarnessContainerTemplateID, ServiceFamilyID: DeepSeekHarnessTemplateID,
@@ -51,6 +55,7 @@ func builtInTemplateDefinitions() []builtInTemplateDefinition {
 			LocalizationKey: "deepSeekHarnessContainer", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
 			DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Deployment: DeploymentDocker, ContainerMode: "single",
 			Revision: 1, SortOrder: 20, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, Notices: deepSeekHarnessNotices(true),
+			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
 		},
 		{
 			TemplateID: WebtopUbuntuKDETemplateID, ServiceFamilyID: WebtopUbuntuKDETemplateID,
@@ -203,7 +208,15 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 			Available:     available, ReasonCode: reasonCode, Reason: reason, SortOrder: definition.SortOrder,
 			Deployments:          []DeploymentAvailability{{Deployment: definition.Deployment, Available: available, ReasonCode: reasonCode, Reason: reason}},
 			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec,
+			DefaultAccessMode: defaultAccessMode(definition.DefaultAccessMode),
 		})
 	}
 	return items, nil
+}
+
+func defaultAccessMode(value string) string {
+	if strings.TrimSpace(value) == pfregistry.AccessModeDesktopLoopback {
+		return pfregistry.AccessModeDesktopLoopback
+	}
+	return pfregistry.AccessModeUnifiedProxy
 }

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Database schema migration ownership
 description: Redeven automatically migrates product databases at startup while upstream-owned stores remain opaque.
 tags: [architecture, storage, sqlite, migrations, upgrades]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 # Summary
 
@@ -41,8 +41,13 @@ migration histories. Their individual migration tests
 remain responsible for historical shape validation and preservation of their
 domain records. The port-forward registry's contiguous v1-to-v2 migration adds
 managed Web Service and persistent operation records while retaining the exact
-v1 forward table and every user-owned forward. Drifted v1 inputs, future
-versions, and failed migrations remain unchanged; managed service, protected
+v1 forward table and every user-owned forward; v2-to-v3 adds immutable template
+snapshots and service-family state; v3-to-v4 adds the constrained forward access
+mode. The v4 edge defaults ordinary forwards to the unified proxy and selects
+Desktop loopback only for an existing managed forward whose preserved family is
+DeepSeek Harness. It neither rewrites target data nor stores a duplicate mode on
+managed services. Drifted historical inputs, future versions, and failed migrations
+remain unchanged; managed service, protected
 forward, and first operation creation is separately atomic at runtime. The
 shared engine rejects incomplete migration chains,
 unsupported old versions, future versions, malformed metadata, wrong database

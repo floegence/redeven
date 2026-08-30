@@ -248,10 +248,9 @@ describe('web service route helpers', () => {
     expect(isSupportedWebServiceTarget('ftp://localhost:3000')).toBe(false);
   });
 
-  it('opens same-device local loopback targets directly', () => {
+  it('uses the protected route for local targets without direct-access heuristics', () => {
     expect(resolveWebServiceOpenRoute({
       forwardID: 'forward-1',
-      targetURL: 'http://localhost:3000',
       localRuntime,
       desktopContext: {
         local_environment_id: 'local',
@@ -261,14 +260,13 @@ describe('web service route helpers', () => {
       },
       browserLocation: new URL('http://localhost:23998/_redeven_proxy/env') as any,
     })).toEqual({
-      kind: 'browser_direct',
-      url: 'http://localhost:3000',
-      label: 'Direct',
+      kind: 'local_proxy',
+      url: 'http://localhost:23998/pf/forward-1/',
+      label: 'Local proxy',
     });
 
     expect(resolveWebServiceOpenRoute({
       forwardID: 'forward-1',
-      targetURL: 'http://localhost:3000',
       appPath: '/docs?tab=api',
       localRuntime,
       desktopContext: {
@@ -279,8 +277,8 @@ describe('web service route helpers', () => {
       },
       browserLocation: new URL('http://localhost:23998/_redeven_proxy/env') as any,
     })).toMatchObject({
-      kind: 'browser_direct',
-      url: 'http://localhost:3000/docs?tab=api',
+      kind: 'local_proxy',
+      url: 'http://localhost:23998/pf/forward-1/docs?tab=api',
     });
   });
 
@@ -289,7 +287,6 @@ describe('web service route helpers', () => {
 
     expect(resolveWebServiceOpenRoute({
       forwardID: 'forward-1',
-      targetURL: 'http://localhost:3000',
       localRuntime,
       desktopContext: {
         local_environment_id: 'url:http://localhost:24000',
@@ -306,7 +303,6 @@ describe('web service route helpers', () => {
 
     expect(resolveWebServiceOpenRoute({
       forwardID: 'forward-1',
-      targetURL: 'http://localhost:3000',
       localRuntime,
       desktopContext: {
         local_environment_id: 'ssh:devbox',
@@ -322,7 +318,6 @@ describe('web service route helpers', () => {
   it('uses a root-mounted private origin for an isolated Desktop window', () => {
     expect(resolveWebServiceOpenRoute({
       forwardID: 'forward-1',
-      targetURL: 'http://127.0.0.1:3000',
       appPath: '/docs?tab=api#intro',
       localRuntime,
       desktopContext: {
@@ -333,7 +328,7 @@ describe('web service route helpers', () => {
         document_transport: 'desktop_private_bridge_v2',
       },
       browserLocation: new URL('http://127.0.0.1:43123/_redeven_proxy/env') as any,
-      preferIsolatedDesktop: true,
+      desktopWindowAvailable: true,
     })).toEqual({
       kind: 'local_proxy',
       url: 'http://pf-forward-1.localhost:43123/docs?tab=api#intro',
@@ -344,7 +339,6 @@ describe('web service route helpers', () => {
   it('uses the secure tunnel when the page is not in Local UI mode', () => {
     expect(resolveWebServiceOpenRoute({
       forwardID: 'forward-1',
-      targetURL: 'http://localhost:3000',
       localRuntime: null,
       browserLocation: new URL('https://env-demo.example.invalid/_redeven_proxy/env') as any,
     })).toEqual({
@@ -388,7 +382,62 @@ describe('web service metadata and template validation', () => {
       description.value = 'Internal status and release dashboard';
       description.dispatchEvent(new InputEvent('input', { bubbles: true }));
       Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
-      expect(submit).toHaveBeenCalledWith('Team dashboard', 'Internal status and release dashboard');
+      expect(submit).toHaveBeenCalledWith('Team dashboard', 'Internal status and release dashboard', 'unified_proxy');
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('persists an explicit Desktop local access choice', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const submit = vi.fn();
+    const dispose = render(() => (
+      <ForwardMetadataDialog
+        open
+        mode="edit"
+        editorKey="pf-local"
+        initialName="DeepSeek Harness"
+        initialDescription=""
+        initialAccessMode="unified_proxy"
+        targetURL="http://127.0.0.1:3080"
+        loading={false}
+        onOpenChange={() => undefined}
+        onSubmit={submit}
+      />
+    ), host);
+    try {
+      host.querySelector<HTMLButtonElement>('[data-access-mode="desktop_loopback"]')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+      expect(submit).toHaveBeenCalledWith('DeepSeek Harness', '', 'desktop_loopback');
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('does not offer Desktop local compatibility for HTTPS services', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ForwardMetadataDialog
+        open
+        mode="edit"
+        editorKey="pf-https"
+        initialName="Secure preview"
+        initialDescription=""
+        initialAccessMode="unified_proxy"
+        targetURL="https://localhost:8443"
+        loading={false}
+        onOpenChange={() => undefined}
+        onSubmit={() => undefined}
+      />
+    ), host);
+    try {
+      const loopback = host.querySelector<HTMLButtonElement>('[data-access-mode="desktop_loopback"]');
+      expect(loopback?.disabled).toBe(true);
+      expect(loopback?.textContent).toContain('only for HTTP services');
     } finally {
       dispose();
       host.remove();
@@ -516,8 +565,13 @@ describe('web service metadata and template validation', () => {
     try {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
       const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      const attached = row.querySelector<HTMLElement>('[data-testid="managed-operation-progress"]')!;
       expect(progress.textContent).toContain('Pulling image');
       expect(progress.textContent).toContain('2/7');
+      expect(attached.textContent).toContain('Retry');
+      expect(attached.textContent).toContain('Pulling image');
+      expect(attached.textContent).not.toContain('DeepSeek Harness');
+      expect(attached.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
       expect(row.textContent).not.toContain('Error');
       expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Retry')?.disabled).toBe(true);
 
@@ -739,7 +793,7 @@ describe('EnvPortForwardsPage', () => {
 
     runtimeRequest.resolve(localRuntime);
     await waitForAssertion(() => {
-      expect(assign).toHaveBeenCalledWith('http://localhost:3000');
+      expect(assign).toHaveBeenCalledWith('https://localhost/pf/forward-1/');
     });
   });
 
@@ -847,7 +901,7 @@ describe('EnvPortForwardsPage', () => {
         body: JSON.stringify({ target: 'http://127.0.0.1:54945' }),
       });
       expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/pf-route-safe-alias/touch', { method: 'POST' });
-      expect(assign).toHaveBeenCalledWith('http://127.0.0.1:54945');
+      expect(assign).toHaveBeenCalledWith('https://localhost/pf/pf-route-safe-alias/');
     });
   });
 
@@ -1533,7 +1587,7 @@ describe('EnvPortForwardsPage', () => {
     );
   });
 
-  it('opens a same-device local service directly after touching it', async () => {
+  it('opens a local service through the protected proxy after touching it', async () => {
     const assign = vi.fn();
     const close = vi.fn();
     vi.spyOn(window, 'open').mockReturnValue({ location: { assign }, close } as unknown as Window);
@@ -1547,7 +1601,7 @@ describe('EnvPortForwardsPage', () => {
 
     await waitForAssertion(() => {
       expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
-      expect(assign).toHaveBeenCalledWith('http://localhost:3000');
+      expect(assign).toHaveBeenCalledWith('https://localhost/pf/forward-1/');
     });
     expect(close).not.toHaveBeenCalled();
   });
@@ -1583,7 +1637,7 @@ describe('EnvPortForwardsPage', () => {
         method: 'POST',
         body: JSON.stringify({ target: '3000/docs?tab=api' }),
       });
-      expect(assign).toHaveBeenCalledWith('http://localhost:3000/docs?tab=api');
+      expect(assign).toHaveBeenCalledWith('https://localhost/pf/temporary-1/docs?tab=api');
       expect(addressInput?.value).toBe('http://localhost:3000/docs?tab=api');
       expect(host.textContent).toContain('Temporary');
       expect(host.textContent).toContain('Save service');
@@ -1659,7 +1713,7 @@ describe('EnvPortForwardsPage', () => {
     const dialog = Array.from(host.querySelectorAll('h2')).find((heading) => heading.textContent === 'Save Web Service')?.parentElement;
     Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === 'Save service')?.click();
 
-    await waitForAssertion(() => expect(saveBody).toEqual({ name: 'Local documentation', description: '' }));
+    await waitForAssertion(() => expect(saveBody).toEqual({ name: 'Local documentation', description: '', access_mode: 'unified_proxy' }));
   });
 
   it('updates the name of an already saved service', async () => {
@@ -1687,7 +1741,7 @@ describe('EnvPortForwardsPage', () => {
     name.dispatchEvent(new InputEvent('input', { bubbles: true }));
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
 
-    await waitForAssertion(() => expect(updateBody).toEqual({ name: 'Renamed dashboard', description: 'Browser preview' }));
+    await waitForAssertion(() => expect(updateBody).toEqual({ name: 'Renamed dashboard', description: 'Browser preview', access_mode: 'unified_proxy' }));
   });
 
   it('keeps one blocking transaction while a temporary session is created and opened', async () => {
@@ -1731,7 +1785,7 @@ describe('EnvPortForwardsPage', () => {
 
     runtimeRequest.resolve(localRuntime);
     await waitForAssertion(() => {
-      expect(assign).toHaveBeenCalledWith('http://localhost:3000');
+      expect(assign).toHaveBeenCalledWith('https://localhost/pf/temporary-1/');
       expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
       expect(addressInput?.disabled).toBe(false);
     });

@@ -246,13 +246,29 @@ import {
   shouldFailDesktopSessionMainDocument,
   type DesktopSessionTransport,
 } from './desktopSessionTransport';
-import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress, routeWebServiceTargetRequest, webServiceBrowserDisplayURL } from './navigation';
+import {
+  desktopLoopbackBrowserDisplayURL,
+  desktopLoopbackProtectedRouteURL,
+  isAllowedAppNavigation,
+  isAllowedCodespaceWindowNavigation,
+  isAllowedWebServiceWindowNavigation,
+  isDesktopLoopbackWebServiceURL,
+  resolveDesktopLoopbackBrowserAddress,
+  resolveWebServiceBrowserAddress,
+  routeDesktopLoopbackTargetRequest,
+  routeWebServiceTargetRequest,
+  webServiceBrowserDisplayURL,
+} from './navigation';
 import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
 import { openWebServiceInSystemBrowser } from './webServiceBrowserExternal';
 import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
 import { isWebServiceBrowserDevToolsShortcut } from './webServiceBrowserShortcuts';
 import { buildWebServiceUnavailableDocumentURL } from './webServiceUnavailableDocument';
+import {
+  startWebServiceLoopbackGateway,
+  type WebServiceLoopbackGateway,
+} from './webServiceLoopbackGateway';
 import {
   probeExternalLocalUIHealth,
   probeLocalRuntimeBridgeHealth,
@@ -516,8 +532,8 @@ import {
 import {
   DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL,
   normalizeDesktopShellOpenWebServiceWindowRequest,
-  type DesktopShellOpenWebServiceWindowRequest,
   type DesktopShellOpenWebServiceWindowResponse,
+  type NormalizedDesktopShellOpenWebServiceWindowRequest,
 } from '../shared/desktopShellWebServiceWindowIPC';
 import {
   DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL,
@@ -741,6 +757,7 @@ type DesktopSessionRecord = {
   child_windows: Map<string, DesktopTrackedWindow>;
   codespace_windows: Map<string, DesktopTrackedWindow>;
   web_service_windows: Map<string, DesktopTrackedWindow>;
+  web_service_loopback_gateways: Map<string, WebServiceLoopbackGateway>;
   codespace_loading_documents: Map<string, CodespaceLoadingWindowCopy>;
   session_partition: string;
   diagnostics: DesktopDiagnosticsRecorder;
@@ -923,8 +940,12 @@ type DesktopWebServiceBrowserController = Readonly<{
   perform: (action: DesktopWebServiceBrowserAction) => Promise<DesktopWebServiceBrowserActionResponse>;
   refreshTheme: () => void;
   snapshot: () => DesktopWebServiceBrowserState;
+  accessMode: NormalizedDesktopShellOpenWebServiceWindowRequest['access_mode'];
+  targetURL: string;
+  navigateProtectedRoute: (url: string) => DesktopWebServiceBrowserActionResponse;
 }>;
 const webServiceBrowserByToolbarWebContentsID = new Map<number, DesktopWebServiceBrowserController>();
+const webServiceWindowOpenTasks = new Map<string, Promise<DesktopShellOpenWebServiceWindowResponse>>();
 
 function refreshWebServiceBrowserDocuments(): void {
   for (const controller of webServiceBrowserByToolbarWebContentsID.values()) {
@@ -8281,9 +8302,10 @@ async function prepareWebServiceWindowPartition(
   sessionRecord: DesktopSessionRecord,
   partition: string,
   forwardID: string,
+  loopbackGateway?: WebServiceLoopbackGateway,
 ): Promise<void> {
   const webSession = session.fromPartition(partition);
-  installDesktopDiagnosticsHooks(webSession, forwardID);
+  installDesktopDiagnosticsHooks(webSession, forwardID, loopbackGateway);
   await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });
 }
 
@@ -8343,12 +8365,14 @@ function webServiceUnavailableDocumentURL(targetAddress: string): string {
 
 function createWebServiceBrowserController(
   sessionRecord: DesktopSessionRecord,
-  request: DesktopShellOpenWebServiceWindowRequest,
+  request: NormalizedDesktopShellOpenWebServiceWindowRequest,
   partition: string,
+  loopbackGateway?: WebServiceLoopbackGateway,
 ): DesktopWebServiceBrowserController {
   let errorMessage = '';
   let pendingExternalURL = '';
-  let requestedURL = request.url;
+  const browserEntryURL = loopbackGateway?.entryURL(request.url) ?? request.url;
+  let requestedURL = browserEntryURL;
   let unavailableRequestURL = '';
   let unavailablePageURL = '';
   let loadingUnavailablePage = false;
@@ -8369,6 +8393,11 @@ function createWebServiceBrowserController(
       const current = sessionRecord.web_service_windows.get(request.forward_id);
       if (current?.webContentsID !== closedWindow.webContentsID) return;
       sessionRecord.web_service_windows.delete(request.forward_id);
+      const currentGateway = sessionRecord.web_service_loopback_gateways.get(request.forward_id);
+      if (currentGateway && currentGateway === loopbackGateway) {
+        sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
+        void currentGateway.close();
+      }
       if (!contentView.webContents.isDestroyed()) contentView.webContents.close();
       clearWebServiceWindowPartition(partition);
     },
@@ -8404,7 +8433,9 @@ function createWebServiceBrowserController(
   const snapshot = (): DesktopWebServiceBrowserState => {
     const contents = contentView.webContents;
     const routeAddress = unavailableRequestURL || requestedURL;
-    const address = webServiceBrowserDisplayURL(routeAddress, request.target_url, request.forward_id)
+    const address = (loopbackGateway
+      ? desktopLoopbackBrowserDisplayURL(routeAddress, request.target_url, loopbackGateway.origin)
+      : webServiceBrowserDisplayURL(routeAddress, request.target_url, request.forward_id))
       ?? targetAddress + '/';
     const title = contents.isDestroyed() ? '' : contents.getTitle();
     return {
@@ -8414,6 +8445,11 @@ function createWebServiceBrowserController(
       can_go_back: !contents.isDestroyed() && contents.navigationHistory.canGoBack(),
       can_go_forward: !contents.isDestroyed() && contents.navigationHistory.canGoForward(),
       devtools_open: !contents.isDestroyed() && contents.isDevToolsOpened(),
+      open_external_available: request.access_mode === 'unified_proxy',
+      ...(request.access_mode === 'desktop_loopback' ? {
+        open_external_unavailable_reason: createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+          .t('webServiceBrowser.desktopLoopbackExternalUnavailable'),
+      } : {}),
       ...(errorMessage ? { error_message: errorMessage } : {}),
     };
   };
@@ -8432,14 +8468,10 @@ function createWebServiceBrowserController(
     void contentView.webContents.loadURL(targetURL);
   };
   const navigate = (address: string): DesktopWebServiceBrowserActionResponse => {
-    const currentURL = unavailableRequestURL || requestedURL || request.url;
-    const targetURL = resolveWebServiceBrowserAddress(
-      address,
-      currentURL,
-      request.target_url,
-      sessionRecord.allowed_base_url,
-      request.forward_id,
-    );
+    const currentURL = unavailableRequestURL || requestedURL || browserEntryURL;
+    const targetURL = loopbackGateway
+      ? resolveDesktopLoopbackBrowserAddress(address, currentURL, request.target_url, loopbackGateway.origin)
+      : resolveWebServiceBrowserAddress(address, currentURL, request.target_url, sessionRecord.allowed_base_url, request.forward_id);
     if (!targetURL) {
       return {
         ok: false,
@@ -8448,6 +8480,13 @@ function createWebServiceBrowserController(
       };
     }
     loadRequestedURL(targetURL);
+    return { ok: true };
+  };
+  const navigateProtectedRoute = (url: string): DesktopWebServiceBrowserActionResponse => {
+    if (!isAllowedWebServiceWindowNavigation(url, sessionRecord.allowed_base_url, request.forward_id)) {
+      return { ok: false, message: 'Desktop refused to navigate outside this Web Service route.' };
+    }
+    loadRequestedURL(loopbackGateway?.entryURL(url) ?? url);
     return { ok: true };
   };
   const toggleDevTools = (): void => {
@@ -8495,6 +8534,13 @@ function createWebServiceBrowserController(
         toggleDevTools();
         return { ok: true };
       case 'open_external': {
+        if (request.access_mode === 'desktop_loopback') {
+          const message = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+            .t('webServiceBrowser.desktopLoopbackExternalUnavailable');
+          errorMessage = message;
+          publishState();
+          return { ok: false, message };
+        }
         const currentRouteURL = unavailableRequestURL || requestedURL || request.url;
         try {
           await openWebServiceInSystemBrowser({
@@ -8520,10 +8566,11 @@ function createWebServiceBrowserController(
     }
   };
 
-  const allowTargetNavigation = (targetURL: string): boolean => (
-    isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)
-    || routeWebServiceTargetRequest(targetURL, request.url, request.target_url, request.forward_id) !== null
-  );
+  const allowTargetNavigation = (targetURL: string): boolean => loopbackGateway
+    ? isDesktopLoopbackWebServiceURL(targetURL, loopbackGateway.origin)
+      || routeDesktopLoopbackTargetRequest(targetURL, request.target_url, loopbackGateway.origin) !== null
+    : isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)
+      || routeWebServiceTargetRequest(targetURL, request.url, request.target_url, request.forward_id) !== null;
   const markRequestedNavigation = (targetURL: string): void => {
     requestedURL = targetURL;
     unavailableRequestURL = '';
@@ -8619,12 +8666,9 @@ function createWebServiceBrowserController(
   contentView.webContents.on('before-input-event', handleDevToolsShortcut);
 
   webSession.webRequest.onBeforeRequest((details, callback) => {
-    const redirectURL = routeWebServiceTargetRequest(
-      details.url,
-      request.url,
-      request.target_url,
-      request.forward_id,
-    );
+    const redirectURL = loopbackGateway
+      ? routeDesktopLoopbackTargetRequest(details.url, request.target_url, loopbackGateway.origin)
+      : routeWebServiceTargetRequest(details.url, request.url, request.target_url, request.forward_id);
     callback(redirectURL ? { redirectURL } : {});
   });
 
@@ -8656,15 +8700,18 @@ function createWebServiceBrowserController(
     perform,
     refreshTheme,
     snapshot,
+    accessMode: request.access_mode,
+    targetURL: request.target_url,
+    navigateProtectedRoute,
   };
   webServiceBrowserByToolbarWebContentsID.set(windowRecord.webContentsID, controller);
-  void contentView.webContents.loadURL(request.url);
+  void contentView.webContents.loadURL(browserEntryURL);
   return controller;
 }
 
-async function openWebServiceWindowFromShell(
+async function openWebServiceWindowFromShellNow(
   sessionRecord: DesktopSessionRecord | null,
-  request: DesktopShellOpenWebServiceWindowRequest,
+  request: NormalizedDesktopShellOpenWebServiceWindowRequest,
 ): Promise<DesktopShellOpenWebServiceWindowResponse> {
   if (!sessionRecord || sessionRecord.closing) {
     return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
@@ -8679,9 +8726,17 @@ async function openWebServiceWindowFromShell(
   const existing = sessionRecord.web_service_windows.get(request.forward_id);
   const existingWindow = liveTrackedBrowserWindow(existing);
   if (existing && existingWindow) {
-    webServiceBrowserByToolbarWebContentsID.get(existing.webContentsID)?.navigate(request.url);
-    presentAppWindow(existingWindow, { stealAppFocus: true });
-    return { ok: true };
+    const controller = webServiceBrowserByToolbarWebContentsID.get(existing.webContentsID);
+    if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url) {
+      const response = controller.navigateProtectedRoute(request.url);
+      if (!response.ok) return response;
+      presentAppWindow(existingWindow, { stealAppFocus: true });
+      return { ok: true };
+    }
+    existingWindow.destroy();
+    const gateway = sessionRecord.web_service_loopback_gateways.get(request.forward_id);
+    sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
+    await gateway?.close();
   }
   if (existing) {
     sessionRecord.web_service_windows.delete(request.forward_id);
@@ -8689,35 +8744,93 @@ async function openWebServiceWindowFromShell(
   }
 
   const partition = sessionWebServicePartition(sessionRecord.session_key, request.forward_id);
+  let loopbackGateway: WebServiceLoopbackGateway | undefined;
   try {
-    await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id);
+    if (request.access_mode === 'desktop_loopback') {
+      const protectedRequestHeaders = desktopPrivateBridgeRequestHeaders(
+        sessionRecord.transport,
+        sessionRecord.startup,
+        request.url,
+        {},
+        { webServiceForwardID: request.forward_id },
+      ) as Record<string, string>;
+      const protectedRouteURL = (
+        sessionRecord.transport.kind === 'native_local_bridge'
+        || sessionRecord.transport.kind === 'placement_bridge'
+      )
+        ? desktopLoopbackProtectedRouteURL(
+          request.url,
+          sessionRecord.transport.baseURL,
+          request.forward_id,
+        )
+        : request.url;
+      if (!protectedRouteURL) {
+        throw new Error('Desktop could not resolve the protected Web Service route.');
+      }
+      loopbackGateway = await startWebServiceLoopbackGateway({
+        forwardID: request.forward_id,
+        protectedRouteURL,
+        targetURL: request.target_url,
+        protectedRequestHeaders,
+      });
+      sessionRecord.web_service_loopback_gateways.set(request.forward_id, loopbackGateway);
+    }
+    await prepareWebServiceWindowPartition(sessionRecord, partition, request.forward_id, loopbackGateway);
   } catch {
+    sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
+    await loopbackGateway?.close();
     return {
       ok: false,
       message: 'Desktop could not prepare the isolated Web Service network session.',
     };
   }
   if (sessionRecord.closing || sessionsByKey.get(sessionRecord.session_key) !== sessionRecord) {
+    sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
+    await loopbackGateway?.close();
     return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
   }
 
   const preparedExisting = sessionRecord.web_service_windows.get(request.forward_id);
   const preparedExistingWindow = liveTrackedBrowserWindow(preparedExisting);
   if (preparedExisting && preparedExistingWindow) {
-    webServiceBrowserByToolbarWebContentsID.get(preparedExisting.webContentsID)?.navigate(request.url);
-    presentAppWindow(preparedExistingWindow, { stealAppFocus: true });
-    return { ok: true };
+    const controller = webServiceBrowserByToolbarWebContentsID.get(preparedExisting.webContentsID);
+    if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url) {
+      sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
+      await loopbackGateway?.close();
+      const response = controller.navigateProtectedRoute(request.url);
+      if (!response.ok) return response;
+      presentAppWindow(preparedExistingWindow, { stealAppFocus: true });
+      return { ok: true };
+    }
+    preparedExistingWindow.destroy();
   }
   if (preparedExisting) {
     sessionRecord.web_service_windows.delete(request.forward_id);
     sessionKeyByWebContentsID.delete(preparedExisting.webContentsID);
   }
 
-  const controller = createWebServiceBrowserController(sessionRecord, request, partition);
+  const controller = createWebServiceBrowserController(sessionRecord, request, partition, loopbackGateway);
   const { windowRecord } = controller;
   sessionRecord.web_service_windows.set(request.forward_id, windowRecord);
   sessionKeyByWebContentsID.set(windowRecord.webContentsID, sessionRecord.session_key);
   return { ok: true };
+}
+
+async function openWebServiceWindowFromShell(
+  sessionRecord: DesktopSessionRecord | null,
+  request: NormalizedDesktopShellOpenWebServiceWindowRequest,
+): Promise<DesktopShellOpenWebServiceWindowResponse> {
+  if (!sessionRecord) return openWebServiceWindowFromShellNow(sessionRecord, request);
+  const taskKey = `${sessionRecord.session_key}:${request.forward_id}`;
+  const existing = webServiceWindowOpenTasks.get(taskKey);
+  if (existing) return existing;
+  const task = openWebServiceWindowFromShellNow(sessionRecord, request);
+  webServiceWindowOpenTasks.set(taskKey, task);
+  try {
+    return await task;
+  } finally {
+    if (webServiceWindowOpenTasks.get(taskKey) === task) webServiceWindowOpenTasks.delete(taskKey);
+  }
 }
 
 function sessionOpenFailureMessage(targetURL: string, errorDescription: string): string {
@@ -9170,6 +9283,7 @@ async function createSessionRecord(
     child_windows: new Map(),
     codespace_windows: new Map(),
     web_service_windows: new Map(),
+    web_service_loopback_gateways: new Map(),
     codespace_loading_documents: new Map(),
     session_partition: sessionPartition,
     diagnostics,
@@ -9305,6 +9419,8 @@ async function finalizeSessionClosure(
       clearWebServiceWindowPartition(sessionWebServicePartition(sessionKey, forwardID));
     }
     sessionRecord.web_service_windows.clear();
+    await Promise.all(Array.from(sessionRecord.web_service_loopback_gateways.values(), (gateway) => gateway.close()));
+    sessionRecord.web_service_loopback_gateways.clear();
 
     const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
     if (options.closeWindows !== false && rootWindow) {
@@ -17066,7 +17182,11 @@ function sessionRecordForWebContentsID(webContentsID: number): DesktopSessionRec
   return sessionsByKey.get(sessionKey) ?? null;
 }
 
-function installDesktopDiagnosticsHooks(webSession: Session, webServiceForwardID?: string): void {
+function installDesktopDiagnosticsHooks(
+  webSession: Session,
+  webServiceForwardID?: string,
+  loopbackGateway?: WebServiceLoopbackGateway,
+): void {
   if (desktopDiagnosticsHookSessions.has(webSession)) {
     return;
   }
@@ -17090,6 +17210,12 @@ function installDesktopDiagnosticsHooks(webSession: Session, webServiceForwardID
       diagnosticHeaders ?? details.requestHeaders as Record<string, string | string[]>,
       webServiceForwardID ? { webServiceForwardID } : {},
     );
+    for (const name of Object.keys(requestHeaders)) {
+      if (name.toLowerCase() === loopbackGateway?.authorization_header.toLowerCase()) delete requestHeaders[name];
+    }
+    if (loopbackGateway && isDesktopLoopbackWebServiceURL(details.url, loopbackGateway.origin)) {
+      requestHeaders[loopbackGateway.authorization_header] = loopbackGateway.authorization_token;
+    }
     callback({ requestHeaders });
   });
   webSession.webRequest.onCompleted((details) => {
@@ -17914,6 +18040,7 @@ if (!app.requestSingleInstanceLock()) {
       can_go_back: false,
       can_go_forward: false,
       devtools_open: false,
+      open_external_available: false,
       error_message: DESKTOP_STALE_WINDOW_MESSAGE,
     };
   });

@@ -1,9 +1,19 @@
 export const DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL = 'redeven-desktop:shell-open-web-service-window';
 
+export type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
+
 export type DesktopShellOpenWebServiceWindowRequest = Readonly<{
   url: string;
   forward_id: string;
   target_url: string;
+  access_mode?: WebServiceAccessMode;
+}>;
+
+export type NormalizedDesktopShellOpenWebServiceWindowRequest = Readonly<{
+  url: string;
+  forward_id: string;
+  target_url: string;
+  access_mode: WebServiceAccessMode;
 }>;
 
 export type DesktopShellOpenWebServiceWindowResponse = Readonly<{
@@ -25,7 +35,7 @@ function isLoopbackTargetOrigin(targetURL: URL): boolean {
     && octets[0] === '127';
 }
 
-export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown): DesktopShellOpenWebServiceWindowRequest | null {
+export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown): NormalizedDesktopShellOpenWebServiceWindowRequest | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Record<string, unknown>;
   const forwardID = compact(candidate.forward_id);
@@ -39,7 +49,10 @@ export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown)
     if (url.username || url.password) return null;
     if (targetURL.username || targetURL.password) return null;
     if (!isLoopbackTargetOrigin(targetURL)) return null;
-    return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString() };
+    const accessMode = compact(candidate.access_mode) || 'unified_proxy';
+    if (accessMode !== 'unified_proxy' && accessMode !== 'desktop_loopback') return null;
+    if (accessMode === 'desktop_loopback' && targetURL.protocol !== 'http:') return null;
+    return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString(), access_mode: accessMode };
   } catch {
     return null;
   }

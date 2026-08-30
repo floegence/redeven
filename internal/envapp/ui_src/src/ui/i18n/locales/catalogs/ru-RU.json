@@ -3010,6 +3010,16 @@
       "invalid": "Публичные сайты и адреса LAN не входят в область доступа Web Service.",
       "examples": "Можно указать 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
+    "accessMode": {
+      "label": "Режим доступа",
+      "unifiedProxyTitle": "Единый защищённый прокси",
+      "unifiedProxyShort": "Защищённый прокси",
+      "unifiedProxyDescription": "Работает в Desktop, Web Env App и системном браузере.",
+      "desktopLoopbackTitle": "Локальная совместимость Desktop",
+      "desktopLoopbackShort": "Desktop локально",
+      "desktopLoopbackDescription": "Использует изолированный Origin 127.0.0.1 для приложений, которым нужен локальный доступ. Доступно только в Redeven Desktop.",
+      "desktopLoopbackHTTPOnly": "Локальный режим совместимости доступен только для HTTP-сервисов."
+    },
     "session": {
       "temporary": "Временный"
     },
@@ -3055,7 +3065,6 @@
       "resolvingRoute": "Определение маршрута...",
       "updating": "Обновление сервиса...",
       "requestingEntryTicket": "Запрос entry ticket...",
-      "openingDirectly": "Открытие напрямую...",
       "openingLocalProxy": "Открытие Local UI proxy...",
       "working": "Выполняется...",
       "creatingSession": "Подготовка временного сеанса веб-сервиса..."
@@ -3324,7 +3333,8 @@
       "loadFailedPrefix": "Не удалось загрузить веб-службы",
       "popupBlocked": "Всплывающее окно заблокировано. Разрешите всплывающие окна и повторите попытку.",
       "missingEnvContext": "Отсутствует контекст среды. Пожалуйста, откройте снова из плоскости управления.",
-      "desktopWindowFailed": "Desktop не удалось открыть изолированное окно веб-сервиса."
+      "desktopWindowFailed": "Desktop не удалось открыть изолированное окно веб-сервиса.",
+      "desktopLoopbackRequiresDesktop": "Для режима локальной совместимости требуется изолированное окно Redeven Desktop."
     }
   },
   "debugConsoleSettings": {

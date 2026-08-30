@@ -84,6 +84,7 @@ type Template struct {
 	Notices               []TemplateNotice         `json:"notices,omitempty"`
 	Deployments           []DeploymentAvailability `json:"deployments"`
 	DefaultWorkspacePath  string                   `json:"default_workspace_path"`
+	DefaultAccessMode     string                   `json:"default_access_mode"`
 	WorkspaceRoots        []WorkspaceRoot          `json:"workspace_roots"`
 	Source                string                   `json:"source"`
 	Deployment            Deployment               `json:"deployment"`
@@ -179,6 +180,7 @@ type CreateRequest struct {
 	WorkspacePath           string            `json:"workspace_path"`
 	Parameters              map[string]string `json:"parameters,omitempty"`
 	AcceptedNoticeRevisions map[string]int64  `json:"accepted_notice_revisions,omitempty"`
+	AccessMode              string            `json:"access_mode,omitempty"`
 }
 
 type TemplateWriteRequest struct {
@@ -218,6 +220,7 @@ type ServiceView struct {
 	UpdateNotices              []TemplateNotice             `json:"update_notices,omitempty"`
 	ActiveOperation            *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
 	OperationArtifactReference string                       `json:"operation_artifact_reference,omitempty"`
+	AccessMode                 string                       `json:"access_mode"`
 	ContainerResources         []ContainerResourceLink      `json:"container_resources,omitempty"`
 }
 

@@ -252,6 +252,7 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 		ContainerMode: containerMode(spec.Kind), Revision: record.Revision, Editable: true, Duplicateable: true, DerivedFromTemplateID: record.DerivedFromTemplateID,
 		DerivedFromRevision: record.DerivedFromRevision, ServiceFamilyID: record.ServiceFamilyID, Available: available, ReasonCode: code, Reason: reason,
 		Deployments: []DeploymentAvailability{{Deployment: spec.Kind, Available: available, ReasonCode: code, Reason: reason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: m.workspaceRoots(), Spec: &spec,
+		DefaultAccessMode: pfregistry.AccessModeUnifiedProxy,
 	}, nil
 }
 

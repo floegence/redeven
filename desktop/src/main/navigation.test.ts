@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  desktopLoopbackBrowserDisplayURL,
+  desktopLoopbackProtectedRouteURL,
   isAllowedAppNavigation,
   isAllowedCodespaceWindowNavigation,
   isAllowedWebServiceWindowNavigation,
   isCodespaceURLForCodeSpace,
   isPortForwardURLForForward,
+  isDesktopLoopbackWebServiceURL,
+  resolveDesktopLoopbackBrowserAddress,
   resolveWebServiceBrowserAddress,
   routeWebServiceTargetRequest,
+  routeDesktopLoopbackTargetRequest,
   webServiceBrowserDisplayURL,
   webServiceBrowserPrivateAppLocation,
 } from './navigation';
@@ -114,6 +119,22 @@ describe('navigation', () => {
   });
 
   it('maps the exact loopback service scope into its isolated Desktop origin', () => {
+    expect(desktopLoopbackProtectedRouteURL(
+      'http://pf-deepseek.localhost:62003/settings/models?q=1#provider',
+      'http://127.0.0.1:62003/',
+      'deepseek',
+    )).toBe('http://127.0.0.1:62003/pf/deepseek/settings/models?q=1#provider');
+    expect(desktopLoopbackProtectedRouteURL(
+      'http://127.0.0.1:62003/pf/deepseek/settings/models?q=1#provider',
+      'http://127.0.0.1:62003/',
+      'deepseek',
+    )).toBe('http://127.0.0.1:62003/pf/deepseek/settings/models?q=1#provider');
+    expect(desktopLoopbackProtectedRouteURL(
+      'http://pf-other.localhost:62003/',
+      'http://127.0.0.1:62003/',
+      'deepseek',
+    )).toBeNull();
+
     const route = 'http://pf-demo.localhost:43123/';
     expect(routeWebServiceTargetRequest(
       'http://127.0.0.1:3000/assets/app.js?rev=1',
@@ -133,6 +154,66 @@ describe('navigation', () => {
       'http://127.0.0.1:3000/',
       'demo',
     )).toBe('http://pf-demo.localhost:43123/pf/demo');
+  });
+
+  it('maps one HTTP target into only its persisted Desktop loopback origin', () => {
+    expect(routeDesktopLoopbackTargetRequest(
+      'http://127.0.0.1:3000/assets/app.js?rev=1',
+      'http://localhost:3000/',
+      'http://127.0.0.1:45123/',
+    )).toBe('http://127.0.0.1:45123/assets/app.js?rev=1');
+    expect(routeDesktopLoopbackTargetRequest(
+      'ws://localhost:3000/socket',
+      'http://localhost:3000/',
+      'http://127.0.0.1:45123/',
+    )).toBe('ws://127.0.0.1:45123/socket');
+    expect(routeDesktopLoopbackTargetRequest(
+      'http://localhost:3001/assets/app.js',
+      'http://localhost:3000/',
+      'http://127.0.0.1:45123/',
+    )).toBeNull();
+    expect(routeDesktopLoopbackTargetRequest(
+      'https://localhost:3000/assets/app.js',
+      'http://localhost:3000/',
+      'http://127.0.0.1:45123/',
+    )).toBeNull();
+  });
+
+  it('projects and edits Desktop loopback locations as the original service URL', () => {
+    expect(isDesktopLoopbackWebServiceURL(
+      'http://127.0.0.1:45123/models?provider=local',
+      'http://127.0.0.1:45123/',
+    )).toBe(true);
+    expect(isDesktopLoopbackWebServiceURL(
+      'ws://127.0.0.1:45123/models/live',
+      'http://127.0.0.1:45123/',
+    )).toBe(true);
+    expect(isDesktopLoopbackWebServiceURL(
+      'http://127.0.0.1:45124/models',
+      'http://127.0.0.1:45123/',
+    )).toBe(false);
+    expect(desktopLoopbackBrowserDisplayURL(
+      'http://127.0.0.1:45123/models?provider=local#active',
+      'http://localhost:3000/',
+      'http://127.0.0.1:45123/',
+    )).toBe('http://localhost:3000/models?provider=local#active');
+    expect(desktopLoopbackBrowserDisplayURL(
+      'http://127.0.0.1:45123/_redeven_boot/?env=env_demo#redeven=secret',
+      'http://localhost:3000/',
+      'http://127.0.0.1:45123/',
+    )).toBe('http://localhost:3000/');
+    expect(resolveDesktopLoopbackBrowserAddress(
+      '/settings/models?provider=local',
+      'http://127.0.0.1:45123/',
+      'http://localhost:3000/',
+      'http://127.0.0.1:45123/',
+    )).toBe('http://127.0.0.1:45123/settings/models?provider=local');
+    expect(resolveDesktopLoopbackBrowserAddress(
+      'http://localhost:4000/',
+      'http://127.0.0.1:45123/',
+      'http://localhost:3000/',
+      'http://127.0.0.1:45123/',
+    )).toBeNull();
   });
 
   it('does not map remote, cross-port, cross-protocol, or external requests', () => {

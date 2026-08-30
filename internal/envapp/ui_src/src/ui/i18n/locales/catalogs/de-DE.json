@@ -2920,6 +2920,16 @@
       "invalid": "Öffentliche Websites und LAN-Adressen liegen außerhalb des Zugriffsbereichs von Web Service.",
       "examples": "Möglich: 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
+    "accessMode": {
+      "label": "Zugriffsmodus",
+      "unifiedProxyTitle": "Einheitlicher sicherer Proxy",
+      "unifiedProxyShort": "Sicherer Proxy",
+      "unifiedProxyDescription": "Funktioniert in Desktop, Web Env App und im Systembrowser.",
+      "desktopLoopbackTitle": "Lokale Desktop-Kompatibilität",
+      "desktopLoopbackShort": "Desktop lokal",
+      "desktopLoopbackDescription": "Verwendet einen isolierten 127.0.0.1-Origin für Apps, die lokalen Zugriff verlangen. Nur in Redeven Desktop verfügbar.",
+      "desktopLoopbackHTTPOnly": "Der lokale Kompatibilitätsmodus ist nur für HTTP-Dienste verfügbar."
+    },
     "session": {
       "temporary": "Temporär"
     },
@@ -2965,7 +2975,6 @@
       "resolvingRoute": "Route wird aufgelöst...",
       "updating": "Dienst wird aktualisiert...",
       "requestingEntryTicket": "Entry ticket wird angefordert...",
-      "openingDirectly": "Wird direkt geöffnet...",
       "openingLocalProxy": "Local UI proxy wird geöffnet...",
       "working": "In Arbeit...",
       "creatingSession": "Temporäre Webdienst-Sitzung wird vorbereitet..."
@@ -3234,7 +3243,8 @@
       "loadFailedPrefix": "Webdienste konnten nicht geladen werden",
       "popupBlocked": "Popup wurde blockiert. Bitte Popups erlauben und erneut versuchen.",
       "missingEnvContext": "Fehlender Umgebungskontext. Bitte öffnen Sie es erneut von der Steuerungsebene aus.",
-      "desktopWindowFailed": "Desktop konnte das isolierte Webdienst-Fenster nicht öffnen."
+      "desktopWindowFailed": "Desktop konnte das isolierte Webdienst-Fenster nicht öffnen.",
+      "desktopLoopbackRequiresDesktop": "Der lokale Kompatibilitätsmodus benötigt das isolierte Fenster von Redeven Desktop."
     }
   },
   "debugConsoleSettings": {

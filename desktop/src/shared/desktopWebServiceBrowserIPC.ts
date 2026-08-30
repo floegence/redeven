@@ -13,6 +13,8 @@ export type DesktopWebServiceBrowserState = Readonly<{
   can_go_back: boolean;
   can_go_forward: boolean;
   devtools_open: boolean;
+  open_external_available: boolean;
+  open_external_unavailable_reason?: string;
   error_message?: string;
 }>;
 
@@ -48,6 +50,7 @@ export function normalizeDesktopWebServiceBrowserAction(value: unknown): Desktop
 export function normalizeDesktopWebServiceBrowserState(value: unknown): DesktopWebServiceBrowserState {
   const candidate = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const errorMessage = compact(candidate.error_message);
+  const externalUnavailableReason = compact(candidate.open_external_unavailable_reason);
   return {
     address: compact(candidate.address),
     title: compact(candidate.title),
@@ -55,6 +58,8 @@ export function normalizeDesktopWebServiceBrowserState(value: unknown): DesktopW
     can_go_back: candidate.can_go_back === true,
     can_go_forward: candidate.can_go_forward === true,
     devtools_open: candidate.devtools_open === true,
+    open_external_available: candidate.open_external_available !== false,
+    ...(externalUnavailableReason ? { open_external_unavailable_reason: externalUnavailableReason } : {}),
     ...(errorMessage ? { error_message: errorMessage } : {}),
   };
 }

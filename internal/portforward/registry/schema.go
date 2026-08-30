@@ -4,13 +4,14 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 const (
 	registrySchemaKind           = "portforward_registry"
-	registryCurrentSchemaVersion = 3
+	registryCurrentSchemaVersion = 4
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -22,9 +23,26 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 0, ToVersion: 1, Apply: migrateRegistryToV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryToV4},
 		},
 		Verify: verifyRegistrySchema,
 	}
+}
+
+func migrateRegistryToV4(tx *sql.Tx) error {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms"}, "v3"); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`
+ALTER TABLE port_forwards ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'unified_proxy'
+  CHECK(access_mode IN ('unified_proxy','desktop_loopback'));
+UPDATE port_forwards
+SET access_mode='desktop_loopback'
+WHERE forward_id IN (
+  SELECT forward_id FROM managed_web_services WHERE service_family_id='deepseek-harness'
+);
+`)
+	return err
 }
 
 func migrateRegistryToV3(tx *sql.Tx) error {
@@ -217,6 +235,68 @@ func migrateRegistryToV1(tx *sql.Tx) error {
 }
 
 func verifyRegistrySchema(tx *sql.Tx) error {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v4"); err != nil {
+		return err
+	}
+	if err := verifyRegistryAccessModeColumn(tx); err != nil {
+		return err
+	}
+	var invalid int
+	if err := tx.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE access_mode NOT IN ('unified_proxy','desktop_loopback')`).Scan(&invalid); err != nil {
+		return err
+	}
+	if invalid != 0 {
+		return fmt.Errorf("port forward registry has %d invalid access modes", invalid)
+	}
+	return nil
+}
+
+func verifyRegistryAccessModeColumn(tx *sql.Tx) error {
+	rows, err := tx.Query(`PRAGMA table_info(port_forwards)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	found := false
+	for rows.Next() {
+		var (
+			cid          int
+			name         string
+			columnType   string
+			notNull      int
+			defaultValue any
+			primaryKey   int
+		)
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return err
+		}
+		if name != "access_mode" {
+			continue
+		}
+		defaultText, ok := defaultValue.(string)
+		if !ok || strings.ToUpper(strings.TrimSpace(columnType)) != "TEXT" || notNull != 1 || primaryKey != 0 || defaultText != "'unified_proxy'" {
+			return fmt.Errorf("port forward registry v4 access_mode definition mismatch")
+		}
+		found = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("port forward registry v4 access_mode definition is missing")
+	}
+	var createSQL string
+	if err := tx.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='port_forwards'`).Scan(&createSQL); err != nil {
+		return err
+	}
+	normalized := strings.ToLower(strings.Join(strings.Fields(createSQL), ""))
+	if !strings.Contains(normalized, "check(access_modein('unified_proxy','desktop_loopback'))") {
+		return fmt.Errorf("port forward registry v4 access_mode constraint mismatch")
+	}
+	return nil
+}
+
+func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) error {
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
@@ -224,13 +304,12 @@ func verifyRegistrySchema(tx *sql.Tx) error {
 	if !slices.Equal(tables, []string{"managed_web_service_operations", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}) {
 		return fmt.Errorf("port forward registry table set mismatch: got %v", tables)
 	}
-	expectedColumns := []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms"}
 	columns, err := sqliteutil.TableColumnNamesTx(tx, "port_forwards")
 	if err != nil {
 		return err
 	}
 	if !slices.Equal(columns, expectedColumns) {
-		return fmt.Errorf("port forward registry column mismatch: got %v, want %v", columns, expectedColumns)
+		return fmt.Errorf("port forward registry %s column mismatch: got %v, want %v", version, columns, expectedColumns)
 	}
 	templateColumns := []string{"template_id", "name", "description", "source", "deployment", "version", "revision", "spec_json", "spec_sha256", "derived_from_template_id", "derived_from_revision", "service_family_id", "created_at_unix_ms", "updated_at_unix_ms"}
 	columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_service_templates")
@@ -269,7 +348,7 @@ func verifyRegistrySchema(tx *sql.Tx) error {
 		return err
 	}
 	if len(indexes) != 0 {
-		return fmt.Errorf("port forward registry has unexpected indexes %v", indexes)
+		return fmt.Errorf("port forward registry %s has unexpected indexes %v", version, indexes)
 	}
 	return nil
 }

@@ -11,11 +11,33 @@ describe('desktopShellWebServiceWindowIPC', () => {
       url: 'http://127.0.0.1:43123/pf/demo/docs?q=1',
       forward_id: 'demo',
       target_url: 'http://localhost:3000',
+      access_mode: 'desktop_loopback',
     })).toEqual({
       url: 'http://127.0.0.1:43123/pf/demo/docs?q=1',
       forward_id: 'demo',
       target_url: 'http://localhost:3000/',
+      access_mode: 'desktop_loopback',
     });
+  });
+
+  it('keeps legacy requests on the unified proxy and rejects invalid mode combinations', () => {
+    expect(normalizeDesktopShellOpenWebServiceWindowRequest({
+      url: 'https://pf-demo.sg.redeven.online/',
+      forward_id: 'demo',
+      target_url: 'http://localhost:3000',
+    })?.access_mode).toBe('unified_proxy');
+    expect(normalizeDesktopShellOpenWebServiceWindowRequest({
+      url: 'https://pf-demo.sg.redeven.online/',
+      forward_id: 'demo',
+      target_url: 'https://localhost:3000',
+      access_mode: 'desktop_loopback',
+    })).toBeNull();
+    expect(normalizeDesktopShellOpenWebServiceWindowRequest({
+      url: 'https://pf-demo.sg.redeven.online/',
+      forward_id: 'demo',
+      target_url: 'http://localhost:3000',
+      access_mode: 'unsupported_mode',
+    })).toBeNull();
   });
 
   it('rejects unsupported URLs and invalid forward ids', () => {

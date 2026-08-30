@@ -11,7 +11,7 @@ import (
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestOpen_CreatesV3SchemaForFreshDB(t *testing.T) {
+func TestOpen_CreatesV4SchemaForFreshDB(t *testing.T) {
 	t.Parallel()
 
 	p := filepath.Join(t.TempDir(), "registry.sqlite")
@@ -25,8 +25,8 @@ func TestOpen_CreatesV3SchemaForFreshDB(t *testing.T) {
 	if err := r.db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	if v != 3 {
-		t.Fatalf("user_version = %d, want 3", v)
+	if v != 4 {
+		t.Fatalf("user_version = %d, want 4", v)
 	}
 
 	cols, err := tableColumns(r.db, "port_forwards")
@@ -43,6 +43,7 @@ func TestOpen_CreatesV3SchemaForFreshDB(t *testing.T) {
 		"created_at_unix_ms",
 		"updated_at_unix_ms",
 		"last_opened_at_unix_ms",
+		"access_mode",
 	}
 	for _, c := range want {
 		if !slices.Contains(cols, c) {
@@ -76,8 +77,177 @@ func TestOpen_MigratesV1AndPreservesForwards(t *testing.T) {
 		t.Fatalf("preserved forward = %+v, err=%v", forward, err)
 	}
 	var version int
-	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 3 {
+	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 4 {
 		t.Fatalf("migrated version=%d, err=%v", version, err)
+	}
+}
+
+func TestOpen_MigratesV3AccessModesAndPreservesRecords(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV3TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forwardID := range []string{"pf_deepseek", "pf_webtop", "pf_plain"} {
+		if _, err := db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms) VALUES(?, 'http://127.0.0.1:3080', ?, '', '', 0, 1, 2, 3)`, forwardID, forwardID); err != nil {
+			_ = db.Close()
+			t.Fatal(err)
+		}
+	}
+	services := []struct {
+		serviceID, templateID, familyID, forwardID string
+	}{
+		{"mws_deepseek", "deepseek-harness-container", "deepseek-harness", "pf_deepseek"},
+		{"mws_webtop", "linuxserver-webtop-ubuntu-kde", "linuxserver-webtop-ubuntu-kde", "pf_webtop"},
+	}
+	for _, service := range services {
+		if _, err := db.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,'builtin',1,'{}','',?,'container','/workspace','{}','1','running','stopped',?,'','{}',3080,'','','',4,5)`, service.serviceID, service.templateID, service.familyID, service.forwardID); err != nil {
+			_ = db.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	for forwardID, wantMode := range map[string]string{
+		"pf_deepseek": AccessModeDesktopLoopback,
+		"pf_webtop":   AccessModeUnifiedProxy,
+		"pf_plain":    AccessModeUnifiedProxy,
+	} {
+		forward, err := r.GetForward(context.Background(), forwardID)
+		if err != nil || forward == nil || forward.AccessMode != wantMode || forward.Name != forwardID {
+			t.Fatalf("forward %s = %+v, err=%v, want mode %s", forwardID, forward, err, wantMode)
+		}
+	}
+}
+
+func TestOpen_RejectsV3SchemaDriftWithoutPartialMigration(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV3TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE managed_web_services ADD COLUMN unexpected TEXT NOT NULL DEFAULT ''`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(p); err == nil {
+		t.Fatal("Open accepted drifted v3 schema")
+	}
+	raw, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var version int
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	columns, err := tableColumns(raw, "managed_web_services")
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwardColumns, err := tableColumns(raw, "port_forwards")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != 3 || !slices.Contains(columns, "unexpected") || slices.Contains(forwardColumns, "access_mode") {
+		t.Fatalf("failed migration changed v3 database: version=%d service_columns=%v forward_columns=%v", version, columns, forwardColumns)
+	}
+}
+
+func TestOpen_RollsBackFailedV3ToV4Migration(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV3TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms) VALUES('pf_keep','http://127.0.0.1:3080','Keep','','',0,1,2,3)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	spec := registrySchemaSpec()
+	original := spec.Migrations[3].Apply
+	spec.Migrations[3].Apply = func(tx *sql.Tx) error {
+		if err := original(tx); err != nil {
+			return err
+		}
+		return errors.New("injected migration failure")
+	}
+	if _, err := sqliteutil.Open(p, spec); err == nil {
+		t.Fatal("migration unexpectedly succeeded")
+	}
+	raw, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var version, count int
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE forward_id='pf_keep'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	columns, err := tableColumns(raw, "port_forwards")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != 3 || count != 1 || slices.Contains(columns, "access_mode") {
+		t.Fatalf("failed migration was not atomic: version=%d forward_count=%d columns=%v", version, count, columns)
+	}
+}
+
+func TestOpen_RejectsV4AccessModeConstraintDrift(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV3TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE port_forwards ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'unified_proxy'; PRAGMA user_version=4;`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(p); err == nil {
+		t.Fatal("Open accepted a v4 access_mode column without its constraint")
+	}
+	raw, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var version int
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	columns, err := tableColumns(raw, "port_forwards")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != 4 || !slices.Contains(columns, "access_mode") {
+		t.Fatalf("drifted v4 database changed: version=%d columns=%v", version, columns)
 	}
 }
 
@@ -261,7 +431,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 		_ = r.Close()
 		t.Fatal(err)
 	}
-	if _, err := r.db.Exec(`PRAGMA user_version=4`); err != nil {
+	if _, err := r.db.Exec(`PRAGMA user_version=5`); err != nil {
 		_ = r.Close()
 		t.Fatal(err)
 	}
@@ -283,7 +453,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE forward_id='keep'`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if version != 4 || count != 1 {
+	if version != 5 || count != 1 {
 		t.Fatalf("future database changed: version=%d forward_count=%d", version, count)
 	}
 }
@@ -582,6 +752,22 @@ func registryV2TestSpec() sqliteutil.Spec {
 				return errors.New("unexpected v2 table set")
 			}
 			return nil
+		},
+	}
+}
+
+func registryV3TestSpec() sqliteutil.Spec {
+	return sqliteutil.Spec{
+		Kind:           registrySchemaKind,
+		CurrentVersion: 3,
+		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 0, ToVersion: 1, Apply: migrateRegistryToV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryToV3},
+		},
+		Verify: func(tx *sql.Tx) error {
+			return verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms"}, "v3")
 		},
 	}
 }
