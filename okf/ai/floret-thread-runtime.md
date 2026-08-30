@@ -34,7 +34,8 @@ legacy dispatching, retrying, or unknown effect is closed in one terminal failed
 Turn. Floret owns the permanent domain migration lineage from v2 through v7.
 Version 6 stores the manifest, root index, threads, entries, artifacts, and
 supporting records separately, so one child admission writes only affected
-records. Version 7 restores exact RunID identity and converges unknown effects.
+records. Version 7 restores RunID, converges unknown effects, and drops
+verified terminal fork effect authority.
 Each migration is atomic; normal execution has no old-format dual-read path.
 
 Child agents are ordinary child threads with parent identity and independent runtime ownership. No product-owned SubAgent lifecycle, recovery handle, or publication state may become a second authority.
@@ -77,7 +78,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v6.0.0's public ordered `ThreadView.Items`, exact
+Redeven consumes Floret v6.0.1's public ordered `ThreadView.Items`, exact
 item and interaction `TurnID` plus `RunID`, exact active `ThreadView.RunID`,
 process-local `ThreadView.RunProgress`, and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
@@ -96,7 +97,7 @@ stream text. `TurnResult.Output` remains a run aggregate and is not another
 message source. Flower deduplicates exact item IDs only; equal text with
 different stable IDs remains visible.
 
-Canonical terminal failure classification comes from Floret v6.0.0
+Canonical terminal failure classification comes from Floret v6.0.1
 `ThreadView.Failure` and `ThreadSummary.Failure`. Redeven maps the typed code
 once for list, detail, live current, and command responses, then removes the
 upstream failure payload from the Flower wire view. There is no error-text or
@@ -112,7 +113,7 @@ Every public Activity item passes through one host projection before it reaches
 current view, timeline pagination, live stream, or historical replay. The
 projection removes host paths, working directories, pending handles, and
 nested private values while keeping renderer, operation, status, summary,
-stable IDs, and display names. Floret v6.0.0 `StructuredActivityPayload.Rows`
+stable IDs, and display names. Floret v6.0.1 `StructuredActivityPayload.Rows`
 is the only generic rich-detail contract: Redeven creates bounded, ordered,
 safe display rows before admission, and Flower expands only those rows, a
 meaningful summary, or an error. It never rebuilds detail from raw tool JSON.
@@ -129,7 +130,7 @@ database. Redeven never reads, copies, replaces, or compacts opaque Floret
 records itself.
 
 Redeven reports the `verifying` readiness phase immediately before the single
-`runtime.Open` call. Floret v6.0.0 atomically converges the exact legacy
+`runtime.Open` call. Floret v6.0.1 atomically converges the exact legacy
 tool-result Raw representation produced before UTF-8 normalization and maps
 all remaining session-tree authority failures to public
 `runtime.ErrAuthorityCorrupt`. Redeven classifies only that public error; it
@@ -183,7 +184,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v6.0.0 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v6.0.1 typed runtime without local replacement.
 - `redeven:internal/session/floret_v6_dependency_contract_test.go` - Enforces exact published-v6 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.
