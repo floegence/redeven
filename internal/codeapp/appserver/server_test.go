@@ -2758,16 +2758,10 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	srv := newServer()
 
 	type aiThreadReadStatusSnapshot struct {
-		ActivityRevision    int64  `json:"activity_revision"`
-		LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`
-		ActivitySignature   string `json:"activity_signature"`
-		WaitingPromptID     string `json:"waiting_prompt_id"`
+		ActivityRevision int64 `json:"activity_revision"`
 	}
 	type aiThreadReadStatusState struct {
-		LastSeenActivityRevision  int64  `json:"last_seen_activity_revision"`
-		LastReadMessageAtUnixMs   int64  `json:"last_read_message_at_unix_ms"`
-		LastSeenActivitySignature string `json:"last_seen_activity_signature"`
-		LastSeenWaitingPromptID   string `json:"last_seen_waiting_prompt_id"`
+		LastSeenActivityRevision int64 `json:"last_seen_activity_revision"`
 	}
 	type aiThreadReadStatus struct {
 		IsUnread  bool                       `json:"is_unread"`
@@ -2872,10 +2866,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Helper()
 		bodyBytes, err := json.Marshal(map[string]any{
 			"snapshot": map[string]any{
-				"activity_revision":       snapshot.ActivityRevision,
-				"last_message_at_unix_ms": snapshot.LastMessageAtUnixMs,
-				"activity_signature":      snapshot.ActivitySignature,
-				"waiting_prompt_id":       snapshot.WaitingPromptID,
+				"activity_revision": snapshot.ActivityRevision,
 			},
 		})
 		if err != nil {
@@ -2902,6 +2893,17 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 			t.Fatalf("unmarshal mark-read response: %v", err)
 		}
 		return resp
+	}
+
+	missingRead := performServerRequest(
+		srv,
+		http.MethodPost,
+		"/_redeven_proxy/api/ai/threads/thread_missing/read",
+		originUser1,
+		`{"snapshot":{"activity_revision":1}}`,
+	)
+	if missingRead.Code != http.StatusNotFound {
+		t.Fatalf("missing ai mark-read status=%d, want=%d body=%s", missingRead.Code, http.StatusNotFound, missingRead.Body.String())
 	}
 
 	firstUserOneList := readList(originUser1)
@@ -2937,10 +2939,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	staleSnapshot := detail.Data.Thread.ReadStatus.Snapshot
 
 	invalidRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
-		ActivityRevision:    detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision + 1,
-		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs,
-		ActivitySignature:   detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature,
-		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID,
+		ActivityRevision: detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision + 1,
 	})
 	if invalidRead.Code != http.StatusBadRequest {
 		t.Fatalf("future ai mark-read status=%d, want=%d body=%s", invalidRead.Code, http.StatusBadRequest, invalidRead.Body.String())
@@ -2948,32 +2947,30 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	if !readDetail(originUser1).Data.Thread.ReadStatus.IsUnread {
 		t.Fatalf("user1 detail is_unread=false after rejected future mark-read, want=true")
 	}
-	mismatchedRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
-		ActivityRevision:    detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision,
-		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs,
-		ActivitySignature:   detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature + "\u001fstale",
-		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID,
-	})
-	if mismatchedRead.Code != http.StatusBadRequest {
-		t.Fatalf("mismatched ai mark-read status=%d, want=%d body=%s", mismatchedRead.Code, http.StatusBadRequest, mismatchedRead.Body.String())
+	for name, body := range map[string]string{
+		"missing revision":  `{"snapshot":{}}`,
+		"negative revision": `{"snapshot":{"activity_revision":-1}}`,
+	} {
+		rr := performServerRequest(
+			srv,
+			http.MethodPost,
+			"/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID)+"/read",
+			originUser1,
+			body,
+		)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("%s ai mark-read status=%d, want=%d body=%s", name, rr.Code, http.StatusBadRequest, rr.Body.String())
+		}
 	}
-	mismatchedPromptRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
-		ActivityRevision:    detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision,
-		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs,
-		ActivitySignature:   detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature,
-		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID + "-tampered",
-	})
-	if mismatchedPromptRead.Code != http.StatusBadRequest {
-		t.Fatalf("mismatched prompt ai mark-read status=%d, want=%d body=%s", mismatchedPromptRead.Code, http.StatusBadRequest, mismatchedPromptRead.Body.String())
-	}
-	mismatchedLastMessageRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
-		ActivityRevision:    detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision,
-		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs - 1,
-		ActivitySignature:   detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature,
-		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID,
-	})
-	if mismatchedLastMessageRead.Code != http.StatusBadRequest {
-		t.Fatalf("mismatched last-message ai mark-read status=%d, want=%d body=%s", mismatchedLastMessageRead.Code, http.StatusBadRequest, mismatchedLastMessageRead.Body.String())
+	legacyRead := performServerRequest(
+		srv,
+		http.MethodPost,
+		"/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID)+"/read",
+		originUser1,
+		fmt.Sprintf(`{"snapshot":{"activity_revision":%d,"activity_signature":"legacy"}}`, detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision),
+	)
+	if legacyRead.Code != http.StatusBadRequest {
+		t.Fatalf("legacy ai mark-read status=%d, want=%d body=%s", legacyRead.Code, http.StatusBadRequest, legacyRead.Body.String())
 	}
 
 	if err := aiSvc.Close(); err != nil {
@@ -2985,18 +2982,6 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Fatalf("reopen AI service after third canonical fixture: %v", err)
 	}
 	srv = newServer()
-	staleTampered := markRead(originUser1, aiThreadReadStatusSnapshot{
-		ActivityRevision:    staleSnapshot.ActivityRevision,
-		LastMessageAtUnixMs: staleSnapshot.LastMessageAtUnixMs,
-		ActivitySignature:   staleSnapshot.ActivitySignature + "\u001ftampered-history",
-		WaitingPromptID:     staleSnapshot.WaitingPromptID + "-old",
-	})
-	if !staleTampered.Data.ReadStatus.IsUnread {
-		t.Fatalf("tampered stale mark-read response is_unread=false after concurrent activity, want true")
-	}
-	if staleTampered.Data.ReadStatus.Snapshot.ActivityRevision <= staleSnapshot.ActivityRevision {
-		t.Fatalf("tampered stale mark-read response activity_revision=%d, want newer than %d", staleTampered.Data.ReadStatus.Snapshot.ActivityRevision, staleSnapshot.ActivityRevision)
-	}
 	staleMarked := markRead(originUser1, staleSnapshot)
 	if !staleMarked.Data.ReadStatus.IsUnread {
 		t.Fatalf("stale mark-read response is_unread=false after concurrent activity, want true")
@@ -3013,9 +2998,6 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	if marked.Data.ReadStatus.IsUnread {
 		t.Fatalf("mark-read response is_unread=true, want=false")
 	}
-	if marked.Data.ReadStatus.ReadState.LastReadMessageAtUnixMs != detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs {
-		t.Fatalf("mark-read last_read_message_at_unix_ms=%d, want=%d", marked.Data.ReadStatus.ReadState.LastReadMessageAtUnixMs, detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs)
-	}
 	if marked.Data.ReadStatus.ReadState.LastSeenActivityRevision != detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision {
 		t.Fatalf("mark-read last_seen_activity_revision=%d, want=%d", marked.Data.ReadStatus.ReadState.LastSeenActivityRevision, detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision)
 	}
@@ -3028,6 +3010,14 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	userTwoAfterRead := readList(originUser2)
 	if !userTwoAfterRead.Data.Threads[0].ReadStatus.IsUnread {
 		t.Fatalf("user2 list is_unread=false after user1 mark-read, want per-user read-state")
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("close read-state store before failure mapping: %v", err)
+	}
+	failedRead := performAIMarkRead(originUser1, detail.Data.Thread.ReadStatus.Snapshot)
+	if failedRead.Code != http.StatusInternalServerError {
+		t.Fatalf("failed ai mark-read status=%d, want=%d body=%s", failedRead.Code, http.StatusInternalServerError, failedRead.Body.String())
 	}
 }
 
@@ -3289,22 +3279,12 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, creatorMeta.UserPublicID, map[string]threadreadstate.FlowerSnapshot{
-		thread.ThreadID: {
-			ActivityRevision:    100,
-			LastMessageAtUnixMs: 100,
-			ActivitySignature:   "status:waiting_user\u001factivity:100\u001fprompt:prompt_1",
-			WaitingPromptID:     "prompt_1",
-		},
+		thread.ThreadID: {ActivityRevision: 100},
 	}); err != nil {
 		t.Fatalf("EnsureFlower(user first): %v", err)
 	}
 	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, metaByChannel["ch_test_ai_delete_cleanup_user_2"].UserPublicID, map[string]threadreadstate.FlowerSnapshot{
-		thread.ThreadID: {
-			ActivityRevision:    110,
-			LastMessageAtUnixMs: 110,
-			ActivitySignature:   "status:waiting_user\u001factivity:110\u001fprompt:prompt_2",
-			WaitingPromptID:     "prompt_2",
-		},
+		thread.ThreadID: {ActivityRevision: 110},
 	}); err != nil {
 		t.Fatalf("EnsureFlower(other user): %v", err)
 	}
@@ -3345,7 +3325,7 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	}
 
 	_, err = store.EnsureFlower(context.Background(), creatorMeta.EndpointID, creatorMeta.UserPublicID, map[string]threadreadstate.FlowerSnapshot{
-		thread.ThreadID: {ActivityRevision: 1, LastMessageAtUnixMs: 1, ActivitySignature: "deleted"},
+		thread.ThreadID: {ActivityRevision: 1},
 	})
 	if !errors.Is(err, threadreadstate.ErrThreadRetired) {
 		t.Fatalf("EnsureFlower(read_state verify) error=%v, want %v", err, threadreadstate.ErrThreadRetired)

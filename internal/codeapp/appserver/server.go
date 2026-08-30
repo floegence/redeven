@@ -4439,7 +4439,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			resp, err := g.markAIThreadRead(r.Context(), meta, threadID, body)
 			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				switch {
+				case errors.Is(err, errInvalidFlowerReadSnapshot), errors.Is(err, errFlowerReadSnapshotAhead):
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				case errors.Is(err, errFlowerThreadNotFound):
+					writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: err.Error()})
+				default:
+					writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to mark Flower thread read"})
+				}
 				return
 			}
 			if aiSvc != nil {

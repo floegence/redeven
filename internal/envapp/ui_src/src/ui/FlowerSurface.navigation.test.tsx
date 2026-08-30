@@ -63,6 +63,47 @@ function attachTranscriptScrollMetrics(transcript: HTMLElement, metrics: {
 }
 
 describe('FlowerSurface navigation', () => {
+  it('attempts a failed read acknowledgement only once per displayed revision', async () => {
+    const unreadThread = thread({
+      thread_id: 'thread-read-ack-failure',
+      status: 'success',
+      read_status: {
+        is_unread: true,
+        snapshot: { activity_revision: 7 },
+        read_state: { last_seen_activity_revision: 6 },
+      },
+    });
+    const markThreadRead = vi.fn(async (_threadID: string, _snapshot: { activity_revision: number }) => {
+      throw new Error('simulated read acknowledgement failure');
+    });
+    const otherThread = thread({ thread_id: 'thread-read-ack-other', title: 'Other thread' });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [unreadThread, otherThread]),
+      loadThread: vi.fn(async (threadID: string) => liveBootstrap(
+        threadID === unreadThread.thread_id ? unreadThread : otherThread,
+        threadID === unreadThread.thread_id ? 7 : 1,
+      )),
+      markThreadRead,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => markThreadRead.mock.calls.length === 1);
+    await wait(50);
+
+    expect(markThreadRead).toHaveBeenCalledTimes(1);
+    expect(markThreadRead).toHaveBeenCalledWith(unreadThread.thread_id, { activity_revision: 7 });
+
+    (runtime.querySelector(`[data-thread-id="${otherThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector(`[data-thread-id="${otherThread.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    expect(runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"]`)?.getAttribute('data-flower-thread-unread-dot')).toBe('true');
+    (runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => markThreadRead.mock.calls.length === 2);
+
+    expect(markThreadRead.mock.calls.map((call) => call[1].activity_revision)).toEqual([7, 7]);
+  });
+
   it('keeps thread-menu stop failures silent and immediately retryable', async () => {
     clearFlowerSurfaceNotifications();
     const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);

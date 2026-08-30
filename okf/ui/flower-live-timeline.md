@@ -19,6 +19,8 @@ stream.
 
 `ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, state-bearing action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's activity revision orders update and read metadata; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those three authorities independently, so an unchanged runtime view cannot discard newer product metadata.
 
+Flower read state is a Redeven-owned per-user activity revision watermark. Requests contain only the displayed `activity_revision`; equal or older acknowledgements are valid and cannot advance beyond current activity, while a future revision is rejected. The browser keeps one per-thread, per-selection-cycle coordinator: one request may be in flight, only the greatest newer revision remains pending, and a failed revision is not retried until a newer revision or a new genuine presentation cycle. Signature, prompt, message-time, polling, timer, and error-class retry paths do not exist.
+
 Stop is the deliberate command-only exception. Composer and thread-menu entry
 points share one per-thread request owner, show pending only while that request
 is in flight, and consume only an acknowledgement. A successful request never

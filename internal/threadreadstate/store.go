@@ -23,23 +23,16 @@ type Store struct {
 var ErrThreadRetired = errors.New("thread read state retired")
 
 type Record struct {
-	EndpointID                string  `json:"endpoint_id"`
-	ScopeID                   string  `json:"scope_id"`
-	Surface                   Surface `json:"surface"`
-	ThreadID                  string  `json:"thread_id"`
-	LastSeenActivityRevision  int64   `json:"last_seen_activity_revision"`
-	LastReadMessageAtUnixMs   int64   `json:"last_read_message_at_unix_ms"`
-	LastSeenWaitingPromptID   string  `json:"last_seen_waiting_prompt_id"`
-	LastReadUpdatedAtUnixS    int64   `json:"last_read_updated_at_unix_s"`
-	LastSeenActivitySignature string  `json:"last_seen_activity_signature"`
-	UpdatedAtUnixMs           int64   `json:"updated_at_unix_ms"`
+	EndpointID               string  `json:"endpoint_id"`
+	ScopeID                  string  `json:"scope_id"`
+	Surface                  Surface `json:"surface"`
+	ThreadID                 string  `json:"thread_id"`
+	LastSeenActivityRevision int64   `json:"last_seen_activity_revision"`
+	UpdatedAtUnixMs          int64   `json:"updated_at_unix_ms"`
 }
 
 type FlowerSnapshot struct {
-	ActivityRevision    int64
-	LastMessageAtUnixMs int64
-	ActivitySignature   string
-	WaitingPromptID     string
+	ActivityRevision int64
 }
 
 func Open(path string) (*Store, error) {
@@ -276,8 +269,6 @@ func loadRecordTx(ctx context.Context, tx *sql.Tx, key recordKey) (*Record, erro
 	row := tx.QueryRowContext(ctx, `
 SELECT endpoint_id, scope_id, surface, thread_id,
        last_seen_activity_revision,
-       last_read_message_at_unix_ms, last_seen_waiting_prompt_id,
-       last_read_updated_at_unix_s, last_seen_activity_signature,
        updated_at_unix_ms
 FROM thread_read_state
 WHERE endpoint_id = ? AND scope_id = ? AND surface = ? AND thread_id = ?
@@ -309,8 +300,6 @@ func loadRecordsByThreadTx(ctx context.Context, tx *sql.Tx, key recordKey, threa
 	query := `
 SELECT endpoint_id, scope_id, surface, thread_id,
        last_seen_activity_revision,
-       last_read_message_at_unix_ms, last_seen_waiting_prompt_id,
-       last_read_updated_at_unix_s, last_seen_activity_signature,
        updated_at_unix_ms
 FROM thread_read_state
 WHERE endpoint_id = ? AND scope_id = ? AND surface = ? AND thread_id IN (` + strings.Join(placeholders, ",") + `)
@@ -344,19 +333,11 @@ INSERT INTO thread_read_state (
   surface,
   thread_id,
   last_seen_activity_revision,
-  last_read_message_at_unix_ms,
-  last_seen_waiting_prompt_id,
-  last_read_updated_at_unix_s,
-  last_seen_activity_signature,
   updated_at_unix_ms
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(endpoint_id, scope_id, surface, thread_id) DO UPDATE SET
   last_seen_activity_revision = excluded.last_seen_activity_revision,
-  last_read_message_at_unix_ms = excluded.last_read_message_at_unix_ms,
-  last_seen_waiting_prompt_id = excluded.last_seen_waiting_prompt_id,
-  last_read_updated_at_unix_s = excluded.last_read_updated_at_unix_s,
-  last_seen_activity_signature = excluded.last_seen_activity_signature,
   updated_at_unix_ms = excluded.updated_at_unix_ms
 `,
 		record.EndpointID,
@@ -364,10 +345,6 @@ ON CONFLICT(endpoint_id, scope_id, surface, thread_id) DO UPDATE SET
 		string(record.Surface),
 		record.ThreadID,
 		record.LastSeenActivityRevision,
-		record.LastReadMessageAtUnixMs,
-		record.LastSeenWaitingPromptID,
-		record.LastReadUpdatedAtUnixS,
-		record.LastSeenActivitySignature,
 		record.UpdatedAtUnixMs,
 	)
 	return err
@@ -386,10 +363,6 @@ func scanRecord(scan rowScanner) (Record, error) {
 		&surface,
 		&record.ThreadID,
 		&record.LastSeenActivityRevision,
-		&record.LastReadMessageAtUnixMs,
-		&record.LastSeenWaitingPromptID,
-		&record.LastReadUpdatedAtUnixS,
-		&record.LastSeenActivitySignature,
 		&record.UpdatedAtUnixMs,
 	); err != nil {
 		return Record{}, err
@@ -401,8 +374,6 @@ func scanRecord(scan rowScanner) (Record, error) {
 	if record.LastSeenActivityRevision < 0 {
 		record.LastSeenActivityRevision = 0
 	}
-	record.LastSeenWaitingPromptID = strings.TrimSpace(record.LastSeenWaitingPromptID)
-	record.LastSeenActivitySignature = strings.TrimSpace(record.LastSeenActivitySignature)
 	return record, nil
 }
 
@@ -477,22 +448,12 @@ func normalizeThreadID(threadID string) string {
 }
 
 func normalizeFlowerSnapshot(snapshot FlowerSnapshot) FlowerSnapshot {
-	activityRevision := maxInt64(0, snapshot.ActivityRevision)
-	lastMessageAtUnixMs := maxInt64(0, snapshot.LastMessageAtUnixMs)
-	return FlowerSnapshot{
-		ActivityRevision:    activityRevision,
-		LastMessageAtUnixMs: lastMessageAtUnixMs,
-		ActivitySignature:   strings.TrimSpace(snapshot.ActivitySignature),
-		WaitingPromptID:     strings.TrimSpace(snapshot.WaitingPromptID),
-	}
+	return FlowerSnapshot{ActivityRevision: maxInt64(0, snapshot.ActivityRevision)}
 }
 
 func applyFlowerSeed(record Record, snapshot FlowerSnapshot) Record {
 	snapshot = normalizeFlowerSnapshot(snapshot)
 	record.LastSeenActivityRevision = snapshot.ActivityRevision
-	record.LastReadMessageAtUnixMs = snapshot.LastMessageAtUnixMs
-	record.LastSeenWaitingPromptID = snapshot.WaitingPromptID
-	record.LastSeenActivitySignature = snapshot.ActivitySignature
 	return record
 }
 
@@ -500,10 +461,7 @@ func applyFlowerAdvance(record Record, snapshot FlowerSnapshot) Record {
 	snapshot = normalizeFlowerSnapshot(snapshot)
 	if snapshot.ActivityRevision > record.LastSeenActivityRevision {
 		record.LastSeenActivityRevision = snapshot.ActivityRevision
-		record.LastSeenActivitySignature = snapshot.ActivitySignature
-		record.LastSeenWaitingPromptID = snapshot.WaitingPromptID
 	}
-	record.LastReadMessageAtUnixMs = maxInt64(record.LastReadMessageAtUnixMs, snapshot.LastMessageAtUnixMs)
 	return record
 }
 

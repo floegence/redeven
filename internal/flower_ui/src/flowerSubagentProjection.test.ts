@@ -38,8 +38,8 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     target_labels: [],
     read_status: {
       is_unread: false,
-      snapshot: { activity_revision: 1, last_message_at_unix_ms: 20, activity_signature: 'sig' },
-      read_state: { last_seen_activity_revision: 1, last_read_message_at_unix_ms: 20, last_seen_activity_signature: 'sig' },
+      snapshot: { activity_revision: 1 },
+      read_state: { last_seen_activity_revision: 1 },
     },
     messages: [],
     subagents: [],

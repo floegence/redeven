@@ -14,7 +14,7 @@ const thread = (actions: readonly FlowerApprovalAction[]): FlowerThreadSnapshot 
   settings_revision: 1,
   created_at_ms: 1, updated_at_ms: 2, status: 'waiting_approval', source_label: 'Local', target_labels: [], messages: [],
   approval_actions: actions,
-  read_status: { is_unread: false, snapshot: { activity_revision: 1, last_message_at_unix_ms: 1, activity_signature: 'a' }, read_state: { last_seen_activity_revision: 1, last_read_message_at_unix_ms: 1, last_seen_activity_signature: 'a' } },
+  read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } },
 });
 
 describe('flowerDisplayApprovalAction', () => {

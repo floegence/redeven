@@ -14,7 +14,7 @@ function thread(id: string, version: number, text: string): FlowerThreadSnapshot
     settings_revision: 1, permission_type: 'approval_required',
     created_at_ms: 1, updated_at_ms: version, status: 'success', source_label: 'test', target_labels: [],
     messages: [{ id: `${id}-message`, role: 'assistant', content: text, status: 'complete', created_at_ms: version }],
-    read_status: { is_unread: false, snapshot: { activity_revision: version, last_message_at_unix_ms: version, activity_signature: text }, read_state: { last_seen_activity_revision: version, last_read_message_at_unix_ms: version, last_seen_activity_signature: text } },
+    read_status: { is_unread: false, snapshot: { activity_revision: version }, read_state: { last_seen_activity_revision: version } },
   };
 }
 
@@ -74,8 +74,6 @@ describe('ThreadCache', () => {
           is_unread: true,
           snapshot: {
             activity_revision: 3_589,
-            last_message_at_unix_ms: 3_589,
-            activity_signature: 'running',
           },
           read_state: current.thread.read_status.read_state,
         },
@@ -93,13 +91,9 @@ describe('ThreadCache', () => {
           is_unread: false,
           snapshot: {
             activity_revision: 5_555,
-            last_message_at_unix_ms: 5_541,
-            activity_signature: 'success',
           },
           read_state: {
             last_seen_activity_revision: 5_555,
-            last_read_message_at_unix_ms: 5_541,
-            last_seen_activity_signature: 'success',
           },
         },
       },
@@ -151,7 +145,6 @@ describe('ThreadCache', () => {
           snapshot: {
             ...initial.thread.read_status.snapshot,
             activity_revision: 10,
-            last_message_at_unix_ms: 10,
           },
         },
       },
@@ -193,7 +186,6 @@ describe('ThreadCache', () => {
         snapshot: {
           ...detail.read_status.snapshot,
           activity_revision: 3,
-          last_message_at_unix_ms: 3,
         },
       },
     }, detail)).toBe(false);

@@ -449,16 +449,10 @@ export type FlowerSubmitInputReceipt = Readonly<{
 
 export type FlowerThreadActivitySnapshot = Readonly<{
   activity_revision: number;
-  last_message_at_unix_ms: number;
-  activity_signature: string;
-  waiting_prompt_id?: string;
 }>;
 
 export type FlowerThreadReadState = Readonly<{
   last_seen_activity_revision: number;
-  last_read_message_at_unix_ms: number;
-  last_seen_activity_signature: string;
-  last_seen_waiting_prompt_id?: string;
 }>;
 
 export type FlowerThreadReadStatus = Readonly<{

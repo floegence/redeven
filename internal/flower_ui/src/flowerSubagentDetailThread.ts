@@ -35,19 +35,10 @@ function canonicalMessages(detail: FlowerSubagentDetail): FlowerChatMessage[] {
 
 function readStatus(thread: FlowerThreadSnapshot): FlowerThreadReadStatus {
   const revision = Math.max(1, thread.messages.length);
-  const signature = `status:${thread.status}\x1fmessages:${thread.messages.length}\x1fupdated:${thread.updated_at_ms}`;
   return {
     is_unread: false,
-    snapshot: {
-      activity_revision: revision,
-      last_message_at_unix_ms: thread.updated_at_ms,
-      activity_signature: signature,
-    },
-    read_state: {
-      last_seen_activity_revision: revision,
-      last_read_message_at_unix_ms: thread.updated_at_ms,
-      last_seen_activity_signature: signature,
-    },
+    snapshot: { activity_revision: revision },
+    read_state: { last_seen_activity_revision: revision },
   };
 }
 
@@ -84,8 +75,8 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null)
     approval_actions: [],
     read_status: {
       is_unread: false,
-      snapshot: { activity_revision: 1, last_message_at_unix_ms: updatedAt, activity_signature: '' },
-      read_state: { last_seen_activity_revision: 1, last_read_message_at_unix_ms: updatedAt, last_seen_activity_signature: '' },
+      snapshot: { activity_revision: 1 },
+      read_state: { last_seen_activity_revision: 1 },
     },
   };
   return { ...thread, read_status: readStatus(thread) };

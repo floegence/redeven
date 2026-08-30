@@ -7,16 +7,8 @@ import { canForkThreadItem, canPinThreadItem, canRenameThreadItem } from './thre
 function readStatus(isUnread = false): FlowerThreadReadStatus {
   return {
     is_unread: isUnread,
-    snapshot: {
-      activity_revision: isUnread ? 2 : 1,
-      last_message_at_unix_ms: 1,
-      activity_signature: isUnread ? 'status:success\u001factivity:2' : 'status:idle\u001factivity:1',
-    },
-    read_state: {
-      last_seen_activity_revision: 1,
-      last_read_message_at_unix_ms: 1,
-      last_seen_activity_signature: 'status:idle\u001factivity:1',
-    },
+    snapshot: { activity_revision: isUnread ? 2 : 1 },
+    read_state: { last_seen_activity_revision: 1 },
   };
 }
 

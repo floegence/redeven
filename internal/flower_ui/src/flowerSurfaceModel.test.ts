@@ -18,8 +18,8 @@ function snapshot(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSn
     messages: [],
     read_status: {
       is_unread: false,
-      snapshot: { activity_revision: 2, last_message_at_unix_ms: 2, activity_signature: 'idle' },
-      read_state: { last_seen_activity_revision: 2, last_read_message_at_unix_ms: 2, last_seen_activity_signature: 'idle' },
+      snapshot: { activity_revision: 2 },
+      read_state: { last_seen_activity_revision: 2 },
     },
     ...overrides,
   };

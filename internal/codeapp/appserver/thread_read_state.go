@@ -13,17 +13,11 @@ import (
 )
 
 type flowerThreadUnreadSnapshotView struct {
-	ActivityRevision    int64  `json:"activity_revision"`
-	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`
-	ActivitySignature   string `json:"activity_signature"`
-	WaitingPromptID     string `json:"waiting_prompt_id,omitempty"`
+	ActivityRevision int64 `json:"activity_revision"`
 }
 
 type flowerThreadReadStateView struct {
-	LastSeenActivityRevision  int64  `json:"last_seen_activity_revision"`
-	LastReadMessageAtUnixMs   int64  `json:"last_read_message_at_unix_ms"`
-	LastSeenActivitySignature string `json:"last_seen_activity_signature"`
-	LastSeenWaitingPromptID   string `json:"last_seen_waiting_prompt_id,omitempty"`
+	LastSeenActivityRevision int64 `json:"last_seen_activity_revision"`
 }
 
 type flowerThreadReadStatusView struct {
@@ -76,12 +70,22 @@ func (e aiFlowerThreadDetailEnvelope) MarshalJSON() ([]byte, error) {
 }
 
 type aiMarkThreadReadRequest struct {
-	Snapshot flowerThreadUnreadSnapshotView `json:"snapshot"`
+	Snapshot *flowerThreadReadRequestSnapshot `json:"snapshot"`
+}
+
+type flowerThreadReadRequestSnapshot struct {
+	ActivityRevision *int64 `json:"activity_revision"`
 }
 
 type aiMarkThreadReadResponse struct {
 	ReadStatus flowerThreadReadStatusView `json:"read_status"`
 }
+
+var (
+	errFlowerReadSnapshotAhead   = errors.New("read snapshot exceeds current thread state")
+	errFlowerThreadNotFound      = errors.New("thread not found")
+	errInvalidFlowerReadSnapshot = errors.New("invalid read snapshot")
+)
 
 func (g *Server) buildAIListThreadsView(
 	ctx context.Context,
@@ -143,16 +147,10 @@ func flowerAIReadStatusView(view flowerThreadReadStatusView) ai.FlowerThreadRead
 	return ai.FlowerThreadReadView{
 		IsUnread: view.IsUnread,
 		Snapshot: ai.FlowerThreadReadSnapshot{
-			ActivityRevision:    view.Snapshot.ActivityRevision,
-			LastMessageAtUnixMs: view.Snapshot.LastMessageAtUnixMs,
-			ActivitySignature:   view.Snapshot.ActivitySignature,
-			WaitingPromptID:     view.Snapshot.WaitingPromptID,
+			ActivityRevision: view.Snapshot.ActivityRevision,
 		},
 		ReadState: ai.FlowerThreadReadRecord{
-			LastSeenActivityRevision:  view.ReadState.LastSeenActivityRevision,
-			LastReadMessageAtUnixMs:   view.ReadState.LastReadMessageAtUnixMs,
-			LastSeenActivitySignature: view.ReadState.LastSeenActivitySignature,
-			LastSeenWaitingPromptID:   view.ReadState.LastSeenWaitingPromptID,
+			LastSeenActivityRevision: view.ReadState.LastSeenActivityRevision,
 		},
 	}
 }
@@ -163,11 +161,11 @@ func (g *Server) markAIThreadRead(
 	threadID string,
 	req aiMarkThreadReadRequest,
 ) (aiMarkThreadReadResponse, error) {
-	snapshot, err := g.validateFlowerReadSnapshot(ctx, meta, threadID, threadreadstate.FlowerSnapshot{
-		ActivityRevision:    req.Snapshot.ActivityRevision,
-		LastMessageAtUnixMs: req.Snapshot.LastMessageAtUnixMs,
-		ActivitySignature:   strings.TrimSpace(req.Snapshot.ActivitySignature),
-		WaitingPromptID:     strings.TrimSpace(req.Snapshot.WaitingPromptID),
+	if req.Snapshot == nil || req.Snapshot.ActivityRevision == nil || *req.Snapshot.ActivityRevision < 0 {
+		return aiMarkThreadReadResponse{}, errInvalidFlowerReadSnapshot
+	}
+	snapshot, current, err := g.validateFlowerReadSnapshot(ctx, meta, threadID, threadreadstate.FlowerSnapshot{
+		ActivityRevision: *req.Snapshot.ActivityRevision,
 	})
 	if err != nil {
 		return aiMarkThreadReadResponse{}, err
@@ -175,18 +173,6 @@ func (g *Server) markAIThreadRead(
 	record, err := g.advanceFlowerReadRecord(ctx, meta, threadID, snapshot)
 	if err != nil {
 		return aiMarkThreadReadResponse{}, err
-	}
-	current := snapshot
-	aiSvc := aiServiceFromContext(ctx)
-	if g != nil && aiSvc != nil && meta != nil {
-		thread, err := aiSvc.GetThread(ctx, meta, threadID)
-		if err != nil {
-			return aiMarkThreadReadResponse{}, err
-		}
-		if thread == nil {
-			return aiMarkThreadReadResponse{}, errors.New("thread not found")
-		}
-		current = flowerSnapshotFromThread(*thread)
 	}
 	return aiMarkThreadReadResponse{
 		ReadStatus: flowerReadStatusView(current, record),
@@ -224,39 +210,24 @@ func (g *Server) validateFlowerReadSnapshot(
 	meta *session.Meta,
 	threadID string,
 	snapshot threadreadstate.FlowerSnapshot,
-) (threadreadstate.FlowerSnapshot, error) {
+) (threadreadstate.FlowerSnapshot, threadreadstate.FlowerSnapshot, error) {
 	snapshot = normalizeFlowerSnapshot(snapshot)
-	if snapshot.ActivitySignature == "" {
-		return threadreadstate.FlowerSnapshot{}, errors.New("missing read snapshot activity signature")
-	}
 	aiSvc := aiServiceFromContext(ctx)
 	if g == nil || aiSvc == nil || meta == nil {
-		return snapshot, nil
+		return snapshot, snapshot, nil
 	}
 	thread, err := aiSvc.GetThread(ctx, meta, threadID)
 	if err != nil {
-		return threadreadstate.FlowerSnapshot{}, err
+		return threadreadstate.FlowerSnapshot{}, threadreadstate.FlowerSnapshot{}, err
 	}
 	if thread == nil {
-		return threadreadstate.FlowerSnapshot{}, errors.New("thread not found")
+		return threadreadstate.FlowerSnapshot{}, threadreadstate.FlowerSnapshot{}, errFlowerThreadNotFound
 	}
 	current := normalizeFlowerSnapshot(flowerSnapshotFromThread(*thread))
-	if snapshot.ActivityRevision > current.ActivityRevision || snapshot.LastMessageAtUnixMs > current.LastMessageAtUnixMs {
-		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot exceeds current thread state")
+	if snapshot.ActivityRevision > current.ActivityRevision {
+		return threadreadstate.FlowerSnapshot{}, threadreadstate.FlowerSnapshot{}, errFlowerReadSnapshotAhead
 	}
-	if snapshot.ActivityRevision == current.ActivityRevision && snapshot.ActivitySignature != current.ActivitySignature {
-		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot does not match current thread activity")
-	}
-	if snapshot.ActivityRevision == current.ActivityRevision && snapshot.WaitingPromptID != current.WaitingPromptID {
-		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot does not match current thread activity")
-	}
-	if snapshot.ActivityRevision < current.ActivityRevision {
-		return snapshot, nil
-	}
-	if snapshot.LastMessageAtUnixMs != current.LastMessageAtUnixMs {
-		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot does not match current thread activity")
-	}
-	return snapshot, nil
+	return snapshot, current, nil
 }
 
 func (g *Server) advanceFlowerReadRecord(
@@ -273,24 +244,18 @@ func (g *Server) advanceFlowerReadRecord(
 		}
 		if meta == nil {
 			return threadreadstate.Record{
-				Surface:                   threadreadstate.SurfaceFlower,
-				ScopeID:                   scopeID,
-				ThreadID:                  strings.TrimSpace(threadID),
-				LastSeenActivityRevision:  snapshot.ActivityRevision,
-				LastReadMessageAtUnixMs:   snapshot.LastMessageAtUnixMs,
-				LastSeenActivitySignature: strings.TrimSpace(snapshot.ActivitySignature),
-				LastSeenWaitingPromptID:   strings.TrimSpace(snapshot.WaitingPromptID),
+				Surface:                  threadreadstate.SurfaceFlower,
+				ScopeID:                  scopeID,
+				ThreadID:                 strings.TrimSpace(threadID),
+				LastSeenActivityRevision: snapshot.ActivityRevision,
 			}, nil
 		}
 		return threadreadstate.Record{
-			EndpointID:                endpointID,
-			ScopeID:                   scopeID,
-			Surface:                   threadreadstate.SurfaceFlower,
-			ThreadID:                  strings.TrimSpace(threadID),
-			LastSeenActivityRevision:  snapshot.ActivityRevision,
-			LastReadMessageAtUnixMs:   snapshot.LastMessageAtUnixMs,
-			LastSeenActivitySignature: strings.TrimSpace(snapshot.ActivitySignature),
-			LastSeenWaitingPromptID:   strings.TrimSpace(snapshot.WaitingPromptID),
+			EndpointID:               endpointID,
+			ScopeID:                  scopeID,
+			Surface:                  threadreadstate.SurfaceFlower,
+			ThreadID:                 strings.TrimSpace(threadID),
+			LastSeenActivityRevision: snapshot.ActivityRevision,
 		}, nil
 	}
 	return g.threadReadState.AdvanceFlower(ctx, meta.EndpointID, meta.UserPublicID, threadID, snapshot)
@@ -306,10 +271,7 @@ func buildAIThreadView(thread ai.ThreadView, record threadreadstate.Record) aiTh
 
 func flowerSnapshotFromThread(thread ai.ThreadView) threadreadstate.FlowerSnapshot {
 	return threadreadstate.FlowerSnapshot{
-		ActivityRevision:    thread.FlowerActivity.ActivityRevision,
-		LastMessageAtUnixMs: thread.FlowerActivity.LastMessageAtUnixMs,
-		ActivitySignature:   strings.TrimSpace(thread.FlowerActivity.ActivitySignature),
-		WaitingPromptID:     strings.TrimSpace(thread.FlowerActivity.WaitingPromptID),
+		ActivityRevision: thread.FlowerActivity.ActivityRevision,
 	}
 }
 
@@ -319,16 +281,10 @@ func flowerReadStatusView(snapshot threadreadstate.FlowerSnapshot, record thread
 	return flowerThreadReadStatusView{
 		IsUnread: flowerIsUnread(snapshot, record),
 		Snapshot: flowerThreadUnreadSnapshotView{
-			ActivityRevision:    snapshot.ActivityRevision,
-			LastMessageAtUnixMs: snapshot.LastMessageAtUnixMs,
-			ActivitySignature:   snapshot.ActivitySignature,
-			WaitingPromptID:     snapshot.WaitingPromptID,
+			ActivityRevision: snapshot.ActivityRevision,
 		},
 		ReadState: flowerThreadReadStateView{
-			LastSeenActivityRevision:  record.LastSeenActivityRevision,
-			LastReadMessageAtUnixMs:   record.LastReadMessageAtUnixMs,
-			LastSeenActivitySignature: record.LastSeenActivitySignature,
-			LastSeenWaitingPromptID:   record.LastSeenWaitingPromptID,
+			LastSeenActivityRevision: record.LastSeenActivityRevision,
 		},
 	}
 }
@@ -339,39 +295,26 @@ func seedFlowerRecords(userPublicID string, snapshots map[string]threadreadstate
 	for threadID, snapshot := range snapshots {
 		snapshot = normalizeFlowerSnapshot(snapshot)
 		out[threadID] = threadreadstate.Record{
-			ThreadID:                  strings.TrimSpace(threadID),
-			Surface:                   threadreadstate.SurfaceFlower,
-			ScopeID:                   scopeID,
-			LastSeenActivityRevision:  snapshot.ActivityRevision,
-			LastReadMessageAtUnixMs:   snapshot.LastMessageAtUnixMs,
-			LastSeenActivitySignature: snapshot.ActivitySignature,
-			LastSeenWaitingPromptID:   snapshot.WaitingPromptID,
+			ThreadID:                 strings.TrimSpace(threadID),
+			Surface:                  threadreadstate.SurfaceFlower,
+			ScopeID:                  scopeID,
+			LastSeenActivityRevision: snapshot.ActivityRevision,
 		}
 	}
 	return out
 }
 
 func normalizeFlowerSnapshot(snapshot threadreadstate.FlowerSnapshot) threadreadstate.FlowerSnapshot {
-	if snapshot.LastMessageAtUnixMs < 0 {
-		snapshot.LastMessageAtUnixMs = 0
-	}
 	if snapshot.ActivityRevision < 0 {
 		snapshot.ActivityRevision = 0
 	}
-	snapshot.ActivitySignature = strings.TrimSpace(snapshot.ActivitySignature)
-	snapshot.WaitingPromptID = strings.TrimSpace(snapshot.WaitingPromptID)
 	return snapshot
 }
 
 func normalizeFlowerRecord(record threadreadstate.Record) threadreadstate.Record {
-	if record.LastReadMessageAtUnixMs < 0 {
-		record.LastReadMessageAtUnixMs = 0
-	}
 	if record.LastSeenActivityRevision < 0 {
 		record.LastSeenActivityRevision = 0
 	}
-	record.LastSeenActivitySignature = strings.TrimSpace(record.LastSeenActivitySignature)
-	record.LastSeenWaitingPromptID = strings.TrimSpace(record.LastSeenWaitingPromptID)
 	return record
 }
 

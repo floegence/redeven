@@ -68,9 +68,6 @@ type LoadSubagentDetailResponse = Readonly<{
 type MarkThreadReadInput = Readonly<{
   snapshot: Readonly<{
     activity_revision: number;
-    last_message_at_unix_ms: number;
-    activity_signature: string;
-    waiting_prompt_id?: string;
   }>;
 }>;
 
@@ -162,16 +159,8 @@ function mapRuntimeSummaryThread(thread: ThreadView, options: RuntimeFlowerSurfa
   const activityRevision = Math.max(updatedAt, lastMessageAt);
   const readStatus = thread.read_status ?? {
     is_unread: false,
-    snapshot: {
-      activity_revision: activityRevision,
-      last_message_at_unix_ms: lastMessageAt,
-      activity_signature: '',
-    },
-    read_state: {
-      last_seen_activity_revision: activityRevision,
-      last_read_message_at_unix_ms: lastMessageAt,
-      last_seen_activity_signature: '',
-    },
+    snapshot: { activity_revision: activityRevision },
+    read_state: { last_seen_activity_revision: activityRevision },
   };
 	return mapFlowerThread(summary, [], options.mapperOptions, readStatus);
 }
@@ -245,9 +234,6 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     const result = await options.transport.markThreadRead(tid, {
       snapshot: {
         activity_revision: Math.floor(Number(snapshot.activity_revision)),
-        last_message_at_unix_ms: Math.floor(Number(snapshot.last_message_at_unix_ms)),
-        activity_signature: trim(snapshot.activity_signature),
-        waiting_prompt_id: trim(snapshot.waiting_prompt_id) || undefined,
       },
     });
     if (!result.read_status) throw new Error('Missing read status.');

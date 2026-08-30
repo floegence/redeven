@@ -7,7 +7,7 @@ const summary = (): FlowerThreadSnapshot => ({
   settings_revision: 1,
   created_at_ms: 1, updated_at_ms: 2, status: 'idle', source_label: 'Desktop', target_labels: ['local'],
   messages: [{ id: 'old', role: 'assistant', content: 'old', status: 'complete', created_at_ms: 1 }],
-  read_status: { is_unread: false, snapshot: { activity_revision: 0, last_message_at_unix_ms: 0, activity_signature: '' }, read_state: { last_seen_activity_revision: 0, last_read_message_at_unix_ms: 0, last_seen_activity_signature: '' } },
+  read_status: { is_unread: false, snapshot: { activity_revision: 0 }, read_state: { last_seen_activity_revision: 0 } },
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {

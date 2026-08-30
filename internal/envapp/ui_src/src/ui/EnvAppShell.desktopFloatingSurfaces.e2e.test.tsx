@@ -277,6 +277,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </div>
     </Show>
   ),
+  DialogPlacementProvider: (props: any) => <>{props.children}</>,
   Dropdown: (props: any) => <>{props.trigger}</>,
   SegmentedControl: () => <div />,
   Tooltip: (props: any) => <>{props.children}</>,
