@@ -847,15 +847,9 @@ export function mapFlowerReadStatus(raw: unknown): FlowerThreadReadStatus {
     is_unread: Boolean(record.is_unread),
     snapshot: {
       activity_revision: Math.max(0, Math.floor(Number(snapshot.activity_revision ?? 0))),
-      last_message_at_unix_ms: Math.max(0, Math.floor(Number(snapshot.last_message_at_unix_ms ?? 0))),
-      activity_signature: trim(snapshot.activity_signature),
-      ...(trim(snapshot.waiting_prompt_id) ? { waiting_prompt_id: trim(snapshot.waiting_prompt_id) } : {}),
     },
     read_state: {
       last_seen_activity_revision: Math.max(0, Math.floor(Number(readState.last_seen_activity_revision ?? 0))),
-      last_read_message_at_unix_ms: Math.max(0, Math.floor(Number(readState.last_read_message_at_unix_ms ?? 0))),
-      last_seen_activity_signature: trim(readState.last_seen_activity_signature),
-      ...(trim(readState.last_seen_waiting_prompt_id) ? { last_seen_waiting_prompt_id: trim(readState.last_seen_waiting_prompt_id) } : {}),
     },
   };
 }

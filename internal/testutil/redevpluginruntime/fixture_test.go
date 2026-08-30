@@ -37,6 +37,13 @@ func TestInstallAtCreatesNativeAdmissionFixture(t *testing.T) {
 	if info.Mode().Perm() != 0o500 {
 		t.Fatalf("fixture mode = %o, want 500", info.Mode().Perm())
 	}
+	descriptorInfo, err := os.Stat(filepath.Join(root, descriptorName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if descriptorInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("fixture descriptor mode = %o, want 600", descriptorInfo.Mode().Perm())
+	}
 	if runtime.GOOS == "linux" {
 		file, err := elf.Open(path)
 		if err != nil {
@@ -84,6 +91,9 @@ func TestInstallAtPreservesMatchingFixture(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, binaryName)); err != nil {
 		t.Fatalf("second cleanup removed first fixture: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(root, descriptorName)); err != nil {
+		t.Fatalf("second cleanup removed first fixture descriptor: %v", err)
+	}
 	if err := firstCleanup(); err != nil {
 		t.Fatal(err)
 	}
@@ -124,6 +134,9 @@ func TestInstallAtCleanupIsConcurrentAndIdempotent(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, binaryName)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("runtime fixture stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, descriptorName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime fixture descriptor stat error = %v, want not exist", err)
 	}
 }
 

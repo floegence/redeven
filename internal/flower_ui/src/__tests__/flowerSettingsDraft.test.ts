@@ -6,16 +6,8 @@ import type { FlowerThreadReadStatus, FlowerThreadSnapshot } from '../contracts/
 function readStatus(isUnread = false): FlowerThreadReadStatus {
   return {
     is_unread: isUnread,
-    snapshot: {
-      activity_revision: 2,
-      last_message_at_unix_ms: 2,
-      activity_signature: 'status:success\u001factivity:2',
-    },
-    read_state: {
-      last_seen_activity_revision: isUnread ? 1 : 2,
-      last_read_message_at_unix_ms: isUnread ? 1 : 2,
-      last_seen_activity_signature: isUnread ? 'status:running\u001factivity:1' : 'status:success\u001factivity:2',
-    },
+    snapshot: { activity_revision: 2 },
+    read_state: { last_seen_activity_revision: isUnread ? 1 : 2 },
   };
 }
 

@@ -19,19 +19,12 @@ const stagingScope = (threadID: string) => ({
   expires_at_unix_ms: 10_000,
 });
 
-function readStatus(isUnread = false, revision = 2, status = 'idle') {
-  const signature = `status:${status}\u001factivity:${revision}`;
+function readStatus(isUnread = false, revision = 2, _status = 'idle') {
   return {
     is_unread: isUnread,
-    snapshot: {
-      activity_revision: revision,
-      last_message_at_unix_ms: revision,
-      activity_signature: signature,
-    },
+    snapshot: { activity_revision: revision },
     read_state: {
       last_seen_activity_revision: isUnread ? Math.max(0, revision - 1) : revision,
-      last_read_message_at_unix_ms: isUnread ? Math.max(0, revision - 1) : revision,
-      last_seen_activity_signature: isUnread ? `status:${status}\u001factivity:${Math.max(0, revision - 1)}` : signature,
     },
   };
 }

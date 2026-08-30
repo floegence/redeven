@@ -805,6 +805,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </section>
     </Show>
   ),
+  DialogPlacementProvider: (props: any) => <>{props.children}</>,
   SurfaceFloatingLayer: (props: any) => {
     let layer: HTMLDivElement | undefined;
     onMount(() => props.layerRef?.(layer));

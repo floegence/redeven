@@ -12,17 +12,11 @@ import (
 const FlowerLiveSchemaVersion int64 = 1
 
 type FlowerThreadReadSnapshot struct {
-	ActivityRevision    int64  `json:"activity_revision"`
-	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`
-	ActivitySignature   string `json:"activity_signature"`
-	WaitingPromptID     string `json:"waiting_prompt_id,omitempty"`
+	ActivityRevision int64 `json:"activity_revision"`
 }
 
 type FlowerThreadReadRecord struct {
-	LastSeenActivityRevision  int64  `json:"last_seen_activity_revision"`
-	LastReadMessageAtUnixMs   int64  `json:"last_read_message_at_unix_ms"`
-	LastSeenActivitySignature string `json:"last_seen_activity_signature"`
-	LastSeenWaitingPromptID   string `json:"last_seen_waiting_prompt_id,omitempty"`
+	LastSeenActivityRevision int64 `json:"last_seen_activity_revision"`
 }
 
 type FlowerThreadReadView struct {

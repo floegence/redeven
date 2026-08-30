@@ -80,8 +80,8 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     messages: [],
     read_status: {
       is_unread: false,
-      snapshot: { activity_revision: 1, last_message_at_unix_ms: 1, activity_signature: 'live' },
-      read_state: { last_seen_activity_revision: 1, last_read_message_at_unix_ms: 1, last_seen_activity_signature: 'live' },
+      snapshot: { activity_revision: 1 },
+      read_state: { last_seen_activity_revision: 1 },
     },
     ...overrides,
   };

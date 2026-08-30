@@ -149,7 +149,7 @@ import {
 } from './threadCache';
 import { createTransportOutbox, restoreTransportOutbox, type TransportOutbox } from './transportOutbox';
 import { createLiveTransport } from './liveTransport';
-import { flowerThreadReadSnapshotKey } from './flowerThreadListRefresh';
+import { flowerThreadActivityRevision } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
@@ -1131,9 +1131,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
     });
   };
-  const locallyReadSnapshots = new Map<string, string>();
-  const persistingReadThreadIDs = new Set<string>();
-  const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
+  type ThreadReadAcknowledgementState = {
+    sequence: number;
+    optimisticRevision: number;
+    inFlightRevision: number;
+    pendingRevision: number;
+    lastAttemptedRevision: number;
+  };
+  const threadReadAcknowledgements = new Map<string, ThreadReadAcknowledgementState>();
   let threadsRefreshRequest: Promise<boolean> | null = null;
   const retiredThreadIDs = new Set<string>();
   let copiedMessageResetTimer: number | undefined;
@@ -2378,8 +2383,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
   const threadWithLocalReadVisibility = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
     if (!thread.read_status.is_unread) return thread;
-    const localKey = locallyReadSnapshots.get(thread.thread_id);
-    if (!localKey || localKey !== flowerThreadReadSnapshotKey(thread.read_status.snapshot)) {
+    const state = threadReadAcknowledgements.get(thread.thread_id);
+    if (!state || state.optimisticRevision !== flowerThreadActivityRevision(thread.read_status.snapshot)) {
       return thread;
     }
     return readStatusWithUnread(thread, false);
@@ -2391,7 +2396,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyThreadReadStatus = (threadID: string, readStatus: FlowerThreadReadStatus) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreadCache((cache) => cache.updateSummaryAdjuncts(tid, (thread) => threadWithReadStatus(thread, readStatus)));
+    setThreadCache((cache) => (
+      cache
+        .updateSummaryAdjuncts(tid, (thread) => threadWithReadStatus(thread, readStatus))
+        .updateDetailAdjuncts(tid, (thread) => threadWithReadStatus(thread, readStatus))
+    ));
   };
   const threadItemSignature = (t: FlowerThreadSnapshot): string => {
     const visibleThread = threadWithLocalReadVisibility(t);
@@ -2409,7 +2418,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       t.working_dir ?? '',
       t.read_only_reason ?? '',
       stableLiveSidebar ? 'live' : String(visibleThread.read_status.is_unread),
-      stableLiveSidebar ? 'live' : flowerThreadReadSnapshotKey(t.read_status.snapshot),
+      stableLiveSidebar ? 'live' : String(flowerThreadActivityRevision(t.read_status.snapshot)),
     ].join('\x1f');
   };
   const sidebarItemSignature = (t: FlowerThreadListItem): string => [
@@ -2425,7 +2434,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     t.working_dir,
     t.read_only_reason ?? '',
     SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : String(t.read_status.is_unread),
-    SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : flowerThreadReadSnapshotKey(t.read_status.snapshot),
+    SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : String(flowerThreadActivityRevision(t.read_status.snapshot)),
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
@@ -3468,8 +3477,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const summaryDetailRecoverySignature = (summary: FlowerThreadSnapshot): string => [
     String(Math.max(0, Math.floor(Number(summary.read_status.snapshot.activity_revision) || 0))),
-    String(Math.max(0, Math.floor(Number(summary.read_status.snapshot.last_message_at_unix_ms) || 0))),
-    trimString(summary.read_status.snapshot.activity_signature),
     summary.status,
     trimString(summary.active_run_id),
     summary.approval_pending ? '1' : '0',
@@ -3599,19 +3606,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
 
-  const markThreadReadLocally = (threadID: string, snapshot: FlowerThreadActivitySnapshot) => {
+  const readAcknowledgementStateFor = (threadID: string, sequence: number): ThreadReadAcknowledgementState => {
     const tid = trimString(threadID);
-    if (!tid) return;
-    const key = flowerThreadReadSnapshotKey(snapshot);
-    if (!key) return;
-    locallyReadSnapshots.set(tid, key);
-    setLocalReadVisibilityRevision((revision) => revision + 1);
+    const current = threadReadAcknowledgements.get(tid);
+    if (current?.sequence === sequence) return current;
+    const next: ThreadReadAcknowledgementState = {
+      sequence,
+      optimisticRevision: 0,
+      inFlightRevision: 0,
+      pendingRevision: 0,
+      lastAttemptedRevision: 0,
+    };
+    threadReadAcknowledgements.set(tid, next);
+    return next;
   };
 
-  const clearLocalReadVisibility = (threadID: string) => {
-    const tid = trimString(threadID);
-    if (!tid) return;
-    if (locallyReadSnapshots.delete(tid)) {
+  const setOptimisticReadRevision = (state: ThreadReadAcknowledgementState, revision: number) => {
+    if (state.optimisticRevision === revision) return;
+    state.optimisticRevision = revision;
+    setLocalReadVisibilityRevision((current) => current + 1);
+  };
+
+  const clearOptimisticReadRevision = (state: ThreadReadAcknowledgementState, revision: number) => {
+    if (state.optimisticRevision === revision) {
+      state.optimisticRevision = 0;
       setLocalReadVisibilityRevision((revision) => revision + 1);
     }
   };
@@ -3636,40 +3654,47 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const persistThreadRead = (threadID: string, snapshot: FlowerThreadActivitySnapshot, sequence: number) => {
     const tid = trimString(threadID);
     if (!tid || !readAcknowledgementEligible(tid, sequence)) return;
-    const submittedSnapshotKey = flowerThreadReadSnapshotKey(snapshot);
-    if (!submittedSnapshotKey || locallyReadSnapshots.get(tid) === submittedSnapshotKey) return;
-    markThreadReadLocally(tid, snapshot);
-    if (persistingReadThreadIDs.has(tid)) {
-      pendingReadPersistenceSnapshots.set(tid, snapshot);
+    const revision = flowerThreadActivityRevision(snapshot);
+    if (revision <= 0) return;
+    const state = readAcknowledgementStateFor(tid, sequence);
+    if (revision <= state.lastAttemptedRevision || state.inFlightRevision === revision) return;
+    if (state.inFlightRevision > 0) {
+      if (revision > state.inFlightRevision && revision > state.pendingRevision) {
+        state.pendingRevision = revision;
+        setOptimisticReadRevision(state, revision);
+      }
       return;
     }
-    persistingReadThreadIDs.add(tid);
-    const readPromise = props.adapter.markThreadRead(tid, snapshot)
-      .catch(() => null);
-    void readPromise
+    state.inFlightRevision = revision;
+    state.lastAttemptedRevision = revision;
+    setOptimisticReadRevision(state, revision);
+    void props.adapter.markThreadRead(tid, { activity_revision: revision })
       .then((readStatus) => {
-        if (!readStatus) {
-          clearLocalReadVisibility(tid);
-          return;
-        }
+        if (threadReadAcknowledgements.get(tid) !== state) return;
         if (sequence === threadLoadSequence && selectedThreadID() === tid) {
           applyThreadReadStatus(tid, readStatus);
           if (readStatus.is_unread) {
-            const nextSnapshotKey = flowerThreadReadSnapshotKey(readStatus.snapshot);
-            if (nextSnapshotKey && nextSnapshotKey !== submittedSnapshotKey) {
-              pendingReadPersistenceSnapshots.set(tid, readStatus.snapshot);
+            const nextRevision = flowerThreadActivityRevision(readStatus.snapshot);
+            if (nextRevision > revision && nextRevision > state.pendingRevision) {
+              state.pendingRevision = nextRevision;
+              setOptimisticReadRevision(state, nextRevision);
             }
           }
         }
-        clearLocalReadVisibility(tid);
+        clearOptimisticReadRevision(state, revision);
+      })
+      .catch(() => {
+        if (threadReadAcknowledgements.get(tid) !== state) return;
+        clearOptimisticReadRevision(state, revision);
       })
       .finally(() => {
-        persistingReadThreadIDs.delete(tid);
-        const pendingSnapshot = pendingReadPersistenceSnapshots.get(tid);
-        pendingReadPersistenceSnapshots.delete(tid);
-        if (!pendingSnapshot) return;
+        if (threadReadAcknowledgements.get(tid) !== state) return;
+        state.inFlightRevision = 0;
+        const pendingRevision = state.pendingRevision;
+        state.pendingRevision = 0;
+        if (pendingRevision <= revision) return;
         if (!readAcknowledgementEligible(tid, sequence)) return;
-        persistThreadRead(tid, pendingSnapshot, sequence);
+        persistThreadRead(tid, { activity_revision: pendingRevision }, sequence);
       });
   };
 
@@ -3678,6 +3703,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const sequence = threadLoadSequence;
     if (!thread?.read_status.is_unread || !readAcknowledgementEligible(thread.thread_id, sequence)) return;
     persistThreadRead(thread.thread_id, thread.read_status.snapshot, sequence);
+  });
+
+  let readAcknowledgementSelectionThreadID = '';
+  createEffect(() => {
+    const nextThreadID = trimString(selectedThreadID());
+    if (nextThreadID === readAcknowledgementSelectionThreadID) return;
+    if (readAcknowledgementSelectionThreadID) {
+      threadReadAcknowledgements.delete(readAcknowledgementSelectionThreadID);
+    }
+    readAcknowledgementSelectionThreadID = nextThreadID;
   });
 
   const writeClipboardText = async (value: string, label: string) => {
@@ -4163,13 +4198,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         is_unread: false,
         snapshot: {
           activity_revision: 0,
-          last_message_at_unix_ms: now,
-          activity_signature: `current:${threadID}:${current.view_version}`,
         },
         read_state: {
           last_seen_activity_revision: 0,
-          last_read_message_at_unix_ms: now,
-          last_seen_activity_signature: `current:${threadID}:${current.view_version}`,
         },
       },
     } satisfies FlowerThreadSnapshot;
@@ -4280,7 +4311,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (envelope.kind === 'viewer.read_state') {
       const threadID = trimString(envelope.thread_id);
       if (threadID && envelope.read_status && !retiredThreadIDs.has(threadID)) {
-        clearLocalReadVisibility(threadID);
+        const state = threadReadAcknowledgements.get(threadID);
+        if (
+          state
+          && state.optimisticRevision > 0
+          && flowerThreadActivityRevision(envelope.read_status.snapshot) >= state.optimisticRevision
+        ) {
+          state.optimisticRevision = 0;
+          setLocalReadVisibilityRevision((revision) => revision + 1);
+        }
         applyThreadReadStatus(threadID, envelope.read_status);
       }
     }
@@ -5024,9 +5063,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     summaryDetailRecoveryTargets.delete(tid);
     summaryDetailRecoveryExhaustedSignatures.delete(tid);
-    locallyReadSnapshots.delete(tid);
-    persistingReadThreadIDs.delete(tid);
-    pendingReadPersistenceSnapshots.delete(tid);
+    threadReadAcknowledgements.delete(tid);
     releaseAttachmentStagingScope(tid);
 
     setThreadCache((cache) => cache.evict(tid));
@@ -5165,6 +5202,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     clearSelectedThreadTailRevealSchedule();
     transcriptScroll.dispose();
     subagentDetailScroll.dispose();
+    threadReadAcknowledgements.clear();
     if (copiedMessageResetTimer !== undefined) {
       window.clearTimeout(copiedMessageResetTimer);
       copiedMessageResetTimer = undefined;

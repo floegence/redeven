@@ -54,19 +54,11 @@ function stagingScope(targetID: string): FlowerAttachmentStagingScope {
   };
 }
 
-function readStatus(status = 'idle') {
+function readStatus(_status = 'idle') {
   return {
     is_unread: false,
-    snapshot: {
-      activity_revision: 2,
-      last_message_at_unix_ms: 2,
-      activity_signature: `status:${status}`,
-    },
-    read_state: {
-      last_seen_activity_revision: 2,
-      last_read_message_at_unix_ms: 2,
-      last_seen_activity_signature: `status:${status}`,
-    },
+    snapshot: { activity_revision: 2 },
+    read_state: { last_seen_activity_revision: 2 },
   };
 }
 

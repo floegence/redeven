@@ -30,12 +30,7 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 	store := openTestStore(t)
 
 	records, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
-		"th_1": {
-			ActivityRevision:    130,
-			LastMessageAtUnixMs: 120,
-			ActivitySignature:   "status:waiting_user\u001factivity:130\u001fprompt:prompt_1",
-			WaitingPromptID:     "prompt_1",
-		},
+		"th_1": {ActivityRevision: 130},
 	})
 	if err != nil {
 		t.Fatalf("EnsureFlower: %v", err)
@@ -45,129 +40,73 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 	if record.ScopeID != "user_1" {
 		t.Fatalf("ScopeID=%q, want user_1", record.ScopeID)
 	}
-	if record.LastReadMessageAtUnixMs != 120 {
-		t.Fatalf("LastReadMessageAtUnixMs=%d, want=120", record.LastReadMessageAtUnixMs)
-	}
 	if record.LastSeenActivityRevision != 130 {
 		t.Fatalf("LastSeenActivityRevision=%d, want=130", record.LastSeenActivityRevision)
 	}
-	if record.LastSeenActivitySignature != "status:waiting_user\u001factivity:130\u001fprompt:prompt_1" {
-		t.Fatalf("LastSeenActivitySignature=%q, want seeded signature", record.LastSeenActivitySignature)
-	}
-	if record.LastSeenWaitingPromptID != "prompt_1" {
-		t.Fatalf("LastSeenWaitingPromptID=%q, want=prompt_1", record.LastSeenWaitingPromptID)
-	}
 
 	record, err = store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
-		ActivityRevision:    125,
-		LastMessageAtUnixMs: 100,
+		ActivityRevision: 125,
 	})
 	if err != nil {
 		t.Fatalf("AdvanceFlower(regress): %v", err)
 	}
-	if record.LastReadMessageAtUnixMs != 120 {
-		t.Fatalf("LastReadMessageAtUnixMs=%d after regress, want=120", record.LastReadMessageAtUnixMs)
-	}
 	if record.LastSeenActivityRevision != 130 {
 		t.Fatalf("LastSeenActivityRevision=%d after regress, want=130", record.LastSeenActivityRevision)
 	}
-	if record.LastSeenActivitySignature != "status:waiting_user\u001factivity:130\u001fprompt:prompt_1" {
-		t.Fatalf("LastSeenActivitySignature=%q after regress, want seeded signature", record.LastSeenActivitySignature)
-	}
-	if record.LastSeenWaitingPromptID != "prompt_1" {
-		t.Fatalf("LastSeenWaitingPromptID=%q after regress, want=prompt_1", record.LastSeenWaitingPromptID)
-	}
 
 	record, err = store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
-		ActivityRevision:    130,
-		LastMessageAtUnixMs: 120,
-		ActivitySignature:   "status:waiting_user\u001factivity:130\u001fprompt:prompt_2",
-		WaitingPromptID:     "prompt_2",
+		ActivityRevision: 130,
 	})
 	if err != nil {
 		t.Fatalf("AdvanceFlower(same revision): %v", err)
 	}
-	if record.LastSeenActivitySignature != "status:waiting_user\u001factivity:130\u001fprompt:prompt_1" {
-		t.Fatalf("LastSeenActivitySignature=%q after same revision, want seeded signature", record.LastSeenActivitySignature)
-	}
-	if record.LastSeenWaitingPromptID != "prompt_1" {
-		t.Fatalf("LastSeenWaitingPromptID=%q after same revision, want=prompt_1", record.LastSeenWaitingPromptID)
+	if record.LastSeenActivityRevision != 130 {
+		t.Fatalf("LastSeenActivityRevision=%d after same revision, want=130", record.LastSeenActivityRevision)
 	}
 
 	record, err = store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
-		ActivityRevision:    200,
-		LastMessageAtUnixMs: 180,
-		ActivitySignature:   "status:success\u001factivity:200",
-		WaitingPromptID:     "prompt_2",
+		ActivityRevision: 200,
 	})
 	if err != nil {
 		t.Fatalf("AdvanceFlower(progress): %v", err)
 	}
-	if record.LastReadMessageAtUnixMs != 180 {
-		t.Fatalf("LastReadMessageAtUnixMs=%d after progress, want=180", record.LastReadMessageAtUnixMs)
-	}
 	if record.LastSeenActivityRevision != 200 {
 		t.Fatalf("LastSeenActivityRevision=%d after progress, want=200", record.LastSeenActivityRevision)
 	}
-	if record.LastSeenActivitySignature != "status:success\u001factivity:200" {
-		t.Fatalf("LastSeenActivitySignature=%q after progress, want updated signature", record.LastSeenActivitySignature)
-	}
-	if record.LastSeenWaitingPromptID != "prompt_2" {
-		t.Fatalf("LastSeenWaitingPromptID=%q after progress, want=prompt_2", record.LastSeenWaitingPromptID)
-	}
 
 	userRecords, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
-		"th_1": {
-			ActivityRevision:    200,
-			LastMessageAtUnixMs: 180,
-			ActivitySignature:   "status:success\u001factivity:200",
-			WaitingPromptID:     "prompt_2",
-		},
+		"th_1": {ActivityRevision: 200},
 	})
 	if err != nil {
 		t.Fatalf("EnsureFlower(user_1): %v", err)
 	}
-	if got := userRecords["th_1"].LastReadMessageAtUnixMs; got != 180 {
-		t.Fatalf("user_1 LastReadMessageAtUnixMs=%d, want=180", got)
+	if got := userRecords["th_1"].LastSeenActivityRevision; got != 200 {
+		t.Fatalf("user_1 LastSeenActivityRevision=%d, want=200", got)
 	}
 }
 
-func TestStore_FlowerRevisionDoesNotDeriveFromLastMessageAt(t *testing.T) {
+func TestStore_FlowerRevisionIsTheOnlyReadWatermark(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	store := openTestStore(t)
 
-	records, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
-		"th_1": {
-			ActivityRevision:    2,
-			LastMessageAtUnixMs: 5000,
-			ActivitySignature:   "activity:2\u001flast_message:5000",
-		},
-	})
+	records, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{"th_1": {ActivityRevision: 2}})
 	if err != nil {
 		t.Fatalf("EnsureFlower: %v", err)
 	}
 	if got := records["th_1"].LastSeenActivityRevision; got != 2 {
 		t.Fatalf("seed LastSeenActivityRevision=%d, want 2", got)
 	}
-	if got := records["th_1"].LastReadMessageAtUnixMs; got != 5000 {
-		t.Fatalf("seed LastReadMessageAtUnixMs=%d, want 5000", got)
-	}
 
 	record, err := store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
-		ActivityRevision:    3,
-		LastMessageAtUnixMs: 6000,
-		ActivitySignature:   "activity:3\u001flast_message:6000",
+		ActivityRevision: 3,
 	})
 	if err != nil {
 		t.Fatalf("AdvanceFlower: %v", err)
 	}
 	if record.LastSeenActivityRevision != 3 {
 		t.Fatalf("advance LastSeenActivityRevision=%d, want 3", record.LastSeenActivityRevision)
-	}
-	if record.LastReadMessageAtUnixMs != 6000 {
-		t.Fatalf("advance LastReadMessageAtUnixMs=%d, want 6000", record.LastReadMessageAtUnixMs)
 	}
 }
 
@@ -205,17 +144,12 @@ INSERT INTO thread_read_state (
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	records, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
-		"thread_1": {
-			ActivityRevision:    17,
-			LastMessageAtUnixMs: 23,
-			WaitingPromptID:     "prompt_1",
-			ActivitySignature:   "activity:17",
-		},
+		"thread_1": {ActivityRevision: 17},
 	})
 	if err != nil {
 		t.Fatalf("load migrated read state: %v", err)
 	}
-	if got := records["thread_1"]; got.LastSeenActivityRevision != 17 || got.LastReadMessageAtUnixMs != 23 || got.LastSeenWaitingPromptID != "prompt_1" || got.LastSeenActivitySignature != "activity:17" {
+	if got := records["thread_1"]; got.LastSeenActivityRevision != 17 || got.UpdatedAtUnixMs != 29 {
 		t.Fatalf("migrated read state = %+v", got)
 	}
 	if err := store.RetireFlowerThreadReadState(ctx, "env_1", "thread_1"); err != nil {
@@ -279,6 +213,87 @@ VALUES ('env_1', 'codex', 'codex_retired', 11);
 	}
 	if flowerRows != 1 || codexRows != 0 || codexRetirements != 0 {
 		t.Fatalf("migrated rows flower=%d codex=%d codex_retirements=%d", flowerRows, codexRows, codexRetirements)
+	}
+}
+
+func TestStore_MigratesV3ToRevisionOnlyAndReopensIdempotently(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "thread_read_state.sqlite")
+	v3Spec := schemaSpec()
+	v3Spec.CurrentVersion = 3
+	v3Spec.Migrations = v3Spec.Migrations[:3]
+	v3Spec.Verify = nil
+	v3DB, err := sqliteutil.Open(dbPath, v3Spec)
+	if err != nil {
+		t.Fatalf("open v3 store: %v", err)
+	}
+	if _, err := v3DB.ExecContext(ctx, `
+INSERT INTO thread_read_state (
+  endpoint_id, scope_id, surface, thread_id,
+  last_seen_activity_revision, last_read_message_at_unix_ms,
+  last_seen_waiting_prompt_id, last_read_updated_at_unix_s,
+  last_seen_activity_signature, updated_at_unix_ms
+) VALUES ('env_1', 'user_1', 'flower', 'thread_1', 41, 42, 'prompt_1', 43, 'signature_1', 44);
+`); err != nil {
+		_ = v3DB.Close()
+		t.Fatalf("seed v3 store: %v", err)
+	}
+	if err := v3DB.Close(); err != nil {
+		t.Fatalf("close v3 store: %v", err)
+	}
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("migrate v3 store: %v", err)
+	}
+	records, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
+		"thread_1": {ActivityRevision: 99},
+	})
+	if err != nil {
+		_ = store.Close()
+		t.Fatalf("load migrated read state: %v", err)
+	}
+	if got := records["thread_1"]; got.LastSeenActivityRevision != 41 || got.UpdatedAtUnixMs != 44 {
+		_ = store.Close()
+		t.Fatalf("migrated read state = %+v", got)
+	}
+	var legacyColumns int
+	if err := store.db.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM pragma_table_info('thread_read_state')
+WHERE name IN (
+  'last_read_message_at_unix_ms',
+  'last_seen_waiting_prompt_id',
+  'last_read_updated_at_unix_s',
+  'last_seen_activity_signature'
+)
+`).Scan(&legacyColumns); err != nil {
+		_ = store.Close()
+		t.Fatal(err)
+	}
+	if legacyColumns != 0 {
+		_ = store.Close()
+		t.Fatalf("legacy columns after v4 migration = %d, want 0", legacyColumns)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close migrated store: %v", err)
+	}
+
+	reopened, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("reopen v4 store: %v", err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	reopenedRecords, err := reopened.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
+		"thread_1": {ActivityRevision: 99},
+	})
+	if err != nil {
+		t.Fatalf("load reopened read state: %v", err)
+	}
+	if got := reopenedRecords["thread_1"].LastSeenActivityRevision; got != 41 {
+		t.Fatalf("reopened revision = %d, want 41", got)
 	}
 }
 
@@ -348,7 +363,7 @@ INSERT INTO thread_read_state (
   last_seen_waiting_prompt_id, last_read_updated_at_unix_s,
   last_seen_activity_signature, updated_at_unix_ms
 ) VALUES ('env_1', 'user_1', 'codex', 'codex_1', 0, 0, '', 9, 'codex', 10);
-PRAGMA user_version = 4;
+		PRAGMA user_version = 5;
 `); err != nil {
 		_ = v2DB.Close()
 		t.Fatalf("seed future v2 store: %v", err)
@@ -384,7 +399,7 @@ func TestStore_RetireFlowerThreadRejectsFutureEnsureAndAdvance(t *testing.T) {
 
 	ctx := context.Background()
 	store := openTestStore(t)
-	snapshot := FlowerSnapshot{ActivityRevision: 10, LastMessageAtUnixMs: 20, ActivitySignature: "activity:10"}
+	snapshot := FlowerSnapshot{ActivityRevision: 10}
 	if _, err := store.EnsureFlower(ctx, "env_retired", "user_1", map[string]FlowerSnapshot{"thread_retired": snapshot}); err != nil {
 		t.Fatal(err)
 	}

@@ -2,16 +2,24 @@ package redevpluginruntime
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
+
+	"github.com/floegence/redevplugin/v3/pkg/version"
 )
 
-const binaryName = "redevplugin-runtime"
+const (
+	binaryName     = "redevplugin-runtime"
+	descriptorName = ".redevplugin-release-artifacts-verified.json"
+)
 
 // InstallAt writes the minimal executable needed to exercise native runtime
 // admission without starting a worker.
@@ -30,34 +38,33 @@ func InstallAt(root string) (func() error, error) {
 	path := filepath.Join(root, binaryName)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o500)
 	if errors.Is(err, os.ErrExist) {
-		return preserveExistingFixture(path, header)
+		if err := preserveExistingFixture(path, header, 0o500); err != nil {
+			return nil, err
+		}
+		return installDescriptor(root, header)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("create ReDevPlugin runtime fixture: %w", err)
 	}
-	var cleanupOnce sync.Once
-	var cleanupErr error
-	cleanup := func() error {
-		cleanupOnce.Do(func() {
-			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-				cleanupErr = fmt.Errorf("remove ReDevPlugin runtime fixture: %w", err)
-			}
-		})
-		return cleanupErr
-	}
+	binaryCleanup := removeFixture(path, "ReDevPlugin runtime fixture")
 	if written, err := file.Write(header); err != nil || written != len(header) {
 		_ = file.Close()
-		_ = cleanup()
+		_ = binaryCleanup()
 		if err != nil {
 			return nil, fmt.Errorf("write ReDevPlugin runtime fixture: %w", err)
 		}
 		return nil, fmt.Errorf("write ReDevPlugin runtime fixture: wrote %d of %d bytes", written, len(header))
 	}
 	if err := file.Close(); err != nil {
-		_ = cleanup()
+		_ = binaryCleanup()
 		return nil, fmt.Errorf("close ReDevPlugin runtime fixture: %w", err)
 	}
-	return cleanup, nil
+	descriptorCleanup, err := installDescriptor(root, header)
+	if err != nil {
+		_ = binaryCleanup()
+		return nil, err
+	}
+	return combineCleanup(descriptorCleanup, binaryCleanup), nil
 }
 
 // InstallSiblingOfCurrentExecutable follows the same canonical sibling rule as
@@ -88,22 +95,105 @@ func executableHeader(goos, goarch string) ([]byte, error) {
 	}
 }
 
-func preserveExistingFixture(path string, expected []byte) (func() error, error) {
+func preserveExistingFixture(path string, expected []byte, mode os.FileMode) error {
 	info, err := os.Lstat(path)
 	if err != nil {
-		return nil, fmt.Errorf("inspect existing ReDevPlugin runtime fixture: %w", err)
+		return fmt.Errorf("inspect existing ReDevPlugin runtime fixture: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm() != 0o500 {
-		return nil, fmt.Errorf("refuse to replace existing ReDevPlugin runtime fixture %q", path)
+	if !info.Mode().IsRegular() || info.Mode().Perm() != mode {
+		return fmt.Errorf("refuse to replace existing ReDevPlugin runtime fixture %q", path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read existing ReDevPlugin runtime fixture: %w", err)
+		return fmt.Errorf("read existing ReDevPlugin runtime fixture: %w", err)
 	}
 	if !bytes.Equal(data, expected) {
-		return nil, fmt.Errorf("refuse to replace existing ReDevPlugin runtime fixture %q", path)
+		return fmt.Errorf("refuse to replace existing ReDevPlugin runtime fixture %q", path)
 	}
-	return func() error { return nil }, nil
+	return nil
+}
+
+func installDescriptor(root string, binary []byte) (func() error, error) {
+	digest := sha256.Sum256(binary)
+	descriptor := struct {
+		SchemaVersion   string `json:"schema_version"`
+		PlatformRelease struct {
+			PlatformVersion string `json:"platform_version"`
+		} `json:"platform_release"`
+		Runtime struct {
+			Target string `json:"target"`
+			Binary struct {
+				Path   string `json:"path"`
+				SHA256 string `json:"sha256"`
+				Size   int    `json:"size"`
+			} `json:"binary"`
+		} `json:"runtime"`
+	}{
+		SchemaVersion: "redeven.redevplugin_runtime_build.v1",
+	}
+	descriptor.PlatformRelease.PlatformVersion = version.CurrentPlatformVersion()
+	descriptor.Runtime.Target = runtime.GOOS + "/" + runtime.GOARCH
+	descriptor.Runtime.Binary.Path = binaryName
+	descriptor.Runtime.Binary.SHA256 = hex.EncodeToString(digest[:])
+	descriptor.Runtime.Binary.Size = len(binary)
+	raw, err := json.Marshal(descriptor)
+	if err != nil {
+		return nil, fmt.Errorf("encode ReDevPlugin runtime fixture descriptor: %w", err)
+	}
+
+	path := filepath.Join(root, descriptorName)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		if err := preserveExistingFixture(path, raw, 0o600); err != nil {
+			return nil, err
+		}
+		return func() error { return nil }, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("create ReDevPlugin runtime fixture descriptor: %w", err)
+	}
+	cleanup := removeFixture(path, "ReDevPlugin runtime fixture descriptor")
+	if written, err := file.Write(raw); err != nil || written != len(raw) {
+		_ = file.Close()
+		_ = cleanup()
+		if err != nil {
+			return nil, fmt.Errorf("write ReDevPlugin runtime fixture descriptor: %w", err)
+		}
+		return nil, fmt.Errorf("write ReDevPlugin runtime fixture descriptor: wrote %d of %d bytes", written, len(raw))
+	}
+	if err := file.Close(); err != nil {
+		_ = cleanup()
+		return nil, fmt.Errorf("close ReDevPlugin runtime fixture descriptor: %w", err)
+	}
+	return cleanup, nil
+}
+
+func removeFixture(path, label string) func() error {
+	var cleanupOnce sync.Once
+	var cleanupErr error
+	return func() error {
+		cleanupOnce.Do(func() {
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				cleanupErr = fmt.Errorf("remove %s: %w", label, err)
+			}
+		})
+		return cleanupErr
+	}
+}
+
+func combineCleanup(cleanups ...func() error) func() error {
+	var cleanupOnce sync.Once
+	var cleanupErr error
+	return func() error {
+		cleanupOnce.Do(func() {
+			for _, cleanup := range cleanups {
+				if err := cleanup(); err != nil && cleanupErr == nil {
+					cleanupErr = err
+				}
+			}
+		})
+		return cleanupErr
+	}
 }
 
 func elfHeader(goarch string) ([]byte, error) {

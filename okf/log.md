@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-08-30
+* **Revision-only Flower read acknowledgements**: Redeven advances the read-state
+  store to schema v4, retains only each user's last seen activity revision, and
+  removes signature, prompt, and message-time validation. Flower sends each
+  displayed revision once per selection cycle, coalesces concurrent updates to
+  the newest revision, and does not automatically retry a failed acknowledgement.
+
 ## 2026-08-29
 * **Exact Flower run progress and stable status animation**: Redeven adopts
   Floret v5.0.15 as the sole owner of active RunID and process-local run phase.

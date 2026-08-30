@@ -365,19 +365,12 @@ export function settingsSnapshot(configured = true): FlowerSettingsSnapshot {
   };
 }
 
-export function readStatus(isUnread = false, revision = 2, status = 'idle'): FlowerThreadReadStatus {
-  const signature = `status:${status}\u001factivity:${revision}`;
+export function readStatus(isUnread = false, revision = 2, _status = 'idle'): FlowerThreadReadStatus {
   return {
     is_unread: isUnread,
-    snapshot: {
-      activity_revision: revision,
-      last_message_at_unix_ms: revision,
-      activity_signature: signature,
-    },
+    snapshot: { activity_revision: revision },
     read_state: {
       last_seen_activity_revision: isUnread ? Math.max(0, revision - 1) : revision,
-      last_read_message_at_unix_ms: isUnread ? Math.max(0, revision - 1) : revision,
-      last_seen_activity_signature: isUnread ? `status:${status}\u001factivity:${Math.max(0, revision - 1)}` : signature,
     },
   };
 }
@@ -944,9 +937,6 @@ export function adapter(configured = true): TestFlowerSurfaceAdapter {
       snapshot,
       read_state: {
         last_seen_activity_revision: snapshot.activity_revision,
-        last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
-        last_seen_activity_signature: snapshot.activity_signature,
-        ...(snapshot.waiting_prompt_id ? { last_seen_waiting_prompt_id: snapshot.waiting_prompt_id } : {}),
       },
     })),
     resolveHandler: vi.fn(async () => decision()),

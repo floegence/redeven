@@ -16,18 +16,8 @@ import {
 function readStatus(): FlowerThreadReadStatus {
   return {
     is_unread: false,
-    snapshot: {
-      activity_revision: 42,
-      last_message_at_unix_ms: 3200,
-      activity_signature: 'status:success\u001factivity:42\u001flast_message:3200',
-      waiting_prompt_id: '',
-    },
-    read_state: {
-      last_seen_activity_revision: 42,
-      last_read_message_at_unix_ms: 3200,
-      last_seen_activity_signature: 'status:success\u001factivity:42\u001flast_message:3200',
-      last_seen_waiting_prompt_id: '',
-    },
+    snapshot: { activity_revision: 42 },
+    read_state: { last_seen_activity_revision: 42 },
   };
 }
 
@@ -529,31 +519,21 @@ describe('runtime Flower surface adapter read state', () => {
 
     const result = await adapter.markThreadRead(' thread_1 ', {
       activity_revision: 42.9,
-      last_message_at_unix_ms: 3200.8,
-      activity_signature: ' status:success ',
-      waiting_prompt_id: ' ',
     });
 
     expect(result).toEqual({
       ...status,
       snapshot: {
         activity_revision: 42,
-        last_message_at_unix_ms: 3200,
-        activity_signature: 'status:success\u001factivity:42\u001flast_message:3200',
       },
       read_state: {
         last_seen_activity_revision: 42,
-        last_read_message_at_unix_ms: 3200,
-        last_seen_activity_signature: 'status:success\u001factivity:42\u001flast_message:3200',
       },
     });
     expect(markThreadRead).toHaveBeenCalledTimes(1);
     expect(markThreadRead).toHaveBeenCalledWith('thread_1', {
       snapshot: {
         activity_revision: 42,
-        last_message_at_unix_ms: 3200,
-        activity_signature: 'status:success',
-        waiting_prompt_id: undefined,
       },
     });
     expect(loadThread).not.toHaveBeenCalled();
@@ -566,9 +546,6 @@ describe('runtime Flower surface adapter read state', () => {
 
     await expect(adapter.markThreadRead('thread_1', {
       activity_revision: 1,
-      last_message_at_unix_ms: 1,
-      activity_signature: 'activity:1',
-      waiting_prompt_id: '',
     })).rejects.toThrow('Missing read status.');
   });
 
@@ -584,9 +561,6 @@ describe('runtime Flower surface adapter read state', () => {
 
     await expect(adapter.markThreadRead('thread_1', {
       activity_revision: 1,
-      last_message_at_unix_ms: 1,
-      activity_signature: 'activity:1',
-      waiting_prompt_id: '',
     })).rejects.toThrow('thread.read_status.read_state is required');
   });
 

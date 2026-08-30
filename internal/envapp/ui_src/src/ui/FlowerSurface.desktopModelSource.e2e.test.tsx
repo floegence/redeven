@@ -18,19 +18,11 @@ function jsonResponse(data: unknown): Response {
   } as Response;
 }
 
-function readStatus(status = 'idle') {
+function readStatus(_status = 'idle') {
   return {
     is_unread: false,
-    snapshot: {
-      activity_revision: 1,
-      last_message_at_unix_ms: 1,
-      activity_signature: `status:${status}`,
-    },
-    read_state: {
-      last_seen_activity_revision: 1,
-      last_read_message_at_unix_ms: 1,
-      last_seen_activity_signature: `status:${status}`,
-    },
+    snapshot: { activity_revision: 1 },
+    read_state: { last_seen_activity_revision: 1 },
   };
 }
 

@@ -38,10 +38,7 @@ func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
 		"user_1",
 		"thread_1",
 		threadreadstate.FlowerSnapshot{
-			ActivityRevision:    42,
-			LastMessageAtUnixMs: 123_456,
-			ActivitySignature:   "sig_1",
-			WaitingPromptID:     "prompt_1",
+			ActivityRevision: 42,
 		},
 	); err != nil {
 		_ = legacy.Close()
@@ -70,20 +67,14 @@ func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
 	defer func() { _ = current.Close() }()
 	records, err := current.EnsureFlower(context.Background(), "env_1", "user_1", map[string]threadreadstate.FlowerSnapshot{
 		"thread_1": {
-			ActivityRevision:    42,
-			LastMessageAtUnixMs: 123_456,
-			ActivitySignature:   "sig_1",
-			WaitingPromptID:     "prompt_1",
+			ActivityRevision: 42,
 		},
 	})
 	if err != nil {
 		t.Fatalf("EnsureFlower current: %v", err)
 	}
 	record := records["thread_1"]
-	if record.LastSeenActivityRevision != 42 ||
-		record.LastReadMessageAtUnixMs != 123_456 ||
-		record.LastSeenActivitySignature != "sig_1" ||
-		record.LastSeenWaitingPromptID != "prompt_1" {
+	if record.LastSeenActivityRevision != 42 {
 		t.Fatalf("migrated record=%#v, want legacy read state", record)
 	}
 }

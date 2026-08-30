@@ -108,7 +108,6 @@ export function threadSnapshotRevision(thread: FlowerThreadSnapshot | undefined)
     0,
     Math.floor(Number(thread.updated_at_ms) || 0),
     Math.floor(Number(thread.read_status.snapshot.activity_revision) || 0),
-    Math.floor(Number(thread.read_status.snapshot.last_message_at_unix_ms) || 0),
   );
 }
 

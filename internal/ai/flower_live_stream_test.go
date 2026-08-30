@@ -519,8 +519,8 @@ func TestFlowerLiveViewerReadStateIsSharedOnlyWithSameUser(t *testing.T) {
 
 	readStatus := FlowerThreadReadView{
 		IsUnread:  false,
-		Snapshot:  FlowerThreadReadSnapshot{ActivityRevision: 7, ActivitySignature: "snapshot"},
-		ReadState: FlowerThreadReadRecord{LastSeenActivityRevision: 7, LastSeenActivitySignature: "private_read"},
+		Snapshot:  FlowerThreadReadSnapshot{ActivityRevision: 7},
+		ReadState: FlowerThreadReadRecord{LastSeenActivityRevision: 7},
 	}
 	if err := svc.PublishFlowerViewerReadState(&firstMeta, threadID, readStatus); err != nil {
 		t.Fatal(err)
@@ -533,7 +533,7 @@ func TestFlowerLiveViewerReadStateIsSharedOnlyWithSameUser(t *testing.T) {
 	if len(firstFrame.Data) == 0 || len(secondFrame.Data) == 0 || &firstFrame.Data[0] != &secondFrame.Data[0] {
 		t.Fatal("same-user tabs did not share one immutable encoded viewer batch")
 	}
-	if !strings.Contains(string(firstFrame.Data), "private_read") {
+	if !strings.Contains(string(firstFrame.Data), `"last_seen_activity_revision":7`) {
 		t.Fatalf("viewer frame omitted read state: %s", firstFrame.Data)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)

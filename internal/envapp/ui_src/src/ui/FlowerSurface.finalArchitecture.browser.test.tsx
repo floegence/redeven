@@ -23,6 +23,7 @@ import {
   subagentDetail,
   subagentSummary,
   thread,
+  wait,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 
@@ -85,6 +86,72 @@ function completedTerminalThread() {
 }
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('coalesces live read revisions while one acknowledgement is in flight', async () => {
+    const initial = thread({
+      thread_id: 'thread-read-ack-coalescing',
+      title: 'Read acknowledgement coalescing',
+      status: 'success',
+      read_status: readStatus(true, 7, 'success'),
+    });
+    const stream = controlledWorkspaceStream([{
+      schema_version: 1,
+      kind: 'ready',
+      summaries: [initial],
+    }]);
+    const firstAcknowledgement = deferred<ReturnType<typeof readStatus>>();
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot: { activity_revision: number }) => {
+      if (snapshot.activity_revision === 7) return firstAcknowledgement.promise;
+      return {
+        is_unread: false,
+        snapshot,
+        read_state: { last_seen_activity_revision: snapshot.activity_revision },
+      };
+    });
+    let latestThread = initial;
+    const loadThread = vi.fn(async () => liveBootstrap(latestThread, latestThread.updated_at_ms));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [initial]),
+      loadThread,
+      connectLiveStream: stream.connect,
+      markThreadRead,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => markThreadRead.mock.calls.length === 1);
+
+    latestThread = thread({
+      ...initial,
+      updated_at_ms: 8,
+      read_status: readStatus(true, 8, 'success'),
+    });
+    stream.push({
+      schema_version: 1,
+      kind: 'summary.batch',
+      summaries: [latestThread],
+    });
+    await waitFor(() => loadThread.mock.calls.length >= 2);
+    latestThread = thread({
+      ...initial,
+      updated_at_ms: 9,
+      read_status: readStatus(true, 9, 'success'),
+    });
+    stream.push({
+      schema_version: 1,
+      kind: 'summary.batch',
+      summaries: [latestThread],
+    });
+    await waitFor(() => loadThread.mock.calls.length >= 3);
+    await wait(25);
+    expect(markThreadRead).toHaveBeenCalledTimes(1);
+
+    firstAcknowledgement.resolve(readStatus(true, 9, 'success'));
+    await waitFor(() => markThreadRead.mock.calls.length === 2);
+
+    expect(markThreadRead.mock.calls.map((call) => call[1].activity_revision)).toEqual([7, 9]);
+  });
+
   it('routes a live Subagent inventory to the parent panel and opens its floating detail', async () => {
     const parent = thread({
       thread_id: 'thread-parent-live-subagent',

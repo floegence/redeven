@@ -1,23 +1,15 @@
 import type { FlowerThreadActivitySnapshot, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import { trimString } from './flowerSurfaceModel';
 
-export function flowerThreadReadSnapshotKey(snapshot: FlowerThreadActivitySnapshot | null | undefined): string {
-  return [
-    String(Math.max(0, Math.floor(Number(snapshot?.activity_revision ?? 0)))),
-    String(Math.max(0, Math.floor(Number(snapshot?.last_message_at_unix_ms ?? 0)))),
-    trimString(snapshot?.activity_signature),
-    trimString(snapshot?.waiting_prompt_id),
-  ].join('\x1e');
+export function flowerThreadActivityRevision(snapshot: FlowerThreadActivitySnapshot | null | undefined): number {
+  return Math.max(0, Math.floor(Number(snapshot?.activity_revision ?? 0)));
 }
 
 function readStateKey(thread: FlowerThreadSnapshot): string {
   return [
     String(thread.read_status.is_unread),
-    flowerThreadReadSnapshotKey(thread.read_status.snapshot),
+    String(flowerThreadActivityRevision(thread.read_status.snapshot)),
     String(Math.max(0, Math.floor(Number(thread.read_status.read_state.last_seen_activity_revision ?? 0)))),
-    String(Math.max(0, Math.floor(Number(thread.read_status.read_state.last_read_message_at_unix_ms ?? 0)))),
-    trimString(thread.read_status.read_state.last_seen_activity_signature),
-    trimString(thread.read_status.read_state.last_seen_waiting_prompt_id),
   ].join('\x1e');
 }
 

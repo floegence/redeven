@@ -76,10 +76,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	view.ApprovalPending = &approvalPending
 	view.ApprovalPendingCount = current.Attention.ApprovalCount
 	view.FlowerActivity = FlowerThreadReadSnapshot{
-		ActivityRevision:    max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
-		LastMessageAtUnixMs: view.LastMessageAtUnixMs,
-		ActivitySignature:   fmt.Sprintf("%s:%d:%s:%d:%d", view.ThreadID, max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs), current.Activity, current.Attention.ApprovalCount, current.Attention.InputCount),
-		WaitingPromptID:     waitingPromptID(view.WaitingPrompt),
+		ActivityRevision: max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
 	}
 	children, err := s.listFlowerSubagentsForParent(ctx, current.ThreadID)
 	if err != nil {
@@ -179,9 +176,7 @@ func (s *Service) threadViewFromSummary(ctx context.Context, th *threadstore.Thr
 	}
 	view.RunProgress = flowerRunProgress(summary.RunID, summary.TurnID, summary.RunProgress)
 	view.FlowerActivity = FlowerThreadReadSnapshot{
-		ActivityRevision:    max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
-		LastMessageAtUnixMs: view.LastMessageAtUnixMs,
-		ActivitySignature:   fmt.Sprintf("%s:%d:%s:%d:%d", view.ThreadID, max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs), summary.Activity, summary.Attention.ApprovalCount, summary.Attention.InputCount),
+		ActivityRevision: max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
 	}
 	return view, nil
 }
@@ -325,13 +320,6 @@ func requestUserInputPromptFromCurrent(current flruntime.ThreadView) *RequestUse
 		}
 	}
 	return nil
-}
-
-func waitingPromptID(prompt *RequestUserInputPrompt) string {
-	if prompt == nil {
-		return ""
-	}
-	return strings.TrimSpace(prompt.PromptID)
 }
 
 func (s *Service) threadReasoningDefaults(ctx context.Context, modelID string) (config.AIReasoningCapability, config.AIReasoningSelection, bool, error) {

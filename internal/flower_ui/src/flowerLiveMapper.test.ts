@@ -177,18 +177,15 @@ describe('mapFlowerThread title contract', () => {
       created_at_unix_ms: 1,
       updated_at_unix_ms: 9,
       run_status: 'running',
+      active_run_id: 'run-settings-revision',
       queued_turn_count: 0,
       read_status: {
         is_unread: false,
         snapshot: {
           activity_revision: 9,
-          last_message_at_unix_ms: 9,
-          activity_signature: 'running',
         },
         read_state: {
           last_seen_activity_revision: 9,
-          last_read_message_at_unix_ms: 9,
-          last_seen_activity_signature: 'running',
         },
       },
     }, [], {

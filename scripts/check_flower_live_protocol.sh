@@ -27,6 +27,20 @@ if rg -n 'transcriptRenderSignature|getActiveRunSnapshot|ActiveRunSnapshot' inte
   exit 1
 fi
 
+obsolete_read_state_pattern='activity_signature|last_seen_activity_signature|last_seen_waiting_prompt_id|last_read_message_at_unix_ms|last_read_updated_at_unix_s'
+obsolete_read_state_paths=(
+  internal/threadreadstate/store.go
+  internal/codeapp/appserver/thread_read_state.go
+  internal/ai/flower_live_types.go
+  internal/flower_ui/src
+  desktop/src/welcome/flower
+  internal/envapp/ui_src/src/ui
+)
+if rg -n "$obsolete_read_state_pattern" "${obsolete_read_state_paths[@]}" -S; then
+  echo "obsolete Flower read acknowledgement fields are still present" >&2
+  exit 1
+fi
+
 if rg -n 'anchor_message_id|AnchorMessageID|context\.compaction\.(started|applied)' internal/flower_ui/src desktop/src/welcome/flower internal/envapp/ui_src/src/ui internal/ai -S; then
   echo "old Flower context compaction timeline protocol is still present" >&2
   exit 1

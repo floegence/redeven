@@ -10,7 +10,7 @@ import (
 
 const (
 	schemaKind           = "thread_read_state"
-	currentSchemaVersion = 3
+	currentSchemaVersion = 4
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -22,9 +22,46 @@ func schemaSpec() sqliteutil.Spec {
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateToV4},
 		},
 		Verify: verifySchema,
 	}
+}
+
+func migrateToV4(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+DROP INDEX idx_thread_read_state_scope;
+ALTER TABLE thread_read_state RENAME TO thread_read_state_v3;
+CREATE TABLE thread_read_state (
+  endpoint_id TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  surface TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  last_seen_activity_revision INTEGER NOT NULL DEFAULT 0,
+  updated_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY (endpoint_id, scope_id, surface, thread_id)
+);
+INSERT INTO thread_read_state (
+  endpoint_id,
+  scope_id,
+  surface,
+  thread_id,
+  last_seen_activity_revision,
+  updated_at_unix_ms
+)
+SELECT
+  endpoint_id,
+  scope_id,
+  surface,
+  thread_id,
+  last_seen_activity_revision,
+  updated_at_unix_ms
+FROM thread_read_state_v3;
+DROP TABLE thread_read_state_v3;
+CREATE INDEX idx_thread_read_state_scope
+  ON thread_read_state(endpoint_id, scope_id, surface, updated_at_unix_ms DESC, thread_id DESC);
+`)
+	return err
 }
 
 func migrateToV3(tx *sql.Tx) error {
@@ -87,10 +124,6 @@ func verifySchema(tx *sql.Tx) error {
 		"surface",
 		"thread_id",
 		"last_seen_activity_revision",
-		"last_read_message_at_unix_ms",
-		"last_seen_waiting_prompt_id",
-		"last_read_updated_at_unix_s",
-		"last_seen_activity_signature",
 		"updated_at_unix_ms",
 	}
 	columns, err := sqliteutil.TableColumnNamesTx(tx, "thread_read_state")

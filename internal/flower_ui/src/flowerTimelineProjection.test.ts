@@ -61,16 +61,8 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     messages: [],
     read_status: {
       is_unread: false,
-      snapshot: {
-        activity_revision: 1,
-        last_message_at_unix_ms: 2,
-        activity_signature: 'activity:1',
-      },
-      read_state: {
-        last_seen_activity_revision: 1,
-        last_read_message_at_unix_ms: 2,
-        last_seen_activity_signature: 'activity:1',
-      },
+      snapshot: { activity_revision: 1 },
+      read_state: { last_seen_activity_revision: 1 },
     },
     ...overrides,
     title_status: overrides.title_status ?? 'ready',
