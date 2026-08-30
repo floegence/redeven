@@ -1,11 +1,10 @@
-import { Button, type DirectoryPickerProps } from '@floegence/floe-webapp-core/ui';
+import { Button, DirectoryPicker, type DirectoryPickerProps } from '@floegence/floe-webapp-core/ui';
 import { FolderOpen } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createSignal } from 'solid-js';
 
 import type { TerminalGroup } from '../protocol/redeven_v1/sdk/terminal';
 import { useI18n } from '../i18n';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
-import { LazyMountedDirectoryPicker } from '../primitives/LazyMountedPickers';
 
 export function defaultTerminalGroupNameFromPath(path: string): string {
   const raw = String(path ?? '').trim();
@@ -111,7 +110,7 @@ export function TerminalGroupEditorDialog(props: {
           <p class="text-[11px] leading-4 text-muted-foreground">{i18n.t('terminal.groupDefaultPathHint')}</p>
         </div>
       </Dialog>
-      <LazyMountedDirectoryPicker
+      <DirectoryPicker
         open={pickerOpen()}
         onOpenChange={setPickerOpen}
         files={props.pickerFiles ?? []}

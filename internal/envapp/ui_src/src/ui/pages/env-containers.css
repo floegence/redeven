@@ -221,6 +221,8 @@
 .container-runtime-badge { flex: none; padding: 2px 6px; border-radius: 999px; color: var(--muted-foreground); background: var(--redeven-surface-control-muted); font-size: 9px; font-weight: 600; }
 .container-secondary-cell,
 .container-port-cell { overflow: hidden; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.container-resource-link { display: inline-flex; max-width: 100%; min-height: 28px; align-items: center; gap: 4px; overflow: hidden; color: var(--primary); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.container-resource-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .container-row-actions { justify-content: flex-end; }
 .container-destructive-action { color: var(--destructive) !important; }
 .floe-floating-menu button:has(.text-destructive) { color: var(--destructive); }
@@ -426,6 +428,11 @@
 .container-mount-row > div { display: grid; gap: 3px; }
 .container-mount-row strong { font-family: var(--font-mono); font-size: 11px; }
 .container-mount-row span { color: var(--muted-foreground); font-size: 10px; }
+.container-mount-row--link { width: 100%; text-align: left; }
+.container-mount-row--link:hover { background: color-mix(in srgb, var(--redeven-surface-panel-hover) 52%, transparent); }
+.container-mount-groups { display: grid; max-width: 880px; gap: 24px; }
+.container-mount-groups section { display: grid; gap: 6px; }
+.container-mount-groups h3 { color: var(--muted-foreground); font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
 
 .container-file-path { display: flex; min-height: 40px; align-items: center; gap: 8px; }
 .container-file-path > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -500,7 +507,18 @@
 .container-compose-editor { display: grid; gap: 16px; }
 .container-compose-editor label { display: grid; gap: 7px; font-size: 12px; font-weight: 620; }
 .container-compose-editor small { color: var(--muted-foreground); font-size: 10px; font-weight: 450; line-height: 1.55; }
-.container-compose-editor textarea { resize: vertical; font-family: var(--font-mono); font-size: 11px; line-height: 1.55; }
+.container-compose-field { display: grid; gap: 7px; }
+.container-compose-field__label { font-size: 12px; font-weight: 620; }
+.container-compose-path-entry { display: flex; align-items: center; gap: 7px; }
+.container-compose-path-entry > :first-child { min-width: 0; flex: 1; font-family: var(--font-mono); font-size: 11px; }
+.container-compose-path-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.container-compose-path-list li { display: grid; min-height: 42px; grid-template-columns: 22px minmax(0, 1fr) 32px 32px 32px; align-items: center; gap: 4px; border-bottom: 1px solid color-mix(in srgb, var(--border) 52%, transparent); }
+.container-compose-path-list__order { display: grid; width: 18px; height: 18px; place-items: center; border-radius: 999px; color: var(--muted-foreground); background: var(--redeven-surface-control-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.container-compose-path-list code { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.container-compose-profile-input { max-width: 360px; }
+.container-compose-profile-list { display: flex; min-height: 24px; flex-wrap: wrap; gap: 6px; }
+.container-compose-profile-list button { display: inline-grid; width: 20px; min-height: 20px; margin-left: 3px; place-items: center; border-radius: 999px; }
+.container-compose-profile-list button:hover { background: color-mix(in srgb, var(--foreground) 10%, transparent); }
 
 .container-operations-workspace {
   display: grid;
@@ -634,6 +652,9 @@
   .container-operation-list { max-height: 230px; border-right: 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 66%, transparent); }
   .container-operation-detail { padding: 18px 16px 24px; }
   .container-operation-facts { grid-template-columns: 1fr; gap: 10px; }
+  .container-compose-path-entry { align-items: stretch; flex-wrap: wrap; }
+  .container-compose-path-entry > :first-child { flex-basis: 100%; }
+  .container-compose-path-list li { grid-template-columns: 22px minmax(0, 1fr) 44px 44px 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

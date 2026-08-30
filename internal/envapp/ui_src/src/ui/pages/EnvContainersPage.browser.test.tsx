@@ -37,6 +37,10 @@ vi.mock('../services/uiStorage', async (importOriginal) => ({
   writeUIStorageJSON: vi.fn(),
 }));
 
+vi.mock('../protocol/redeven_v1', () => ({
+  useRedevenRpc: () => ({ fs: { list: vi.fn().mockResolvedValue({ entries: [] }) } }),
+}));
+
 vi.mock('../services/containerResourcesApi', () => ({
   listContainerRuntimes: vi.fn().mockResolvedValue([{
     endpoint_id: 'desktop-linux', engine: 'docker', state: 'ready', engine_version: '27.3.1', rootless: false,
@@ -54,10 +58,10 @@ vi.mock('../services/containerResourcesApi', () => ({
   listContainerOperations: vi.fn().mockResolvedValue([]),
   listContainerOperationEvents: vi.fn().mockResolvedValue([]),
   subscribeContainerOperationEvents: vi.fn().mockResolvedValue(undefined),
-  createSavedComposeProject: vi.fn(),
-  getSavedComposeProjectDefinition: vi.fn(),
-  updateSavedComposeProject: vi.fn(),
-  deleteSavedComposeProject: vi.fn(),
+  createComposeProjectDefinition: vi.fn(),
+  getComposeProjectDefinition: vi.fn(),
+  updateComposeProjectDefinition: vi.fn(),
+  deleteComposeProjectDefinition: vi.fn(),
   getContainerImageHistory: vi.fn().mockResolvedValue([]),
   getRawContainerInspect: vi.fn().mockResolvedValue({}),
   listContainerResourceFiles: vi.fn().mockResolvedValue({ path: '/', entries: [], truncated: false }),

@@ -188,7 +188,7 @@ import {
   type FlowerCompanionTerminalTransition,
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
-import { createDirectoryPickerDataSource } from './filePicker/createDirectoryPickerDataSource';
+import { createFilesystemPickerDataSource } from './filePicker/createFilesystemPickerDataSource';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { mergeFlowerContextUsage } from './flowerLiveMapper';
 import { createFlowerScrollTailController } from './flowerScrollTail';
@@ -1984,7 +1984,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadID()) return `${copy().threadList.copyWorkingDirectory}: ${path}`;
     return `${copy().threadList.workingDirectoryLabel}: ${path}`;
   });
-  const workingDirectoryPicker = createDirectoryPickerDataSource({
+  const workingDirectoryPicker = createFilesystemPickerDataSource({
     homePath: () => workingDirectoryHomePath(),
     listDirectory: async (absolutePath) => {
       if (!props.adapter.listWorkingDirectoryEntries) {

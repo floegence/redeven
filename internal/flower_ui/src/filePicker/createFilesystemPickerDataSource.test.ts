@@ -1,7 +1,7 @@
 import { createRoot, createSignal } from 'solid-js';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createDirectoryPickerDataSource, type DirectoryPickerDataSource } from './createDirectoryPickerDataSource';
+import { createFilesystemPickerDataSource, type FilesystemPickerDataSource } from './createFilesystemPickerDataSource';
 
 type DirectoryEntry = {
   name: string;
@@ -21,13 +21,15 @@ function deferred<T>() {
 
 function withDataSource(
   listDirectory: (absolutePath: string) => Promise<readonly DirectoryEntry[]>,
-  callback: (dataSource: DirectoryPickerDataSource, setHomePath: (value: string) => void) => Promise<void> | void,
+  callback: (dataSource: FilesystemPickerDataSource, setHomePath: (value: string) => void) => Promise<void> | void,
+  includeFiles = false,
 ) {
   return createRoot(async (dispose) => {
     const [homePath, setHomePath] = createSignal('/Users/alice');
-    const dataSource = createDirectoryPickerDataSource({
+    const dataSource = createFilesystemPickerDataSource({
       homePath,
       listDirectory,
+      includeFiles,
     });
 
     try {
@@ -38,7 +40,23 @@ function withDataSource(
   });
 }
 
-describe('createDirectoryPickerDataSource', () => {
+describe('createFilesystemPickerDataSource', () => {
+  it('shares one tree source while exposing files only to file pickers', async () => {
+    const listDirectory = vi.fn(async (): Promise<readonly DirectoryEntry[]> => [
+      { name: 'src', path: '/Users/alice/src', isDirectory: true },
+      { name: 'compose.yaml', path: '/Users/alice/compose.yaml', isDirectory: false },
+    ]);
+
+    await withDataSource(listDirectory, async (dataSource) => {
+      await dataSource.ensureRootLoaded();
+      expect(dataSource.files().map((item) => item.name)).toEqual(['src']);
+    });
+    await withDataSource(listDirectory, async (dataSource) => {
+      await dataSource.ensureRootLoaded();
+      expect(dataSource.files().map((item) => item.name)).toEqual(['src', 'compose.yaml']);
+    }, true);
+  });
+
   it('hydrates ancestor directories so an existing unloaded path becomes selectable', async () => {
     const listDirectory = vi.fn(async (absolutePath: string): Promise<readonly DirectoryEntry[]> => {
       if (absolutePath === '/Users/alice') {

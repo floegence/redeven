@@ -589,6 +589,7 @@ func containerSummary(container EngineContainer) ContainerSummary {
 	return ContainerSummary{
 		ContainerID:     strings.TrimSpace(container.ContainerID),
 		Name:            strings.TrimSpace(container.Name),
+		ImageID:         strings.TrimSpace(container.Image.RuntimeID),
 		Image:           imageSummary(container.Image),
 		State:           container.State,
 		Health:          strings.TrimSpace(container.Health),
@@ -622,6 +623,7 @@ func containerInspect(container EngineContainer) ContainerInspect {
 	return ContainerInspect{
 		ContainerID:     strings.TrimSpace(container.ContainerID),
 		Name:            strings.TrimSpace(container.Name),
+		ImageID:         strings.TrimSpace(container.Image.RuntimeID),
 		Image:           imageSummary(container.Image),
 		State:           container.State,
 		Health:          strings.TrimSpace(container.Health),

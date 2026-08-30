@@ -2,7 +2,7 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import { normalizeAbsolutePath } from './path';
 
-type DirectoryEntryLike = {
+type FilesystemEntryLike = {
   name?: string | null;
   path?: string | null;
   isDirectory?: boolean | null;
@@ -77,8 +77,12 @@ export function normalizePickerTreeInput(path: string, rootPathAbs?: string | nu
   return normalizePickerTreePath(path);
 }
 
-export function toPickerFolderItem(entry: DirectoryEntryLike, rootPathAbs?: string | null): FileItem | null {
-  if (!entry?.isDirectory) return null;
+export function toPickerItem(
+  entry: FilesystemEntryLike,
+  rootPathAbs?: string | null,
+  includeFiles = false,
+): FileItem | null {
+  if (!entry?.isDirectory && !includeFiles) return null;
 
   const absolutePath = normalizeAbsolutePath(String(entry.path ?? ''));
   if (!absolutePath) return null;
@@ -91,14 +95,14 @@ export function toPickerFolderItem(entry: DirectoryEntryLike, rootPathAbs?: stri
   return {
     id: treePath,
     name,
-    type: 'folder',
+    type: entry.isDirectory ? 'folder' : 'file',
     path: treePath,
     size: Number.isFinite(size) ? size : undefined,
     modifiedAt: Number.isFinite(modifiedAtMs) && modifiedAtMs > 0 ? new Date(modifiedAtMs) : undefined,
   };
 }
 
-export function sortPickerFolderItems(items: FileItem[]): FileItem[] {
+export function sortPickerItems(items: FileItem[]): FileItem[] {
   return [...items].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
 }
 

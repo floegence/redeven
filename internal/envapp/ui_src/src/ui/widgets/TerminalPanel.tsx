@@ -138,7 +138,7 @@ import { TerminalSearchOverlay } from './TerminalSearchOverlay';
 import { TerminalSharedGeometryNotice } from './TerminalSharedGeometryNotice';
 import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometryPresentation';
 import { REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR } from '../workbench/surface/workbenchInputRouting';
-import { createDirectoryPickerDataSource } from '../../../../../flower_ui/src/filePicker/createDirectoryPickerDataSource';
+import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
 
 type pending_terminal_session_status = 'creating' | 'failed';
 
@@ -1057,7 +1057,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   ensureTerminalPreferencesInitialized(floe.persist);
   const terminalPrefs = useTerminalPreferences();
   const terminalCatalog = useTerminalSessionCatalog();
-  const groupPathPicker = createDirectoryPickerDataSource({
+  const groupPathPicker = createFilesystemPickerDataSource({
     homePath: () => '/',
     listDirectory: async (absolutePath) => {
       if (!protocol.session?.()) return [];

@@ -14,7 +14,7 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
-import { LazyMountedDirectoryPicker } from '../primitives/LazyMountedPickers';
+import { DirectoryPicker } from '@floegence/floe-webapp-core/ui';
 
 import {
   getEnvPublicIDFromSession,
@@ -40,7 +40,7 @@ import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
-import { createDirectoryPickerDataSource } from '../../../../../flower_ui/src/filePicker/createDirectoryPickerDataSource';
+import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
 import {
   ServiceTemplateCatalog,
   ServiceTemplateIdentity,
@@ -1589,7 +1589,7 @@ export function EnvPortForwardsPage() {
   const managedRowOperation = (serviceID: string) => managedOperations.ownedOperation(serviceID, 'row');
   const managedOperationArtifact = (serviceID: string) => managedState().find((service) => service.service_id === serviceID)?.operation_artifact_reference;
 
-  const workspacePicker = createDirectoryPickerDataSource({
+  const workspacePicker = createFilesystemPickerDataSource({
     homePath: () => '/',
     listDirectory: async (absolutePath) => {
       if (!protocol.session?.()) return [];
@@ -2799,7 +2799,7 @@ export function EnvPortForwardsPage() {
         </div>
       </EnvAppDrawer>
 
-      <LazyMountedDirectoryPicker
+      <DirectoryPicker
         open={workspacePickerOpen()}
         onOpenChange={setWorkspacePickerOpen}
         files={workspacePicker.files()}

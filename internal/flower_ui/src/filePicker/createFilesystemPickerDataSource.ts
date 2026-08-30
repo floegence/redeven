@@ -9,12 +9,12 @@ import {
   normalizePickerTreeInput,
   normalizePickerTreePath,
   replacePickerChildren,
-  sortPickerFolderItems,
-  toPickerFolderItem,
+  sortPickerItems,
+  toPickerItem,
   toPickerTreeAbsolutePath,
 } from './directoryPickerTree';
 
-type DirectoryEntryLike = {
+type FilesystemEntryLike = {
   name?: string | null;
   path?: string | null;
   isDirectory?: boolean | null;
@@ -22,15 +22,17 @@ type DirectoryEntryLike = {
   modifiedAt?: number | null;
 };
 
-export type DirectoryPickerListDirectory<Entry extends DirectoryEntryLike = DirectoryEntryLike> = (
+export type FilesystemPickerListDirectory<Entry extends FilesystemEntryLike = FilesystemEntryLike> = (
   absolutePath: string,
 ) => Promise<readonly Entry[] | Entry[]>;
 
-export type DirectoryPickerDataSource = ReturnType<typeof createDirectoryPickerDataSource>;
+export type FilesystemPickerDataSource = ReturnType<typeof createFilesystemPickerDataSource>;
 
-export function createDirectoryPickerDataSource<Entry extends DirectoryEntryLike>(args: {
+/** One filesystem tree source for directory, open-file, and save-file pickers. */
+export function createFilesystemPickerDataSource<Entry extends FilesystemEntryLike>(args: {
   homePath: Accessor<string | undefined>;
-  listDirectory: DirectoryPickerListDirectory<Entry>;
+  listDirectory: FilesystemPickerListDirectory<Entry>;
+  includeFiles?: boolean;
 }) {
   const [files, setFiles] = createSignal<FileItem[]>([]);
   let cache = new Map<string, FileItem[]>();
@@ -50,40 +52,31 @@ export function createDirectoryPickerDataSource<Entry extends DirectoryEntryLike
     const normalizedPickerPath = normalizePickerTreePath(pickerPath);
     const homePath = readHomePath();
     const absolutePath = toPickerTreeAbsolutePath(normalizedPickerPath, homePath);
-    if (!absolutePath) {
-      return [];
-    }
+    if (!absolutePath) return [];
 
     const cached = cache.get(absolutePath);
     if (cached) {
       setFiles((prev) => replacePickerChildren(prev, normalizedPickerPath, cached));
       return cached;
     }
-
     const running = inflight.get(absolutePath);
-    if (running) {
-      return running;
-    }
+    if (running) return running;
 
     const requestRevision = revision;
     const request = Promise.resolve(args.listDirectory(absolutePath))
-      .then((entries) => sortPickerFolderItems(
+      .then((entries) => sortPickerItems(
         Array.from(entries ?? [])
-          .map((entry) => toPickerFolderItem(entry, homePath))
+          .map((entry) => toPickerItem(entry, homePath, Boolean(args.includeFiles)))
           .filter((item): item is FileItem => Boolean(item)),
       ))
       .then((items) => {
-        if (requestRevision !== revision) {
-          return items;
-        }
+        if (requestRevision !== revision) return items;
         cache.set(absolutePath, items);
         setFiles((prev) => replacePickerChildren(prev, normalizedPickerPath, items));
         return items;
       })
       .finally(() => {
-        if (inflight.get(absolutePath) === request) {
-          inflight.delete(absolutePath);
-        }
+        if (inflight.get(absolutePath) === request) inflight.delete(absolutePath);
       });
 
     inflight.set(absolutePath, request);
@@ -92,41 +85,24 @@ export function createDirectoryPickerDataSource<Entry extends DirectoryEntryLike
 
   const ensurePath: PickerEnsurePath = async (path) => {
     const targetPath = normalizePickerTreeInput(path, readHomePath());
-    if (targetPath === '/') {
-      return { status: 'ready', resolvedPath: '/' };
-    }
-    if (hasPickerFolderPath(files(), targetPath)) {
+    if (targetPath === '/' || hasPickerFolderPath(files(), targetPath)) {
       return { status: 'ready', resolvedPath: targetPath };
     }
-
     try {
       const chain = listPickerTreePathChain(targetPath);
       for (let index = 0; index < chain.length - 1; index += 1) {
         const parentPath = chain[index] ?? '/';
         const nextPath = chain[index + 1] ?? targetPath;
         const children = await loadDirectory(parentPath);
-        const nextExists = children.some((item) => (
-          item.type === 'folder'
-          && normalizePickerTreePath(item.path) === nextPath
-        ));
-        if (!nextExists) {
-          return {
-            status: 'missing',
-            resolvedPath: targetPath,
-            message: 'Path not found',
-          };
+        if (!children.some((item) => item.type === 'folder' && normalizePickerTreePath(item.path) === nextPath)) {
+          return { status: 'missing', resolvedPath: targetPath, message: 'Path not found' };
         }
       }
-
       return hasPickerFolderPath(files(), targetPath)
         ? { status: 'ready', resolvedPath: targetPath }
         : { status: 'missing', resolvedPath: targetPath, message: 'Path not found' };
     } catch {
-      return {
-        status: 'error',
-        resolvedPath: targetPath,
-        message: 'Could not load path',
-      };
+      return { status: 'error', resolvedPath: targetPath, message: 'Could not load path' };
     }
   };
 
@@ -134,9 +110,7 @@ export function createDirectoryPickerDataSource<Entry extends DirectoryEntryLike
     files,
     reset,
     ensureRootLoaded: () => loadDirectory('/'),
-    expandPath: async (pickerPath: string) => {
-      await loadDirectory(pickerPath);
-    },
+    expandPath: async (pickerPath: string) => { await loadDirectory(pickerPath); },
     ensurePath,
   };
 }

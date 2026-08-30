@@ -85,7 +85,48 @@ func (c *CLIClient) List(ctx context.Context, engine Engine, all bool) ([]Engine
 	if err != nil {
 		return nil, err
 	}
-	return parseContainerList(engine, raw)
+	containers, err := parseContainerList(engine, raw)
+	if err != nil {
+		return nil, err
+	}
+	return c.enrichContainerImageIDs(ctx, engine, containers)
+}
+
+func (c *CLIClient) enrichContainerImageIDs(ctx context.Context, engine Engine, containers []EngineContainer) ([]EngineContainer, error) {
+	ids := make([]string, 0, len(containers))
+	for _, container := range containers {
+		if container.Image.RuntimeID == "" && container.ContainerID != "" {
+			ids = append(ids, container.ContainerID)
+		}
+	}
+	if len(ids) == 0 {
+		return containers, nil
+	}
+
+	args := append([]string{"inspect"}, ids...)
+	raw, err := c.run(ctx, engine, args...)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+		return containers, nil
+	}
+	var docs []inspectDocument
+	if err := json.Unmarshal(bytes.TrimSpace(raw), &docs); err != nil {
+		return containers, nil
+	}
+	imageIDs := make(map[string]string, len(docs))
+	for _, doc := range docs {
+		if id, imageID := strings.TrimSpace(doc.ID), cleanImageMetadata(doc.Image); id != "" && imageID != "" {
+			imageIDs[id] = imageID
+		}
+	}
+	for index := range containers {
+		if containers[index].Image.RuntimeID == "" {
+			containers[index].Image.RuntimeID = imageIDs[containers[index].ContainerID]
+		}
+	}
+	return containers, nil
 }
 
 func (c *CLIClient) Inspect(ctx context.Context, engine Engine, containerID string) (EngineContainer, error) {
@@ -934,10 +975,13 @@ func parseContainerList(engine Engine, raw []byte) ([]EngineContainer, error) {
 		}
 		group := listContainerGroup(engine, entry.Labels, entry.Pod, entry.PodName)
 		out = append(out, EngineContainer{
-			Engine:          engine,
-			ContainerID:     id,
-			Name:            firstName(entry.Names, entry.NamesAlt),
-			Image:           ImageInput{Reference: strings.TrimSpace(entry.Image)},
+			Engine:      engine,
+			ContainerID: id,
+			Name:        firstName(entry.Names, entry.NamesAlt),
+			Image: ImageInput{
+				Reference: strings.TrimSpace(entry.Image),
+				RuntimeID: cleanImageMetadata(entry.ImageID),
+			},
 			State:           normalizeStateString(entry.State, entry.Status),
 			Health:          listHealth(entry.Status),
 			CreatedAtUnixMs: createdAt,

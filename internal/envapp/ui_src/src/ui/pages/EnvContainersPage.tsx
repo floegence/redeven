@@ -8,11 +8,13 @@ import {
   ArrowUp,
   Check,
   ChevronRight,
+  CircleStop,
   Copy,
   Cpu,
   Database,
   Download,
   ExternalLink,
+  Filter,
   Folder,
   FileText,
   Info,
@@ -25,14 +27,13 @@ import {
   Plus,
   Refresh,
   Search,
-  Settings,
   Terminal,
-  Stop,
   Trash,
   X,
+  XCircle,
 } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
-import { Button, Dropdown, Input, MonitoringChart, Select, Tabs, Tag, Textarea, type DropdownItem, type TabItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, FileOpenPicker, Input, MonitoringChart, Select, Tabs, Tag, type DropdownItem, type TabItem } from '@floegence/floe-webapp-core/ui';
 
 import { Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
@@ -81,7 +82,9 @@ import {
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { consumeContainerResourceNavigation, subscribeContainerResourceNavigation, type ContainerResourceNavigation } from '../services/containerResourceNavigation';
 import { useI18n } from '../i18n';
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
 import { useEnvContext } from './EnvContext';
 import './env-containers.css';
 
@@ -128,6 +131,14 @@ type ContainerConsoleState =
   | Readonly<{ phase: 'ready'; target: ContainerConsoleTarget; runtimes: readonly ContainerRuntime[]; inventory: readonly ContainerResourceEntry[]; refreshing: boolean }>
   | Readonly<{ phase: 'unavailable' | 'permission'; target: ContainerConsoleTarget; runtimes: readonly ContainerRuntime[] }>
   | Readonly<{ phase: 'error'; target: ContainerConsoleTarget; runtimes: readonly ContainerRuntime[]; message: string }>;
+
+type ReadyContainerConsoleState = Extract<ContainerConsoleState, { phase: 'ready' }>;
+
+type RelatedNavigationOrigin = Readonly<{
+  state: ReadyContainerConsoleState;
+  detailTab: DetailTab;
+  scrollTop: number;
+}>;
 
 const DEFAULT_STATE: PersistedContainersState = {
   version: 2,
@@ -256,6 +267,41 @@ function identityAliases(values: readonly unknown[]): ReadonlySet<string> {
 
 function imageIdentityAliases(image: ImageInventoryItem): ReadonlySet<string> {
   return identityAliases([image.id, image.reference, image.digest, ...(image.tags ?? [])]);
+}
+
+function canonicalImageID(value: unknown): string {
+  return compact(value).toLowerCase().replace(/^sha256:/u, '');
+}
+
+function absolutePath(value: string): boolean {
+  return value.startsWith('/') || /^[a-z]:[\\/]/iu.test(value);
+}
+
+function validComposeProjectName(value: string): boolean {
+  return /^[a-z0-9][a-z0-9_-]{0,62}$/u.test(compact(value).toLowerCase());
+}
+
+function parentNameFromPath(path: string): string {
+  const parts = compact(path).replace(/\\/gu, '/').split('/').filter(Boolean);
+  const parent = parts.at(-2) ?? '';
+  return parent.toLowerCase().replace(/[^a-z0-9_-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 63);
+}
+
+type ActionIconComponent = (props: { class?: string; 'aria-hidden'?: boolean | 'true' | 'false' }) => JSX.Element;
+
+function actionPresentation(method: string): Readonly<{ icon: ActionIconComponent; destructive: boolean }> {
+  if (method.endsWith('.start') || method.endsWith('.unpause')) return { icon: Play, destructive: false };
+  if (method.endsWith('.stop')) return { icon: CircleStop, destructive: false };
+  if (method.endsWith('.restart')) return { icon: Refresh, destructive: false };
+  if (method.endsWith('.pause')) return { icon: Pause, destructive: false };
+  if (method.endsWith('.kill')) return { icon: XCircle, destructive: true };
+  if (method.endsWith('.remove') || method.endsWith('.down')) return { icon: Trash, destructive: true };
+  return { icon: Activity, destructive: false };
+}
+
+function ActionGlyph(props: { method: string; class?: string }) {
+  const Icon = actionPresentation(props.method).icon;
+  return <Icon class={props.class ?? 'h-3.5 w-3.5'} aria-hidden="true" />;
 }
 
 function resourceMatchesNavigation(
@@ -449,10 +495,20 @@ function DetailRow(props: { label: string; value: string | number; mono?: boolea
   );
 }
 
+function DetailLinkRow(props: { label: string; value: string; onClick: () => void }) {
+  return (
+    <div class="container-detail-row">
+      <dt>{props.label}</dt>
+      <dd><button type="button" class="container-resource-link font-mono" title={props.value} onClick={props.onClick}>{props.value}<ChevronRight class="h-3.5 w-3.5" /></button></dd>
+    </div>
+  );
+}
+
 export function EnvContainersPage(props: { stateScope?: string; variant?: 'activity' | 'workbench' }) {
   const i18n = useI18n();
   const notify = useNotification();
   const env = useEnvContext();
+  const rpc = useRedevenRpc();
   const storageKey = () => `containers:${compact(props.stateScope) || 'activity'}`;
   const restored = sanitizePersistedState(readUIStorageJSON(storageKey(), DEFAULT_STATE));
   const restoredTarget: ContainerConsoleTarget = normalizeConsoleTarget(restored);
@@ -482,9 +538,16 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [composeEditingID, setComposeEditingID] = createSignal('');
   const [composeEditorTarget, setComposeEditorTarget] = createSignal<ReadyContainerRuntime | null>(null);
   const [composeName, setComposeName] = createSignal('');
-  const [composeConfigPaths, setComposeConfigPaths] = createSignal('');
+  const [composeNameTouched, setComposeNameTouched] = createSignal(false);
+  const [composeConfigPaths, setComposeConfigPaths] = createSignal<string[]>([]);
+  const [composeConfigPathInput, setComposeConfigPathInput] = createSignal('');
+  const [composeConfigPathError, setComposeConfigPathError] = createSignal('');
+  const [composeConfigPickerOpen, setComposeConfigPickerOpen] = createSignal(false);
   const [composeEnvFilePath, setComposeEnvFilePath] = createSignal('');
-  const [composeProfiles, setComposeProfiles] = createSignal('');
+  const [composeEnvPickerOpen, setComposeEnvPickerOpen] = createSignal(false);
+  const [composeProfiles, setComposeProfiles] = createSignal<string[]>([]);
+  const [composeProfileInput, setComposeProfileInput] = createSignal('');
+  const [composeProfileError, setComposeProfileError] = createSignal('');
   const [composeEditorBusy, setComposeEditorBusy] = createSignal(false);
   const [composeForget, setComposeForget] = createSignal<ContainerResourceEntry | null>(null);
   const [runtimeStatusOpen, setRuntimeStatusOpen] = createSignal(false);
@@ -529,12 +592,22 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   let logViewElement: HTMLDivElement | undefined;
   let inventoryScrollElement: HTMLDivElement | undefined;
   let storedInventoryScrollTop = 0;
+  let relatedNavigationOrigin: RelatedNavigationOrigin | null = null;
+
+  const composeFilePicker = createFilesystemPickerDataSource({
+    homePath: () => '/',
+    includeFiles: true,
+    listDirectory: async (path) => (await rpc.fs.list({ path, showHidden: true })).entries ?? [],
+  });
 
   const permissions = createMemo(() => env.env()?.permissions);
   const canRead = createMemo(() => Boolean(permissions()?.can_read));
   const canExecute = createMemo(() => canRead() && Boolean(permissions()?.can_execute));
   const canRWX = createMemo(() => canExecute() && Boolean(permissions()?.can_write));
   const canAdmin = createMemo(() => Boolean(permissions()?.can_admin || permissions()?.is_owner));
+  const composeNameError = createMemo(() => compact(composeName()) && !validComposeProjectName(composeName())
+    ? i18n.t('containers.compose.errors.name')
+    : '');
   const readyConsole = createMemo(() => {
     const state = consoleState();
     return state.phase === 'ready' ? state : null;
@@ -712,6 +785,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       resetListControls?: boolean;
       notifyIfSelectionMissing?: boolean;
       navigation?: Readonly<{ engine: ContainerEngine; endpointID: string; selectedIdentity: string }>;
+      restoreOnSelectionMissing?: RelatedNavigationOrigin;
     }> = {},
   ) => {
     let target = normalizeConsoleTarget(requestedTarget);
@@ -824,6 +898,17 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         navigationSelectionMissing = !selectedEntry;
       }
       const selectedStillExists = !nextSelectedResourceKey || entries.some((entry) => entry.key === nextSelectedResourceKey);
+      if (!selectedStillExists && options.restoreOnSelectionMissing) {
+        const origin = options.restoreOnSelectionMissing;
+        relatedNavigationOrigin = null;
+        setConsoleState(origin.state);
+        setDetailTab(origin.detailTab);
+        queueMicrotask(() => {
+          if (inventoryScrollElement) inventoryScrollElement.scrollTop = origin.scrollTop;
+        });
+        notify.info(i18n.t('containers.notifications.relatedMissingTitle'), i18n.t('containers.notifications.relatedMissingMessage'));
+        return;
+      }
       const readyTarget = { ...target, selectedResourceKey: selectedStillExists ? nextSelectedResourceKey : '' };
       setConsoleState({ phase: 'ready', target: readyTarget, runtimes: nextRuntimes, inventory: entries, refreshing: false });
       if ((navigationSelectionMissing || !selectedStillExists) && options.notifyIfSelectionMissing) {
@@ -1022,7 +1107,66 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     operationDetailsAbort?.abort();
   });
 
+  const openRelatedResource = async (
+    source: ContainerResourceEntry,
+    targetView: ContainerResourceView,
+    match: (item: ContainerResourceInventoryItem) => boolean,
+  ) => {
+    const originState = readyConsole();
+    if (!originState) return;
+    const origin: RelatedNavigationOrigin = {
+      state: originState,
+      detailTab: detailTab(),
+      scrollTop: originState.target.selectedResourceKey
+        ? storedInventoryScrollTop
+        : inventoryScrollElement?.scrollTop ?? storedInventoryScrollTop,
+    };
+    try {
+      const items = await listContainerResources(targetView, source.target.engine, source.target.endpoint_id);
+      if (readyConsole() !== originState) return;
+      const matches = items.filter(match);
+      if (matches.length !== 1) {
+        notify.info(
+          i18n.t(matches.length > 1 ? 'containers.notifications.relatedAmbiguousTitle' : 'containers.notifications.relatedMissingTitle'),
+          i18n.t(matches.length > 1 ? 'containers.notifications.relatedAmbiguousMessage' : 'containers.notifications.relatedMissingMessage'),
+        );
+        return;
+      }
+      inventoryCache.set(inventoryCacheKey(source.target, targetView), items);
+      relatedNavigationOrigin = origin;
+      await loadConsole(
+        { view: targetView, selectedResourceKey: resourceKey(source.target, targetView, matches[0]) },
+        { restoreOnSelectionMissing: origin },
+      );
+    } catch (cause) {
+      if (readyConsole() !== originState) return;
+      notify.error(
+        i18n.t('containers.notifications.relatedMissingTitle'),
+        cause instanceof Error ? cause.message : i18n.t('containers.notifications.relatedMissingMessage'),
+      );
+    }
+  };
+
+  const openContainerImage = (entry: ContainerResourceEntry) => {
+    const container = entry.item as ContainerInventoryItem;
+    const imageID = canonicalImageID(container.image_id);
+    const referenceAliases = identityAliases([container.image?.reference, container.image?.digest]);
+    void openRelatedResource(entry, 'images', (item) => {
+      const image = item as ImageInventoryItem;
+      if (imageID) return canonicalImageID(image.id) === imageID;
+      const aliases = imageIdentityAliases(image);
+      return Array.from(referenceAliases).some((alias) => aliases.has(alias));
+    });
+  };
+
+  const openNamedVolume = (name: string) => {
+    const source = selectedEntry();
+    if (!source || !compact(name)) return;
+    void openRelatedResource(source, 'volumes', (item) => resourceIdentity('volumes', item) === compact(name));
+  };
+
   const selectResource = (entry: ContainerResourceEntry) => {
+    relatedNavigationOrigin = null;
     storedInventoryScrollTop = inventoryScrollElement?.scrollTop ?? 0;
     setSelectedResourceKey(entry.key);
     setDetailTab('overview');
@@ -1036,6 +1180,17 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   };
 
   const closeDetails = () => {
+    const origin = relatedNavigationOrigin;
+    if (origin) {
+      relatedNavigationOrigin = null;
+      void loadConsole(origin.state.target).then(() => {
+        setDetailTab(origin.detailTab);
+        queueMicrotask(() => {
+          if (inventoryScrollElement) inventoryScrollElement.scrollTop = origin.scrollTop;
+        });
+      });
+      return;
+    }
     setSelectedResourceKey('');
     queueMicrotask(() => {
       if (inventoryScrollElement) inventoryScrollElement.scrollTop = storedInventoryScrollTop;
@@ -1429,9 +1584,101 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const resetComposeEditor = () => {
     setComposeEditingID('');
     setComposeName('');
-    setComposeConfigPaths('');
+    setComposeNameTouched(false);
+    setComposeConfigPaths([]);
+    setComposeConfigPathInput('');
+    setComposeConfigPathError('');
+    setComposeConfigPickerOpen(false);
     setComposeEnvFilePath('');
-    setComposeProfiles('');
+    setComposeEnvPickerOpen(false);
+    setComposeProfiles([]);
+    setComposeProfileInput('');
+    setComposeProfileError('');
+    composeFilePicker.reset();
+  };
+
+  const addComposeConfigPaths = (paths: readonly string[]) => {
+    const additions = paths.map(compact).filter(Boolean);
+    const invalid = additions.find((path) => !absolutePath(path));
+    if (invalid) {
+      setComposeConfigPathError(i18n.t('containers.compose.errors.absolutePath'));
+      return;
+    }
+    const next = [...composeConfigPaths()];
+    for (const path of additions) {
+      if (!next.includes(path)) next.push(path);
+    }
+    if (next.length > 8) {
+      setComposeConfigPathError(i18n.t('containers.compose.errors.fileLimit'));
+      return;
+    }
+    setComposeConfigPaths(next);
+    setComposeConfigPathInput('');
+    setComposeConfigPathError('');
+    if (!composeNameTouched() && !compact(composeName())) {
+      const suggestion = parentNameFromPath(additions[0] ?? '');
+      if (suggestion) setComposeName(suggestion);
+    }
+  };
+
+  const addComposeConfigPathInput = () => {
+    const path = compact(composeConfigPathInput());
+    if (path) addComposeConfigPaths([path]);
+  };
+
+  const acceptComposeConfigSelection = (paths: readonly string[]) => {
+    setComposeConfigPaths([...paths]);
+    setComposeConfigPathError('');
+    if (!composeNameTouched() && !compact(composeName())) {
+      const suggestion = parentNameFromPath(paths[0] ?? '');
+      if (suggestion) setComposeName(suggestion);
+    }
+  };
+
+  const moveComposeConfigPath = (index: number, offset: -1 | 1) => {
+    const next = [...composeConfigPaths()];
+    const destination = index + offset;
+    if (destination < 0 || destination >= next.length) return;
+    [next[index], next[destination]] = [next[destination], next[index]];
+    setComposeConfigPaths(next);
+  };
+
+  const openComposeFilePicker = (kind: 'config' | 'env') => {
+    composeFilePicker.reset();
+    if (kind === 'config') setComposeConfigPickerOpen(true);
+    else setComposeEnvPickerOpen(true);
+    void composeFilePicker.ensureRootLoaded().catch((cause) => {
+      if (kind === 'config') setComposeConfigPickerOpen(false);
+      else setComposeEnvPickerOpen(false);
+      notify.error(
+        i18n.t('containers.notifications.filePickerFailedTitle'),
+        cause instanceof Error ? cause.message : i18n.t('containers.notifications.filePickerFailedMessage'),
+      );
+    });
+  };
+
+  const addComposeProfile = (raw: string) => {
+    const profile = compact(raw);
+    if (!profile) return;
+    if (profile.length > 64 || /[\s/\\]/u.test(profile) || profile.startsWith('-')) {
+      setComposeProfileError(i18n.t('containers.compose.errors.profile'));
+      return;
+    }
+    if (!composeProfiles().includes(profile)) setComposeProfiles((current) => [...current, profile]);
+    setComposeProfileInput('');
+    setComposeProfileError('');
+  };
+
+  const updateComposeProfileInput = (value: string) => {
+    const parts = value.split(',');
+    if (parts.length === 1) {
+      setComposeProfileInput(value);
+      setComposeProfileError('');
+      return;
+    }
+    const pending = parts.pop() ?? '';
+    for (const profile of parts) addComposeProfile(profile);
+    setComposeProfileInput(pending);
   };
 
   const openComposeEditor = async (entry?: ContainerResourceEntry) => {
@@ -1447,9 +1694,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       const definition = await getComposeProjectDefinition(project.project_id, target.engine, target.endpoint_id);
       setComposeEditingID(definition.project_id);
       setComposeName(definition.name);
-      setComposeConfigPaths(definition.config_paths.join('\n'));
+      setComposeNameTouched(true);
+      setComposeConfigPaths([...definition.config_paths]);
       setComposeEnvFilePath(definition.env_file_path ?? '');
-      setComposeProfiles((definition.profiles ?? []).join(', '));
+      setComposeProfiles([...(definition.profiles ?? [])]);
     } catch (cause) {
       setComposeEditorOpen(false);
       notify.error(i18n.t('containers.notifications.composeLoadFailedTitle'), cause instanceof Error ? cause.message : String(cause));
@@ -1460,7 +1708,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const submitComposeEditor = async () => {
     const target = composeEditorTarget();
-    const configPaths = composeConfigPaths().split(/\r?\n/u).map(compact).filter(Boolean);
+    const configPaths = composeConfigPaths();
     if (!target || target.engine !== 'docker' || !compact(composeName()) || configPaths.length === 0) return;
     const input = {
       engine: 'docker' as const,
@@ -1468,7 +1716,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       name: compact(composeName()).toLowerCase(),
       config_paths: configPaths,
       ...(compact(composeEnvFilePath()) ? { env_file_path: compact(composeEnvFilePath()) } : {}),
-      profiles: composeProfiles().split(',').map(compact).filter(Boolean),
+      profiles: composeProfiles(),
     };
     setComposeEditorBusy(true);
     try {
@@ -1617,7 +1865,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <DetailSection title={i18n.t('containers.inspector.overview')} icon={<Info class="h-4 w-4" />}>
           <dl>
             <Show when={view() === 'containers'}>
-              <DetailRow label={i18n.t('containers.columns.image')} value={detailString(image, 'reference') || (item as ContainerInventoryItem).image?.reference || '—'} mono />
+              <Show when={detailString(image, 'reference') || (item as ContainerInventoryItem).image?.reference || (item as ContainerInventoryItem).image_id} fallback={<DetailRow label={i18n.t('containers.columns.image')} value="—" />} keyed>{(imageReference) => <DetailLinkRow label={i18n.t('containers.columns.image')} value={imageReference} onClick={() => { const entry = selectedEntry(); if (entry) openContainerImage(entry); }} />}</Show>
               <Show when={detailString(record, 'health') || (item as ContainerInventoryItem).health}>{(health) => <DetailRow label={i18n.t('containers.columns.health')} value={localizedResourceStatus(health())} />}</Show>
               <Show when={detailString(record, 'group_name') || (item as ContainerInventoryItem).group_name}>{(group) => <DetailRow label={i18n.t('containers.columns.group')} value={group()} />}</Show>
             </Show>
@@ -1671,13 +1919,13 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       const state = (selected() as ContainerInventoryItem).state;
       return (
         <>
-          <Show when={state !== 'running'}><Button size="sm" onClick={() => runAction('containers.start')} disabled={!canExecute()}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.start')}</Button></Show>
-          <Show when={state === 'running'}><Button size="sm" variant="outline" onClick={() => runAction('containers.stop')} disabled={!canExecute()}><Stop class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button></Show>
-          <Button size="sm" variant="outline" onClick={() => runAction('containers.restart')} disabled={!canExecute()}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.restart')}</Button>
-          <Show when={state === 'running'}><Button size="sm" variant="ghost" onClick={() => runAction('containers.pause')} disabled={!canExecute()}><Pause class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.pause')}</Button></Show>
-          <Show when={state === 'paused'}><Button size="sm" variant="ghost" onClick={() => runAction('containers.unpause')} disabled={!canExecute()}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.resume')}</Button></Show>
-          <Button size="sm" variant="ghost" onClick={() => runAction('containers.kill')} disabled={!canExecute() || !canAdmin()}>{i18n.t('containers.actions.kill')}</Button>
-          <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('containers.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
+          <Show when={state !== 'running'}><Button size="sm" onClick={() => runAction('containers.start')} disabled={!canExecute()}><ActionGlyph method="containers.start" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.start')}</Button></Show>
+          <Show when={state === 'running'}><Button size="sm" variant="outline" onClick={() => runAction('containers.stop')} disabled={!canExecute()}><ActionGlyph method="containers.stop" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button></Show>
+          <Button size="sm" variant="outline" onClick={() => runAction('containers.restart')} disabled={!canExecute()}><ActionGlyph method="containers.restart" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.restart')}</Button>
+          <Show when={state === 'running'}><Button size="sm" variant="ghost" onClick={() => runAction('containers.pause')} disabled={!canExecute()}><ActionGlyph method="containers.pause" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.pause')}</Button></Show>
+          <Show when={state === 'paused'}><Button size="sm" variant="ghost" onClick={() => runAction('containers.unpause')} disabled={!canExecute()}><ActionGlyph method="containers.unpause" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.resume')}</Button></Show>
+          <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('containers.kill')} disabled={!canExecute() || !canAdmin()}><ActionGlyph method="containers.kill" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.kill')}</Button>
+          <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('containers.remove')} disabled={!canRWX() || !canAdmin()}><ActionGlyph method="containers.remove" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
         </>
       );
     }
@@ -1685,16 +1933,16 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       <>
         <Button size="sm" onClick={runSelectedImage} disabled={!canRWX()}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.run')}</Button>
         <Button size="sm" variant="outline" onClick={() => openCreation('image-tag')} disabled={!canRWX()}>{i18n.t('containers.actions.tag')}</Button>
-        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('images.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
+        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('images.remove')} disabled={!canRWX() || !canAdmin()}><ActionGlyph method="images.remove" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
       </>
     );
-    if (view() === 'volumes') return <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('volumes.remove')} disabled={!canRWX() || !canAdmin()}><Trash class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>;
+    if (view() === 'volumes') return <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('volumes.remove')} disabled={!canRWX() || !canAdmin()}><ActionGlyph method="volumes.remove" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>;
     if (view() === 'compose-projects') return (
       <>
-        <Button size="sm" onClick={() => runAction('compose.projects.start')} disabled={!canExecute()}>{i18n.t('containers.actions.start')}</Button>
-        <Button size="sm" variant="outline" onClick={() => runAction('compose.projects.stop')} disabled={!canExecute()}>{i18n.t('containers.actions.stop')}</Button>
-        <Button size="sm" variant="outline" onClick={() => runAction('compose.projects.restart')} disabled={!canExecute()}>{i18n.t('containers.actions.restart')}</Button>
-        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('compose.projects.down')} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.down')}</Button>
+        <Button size="sm" onClick={() => runAction('compose.projects.start')} disabled={!canExecute()}><ActionGlyph method="compose.projects.start" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.start')}</Button>
+        <Button size="sm" variant="outline" onClick={() => runAction('compose.projects.stop')} disabled={!canExecute()}><ActionGlyph method="compose.projects.stop" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button>
+        <Button size="sm" variant="outline" onClick={() => runAction('compose.projects.restart')} disabled={!canExecute()}><ActionGlyph method="compose.projects.restart" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.restart')}</Button>
+        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('compose.projects.down')} disabled={!canRWX() || !canAdmin()}><ActionGlyph method="compose.projects.down" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.down')}</Button>
         <Show when={(selected() as ComposeProjectInventoryItem).saved}>
           <Button size="sm" variant="ghost" onClick={() => { const entry = selectedEntry(); if (entry) void openComposeEditor(entry); }} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.compose.edit')}</Button>
           <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => { const entry = selectedEntry(); if (entry) setComposeForget(entry); }} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.compose.forget')}</Button>
@@ -1703,10 +1951,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     );
     return (
       <>
-        <Button size="sm" onClick={() => runAction('pods.start')} disabled={!canExecute()}>{i18n.t('containers.actions.start')}</Button>
-        <Button size="sm" variant="outline" onClick={() => runAction('pods.stop')} disabled={!canExecute()}>{i18n.t('containers.actions.stop')}</Button>
-        <Button size="sm" variant="outline" onClick={() => runAction('pods.restart')} disabled={!canExecute()}>{i18n.t('containers.actions.restart')}</Button>
-        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('pods.remove')} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.remove')}</Button>
+        <Button size="sm" onClick={() => runAction('pods.start')} disabled={!canExecute()}><ActionGlyph method="pods.start" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.start')}</Button>
+        <Button size="sm" variant="outline" onClick={() => runAction('pods.stop')} disabled={!canExecute()}><ActionGlyph method="pods.stop" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button>
+        <Button size="sm" variant="outline" onClick={() => runAction('pods.restart')} disabled={!canExecute()}><ActionGlyph method="pods.restart" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.restart')}</Button>
+        <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('pods.remove')} disabled={!canRWX() || !canAdmin()}><ActionGlyph method="pods.remove" class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.remove')}</Button>
       </>
     );
   };
@@ -1720,35 +1968,36 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
       return !canExecute();
     };
-    const menuItem = (method: string, destructive = false): DropdownItem => ({
-      id: method,
-      label: operationLabel(method),
-      disabled: operationDisabled(method),
-      ...(destructive ? {
-        icon: () => <Trash class="h-3.5 w-3.5 text-destructive" />,
-      } : {}),
-    });
+    const menuItem = (method: string): DropdownItem => {
+      const presentation = actionPresentation(method);
+      return {
+        id: method,
+        label: operationLabel(method),
+        disabled: operationDisabled(method),
+        icon: () => <ActionGlyph method={method} class={`h-3.5 w-3.5 ${presentation.destructive ? 'text-destructive' : ''}`} />,
+      };
+    };
     const items = (): DropdownItem[] => {
       if (view() === 'containers') return [
         menuItem('containers.restart'),
         menuItem((item as ContainerInventoryItem).state === 'paused' ? 'containers.unpause' : 'containers.pause'),
-        menuItem('containers.kill', true),
-        menuItem('containers.remove', true),
+        menuItem('containers.kill'),
+        menuItem('containers.remove'),
       ];
-      if (view() === 'images') return [menuItem('images.remove', true)];
-      if (view() === 'volumes') return [menuItem('volumes.remove', true)];
+      if (view() === 'images') return [menuItem('images.remove')];
+      if (view() === 'volumes') return [menuItem('volumes.remove')];
       if (view() === 'compose-projects') {
         const project = item as ComposeProjectInventoryItem;
         return [
           menuItem('compose.projects.restart'),
-          menuItem('compose.projects.down', true),
+          menuItem('compose.projects.down'),
           ...(project.saved ? [
-            { id: 'compose.definition.edit', label: i18n.t('containers.compose.edit'), disabled: !canRWX() || !canAdmin() },
+            { id: 'compose.definition.edit', label: i18n.t('containers.compose.edit'), disabled: !canRWX() || !canAdmin(), icon: () => <FileText class="h-3.5 w-3.5" /> },
             { id: 'compose.definition.forget', label: i18n.t('containers.compose.forget'), disabled: !canRWX() || !canAdmin(), icon: () => <Trash class="h-3.5 w-3.5 text-destructive" /> },
           ] satisfies DropdownItem[] : []),
         ];
       }
-      return [menuItem('pods.restart'), menuItem('pods.remove', true)];
+      return [menuItem('pods.restart'), menuItem('pods.remove')];
     };
     return (
       <div class="container-row-menu" onClick={(event) => event.stopPropagation()}>
@@ -1802,6 +2051,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const selectResourceView = (nextView: ContainerResourceView) => {
     const state = consoleState();
     if (state.phase !== 'ready' || state.target.view === nextView) return;
+    relatedNavigationOrigin = null;
     void loadConsole(
       { view: nextView, selectedResourceKey: '' },
       { resetListControls: true },
@@ -1869,7 +2119,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     );
     if (tab === 'mounts') {
       const mounts = detailArray(detailRecord(record.runtime), 'mounts');
-      return <div class="container-reference-list"><Show when={mounts.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyMounts')}</div>}><For each={mounts}>{(value) => { const mount = detailRecord(value); return <div class="container-mount-row"><Database class="h-4 w-4" /><div><strong>{detailString(mount, 'target') || '—'}</strong><span>{detailString(mount, 'type')} · {detailString(mount, 'source_kind') || i18n.t('containers.detail.redacted')}</span></div></div>; }}</For></Show></div>;
+      const namedVolumes = mounts.map(detailRecord).filter((mount) => detailString(mount, 'source_kind') === 'named_volume' && detailString(mount, 'source'));
+      const otherMounts = mounts.map(detailRecord).filter((mount) => detailString(mount, 'source_kind') !== 'named_volume' || !detailString(mount, 'source'));
+      const mountMeta = (mount: DetailRecord) => `${detailString(mount, 'target') || '—'} · ${detailBoolean(mount, 'read_only') ? i18n.t('containers.detail.readOnly') : i18n.t('containers.detail.readWrite')}`;
+      return <div class="container-mount-groups"><Show when={mounts.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyMounts')}</div>}><Show when={namedVolumes.length > 0}><section><h3>{i18n.t('containers.detail.namedVolumes')}</h3><div class="container-reference-list"><For each={namedVolumes}>{(mount) => <button type="button" class="container-mount-row container-mount-row--link" onClick={() => openNamedVolume(detailString(mount, 'source'))}><Database class="h-4 w-4" /><div><strong>{detailString(mount, 'source')}</strong><span>{mountMeta(mount)}</span></div><ChevronRight class="ml-auto h-3.5 w-3.5" /></button>}</For></div></section></Show><Show when={otherMounts.length > 0}><section><h3>{i18n.t('containers.detail.otherMounts')}</h3><div class="container-reference-list"><For each={otherMounts}>{(mount) => <div class="container-mount-row"><Folder class="h-4 w-4" /><div><strong>{detailString(mount, 'target') || '—'}</strong><span>{detailString(mount, 'type')} · {detailString(mount, 'source_kind') || i18n.t('containers.detail.redacted')}</span></div></div>}</For></div></section></Show></Show></div>;
     }
     if (tab === 'files') return (
       <div class="container-files-view">
@@ -1951,10 +2204,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
               if (column === 'ports') setShowPortsColumn((visible) => !visible);
               if (column === 'created') setShowCreatedColumn((visible) => !visible);
             }}
-            triggerAriaLabel={i18n.t('containers.columns.settings')}
+            triggerAriaLabel={i18n.t('containers.columns.filter')}
             trigger={(
-              <button type="button" class="container-icon-action inline-flex items-center justify-center" title={i18n.t('containers.columns.settings')}>
-                <Settings class="h-4 w-4" />
+              <button type="button" class="container-icon-action inline-flex items-center justify-center" title={i18n.t('containers.columns.filter')}>
+                <Filter class="h-4 w-4" />
               </button>
             )}
           />
@@ -2087,10 +2340,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                         return <tr tabindex={0} data-container-resource-row-index={index()} onClick={() => selectResource(entry)} onKeyDown={(event) => handleTableKey(event, index())}>
                           <td><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item()))}><span class="container-usage-dot" data-active={resourceActive(view(), item())} /></Show></td>
                           <td><div class="container-name-cell"><ViewIcon view={view()} class="h-4 w-4" /><span class="truncate">{resourceName(view(), item())}</span><Show when={view() === 'compose-projects' && (item() as ComposeProjectInventoryItem).saved}><span class="container-saved-project" title={(item() as ComposeProjectInventoryItem).source || i18n.t('containers.compose.saved')}><Check class="h-3 w-3" />{i18n.t('containers.compose.saved')}</span></Show><Show when={runtimeBadgeVisible(entry)}><span class="container-runtime-badge">{runtimeName(entry.target.engine)}</span></Show><Show when={resourceManagement(item())?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></td>
-                          <Show when={showSecondaryColumn()}><td class="container-secondary-cell"><Show when={view() === 'containers'}>{container().image?.reference || '—'}</Show><Show when={view() === 'images'}>{formatBytes((item() as ImageInventoryItem).size_bytes)}</Show><Show when={view() === 'volumes'}>{(item() as VolumeInventoryItem).driver || '—'}</Show><Show when={view() === 'compose-projects' || view() === 'pods'}>{(item() as ComposeProjectInventoryItem | PodInventoryItem).running_count} / {(item() as ComposeProjectInventoryItem | PodInventoryItem).container_count}</Show></td></Show>
+                          <Show when={showSecondaryColumn()}><td class="container-secondary-cell"><Show when={view() === 'containers'}><Show when={container().image_id || container().image?.reference || container().image?.digest} fallback="—"><button type="button" class="container-resource-link" onClick={(event) => { event.stopPropagation(); openContainerImage(entry); }}>{container().image?.reference || container().image?.digest || container().image_id}</button></Show></Show><Show when={view() === 'images'}>{formatBytes((item() as ImageInventoryItem).size_bytes)}</Show><Show when={view() === 'volumes'}>{(item() as VolumeInventoryItem).driver || '—'}</Show><Show when={view() === 'compose-projects' || view() === 'pods'}>{(item() as ComposeProjectInventoryItem | PodInventoryItem).running_count} / {(item() as ComposeProjectInventoryItem | PodInventoryItem).container_count}</Show></td></Show>
                           <Show when={view() === 'containers'}><Show when={showPortsColumn()}><td class="container-port-cell">{container().ports?.map(formatPort).filter(Boolean).slice(0, 2).join(', ') || '—'}</td></Show><Show when={chartsOpen()}><td class="tabular-nums">{sample() ? `${sample()!.cpu_percent.toFixed(1)}%` : '—'}</td><td class="tabular-nums">{formatBytes(sample()?.memory_bytes)}</td></Show></Show>
                           <Show when={view() !== 'containers' && showCreatedColumn()}><td>{formatDate((item() as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms)}</td></Show>
-                          <td><div class="container-row-actions"><Show when={resourceManagement(item())?.managed} fallback={<><Show when={view() === 'containers'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item()) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, resourceActive(view(), item()) ? 'containers.stop' : 'containers.start')}>{resourceActive(view(), item()) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show><Show when={view() === 'images'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.actions.run')} disabled={!canRWX()} onClick={(event) => openImageRun(event, entry)}><Play class="h-4 w-4" /></Button></Show><Show when={view() === 'compose-projects'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item()) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, resourceActive(view(), item()) ? 'compose.projects.stop' : 'compose.projects.start')}>{resourceActive(view(), item()) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show><Show when={view() === 'pods'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={resourceActive(view(), item()) ? i18n.t('containers.actions.stop') : i18n.t('containers.actions.start')} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, resourceActive(view(), item()) ? 'pods.stop' : 'pods.start')}>{resourceActive(view(), item()) ? <Stop class="h-4 w-4" /> : <Play class="h-4 w-4" />}</Button></Show>{renderRowOverflow(entry)}<ChevronRight class="h-4 w-4 text-muted-foreground" /></>}><Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); selectResource(entry); queueMicrotask(openManagedService); }}><ExternalLink class="h-4 w-4" /></Button></Show></div></td>
+                          <td><div class="container-row-actions"><Show when={resourceManagement(item())?.managed} fallback={<><Show when={view() === 'containers'}>{(() => { const method = resourceActive(view(), item()) ? 'containers.stop' : 'containers.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show><Show when={view() === 'images'}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.actions.run')} disabled={!canRWX()} onClick={(event) => openImageRun(event, entry)}><Play class="h-4 w-4" /></Button></Show><Show when={view() === 'compose-projects'}>{(() => { const method = resourceActive(view(), item()) ? 'compose.projects.stop' : 'compose.projects.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show><Show when={view() === 'pods'}>{(() => { const method = resourceActive(view(), item()) ? 'pods.stop' : 'pods.start'; return <Button size="sm" variant="ghost" class="container-icon-action" aria-label={operationLabel(method)} disabled={!canExecute()} onClick={(event) => runRowAction(event, entry, method)}><ActionGlyph method={method} class="h-4 w-4" /></Button>; })()}</Show>{renderRowOverflow(entry)}<ChevronRight class="h-4 w-4 text-muted-foreground" /></>}><Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); selectResource(entry); queueMicrotask(openManagedService); }}><ExternalLink class="h-4 w-4" /></Button></Show></div></td>
                         </tr>;
                       }}</For></tbody>
                     </table>
@@ -2136,18 +2389,37 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       </Dialog>
 
       <Dialog
-        open={composeEditorOpen()}
-        onOpenChange={(open) => { if (!open && !composeEditorBusy()) { setComposeEditorOpen(false); resetComposeEditor(); } }}
+        open={composeEditorOpen() && !composeConfigPickerOpen() && !composeEnvPickerOpen()}
+        onOpenChange={(open) => { if (!open && !composeEditorBusy() && !composeConfigPickerOpen() && !composeEnvPickerOpen()) { setComposeEditorOpen(false); resetComposeEditor(); } }}
         title={i18n.t(composeEditingID() ? 'containers.compose.editorEditTitle' : 'containers.compose.editorAddTitle')}
-        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => { setComposeEditorOpen(false); resetComposeEditor(); }} disabled={composeEditorBusy()}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => void submitComposeEditor()} disabled={composeEditorBusy() || !compact(composeName()) || !compact(composeConfigPaths())}>{i18n.t('containers.compose.save')}</Button></div>}
+        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => { setComposeEditorOpen(false); resetComposeEditor(); }} disabled={composeEditorBusy()}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => void submitComposeEditor()} disabled={composeEditorBusy() || !validComposeProjectName(composeName()) || composeConfigPaths().length === 0 || (compact(composeEnvFilePath()) !== '' && !absolutePath(composeEnvFilePath()))}>{i18n.t('containers.compose.save')}</Button></div>}
       >
         <div class="container-compose-editor">
-          <label>{i18n.t('containers.compose.name')}<Input value={composeName()} onInput={(event) => setComposeName(event.currentTarget.value)} disabled={composeEditorBusy()} autocomplete="off" /></label>
-          <label>{i18n.t('containers.compose.configPaths')}<Textarea rows={4} value={composeConfigPaths()} onInput={(event) => setComposeConfigPaths(event.currentTarget.value)} disabled={composeEditorBusy()} /><small>{i18n.t('containers.compose.configPathsHint')}</small></label>
-          <label>{i18n.t('containers.compose.envFile')}<Input value={composeEnvFilePath()} onInput={(event) => setComposeEnvFilePath(event.currentTarget.value)} disabled={composeEditorBusy()} /><small>{i18n.t('containers.compose.envFileHint')}</small></label>
-          <label>{i18n.t('containers.compose.profiles')}<Input value={composeProfiles()} onInput={(event) => setComposeProfiles(event.currentTarget.value)} disabled={composeEditorBusy()} /><small>{i18n.t('containers.compose.profilesHint')}</small></label>
+          <label>{i18n.t('containers.compose.name')}<Input value={composeName()} onInput={(event) => { setComposeNameTouched(true); setComposeName(event.currentTarget.value); }} disabled={composeEditorBusy()} autocomplete="off" placeholder={i18n.t('containers.compose.namePlaceholder')} aria-invalid={composeNameError() ? 'true' : undefined} /><small>{composeNameError()}</small></label>
+          <div class="container-compose-field">
+            <span class="container-compose-field__label">{i18n.t('containers.compose.configPaths')}</span>
+            <div class="container-compose-path-entry"><Input value={composeConfigPathInput()} onInput={(event) => { setComposeConfigPathInput(event.currentTarget.value); setComposeConfigPathError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addComposeConfigPathInput(); } }} disabled={composeEditorBusy()} placeholder={i18n.t('containers.compose.configPathPlaceholder')} aria-invalid={composeConfigPathError() ? 'true' : undefined} /><Button size="sm" variant="outline" onClick={addComposeConfigPathInput} disabled={composeEditorBusy() || !compact(composeConfigPathInput())}>{i18n.t('containers.compose.addPath')}</Button><Button size="sm" variant="outline" onClick={() => openComposeFilePicker('config')} disabled={composeEditorBusy()}><Folder class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.compose.chooseFiles')}</Button></div>
+            <small>{composeConfigPathError() || i18n.t('containers.compose.configPathsHint')}</small>
+            <ol class="container-compose-path-list">
+              <For each={composeConfigPaths()}>{(path, index) => <li><span class="container-compose-path-list__order">{index() + 1}</span><code title={path}>{path}</code><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.compose.moveUp')} disabled={index() === 0} onClick={() => moveComposeConfigPath(index(), -1)}><ArrowUp class="h-3.5 w-3.5" /></Button><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.compose.moveDown')} disabled={index() === composeConfigPaths().length - 1} onClick={() => moveComposeConfigPath(index(), 1)}><ArrowDown class="h-3.5 w-3.5" /></Button><Button size="sm" variant="ghost" class="container-icon-action container-destructive-action" aria-label={i18n.t('containers.compose.removePath')} onClick={() => setComposeConfigPaths((current) => current.filter((_, currentIndex) => currentIndex !== index()))}><X class="h-3.5 w-3.5" /></Button></li>}</For>
+            </ol>
+          </div>
+          <div class="container-compose-field">
+            <span class="container-compose-field__label">{i18n.t('containers.compose.envFile')}</span>
+            <div class="container-compose-path-entry"><Input value={composeEnvFilePath()} onInput={(event) => setComposeEnvFilePath(event.currentTarget.value)} disabled={composeEditorBusy()} placeholder={i18n.t('containers.compose.envFilePlaceholder')} aria-invalid={compact(composeEnvFilePath()) !== '' && !absolutePath(composeEnvFilePath()) ? 'true' : undefined} /><Button size="sm" variant="outline" onClick={() => openComposeFilePicker('env')} disabled={composeEditorBusy()}><Folder class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.compose.chooseFile')}</Button><Show when={composeEnvFilePath()}><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.compose.clearEnvFile')} onClick={() => setComposeEnvFilePath('')}><X class="h-3.5 w-3.5" /></Button></Show></div>
+            <small>{compact(composeEnvFilePath()) !== '' && !absolutePath(composeEnvFilePath()) ? i18n.t('containers.compose.errors.absolutePath') : i18n.t('containers.compose.envFileHint')}</small>
+          </div>
+          <div class="container-compose-field">
+            <span class="container-compose-field__label">{i18n.t('containers.compose.profiles')}</span>
+            <div class="container-compose-profile-input"><Input value={composeProfileInput()} onInput={(event) => updateComposeProfileInput(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); addComposeProfile(composeProfileInput()); } }} disabled={composeEditorBusy()} placeholder={i18n.t('containers.compose.profilesPlaceholder')} aria-invalid={composeProfileError() ? 'true' : undefined} /></div>
+            <div class="container-compose-profile-list"><For each={composeProfiles()}>{(profile) => <Tag tone="soft" size="sm">{profile}<button type="button" aria-label={i18n.t('containers.compose.removeProfile', { name: profile })} onClick={() => setComposeProfiles((current) => current.filter((item) => item !== profile))}><X class="h-3 w-3" /></button></Tag>}</For></div>
+            <small>{composeProfileError() || i18n.t('containers.compose.profilesHint')}</small>
+          </div>
         </div>
       </Dialog>
+
+      <FileOpenPicker open={composeConfigPickerOpen()} onOpenChange={setComposeConfigPickerOpen} files={composeFilePicker.files()} homePath="/" selectionMode="multiple" maxSelections={8} initialSelectedPaths={composeConfigPaths()} fileFilter={(item) => /\.ya?ml$/iu.test(item.name)} title={i18n.t('containers.compose.chooseFiles')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} emptyText={i18n.t('containers.compose.noComposeFiles')} onExpand={composeFilePicker.expandPath} ensurePath={composeFilePicker.ensurePath} onSelect={acceptComposeConfigSelection} />
+      <FileOpenPicker open={composeEnvPickerOpen()} onOpenChange={setComposeEnvPickerOpen} files={composeFilePicker.files()} homePath="/" selectionMode="single" initialSelectedPaths={composeEnvFilePath() ? [composeEnvFilePath()] : []} title={i18n.t('containers.compose.chooseEnvFile')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} emptyText={i18n.t('containers.compose.noEnvFiles')} onExpand={composeFilePicker.expandPath} ensurePath={composeFilePicker.ensurePath} onSelect={(paths) => setComposeEnvFilePath(paths[0] ?? '')} />
 
       <Dialog
         open={composeForget() !== null}

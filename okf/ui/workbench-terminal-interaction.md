@@ -72,5 +72,5 @@ Redeven may adapt Flowersec streams, product permissions, local-path capability,
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.agentUnread.browser.test.tsx` - Real catalog-to-Panel-to-Navigator stock Agent unread and shared reader-focus coverage.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.click-handoff.browser.test.tsx` - Browser proof that a Terminal bottom status-bar overlay does not block the shared Workbench resize handle and that lock prevents resize.
 - `redeven:internal/envapp/ui_src/scripts/checkSemanticTerminalCarrier.mjs` - Real Runtime, PTY, Activity, Workbench, clear, top resize, refresh, and multi-view carrier.
-- `redeven:desktop/package.json` and `redeven:internal/envapp/ui_src/package.json` - Consume the published `@floegence/floe-webapp-core` 0.46.5 release.
+- `redeven:desktop/package.json` and `redeven:internal/envapp/ui_src/package.json` - Consume the published `@floegence/floe-webapp-core` 0.46.6 release.
 - `redeven:internal/session/dependency_contract_test.go` - Published dependency and legacy package exclusion contract.
