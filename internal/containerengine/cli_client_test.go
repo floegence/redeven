@@ -109,11 +109,15 @@ func TestCLIClientListParsesDockerNDJSONAndPodmanArray(t *testing.T) {
 		`{"ID":"def456","Names":"worker","Image":"ghcr.io/acme/worker:latest","State":"exited","Status":"Exited (0)","CreatedAt":"2024-01-02T00:00:00Z"}`,
 	}, "\n")
 	podmanList := `[
-		{"Id":"pod123","Names":["pod-api"],"Image":"quay.io/acme/api:latest","State":"running","CreatedAt":"2 years ago","Created":1704067200,"Ports":[{"host_ip":"::1","container_port":8080,"host_port":18080,"range":2,"protocol":"tcp,udp"}],"ExposedPorts":{"8080":["tcp"],"9000":["sctp"]}}
+		{"Id":"pod123","Names":["pod-api"],"Image":"quay.io/acme/api:latest","ImageID":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","State":"running","CreatedAt":"2 years ago","Created":1704067200,"Ports":[{"host_ip":"::1","container_port":8080,"host_port":18080,"range":2,"protocol":"tcp,udp"}],"ExposedPorts":{"8080":["tcp"],"9000":["sctp"]}}
 	]`
 	runner := &fakeCommandRunner{
 		outputs: map[string]string{
 			"docker ps -a --no-trunc --format json": dockerList,
+			"docker inspect abc123 def456": `[
+				{"Id":"abc123","Image":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+				{"Id":"def456","Image":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}
+			]`,
 			"podman ps -a --no-trunc --format json": podmanList,
 		},
 	}
@@ -129,6 +133,9 @@ func TestCLIClientListParsesDockerNDJSONAndPodmanArray(t *testing.T) {
 	if dockerContainers[0].ContainerID != "abc123" || dockerContainers[0].Name != "api" || dockerContainers[0].State != ContainerStateRunning {
 		t.Fatalf("first docker container = %+v", dockerContainers[0])
 	}
+	if dockerContainers[0].Image.RuntimeID != "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("first docker image runtime ID = %q", dockerContainers[0].Image.RuntimeID)
+	}
 	if dockerContainers[0].CreatedAtUnixMs != 1704067200000 || !reflect.DeepEqual(dockerContainers[0].Ports, []PortSummary{
 		{Protocol: "tcp", HostIP: "127.0.0.1", HostPort: 8080, Port: 80},
 		{Protocol: "tcp", Port: 443},
@@ -138,6 +145,9 @@ func TestCLIClientListParsesDockerNDJSONAndPodmanArray(t *testing.T) {
 	if dockerContainers[1].State != ContainerStateExited {
 		t.Fatalf("second docker state = %q", dockerContainers[1].State)
 	}
+	if dockerContainers[1].Image.RuntimeID != "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" {
+		t.Fatalf("second docker image runtime ID = %q", dockerContainers[1].Image.RuntimeID)
+	}
 
 	podmanContainers, err := client.List(context.Background(), EnginePodman, true)
 	if err != nil {
@@ -145,6 +155,9 @@ func TestCLIClientListParsesDockerNDJSONAndPodmanArray(t *testing.T) {
 	}
 	if len(podmanContainers) != 1 || podmanContainers[0].Name != "pod-api" || podmanContainers[0].CreatedAtUnixMs != 1704067200000 {
 		t.Fatalf("podman containers = %+v", podmanContainers)
+	}
+	if podmanContainers[0].Image.RuntimeID != "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
+		t.Fatalf("podman image runtime ID = %q", podmanContainers[0].Image.RuntimeID)
 	}
 	if !reflect.DeepEqual(podmanContainers[0].Ports, []PortSummary{
 		{Protocol: "tcp", HostIP: "::1", HostPort: 18080, Port: 8080},
@@ -171,6 +184,27 @@ func TestCLIClientListPrefersPausedDockerStatusOverRunningState(t *testing.T) {
 	}
 	if len(containers) != 1 || containers[0].State != ContainerStatePaused {
 		t.Fatalf("containers = %+v, want one paused container", containers)
+	}
+}
+
+func TestCLIClientListPropagatesCancellationDuringImageIdentityEnrichment(t *testing.T) {
+	t.Parallel()
+
+	client := &CLIClient{Runner: CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+		command := strings.TrimSpace(name + " " + strings.Join(args, " "))
+		switch command {
+		case "docker ps -a --no-trunc --format json":
+			return []byte(`{"ID":"container-1","Names":"api","Image":"example/api:latest","State":"running"}`), nil
+		case "docker inspect container-1":
+			return nil, context.Canceled
+		default:
+			return nil, errFakeCommandNotFound(command)
+		}
+	})}
+
+	_, err := client.List(context.Background(), EngineDocker, true)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("List() error = %v, want context.Canceled", err)
 	}
 }
 
@@ -202,6 +236,9 @@ func TestCLIClientInspectParsesRuntimeInputs(t *testing.T) {
 	}
 	if container.Image.Reference != "ghcr.io/acme/api:latest" || container.Image.Digest != testSHA256Digest {
 		t.Fatalf("image = %+v", container.Image)
+	}
+	if container.Image.RuntimeID != "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("image runtime ID = %q", container.Image.RuntimeID)
 	}
 	if !container.Runtime.Privileged || container.Runtime.NetworkMode != "host" || container.Runtime.RestartPolicy != "always" {
 		t.Fatalf("runtime = %+v", container.Runtime)
@@ -776,6 +813,7 @@ func (r *contextCancelRunner) Run(ctx context.Context, name string, args ...stri
 const dockerInspectFixture = `[
   {
     "Id": "container_123",
+	"Image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "Name": "/api",
     "Created": "2024-01-01T00:00:00Z",
     "RepoDigests": ["ghcr.io/acme/api@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],

@@ -36,6 +36,7 @@ export type ContainerManagement = Readonly<{
 export type ContainerInventoryItem = Readonly<{
   container_id: string;
   name?: string;
+  image_id?: string;
   image?: Readonly<{ reference?: string; digest?: string; digest_pinned?: boolean }>;
   state: string;
   health?: string;

@@ -124,6 +124,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
+  DirectoryPicker: (props: any) => <Show when={props.open}><div data-testid="managed-workspace-picker-mock"><h2>{props.title}</h2><button type="button" onClick={() => { props.onSelect('/Users/demo/Projects/Focused App'); props.onOpenChange(false); }}>Select focused folder</button></div></Show>,
   Dropdown: (props: any) => (
     <div>
       {props.trigger}
@@ -180,10 +181,6 @@ vi.mock('../primitives/EnvAppModal', () => ({
 
 vi.mock('../primitives/EnvAppDrawer', () => ({
   EnvAppDrawer: (props: any) => <Show when={props.open}><div data-testid="env-app-drawer-mock"><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
-}));
-
-vi.mock('../primitives/LazyMountedPickers', () => ({
-  LazyMountedDirectoryPicker: (props: any) => <Show when={props.open}><div data-testid="managed-workspace-picker-mock"><h2>{props.title}</h2><button type="button" onClick={() => { props.onSelect('/Users/demo/Projects/Focused App'); props.onOpenChange(false); }}>Select focused folder</button></div></Show>,
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({

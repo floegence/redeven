@@ -70,7 +70,7 @@ import {
 import { buildFilePathFlowerTurnLauncherIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { canLaunchProcess } from "../utils/permission";
-import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../../../../../flower_ui/src/filePicker/directoryPickerTree";
+import { replacePickerChildren, sortPickerItems, toPickerItem, toPickerTreeAbsolutePath } from "../../../../../flower_ui/src/filePicker/directoryPickerTree";
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from "../workbench/surface/workbenchWheelInteractive";
 import { FloatingContextMenu, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
@@ -1077,8 +1077,8 @@ export function EnvCodespacesPage() {
     try {
       const resp = await rpc.fs.list({ path: absolutePath, showHidden: false });
       const entries = resp?.entries ?? [];
-      const items = sortPickerFolderItems(
-        entries.map((entry) => toPickerFolderItem(entry as FsFileInfo, homePath())).filter((item): item is FileItem => !!item)
+      const items = sortPickerItems(
+        entries.map((entry) => toPickerItem(entry as FsFileInfo, homePath())).filter((item): item is FileItem => !!item)
       );
       cache.set(absolutePath, items);
       setFiles((prev) => replacePickerChildren(prev, pickerPath, items));

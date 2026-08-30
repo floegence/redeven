@@ -6,7 +6,7 @@ import {
   listPickerTreePathChain,
   normalizePickerTreeInput,
   replacePickerChildren,
-  toPickerFolderItem,
+  toPickerItem,
   toPickerTreeAbsolutePath,
   toPickerTreePath,
 } from './directoryPickerTree';
@@ -24,7 +24,7 @@ describe('directoryPickerTree', () => {
     expect(toPickerTreePath('/Users/alice', '/Users/alice')).toBe('/');
     expect(toPickerTreePath('/Volumes/team/project', '/Users/alice')).toBe('/Volumes/team/project');
 
-    const item = toPickerFolderItem(
+    const item = toPickerItem(
       {
         name: 'project',
         path: '/Users/alice/project',

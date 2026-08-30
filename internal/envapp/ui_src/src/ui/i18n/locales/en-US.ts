@@ -2708,7 +2708,7 @@ export const enUS = defineDictionary({
     columns: {
       name: 'Name', status: 'Status', details: 'Details', image: 'Image', size: 'Size', driver: 'Driver',
       running: 'Running', usage: 'Usage', ownership: 'Ownership', tags: 'Tags', services: 'Services',
-      created: 'Created', health: 'Health', group: 'Group', digest: 'Digest', scope: 'Scope', settings: 'Columns',
+      created: 'Created', health: 'Health', group: 'Group', digest: 'Digest', scope: 'Scope', filter: 'Filter columns',
     },
     states: {
       running: 'Running', stopped: 'Stopped', exited: 'Exited', paused: 'Paused', restarting: 'Restarting',
@@ -2748,6 +2748,7 @@ export const enUS = defineDictionary({
       safeInspect: 'Redacted inspect', safeInspectHint: 'Only redacted, structured information is shown by default.',
       rawJson: 'Raw JSON', rawWarning: 'Raw data can contain sensitive configuration. Open it only when needed.',
       emptyReferences: 'No referenced containers', emptyMounts: 'No mounts', redacted: 'Redacted',
+      namedVolumes: 'Named volumes', otherMounts: 'Other mounts', readOnly: 'Read only', readWrite: 'Read and write',
       parentFolder: 'Parent folder', downloadFile: 'Download file', binaryFile: 'This file cannot be previewed as text.',
       layer: 'Layer', layersUnavailable: 'Image layers could not be loaded', emptyLayers: 'No image layers reported',
       execUnavailable: 'This Floeterm release does not support a container terminal.', fullscreen: 'Full screen',
@@ -2783,9 +2784,14 @@ export const enUS = defineDictionary({
     compose: {
       add: 'Add project', edit: 'Edit project', forget: 'Forget project', saved: 'Saved', source: 'Compose file',
       editorAddTitle: 'Add Compose project', editorEditTitle: 'Edit Compose project', name: 'Project name',
-      configPaths: 'Compose files', configPathsHint: 'Enter one absolute file path per line. Later files override earlier files.',
-      envFile: 'Environment file', envFileHint: 'Optional absolute path to an env file.', profiles: 'Profiles',
-      profilesHint: 'Optional comma-separated profile names.', save: 'Save project', forgetTitle: 'Forget Compose project',
+      namePlaceholder: 'e.g. my-app', configPaths: 'Compose files', configPathPlaceholder: 'e.g. /workspace/my-app/compose.yaml',
+      configPathsHint: 'Later files override earlier files.', addPath: 'Add', chooseFiles: 'Choose files',
+      moveUp: 'Move up', moveDown: 'Move down', removePath: 'Remove file', noComposeFiles: 'No YAML files here',
+      envFile: 'Environment file', envFilePlaceholder: 'e.g. /workspace/my-app/.env', envFileHint: 'Optional.',
+      chooseFile: 'Choose file', chooseEnvFile: 'Choose environment file', clearEnvFile: 'Clear environment file', noEnvFiles: 'No files here',
+      profiles: 'Profiles', profilesPlaceholder: 'e.g. dev, gpu', profilesHint: 'Press Enter or comma to add.', removeProfile: 'Remove {name}',
+      errors: { name: 'Use lowercase letters, numbers, hyphens, or underscores.', absolutePath: 'Enter an absolute path.', fileLimit: 'Choose up to 8 Compose files.', profile: 'Enter a valid profile name.' },
+      save: 'Save project', forgetTitle: 'Forget Compose project',
       forgetMessage: 'Forget “{name}”? Running containers are not changed.',
     },
     permissions: {
@@ -2801,6 +2807,9 @@ export const enUS = defineDictionary({
       composeSavedTitle: 'Project saved', composeSavedMessage: 'The Compose project is ready for one-click operations.',
       composeSaveFailedTitle: 'Project not saved', composeForgottenTitle: 'Project forgotten',
       composeForgottenMessage: 'The saved Compose definition was removed.',
+      relatedMissingTitle: 'Resource unavailable', relatedMissingMessage: 'The linked resource no longer exists.',
+      relatedAmbiguousTitle: 'Multiple matches found', relatedAmbiguousMessage: 'Open the resource list and choose the intended item.',
+      filePickerFailedTitle: 'Files unavailable', filePickerFailedMessage: 'Enter the absolute path instead.',
     },
   },
   webServices: {

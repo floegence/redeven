@@ -130,95 +130,13 @@ group termination. Redeven does not elevate privileges, change socket
 permissions, add users to system groups, or silently switch engines. Host
 administrators remain responsible for engine access.
 
-## Native surfaces
+## Product surface
 
-Containers has a fixed Activity entry and a multi-instance
-`redeven.containers` Workbench component. Each instance persists only the
-resource view and selected resource key. Stored v1 engine and endpoint state is
-ignored. One compact header owns refresh and Operations; it does not expose an
-engine or endpoint selector. Workbench hides the duplicate product title.
-Underlined resource tabs, a single toolbar, status color, icons,
-spacing, sortable type-specific columns, direct lifecycle actions, and an
-overflow menu replace overview cards, nested panels, repeated prose, and long
-identifiers. The active resource name appears only in the resource tab; the
-toolbar begins with search and filters instead of repeating the tab label or
-inventory count. The overflow menu follows shared outside-click, Escape, and
-focus behavior. Column visibility uses the released shared Dropdown, including
-the same outside-click and Escape dismissal, instead of a page-local floating
-panel. Containers default to the Active filter while other resource views
-default to All. Column visibility is user-controlled. Metrics are off by
-default; when requested, the UI starts one endpoint-wide SSE per compatible
-ready runtime, merges samples by exact target, and closes every stream when
-charts or the owning view close.
-
-One discriminated console controller owns runtime discovery, resource view,
-aggregated inventory, and selected resource. It keeps a component-lifetime
-cache per exact `(engine, endpoint, view)` and combines only entries from the
-current ready runtime set. Every resource entry retains its source target;
-same-name Docker and Podman resources stay separate and receive a runtime badge
-only when their displayed names conflict. Details, streams, preflights,
-mutations, Web Services navigation, and operation observation route through
-that source target.
-
-View changes reuse cached per-runtime inventory while refreshing in the
-background. Runtime rediscovery clears stale target ownership before a new set
-can commit. One request generation and cancellation signal fence older runtime,
-inventory, detail, log, history, file, and statistics responses. Only `ready`
-renders resource data or detail; a refreshing cache remains `ready` but cannot
-authorize mutation without a current server preflight. A first visit keeps the
-production tabs, toolbar, table headers, mobile cards, and responsive geometry
-in place during loading. Resource and detail navigation use the published Floe
-Webapp `Tabs` owner for icons, underlined selection, keyboard movement, and
-narrow-width overflow.
-
-Containers, Images, and Volumes aggregate every ready runtime. Compose Projects
-exists only while Docker is ready; Pods exists only while Podman is ready. With
-no ready runtime, the stable page reports each engine's concise detection state
-and offers retry. With partial failure, usable resources remain visible and one
-warning opens a shared Dialog containing status only; it cannot switch targets.
-Create, pull, volume creation, and cleanup use the sole compatible target
-directly. When both engines are compatible, the operation Dialog contains one
-Floe Select, defaults to Docker, and never exposes endpoint names. Actions from
-an existing resource always reuse its source target.
-
-Selecting a resource opens a component-local detail page, never a floating
-inspector. Returning preserves the list query, filter, sort, and scroll owner.
-Container details provide Overview, live searchable logs, redacted Inspect,
-mounts, capability-gated Exec, and bounded in-browser statistics. Detail
-statistics select the container from one endpoint-wide sample because engine
-versions do not consistently return targeted `stats` output. Each sample carries
-its authoritative capture time. The detail view uses the same Floe monitoring
-panels and charts as Env Monitor and derives receive/send rates from successive
-engine counters instead of charting cumulative byte totals.
-Image details provide Overview, sanitized layers, references, Run, Tag, and
-Delete without vulnerability or package-analysis placeholders. Image history
-queries use the stable image ID so dangling images remain inspectable. Volume details
-provide Overview, references, and capability-gated files. Compose Projects and
-Pods expose overview, members, lifecycle, and member navigation. Users may save
-a Docker Compose Project from absolute Compose file paths, an optional env file,
-and profiles, then start, stop, restart, or down it through the same preflight,
-lock, operation, and reconciliation owner. A saved definition remains listed
-after down, and down retains volumes. Managed resources cannot be saved as a
-parallel native lifecycle owner and replace mutation controls with one Web
-Services link.
-
-Desktop uses a compact table, narrow Workbench hides secondary columns, and
-mobile uses cards plus a full-screen detail surface. Logs support timestamped
-search, follow/pause, wrapping, copy, current-buffer download, and browser full
-screen. A shared Operations drawer uses a master-detail layout: the list names
-the operation and resource once, while the detail shows current reported phase,
-observed unit progress, source service, duration, sanitized failure, durable
-event timeline, and cancellation. It does not expose endpoint presentation.
-
-The UI provides structured create dialogs and a separate risk review before
-submission. It supports keyboard operation, 44 px touch targets, forced colors,
-reduced motion, and every shipped locale. A missing, stopped, unreachable, or
-permission-denied engine produces a dedicated detection state with retry instead
-of a broken resource table. Inventory from an inactive target is never shown in
-a loading or failure state. An exact-target cached inventory is visual
-continuity only and cannot authorize destructive work. Detail reads,
-logs, statistics, image history, and file reads commit only while their owning
-`ready` context is still current.
+The native Activity and Workbench interaction, loading, resource-navigation,
+Compose input, and responsive presentation contracts are owned by
+[Native container console](container-resources-console.md). That surface may
+project only the targets and capabilities established here; it cannot create a
+second routing, mutation, or ownership path.
 
 # Boundaries
 
@@ -241,7 +159,3 @@ logs, statistics, image history, and file reads commit only while their owning
 - `redeven:internal/containerresource/schema.go` - Defines the Redeven-owned product database lineage.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Enforces native Local API routes and RWX/Admin permissions.
 - `redeven:internal/managedwebservice/container_resources.go` - Resolves protected Web Services ownership.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Implements the native responsive product surface.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies aggregation, target-routed actions, partial failure, exact-target caching, cancellation, and ready-only rendering.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Verifies desktop and narrow dedicated-detail layouts in Chromium.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Registers the multi-instance Workbench component.

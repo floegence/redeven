@@ -28,6 +28,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.
 - [Native container operation observation](architecture/containers-operation-observation.md) - Keep endpoint-bound native mutations locked until authoritative reconciliation proves a terminal outcome.
 - [Native container resources](architecture/container-resources-capability.md) - Manage Docker and Podman through one native engine, operation, permission, and product boundary.
+- [Native container console](architecture/container-resources-console.md) - Present stable aggregated inventory, structured Compose input, and exact-target resource navigation.
 
 ## Security
 

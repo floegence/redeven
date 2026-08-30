@@ -315,6 +315,7 @@ type ResourcePlan struct {
 type ContainerSummary struct {
 	ContainerID     string         `json:"container_id"`
 	Name            string         `json:"name,omitempty"`
+	ImageID         string         `json:"image_id,omitempty"`
 	Image           ImageSummary   `json:"image"`
 	State           ContainerState `json:"state"`
 	Health          string         `json:"health,omitempty"`
@@ -328,6 +329,7 @@ type ContainerSummary struct {
 type ContainerInspect struct {
 	ContainerID     string          `json:"container_id"`
 	Name            string          `json:"name,omitempty"`
+	ImageID         string          `json:"image_id,omitempty"`
 	Image           ImageSummary    `json:"image"`
 	State           ContainerState  `json:"state"`
 	Health          string          `json:"health,omitempty"`

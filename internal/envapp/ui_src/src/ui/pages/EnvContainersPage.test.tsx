@@ -36,6 +36,7 @@ const harness = vi.hoisted(() => ({
   subscribeStats: vi.fn(),
   subscribeCollectionStats: vi.fn(),
   preflight: vi.fn(),
+  fsList: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -52,10 +53,12 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   ArrowDown: icon('arrow-down'),
   ArrowUp: icon('arrow-up'),
   Check: icon('check'),
+  CircleStop: icon('circle-stop'),
   Cpu: icon('cpu'),
   Database: icon('database'),
   ExternalLink: icon('external-link'),
   FileText: icon('file'),
+  Filter: icon('filter'),
   Info: icon('info'),
   Layers: icon('layers'),
   Maximize: icon('maximize'),
@@ -66,10 +69,9 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Plus: icon('plus'),
   Refresh: icon('refresh'),
   Search: icon('search'),
-  Settings: icon('settings'),
-  Stop: icon('stop'),
   Trash: icon('trash'),
   X: icon('x'),
+  XCircle: icon('x-circle'),
   ArrowLeft: icon('arrow-left'),
   ChevronRight: icon('chevron-right'),
   Copy: icon('copy'),
@@ -85,8 +87,14 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => <button type="button" class={props.class} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
-  Dropdown: (props: any) => <div class="test-dropdown">{props.trigger}<div data-test-dropdown-menu>{props.items.map((item: any) => <button type="button" disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.label}</button>)}</div></div>,
-  Input: (props: any) => <input class={props.class} value={props.value} placeholder={props.placeholder} aria-label={props['aria-label']} onInput={props.onInput} />,
+  Dropdown: (props: any) => <div class="test-dropdown">{props.trigger}<div data-test-dropdown-menu>{props.items.map((item: any) => <button type="button" disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.icon}{item.label}</button>)}</div></div>,
+  FileOpenPicker: (props: any) => <Show when={props.open}><section data-file-open-picker>{props.title}<button type="button" data-picker-confirm onClick={() => {
+    props.onSelect?.(props.selectionMode === 'multiple'
+      ? ['/workspace/my-app/compose.yaml', '/workspace/my-app/compose.override.yaml']
+      : ['/workspace/my-app/.env']);
+    props.onOpenChange?.(false);
+  }}>confirm files</button></section></Show>,
+  Input: (props: any) => <input class={props.class} value={props.value} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} disabled={props.disabled} onInput={props.onInput} onKeyDown={props.onKeyDown} />,
   MonitoringChart: (props: any) => <div
     class={props.class}
     data-monitoring-chart
@@ -185,6 +193,10 @@ vi.mock('../services/containerResourcesApi', () => ({
   tailContainerLogs: vi.fn(),
 }));
 
+vi.mock('../protocol/redeven_v1', () => ({
+  useRedevenRpc: () => ({ fs: { list: harness.fsList } }),
+}));
+
 import { EnvContainersPage } from './EnvContainersPage';
 import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 
@@ -266,6 +278,7 @@ describe('native Containers page', () => {
       plan: { method: 'containers.start', target: {}, plan_digest: 'plan', risk_level: 'low', risk_flags: [], requires_admin: false },
       management: { managed: false },
     });
+    harness.fsList.mockReset().mockResolvedValue({ entries: [] });
   });
 
   afterEach(() => {
@@ -1040,13 +1053,17 @@ describe('native Containers page', () => {
 
     const dialog = host.querySelector('[data-dialog]')!;
     const inputs = dialog.querySelectorAll<HTMLInputElement>('input');
-    const textarea = dialog.querySelector<HTMLTextAreaElement>('textarea')!;
+    inputs[0].value = 'Saved API';
+    inputs[0].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(inputs[0].getAttribute('aria-invalid')).toBe('true');
     inputs[0].value = 'Saved-API';
     inputs[0].dispatchEvent(new InputEvent('input', { bubbles: true }));
-    textarea.value = '/workspace/compose.yaml';
-    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    inputs[2].value = 'dev, observability';
-    inputs[2].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    inputs[1].value = '/workspace/compose.yaml';
+    inputs[1].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.compose.addPath'))?.click();
+    inputs[3].value = 'dev,observability,';
+    inputs[3].dispatchEvent(new InputEvent('input', { bubbles: true }));
     Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
       .find((button) => button.textContent?.includes('containers.compose.save'))?.click();
     await settle();
@@ -1055,5 +1072,159 @@ describe('native Containers page', () => {
       engine: 'docker', endpoint_id: 'docker-primary', name: 'saved-api',
       config_paths: ['/workspace/compose.yaml'], profiles: ['dev', 'observability'],
     });
+  });
+
+  it('keeps picker order, suggests a project name, and saves an environment file', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects' ? [] : []));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.compose-projects'))?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.compose.add'))?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button'))
+      .find((button) => button.textContent?.includes('containers.compose.chooseFiles'))?.click();
+    await settle();
+    host.querySelector<HTMLButtonElement>('[data-file-open-picker] [data-picker-confirm]')?.click();
+    await settle();
+
+    const dialog = host.querySelector<HTMLElement>('[data-dialog]')!;
+    expect(dialog.querySelector<HTMLInputElement>('input')?.value).toBe('my-app');
+    expect(dialog.textContent).toContain('/workspace/my-app/compose.yaml');
+    expect(dialog.textContent).toContain('/workspace/my-app/compose.override.yaml');
+
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent === 'containers.compose.chooseFile')?.click();
+    await settle();
+    host.querySelector<HTMLButtonElement>('[data-file-open-picker] [data-picker-confirm]')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button'))
+      .find((button) => button.textContent?.includes('containers.compose.save'))?.click();
+    await settle();
+
+    expect(harness.createComposeDefinition).toHaveBeenCalledWith({
+      engine: 'docker', endpoint_id: 'docker-primary', name: 'my-app',
+      config_paths: ['/workspace/my-app/compose.yaml', '/workspace/my-app/compose.override.yaml'],
+      env_file_path: '/workspace/my-app/.env', profiles: [],
+    });
+  });
+
+  it('keeps manual Compose paths usable when the file picker is unavailable', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects' ? [] : []));
+    harness.fsList.mockRejectedValueOnce(new Error('filesystem unavailable'));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.compose-projects'))?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.compose.add'))?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button'))
+      .find((button) => button.textContent?.includes('containers.compose.chooseFiles'))?.click();
+    await settle();
+
+    expect(host.querySelector('[data-file-open-picker]')).toBeNull();
+    expect(harness.notify.error).toHaveBeenCalledWith(
+      'containers.notifications.filePickerFailedTitle',
+      'filesystem unavailable',
+    );
+
+    const dialog = host.querySelector<HTMLElement>('[data-dialog]')!;
+    const inputs = dialog.querySelectorAll<HTMLInputElement>('input');
+    inputs[0].value = 'Manual-API';
+    inputs[0].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    inputs[1].value = '/workspace/manual/compose.yaml';
+    inputs[1].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.compose.addPath'))?.click();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.compose.save'))?.click();
+    await settle();
+
+    expect(harness.createComposeDefinition).toHaveBeenCalledWith({
+      engine: 'docker', endpoint_id: 'docker-primary', name: 'manual-api',
+      config_paths: ['/workspace/manual/compose.yaml'], profiles: [],
+    });
+  });
+
+  it('opens the exact same-runtime image from a container and restores the container detail', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images'
+      ? [{ id: 'sha256:abcdef', reference: 'example/api:latest', tags: ['example/api:latest'] }]
+      : [{ container_id: 'container-1', name: 'API', state: 'running', image_id: 'sha256:abcdef', image: { reference: 'example/api:latest' }, management: { managed: false } }]));
+    harness.resourceDetails.mockImplementation((nextView: string) => Promise.resolve(nextView === 'containers'
+      ? { container_id: 'container-1', state: 'running', image: { reference: 'example/api:latest' } }
+      : { id: 'sha256:abcdef', reference: 'example/api:latest' }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('.container-secondary-cell .container-resource-link')?.click();
+    await settle();
+    expect(harness.listResources).toHaveBeenCalledWith('images', 'docker', 'docker-primary', expect.anything());
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('example/api:latest');
+
+    host.querySelector<HTMLButtonElement>('[data-container-detail-page] button[aria-label="containers.detail.back"]')?.click();
+    await settle();
+    expect(host.querySelector('[data-container-detail-page]')).toBeNull();
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.containers');
+  });
+
+  it('opens named volumes from Mounts while leaving bind mounts non-interactive', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'volumes'
+      ? [{ name: 'api-data', driver: 'local', referenced_containers: 1 }]
+      : [{ container_id: 'container-1', name: 'API', state: 'running', management: { managed: false } }]));
+    harness.resourceDetails.mockImplementation((nextView: string) => Promise.resolve(nextView === 'containers'
+      ? {
+        container_id: 'container-1', state: 'running', runtime: { mounts: [
+          { type: 'volume', source: 'api-data', source_kind: 'named_volume', target: '/data', read_only: true },
+          { type: 'bind', source_kind: 'host_path', target: '/app', read_only: false },
+        ] },
+      }
+      : { name: 'api-data', driver: 'local', referenced_containers: 1 }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.mounts'))?.click();
+    await settle();
+    expect(host.querySelectorAll('.container-mount-row--link')).toHaveLength(1);
+    expect(host.querySelector('.container-mount-row:not(.container-mount-row--link)')?.textContent).toContain('/app');
+    host.querySelector<HTMLButtonElement>('.container-mount-row--link')?.click();
+    await settle();
+
+    expect(harness.listResources).toHaveBeenCalledWith('volumes', 'docker', 'docker-primary', expect.anything());
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('api-data');
+  });
+
+  it('uses filter and lifecycle-specific icons from the shared action map', async () => {
+    harness.listResources.mockResolvedValue([{
+      container_id: 'container-1', name: 'API', state: 'running', management: { managed: false },
+    }]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    expect(host.querySelector('[data-icon="filter"]')).not.toBeNull();
+    expect(host.querySelector('[data-icon="settings"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="containers.actions.stop"] [data-icon="circle-stop"]')).not.toBeNull();
+    const menuIcons = Array.from(host.querySelectorAll('[data-test-dropdown-menu] [data-icon]'))
+      .map((item) => item.getAttribute('data-icon'));
+    expect(menuIcons).toEqual(expect.arrayContaining(['refresh', 'pause', 'x-circle', 'trash']));
   });
 });

@@ -380,32 +380,32 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"0.46.5\"",
+			"\"@floegence/floe-webapp-core\": \"0.46.6\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.46.5.tgz",
+			"floe-webapp-core-0.46.6.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.46.5",
+			"@floegence/floe-webapp-core@0.46.6",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.46.5\"",
-			"\"@floegence/floe-webapp-core\": \"0.46.5\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.46.5\"",
+			"\"@floegence/floe-webapp-boot\": \"0.46.6\"",
+			"\"@floegence/floe-webapp-core\": \"0.46.6\"",
+			"\"@floegence/floe-webapp-protocol\": \"0.46.6\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.18.0\"",
 			"\"@floegence/flowersec-core\": \"3.2.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.46.5.tgz",
-			"floe-webapp-core-0.46.5.tgz",
-			"floe-webapp-protocol-0.46.5.tgz",
+			"floe-webapp-boot-0.46.6.tgz",
+			"floe-webapp-core-0.46.6.tgz",
+			"floe-webapp-protocol-0.46.6.tgz",
 			"floeterm-terminal-web-0.18.0.tgz",
 			"flowersec-core-3.2.0.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.46.5",
-			"@floegence/floe-webapp-core@0.46.5",
-			"@floegence/floe-webapp-protocol@0.46.5",
+			"@floegence/floe-webapp-boot@0.46.6",
+			"@floegence/floe-webapp-core@0.46.6",
+			"@floegence/floe-webapp-protocol@0.46.6",
 			"@floegence/floeterm-terminal-web@0.18.0",
 			"@floegence/flowersec-core@3.2.0",
 		},
@@ -416,9 +416,9 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"flowersec-core-3.2.0.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.46.5",
-			"@floegence/floe-webapp-core | 0.46.5",
-			"@floegence/floe-webapp-protocol | 0.46.5",
+			"@floegence/floe-webapp-boot | 0.46.6",
+			"@floegence/floe-webapp-core | 0.46.6",
+			"@floegence/floe-webapp-protocol | 0.46.6",
 			"@floegence/floeterm-terminal-web | 0.18.0",
 			"@floegence/flowersec-core | 3.2.0",
 		},
@@ -430,7 +430,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.18.0",
 			"semantic Presentation",
-			"Floe Webapp Boot, Core, and Protocol v0.46.5",
+			"Floe Webapp Boot, Core, and Protocol v0.46.6",
 			"Flowersec Core v3.2.0",
 		},
 	}
@@ -782,7 +782,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"github.com/floegence/floret/v6 v6.0.1",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go and Core v3.2.0 plus Floe Webapp v0.46.5",
+			"published Flowersec Go and Core v3.2.0 plus Floe Webapp v0.46.6",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",

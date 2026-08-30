@@ -55,12 +55,18 @@ func TestAdapterListAndInspectReturnRedactedDomainDTOs(t *testing.T) {
 	if list.Engine != EngineDocker || len(list.Containers) != 1 || list.Containers[0].ContainerID != "container_123" {
 		t.Fatalf("list response = %+v", list)
 	}
+	if list.Containers[0].ImageID != "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("list image ID = %q", list.Containers[0].ImageID)
+	}
 	inspect, err := adapter.Inspect(context.Background(), ContainerInspectRequest{Engine: EngineDocker, ContainerID: "container_123"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if inspect.Container.Runtime.Env.SecretLikeCount != 1 || inspect.Container.Labels.SecretLikeCount != 1 {
 		t.Fatalf("inspect summaries = %+v", inspect.Container)
+	}
+	if inspect.Container.ImageID != list.Containers[0].ImageID {
+		t.Fatalf("inspect image ID = %q, want %q", inspect.Container.ImageID, list.Containers[0].ImageID)
 	}
 	raw, err := json.Marshal(inspect)
 	if err != nil {
@@ -346,7 +352,10 @@ func (c *fakeFollowingEngineClient) FollowLogs(ctx context.Context, _ EngineLogs
 func testEngineContainer() EngineContainer {
 	return EngineContainer{
 		Engine: EngineDocker, ContainerID: "container_123", Name: "api",
-		Image: ImageInput{Reference: "ghcr.io/acme/api:latest"}, State: ContainerStateRunning,
+		Image: ImageInput{
+			Reference: "ghcr.io/acme/api:latest",
+			RuntimeID: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}, State: ContainerStateRunning,
 		CreatedAtUnixMs: 1704067200000,
 		Runtime: RuntimeInput{
 			Privileged: true, NetworkMode: "host", Env: []string{"MODE=prod", "API_TOKEN=raw-token"},
