@@ -21,20 +21,6 @@ function readFlowerSettingsSource(): string {
   return fs.readFileSync(path.resolve(dir, '../ui/pages/settings/sections/FlowerSection.tsx'), 'utf8');
 }
 
-function relativeLuminance(hex: string): number {
-  const channels = hex.match(/[a-f\d]{2}/gi)?.map((channel) => Number.parseInt(channel, 16) / 255) ?? [];
-  const linear = channels.map((channel) => (
-    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
-  ));
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-}
-
-function contrastRatio(first: string, second: string): number {
-  const firstLuminance = relativeLuminance(first);
-  const secondLuminance = relativeLuminance(second);
-  return (Math.max(firstLuminance, secondLuminance) + 0.05) / (Math.min(firstLuminance, secondLuminance) + 0.05);
-}
-
 describe('Redeven Env App surface theme contract', () => {
   it('strengthens Git table gridlines only for Classic Dark', () => {
     const src = readRedevenCss();
@@ -169,60 +155,52 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--popover: #fffdfa;');
   });
 
-  it('keeps the settings content hierarchy while restoring the warm light sidebar', () => {
+  it('derives one settings hierarchy for every shell theme without Classic-only copies', () => {
     const src = readRedevenCss();
+    const sharedRootStart = src.indexOf(':root {\n  /* Canonical semantic aliases.');
+    const sharedRootEnd = src.indexOf('\n}\n\n:root.dark {', sharedRootStart);
+    const sharedRoot = src.slice(sharedRootStart, sharedRootEnd);
+    const classicLightStart = src.indexOf(":root[data-floe-shell-theme='classic-light'],");
+    const classicLightEnd = src.indexOf('\n}\n\n:root {', classicLightStart);
+    const classicLightScope = src.slice(classicLightStart, classicLightEnd);
+    const classicDarkStart = src.indexOf(":root[data-floe-shell-theme='classic-dark'],");
+    const classicDarkEnd = src.indexOf('\n}\n\n:root[data-floe-shell-theme=\'hc-light\']', classicDarkStart);
+    const classicDarkScope = src.slice(classicDarkStart, classicDarkEnd);
 
     for (const token of [
-      '--redeven-settings-header-bg: #ffffff;',
-      '--redeven-settings-sidebar-bg: #e9e5df;',
-      '--redeven-settings-sidebar-border: #d0c9bf;',
-      '--redeven-settings-content-bg: #f4f6f8;',
-      '--redeven-settings-card-bg: #ffffff;',
-      '--redeven-settings-sidebar-inset-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 64%, var(--redeven-settings-card-bg) 36%);',
-      '--redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 92%, var(--foreground) 8%);',
-      '--redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 88%, var(--foreground) 12%);',
-      '--redeven-settings-sidebar-selection-fg: var(--foreground);',
-      '--redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--foreground) 64%, var(--redeven-settings-sidebar-bg) 36%);',
-      '--redeven-settings-sidebar-note-fg: #5a687c;',
-      '--redeven-settings-sidebar-control-border: #748092;',
-      '--redeven-settings-inset-bg: #f7f8fa;',
-      '--redeven-settings-row-hover-bg: #eef2f6;',
-      '--redeven-settings-card-border: #d8dee6;',
-      '--redeven-settings-divider: #e4e8ee;',
-      '--redeven-settings-label-fg: #475569;',
-      '--redeven-settings-note-fg: #667085;',
-      '--redeven-settings-selection-bg: #e8f0fe;',
-      '--redeven-settings-selection-indicator: #3b82f6;',
-      '--redeven-settings-choice-selected-bg: #f1f3f5;',
-      '--redeven-settings-choice-selected-border: #aeb7c2;',
-      '--redeven-settings-control-border: #8793a5;',
-      '--redeven-settings-header-bg: #141820;',
-      '--redeven-settings-sidebar-bg: #141820;',
-      '--redeven-settings-sidebar-border: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 74%, var(--foreground) 26%);',
-      '--redeven-settings-content-bg: #181c23;',
-      '--redeven-settings-card-bg: #222730;',
-      '--redeven-settings-sidebar-inset-bg: #1b2027;',
-      '--redeven-settings-sidebar-hover-bg: #282e38;',
-      '--redeven-settings-sidebar-selection-bg: var(--redeven-settings-selection-bg);',
-      '--redeven-settings-sidebar-selection-fg: var(--redeven-settings-selection-fg);',
-      '--redeven-settings-sidebar-selection-indicator: var(--redeven-settings-selection-indicator);',
-      '--redeven-settings-sidebar-note-fg: #94a3b8;',
-      '--redeven-settings-sidebar-control-border: #68788f;',
-      '--redeven-settings-inset-bg: #1b2027;',
-      '--redeven-settings-row-hover-bg: #282e38;',
-      '--redeven-settings-card-border: color-mix(in srgb, var(--redeven-settings-card-bg) 72%, var(--foreground) 28%);',
-      '--redeven-settings-divider: color-mix(in srgb, var(--redeven-settings-inset-bg) 80%, var(--foreground) 20%);',
-      '--redeven-settings-label-fg: #c0c9d6;',
-      '--redeven-settings-note-fg: #94a3b8;',
-      '--redeven-settings-selection-bg: #22324a;',
-      '--redeven-settings-selection-indicator: #6ea8fe;',
-      '--redeven-settings-choice-selected-bg: #262b32;',
-      '--redeven-settings-choice-selected-border: #4c5664;',
-      '--redeven-settings-control-border: #68788f;',
+      '--redeven-settings-selection-source: var(--ring, var(--primary));',
+      '--redeven-settings-contrast-source: var(--redeven-surface-shadow-source);',
+      '--redeven-settings-header-bg: var(--redeven-surface-panel);',
+      '--redeven-settings-sidebar-bg: color-mix(in srgb, var(--sidebar) 82%, var(--redeven-surface-main) 18%);',
+      '--redeven-settings-sidebar-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-sidebar-bg));',
+      '--redeven-settings-content-bg: var(--redeven-surface-main);',
+      '--redeven-settings-card-bg: var(--redeven-surface-panel);',
+      '--redeven-settings-sidebar-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 76%, var(--redeven-settings-sidebar-bg) 24%);',
+      '--redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-sidebar-bg));',
+      '--redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-sidebar-bg));',
+      '--redeven-settings-sidebar-selection-fg: color-mix(in srgb, var(--foreground) 78%, var(--redeven-settings-contrast-source) 22%);',
+      '--redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);',
+      '--redeven-settings-sidebar-note-fg: var(--muted-foreground);',
+      '--redeven-settings-sidebar-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-sidebar-inset-bg));',
+      '--redeven-settings-inset-bg: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, var(--redeven-settings-card-bg) 18%);',
+      '--redeven-settings-row-hover-bg: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));',
+      '--redeven-settings-card-border: color-mix(in srgb, var(--foreground) 14%, var(--redeven-settings-card-bg));',
+      '--redeven-settings-divider: color-mix(in srgb, var(--foreground) 6%, var(--redeven-settings-inset-bg));',
+      '--redeven-settings-label-fg: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);',
+      '--redeven-settings-note-fg: var(--muted-foreground);',
+      '--redeven-settings-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-card-bg));',
+      '--redeven-settings-selection-fg: color-mix(in srgb, var(--foreground) 78%, var(--redeven-settings-contrast-source) 22%);',
+      '--redeven-settings-choice-selected-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 8%, var(--redeven-settings-inset-bg));',
+      '--redeven-settings-choice-selected-border: color-mix(in srgb, var(--foreground) 18%, var(--redeven-settings-inset-bg));',
+      '--redeven-settings-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-inset-bg));',
+      '--redeven-settings-section-shadow: var(--redeven-shadow-soft);',
     ]) {
-      expect(src).toContain(token);
+      expect(sharedRoot).toContain(token);
     }
 
+    expect(classicLightScope).not.toContain('--redeven-settings-');
+    expect(classicDarkScope).not.toContain('--redeven-settings-');
+    expect(src).toContain('--redeven-settings-contrast-source: var(--redeven-surface-highlight-source);');
     expect(src).toContain('.redeven-settings-table {');
     expect(src).toContain('background: var(--redeven-settings-inset-bg);');
     expect(src).toContain('.redeven-settings-list > .redeven-setting-row + .redeven-setting-row {');
@@ -232,12 +210,12 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('border-color: var(--redeven-settings-sidebar-control-border);');
     expect(src).toContain('background: var(--redeven-settings-sidebar-inset-bg);');
     expect(src).toContain('background: var(--redeven-settings-sidebar-hover-bg) !important;');
-    expect(src).toContain('border-color: var(--redeven-settings-sidebar-selection-indicator) !important;');
     expect(src).toContain('background: var(--redeven-settings-sidebar-selection-bg) !important;');
     expect(src).toContain('color: var(--redeven-settings-sidebar-selection-fg) !important;');
+    expect(src).toContain('.redeven-settings-nav-item--active::before {');
+    expect(src).toContain('inset-inline-start: 0.25rem;');
+    expect(src).toContain('width: 3px;');
     expect(src).toContain(":not([type='range']):not(.redeven-settings-search),");
-    expect(src).not.toContain('--redeven-settings-content-bg: #fffdfa;');
-    expect(src).not.toContain('--redeven-settings-card-bg: #363b45;');
   });
 
   it('uses neutral selection surfaces for large Flower choices without weakening focused settings selection', () => {
@@ -252,27 +230,22 @@ describe('Redeven Env App surface theme contract', () => {
     expect(flower).not.toContain("&& 'redeven-settings-choice--selected'");
   });
 
-  it('keeps settings text and control boundaries above their accessibility thresholds', () => {
-    expect(contrastRatio('#202a37', '#ffffff')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#475569', '#ffffff')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#667085', '#ffffff')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#667085', '#f7f8fa')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#8793a5', '#ffffff')).toBeGreaterThanOrEqual(3);
-    expect(contrastRatio('#5a687c', '#e9e5df')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#748092', '#e9e5df')).toBeGreaterThanOrEqual(3);
-    expect(contrastRatio('#202a37', '#d1ceca')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#686d74', '#d1ceca')).toBeGreaterThanOrEqual(3);
+  it('keeps high-contrast settings explicit without adding another ordinary-theme mapping', () => {
+    const src = readRedevenCss();
+    const highContrastStart = src.indexOf(":root[data-floe-shell-theme='hc-light'] {");
+    const highContrastEnd = src.indexOf('\n}\n\n@media (max-width: 960px)', highContrastStart);
+    const highContrastScope = src.slice(highContrastStart, highContrastEnd);
+    const forcedColorsStart = src.indexOf('@media (forced-colors: active) {', src.indexOf('.redeven-settings-table__row--interactive:hover'));
+    const forcedColorsEnd = src.indexOf('\n}\n\n.redeven-settings-alert--danger', forcedColorsStart);
+    const forcedColorsScope = src.slice(forcedColorsStart, forcedColorsEnd);
 
-    expect(contrastRatio('#f9fafb', '#222730')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#c0c9d6', '#222730')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#94a3b8', '#222730')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#94a3b8', '#1b2027')).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio('#68788f', '#222730')).toBeGreaterThanOrEqual(3);
-
-    expect(contrastRatio('#59616e', '#292c33')).toBeGreaterThanOrEqual(2.2);
-    expect(contrastRatio('#68788f', '#292c33')).toBeGreaterThanOrEqual(3);
-    expect(contrastRatio('#47515f', '#121721')).toBeGreaterThanOrEqual(2.2);
-    expect(contrastRatio('#4e5664', '#292c33')).toBeGreaterThanOrEqual(1.8);
+    expect(highContrastScope).toContain('--redeven-settings-card-border: var(--border);');
+    expect(highContrastScope).toContain('--redeven-settings-divider: var(--border);');
+    expect(highContrastScope).toContain('--redeven-settings-sidebar-selection-bg: var(--selection-bg);');
+    expect(highContrastScope).toContain('--redeven-settings-sidebar-selection-fg: var(--selection-fg);');
+    expect(forcedColorsScope).toContain('border-color: CanvasText !important;');
+    expect(forcedColorsScope).toContain('background: Highlight !important;');
+    expect(forcedColorsScope).toContain('color: HighlightText !important;');
   });
 
   it('keeps Flower on the shared main content surface family instead of private raw color literals', () => {
