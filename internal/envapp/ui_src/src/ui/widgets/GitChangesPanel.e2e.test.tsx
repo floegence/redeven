@@ -963,7 +963,7 @@ describe('GitChangesPanel interactions', () => {
 
     try {
       expect(host.querySelector('.git-changes-filter-slot')).toBeTruthy();
-      expect(host.querySelector('.git-changes-toolbar-loading-slot')?.getAttribute('data-visible')).toBe('true');
+      expect(host.querySelector('.git-changes-toolbar-loading-slot')).toBeNull();
       expect(host.querySelector('.git-changes-breadcrumb-slot')).toBeTruthy();
       expect(host.querySelector('.git-changes-table-pending')).toBeTruthy();
       expect(host.querySelectorAll('.git-content-skeleton__table-row')).toHaveLength(3);
@@ -1014,8 +1014,10 @@ describe('GitChangesPanel interactions', () => {
 
     try {
       expect(host.textContent).toContain('src/app.ts');
-      expect(host.querySelector('.git-changes-table-refresh-row')).toBeTruthy();
+      expect(host.querySelector('.git-changes-table-refresh-row')).toBeNull();
       expect(host.querySelector('.git-changes-table-pending')).toBeNull();
+      expect(host.querySelector('[data-git-content-skeleton]')).toBeNull();
+      expect(host.querySelector('.git-inline-loading-status')).toBeNull();
       expect(host.textContent).not.toContain('No staged files yet.');
     } finally {
       dispose();

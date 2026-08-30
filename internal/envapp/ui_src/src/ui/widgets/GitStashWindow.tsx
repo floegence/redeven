@@ -58,7 +58,6 @@ import {
   GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
-  GitInlineLoadingStatus,
   GitStatePane,
   GitSubtleNote,
   gitChangedFilesRowClass,
@@ -799,11 +798,6 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   if (!detail) return null;
                                   return (
                                     <>
-                                      <Show when={props.stashDetailLoading}>
-                                        <div class="mb-3 -mt-1">
-                                          <GitInlineLoadingStatus class="w-24">{i18n.t('uiCopy.git.loadingStashDetail')}</GitInlineLoadingStatus>
-                                        </div>
-                                      </Show>
                                       <div class="flex flex-col gap-4">
                                         <StashDetailHeader
                                           stash={detail}

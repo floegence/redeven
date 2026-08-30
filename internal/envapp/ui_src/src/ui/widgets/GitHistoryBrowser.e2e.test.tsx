@@ -244,6 +244,51 @@ describe("GitHistoryBrowser interactions", () => {
     }
   });
 
+  it("replaces the previous commit with a full detail skeleton while switching commits", async () => {
+    const [selectedCommitHash, setSelectedCommitHash] = createSignal(
+      "3a47b67b1234567890",
+    );
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <div class="h-[640px]">
+              <GitHistoryBrowser
+                repoInfo={{
+                  available: true,
+                  repoRootPath: "/workspace/repo",
+                  headRef: "main",
+                  headCommit: "3a47b67b1234567890",
+                }}
+                currentPath="/workspace/repo/src"
+                selectedCommitHash={selectedCommitHash()}
+              />
+            </div>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+      expect(host.textContent).toContain("Refine bootstrap");
+
+      mockGetCommitDetail.mockImplementationOnce(() => new Promise(() => {}));
+      setSelectedCommitHash("4b58c78c1234567890");
+      await flush();
+
+      expect(host.textContent).not.toContain("Refine bootstrap");
+      expect(host.querySelector('[data-git-content-skeleton="commit-detail"]')).toBeTruthy();
+      expect(host.querySelector('.git-inline-loading-status')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
   it("renders merge commit presentation context alongside inline commit patches", async () => {
     mockGetCommitDetail.mockResolvedValueOnce({
       repoRootPath: "/workspace/repo",

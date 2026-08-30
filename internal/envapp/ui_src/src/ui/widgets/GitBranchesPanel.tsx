@@ -1706,18 +1706,6 @@ function HistoryList(
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
             <Show
-              when={props.listRefreshing && (props.commits?.length ?? 0) > 0}
-            >
-              <div
-                class={cn(
-                  "rounded-md px-2.5 py-1.5",
-                  redevenSurfaceRoleClass("inset"),
-                )}
-              >
-                <GitInlineLoadingStatus class="w-28">{i18n.t('uiCopy.git.refreshingHistory')}</GitInlineLoadingStatus>
-              </div>
-            </Show>
-            <Show
               when={!props.listLoading}
               fallback={
                 <GitStatePane
@@ -2490,29 +2478,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       visible: text !== i18n.t('gitPresentation.noExtraStatus'),
     };
   });
-  const branchHeaderPendingLabel = () => {
-    if (branchIsVerifying()) return i18n.t('common.status.checking');
-    if (props.branchesLoading && selectedBranch()) return i18n.t('common.actions.refresh');
-    return "";
-  };
-  const renderBranchHeaderVerificationSlot = () => {
-    const label = branchHeaderPendingLabel();
-    return (
-      <div
-        class="git-branch-header-verification-slot"
-        data-git-branch-verification-state={label ? "active" : "idle"}
-        aria-hidden={label ? undefined : "true"}
-      >
-        <Show when={label}>
-          {(value) => (
-            <GitInlineLoadingStatus class="git-branch-header-inline-status">
-              {value()}
-            </GitInlineLoadingStatus>
-          )}
-        </Show>
-      </div>
-    );
-  };
   const branchHeaderControls = createMemo<BranchHeaderControlGroups>(() => {
     const primaryActions: BranchPrimaryActionPresentation[] = [];
     const secondaryShortcuts: BranchShortcutPresentation[] = [];
@@ -3795,7 +3760,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           <Show when={selectedBranch()?.kind === "remote"}>
                             <GitMetaPill tone="violet">{i18n.t('uiCopy.git.remote')}</GitMetaPill>
                           </Show>
-                          {renderBranchHeaderVerificationSlot()}
                         </div>
                       </div>
                     </div>

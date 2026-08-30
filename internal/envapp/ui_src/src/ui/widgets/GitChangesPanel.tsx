@@ -33,7 +33,6 @@ import {
   GitChangeMetrics,
   GitChangeStatusPill,
   GitContentSkeleton,
-  GitInlineLoadingStatus,
   GitMetaPill,
   GitPagedTableFooter,
   GitShortcutOrbButton,
@@ -385,11 +384,6 @@ function WorkspaceTable(props: WorkspaceTableProps) {
             loading={props.loadingMore}
             loadingStatus={i18n.t('git.changes.loadingNextPage')}
           />
-        </Show>
-        <Show when={refreshing() && props.items.length > 0 && !props.loadingMore}>
-          <div class={`git-changes-table-refresh-row border-t px-2.5 py-1 ${redevenDividerRoleClass()} ${redevenSurfaceRoleClass('inset')}`}>
-            <GitInlineLoadingStatus>{loadingLabel()}</GitInlineLoadingStatus>
-          </div>
         </Show>
         <Show when={props.items.length > 0}>
           <div class={`flex flex-wrap items-center justify-between gap-2 border-t px-2.5 py-1 text-[10px] text-muted-foreground ${redevenDividerRoleClass()} ${redevenSurfaceRoleClass('inset')}`}>
@@ -1171,14 +1165,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     <span aria-hidden="true">·</span>
                     <span class="line-clamp-1">{summaryCopy()}</span>
                   </Show>
-                  <span
-                    class="git-changes-toolbar-loading-slot"
-                    data-visible={tableLoadingState() !== 'idle' ? 'true' : 'false'}
-                  >
-                    <Show when={tableLoadingState() !== 'idle'}>
-                      <GitInlineLoadingStatus>{tableLoadingLabel()}</GitInlineLoadingStatus>
-                    </Show>
-                  </span>
                 </div>
                 <Show when={showActionRow()}>
                   <div

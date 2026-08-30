@@ -5240,9 +5240,6 @@ describe("GitBranchesPanel interactions", () => {
       const inlineStatuses = Array.from(
         host.querySelectorAll(".git-inline-loading-status"),
       );
-      const verificationSlot = host.querySelector(
-        '[data-git-branch-verification-state="active"]',
-      ) as HTMLElement | null;
 
       expect(header?.dataset.gitBranchHeaderLayout).toBe("compact");
       expect(commandRail?.dataset.gitBranchHeaderActions).toBe("overflow");
@@ -5256,9 +5253,8 @@ describe("GitBranchesPanel interactions", () => {
       expect(mergeMenuButton).toBeTruthy();
       expect(mergeMenuButton?.disabled).toBe(true);
       expect(mergeMenuButton?.textContent).toContain("Checking");
-      expect(verificationSlot).toBeTruthy();
-      expect(inlineStatuses).toHaveLength(1);
-      expect(inlineStatuses[0]?.textContent).toContain("Checking");
+      expect(inlineStatuses).toHaveLength(0);
+      expect(host.querySelector('[data-git-branch-verification-state]')).toBeNull();
       expect(host.textContent).not.toContain("Checking branch...");
       expect(host.textContent).not.toContain("Checking branch selection");
       expect(host.querySelector('[data-git-content-skeleton="changed-files"][data-git-skeleton-busy="true"]')).toBeTruthy();

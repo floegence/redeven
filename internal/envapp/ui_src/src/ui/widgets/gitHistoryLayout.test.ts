@@ -466,6 +466,7 @@ describe('browser workspace layout wiring', () => {
     const branchesSrc = read('./GitBranchesPanel.tsx');
     const historySrc = read('./GitHistoryBrowser.tsx');
     const sidebarSrc = read('./GitWorkbenchSidebar.tsx');
+    const workbenchSrc = read('./GitWorkbench.tsx');
 
     expect(primitivesSrc).toContain('export interface GitStatePaneProps');
     expect(primitivesSrc).toContain('flex w-full min-h-0 flex-1 items-center justify-center');
@@ -486,6 +487,8 @@ describe('browser workspace layout wiring', () => {
 
     expect(changesSrc).toContain('GitStatePane');
     expect(changesSrc).toContain("i18n.t('git.changes.loadingWorkspaceChanges')");
+    expect(changesSrc).not.toContain('git-changes-toolbar-loading-slot');
+    expect(changesSrc).not.toContain('git-changes-table-refresh-row');
 
     expect(branchesSrc).toContain('GitStatePane');
     expect(branchesSrc).toContain("i18n.t('uiCopy.git.loadingCommitHistory')");
@@ -496,7 +499,10 @@ describe('browser workspace layout wiring', () => {
 
     expect(historySrc).toContain('GitStatePane');
     expect(historySrc).toContain("i18n.t('uiCopy.git.loadingCommitDetails')");
+    expect(historySrc).not.toContain('GitInlineLoadingStatus');
     expect(historySrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
+
+    expect(workbenchSrc).not.toContain('GitInlineLoadingStatus');
 
     expect(sidebarSrc).toContain('GitStatePane');
     expect(sidebarSrc).toContain("i18n.t('git.notifications.checkingRepository')");
@@ -504,7 +510,7 @@ describe('browser workspace layout wiring', () => {
     expect(sidebarSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
   });
 
-  it('keeps branch verification pending inside the branch detail shell', () => {
+  it('keeps branch verification pending without inventing header content', () => {
     const branchesSrc = read('./GitBranchesPanel.tsx');
 
     expect(branchesSrc).toContain('const selectedBranch = () => branchDetailState().branch ?? null;');
@@ -514,8 +520,8 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('if (props.onCheckoutBranch && selectedBranch())');
     expect(branchesSrc).toContain('if (deleteAvailable() && selectedBranch())');
     expect(branchesSrc).toContain('const shouldRenderBranchHeaderActions = () =>');
-    expect(branchesSrc).toContain('git-branch-header-verification-slot');
-    expect(branchesSrc).toContain('GitInlineLoadingStatus class="git-branch-header-inline-status"');
+    expect(branchesSrc).not.toContain('git-branch-header-verification-slot');
+    expect(branchesSrc).not.toContain('git-branch-header-inline-status');
     expect(branchesSrc).toContain('data-git-branch-status-summary-state');
     expect(branchesSrc).toContain('data-git-branch-status-content-frame="true"');
     expect(branchesSrc).toContain('data-git-branch-detached-context="true"');
