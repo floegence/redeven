@@ -113,9 +113,8 @@ function mountHarness(
 	        canReviewIssues
 	        canRetryGeneration
         focusEnabled
-      >
-        <button type="button">Flower child</button>
-      </AIReadinessBoundary>
+        renderContent={() => <button type="button">Flower child</button>}
+      />
     </I18nProvider>
   ), host));
   return { host, setSnapshot };
@@ -280,7 +279,7 @@ describe('AIReadinessBoundary browser layout', () => {
     await settleFrames();
   });
 
-  it('restores the same visible Flower DOM after a blocked-ready transition', async () => {
+  it('unmounts Flower while blocked and mounts a fresh surface after readiness returns', async () => {
     await page.viewport(1280, 720);
     const ready = blockedReason('', { state: 'ready' });
     const { host, setSnapshot } = mountHarness(ready);
@@ -291,12 +290,14 @@ describe('AIReadinessBoundary browser layout', () => {
 
     setSnapshot(blockedReason('store_integrity_error'));
     await expect.element(page.getByText('Agent data needs attention', { exact: true })).toBeVisible();
-    expect(child.offsetParent).toBeNull();
+    expect(host.querySelector('[data-ai-readiness-content]')).toBeNull();
+    expect(child.isConnected).toBe(false);
     setSnapshot(ready);
     await settleFrames();
 
-    expect(host.querySelector('[data-ai-readiness-content] button')).toBe(child);
-    expect(child.offsetParent).not.toBeNull();
+    const remountedChild = host.querySelector<HTMLButtonElement>('[data-ai-readiness-content] button')!;
+    expect(remountedChild).not.toBe(child);
+    expect(remountedChild.offsetParent).not.toBeNull();
     expect(host.querySelector('.ai-readiness-surface')).toBeNull();
     await expectAuditedVisualEvidence(1280, 720);
   });

@@ -25,7 +25,7 @@ export type AIReadinessBoundaryProps = Readonly<{
   canReviewIssues?: boolean;
   canRetryGeneration: boolean;
   focusEnabled: boolean;
-  children: JSX.Element;
+  renderContent: () => JSX.Element;
 }>;
 
 export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
@@ -41,13 +41,16 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   const [copied, setCopied] = createSignal(false);
   const [copyFailed, setCopyFailed] = createSignal(false);
   const [clockMs, setClockMs] = createSignal(Date.now());
+  const operational = createMemo(() => {
+    const state = props.controller.snapshot().state;
+    return state === 'ready' || state === 'degraded';
+  });
   const diagnosticContentID = `ai-readiness-diagnostic-${createUniqueId()}`;
   let boundaryRoot: HTMLDivElement | undefined;
   let surfaceRoot: HTMLDivElement | undefined;
   let maintenanceHeading: HTMLHeadingElement | undefined;
   let diagnosticsButton: HTMLButtonElement | undefined;
-  let previousSurfaceFocus: HTMLElement | null = null;
-  let wasReady = false;
+  let wasOperational = false;
   let maintenanceFocused = false;
   let restoreSurfaceFocus = false;
 
@@ -78,34 +81,28 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   });
 
   createEffect(() => {
-    const ready = props.controller.snapshot().state === 'ready' || props.controller.snapshot().state === 'degraded';
-    if (props.focusEnabled && !ready && wasReady && surfaceRoot?.contains(document.activeElement)) {
-      previousSurfaceFocus = document.activeElement as HTMLElement;
-      restoreSurfaceFocus = true;
-    }
-    if (props.focusEnabled && !ready && (props.controller.snapshot().state === 'blocked' || busyVisible()) && !maintenanceFocused && focusStillBelongsToBoundary()) {
+    const isOperational = operational();
+    if (props.focusEnabled && !isOperational && (props.controller.snapshot().state === 'blocked' || busyVisible()) && !maintenanceFocused && focusStillBelongsToBoundary()) {
       queueMicrotask(() => {
-        if (!props.focusEnabled || props.controller.snapshot().state === 'ready' || props.controller.snapshot().state === 'degraded' || !focusStillBelongsToBoundary()) return;
+        if (!props.focusEnabled || operational() || !focusStillBelongsToBoundary()) return;
         maintenanceFocused = true;
         maintenanceHeading?.focus({ preventScroll: true });
       });
     }
-    if (ready && !wasReady) {
+    if (isOperational && !wasOperational) {
       maintenanceFocused = false;
       setDiagnosticsOpen(false);
       if (props.focusEnabled && restoreSurfaceFocus && focusStillBelongsToBoundary()) {
         restoreSurfaceFocus = false;
         queueMicrotask(() => {
           if (!props.focusEnabled || !focusStillBelongsToBoundary()) return;
-          const target = previousSurfaceFocus;
-          if (target?.isConnected && !target.hasAttribute('disabled')) target.focus({ preventScroll: true });
-          else surfaceRoot?.focus({ preventScroll: true });
+          surfaceRoot?.focus({ preventScroll: true });
         });
       } else {
         restoreSurfaceFocus = false;
       }
     }
-    wasReady = ready;
+    wasOperational = isOperational;
   });
 
   const maintenanceVisible = createMemo(() => {
@@ -216,26 +213,27 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
 
   return (
     <div ref={boundaryRoot} class="ai-readiness-boundary h-full min-h-0" data-ai-readiness-state={props.controller.snapshot().state}>
-      <div
-        ref={surfaceRoot}
-        class="h-full min-h-0 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        tabindex={-1}
-        hidden={props.controller.snapshot().state !== 'ready' && props.controller.snapshot().state !== 'degraded'}
-        data-ai-readiness-content
-      >
-        <Show when={props.controller.snapshot().state === 'degraded'}>
-          <aside class="ai-readiness-degraded" role="status" aria-label={projection().title}>
-            <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span class="min-w-0 flex-1">{projection().description}</span>
-            <Show when={props.canReviewIssues}>
-              <button type="button" class={`ai-readiness-degraded__review ${INTERACTIVE_CLASS}`} onClick={props.onReviewIssues}>
-                {i18n.t('aiReadiness.actions.reviewIssues')}
-              </button>
-            </Show>
-          </aside>
-        </Show>
-        {props.children}
-      </div>
+      <Show when={operational()}>
+        <div
+          ref={surfaceRoot}
+          class="h-full min-h-0 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          tabindex={-1}
+          data-ai-readiness-content
+        >
+          <Show when={props.controller.snapshot().state === 'degraded'}>
+            <aside class="ai-readiness-degraded" role="status" aria-label={projection().title}>
+              <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span class="min-w-0 flex-1">{projection().description}</span>
+              <Show when={props.canReviewIssues}>
+                <button type="button" class={`ai-readiness-degraded__review ${INTERACTIVE_CLASS}`} onClick={props.onReviewIssues}>
+                  {i18n.t('aiReadiness.actions.reviewIssues')}
+                </button>
+              </Show>
+            </aside>
+          </Show>
+          {props.renderContent()}
+        </div>
+      </Show>
 
       <Show when={maintenanceVisible()}>
         <section

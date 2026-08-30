@@ -70,6 +70,7 @@ main() {
       src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/flower/FlowerAttachmentLane.test.tsx \
       src/ui/flower/WebFetchSearchingOrb.test.tsx \
+      src/ui/flower/AIReadinessBoundary.test.tsx \
       src/ui/flower/aiReadiness.test.ts \
       src/ui/flower/aiReadinessPresentation.test.ts \
       src/ui/flower/activityDisclosure.test.ts \
@@ -86,6 +87,7 @@ main() {
       src/ui/plugins/pluginPresentation.test.ts \
       src/ui/workbench/redevenWorkbenchWidgets.test.tsx \
       src/ui/widgets/FlowerTurnLauncherWindow.test.tsx \
+      src/ui/pages/EnvAIPage.send.e2e.test.tsx \
       src/ui/chat/blocks/ShellBlock.test.tsx \
       src/ui/chat/message-list/VirtualMessageList.test.tsx
 
@@ -161,6 +163,7 @@ main() {
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
         src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx \
         src/ui/plugins/PluginManagement.browser.test.tsx \
+        src/ui/flower/AIReadinessBoundary.browser.test.tsx \
         src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx
     fi
   )
