@@ -79,7 +79,7 @@ type Options struct {
 	ThreadReadStateStore *threadreadstate.Store
 	// PluginPlatform is the released ReDevPlugin HTTP handler mounted behind Redeven routes.
 	PluginPlatform       http.Handler
-	PluginMarketSnapshot func() (pluginmarket.Snapshot, bool)
+	PluginMarketSnapshot func(context.Context) (pluginmarket.Snapshot, error)
 	PluginMarketDetail   func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
 	PluginMarketIcon     func(context.Context, string, string) (pluginmarket.IconAsset, error)
 	// AgentHomeDir is the canonical absolute path to the default home directory.
@@ -238,7 +238,7 @@ type Server struct {
 	secrets               *settings.SecretsStore
 	threadReadState       *threadreadstate.Store
 	pluginPlatform        http.Handler
-	pluginMarketSnapshot  func() (pluginmarket.Snapshot, bool)
+	pluginMarketSnapshot  func(context.Context) (pluginmarket.Snapshot, error)
 	pluginMarketDetail    func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
 	pluginMarketIcon      func(context.Context, string, string) (pluginmarket.IconAsset, error)
 	pluginConnMu          sync.Mutex
@@ -2588,8 +2588,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market is unavailable"})
 			return
 		}
-		snapshot, ok := g.pluginMarketSnapshot()
-		if !ok {
+		snapshot, err := g.pluginMarketSnapshot(r.Context())
+		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market is unavailable"})
 			return
 		}

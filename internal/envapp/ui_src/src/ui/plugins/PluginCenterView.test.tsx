@@ -2391,6 +2391,143 @@ describe('PluginCenterView', () => {
     expect(onCommand).not.toHaveBeenCalled();
   });
 
+  it('refreshes the market before inspecting the current official release source', async () => {
+    const inspection = externalInspectionForCenter();
+    const oldItem = {
+      ...metricsPlugin,
+      pluginInstanceID: 'plugininst_metrics',
+      version: '1.0.6',
+      managementRevision: 13,
+      lifecycleState: 'update_available' as const,
+      officialCatalog: {
+        ...metricsPlugin.officialCatalog,
+        marketGeneration: 6,
+        distribution: {
+          ...metricsPlugin.officialCatalog.distribution,
+          installSource: {
+            sourceKind: 'package_url' as const,
+            url: 'https://plugins.example.com/weather-1.0.6.redevplugin',
+          },
+        },
+      },
+    };
+    const currentItem = {
+      ...oldItem,
+      officialCatalog: {
+        ...oldItem.officialCatalog,
+        latestVersion: '1.0.7',
+        stableVersion: '1.0.7',
+        marketGeneration: 7,
+        distribution: {
+          ...oldItem.officialCatalog.distribution,
+          installSource: {
+            sourceKind: 'package_url' as const,
+            url: 'https://plugins.example.com/weather-1.0.7.redevplugin',
+          },
+        },
+      },
+    };
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [oldItem] });
+    const order: string[] = [];
+    const onRefresh = vi.fn(async () => {
+      order.push('refresh');
+      setCurrentProjection({ items: [currentItem] });
+    });
+    const onInspectExternal = vi.fn(async () => {
+      order.push('inspect');
+      return {
+        ...inspection,
+        intent: {
+          action: 'update' as const,
+          plugin_instance_id: 'plugininst_metrics',
+          expected_management_revision: 13,
+        },
+        plugin_id: metricsPlugin.pluginID,
+        publisher_id: metricsPlugin.officialCatalog.publisherID,
+        version: '1.0.7',
+      };
+    });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        error={null}
+        onCommand={vi.fn()}
+        onInspectExternal={onInspectExternal}
+        onRefresh={onRefresh}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    openInventoryDetails(mount);
+    (mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(onInspectExternal).toHaveBeenCalledOnce());
+    expect(order).toEqual(['refresh', 'inspect']);
+    expect(onInspectExternal).toHaveBeenCalledWith({
+      sourceKind: 'package_url',
+      url: 'https://plugins.example.com/weather-1.0.7.redevplugin',
+      intent: {
+        action: 'update',
+        plugin_instance_id: 'plugininst_metrics',
+        expected_management_revision: 13,
+      },
+    }, expect.any(AbortSignal));
+  });
+
+  it('shows a retryable catalog error without inspecting a cached official source', async () => {
+    const updatesProjection: PluginInventoryProjection = {
+      items: [{
+        ...metricsPlugin,
+        pluginInstanceID: 'plugininst_metrics',
+        version: '1.9.0',
+        managementRevision: 13,
+        lifecycleState: 'update_available',
+      }],
+    };
+    const onRefresh = vi.fn()
+      .mockRejectedValueOnce(new Error('market offline'))
+      .mockResolvedValue(undefined);
+    const onInspectExternal = vi.fn(async () => ({
+      ...externalInspectionForCenter(),
+      intent: {
+        action: 'update' as const,
+        plugin_instance_id: 'plugininst_metrics',
+        expected_management_revision: 13,
+      },
+      plugin_id: metricsPlugin.pluginID,
+      publisher_id: metricsPlugin.officialCatalog.publisherID,
+      version: '2.0.0',
+    }));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={updatesProjection}
+        loading={false}
+        error={null}
+        onCommand={vi.fn()}
+        onInspectExternal={onInspectExternal}
+        onRefresh={onRefresh}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    openInventoryDetails(mount);
+    (mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-retry]')).not.toBeNull());
+    expect(document.querySelector('[data-plugin-update-dialog]')?.textContent).toContain('plugin catalog is unavailable');
+    expect(onInspectExternal).not.toHaveBeenCalled();
+
+    (document.querySelector('[data-plugin-update-retry]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(onInspectExternal).toHaveBeenCalledOnce());
+    expect(onRefresh).toHaveBeenCalledTimes(2);
+  });
+
   it('submits official catalog updates through the platform release command', async () => {
     const onCommand = vi.fn(async () => undefined);
     const onCommitExternal = vi.fn(async () => externalCommitForCenter(externalInspectionForCenter()));

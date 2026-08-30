@@ -642,6 +642,33 @@ func (transport blockingMarketTransport) RoundTrip(request *http.Request) (*http
 	return transport(request)
 }
 
+type controlledMarketService struct {
+	calls    chan struct{}
+	release  chan struct{}
+	snapshot pluginmarket.Snapshot
+	err      error
+}
+
+func (service *controlledMarketService) Snapshot(ctx context.Context) (pluginmarket.Snapshot, error) {
+	service.calls <- struct{}{}
+	if service.release != nil {
+		select {
+		case <-ctx.Done():
+			return pluginmarket.Snapshot{}, ctx.Err()
+		case <-service.release:
+		}
+	}
+	return service.snapshot.Clone(), service.err
+}
+
+func (*controlledMarketService) Detail(context.Context, string) (pluginmarket.PluginDetail, int64, error) {
+	return pluginmarket.PluginDetail{}, -1, pluginmarket.ErrUnavailable
+}
+
+func (*controlledMarketService) Icon(context.Context, string, pluginmarket.PresentationIcon) (pluginmarket.IconAsset, error) {
+	return pluginmarket.IconAsset{}, pluginmarket.ErrUnavailable
+}
+
 func TestNewDoesNotWaitForRemotePluginMarket(t *testing.T) {
 	requestStarted := make(chan struct{}, 1)
 	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
@@ -689,48 +716,98 @@ func TestNewDoesNotWaitForRemotePluginMarket(t *testing.T) {
 	}
 }
 
-func TestMarketSnapshotReturnsCachedProjectionWhileRemoteRefreshIsBlocked(t *testing.T) {
-	requestStarted := make(chan struct{}, 1)
-	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
-		Origin:    "https://plugins.redeven.com",
-		CachePath: filepath.Join(t.TempDir(), "market-lkg.json"),
-		HTTPClient: &http.Client{Transport: blockingMarketTransport(func(request *http.Request) (*http.Response, error) {
-			select {
-			case requestStarted <- struct{}{}:
-			default:
-			}
-			<-request.Context().Done()
-			return nil, request.Context().Err()
-		})},
-	})
-	if err != nil {
+func TestMarketSnapshotWaitsForCurrentSharedRefresh(t *testing.T) {
+	release := make(chan struct{})
+	service := &controlledMarketService{
+		calls:   make(chan struct{}, 4),
+		release: release,
+		snapshot: pluginmarket.Snapshot{
+			SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+			Generation:    8,
+			CachedAt:      time.Now().UTC(),
+			Source:        pluginmarket.SnapshotSourceRemote,
+		},
+	}
+	integration := &Integration{marketService: service}
+	if _, err := integration.startMarketRefresh(); err != nil {
 		t.Fatal(err)
 	}
-	cached := pluginmarket.Snapshot{
-		SchemaVersion: pluginmarket.SnapshotSchemaVersion,
-		Generation:    7,
-		CachedAt:      time.Now().UTC(),
-		Stale:         true,
-		Source:        pluginmarket.SnapshotSourceCache,
-	}
-	integration := &Integration{marketSnapshot: &cached, marketService: market}
-	integration.startMarketRefresh()
 	select {
-	case <-requestStarted:
+	case <-service.calls:
 	case <-time.After(time.Second):
 		t.Fatal("background plugin market refresh did not start")
 	}
 
-	startedAt := time.Now()
-	snapshot, ok := integration.MarketSnapshot()
-	if elapsed := time.Since(startedAt); elapsed > 100*time.Millisecond {
-		t.Fatalf("MarketSnapshot() blocked for %s", elapsed)
+	type result struct {
+		snapshot pluginmarket.Snapshot
+		err      error
 	}
-	if !ok || snapshot.Generation != 7 || !snapshot.Stale || snapshot.Source != pluginmarket.SnapshotSourceCache {
-		t.Fatalf("MarketSnapshot() = %#v, %v", snapshot, ok)
+	results := make(chan result, 2)
+	for range 2 {
+		go func() {
+			snapshot, err := integration.MarketSnapshot(context.Background())
+			results <- result{snapshot: snapshot, err: err}
+		}()
+	}
+	select {
+	case result := <-results:
+		t.Fatalf("MarketSnapshot() returned before refresh completed: %#v, %v", result.snapshot, result.err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	for range 2 {
+		result := <-results
+		if result.err != nil || result.snapshot.Generation != 8 || result.snapshot.Stale {
+			t.Fatalf("MarketSnapshot() = %#v, %v", result.snapshot, result.err)
+		}
+	}
+	if len(service.calls) != 0 {
+		t.Fatal("concurrent snapshot readers started a duplicate market refresh")
+	}
+}
+
+func TestMarketSnapshotPreservesStaleFallbackWithoutCallingItFresh(t *testing.T) {
+	service := &controlledMarketService{
+		calls: make(chan struct{}, 1),
+		snapshot: pluginmarket.Snapshot{
+			SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+			Generation:    7,
+			CachedAt:      time.Now().UTC(),
+			Stale:         true,
+			Source:        pluginmarket.SnapshotSourceCache,
+		},
+	}
+	integration := &Integration{marketService: service}
+	snapshot, err := integration.MarketSnapshot(context.Background())
+	if err != nil || snapshot.Generation != 7 || !snapshot.Stale || snapshot.Source != pluginmarket.SnapshotSourceCache {
+		t.Fatalf("MarketSnapshot() = %#v, %v", snapshot, err)
+	}
+}
+
+func TestMarketSnapshotHonorsCallerCancellation(t *testing.T) {
+	service := &controlledMarketService{
+		calls:   make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	integration := &Integration{marketService: service}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := integration.MarketSnapshot(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("MarketSnapshot() error = %v, want context cancellation", err)
 	}
 	if err := integration.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMarketSnapshotFailsWhenRefreshHasNoUsableSnapshot(t *testing.T) {
+	service := &controlledMarketService{
+		calls: make(chan struct{}, 1),
+		err:   pluginmarket.ErrUnavailable,
+	}
+	integration := &Integration{marketService: service}
+	if _, err := integration.MarketSnapshot(context.Background()); !errors.Is(err, pluginmarket.ErrUnavailable) {
+		t.Fatalf("MarketSnapshot() error = %v, want unavailable", err)
 	}
 }
 

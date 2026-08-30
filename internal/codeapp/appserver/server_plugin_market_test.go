@@ -46,8 +46,8 @@ func TestServerPluginMarketCatalogReturnsFrozenSnapshot(t *testing.T) {
 	cap := config.PermissionSet{Read: true}
 	server := &Server{
 		localPermissionCap: &cap,
-		pluginMarketSnapshot: func() (pluginmarket.Snapshot, bool) {
-			return want, true
+		pluginMarketSnapshot: func(context.Context) (pluginmarket.Snapshot, error) {
+			return want, nil
 		},
 	}
 
@@ -76,9 +76,9 @@ func TestServerPluginMarketCatalogFailsClosed(t *testing.T) {
 		called := false
 		server := &Server{
 			localPermissionCap: &cap,
-			pluginMarketSnapshot: func() (pluginmarket.Snapshot, bool) {
+			pluginMarketSnapshot: func(context.Context) (pluginmarket.Snapshot, error) {
 				called = true
-				return pluginmarket.Snapshot{}, true
+				return pluginmarket.Snapshot{}, nil
 			},
 		}
 		response := performPluginMarketRequest(server, WithLocalUIEnvRoute)
@@ -91,8 +91,8 @@ func TestServerPluginMarketCatalogFailsClosed(t *testing.T) {
 		cap := config.PermissionSet{Read: true}
 		server := &Server{
 			localPermissionCap: &cap,
-			pluginMarketSnapshot: func() (pluginmarket.Snapshot, bool) {
-				return pluginmarket.Snapshot{}, false
+			pluginMarketSnapshot: func(context.Context) (pluginmarket.Snapshot, error) {
+				return pluginmarket.Snapshot{}, pluginmarket.ErrUnavailable
 			},
 		}
 		response := performPluginMarketRequest(server, WithLocalUIEnvRoute)
@@ -106,9 +106,9 @@ func TestServerPluginMarketCatalogFailsClosed(t *testing.T) {
 		called := false
 		server := &Server{
 			localPermissionCap: &cap,
-			pluginMarketSnapshot: func() (pluginmarket.Snapshot, bool) {
+			pluginMarketSnapshot: func(context.Context) (pluginmarket.Snapshot, error) {
 				called = true
-				return pluginmarket.Snapshot{}, true
+				return pluginmarket.Snapshot{}, nil
 			},
 		}
 		response := performPluginMarketRequest(server, func(request *http.Request) *http.Request {

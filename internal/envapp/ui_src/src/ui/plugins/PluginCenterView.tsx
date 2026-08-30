@@ -554,7 +554,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const currentUpdateReviewItem = createMemo(() => {
     const reviewed = updateReviewItem();
     if (!reviewed) return undefined;
-    return allItems().find((item) => item.inventoryKey === reviewed.inventoryKey) ?? reviewed;
+    return allItems().find((item) => item.inventoryKey === reviewed.inventoryKey);
   });
 
   const runCommand = async (command: PluginLifecycleCommand, installItemOverride?: PluginInventoryItem) => {
@@ -647,8 +647,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       await props.onRefresh();
       marketDetailCache.clear();
       setMarketDetailState(undefined);
-    } catch (error) {
-      setCommandError(messageFromUnknown(error));
+    } catch {
+      setCommandError(i18n.t('uiCopy.plugin.marketUnavailable'));
     } finally {
       setRefreshPending(false);
     }
