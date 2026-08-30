@@ -558,6 +558,8 @@ describe('EnvSettingsPage', () => {
     expect(renderedNavLabels).toEqual(navLabels);
     expect(host.querySelector('[data-settings-nav-item="config"]')?.getAttribute('aria-current')).toBe('page');
     expect(host.querySelector('[data-settings-nav-item="connection"]')?.hasAttribute('aria-current')).toBe(false);
+    expect(host.querySelector('[data-settings-nav-item="config"]')?.classList.contains('redeven-settings-nav-item--active')).toBe(true);
+    expect(host.querySelector('[data-settings-nav-item="config"]')?.classList.contains('border-r-2')).toBe(false);
 
     const settingsSidebar = host.querySelector('.redeven-settings-sidebar');
     expect(settingsSidebar?.querySelector('[data-icon="Search"]')?.classList.contains('redeven-settings-sidebar-note')).toBe(true);
