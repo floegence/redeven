@@ -172,18 +172,6 @@ function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
   return view === 'overview' ? 'changes' : view;
 }
 
-function selectorLabel(view: GitWorkbenchSubview, i18n: ReturnType<typeof useI18n>): string {
-  switch (normalizeSubview(view)) {
-    case 'branches':
-      return i18n.t('gitPresentation.branchesView');
-    case 'history':
-      return i18n.t('gitPresentation.graphView');
-    case 'changes':
-    default:
-      return i18n.t('git.common.changes');
-  }
-}
-
 function resolveWorkspaceSectionIcon(section: GitWorkspaceViewSection): import('solid-js').Component<{ class?: string }> {
   switch (section) {
     case 'staged':
@@ -193,18 +181,6 @@ function resolveWorkspaceSectionIcon(section: GitWorkspaceViewSection): import('
     case 'changes':
     default:
       return FileText;
-  }
-}
-
-function selectorDescription(view: GitWorkbenchSubview, i18n: ReturnType<typeof useI18n>): string {
-  switch (normalizeSubview(view)) {
-    case 'branches':
-      return i18n.t('git.overview.chooseBranchToLoadCompare');
-    case 'history':
-      return i18n.t('uiCopy.git.chooseCommit');
-    case 'changes':
-    default:
-      return i18n.t('git.overview.reviewWorkspaceFromSidebar');
   }
 }
 
@@ -507,13 +483,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                 when={props.repoAvailable}
                 fallback={<div class="py-3 text-xs text-muted-foreground">{props.repoUnavailableReason || i18n.t('git.notifications.currentPathNotGitRepo')}</div>}
               >
-                <div class="space-y-2">
-                  <div class="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/65">
-                    {selectorLabel(activeSubview(), i18n)}
-                  </div>
-                  <div class="px-1 text-[11px] text-muted-foreground">
-                    {selectorDescription(activeSubview(), i18n)}
-                  </div>
+                <div class="space-y-1.5">
 
                   <Show when={activeSubview() === 'changes'}>
                     <Show
@@ -596,7 +566,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                       fallback={<GitStatePane loading message={i18n.t('git.notifications.loadingBranches')} class="min-h-[4.5rem] py-3" />}
                     >
                       <Show when={!props.branchesError} fallback={<div class="py-3 text-xs break-words text-error">{props.branchesError}</div>}>
-                        <GitSection label={i18n.t('uiCopy.git.local')} description={i18n.t('uiCopy.git.localBranchesDescription')} aside={String(localBranchCount())} tone="brand">
+                        <GitSection label={i18n.t('uiCopy.git.local')} aside={String(localBranchCount())} tone="brand">
                           <Show when={localBranchCount() > 0} fallback={<GitSubtleNote>{i18n.t('uiCopy.git.noLocalBranches')}</GitSubtleNote>}>
                             <div class="space-y-px">
                               <For each={props.branches?.local ?? []}>
@@ -635,7 +605,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                           </Show>
                         </GitSection>
 
-                        <GitSection label={i18n.t('uiCopy.git.remote')} description={i18n.t('uiCopy.git.remoteBranchesDescription')} aside={String(remoteBranchCount())} tone="violet">
+                        <GitSection label={i18n.t('uiCopy.git.remote')} aside={String(remoteBranchCount())} tone="violet">
                           <Show when={remoteBranchCount() > 0} fallback={<GitSubtleNote>{i18n.t('uiCopy.git.noRemoteBranches')}</GitSubtleNote>}>
                             <div class="space-y-px">
                               <For each={props.branches?.remote ?? []}>

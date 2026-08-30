@@ -419,17 +419,6 @@ export function workspaceViewSectionActionKey(
   return `section:${section}`;
 }
 
-export function branchSubviewLabel(section: GitBranchSubview): string {
-  switch (section) {
-    case "status":
-      return "Status";
-    case "history":
-      return "History";
-    default:
-      return "Status";
-  }
-}
-
 export function workspaceSectionCount(
   summary: GitWorkspaceSummary | null | undefined,
   section: GitWorkspaceSection,

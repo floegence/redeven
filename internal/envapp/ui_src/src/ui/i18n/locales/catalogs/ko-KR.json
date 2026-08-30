@@ -4951,7 +4951,15 @@
       "localBranchesDescription": "이 체크아웃의 브랜치입니다.",
       "remoteBranchesDescription": "추적 중이거나 공유된 참조입니다.",
       "reviewSelectedBranchStatusDiff": "선택한 브랜치 상태 파일의 차이를 검토합니다.",
-      "selectBranchStatusFile": "브랜치 상태 파일을 선택하여 차이를 확인하세요."
+      "selectBranchStatusFile": "브랜치 상태 파일을 선택하여 차이를 확인하세요.",
+      "changeTypes": {
+        "added": "추가됨",
+        "modified": "수정됨",
+        "deleted": "삭제됨",
+        "renamed": "이름 변경됨",
+        "copied": "복사됨",
+        "conflicted": "충돌"
+      }
     },
     "shell": {
       "displayMode": "디스플레이 모드",

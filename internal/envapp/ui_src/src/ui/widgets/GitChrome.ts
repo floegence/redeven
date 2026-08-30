@@ -133,9 +133,9 @@ export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, act
 
 export function gitNavigationItemClass(active: boolean): string {
   const base =
-    'git-browser-interactive border-l-[2px] border-l-transparent focus-visible:outline-none';
+    'git-browser-interactive border border-transparent focus-visible:outline-none';
   return active
-    ? `${base} git-browser-selection-surface git-browser-selection-nav font-medium`
+    ? `${base} git-browser-selection-surface font-medium`
     : `${base} bg-transparent text-muted-foreground hover:text-foreground`;
 }
 
@@ -196,26 +196,6 @@ export function gitChangeTone(change: string | undefined): GitChromeTone {
     case 'modified':
     default:
       return 'brand';
-  }
-}
-
-export function gitChangeLabel(change: string | undefined): string {
-  const normalized = String(change ?? '').trim().toLowerCase();
-  switch (normalized) {
-    case 'added':
-      return 'Added';
-    case 'conflicted':
-      return 'Conflicted';
-    case 'deleted':
-      return 'Deleted';
-    case 'renamed':
-      return 'Renamed';
-    case 'copied':
-      return 'Copied';
-    case 'modified':
-      return 'Modified';
-    default:
-      return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : 'Modified';
   }
 }
 

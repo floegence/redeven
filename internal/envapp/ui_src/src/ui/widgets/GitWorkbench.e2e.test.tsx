@@ -8,13 +8,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitWorkbench } from './GitWorkbench';
 
-function findGitTitleDot(container: ParentNode, label: string): HTMLSpanElement | null {
-  const labelNode = Array.from(container.querySelectorAll('div')).find((node) => (
-    node.textContent?.trim() === label
-    && node.className.includes('tracking-[0.16em]')
-  )) as HTMLDivElement | undefined;
-  expect(labelNode).toBeTruthy();
-  return labelNode?.parentElement?.querySelector('span[aria-hidden="true"]') as HTMLSpanElement | null;
+async function flush() {
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
+async function clickRepositoryMenuItem(host: HTMLElement, label: string) {
+  const trigger = host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null;
+  expect(trigger).toBeTruthy();
+  trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
+  const item = Array.from(document.body.querySelectorAll('[role="menu"] button')).find(
+    (node) => node.textContent?.trim() === label,
+  ) as HTMLButtonElement | undefined;
+  expect(item).toBeTruthy();
+  item!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
 }
 
 describe('GitWorkbench interactions', () => {
@@ -38,7 +47,7 @@ describe('GitWorkbench interactions', () => {
     document.body.innerHTML = '';
   });
 
-  it('keeps the global header lightweight while exposing repository sync actions', () => {
+  it('keeps the global header lightweight while exposing repository sync actions', async () => {
     let refreshCount = 0;
     let fetchCount = 0;
     let pullCount = 0;
@@ -102,24 +111,18 @@ describe('GitWorkbench interactions', () => {
     ), host);
 
     try {
-      const fetchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Fetch')) as HTMLButtonElement | undefined;
-      const pullButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Pull')) as HTMLButtonElement | undefined;
-      const pushButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Push')) as HTMLButtonElement | undefined;
-      const refreshButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Refresh')) as HTMLButtonElement | undefined;
-      expect(fetchButton).toBeTruthy();
+      const pullButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Pull 1')) as HTMLButtonElement | undefined;
+      const refreshButton = host.querySelector('button[aria-label="Refresh"]') as HTMLButtonElement | null;
       expect(pullButton).toBeTruthy();
-      expect(pushButton).toBeTruthy();
       expect(refreshButton).toBeTruthy();
       expect(refreshButton?.className).toContain('bg-background/72');
       expect(refreshButton?.className).not.toContain('redeven-surface-control--muted');
       expect(refreshButton?.className).not.toContain('border-input');
-      expect(Array.from(host.querySelectorAll('button')).find((button) => button.className.includes('hover:text-[var(--redeven-status-success)]'))).toBeTruthy();
-      expect(Array.from(host.querySelectorAll('button')).find((button) => button.className.includes('hover:text-[var(--redeven-status-info)]'))).toBeTruthy();
       expect(refreshButton?.className).not.toContain(' border ');
       expect(refreshButton?.className).not.toContain('border-input');
-      fetchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       pullButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      pushButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await clickRepositoryMenuItem(host, 'Fetch');
+      await clickRepositoryMenuItem(host, 'Push 2');
       refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       expect(host.querySelector('button[aria-label="Toggle browser sidebar"]')).toBeNull();
@@ -127,21 +130,16 @@ describe('GitWorkbench interactions', () => {
       expect(pullCount).toBe(1);
       expect(pushCount).toBe(1);
       expect(refreshCount).toBe(1);
-      expect(host.textContent).toContain('Branches');
       expect(host.textContent).toContain('/workspace/repo');
-      expect(host.textContent).toContain('Status');
+      expect(host.textContent).toContain('Workspace');
       expect(host.textContent).toContain('No checked-out worktree');
       expect(host.textContent).toContain('This branch is not checked out in the active worktree.');
-      const branchesDot = findGitTitleDot(host, 'Branches');
-      expect(branchesDot?.className).toContain('git-tone-dot');
-      expect(branchesDot?.className).toContain('git-tone-dot--violet');
-      expect(branchesDot?.className).not.toContain('bg-violet-500/75');
     } finally {
       dispose();
     }
   });
 
-  it('stacks repository actions under the summary block for narrow layouts', () => {
+  it('keeps repository identity and the contextual primary action on one compact row', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -179,20 +177,18 @@ describe('GitWorkbench interactions', () => {
     ), host);
 
     try {
-      const fetchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Fetch')) as HTMLButtonElement | undefined;
-      expect(fetchButton).toBeTruthy();
-      const actionContainer = fetchButton?.parentElement as HTMLDivElement | null;
-      const headerContainer = actionContainer?.parentElement as HTMLDivElement | null;
-      expect(actionContainer?.className).toContain('w-full');
-      expect(actionContainer?.className).toContain('xl:w-auto');
-      expect(headerContainer?.className).toContain('flex-col');
-      expect(headerContainer?.className).toContain('xl:flex-row');
+      const pushButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Push 1')) as HTMLButtonElement | undefined;
+      const header = host.querySelector('[data-git-repository-header="compact"]');
+      expect(pushButton).toBeTruthy();
+      expect(header).toBeTruthy();
+      expect(pushButton?.parentElement?.className).toContain('items-center');
+      expect(pushButton?.parentElement?.parentElement?.className).toContain('justify-between');
     } finally {
       dispose();
     }
   });
 
-  it('renders detached HEAD explicitly in the header and disables pull and push', () => {
+  it('renders detached HEAD explicitly in the header and disables pull and push', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -223,15 +219,16 @@ describe('GitWorkbench interactions', () => {
     ), host);
 
     try {
-      const pullButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Pull')) as HTMLButtonElement | undefined;
-      const pushButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Push')) as HTMLButtonElement | undefined;
       expect(host.textContent).toContain('Detached HEAD');
       expect(host.textContent).toContain('def56789');
       expect(host.textContent).toContain('Viewing def56789 without a branch.');
-      expect(pullButton?.disabled).toBe(true);
-      expect(pushButton?.disabled).toBe(true);
-      const graphDot = findGitTitleDot(host, 'Graph');
-      expect(graphDot?.className).toContain('git-tone-dot--brand');
+      const moreButton = host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null;
+      expect(moreButton).toBeTruthy();
+      moreButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      const menuButtons = Array.from(document.body.querySelectorAll('[role="menu"] button')) as HTMLButtonElement[];
+      expect(menuButtons.find((node) => node.textContent?.includes('Pull'))?.disabled).toBe(true);
+      expect(menuButtons.find((node) => node.textContent?.includes('Push'))?.disabled).toBe(true);
     } finally {
       dispose();
     }
@@ -293,7 +290,7 @@ describe('GitWorkbench interactions', () => {
     }
   });
 
-  it('opens the shared stash list from the header button', () => {
+  it('opens the shared stash list from the header overflow menu', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onOpenStash = vi.fn();
@@ -330,9 +327,7 @@ describe('GitWorkbench interactions', () => {
     ), host);
 
     try {
-      const stashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stashes · 2')) as HTMLButtonElement | undefined;
-      expect(stashButton).toBeTruthy();
-      stashButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await clickRepositoryMenuItem(host, 'Stashes · 2');
 
       expect(onOpenStash).toHaveBeenCalledWith({
         tab: 'stashes',

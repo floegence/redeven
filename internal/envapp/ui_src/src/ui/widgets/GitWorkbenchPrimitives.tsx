@@ -4,8 +4,9 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Button, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { Tooltip } from '../primitives/Tooltip';
 import { useI18n } from '../i18n';
+import { localizedGitChangeLabel } from '../utils/localizedGitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
+import { gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
 
 function gitTagVariant(tone?: GitChromeTone): TagProps['variant'] {
   switch (tone) {
@@ -413,9 +414,10 @@ export interface GitChangeStatusPillProps {
 }
 
 export function GitChangeStatusPill(props: GitChangeStatusPillProps) {
+  const i18n = useI18n();
   return (
     <GitMetaPill tone={gitChangeTone(props.change ?? undefined)} class={cn('whitespace-nowrap', props.class)}>
-      {gitChangeLabel(props.change ?? undefined)}
+      {localizedGitChangeLabel(props.change, i18n)}
     </GitMetaPill>
   );
 }

@@ -64,8 +64,10 @@ describe('browser workspace layout wiring', () => {
   it('pins the mode switch area in the shared browser shell', () => {
     const src = read('./BrowserWorkspaceShell.tsx');
 
-    expect(src).toContain("i18n.t('uiCopy.shell.mode')");
     expect(src).toContain('props.modeSwitcher');
+    expect(src).toContain('sticky top-0 z-10 shrink-0 border-b');
+    expect(src).not.toContain("i18n.t('uiCopy.shell.mode')");
+    expect(src).not.toContain('navigationLabel');
     expect(src).not.toContain('headerActions?: JSX.Element;');
     expect(src).not.toContain('{props.headerActions}');
   });
@@ -147,11 +149,13 @@ describe('browser workspace layout wiring', () => {
 
     expect(navSrc).toContain('role="tablist"');
     expect(navSrc).toContain("aria-label={i18n.t('uiCopy.git.views')}");
-    expect(navSrc).toContain('space-y-0.5 rounded-md bg-muted/[0.14] p-0.5');
-    expect(navSrc).toContain('rounded px-2.5 py-2.5');
-    expect(navSrc).toContain('sm:py-1.5');
+    expect(navSrc).toContain('aria-orientation="horizontal"');
+    expect(navSrc).toContain("resolveRovingTabTargetId(itemIds(), currentId, event.key, 'horizontal')");
+    expect(navSrc).toContain('grid grid-cols-3 gap-0.5 rounded-md bg-muted/[0.12] p-0.5');
+    expect(navSrc).toContain('rounded px-2 py-1.5');
     expect(navSrc).toContain('gitNavigationItemClass(active())');
     expect(navSrc).toContain('gitSelectedChipClass(true)');
+    expect(navSrc).toContain("typeof item.count === 'number' && item.count > 0");
     expect(navSrc).not.toContain('gitSubviewTone');
     expect(navSrc).not.toContain('gitToneBadgeClass');
     expect(navSrc).not.toContain('gitToneSelectableCardClass');
@@ -210,7 +214,6 @@ describe('browser workspace layout wiring', () => {
 
   it('routes branch review through status and history views with compare in a dialog', () => {
     const branchesSrc = read('./GitBranchesPanel.tsx');
-    const branchHeaderLayoutSrc = read('./gitBranchHeaderLayout.ts');
 
     expect(branchesSrc).toContain("selectedBranchSubview?: GitBranchSubview;");
     expect(branchesSrc).toContain('branchSummary');
@@ -234,15 +237,15 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain("i18n.t('git.branches.mergeAction')");
     expect(branchesSrc).toContain("i18n.t('common.actions.delete')");
     expect(branchesSrc).toContain('flex h-full min-h-0 flex-col overflow-hidden');
-    expect(branchesSrc).toContain('resolveGitBranchHeaderLayout');
-    expect(branchesSrc).toContain("const [branchHeaderWidth, setBranchHeaderWidth] = createSignal(0);");
-    expect(branchesSrc).toContain('ref={setBranchHeaderTopRowElement}');
-    expect(branchesSrc).toContain('new ResizeObserver');
-    expect(branchesSrc).toContain('branchHeaderUsesOverflow');
+    expect(branchesSrc).not.toContain('resolveGitBranchHeaderLayout');
+    expect(branchesSrc).not.toContain('branchHeaderWidth');
     expect(branchesSrc).toContain('branchHeaderMainAction');
     expect(branchesSrc).toContain('branchHeaderOverflowItems');
-    expect(branchesSrc).toContain('data-git-branch-header-layout={branchHeaderLayout()}');
-    expect(branchesSrc).toContain('data-git-branch-header-actions={branchHeaderUsesOverflow() ? "overflow" : "inline"}');
+    expect(branchesSrc).toContain('data-git-branch-header-layout="compact"');
+    expect(branchesSrc).toContain('data-git-branch-header-actions="overflow"');
+    expect(branchesSrc).not.toContain('branchHeaderUsesOverflow');
+    expect(branchesSrc).toContain('localizedGitBranchSubviewLabel(view, i18n)');
+    expect(branchesSrc).toContain('git.contextMenu.deleteBranch');
     expect(branchesSrc).toContain('role="tablist"');
     expect(branchesSrc).toContain("aria-label={i18n.t('git.overview.branchDetailTabs')}");
     expect(branchesSrc).toContain('statusToolbarActions');
@@ -253,12 +256,6 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('setCompareDialogOpen(true)');
     expect(branchesSrc).toContain('source: "branch_status"');
 
-    expect(branchHeaderLayoutSrc).toContain("export type GitBranchHeaderLayout = 'compact' | 'stacked' | 'inline';");
-    expect(branchHeaderLayoutSrc).toContain('GIT_BRANCH_HEADER_STACKED_MIN_WIDTH = 620');
-    expect(branchHeaderLayoutSrc).toContain('GIT_BRANCH_HEADER_INLINE_MIN_WIDTH = 960');
-    expect(branchHeaderLayoutSrc).toContain("if (width >= GIT_BRANCH_HEADER_INLINE_MIN_WIDTH) return 'inline';");
-    expect(branchHeaderLayoutSrc).toContain("if (width >= GIT_BRANCH_HEADER_STACKED_MIN_WIDTH) return 'stacked';");
-    expect(branchHeaderLayoutSrc).toContain("return 'compact';");
   });
 
 
@@ -351,7 +348,8 @@ describe('browser workspace layout wiring', () => {
 
     expect(branchesSrc).toContain('GitTableFrame');
     expect(branchesSrc).toContain('<GitTableFrame class="flex min-h-0 flex-1 flex-col">');
-    expect(branchesSrc).toContain('<GitPanelFrame>');
+    expect(branchesSrc).not.toContain('<GitPanelFrame>');
+    expect(branchesSrc).toContain('class={cn("shrink-0 space-y-1.5 border-b px-2.5 py-1.5"');
     expect(branchesSrc).toContain('data-git-branch-status-content-frame="true"');
   });
 
@@ -360,7 +358,7 @@ describe('browser workspace layout wiring', () => {
     const filesSrc = read('./FileBrowserWorkspace.tsx');
 
     expect(src).toContain("import { GitViewNav } from './GitViewNav';");
-    expect(src).toContain('navigationLabel="View"');
+    expect(src).not.toContain('navigationLabel=');
     expect(src).toContain('sidebarBodyClass="overflow-hidden"');
     expect(src).toContain("class={['redeven-git-browser', props.class].filter(Boolean).join(' ')}");
     expect(src).toContain('<GitViewNav');
@@ -372,12 +370,12 @@ describe('browser workspace layout wiring', () => {
   it('keeps the git sidebar labels and density aligned with the compact workspace language', () => {
     const src = read('./GitWorkbenchSidebar.tsx');
 
-    expect(src).toContain("i18n.t('git.common.changes')");
-    expect(src).toContain("i18n.t('gitPresentation.branchesView')");
-    expect(src).toContain("i18n.t('gitPresentation.graphView')");
+    expect(src).toContain('localizedWorkspaceViewSectionLabel(section, i18n)');
     expect(src).toContain("i18n.t('uiCopy.git.local')");
     expect(src).toContain("i18n.t('uiCopy.git.remote')");
-    expect(src).toContain("i18n.t('git.overview.chooseBranchToLoadCompare')");
+    expect(src).not.toContain("i18n.t('git.overview.chooseBranchToLoadCompare')");
+    expect(src).not.toContain('selectorDescription');
+    expect(src).not.toContain('localBranchesDescription');
     expect(src).not.toContain('Recent history with merge structure.');
     expect(src).toContain('space-y-2');
     expect(src).toContain('WORKSPACE_VIEW_SECTIONS');
@@ -438,9 +436,16 @@ describe('browser workspace layout wiring', () => {
     expect(src).not.toContain('Compact repo signals and actions for the current view.');
     expect(src).not.toContain('Clean workspace');
     expect(src).toContain('GitMetaPill');
-    expect(src).toContain('GitLabelBlock');
+    expect(src).toContain('primaryRepositoryAction');
+    expect(src).toContain('repositoryHeaderMenuItems');
+    expect(src).toContain('data-git-repository-header="compact"');
+    expect(src).toContain('data-git-repository-context-target="header"');
+    expect(src).toContain('<GitEntityContextMenu controller={repositoryContextMenu}');
+    expect(src).toContain('<Dropdown');
+    expect(src).not.toContain('GitLabelBlock');
     expect(src).toContain('gitToneHeaderActionButtonClass()');
     expect(src).toContain('variant="ghost"');
+    expect(src).toContain('variant="default"');
     expect(src).toContain("redevenDividerRoleClass()");
     expect(src).toContain("redevenSurfaceRoleClass('inset')");
     expect(src).not.toContain("gitToneSurfaceClass(subviewTone())");

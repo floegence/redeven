@@ -13,9 +13,42 @@ import {
   summarizePendingWorkspaceCount,
   summarizeWorkspaceCount,
   type GitHeadDisplay,
+  type GitBranchSubview,
   type GitWorkbenchSubviewItem,
   type GitWorkspaceViewSection,
 } from './gitWorkbench';
+
+export function localizedGitChangeLabel(
+  change: string | null | undefined,
+  i18n: I18nHelpers,
+): string {
+  switch (String(change ?? '').trim().toLowerCase()) {
+    case 'added':
+      return i18n.t('uiCopy.git.changeTypes.added');
+    case 'conflicted':
+      return i18n.t('uiCopy.git.changeTypes.conflicted');
+    case 'deleted':
+      return i18n.t('uiCopy.git.changeTypes.deleted');
+    case 'renamed':
+      return i18n.t('uiCopy.git.changeTypes.renamed');
+    case 'copied':
+      return i18n.t('uiCopy.git.changeTypes.copied');
+    case 'modified':
+    case '':
+      return i18n.t('uiCopy.git.changeTypes.modified');
+    default:
+      return String(change).trim();
+  }
+}
+
+export function localizedGitBranchSubviewLabel(
+  view: GitBranchSubview,
+  i18n: I18nHelpers,
+): string {
+  return view === 'history'
+    ? i18n.t('gitPresentation.graphView')
+    : i18n.t('git.changes.workspace');
+}
 
 export function localizedGitCommitDiffPresentationBadge(
   presentation: GitCommitDiffPresentation | null | undefined,

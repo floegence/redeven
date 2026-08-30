@@ -4955,7 +4955,15 @@
       "localBranchesDescription": "Branches in diesem Checkout.",
       "remoteBranchesDescription": "Nachverfolgte und gemeinsam genutzte Referenzen.",
       "reviewSelectedBranchStatusDiff": "Unterschiede der ausgewählten Branch-Statusdatei prüfen.",
-      "selectBranchStatusFile": "Branch-Statusdatei auswählen, um die Unterschiede anzuzeigen."
+      "selectBranchStatusFile": "Branch-Statusdatei auswählen, um die Unterschiede anzuzeigen.",
+      "changeTypes": {
+        "added": "Hinzugefügt",
+        "modified": "Geändert",
+        "deleted": "Gelöscht",
+        "renamed": "Umbenannt",
+        "copied": "Kopiert",
+        "conflicted": "Konflikt"
+      }
     },
     "shell": {
       "displayMode": "Anzeigemodus",

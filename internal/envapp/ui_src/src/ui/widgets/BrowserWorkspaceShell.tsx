@@ -21,7 +21,6 @@ export interface BrowserWorkspaceShellProps {
   bodyRef?: (el: HTMLDivElement) => void;
   modeSwitcher: JSX.Element;
   navigation?: JSX.Element;
-  navigationLabel?: string;
   sidebarBody: JSX.Element;
   sidebarBodyClass?: string;
   content: JSX.Element;
@@ -93,15 +92,11 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
         bodyRef={props.bodyRef}
       >
         <div class="flex h-full min-h-0 flex-col bg-sidebar">
-          <div class="sticky top-0 z-10 shrink-0 border-b border-sidebar-border bg-sidebar/95 px-2.5 py-2 backdrop-blur supports-[backdrop-filter]:bg-sidebar/90">
-            <div>
-              <div class="px-0.5 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">{i18n.t('uiCopy.shell.mode')}</div>
-              {props.modeSwitcher}
-            </div>
+          <div class="sticky top-0 z-10 shrink-0 border-b border-sidebar-border bg-sidebar/95 px-2.5 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-sidebar/90">
+            {props.modeSwitcher}
 
             <Show when={props.navigation}>
-              <div class="mt-2 border-t border-sidebar-border pt-2">
-                <div class="px-0.5 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">{props.navigationLabel || i18n.t('shell.commandPalette.categories.navigation')}</div>
+              <div class="mt-1.5">
                 {props.navigation}
               </div>
             </Show>

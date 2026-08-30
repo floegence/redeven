@@ -5063,7 +5063,15 @@
       "localBranchesDescription": "Ветки в этой рабочей копии.",
       "remoteBranchesDescription": "Отслеживаемые и общие ссылки.",
       "reviewSelectedBranchStatusDiff": "Просмотреть различия выбранного файла состояния ветки.",
-      "selectBranchStatusFile": "Выберите файл состояния ветки, чтобы просмотреть различия."
+      "selectBranchStatusFile": "Выберите файл состояния ветки, чтобы просмотреть различия.",
+      "changeTypes": {
+        "added": "Добавлен",
+        "modified": "Изменён",
+        "deleted": "Удалён",
+        "renamed": "Переименован",
+        "copied": "Скопирован",
+        "conflicted": "Конфликт"
+      }
     },
     "shell": {
       "displayMode": "Режим отображения",

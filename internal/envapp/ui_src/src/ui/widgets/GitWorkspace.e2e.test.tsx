@@ -95,8 +95,8 @@ describe('GitWorkspace interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Mode');
-      expect(host.textContent).toContain('View');
+      expect(host.textContent).not.toContain('Mode');
+      expect(host.textContent).not.toContain('ViewGit');
       expect(host.querySelector('.redeven-git-browser')).toBeTruthy();
       expect(host.querySelectorAll('[role="radiogroup"][aria-label="Browser mode"]').length).toBe(1);
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
@@ -145,7 +145,6 @@ describe('GitWorkspace interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('View');
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Changes'))).toBe(true);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Branches'))).toBe(true);
@@ -213,7 +212,7 @@ describe('GitWorkspace interactions', () => {
     }
   });
 
-  it('supports vertical keyboard navigation across git view tabs', () => {
+  it('supports horizontal keyboard navigation across git view tabs', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -271,7 +270,7 @@ describe('GitWorkspace interactions', () => {
       expect(activeTab?.getAttribute('aria-controls')).toBe('git-workbench-subview-panel-changes');
       expect(activeTab?.getAttribute('tabindex')).toBe('0');
       expect(host.querySelector('#git-workbench-subview-panel-changes')).toBeTruthy();
-      activeTab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      activeTab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
       expect(host.querySelector('#git-workbench-subview-tab-branches')?.getAttribute('aria-selected')).toBe('true');
       expect(host.querySelector('#git-workbench-subview-panel-branches')).toBeTruthy();
     } finally {
@@ -370,8 +369,7 @@ describe('GitWorkspace interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Mode');
-      expect(host.textContent).toContain('View');
+      expect(host.textContent).not.toContain('Mode');
       expect(host.querySelectorAll('[role="radiogroup"][aria-label="Browser mode"]').length).toBe(1);
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Changes'))).toBe(true);

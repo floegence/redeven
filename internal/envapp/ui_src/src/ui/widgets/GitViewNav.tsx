@@ -1,4 +1,4 @@
-import { For } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import type { GitWorkbenchSubview, GitWorkbenchSubviewItem } from '../utils/gitWorkbench';
@@ -18,14 +18,14 @@ const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 export function GitViewNav(props: GitViewNavProps) {
   const i18n = useI18n();
   const buttonBaseClass =
-    'cursor-pointer flex w-full items-center justify-between gap-2 rounded px-2.5 py-2.5 text-left text-xs transition-all duration-150 sm:py-1.5';
+    'cursor-pointer flex min-w-0 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs transition-[background-color,color,border-color] duration-150';
   const badgeBaseClass =
-    'inline-flex min-w-[1.5rem] items-center justify-center rounded px-1 py-0.5 text-[10px] font-medium tabular-nums transition-colors duration-150';
+    'inline-flex min-w-[1.25rem] items-center justify-center rounded px-1 py-0.5 text-[9px] font-semibold tabular-nums transition-colors duration-150';
   const tabRefs = new Map<GitWorkbenchSubview, HTMLButtonElement>();
   const itemIds = () => props.items.map((item) => item.id);
 
   const handleKeyDown = (event: KeyboardEvent, currentId: GitWorkbenchSubview) => {
-    const nextId = resolveRovingTabTargetId(itemIds(), currentId, event.key, 'vertical');
+    const nextId = resolveRovingTabTargetId(itemIds(), currentId, event.key, 'horizontal');
     if (!nextId || nextId === currentId) return;
     event.preventDefault();
     props.onChange(nextId);
@@ -34,10 +34,10 @@ export function GitViewNav(props: GitViewNavProps) {
 
   return (
     <div
-      class={cn('space-y-0.5 rounded-md bg-muted/[0.14] p-0.5', props.class)}
+      class={cn('grid grid-cols-3 gap-0.5 rounded-md bg-muted/[0.12] p-0.5', props.class)}
       role="tablist"
       aria-label={i18n.t('uiCopy.git.views')}
-      aria-orientation="vertical"
+      aria-orientation="horizontal"
     >
       <For each={props.items}>
         {(item) => {
@@ -60,20 +60,22 @@ export function GitViewNav(props: GitViewNavProps) {
               onClick={() => props.onChange(item.id)}
               onKeyDown={(event) => handleKeyDown(event, item.id)}
             >
-              <span class="flex min-w-0 flex-1 items-center gap-2 truncate">
+              <span class="flex min-w-0 items-center justify-center gap-1.5 truncate">
                 <Dynamic component={item.icon} class="h-3.5 w-3.5 shrink-0" />
                 <span class="truncate font-medium">{item.label}</span>
               </span>
-              <span
-                class={cn(
-                  badgeBaseClass,
-                  active()
-                    ? gitSelectedChipClass(true)
-                    : 'bg-background/70 text-muted-foreground',
-                )}
-              >
-                {typeof item.count === 'number' && item.count > 0 ? item.count : '•'}
-              </span>
+              <Show when={typeof item.count === 'number' && item.count > 0}>
+                <span
+                  class={cn(
+                    badgeBaseClass,
+                    active()
+                      ? gitSelectedChipClass(true)
+                      : 'bg-background/70 text-muted-foreground',
+                  )}
+                >
+                  {item.count}
+                </span>
+              </Show>
             </button>
           );
         }}
