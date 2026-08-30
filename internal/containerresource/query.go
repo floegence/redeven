@@ -3,6 +3,8 @@ package containerresource
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/floegence/redeven/internal/containerengine"
@@ -113,23 +115,60 @@ func (s *Service) ComposeProjects(ctx context.Context, req containerengine.Compo
 	if err != nil {
 		return nil, err
 	}
-	result := make([]ComposeProjectItem, 0, len(items))
+	definitions, err := s.store.composeProjectDefinitions(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return nil, err
+	}
+	savedNames := make(map[string]struct{}, len(definitions))
+	result := make([]ComposeProjectItem, 0, len(items)+len(definitions))
+	for _, definition := range definitions {
+		savedNames[definition.Name] = struct{}{}
+		request := containerengine.ComposeProjectRequest{Engine: definition.Engine, EndpointID: definition.EndpointID, ProjectID: definition.ProjectID}
+		if err := s.hydrateSavedComposeRequest(ctx, &request); err != nil {
+			return nil, err
+		}
+		details, inspectErr := s.engine.InspectComposeProject(ctx, request)
+		project := details.ComposeProject
+		if inspectErr != nil {
+			project = containerengine.ComposeProject{ProjectID: definition.ProjectID, Name: definition.Name, Status: "unavailable"}
+		}
+		management, err := s.management(ctx, req.Engine, req.EndpointID, ResourceComposeProject, containerengine.ComposeProjectID(definition.Name), nil)
+		if err != nil {
+			return nil, err
+		}
+		source := ""
+		if len(definition.ConfigPaths) > 0 {
+			source = filepath.Base(definition.ConfigPaths[0])
+		}
+		result = append(result, ComposeProjectItem{ComposeProject: project, Management: management, Saved: true, Source: source})
+	}
 	for _, item := range items {
+		if _, saved := savedNames[item.Name]; saved {
+			continue
+		}
 		management, err := s.management(ctx, req.Engine, req.EndpointID, ResourceComposeProject, item.ProjectID, nil)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, ComposeProjectItem{ComposeProject: item, Management: management})
 	}
+	sort.Slice(result, func(left, right int) bool { return result[left].Name < result[right].Name })
 	return result, nil
 }
 
 func (s *Service) ComposeProject(ctx context.Context, req containerengine.ComposeProjectRequest) (containerengine.ComposeProjectDetails, Management, error) {
+	if err := s.hydrateSavedComposeRequest(ctx, &req); err != nil {
+		return containerengine.ComposeProjectDetails{}, Management{}, err
+	}
 	item, err := s.engine.InspectComposeProject(ctx, req)
 	if err != nil {
 		return containerengine.ComposeProjectDetails{}, Management{}, err
 	}
-	management, err := s.management(ctx, req.Engine, req.EndpointID, ResourceComposeProject, item.ProjectID, nil)
+	managementIdentity := item.ProjectID
+	if req.Deployment != nil {
+		managementIdentity = containerengine.ComposeProjectID(item.Name)
+	}
+	management, err := s.management(ctx, req.Engine, req.EndpointID, ResourceComposeProject, managementIdentity, nil)
 	return item, management, err
 }
 

@@ -2750,6 +2750,13 @@ export const enUS = defineDictionary({
     stats: { cpu: 'CPU', memory: 'Memory', networkIn: 'Network in', networkOut: 'Network out', waiting: 'Waiting for the first sample…', refreshUnavailable: 'Live statistics are unavailable' },
     operations: {
       title: 'Operations', description: 'Audited container operations and their current state.', empty: 'No container operations yet.',
+      phases: {
+        queued: 'Waiting', running: 'Starting', executing: 'Executing', resolving: 'Resolving image', pulling: 'Pulling layers',
+        extracting: 'Extracting layers', verifying: 'Verifying image', reconciling: 'Checking result', succeeded: 'Completed',
+        failed: 'Failed', cancel_requested: 'Cancel requested', canceling: 'Canceling', canceled: 'Canceled', interrupted: 'Interrupted',
+      },
+      seconds: '{count}s', minutes: '{count}m', layers: 'layers', service: 'Service', duration: 'Duration', started: 'Started',
+      errorTitle: 'Operation failed', progressTitle: 'Progress', loadingProgress: 'Loading progress…',
     },
     operationStates: { queued: 'Queued', running: 'Running', canceling: 'Canceling', succeeded: 'Completed', failed: 'Failed', canceled: 'Canceled', interrupted: 'Interrupted' },
     managed: {
@@ -2761,6 +2768,14 @@ export const enUS = defineDictionary({
       typeName: 'Type “{name}” exactly to continue.',
     },
     review: { title: 'Review operation', operation: 'Operation' },
+    compose: {
+      add: 'Add project', edit: 'Edit project', forget: 'Forget project', saved: 'Saved', source: 'Compose file',
+      editorAddTitle: 'Add Compose project', editorEditTitle: 'Edit Compose project', name: 'Project name',
+      configPaths: 'Compose files', configPathsHint: 'Enter one absolute file path per line. Later files override earlier files.',
+      envFile: 'Environment file', envFileHint: 'Optional absolute path to an env file.', profiles: 'Profiles',
+      profilesHint: 'Optional comma-separated profile names.', save: 'Save project', forgetTitle: 'Forget Compose project',
+      forgetMessage: 'Forget “{name}”? Running containers are not changed.',
+    },
     permissions: {
       read: 'Read permission is required to view container resources.',
       admin: 'Admin permission is required for this high-risk operation.',
@@ -2770,7 +2785,10 @@ export const enUS = defineDictionary({
       inventoryChangedTitle: 'Inventory changed', inventoryChangedMessage: 'The selected resource is no longer available.',
       preflightFailedTitle: 'Preflight failed', operationFailedTitle: 'Operation failed',
       operationCompleteTitle: 'Operation complete', operationCompleteMessage: 'The authoritative inventory has been refreshed.',
-      logsFailedTitle: 'Logs unavailable', detailsFailedTitle: 'Details unavailable',
+      logsFailedTitle: 'Logs unavailable', detailsFailedTitle: 'Details unavailable', composeLoadFailedTitle: 'Project unavailable',
+      composeSavedTitle: 'Project saved', composeSavedMessage: 'The Compose project is ready for one-click operations.',
+      composeSaveFailedTitle: 'Project not saved', composeForgottenTitle: 'Project forgotten',
+      composeForgottenMessage: 'The saved Compose definition was removed.',
     },
   },
   webServices: {

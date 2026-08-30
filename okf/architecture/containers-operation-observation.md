@@ -41,6 +41,15 @@ observed sequence and cannot create or repeat work. Events contain sanitized
 state and redacted reconciliation only. UI progress is based on reported
 phases or terminal state, never fabricated elapsed-time percentages.
 
+Every execution reports `executing` and `reconciling`. Image pull additionally
+reports only phases observed from Docker or Podman output and counts known
+completed layers when the engine supplies layer identities. Unknown totals stay
+indeterminate. Raw output, registry responses, command arguments, image-layer
+bytes, and host paths are never persisted. Terminal errors use a small public
+taxonomy for storage, registry availability, rate limiting, not-found, and
+access denial; the drawer presents that sanitized code and message with the
+durable timeline.
+
 ## Authoritative terminal observation
 
 After engine execution returns, the service reloads the exact endpoint-bound
@@ -68,8 +77,9 @@ instead of one process per row. Detail statistics select their container from
 the same endpoint-wide engine primitive rather than relying on inconsistent
 targeted CLI output. Statistics and logs retain only a bounded browser window.
 The Operations drawer persists within its native surface instance and shows the
-internal source target only where exact operation identity is necessary. Mobile
-and desktop expose the same state and cancellation authority.
+source engine label only where operation context is necessary. Selecting an
+operation loads its durable event snapshot, then resumes SSE after the last
+sequence. Mobile and desktop expose the same state and cancellation authority.
 
 # Boundaries
 
@@ -85,6 +95,7 @@ and desktop expose the same state and cancellation authority.
 
 - `redeven:internal/containerresource/service.go` - Admits operations and observes interrupted startup state without replay.
 - `redeven:internal/containerresource/store.go` - Atomically records interrupted state and redacted evidence.
-- `redeven:internal/containerresource/service_test.go` - Proves preflight integrity, idempotency, managed-resource protection, reconciliation, and restart behavior.
+- `redeven:internal/containerengine/cli_client.go` - Parses bounded image pull phase and layer evidence without retaining raw output.
+- `redeven:internal/containerresource/service_test.go` - Proves preflight integrity, idempotency, managed-resource protection, saved Compose lifecycle, reconciliation, migration, and restart behavior.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Streams durable operation events and handles explicit cancellation.
 - `redeven:internal/envapp/ui_src/src/ui/services/containerResourcesApi.ts` - Fences native inventory and event consumers by explicit API identity.

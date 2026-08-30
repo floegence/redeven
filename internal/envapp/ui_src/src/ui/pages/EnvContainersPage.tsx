@@ -32,32 +32,39 @@ import {
   X,
 } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
-import { Button, Dropdown, Input, MonitoringChart, Select, Tabs, Tag, type DropdownItem, type TabItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, Input, MonitoringChart, Select, Tabs, Tag, Textarea, type DropdownItem, type TabItem } from '@floegence/floe-webapp-core/ui';
 
 import { Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 import {
   cancelContainerOperation,
+  createComposeProjectDefinition,
   createContainerOperation,
+  deleteComposeProjectDefinition,
+  getComposeProjectDefinition,
   getContainerImageHistory,
   getRawContainerInspect,
   getContainerResourceDetails,
   listContainerOperations,
+  listContainerOperationEvents,
   listContainerResources,
   listContainerRuntimes,
   listContainerResourceFiles,
   readContainerResourceFile,
   preflightContainerOperation,
   subscribeContainerOperation,
+  subscribeContainerOperationEvents,
   subscribeContainerLogs,
   subscribeContainerStats,
   subscribeContainerStatsCollection,
   tailContainerLogs,
+  updateComposeProjectDefinition,
   type ComposeProjectInventoryItem,
   type ContainerEngine,
   type ContainerInventoryItem,
   type ContainerLogLine,
   type ContainerOperation,
+  type ContainerOperationEvent,
   type ContainerPreflight,
   type ContainerResourceInventoryItem,
   type ContainerResourceView,
@@ -426,6 +433,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [resourceFilter, setResourceFilter] = createSignal<ResourceFilter>(defaultResourceFilter(restored.view));
   const [operations, setOperations] = createSignal<ContainerOperation[]>([]);
   const [operationsOpen, setOperationsOpen] = createSignal(false);
+  const [selectedOperationID, setSelectedOperationID] = createSignal('');
+  const [operationEvents, setOperationEvents] = createSignal<ContainerOperationEvent[]>([]);
+  const [operationEventsLoading, setOperationEventsLoading] = createSignal(false);
   const [creationMode, setCreationMode] = createSignal<CreationMode | null>(null);
   const [creationName, setCreationName] = createSignal('');
   const [creationImage, setCreationImage] = createSignal('');
@@ -435,6 +445,15 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [creationCPUs, setCreationCPUs] = createSignal('');
   const [creationMemory, setCreationMemory] = createSignal('');
   const [creationTargetKey, setCreationTargetKey] = createSignal('');
+  const [composeEditorOpen, setComposeEditorOpen] = createSignal(false);
+  const [composeEditingID, setComposeEditingID] = createSignal('');
+  const [composeEditorTarget, setComposeEditorTarget] = createSignal<ReadyContainerRuntime | null>(null);
+  const [composeName, setComposeName] = createSignal('');
+  const [composeConfigPaths, setComposeConfigPaths] = createSignal('');
+  const [composeEnvFilePath, setComposeEnvFilePath] = createSignal('');
+  const [composeProfiles, setComposeProfiles] = createSignal('');
+  const [composeEditorBusy, setComposeEditorBusy] = createSignal(false);
+  const [composeForget, setComposeForget] = createSignal<ContainerResourceEntry | null>(null);
   const [runtimeStatusOpen, setRuntimeStatusOpen] = createSignal(false);
   const [pruneOpen, setPruneOpen] = createSignal(false);
   const [pruneTargetKey, setPruneTargetKey] = createSignal('');
@@ -473,6 +492,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   let waitingForEnvironment = false;
   const inventoryCache = new Map<string, readonly ContainerResourceInventoryItem[]>();
   let operationStreamAbort: AbortController | null = null;
+  let operationDetailsAbort: AbortController | null = null;
   let logViewElement: HTMLDivElement | undefined;
   let inventoryScrollElement: HTMLDivElement | undefined;
   let storedInventoryScrollTop = 0;
@@ -572,6 +592,60 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       // Inventory remains usable when operation history is temporarily unavailable.
     }
   };
+
+  const selectedOperation = createMemo(() => operations().find((operation) => operation.operation_id === selectedOperationID()) ?? null);
+
+  const mergeOperationEvent = (event: ContainerOperationEvent) => {
+    setOperationEvents((current) => {
+      if (current.some((item) => item.sequence === event.sequence)) return current;
+      return [...current, event].sort((left, right) => left.sequence - right.sequence).slice(-200);
+    });
+  };
+
+  createEffect(() => {
+    if (!operationsOpen()) {
+      operationDetailsAbort?.abort();
+      operationDetailsAbort = null;
+      return;
+    }
+    const items = operations();
+    if (items.length === 0) {
+      setSelectedOperationID('');
+      setOperationEvents([]);
+      return;
+    }
+    if (!items.some((operation) => operation.operation_id === selectedOperationID())) {
+      setSelectedOperationID((items.find(operationActive) ?? items[0]).operation_id);
+    }
+  });
+
+  createEffect(() => {
+    const operationID = selectedOperationID();
+    if (!operationsOpen() || !operationID) return;
+    operationDetailsAbort?.abort();
+    const controller = new AbortController();
+    operationDetailsAbort = controller;
+    setOperationEvents([]);
+    setOperationEventsLoading(true);
+    void listContainerOperationEvents(operationID)
+      .then((events) => {
+        if (controller.signal.aborted) return;
+        setOperationEvents(events.slice(-200));
+        const after = events.at(-1)?.sequence ?? 0;
+        void subscribeContainerOperationEvents(operationID, (event) => {
+          if (controller.signal.aborted) return;
+          mergeOperationEvent(event);
+          if (TERMINAL_OPERATION_STATES.has(event.state)) controller.abort();
+        }, controller.signal, after).catch(() => undefined);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setOperationEvents([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setOperationEventsLoading(false);
+      });
+    onCleanup(() => controller.abort());
+  });
 
   const resetResourceContext = () => {
     setDetails(null);
@@ -909,6 +983,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   onCleanup(() => {
     consoleLoadAbort?.abort();
     operationStreamAbort?.abort();
+    operationDetailsAbort?.abort();
   });
 
   const selectResource = (entry: ContainerResourceEntry) => {
@@ -1043,6 +1118,33 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     i18n.t(`containers.operationStates.${state}` as Parameters<typeof i18n.t>[0])
   );
 
+  const operationPhaseLabel = (phase: string): string => {
+    const normalized = compact(phase) || 'queued';
+    const known = new Set(['queued', 'running', 'executing', 'resolving', 'pulling', 'extracting', 'verifying', 'reconciling', 'succeeded', 'failed', 'cancel_requested', 'canceling', 'canceled', 'interrupted']);
+    return known.has(normalized)
+      ? i18n.t(`containers.operations.phases.${normalized}` as Parameters<typeof i18n.t>[0])
+      : normalized;
+  };
+
+  const progressFromEvent = (event: ContainerOperationEvent | undefined) => {
+    const payload = event?.payload;
+    const phase = typeof payload?.phase === 'string' ? payload.phase : event?.type ?? '';
+    const completed = typeof payload?.completed === 'number' ? payload.completed : 0;
+    const total = typeof payload?.total === 'number' ? payload.total : 0;
+    const unit = typeof payload?.unit === 'string' ? payload.unit : '';
+    return { phase, completed, total, unit };
+  };
+
+  const latestOperationProgress = createMemo(() => progressFromEvent([...operationEvents()].reverse().find((event) => event.type === 'progress')));
+
+  const operationDuration = (operation: ContainerOperation): string => {
+    const start = operation.started_at_unix_ms || operation.created_at_unix_ms;
+    const end = operation.finished_at_unix_ms || Date.now();
+    const seconds = Math.max(0, Math.round((end - start) / 1000));
+    if (seconds < 60) return i18n.t('containers.operations.seconds', { count: seconds });
+    return i18n.t('containers.operations.minutes', { count: Math.max(1, Math.round(seconds / 60)) });
+  };
+
   const beginPreflight = async (draft: MutationDraft) => {
     const generation = consoleLoadGeneration;
     setMutationBusy(true);
@@ -1083,6 +1185,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       const operation = await createContainerOperation(current.preflight, current.request);
       setReview(null);
       setOperationsOpen(true);
+      setSelectedOperationID(operation.operation_id);
       setOperations((previous) => [operation, ...previous.filter((item) => item.operation_id !== operation.operation_id)]);
       operationStreamAbort?.abort();
       const controller = new AbortController();
@@ -1162,6 +1265,14 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   };
 
   const runRowMenuAction = (entry: ContainerResourceEntry, method: string) => {
+    if (method === 'compose.definition.edit') {
+      void openComposeEditor(entry);
+      return;
+    }
+    if (method === 'compose.definition.forget') {
+      setComposeForget(entry);
+      return;
+    }
     const request = actionRequest(method, entry);
     if (request) beginMutation(request);
   };
@@ -1277,6 +1388,83 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           : readyRuntimes();
     const preferred = compatibleTargets.find((runtime) => runtime.engine === 'docker') ?? compatibleTargets[0];
     setCreationTargetKey(preferred ? runtimeKey(preferred) : '');
+  };
+
+  const resetComposeEditor = () => {
+    setComposeEditingID('');
+    setComposeName('');
+    setComposeConfigPaths('');
+    setComposeEnvFilePath('');
+    setComposeProfiles('');
+  };
+
+  const openComposeEditor = async (entry?: ContainerResourceEntry) => {
+    const target = entry?.target ?? readyRuntimes().find((runtime) => runtime.engine === 'docker') ?? null;
+    if (!target || !canRWX() || !canAdmin()) return;
+    resetComposeEditor();
+    setComposeEditorTarget(target);
+    setComposeEditorOpen(true);
+    const project = entry?.item as ComposeProjectInventoryItem | undefined;
+    if (!project?.saved) return;
+    setComposeEditorBusy(true);
+    try {
+      const definition = await getComposeProjectDefinition(project.project_id, target.engine, target.endpoint_id);
+      setComposeEditingID(definition.project_id);
+      setComposeName(definition.name);
+      setComposeConfigPaths(definition.config_paths.join('\n'));
+      setComposeEnvFilePath(definition.env_file_path ?? '');
+      setComposeProfiles((definition.profiles ?? []).join(', '));
+    } catch (cause) {
+      setComposeEditorOpen(false);
+      notify.error(i18n.t('containers.notifications.composeLoadFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setComposeEditorBusy(false);
+    }
+  };
+
+  const submitComposeEditor = async () => {
+    const target = composeEditorTarget();
+    const configPaths = composeConfigPaths().split(/\r?\n/u).map(compact).filter(Boolean);
+    if (!target || target.engine !== 'docker' || !compact(composeName()) || configPaths.length === 0) return;
+    const input = {
+      engine: 'docker' as const,
+      endpoint_id: target.endpoint_id,
+      name: compact(composeName()).toLowerCase(),
+      config_paths: configPaths,
+      ...(compact(composeEnvFilePath()) ? { env_file_path: compact(composeEnvFilePath()) } : {}),
+      profiles: composeProfiles().split(',').map(compact).filter(Boolean),
+    };
+    setComposeEditorBusy(true);
+    try {
+      if (composeEditingID()) await updateComposeProjectDefinition(composeEditingID(), input);
+      else await createComposeProjectDefinition(input);
+      setComposeEditorOpen(false);
+      resetComposeEditor();
+      await reloadConsole();
+      notify.success(i18n.t('containers.notifications.composeSavedTitle'), i18n.t('containers.notifications.composeSavedMessage'));
+    } catch (cause) {
+      notify.error(i18n.t('containers.notifications.composeSaveFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setComposeEditorBusy(false);
+    }
+  };
+
+  const forgetComposeProject = async () => {
+    const entry = composeForget();
+    const project = entry?.item as ComposeProjectInventoryItem | undefined;
+    if (!entry || !project?.saved) return;
+    setComposeEditorBusy(true);
+    try {
+      await deleteComposeProjectDefinition(project.project_id);
+      setComposeForget(null);
+      if (selectedResourceKey() === entry.key) closeDetails();
+      await reloadConsole();
+      notify.success(i18n.t('containers.notifications.composeForgottenTitle'), i18n.t('containers.notifications.composeForgottenMessage'));
+    } catch (cause) {
+      notify.error(i18n.t('containers.notifications.composeSaveFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setComposeEditorBusy(false);
+    }
   };
 
   const loadRawInspect = async () => {
@@ -1410,6 +1598,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             <Show when={view() === 'compose-projects'}>
               <DetailRow label={i18n.t('containers.columns.running')} value={`${detailNumber(record, 'running_count') ?? (item as ComposeProjectInventoryItem).running_count} / ${detailNumber(record, 'container_count') ?? (item as ComposeProjectInventoryItem).container_count}`} />
               <DetailRow label={i18n.t('containers.columns.services')} value={detailNumber(record, 'service_count') ?? (item as ComposeProjectInventoryItem).service_count} />
+              <Show when={(item as ComposeProjectInventoryItem).saved}><DetailRow label={i18n.t('containers.compose.source')} value={(item as ComposeProjectInventoryItem).source || i18n.t('containers.compose.saved')} mono /></Show>
             </Show>
             <Show when={view() === 'pods'}>
               <DetailRow label={i18n.t('containers.columns.running')} value={`${detailNumber(record, 'running_count') ?? (item as PodInventoryItem).running_count} / ${detailNumber(record, 'container_count') ?? (item as PodInventoryItem).container_count}`} />
@@ -1470,6 +1659,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Button size="sm" variant="outline" onClick={() => runAction('compose.projects.stop')} disabled={!canExecute()}>{i18n.t('containers.actions.stop')}</Button>
         <Button size="sm" variant="outline" onClick={() => runAction('compose.projects.restart')} disabled={!canExecute()}>{i18n.t('containers.actions.restart')}</Button>
         <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => runAction('compose.projects.down')} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.actions.down')}</Button>
+        <Show when={(selected() as ComposeProjectInventoryItem).saved}>
+          <Button size="sm" variant="ghost" onClick={() => { const entry = selectedEntry(); if (entry) void openComposeEditor(entry); }} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.compose.edit')}</Button>
+          <Button size="sm" variant="ghost" class="container-destructive-action" onClick={() => { const entry = selectedEntry(); if (entry) setComposeForget(entry); }} disabled={!canRWX() || !canAdmin()}>{i18n.t('containers.compose.forget')}</Button>
+        </Show>
       </>
     );
     return (
@@ -1508,7 +1701,17 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       ];
       if (view() === 'images') return [menuItem('images.remove', true)];
       if (view() === 'volumes') return [menuItem('volumes.remove', true)];
-      if (view() === 'compose-projects') return [menuItem('compose.projects.restart'), menuItem('compose.projects.down', true)];
+      if (view() === 'compose-projects') {
+        const project = item as ComposeProjectInventoryItem;
+        return [
+          menuItem('compose.projects.restart'),
+          menuItem('compose.projects.down', true),
+          ...(project.saved ? [
+            { id: 'compose.definition.edit', label: i18n.t('containers.compose.edit'), disabled: !canRWX() || !canAdmin() },
+            { id: 'compose.definition.forget', label: i18n.t('containers.compose.forget'), disabled: !canRWX() || !canAdmin(), icon: () => <Trash class="h-3.5 w-3.5 text-destructive" /> },
+          ] satisfies DropdownItem[] : []),
+        ];
+      }
       return [menuItem('pods.restart'), menuItem('pods.remove', true)];
     };
     return (
@@ -1725,6 +1928,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Show when={view() === 'containers'}><Button size="sm" onClick={() => openCreation('container')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.container')}</Button></Show>
         <Show when={view() === 'images'}><Button size="sm" onClick={() => openCreation('image')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.image')}</Button></Show>
         <Show when={view() === 'volumes'}><Button size="sm" onClick={() => openCreation('volume')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.volume')}</Button></Show>
+        <Show when={view() === 'compose-projects'}><Button size="sm" onClick={() => void openComposeEditor()} disabled={pending || !canRWX() || !canAdmin()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.compose.add')}</Button></Show>
         <Show when={view() === 'pods'}><Button size="sm" onClick={() => openCreation('pod')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.pod')}</Button></Show>
       </div>
     </section>
@@ -1846,7 +2050,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                         const sample = () => view() === 'containers' ? statsForContainer(entry) : undefined;
                         return <tr tabindex={0} data-container-resource-row-index={index()} onClick={() => selectResource(entry)} onKeyDown={(event) => handleTableKey(event, index())}>
                           <td><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item()))}><span class="container-usage-dot" data-active={resourceActive(view(), item())} /></Show></td>
-                          <td><div class="container-name-cell"><ViewIcon view={view()} class="h-4 w-4" /><span class="truncate">{resourceName(view(), item())}</span><Show when={runtimeBadgeVisible(entry)}><span class="container-runtime-badge">{runtimeName(entry.target.engine)}</span></Show><Show when={resourceManagement(item())?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></td>
+                          <td><div class="container-name-cell"><ViewIcon view={view()} class="h-4 w-4" /><span class="truncate">{resourceName(view(), item())}</span><Show when={view() === 'compose-projects' && (item() as ComposeProjectInventoryItem).saved}><span class="container-saved-project" title={(item() as ComposeProjectInventoryItem).source || i18n.t('containers.compose.saved')}><Check class="h-3 w-3" />{i18n.t('containers.compose.saved')}</span></Show><Show when={runtimeBadgeVisible(entry)}><span class="container-runtime-badge">{runtimeName(entry.target.engine)}</span></Show><Show when={resourceManagement(item())?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></td>
                           <Show when={showSecondaryColumn()}><td class="container-secondary-cell"><Show when={view() === 'containers'}>{container().image?.reference || '—'}</Show><Show when={view() === 'images'}>{formatBytes((item() as ImageInventoryItem).size_bytes)}</Show><Show when={view() === 'volumes'}>{(item() as VolumeInventoryItem).driver || '—'}</Show><Show when={view() === 'compose-projects' || view() === 'pods'}>{(item() as ComposeProjectInventoryItem | PodInventoryItem).running_count} / {(item() as ComposeProjectInventoryItem | PodInventoryItem).container_count}</Show></td></Show>
                           <Show when={view() === 'containers'}><Show when={showPortsColumn()}><td class="container-port-cell">{container().ports?.map(formatPort).filter(Boolean).slice(0, 2).join(', ') || '—'}</td></Show><Show when={chartsOpen()}><td class="tabular-nums">{sample() ? `${sample()!.cpu_percent.toFixed(1)}%` : '—'}</td><td class="tabular-nums">{formatBytes(sample()?.memory_bytes)}</td></Show></Show>
                           <Show when={view() !== 'containers' && showCreatedColumn()}><td>{formatDate((item() as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms)}</td></Show>
@@ -1864,9 +2068,27 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       </main>
 
       <EnvAppDrawer open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} description={i18n.t('containers.operations.description')} bodyClass="min-h-0">
-        <div class="max-h-[70vh] space-y-2 overflow-auto p-1" data-container-operations>
+        <div class="container-operations-workspace" data-container-operations>
           <Show when={operations().length > 0} fallback={<div class="py-12 text-center text-sm text-muted-foreground">{i18n.t('containers.operations.empty')}</div>}>
-            <For each={operations()}>{(operation) => <div class={`container-operation-card ${redevenSurfaceRoleClass('panel')}`} data-state={operation.state}><div class="flex items-start gap-3"><span class="container-operation-card__state" aria-hidden="true" /><div class="min-w-0 flex-1"><div class="truncate text-sm font-medium">{operationLabel(operation.method)}</div><div class="mt-1 truncate font-mono text-[10px] text-muted-foreground">{operation.resource_identity}</div><div class="mt-1 text-[10px] text-muted-foreground">{i18n.formatRelativeTime(operation.updated_at_unix_ms)}</div></div><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></div><Show when={operation.error_message}><p class="mt-2 text-xs text-destructive">{operation.error_message}</p></Show><Show when={operationActive(operation)}><Button size="sm" variant="ghost" class="mt-2" onClick={() => void cancelContainerOperation(operation.operation_id).then(loadOperations)} disabled={!canExecute()}>{i18n.t('containers.actions.cancel')}</Button></Show></div>}</For>
+            <div class="container-operation-list" role="listbox" aria-label={i18n.t('containers.operations.title')}>
+              <For each={operations()}>{(operation) => <button type="button" role="option" aria-selected={selectedOperationID() === operation.operation_id} class="container-operation-card" data-state={operation.state} onClick={() => setSelectedOperationID(operation.operation_id)}><span class="container-operation-card__state" aria-hidden="true" /><span class="min-w-0 flex-1 text-left"><strong>{operationLabel(operation.method)}</strong><small class="font-mono">{operation.resource_identity}</small><small>{i18n.formatRelativeTime(operation.updated_at_unix_ms)}</small></span><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></button>}</For>
+            </div>
+            <Show when={selectedOperation()} keyed>{(operation) => {
+              const progress = () => latestOperationProgress();
+              const phase = () => operationActive(operation) ? (progress().phase || operation.state) : operation.state;
+              const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().completed / progress().total) * 100)) : 0;
+              return <section class="container-operation-detail" data-state={operation.state}>
+                <header><div><span>{operationLabel(operation.method)}</span><h3>{operation.resource_identity}</h3></div><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></header>
+                <div class="container-operation-progress" data-indeterminate={operationActive(operation) && progress().total === 0 ? 'true' : 'false'}>
+                  <div><strong>{operationPhaseLabel(phase())}</strong><Show when={operationActive(operation) && progress().total > 0}><span>{progress().completed} / {progress().total} {progress().unit === 'layers' ? i18n.t('containers.operations.layers') : progress().unit}</span></Show></div>
+                  <div class="container-operation-progress__track" role="progressbar" aria-label={operationPhaseLabel(phase())} aria-valuemin={0} aria-valuemax={operationActive(operation) && progress().total ? progress().total : 100} aria-valuenow={operation.state === 'succeeded' ? 100 : operationActive(operation) && progress().total ? progress().completed : undefined}><span style={{ width: operation.state === 'succeeded' ? '100%' : progress().total ? `${percent()}%` : undefined }} /></div>
+                </div>
+                <dl class="container-operation-facts"><div><dt>{i18n.t('containers.operations.service')}</dt><dd>{runtimeName(operation.engine)}</dd></div><div><dt>{i18n.t('containers.operations.duration')}</dt><dd>{operationDuration(operation)}</dd></div><div><dt>{i18n.t('containers.operations.started')}</dt><dd>{formatDate(operation.started_at_unix_ms || operation.created_at_unix_ms)}</dd></div></dl>
+                <Show when={operation.error_message}><div class="container-operation-error" role="alert"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.operations.errorTitle')}</strong><p>{operation.error_message}</p><Show when={operation.error_code}><code>{operation.error_code}</code></Show></div></div></Show>
+                <div class="container-operation-timeline"><h4>{i18n.t('containers.operations.progressTitle')}</h4><Show when={!operationEventsLoading()} fallback={<div class="container-operation-timeline__loading">{i18n.t('containers.operations.loadingProgress')}</div>}><For each={operationEvents()}>{(event) => { const item = progressFromEvent(event); return <div class="container-operation-step" data-state={event.state}><span aria-hidden="true">{TERMINAL_OPERATION_STATES.has(event.state) && event.state !== 'succeeded' ? <X class="h-3 w-3" /> : <Check class="h-3 w-3" />}</span><div><strong>{operationPhaseLabel(item.phase)}</strong><Show when={item.total > 0}><small>{item.completed} / {item.total} {item.unit === 'layers' ? i18n.t('containers.operations.layers') : item.unit}</small></Show></div><time>{i18n.formatRelativeTime(event.created_at_unix_ms)}</time></div>; }}</For></Show></div>
+                <Show when={operationActive(operation)}><div class="container-operation-detail__actions"><Button size="sm" variant="outline" onClick={() => void cancelContainerOperation(operation.operation_id).then(loadOperations)} disabled={!canExecute()}>{i18n.t('containers.actions.cancel')}</Button></div></Show>
+              </section>;
+            }}</Show>
           </Show>
         </div>
       </EnvAppDrawer>
@@ -1875,6 +2097,29 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <div class="container-runtime-state-list">
           <For each={runtimes()}>{(runtime) => <div><span>{runtimeName(runtime.engine)}</span><strong>{i18n.t(`containers.runtimeStates.${runtime.state}` as Parameters<typeof i18n.t>[0])}</strong></div>}</For>
         </div>
+      </Dialog>
+
+      <Dialog
+        open={composeEditorOpen()}
+        onOpenChange={(open) => { if (!open && !composeEditorBusy()) { setComposeEditorOpen(false); resetComposeEditor(); } }}
+        title={i18n.t(composeEditingID() ? 'containers.compose.editorEditTitle' : 'containers.compose.editorAddTitle')}
+        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => { setComposeEditorOpen(false); resetComposeEditor(); }} disabled={composeEditorBusy()}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => void submitComposeEditor()} disabled={composeEditorBusy() || !compact(composeName()) || !compact(composeConfigPaths())}>{i18n.t('containers.compose.save')}</Button></div>}
+      >
+        <div class="container-compose-editor">
+          <label>{i18n.t('containers.compose.name')}<Input value={composeName()} onInput={(event) => setComposeName(event.currentTarget.value)} disabled={composeEditorBusy()} autocomplete="off" /></label>
+          <label>{i18n.t('containers.compose.configPaths')}<Textarea rows={4} value={composeConfigPaths()} onInput={(event) => setComposeConfigPaths(event.currentTarget.value)} disabled={composeEditorBusy()} /><small>{i18n.t('containers.compose.configPathsHint')}</small></label>
+          <label>{i18n.t('containers.compose.envFile')}<Input value={composeEnvFilePath()} onInput={(event) => setComposeEnvFilePath(event.currentTarget.value)} disabled={composeEditorBusy()} /><small>{i18n.t('containers.compose.envFileHint')}</small></label>
+          <label>{i18n.t('containers.compose.profiles')}<Input value={composeProfiles()} onInput={(event) => setComposeProfiles(event.currentTarget.value)} disabled={composeEditorBusy()} /><small>{i18n.t('containers.compose.profilesHint')}</small></label>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={composeForget() !== null}
+        onOpenChange={(open) => { if (!open && !composeEditorBusy()) setComposeForget(null); }}
+        title={i18n.t('containers.compose.forgetTitle')}
+        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setComposeForget(null)} disabled={composeEditorBusy()}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" variant="destructive" onClick={() => void forgetComposeProject()} disabled={composeEditorBusy()}>{i18n.t('containers.compose.forget')}</Button></div>}
+      >
+        <p class="text-sm leading-6 text-muted-foreground">{i18n.t('containers.compose.forgetMessage', { name: composeForget() ? resourceName('compose-projects', composeForget()!.item) : '' })}</p>
       </Dialog>
 
       <Dialog open={pruneOpen()} onOpenChange={setPruneOpen} title={i18n.t('containers.actions.prune')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setPruneOpen(false)}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => runPrune(pruneTargetKey())}>{i18n.t('containers.actions.review')}</Button></div>}>

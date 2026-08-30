@@ -21,6 +21,12 @@ const harness = vi.hoisted(() => ({
   listResources: vi.fn(),
   resourceDetails: vi.fn(),
   listOperations: vi.fn(),
+  listOperationEvents: vi.fn(),
+  subscribeOperationEvents: vi.fn(),
+  createComposeDefinition: vi.fn(),
+  updateComposeDefinition: vi.fn(),
+  getComposeDefinition: vi.fn(),
+  deleteComposeDefinition: vi.fn(),
   imageHistory: vi.fn(),
   rawInspect: vi.fn(),
   listFiles: vi.fn(),
@@ -45,6 +51,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   AlertTriangle: icon('alert'),
   ArrowDown: icon('arrow-down'),
   ArrowUp: icon('arrow-up'),
+  Check: icon('check'),
   Cpu: icon('cpu'),
   Database: icon('database'),
   ExternalLink: icon('external-link'),
@@ -111,6 +118,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     >{item.icon}{item.label}</button>)}
   </div>,
   Tag: (props: any) => <span>{props.children}</span>,
+  Textarea: (props: any) => <textarea rows={props.rows} value={props.value} placeholder={props.placeholder} disabled={props.disabled} onInput={props.onInput} />,
 }));
 
 vi.mock('../primitives/EnvAppModal', () => ({
@@ -118,7 +126,7 @@ vi.mock('../primitives/EnvAppModal', () => ({
 }));
 
 vi.mock('../primitives/EnvAppDrawer', () => ({
-  EnvAppDrawer: (props: any) => props.open ? <aside data-drawer>{props.title}{props.children}</aside> : null,
+  EnvAppDrawer: (props: any) => <Show when={props.open}><aside data-drawer>{props.title}{props.children}</aside></Show>,
 }));
 
 vi.mock('../i18n', () => ({
@@ -156,6 +164,12 @@ vi.mock('../services/containerResourcesApi', () => ({
   listContainerResources: harness.listResources,
   getContainerResourceDetails: harness.resourceDetails,
   listContainerOperations: harness.listOperations,
+  listContainerOperationEvents: harness.listOperationEvents,
+  subscribeContainerOperationEvents: harness.subscribeOperationEvents,
+  createComposeProjectDefinition: harness.createComposeDefinition,
+  updateComposeProjectDefinition: harness.updateComposeDefinition,
+  getComposeProjectDefinition: harness.getComposeDefinition,
+  deleteComposeProjectDefinition: harness.deleteComposeDefinition,
   getContainerImageHistory: harness.imageHistory,
   getRawContainerInspect: harness.rawInspect,
   listContainerResourceFiles: harness.listFiles,
@@ -219,6 +233,15 @@ describe('native Containers page', () => {
     }]);
     harness.resourceDetails.mockReset().mockResolvedValue({ container_id: 'container-1', state: 'running' });
     harness.listOperations.mockReset().mockResolvedValue([]);
+    harness.listOperationEvents.mockReset().mockResolvedValue([]);
+    harness.subscribeOperationEvents.mockReset().mockResolvedValue(undefined);
+    harness.createComposeDefinition.mockReset().mockResolvedValue({ project_id: 'compose_saved_1' });
+    harness.updateComposeDefinition.mockReset().mockResolvedValue({ project_id: 'compose_saved_1' });
+    harness.getComposeDefinition.mockReset().mockResolvedValue({
+      project_id: 'compose_saved_1', engine: 'docker', endpoint_id: 'docker-primary', name: 'saved-api',
+      config_paths: ['/workspace/compose.yaml'], profiles: [], created_at_unix_ms: 1, updated_at_unix_ms: 1,
+    });
+    harness.deleteComposeDefinition.mockReset().mockResolvedValue(undefined);
     harness.imageHistory.mockReset().mockResolvedValue([]);
     harness.rawInspect.mockReset().mockResolvedValue({});
     harness.listFiles.mockReset().mockResolvedValue({ path: '/', entries: [], truncated: false });
@@ -870,5 +893,71 @@ describe('native Containers page', () => {
     expect(host.querySelector('[data-container-engine-state="unavailable"]')?.textContent).toContain('containers.runtimeStates.error');
     expect(host.textContent).not.toContain('Managed API');
     expect(host.querySelector('[data-container-resource-table]')).toBeNull();
+  });
+
+  it('shows real operation phases and errors in the Operations drawer', async () => {
+    harness.listOperations.mockResolvedValue([{
+      operation_id: 'container_operation_pull', request_id: 'request-pull', request_hash: 'request', plan_hash: 'plan',
+      method: 'images.pull', engine: 'docker', endpoint_id: 'docker-primary', resource_kind: 'image',
+      resource_identity: 'golang:1.26', state: 'running', cancel_requested: false,
+      created_at_unix_ms: 1, started_at_unix_ms: 2, updated_at_unix_ms: 3,
+    }]);
+    harness.listOperationEvents.mockResolvedValue([{
+      sequence: 3, operation_id: 'container_operation_pull', type: 'progress', state: 'running',
+      payload: { phase: 'pulling', completed: 2, total: 5, unit: 'layers' }, created_at_unix_ms: 3,
+    }]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.operations.title"]')?.click();
+    await settle();
+    await settle();
+
+    expect(host.innerHTML).toContain('golang:1.26');
+    const detail = host.querySelector('.container-operation-detail');
+    expect(detail?.textContent).toContain('containers.operations.phases.pulling');
+    expect(detail?.textContent).toContain('2 / 5 containers.operations.layers');
+    expect(detail?.textContent).toContain('containers.operations.progressTitle');
+    expect(harness.subscribeOperationEvents).toHaveBeenCalledWith(
+      'container_operation_pull', expect.any(Function), expect.any(AbortSignal), 3,
+    );
+  });
+
+  it('saves an absolute Compose file as a reusable project', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects' ? [] : [{
+      container_id: 'container-1', name: 'API', state: 'running', management: { managed: false },
+    }]));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.compose-projects'))?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.compose.add'))?.click();
+    await settle();
+
+    const dialog = host.querySelector('[data-dialog]')!;
+    const inputs = dialog.querySelectorAll<HTMLInputElement>('input');
+    const textarea = dialog.querySelector<HTMLTextAreaElement>('textarea')!;
+    inputs[0].value = 'Saved-API';
+    inputs[0].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea.value = '/workspace/compose.yaml';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    inputs[2].value = 'dev, observability';
+    inputs[2].dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('containers.compose.save'))?.click();
+    await settle();
+
+    expect(harness.createComposeDefinition).toHaveBeenCalledWith({
+      engine: 'docker', endpoint_id: 'docker-primary', name: 'saved-api',
+      config_paths: ['/workspace/compose.yaml'], profiles: ['dev', 'observability'],
+    });
   });
 });

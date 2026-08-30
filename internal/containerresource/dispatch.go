@@ -12,7 +12,7 @@ type executionResult struct {
 	Identity string
 }
 
-func (s *Service) execute(ctx context.Context, decoded decodedMutation) (executionResult, error) {
+func (s *Service) execute(ctx context.Context, operationID string, decoded decodedMutation) (executionResult, error) {
 	bound, _, err := s.engine.BindEndpoint(ctx, decoded.preflight.Engine, decoded.preflight.EndpointID)
 	if err != nil {
 		return executionResult{}, err
@@ -43,7 +43,12 @@ func (s *Service) execute(ctx context.Context, decoded decodedMutation) (executi
 		}
 		return executionResult{Identity: result.ContainerID}, err
 	case *containerengine.ImagePullRequest:
-		_, err := s.engine.PullImage(bound, *req)
+		_, err := s.engine.PullImageWithProgress(bound, *req, func(_ context.Context, progress containerengine.ImagePullProgress) error {
+			s.reportProgress(operationID, OperationProgress{
+				Phase: progress.Phase, Completed: progress.Completed, Total: progress.Total, Unit: progress.Unit,
+			})
+			return nil
+		})
 		return executionResult{Identity: req.ImageRef}, err
 	case *containerengine.ImageTagRequest:
 		err := s.engine.TagImage(bound, *req)
@@ -147,6 +152,10 @@ func (s *Service) reconcile(ctx context.Context, decoded decodedMutation, result
 	case *containerengine.ComposeProjectRequest:
 		var inspected containerengine.ComposeProjectDetails
 		inspected, err = s.engine.InspectComposeProject(bound, *req)
+		if decoded.preflight.Method == containerengine.MethodComposeProjectsDown && req.Deployment != nil && err == nil && inspected.ContainerCount == 0 {
+			status.Outcome = "absent"
+			break
+		}
 		if decoded.preflight.Method == containerengine.MethodComposeProjectsDown && err != nil {
 			items, listErr := s.engine.ListComposeProjects(bound, containerengine.ComposeProjectListRequest{Engine: req.Engine, EndpointID: req.EndpointID})
 			if listErr != nil {

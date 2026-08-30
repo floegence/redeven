@@ -13,8 +13,10 @@ var composeDeploymentNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}
 
 type ComposeDeploymentRequest struct {
 	ConfigPath  string
+	ConfigPaths []string
 	EnvFilePath string
 	ProjectName string
+	Profiles    []string
 }
 
 type ComposeDeploymentClient interface {
@@ -23,6 +25,7 @@ type ComposeDeploymentClient interface {
 	InspectComposeDeployment(context.Context, ComposeDeploymentRequest) (ComposeProjectDetails, error)
 	StartComposeDeployment(context.Context, ComposeDeploymentRequest) error
 	StopComposeDeployment(context.Context, ComposeDeploymentRequest) error
+	RestartComposeDeployment(context.Context, ComposeDeploymentRequest) error
 	RemoveComposeDeployment(context.Context, ComposeDeploymentRequest, bool) error
 	TailComposeDeploymentLogs(context.Context, ComposeDeploymentRequest, int) ([]string, error)
 }
@@ -31,11 +34,37 @@ func validateComposeDeploymentRequest(req ComposeDeploymentRequest) error {
 	if !composeDeploymentNamePattern.MatchString(strings.TrimSpace(req.ProjectName)) {
 		return errors.New("compose project name is invalid")
 	}
-	for _, path := range []string{req.ConfigPath, req.EnvFilePath} {
+	paths := composeDeploymentConfigPaths(req)
+	if len(paths) == 0 || len(paths) > 8 {
+		return errors.New("compose deployment must contain between one and eight configuration files")
+	}
+	for _, path := range paths {
 		path = strings.TrimSpace(path)
 		if path == "" || !filepath.IsAbs(path) || strings.ContainsAny(path, "\x00\r\n") {
 			return errors.New("compose deployment path is invalid")
 		}
+	}
+	if path := strings.TrimSpace(req.EnvFilePath); path != "" && (!filepath.IsAbs(path) || strings.ContainsAny(path, "\x00\r\n")) {
+		return errors.New("compose deployment environment path is invalid")
+	}
+	if len(req.Profiles) > 16 {
+		return errors.New("compose deployment has too many profiles")
+	}
+	for _, profile := range req.Profiles {
+		profile = strings.TrimSpace(profile)
+		if profile == "" || len(profile) > 64 || strings.ContainsAny(profile, "\x00\r\n /\\") || strings.HasPrefix(profile, "-") {
+			return errors.New("compose deployment profile is invalid")
+		}
+	}
+	return nil
+}
+
+func composeDeploymentConfigPaths(req ComposeDeploymentRequest) []string {
+	if len(req.ConfigPaths) > 0 {
+		return req.ConfigPaths
+	}
+	if strings.TrimSpace(req.ConfigPath) != "" {
+		return []string{req.ConfigPath}
 	}
 	return nil
 }
@@ -95,6 +124,10 @@ func (a *Adapter) StartComposeDeployment(ctx context.Context, req ComposeDeploym
 
 func (a *Adapter) StopComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {
 	return a.composeDeploymentAction(ctx, req, func(client ComposeDeploymentClient) error { return client.StopComposeDeployment(ctx, req) })
+}
+
+func (a *Adapter) RestartComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {
+	return a.composeDeploymentAction(ctx, req, func(client ComposeDeploymentClient) error { return client.RestartComposeDeployment(ctx, req) })
 }
 
 func (a *Adapter) RemoveComposeDeployment(ctx context.Context, req ComposeDeploymentRequest, removeVolumes bool) error {
