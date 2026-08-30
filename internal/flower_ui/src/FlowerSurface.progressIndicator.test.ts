@@ -342,9 +342,23 @@ describe('Flower progress indicator', () => {
     expect(submitRule).toContain('height: 2.25rem');
     expect(submitRule).toContain('padding: 0');
     expect(continueRule).toContain('min-height: 2.25rem');
+    expect(continueRule).toContain('border-radius: 9999px');
     expect(continueRule).toContain('white-space: nowrap');
     expect(continueRule).not.toContain('width: 2.25rem');
     expect(css).not.toContain('flower-composer-submit-stop');
+  });
+
+  it('keeps answered input as a compact readable receipt', () => {
+    const css = flowerStyles();
+    const receiptRule = cssRule(css, '.flower-input-response-receipt');
+    const questionRule = cssRule(css, '.flower-input-response-question');
+    const answerRule = cssRule(css, '.flower-input-response-answer');
+
+    expect(receiptRule).toContain('display: grid');
+    expect(receiptRule).toContain('min-width: min(18rem, 100%)');
+    expect(questionRule).toContain('white-space: pre-wrap');
+    expect(answerRule).toContain('white-space: pre-wrap');
+    expect(answerRule).toContain('overflow-wrap: anywhere');
   });
 
   it('keeps the scroll-to-latest dock control floating, compact, and interactive', () => {

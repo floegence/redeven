@@ -25,6 +25,18 @@ type persistedThinkingBlock struct {
 	Duration int64  `json:"duration,omitempty"`
 }
 
+type persistedInputResponseBlock struct {
+	Type      string                           `json:"type"` // "input-response"
+	Questions []persistedInputResponseQuestion `json:"questions"`
+}
+
+type persistedInputResponseQuestion struct {
+	QuestionID string `json:"question_id"`
+	Question   string `json:"question"`
+	Answer     string `json:"answer,omitempty"`
+	Redacted   bool   `json:"redacted,omitempty"`
+}
+
 type persistedImageBlock struct {
 	Type string `json:"type"` // "image"
 	Src  string `json:"src"`

@@ -57,3 +57,9 @@ if rg -n "$retired_projection_pattern" "${paths[@]}" -S -g '!**/*test*'; then
   echo "retired Floret projection fields are still present" >&2
   exit 1
 fi
+
+legacy_input_response_projection_pattern='typedResolvedInputMessage|slices\.Sorted\(maps\.Keys\(interaction\.Resolution\.Input\)|Object\.entries\(interaction\.resolution\?\.input'
+if rg -n "$legacy_input_response_projection_pattern" internal/ai internal/flower_ui/src -S -g '!**/*test*'; then
+  echo "legacy answer-only Flower input response projection is still present" >&2
+  exit 1
+fi

@@ -13,6 +13,7 @@ import type {
 import { mapFlowerActivityItem } from './flowerLiveMapper';
 import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
+import { inputResponseBlockFromInteraction, inputResponseVisibleText } from './inputResponse';
 
 type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
@@ -241,16 +242,12 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       const interaction = item.interaction;
       if (!interaction?.resolved) continue;
       if (interaction.kind === 'input') {
-        const values = interaction.resolution?.redacted
-          ? []
-          : Object.entries(interaction.resolution?.input ?? {})
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([, value]) => trim(String(value)))
-            .filter(Boolean);
+        const block = inputResponseBlockFromInteraction(interaction);
+        if (!block) continue;
         messages.push({
           id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'user',
-          content: values.join('\n'), status: 'complete', created_at_ms: createdAtMs,
-          ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),
+          content: inputResponseVisibleText(block), status: 'complete', created_at_ms: createdAtMs,
+          blocks: [block],
           ...(references ? { references } : {}),
         });
         continue;

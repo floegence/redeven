@@ -508,13 +508,20 @@ describe('applyFlowerRuntimeCurrentView', () => {
     });
   });
 
-  it('orders resolved input answers by question key like the canonical adapter', () => {
+  it('projects accepted input as an ordered question-and-answer receipt', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
       items: [{
     id: 'interaction-answer', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'interaction',
         interaction: {
       id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', resolved: true,
+          input: {
+            summary: 'Two questions',
+            questions: [
+              { id: 'zeta', prompt: 'Second question?', kind: 'write' },
+              { id: 'alpha', prompt: 'First question?', kind: 'write' },
+            ],
+          },
           resolution: { accepted: true, input: { zeta: 'second', alpha: 'first' } },
         },
       }],
@@ -523,7 +530,46 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), current);
 
     expect(result.messages).toHaveLength(1);
-    expect(result.messages[0]).toMatchObject({ id: 'interaction-answer', role: 'user', content: 'first\nsecond' });
+    expect(result.messages[0]).toMatchObject({
+      id: 'interaction-answer',
+      role: 'user',
+      content: 'Second question?\nsecond\n\nFirst question?\nfirst',
+      blocks: [{
+        type: 'input-response',
+        questions: [
+          { question_id: 'zeta', question: 'Second question?', answer: 'second' },
+          { question_id: 'alpha', question: 'First question?', answer: 'first' },
+        ],
+      }],
+    });
+  });
+
+  it('keeps secret input questions visible without projecting their answers', () => {
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
+      items: [{
+        id: 'interaction-secret', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'interaction',
+        interaction: {
+          id: 'input-secret', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', resolved: true,
+          input: {
+            summary: 'Secret question',
+            questions: [{ id: 'token', prompt: 'Paste the deployment token.', kind: 'write', secret: true }],
+          },
+          resolution: { accepted: true, redacted: true },
+        },
+      }],
+    };
+
+    const result = applyFlowerRuntimeCurrentView(summary(), current);
+
+    expect(result.messages[0]).toMatchObject({
+      content: 'Paste the deployment token.',
+      blocks: [{
+        type: 'input-response',
+        questions: [{ question_id: 'token', question: 'Paste the deployment token.', redacted: true }],
+      }],
+    });
+    expect(JSON.stringify(result.messages[0])).not.toContain('secret-value');
   });
 
   it('rejects malformed presentation fields from typed activity items', () => {

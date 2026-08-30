@@ -122,6 +122,7 @@ import {
   type FlowerActivityTodoStatus,
 } from './flowerActivityPresentation';
 import { flowerActivityIdentity } from './flowerActivityIdentity';
+import { inputResponseVisibleText } from './inputResponse';
 import {
   createFlowerActivityDisclosureController,
   createFlowerActivityDisclosureMotion,
@@ -5866,6 +5867,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       .flatMap((block) => (
         block.type === 'content' && block.block_type !== 'thinking'
           ? [trimString(block.content)]
+          : block.type === 'input_response'
+            ? [inputResponseVisibleText(block.block, chatCopyValue('inputRequestAnswerHidden', 'Answer hidden'))]
           : []
       ))
       .filter(Boolean)
@@ -9060,6 +9063,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
+  const messageInputResponseBlock = (
+    block: Accessor<Extract<FlowerRenderableMessageBlock, { type: 'input_response' }>>,
+  ) => (
+    <section
+      class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-input-response-receipt"
+      data-flower-input-response
+      aria-label={chatCopyValue('inputRequestAnswered', 'Answered')}
+    >
+      <div class="flower-input-response-status">
+        {chatCopyValue('inputRequestAnswered', 'Answered')}
+      </div>
+      <dl class="flower-input-response-list">
+        <For each={block().block.questions}>
+          {(question) => (
+            <div class="flower-input-response-row" data-flower-input-response-question={question.question_id}>
+              <dt class="flower-input-response-question">{question.question}</dt>
+              <dd class={cn('flower-input-response-answer', question.redacted && 'flower-input-response-answer-redacted')}>
+                {question.redacted
+                  ? chatCopyValue('inputRequestAnswerHidden', 'Answer hidden')
+                  : question.answer}
+              </dd>
+            </div>
+          )}
+        </For>
+      </dl>
+    </section>
+  );
+
   const messageBlockView = (
     message: Accessor<FlowerChatMessage>,
     block: Accessor<FlowerRenderableMessageBlock>,
@@ -9070,6 +9101,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => {
     const activity = createMemo(() => block().type === 'activity' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' }> : null);
     const content = createMemo(() => block().type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
+    const inputResponse = createMemo(() => block().type === 'input_response' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'input_response' }> : null);
     const attachment = createMemo(() => (
       block().type === 'image' || block().type === 'file'
         ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' | 'file' }>
@@ -9079,7 +9111,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <Show
         when={activity()}
         fallback={(
-          <Show when={content()} fallback={<Show when={attachment()}>{messageAttachmentBlock}</Show>}>
+          <Show
+            when={content()}
+            fallback={(
+              <Show when={inputResponse()} fallback={<Show when={attachment()}>{messageAttachmentBlock}</Show>}>
+                {messageInputResponseBlock}
+              </Show>
+            )}
+          >
             {(contentBlock) => {
                 const copyAction = () => {
                   const value = contentBlock();

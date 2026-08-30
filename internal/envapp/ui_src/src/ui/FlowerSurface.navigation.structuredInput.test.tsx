@@ -169,6 +169,46 @@ describe('FlowerSurface navigation structured input', () => {
     });
   });
 
+  it('shows the secret question after settlement without exposing its answer', async () => {
+    const settledThread = thread({
+      thread_id: 'thread-secret-input-settled',
+      title: 'Secret input settled',
+      status: 'success',
+      messages: [{
+        id: 'interaction-secret-input',
+        thread_id: 'thread-secret-input-settled',
+        turn_id: 'turn-secret-input',
+        run_id: 'run-secret-input',
+        role: 'user',
+        content: 'Paste the deployment token.',
+        status: 'complete',
+        created_at_ms: 4_020,
+        blocks: [{
+          type: 'input-response',
+          questions: [{
+            question_id: 'deploy_token',
+            question: 'Paste the deployment token.',
+            redacted: true,
+          }],
+        }],
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [settledThread]),
+      loadThread: vi.fn(async () => liveBootstrap(settledThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-secret-input-settled"] button')));
+    (runtime.querySelector('[data-thread-id="thread-secret-input-settled"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-response]')));
+
+    const response = runtime.querySelector('[data-flower-input-response]');
+    expect(response?.textContent).toContain('Paste the deployment token.');
+    expect(response?.textContent).toContain('Answer hidden');
+    expect(runtime.textContent).not.toContain('secret-token');
+  });
+
   it('submits selected structured input through the adapter and keeps the same thread', async () => {
     const waitingThread = thread({
       thread_id: 'thread-submit-input',
@@ -196,6 +236,24 @@ describe('FlowerSurface navigation structured input', () => {
       input_request: null,
       messages: [
         ...waitingThread.messages,
+        {
+          id: 'interaction-submit-input',
+          thread_id: 'thread-submit-input',
+          turn_id: 'turn-submit-input',
+          run_id: 'run-submit-input',
+          role: 'user',
+          content: 'Where should Flower deploy this change?\nStaging',
+          status: 'complete',
+          created_at_ms: 4_050,
+          blocks: [{
+            type: 'input-response',
+            questions: [{
+              question_id: 'target',
+              question: 'Where should Flower deploy this change?',
+              answer: 'Staging',
+            }],
+          }],
+        },
         {
           id: 'm-continued',
           role: 'assistant',
@@ -238,6 +296,11 @@ describe('FlowerSurface navigation structured input', () => {
       },
     });
     expect(runtime.querySelector('[data-flower-input-request-prompt]')).toBeNull();
+    const response = runtime.querySelector('[data-flower-input-response]');
+    expect(response?.textContent).toContain('Answered');
+    expect(response?.textContent).toContain('Where should Flower deploy this change?');
+    expect(response?.textContent).toContain('Staging');
+    expect(response?.querySelector('.flower-input-request-choice')).toBeNull();
     expect(loadThread).toHaveBeenCalledTimes(1);
     expect(runtime.querySelector('[data-thread-id="thread-submit-input"]')).not.toBeNull();
   });

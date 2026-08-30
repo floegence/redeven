@@ -97,6 +97,7 @@ main() {
       internal/flower_ui/src/threadCache.test.ts \
       internal/flower_ui/src/transportOutbox.test.ts \
       internal/flower_ui/src/runtimeCurrentView.test.ts \
+      internal/flower_ui/src/inputResponse.test.ts \
       internal/flower_ui/src/flowerApprovalPresentation.test.ts \
       internal/flower_ui/src/flowerSurfaceModel.test.ts \
       internal/flower_ui/src/approvalAction.test.ts \
@@ -158,6 +159,7 @@ main() {
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \
         src/ui/FlowerSurface.decisionSurface.browser.test.tsx \
+        src/ui/FlowerSurface.inputResponse.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \

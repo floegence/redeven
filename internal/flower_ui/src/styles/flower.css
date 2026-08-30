@@ -2886,6 +2886,64 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--foreground) 95%, var(--primary) 5%);
 }
 
+.flower-input-response-receipt {
+  display: grid;
+  min-width: min(18rem, 100%);
+  gap: 0.5rem;
+}
+
+.flower-input-response-status {
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  font-size: 0.6875rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.flower-input-response-list {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+  margin: 0;
+}
+
+.flower-input-response-row {
+  display: grid;
+  min-width: 0;
+  gap: 0.1875rem;
+  padding-block: 0.125rem;
+}
+
+.flower-input-response-row + .flower-input-response-row {
+  margin-top: 0.5rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.flower-input-response-question {
+  color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  font-size: 0.75rem;
+  font-weight: 560;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.flower-input-response-answer {
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.flower-input-response-answer-redacted {
+  color: var(--muted-foreground);
+  font-weight: 560;
+}
+
 .flower-queued-turn-bubble {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--primary) 32%, var(--flower-chat-surface-border));
@@ -7753,6 +7811,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-composer-continue {
   min-height: 2.25rem;
+  border-radius: 9999px;
   padding-inline: 0.875rem;
   white-space: nowrap;
 }

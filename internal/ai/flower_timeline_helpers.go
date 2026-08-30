@@ -127,11 +127,27 @@ func decodeFlowerTimelineMessageReferences(raw json.RawMessage, role string) ([]
 func flowerTimelineTextFromBlocks(blocks []any) string {
 	parts := make([]string, 0, len(blocks))
 	for _, block := range blocks {
-		if text := assistantVisibleTextFromBlock(block); text != "" {
+		text := assistantVisibleTextFromBlock(block)
+		if text == "" {
+			text = flowerInputResponseTextFromBlock(block)
+		}
+		if text != "" {
 			parts = append(parts, text)
 		}
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+func flowerInputResponseTextFromBlock(block any) string {
+	raw, err := json.Marshal(block)
+	if err != nil {
+		return ""
+	}
+	var response persistedInputResponseBlock
+	if err := json.Unmarshal(raw, &response); err != nil || response.Type != "input-response" {
+		return ""
+	}
+	return inputResponseVisibleText(response)
 }
 
 func validFlowerTimelineAnchor(anchor FlowerTimelineAnchor) bool {

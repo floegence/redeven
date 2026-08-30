@@ -491,6 +491,39 @@ export function runtimeCurrentView(
         activity: item as unknown as Readonly<Record<string, unknown>>,
       }));
     }
+    const inputResponse = message.blocks?.find((block) => block.type === 'input-response');
+    if (inputResponse?.type === 'input-response') {
+      return [{
+        id: message.id,
+        turn_id: message.turn_id ?? activeTurnID,
+        run_id: message.run_id ?? activeRunID,
+        ordinal: ++nextOrdinal,
+        kind: 'interaction' as const,
+        interaction: {
+          id: message.id,
+          turn_id: message.turn_id ?? activeTurnID,
+          run_id: message.run_id ?? activeRunID,
+          kind: 'input' as const,
+          resolved: true,
+          input: {
+            summary: '',
+            questions: inputResponse.questions.map((question) => ({
+              id: question.question_id,
+              prompt: question.question,
+              kind: 'write',
+              ...(question.redacted ? { secret: true } : {}),
+            })),
+          },
+          resolution: {
+            accepted: true,
+            ...(inputResponse.questions.some((question) => question.redacted) ? { redacted: true } : {}),
+            input: Object.fromEntries(inputResponse.questions.flatMap((question) => (
+              question.redacted ? [] : [[question.question_id, question.answer ?? '']]
+            ))),
+          },
+        },
+      }];
+    }
     return [{
       id: message.id,
       turn_id: message.turn_id ?? activeTurnID,

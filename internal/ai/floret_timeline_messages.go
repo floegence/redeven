@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 
 	"github.com/floegence/floret/v6/identity"
@@ -87,7 +86,7 @@ func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.Ra
 		raw, err := canonicalUserTimelineMessageForThread(threadID, turnID, runID, item.ID, item.Text, item.Attachments, item.References, createdAt)
 		return raw, err == nil, err
 	case flruntime.ThreadItemInteraction:
-		return typedResolvedInputMessage(threadID, item, createdAt)
+		return typedInputResponseMessage(threadID, item, createdAt)
 	case flruntime.ThreadItemTool:
 		if item.Activity == nil {
 			return nil, false, nil
@@ -140,24 +139,84 @@ func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.Ra
 	return raw, true, err
 }
 
-func typedResolvedInputMessage(threadID string, item flruntime.ThreadItem, createdAt int64) (json.RawMessage, bool, error) {
+func typedInputResponseMessage(threadID string, item flruntime.ThreadItem, createdAt int64) (json.RawMessage, bool, error) {
 	interaction := item.Interaction
-	if interaction == nil || interaction.Kind != flruntime.ThreadInteractionInput || !interaction.Resolved || interaction.Resolution == nil || interaction.Resolution.Redacted {
+	if interaction == nil || interaction.Kind != flruntime.ThreadInteractionInput || !interaction.Resolved {
 		return nil, false, nil
 	}
-	keys := slices.Sorted(maps.Keys(interaction.Resolution.Input))
-	values := make([]string, 0, len(keys))
-	for _, key := range keys {
-		if value := strings.TrimSpace(interaction.Resolution.Input[key]); value != "" {
-			values = append(values, value)
+	if interaction.Resolution == nil {
+		return nil, false, errors.New("resolved input interaction is missing its resolution")
+	}
+	if !interaction.Resolution.Accepted {
+		return nil, false, nil
+	}
+	if interaction.Input == nil || len(interaction.Input.Questions) == 0 {
+		return nil, false, errors.New("accepted input interaction is missing its question presentation")
+	}
+
+	questions := make([]persistedInputResponseQuestion, 0, len(interaction.Input.Questions))
+	seen := make(map[string]struct{}, len(interaction.Input.Questions))
+	hasSecret := false
+	for _, inputQuestion := range interaction.Input.Questions {
+		questionID := strings.TrimSpace(inputQuestion.ID)
+		question := strings.TrimSpace(inputQuestion.Prompt)
+		if questionID == "" || question == "" {
+			return nil, false, errors.New("accepted input interaction contains an incomplete question")
+		}
+		if _, exists := seen[questionID]; exists {
+			return nil, false, fmt.Errorf("accepted input interaction contains duplicate question %q", questionID)
+		}
+		seen[questionID] = struct{}{}
+		if inputQuestion.Secret {
+			hasSecret = true
+			if _, exposed := interaction.Resolution.Input[questionID]; exposed {
+				return nil, false, fmt.Errorf("accepted secret input interaction exposes answer %q", questionID)
+			}
+			questions = append(questions, persistedInputResponseQuestion{
+				QuestionID: questionID,
+				Question:   question,
+				Redacted:   true,
+			})
+			continue
+		}
+		answer, exists := interaction.Resolution.Input[questionID]
+		if !exists || strings.TrimSpace(answer) == "" {
+			return nil, false, fmt.Errorf("accepted input interaction is missing answer %q", questionID)
+		}
+		questions = append(questions, persistedInputResponseQuestion{
+			QuestionID: questionID,
+			Question:   question,
+			Answer:     answer,
+		})
+	}
+	for questionID := range interaction.Resolution.Input {
+		if _, exists := seen[questionID]; !exists {
+			return nil, false, fmt.Errorf("accepted input interaction targets unknown question %q", questionID)
 		}
 	}
-	text := strings.Join(values, "\n")
-	if text == "" {
-		return nil, false, nil
+	if interaction.Resolution.Redacted != hasSecret {
+		return nil, false, errors.New("accepted input interaction has inconsistent secret-answer redaction")
 	}
-	raw, err := canonicalUserTimelineMessageForThread(threadID, item.TurnID.String(), item.RunID.String(), item.ID, text, nil, nil, createdAt)
+
+	block := persistedInputResponseBlock{Type: "input-response", Questions: questions}
+	raw, err := json.Marshal(map[string]any{
+		"id": item.ID, "thread_id": threadID, "turn_id": item.TurnID.String(), "run_id": item.RunID.String(), "role": "user",
+		"status": "complete", "timestamp": createdAt, "content": inputResponseVisibleText(block), "blocks": []any{block},
+		"live": false, "active_cursor": false,
+	})
 	return raw, err == nil, err
+}
+
+func inputResponseVisibleText(block persistedInputResponseBlock) string {
+	rows := make([]string, 0, len(block.Questions))
+	for _, question := range block.Questions {
+		parts := []string{strings.TrimSpace(question.Question)}
+		if !question.Redacted && strings.TrimSpace(question.Answer) != "" {
+			parts = append(parts, question.Answer)
+		}
+		rows = append(rows, strings.Join(parts, "\n"))
+	}
+	return strings.Join(rows, "\n\n")
 }
 
 func (service *Service) listThreadTimelineMessages(ctx context.Context, endpointID, threadID string, limit int, beforeRowID int64) ([]threadTimelineMessage, int64, bool, error) {
