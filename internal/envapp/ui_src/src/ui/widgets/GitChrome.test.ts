@@ -119,7 +119,8 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitSelectedChipClass(true)).toBe('git-browser-selection-chip');
     expect(gitSelectedChipClass(false)).toBe('');
 
-    expect(gitNavigationItemClass(true)).toContain('git-browser-selection-surface');
+    expect(gitNavigationItemClass(true)).toContain('git-browser-selection-row');
+    expect(gitNavigationItemClass(true)).toContain('border-l-2');
     expect(gitNavigationItemClass(true)).toContain('border border-transparent');
     expect(gitNavigationItemClass(true)).not.toContain('git-browser-selection-nav');
     expect(gitNavigationItemClass(false)).toContain('git-browser-interactive');

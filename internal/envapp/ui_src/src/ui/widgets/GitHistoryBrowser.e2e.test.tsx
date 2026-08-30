@@ -205,7 +205,7 @@ afterEach(() => {
 });
 
 describe("GitHistoryBrowser interactions", () => {
-  it("shows the git sweep indicator while graph commit details are loading", async () => {
+  it("shows a commit-detail skeleton while graph commit details are loading", async () => {
     mockGetCommitDetail.mockImplementationOnce(() => new Promise(() => {}));
 
     const host = document.createElement("div");
@@ -236,7 +236,8 @@ describe("GitHistoryBrowser interactions", () => {
     try {
       await flush();
       expect(host.textContent).toContain("Loading commit details...");
-      expect(host.querySelector(".git-loading-indicator")).toBeTruthy();
+      expect(host.querySelector('[data-git-content-skeleton="commit-detail"]')).toBeTruthy();
+      expect(host.querySelector(".git-loading-indicator")).toBeNull();
       expect(host.querySelector(".floe-grid-cell")).toBeNull();
     } finally {
       dispose();

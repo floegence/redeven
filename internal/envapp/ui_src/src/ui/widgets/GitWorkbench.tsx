@@ -37,7 +37,7 @@ import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { gitToneHeaderActionButtonClass } from './GitChrome';
-import { GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
+import { GitInlineLoadingStatus, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
@@ -387,7 +387,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 <GitMetaPill tone="info">{localizedSyncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount, i18n)}</GitMetaPill>
               </Show>
               <Show when={loadingBusy()}>
-                <GitMetaPill tone="neutral">{i18n.t('files.refreshing')}</GitMetaPill>
+                <GitInlineLoadingStatus class="w-16">{i18n.t('files.refreshing')}</GitInlineLoadingStatus>
               </Show>
             </div>
             <div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={repoPath()}>{repoPath()}</div>

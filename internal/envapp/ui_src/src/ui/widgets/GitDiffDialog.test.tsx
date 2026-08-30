@@ -515,7 +515,7 @@ describe("GitDiffDialog", () => {
     }
   });
 
-  it("shows a loading state instead of the empty selection message while the first patch preview is pending", async () => {
+  it("shows a patch-shaped skeleton instead of the empty selection message while the first patch preview is pending", async () => {
     let resolvePreview:
       | ((value: Awaited<ReturnType<typeof mockGetDiffContent>>) => void)
       | undefined;
@@ -573,7 +573,8 @@ describe("GitDiffDialog", () => {
 
       expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
       expect(document.body.textContent).toContain("Loading patch preview...");
-      expect(document.body.querySelector(".git-loading-indicator")).toBeTruthy();
+      expect(document.body.querySelector('[data-git-content-skeleton="patch"]')).toBeTruthy();
+      expect(document.body.querySelector(".git-loading-indicator")).toBeNull();
       expect(document.body.querySelector(".floe-grid-cell")).toBeNull();
       expect(document.body.textContent).not.toContain(
         "Select a file to inspect its diff.",

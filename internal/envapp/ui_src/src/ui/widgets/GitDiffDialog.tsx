@@ -990,6 +990,8 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
           <Match when={activeBodyState().kind === "loading"}>
             <GitStatePane
               loading
+              loadingVariant="patch"
+              loadingRows={10}
               message={activeBodyLoadingMessage()}
               surface
               class="min-h-0 flex-1"
@@ -1010,12 +1012,11 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         >
           <GitStatePane
             loading
+            loadingVariant="patch"
+            loadingRows={10}
             message={activeBodyLoadingMessage()}
             class="absolute inset-0 z-10 h-full rounded-md bg-background/44 backdrop-blur-[1px]"
-            contentClass={cn(
-              "rounded-md border px-4 py-3 shadow-sm",
-              redevenSurfaceRoleClass("overlay"),
-            )}
+            surface
           />
         </Show>
       </div>

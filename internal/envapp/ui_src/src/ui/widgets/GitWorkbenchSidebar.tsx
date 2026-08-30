@@ -44,7 +44,7 @@ import {
 import { GitCommitGraph } from './GitCommitGraph';
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 import { useI18n } from '../i18n';
-import { GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GitInlineLoadingStatus, GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import {
   buildGitDirectoryShortcutRequest,
@@ -476,7 +476,15 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
         <div class="space-y-2">
           <Show
               when={!props.repoInfoLoading}
-              fallback={<GitStatePane loading message={i18n.t('git.notifications.checkingRepository')} class="min-h-[4.5rem] py-3" />}
+              fallback={(
+                <GitStatePane
+                  loading
+                  loadingVariant={activeSubview() === 'changes' ? 'workspace-sidebar' : activeSubview() === 'branches' ? 'branches-sidebar' : 'commit-graph'}
+                  loadingRows={7}
+                  message={i18n.t('git.notifications.checkingRepository')}
+                  class="min-h-[4.5rem]"
+                />
+              )}
           >
             <Show when={!props.repoInfoError} fallback={<div class="py-3 text-xs break-words text-error">{props.repoInfoError}</div>}>
               <Show
@@ -488,7 +496,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                   <Show when={activeSubview() === 'changes'}>
                     <Show
                       when={!workspaceBlockingLoading()}
-                      fallback={<GitStatePane loading message={i18n.t('git.changes.loadingWorkspaceChanges')} class="min-h-[4.5rem] py-3" />}
+                      fallback={<GitStatePane loading loadingVariant="workspace-sidebar" message={i18n.t('git.changes.loadingWorkspaceChanges')} class="min-h-[4.5rem]" />}
                     >
                       <Show when={!workspaceBlockingError()} fallback={<div class="py-3 text-xs break-words text-error">{props.workspaceError}</div>}>
                         <div class="rounded-md bg-muted/[0.08] px-2.5 py-2.5">
@@ -536,8 +544,13 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                         <Dynamic component={resolveWorkspaceSectionIcon(section)} class="mt-0.5 h-3.5 w-3.5 shrink-0" />
                                         <div class="min-w-0 flex-1">
                                         <div class="font-medium text-current">{localizedWorkspaceViewSectionLabel(section, i18n)}</div>
-                                        <div class={cn('mt-0.5 text-[10px] leading-relaxed', gitSelectedSecondaryTextClass(active()))}>
-                                          {sectionLoading() ? i18n.t('files.loadingFiles') : count() === 0 ? i18n.t('git.changes.noFilesInSection') : i18n.tn('git.common.fileCount', count())}
+                                        <div class={cn('mt-0.5 min-h-3.5 text-[10px] leading-relaxed', gitSelectedSecondaryTextClass(active()))}>
+                                          <Show
+                                            when={!sectionLoading()}
+                                            fallback={<GitInlineLoadingStatus class="w-16">{i18n.t('files.loadingFiles')}</GitInlineLoadingStatus>}
+                                          >
+                                            {count() === 0 ? i18n.t('git.changes.noFilesInSection') : i18n.tn('git.common.fileCount', count())}
+                                          </Show>
                                         </div>
                                         </div>
                                       </div>
@@ -563,7 +576,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                   <Show when={activeSubview() === 'branches'}>
                     <Show
                       when={!props.branchesLoading}
-                      fallback={<GitStatePane loading message={i18n.t('git.notifications.loadingBranches')} class="min-h-[4.5rem] py-3" />}
+                      fallback={<GitStatePane loading loadingVariant="branches-sidebar" message={i18n.t('git.notifications.loadingBranches')} class="min-h-[4.5rem]" />}
                     >
                       <Show when={!props.branchesError} fallback={<div class="py-3 text-xs break-words text-error">{props.branchesError}</div>}>
                         <GitSection label={i18n.t('uiCopy.git.local')} aside={String(localBranchCount())} tone="brand">
@@ -644,7 +657,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                   <Show when={activeSubview() === 'history'}>
                     <Show
                       when={!props.listLoading}
-                      fallback={<GitStatePane loading message={i18n.t('git.notifications.loadingCommits')} class="min-h-[4.5rem] py-3" />}
+                      fallback={<GitStatePane loading loadingVariant="commit-graph" loadingRows={9} message={i18n.t('git.notifications.loadingCommits')} class="min-h-[4.5rem]" />}
                     >
                       <Show when={!props.listError} fallback={<div class="py-3 text-xs break-words text-error">{props.listError}</div>}>
                         <Show when={(props.commits?.length ?? 0) > 0} fallback={<GitSubtleNote>{i18n.t('uiCopy.git.noCommits')}</GitSubtleNote>}>
@@ -670,8 +683,10 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
 
                     <Show when={props.hasMore}>
                       <div class="pt-1">
-                        <Button size="sm" variant="ghost" class={cn('w-full', gitToneActionButtonClass())} onClick={props.onLoadMore} loading={props.listLoadingMore} disabled={props.listLoadingMore}>
-                          {i18n.t('uiCopy.git.loadMore')}
+                        <Button size="sm" variant="ghost" class={cn('w-full', gitToneActionButtonClass())} onClick={props.onLoadMore} disabled={props.listLoadingMore}>
+                          <Show when={!props.listLoadingMore} fallback={<GitInlineLoadingStatus>{i18n.t('git.common.loadingNextPage')}</GitInlineLoadingStatus>}>
+                            {i18n.t('uiCopy.git.loadMore')}
+                          </Show>
                         </Button>
                       </div>
                     </Show>

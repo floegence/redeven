@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GitInlineLoadingStatus, GitMetaPill, GitPagedTableFooter, GitPanelFrame, GitShortcutOrbButton, GitStatePane, GitTableFrame } from './GitWorkbenchPrimitives';
+import { GitContentSkeleton, GitInlineLoadingStatus, GitMetaPill, GitPagedTableFooter, GitPanelFrame, GitShortcutOrbButton, GitStatePane, GitTableFrame } from './GitWorkbenchPrimitives';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -110,12 +110,12 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
     }
   });
 
-  it('renders GitStatePane loading with the git sweep indicator instead of the square grid loader', () => {
+  it('renders GitStatePane loading as a content-shaped skeleton', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     const dispose = render(() => (
-      <GitStatePane loading message="Loading branch status..." detail="Preparing changed files." />
+      <GitStatePane loading loadingVariant="commit-detail" loadingRows={3} message="Loading branch status..." detail="Preparing changed files." />
     ), host);
 
     try {
@@ -123,9 +123,10 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
       expect(status).toBeTruthy();
       expect(status?.getAttribute('aria-busy')).toBe('true');
       expect(status?.getAttribute('aria-live')).toBe('polite');
-      expect(host.querySelector('.git-state-pane__loading-eyebrow')?.textContent).toContain('Loading');
-      expect(host.querySelector('.git-loading-indicator')).toBeTruthy();
-      expect(host.querySelector('.git-loading-indicator__bar')).toBeTruthy();
+      expect(host.querySelector('[data-git-content-skeleton="commit-detail"]')).toBeTruthy();
+      expect(host.querySelector('.git-content-skeleton__detail-title')).toBeTruthy();
+      expect(host.querySelectorAll('.git-content-skeleton__table-row')).toHaveLength(3);
+      expect(host.querySelector('.git-loading-indicator')).toBeNull();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
       expect(host.textContent).toContain('Loading branch status...');
       expect(host.textContent).toContain('Preparing changed files.');
@@ -144,7 +145,7 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
 
     try {
       expect(host.querySelector('[role="status"]')).toBeNull();
-      expect(host.querySelector('.git-loading-indicator')).toBeNull();
+      expect(host.querySelector('[data-git-content-skeleton]')).toBeNull();
       expect(host.textContent).toContain('Failed to load branches.');
       expect(host.firstElementChild?.className).toContain('border-error/20');
     } finally {
@@ -152,7 +153,7 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
     }
   });
 
-  it('renders inline loading status with the same sweep language', () => {
+  it('renders inline loading status as a text-slot skeleton', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -165,7 +166,8 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
       expect(status).toBeTruthy();
       expect(status?.getAttribute('role')).toBe('status');
       expect(status?.getAttribute('aria-busy')).toBe('true');
-      expect(host.querySelector('.git-loading-indicator--inline')).toBeTruthy();
+      expect(host.querySelector('.git-inline-loading-status__skeleton')).toBeTruthy();
+      expect(host.querySelector('.git-loading-indicator--inline')).toBeNull();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
       expect(host.textContent).toContain('Loading next page');
     } finally {
@@ -173,7 +175,7 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
     }
   });
 
-  it('uses the inline sweep status for paged table footer loading', () => {
+  it('uses content-shaped skeleton slots for paged table footer loading', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -188,11 +190,37 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
 
     try {
       expect(host.querySelector('.git-inline-loading-status')).toBeTruthy();
-      expect(host.querySelector('.git-loading-indicator--inline')).toBeTruthy();
+      expect(host.querySelector('.git-inline-loading-status__skeleton')).toBeTruthy();
+      expect(host.querySelector('.git-paged-footer__button-skeleton')).toBeTruthy();
+      expect(host.querySelector('.git-loading-indicator--inline')).toBeNull();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
       expect(host.textContent).toContain('Loading next page');
-      expect(host.textContent).toContain('Loading more...');
+      expect(host.textContent).not.toContain('Loading more...');
       expect(host.textContent).toContain('Loaded 2 of 40 files.');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('matches the graph-detail and patch loading geometries', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <>
+        <GitContentSkeleton label="Loading branch history" variant="commit-graph-detail" rows={6} />
+        <GitContentSkeleton label="Loading patch" variant="patch" rows={5} />
+      </>
+    ), host);
+
+    try {
+      const split = host.querySelector('[data-git-content-skeleton="commit-graph-detail"]');
+      expect(split?.querySelectorAll('.git-content-skeleton__graph-row')).toHaveLength(6);
+      expect(split?.querySelector('.git-content-skeleton__detail-panel')).toBeTruthy();
+      expect(split?.querySelector('.git-content-skeleton__table')).toBeTruthy();
+      const patch = host.querySelector('[data-git-content-skeleton="patch"]');
+      expect(patch?.querySelector('.git-content-skeleton__patch-heading')).toBeTruthy();
+      expect(patch?.querySelectorAll('.git-content-skeleton__code-row')).toHaveLength(8);
     } finally {
       dispose();
     }

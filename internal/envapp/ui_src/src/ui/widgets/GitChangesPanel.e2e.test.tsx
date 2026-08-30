@@ -913,9 +913,10 @@ describe('GitChangesPanel interactions', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(host.textContent).toContain('Loading next page');
-      expect(host.textContent).toContain('Loading more...');
+      expect(host.textContent).not.toContain('Loading more...');
       expect(host.querySelector('.git-inline-loading-status')).toBeTruthy();
-      expect(host.querySelector('.git-loading-indicator--inline')).toBeTruthy();
+      expect(host.querySelector('.git-inline-loading-status__skeleton')).toBeTruthy();
+      expect(host.querySelector('.git-loading-indicator--inline')).toBeNull();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
     } finally {
       dispose();
@@ -965,7 +966,7 @@ describe('GitChangesPanel interactions', () => {
       expect(host.querySelector('.git-changes-toolbar-loading-slot')?.getAttribute('data-visible')).toBe('true');
       expect(host.querySelector('.git-changes-breadcrumb-slot')).toBeTruthy();
       expect(host.querySelector('.git-changes-table-pending')).toBeTruthy();
-      expect(host.querySelectorAll('.git-changes-table-skeleton__row')).toHaveLength(3);
+      expect(host.querySelectorAll('.git-content-skeleton__table-row')).toHaveLength(3);
       expect(host.textContent).toContain('Loading workspace changes...');
       expect(host.textContent).not.toContain('No staged files yet.');
     } finally {
