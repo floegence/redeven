@@ -58,6 +58,7 @@ import {
   GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
+  GitInlineLoadingStatus,
   GitStatePane,
   GitSubtleNote,
   gitChangedFilesRowClass,
@@ -750,7 +751,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                   {/* Left: stash list */}
                   <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto w-full @[640px]:shrink-0 @[640px]:border-r @[640px]:w-[var(--stash-left-panel-width)]" style={{ "--stash-left-panel-width": `${leftPanelWidth()}px` } as JSX.CSSProperties}>
 
-                    <Show when={!props.stashesLoading} fallback={<GitStatePane loading message={i18n.t('uiCopy.git.loadingStashes')} surface class="min-h-[12rem]" />}>
+                    <Show when={!props.stashesLoading} fallback={<GitStatePane loading loadingVariant="stash-list" loadingRows={6} message={i18n.t('uiCopy.git.loadingStashes')} surface class="min-h-[12rem]" />}>
                       <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? i18n.t('uiCopy.git.failedToLoadStashes')} surface class="min-h-[12rem]" />}>
                         <Show
                           when={props.stashes.length > 0}
@@ -792,7 +793,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                               <Show when={!props.stashDetailError} fallback={<GitStatePane tone="error" message={props.stashDetailError ?? i18n.t('uiCopy.git.failedToLoadStashDetail')} surface class="h-full" />}>
                                 {(() => {
                                   if (!props.stashDetail && props.stashDetailLoading) {
-                                    return <GitStatePane loading message={i18n.t('uiCopy.git.loadingStashDetail')} surface class="h-full" />;
+                                    return <GitStatePane loading loadingVariant="commit-detail" loadingRows={5} message={i18n.t('uiCopy.git.loadingStashDetail')} surface class="h-full" />;
                                   }
                                   const detail = props.stashDetail;
                                   if (!detail) return null;
@@ -800,7 +801,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                     <>
                                       <Show when={props.stashDetailLoading}>
                                         <div class="mb-3 -mt-1">
-                                          <div class="h-0.5 w-full animate-pulse rounded-full bg-primary/40" />
+                                          <GitInlineLoadingStatus class="w-24">{i18n.t('uiCopy.git.loadingStashDetail')}</GitInlineLoadingStatus>
                                         </div>
                                       </Show>
                                       <div class="flex flex-col gap-4">
@@ -956,7 +957,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
             >
               {/* Save tab */}
               <div class="flex h-full min-h-0 flex-col overflow-hidden px-2.5 py-2">
-                <Show when={!props.contextLoading} fallback={<GitStatePane loading message={i18n.t('uiCopy.git.loadingStashSaveContext')} class="h-full" />}>
+                <Show when={!props.contextLoading} fallback={<GitStatePane loading loadingVariant="form" message={i18n.t('uiCopy.git.loadingStashSaveContext')} class="h-full" />}>
                   <Show when={!props.contextError} fallback={<GitStatePane tone="error" message={props.contextError ?? i18n.t('uiCopy.git.failedToLoadStashContext')} class="h-full" />}>
                     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-2">
                       <div class="w-full max-w-lg space-y-5">

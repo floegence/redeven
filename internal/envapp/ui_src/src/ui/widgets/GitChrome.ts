@@ -135,7 +135,7 @@ export function gitNavigationItemClass(active: boolean): string {
   const base =
     'git-browser-interactive border border-transparent focus-visible:outline-none';
   return active
-    ? `${base} git-browser-selection-surface font-medium`
+    ? `${base} border-l-2 git-browser-selection-row font-medium`
     : `${base} bg-transparent text-muted-foreground hover:text-foreground`;
 }
 

@@ -126,6 +126,7 @@ import {
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangedFilesActionButton,
   GitChangeMetrics,
+  GitContentSkeleton,
   GitLabelBlock,
   GitInlineLoadingStatus,
   GitMetaPill,
@@ -1362,6 +1363,8 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
           fallback={
             <GitStatePane
               loading
+              loadingVariant="commit-detail"
+              loadingRows={3}
               message={i18n.t('uiCopy.git.loadingChangedFiles')}
               class="git-branch-history-state min-h-[5rem] px-1 py-2"
             />
@@ -1711,12 +1714,7 @@ function HistoryList(
                   redevenSurfaceRoleClass("inset"),
                 )}
               >
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <div class="text-[11px] text-muted-foreground">
-                    {i18n.t('uiCopy.git.refreshingHistory')}
-                  </div>
-                  <GitMetaPill tone="neutral">{i18n.t('files.refreshing')}</GitMetaPill>
-                </div>
+                <GitInlineLoadingStatus class="w-28">{i18n.t('uiCopy.git.refreshingHistory')}</GitInlineLoadingStatus>
               </div>
             </Show>
             <Show
@@ -1724,6 +1722,8 @@ function HistoryList(
               fallback={
                 <GitStatePane
                   loading
+                  loadingVariant="commit-graph-detail"
+                  loadingRows={10}
                   message={i18n.t('uiCopy.git.loadingCommitHistory')}
                   class="px-1"
                 />
@@ -1777,10 +1777,11 @@ function HistoryList(
                               variant="ghost"
                               class={cn("w-full", gitToneActionButtonClass())}
                               onClick={props.onLoadMore}
-                              loading={props.listLoadingMore}
                               disabled={props.listLoadingMore}
                             >
-                              {i18n.t('uiCopy.git.loadMore')}
+                              <Show when={!props.listLoadingMore} fallback={<GitInlineLoadingStatus>{i18n.t('git.common.loadingNextPage')}</GitInlineLoadingStatus>}>
+                                {i18n.t('uiCopy.git.loadMore')}
+                              </Show>
                             </Button>
                           </div>
                         </Show>
@@ -2060,7 +2061,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
             <Show
               when={!loading()}
               fallback={
-                <GitStatePane loading message={i18n.t('uiCopy.git.loadingBranchCompare')} />
+                <GitStatePane loading loadingVariant="comparison" loadingRows={6} message={i18n.t('uiCopy.git.loadingBranchCompare')} />
               }
             >
               <Show
@@ -3138,50 +3139,21 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       : checking
         ? i18n.t('common.status.checking')
         : i18n.t('uiCopy.git.historyUnavailable');
-    const columnLabels = view === "status"
-      ? [i18n.t('git.common.path'), i18n.t('uiCopy.git.section'), i18n.t('git.common.status'), i18n.t('git.common.changes'), i18n.t('git.common.action')]
-      : [i18n.t('git.common.commit'), i18n.t('uiCopy.git.author'), i18n.t('uiCopy.audit.time')];
     return (
-      <GitTableFrame
+      <div
         class="git-branch-stable-placeholder flex min-h-0 w-full flex-col"
+        data-git-branch-stable-placeholder={view}
+        data-git-branch-stable-placeholder-state={placeholderState}
+        data-git-branch-stable-placeholder-layout={view}
       >
-        <div
-          class="git-branch-stable-placeholder__body"
-          data-git-branch-stable-placeholder={view}
-          data-git-branch-stable-placeholder-state={placeholderState}
-          role="status"
-          aria-live="polite"
-          aria-busy={checking ? "true" : undefined}
-        >
-          <span class="sr-only">{accessibilityLabel}</span>
-          <div
-            class="git-branch-stable-placeholder__table"
-            data-git-branch-stable-placeholder-layout={view}
-            aria-hidden="true"
-          >
-            <div class="git-branch-stable-placeholder__header">
-              <For each={columnLabels}>
-                {(label) => <span>{label}</span>}
-              </For>
-            </div>
-            <For each={[0, 1, 2]}>
-              {(_, rowIndex) => (
-                <div class="git-branch-stable-placeholder__row">
-                  <For each={columnLabels}>
-                    {(_, columnIndex) => (
-                      <span
-                        class="git-branch-stable-placeholder__cell"
-                        data-skeleton-column={columnIndex()}
-                        data-skeleton-row={rowIndex()}
-                      />
-                    )}
-                  </For>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
-      </GitTableFrame>
+        <GitContentSkeleton
+          label={accessibilityLabel}
+          variant={view === "status" ? "changed-files" : "commit-graph"}
+          rows={view === "status" ? 3 : 7}
+          busy={checking}
+          surface
+        />
+      </div>
     );
   };
 
@@ -3767,6 +3739,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         fallback={
           <GitStatePane
             loading
+            loadingVariant="commit-detail"
+            loadingRows={4}
             message={i18n.t('git.notifications.loadingBranches')}
             class="px-3 py-4"
           />

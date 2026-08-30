@@ -51,6 +51,8 @@ import {
   GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
+  GitContentSkeleton,
+  GitInlineLoadingStatus,
   GitLabelBlock,
   GitMetaPill,
   GitPanelFrame,
@@ -425,21 +427,32 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     <div class={cn("relative flex h-full min-h-0 flex-col", props.class)}>
       <Show
         when={repoAvailable()}
-        fallback={
-          <div class="flex h-full items-center justify-center rounded-lg bg-muted/[0.18] px-6 text-center">
-            <div class="max-w-md space-y-2">
-              <div class="text-sm font-medium text-foreground">
-                {i18n.t('uiCopy.git.historyUnavailable')}
+        fallback={(
+          <Show
+            when={!props.repoInfoLoading}
+            fallback={(
+              <div class="h-full px-3 py-4 sm:px-4">
+                <GitContentSkeleton
+                  label={i18n.t('git.notifications.checkingRepositoryContext')}
+                  variant="commit-detail"
+                  rows={4}
+                  surface
+                />
               </div>
-              <div class="text-xs text-muted-foreground">
-                {props.repoInfoLoading
-                  ? i18n.t('git.notifications.checkingRepositoryContext')
-                  : repoUnavailableReason() ||
-                    i18n.t('uiCopy.git.currentPathOutsideRepository', { path: props.currentPath || '/' })}
+            )}
+          >
+            <div class="flex h-full items-center justify-center rounded-lg bg-muted/[0.18] px-6 text-center">
+              <div class="max-w-md space-y-2">
+                <div class="text-sm font-medium text-foreground">
+                  {i18n.t('uiCopy.git.historyUnavailable')}
+                </div>
+                <div class="text-xs text-muted-foreground">
+                  {repoUnavailableReason() || i18n.t('uiCopy.git.currentPathOutsideRepository', { path: props.currentPath || '/' })}
+                </div>
               </div>
             </div>
-          </div>
-        }
+          </Show>
+        )}
       >
         <Show
           when={commitHash()}
@@ -473,6 +486,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   >
                     <GitStatePane
                       loading
+                      loadingVariant="commit-detail"
+                      loadingRows={4}
                       message={i18n.t('uiCopy.git.loadingCommitDetails')}
                       class="px-4"
                     />
@@ -491,7 +506,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                 <div class="relative flex-1 min-h-0">
                   <Show when={detailLoading()}>
                     <div class="absolute inset-x-0 top-0 z-10 mx-3 sm:mx-4">
-                      <div class="h-0.5 w-full animate-pulse rounded-full bg-primary/40" />
+                      <GitInlineLoadingStatus class="w-24">{i18n.t('uiCopy.git.loadingCommitDetails')}</GitInlineLoadingStatus>
                     </div>
                   </Show>
                   <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">

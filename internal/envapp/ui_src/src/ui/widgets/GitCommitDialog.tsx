@@ -14,7 +14,7 @@ import {
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangeMetrics,
   GitChangeStatusPill,
-  GitInlineLoadingStatus,
+  GitContentSkeleton,
   GitPagedTableFooter,
   GitStatStrip,
   GitTableFrame,
@@ -84,9 +84,11 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
           <Show
             when={!props.loadingItems || props.stagedItems.length > 0}
             fallback={(
-              <div class="px-4 py-8">
-                <GitInlineLoadingStatus>{i18n.t('git.commitDialog.loadingStagedFiles')}</GitInlineLoadingStatus>
-              </div>
+              <GitContentSkeleton
+                label={i18n.t('git.commitDialog.loadingStagedFiles')}
+                variant="changed-files"
+                rows={4}
+              />
             )}
           >
             <div class="max-h-[16rem] overflow-auto">

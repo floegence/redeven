@@ -4049,7 +4049,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("shows a loading state instead of the empty selection message for branch-history commit previews", async () => {
+  it("shows a patch-shaped skeleton instead of the empty selection message for branch-history commit previews", async () => {
     let resolvePreview:
       | ((value: Awaited<ReturnType<typeof mockGetDiffContent>>) => void)
       | undefined;
@@ -4132,7 +4132,8 @@ describe("GitBranchesPanel interactions", () => {
 
       expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
       expect(document.body.textContent).toContain("Loading patch preview...");
-      expect(document.body.querySelector(".git-loading-indicator")).toBeTruthy();
+      expect(document.body.querySelector('[data-git-content-skeleton="patch"]')).toBeTruthy();
+      expect(document.body.querySelector(".git-loading-indicator")).toBeNull();
       expect(document.body.querySelector(".floe-grid-cell")).toBeNull();
       expect(document.body.textContent).not.toContain(
         "Select a file to inspect its diff.",
@@ -5141,14 +5142,8 @@ describe("GitBranchesPanel interactions", () => {
         '[data-git-branch-stable-placeholder="status"]',
       );
       expect(placeholder).toBeTruthy();
-      expect(
-        placeholder?.querySelector(
-          '[data-git-branch-stable-placeholder-layout="status"]',
-        ),
-      ).toBeTruthy();
-      expect(
-        placeholder?.querySelectorAll(".git-branch-stable-placeholder__row"),
-      ).toHaveLength(3);
+      expect(placeholder?.getAttribute('data-git-branch-stable-placeholder-layout')).toBe('status');
+      expect(placeholder?.querySelectorAll(".git-content-skeleton__table-row")).toHaveLength(3);
       expect(host.textContent).not.toContain(
         "Branch status will appear here after this selection is available.",
       );
@@ -5266,7 +5261,8 @@ describe("GitBranchesPanel interactions", () => {
       expect(inlineStatuses[0]?.textContent).toContain("Checking");
       expect(host.textContent).not.toContain("Checking branch...");
       expect(host.textContent).not.toContain("Checking branch selection");
-      expect(host.querySelector(".git-loading-indicator")).toBeTruthy();
+      expect(host.querySelector('[data-git-content-skeleton="changed-files"][data-git-skeleton-busy="true"]')).toBeTruthy();
+      expect(host.querySelector(".git-loading-indicator")).toBeNull();
       expect(
         host.querySelector(
           '[data-git-branch-status-summary-state="loading"]',
@@ -5278,7 +5274,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(verifyingPlaceholder).toBeTruthy();
       expect(
         verifyingPlaceholder?.querySelectorAll(
-          ".git-branch-stable-placeholder__row",
+          ".git-content-skeleton__table-row",
         ),
       ).toHaveLength(3);
       expect(host.textContent).not.toContain(
@@ -5341,18 +5337,9 @@ describe("GitBranchesPanel interactions", () => {
       const frame = placeholder?.closest(".git-branch-stable-placeholder");
       expect(placeholder).toBeTruthy();
       expect(frame?.className).not.toContain("flex-1");
-      expect(
-        placeholder?.querySelector(
-          '[data-git-branch-stable-placeholder-layout="status"]',
-        ),
-      ).toBeTruthy();
-      expect(
-        placeholder?.querySelector(".git-branch-stable-placeholder__header")
-          ?.textContent,
-      ).toContain("Path");
-      expect(
-        placeholder?.querySelectorAll(".git-branch-stable-placeholder__row"),
-      ).toHaveLength(3);
+      expect(placeholder?.getAttribute('data-git-branch-stable-placeholder-layout')).toBe('status');
+      expect(placeholder?.querySelectorAll(".git-content-skeleton__table-heading")).toHaveLength(4);
+      expect(placeholder?.querySelectorAll(".git-content-skeleton__table-row")).toHaveLength(3);
       expect(host.textContent).not.toContain(
         "Status will appear here after verification.",
       );
@@ -5429,16 +5416,12 @@ describe("GitBranchesPanel interactions", () => {
         '[data-git-branch-stable-placeholder="history"]',
       );
       expect(historyPlaceholder).toBeTruthy();
-      expect(
-        historyPlaceholder?.querySelector(
-          '[data-git-branch-stable-placeholder-layout="history"]',
-        ),
-      ).toBeTruthy();
+      expect(historyPlaceholder?.getAttribute('data-git-branch-stable-placeholder-layout')).toBe('history');
       expect(
         historyPlaceholder?.querySelectorAll(
-          ".git-branch-stable-placeholder__row",
+          ".git-content-skeleton__graph-row",
         ),
-      ).toHaveLength(3);
+      ).toHaveLength(7);
       expect(host.textContent).not.toContain(
         "Commit history will appear here after this selection is available.",
       );

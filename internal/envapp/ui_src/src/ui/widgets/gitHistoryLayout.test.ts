@@ -149,14 +149,13 @@ describe('browser workspace layout wiring', () => {
 
     expect(navSrc).toContain('role="tablist"');
     expect(navSrc).toContain('data-git-view-nav-label');
-    expect(navSrc).toContain('whitespace-nowrap');
-    expect(navSrc).not.toContain('<span class="truncate font-medium">{item.label}</span>');
+    expect(navSrc).toContain('grid w-full grid-cols-1');
+    expect(navSrc).not.toContain('overflow-x-auto');
     expect(navSrc).toContain("aria-label={i18n.t('uiCopy.git.views')}");
-    expect(navSrc).toContain('aria-orientation="horizontal"');
-    expect(navSrc).toContain("resolveRovingTabTargetId(itemIds(), currentId, event.key, 'horizontal')");
-    expect(navSrc).toContain('grid max-w-full gap-0.5 overflow-x-auto');
-    expect(navSrc).toContain('minmax(max-content, 1fr)');
-    expect(navSrc).toContain('rounded px-1.5 py-1.5');
+    expect(navSrc).toContain('aria-orientation="vertical"');
+    expect(navSrc).toContain("resolveRovingTabTargetId(itemIds(), currentId, event.key, 'vertical')");
+    expect(navSrc).toContain('grid-cols-[minmax(0,1fr)_auto]');
+    expect(navSrc).toContain('rounded-md border border-transparent px-2.5 py-2');
     expect(navSrc).toContain('gitNavigationItemClass(active())');
     expect(navSrc).toContain('gitSelectedChipClass(true)');
     expect(navSrc).toContain("typeof item.count === 'number' && item.count > 0");
@@ -470,10 +469,12 @@ describe('browser workspace layout wiring', () => {
 
     expect(primitivesSrc).toContain('export interface GitStatePaneProps');
     expect(primitivesSrc).toContain('flex w-full min-h-0 flex-1 items-center justify-center');
-    expect(primitivesSrc).toContain('export function GitLoadingIndicator');
+    expect(primitivesSrc).toContain('export function GitContentSkeleton');
+    expect(primitivesSrc).toContain('data-git-content-skeleton={variant()}');
     expect(primitivesSrc).toContain('export function GitInlineLoadingStatus');
-    expect(primitivesSrc).toContain('<GitLoadingIndicator tone={tone()} />');
+    expect(primitivesSrc).toContain('git-inline-loading-status__skeleton');
     expect(primitivesSrc).toContain('<GitInlineLoadingStatus>{status()}</GitInlineLoadingStatus>');
+    expect(primitivesSrc).not.toContain('export function GitLoadingIndicator');
     expect(primitivesSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
     expect(primitivesSrc).not.toContain('<SnakeLoader');
     expect(workspaceSrc).not.toContain('shellLoadingMessage');

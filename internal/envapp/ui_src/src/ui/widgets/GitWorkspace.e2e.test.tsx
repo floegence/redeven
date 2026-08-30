@@ -212,7 +212,7 @@ describe('GitWorkspace interactions', () => {
     }
   });
 
-  it('supports horizontal keyboard navigation across git view tabs', () => {
+  it('supports vertical keyboard navigation across the persistent git view rail', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -269,8 +269,9 @@ describe('GitWorkspace interactions', () => {
       expect(activeTab?.id).toBe('git-workbench-subview-tab-changes');
       expect(activeTab?.getAttribute('aria-controls')).toBe('git-workbench-subview-panel-changes');
       expect(activeTab?.getAttribute('tabindex')).toBe('0');
+      expect(activeTab?.closest('[role="tablist"]')?.getAttribute('aria-orientation')).toBe('vertical');
       expect(host.querySelector('#git-workbench-subview-panel-changes')).toBeTruthy();
-      activeTab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      activeTab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
       expect(host.querySelector('#git-workbench-subview-tab-branches')?.getAttribute('aria-selected')).toBe('true');
       expect(host.querySelector('#git-workbench-subview-panel-branches')).toBeTruthy();
     } finally {
@@ -437,7 +438,8 @@ describe('GitWorkspace interactions', () => {
     try {
       expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeTruthy();
       expect(host.textContent).toContain('Loading commit history...');
-      expect(host.querySelector('.git-loading-indicator')).toBeTruthy();
+      expect(host.querySelector('[data-git-content-skeleton="commit-graph-detail"]')).toBeTruthy();
+      expect(host.querySelector('.git-loading-indicator')).toBeNull();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
       expect(host.textContent).not.toContain('Preparing the active Git view...');
     } finally {

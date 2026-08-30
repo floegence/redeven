@@ -175,7 +175,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
       <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Show
           when={!loading()}
-          fallback={<GitStatePane loading message={i18n.t('git.deleteBranchReview.reviewing')} class="m-4" surface />}
+          fallback={<GitStatePane loading loadingVariant="comparison" loadingRows={4} message={i18n.t('git.deleteBranchReview.reviewing')} class="m-4" surface />}
         >
           <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? i18n.t('git.deleteBranchReview.reviewFailed')} class="m-4" surface />}>
             <Show when={props.branch && preview()} fallback={<GitStatePane message={i18n.t('git.deleteBranchReview.chooseBranch')} class="m-4" surface />}>

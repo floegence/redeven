@@ -32,6 +32,7 @@ import {
   GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
+  GitContentSkeleton,
   GitInlineLoadingStatus,
   GitMetaPill,
   GitPagedTableFooter,
@@ -213,43 +214,35 @@ function WorkspaceTable(props: WorkspaceTableProps) {
         fallback={(
           <div
             class="git-changes-table-pending"
-            role="status"
-            aria-live="polite"
-            aria-busy="true"
             data-git-changes-table-state="initial-loading"
           >
-            <div class="git-changes-table-status-slot">
-              <GitInlineLoadingStatus>{loadingLabel()}</GitInlineLoadingStatus>
-            </div>
-            <div class="git-changes-table-skeleton" aria-hidden="true">
-              <For each={skeletonRows()}>
-                {(_, index) => (
-                  <div class="git-changes-table-skeleton__row">
-                    <span class="git-changes-table-skeleton__path" data-skeleton-index={index()} />
-                    <span class="git-changes-table-skeleton__pill" />
-                    <span class="git-changes-table-skeleton__metrics" />
-                    <span class="git-changes-table-skeleton__actions" />
-                  </div>
-                )}
-              </For>
-            </div>
+            <GitContentSkeleton
+              label={loadingLabel()}
+              variant="changed-files"
+              rows={skeletonRows().length}
+              showHeader={false}
+            />
           </div>
         )}
       >
       <Show
         when={props.items.length > 0}
         fallback={(
-          <div class="git-changes-table-empty">
-            <div class="git-changes-table-status-slot" data-visible={refreshing() ? 'true' : 'false'}>
-              <Show when={refreshing()}>
-                <GitInlineLoadingStatus>{loadingLabel()}</GitInlineLoadingStatus>
-              </Show>
+          <Show
+            when={!refreshing()}
+            fallback={(
+              <div class="git-changes-table-pending" data-git-changes-table-state="refreshing-empty">
+                <GitContentSkeleton label={loadingLabel()} variant="changed-files" rows={3} showHeader={false} />
+              </div>
+            )}
+          >
+            <div class="git-changes-table-empty">
+              <GitChangesEmptyState
+                section={props.section}
+                message={emptySectionMessage(props.section, i18n)}
+              />
             </div>
-            <GitChangesEmptyState
-              section={props.section}
-              message={emptySectionMessage(props.section, i18n)}
-            />
-          </div>
+          </Show>
         )}
       >
         <GitVirtualTable

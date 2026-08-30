@@ -161,27 +161,293 @@ export function GitSubtleNote(props: GitSubtleNoteProps) {
   return <div class={cn('rounded-md bg-muted/[0.10] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', props.class)}>{props.children}</div>;
 }
 
-export interface GitLoadingIndicatorProps {
-  variant?: 'block' | 'inline';
-  tone?: 'muted' | 'error';
+export type GitContentSkeletonVariant =
+  | 'compact'
+  | 'workspace-sidebar'
+  | 'branches-sidebar'
+  | 'commit-graph'
+  | 'commit-graph-detail'
+  | 'changed-files'
+  | 'commit-detail'
+  | 'overview'
+  | 'comparison'
+  | 'patch'
+  | 'stash-list'
+  | 'form';
+
+function GitSkeletonBlock(props: { class?: string }) {
+  return <span class={cn('git-content-skeleton__block', props.class)} />;
+}
+
+function GitSkeletonTable(props: { rows: number; showHeader: boolean }) {
+  return (
+    <div class="git-content-skeleton__table">
+      <Show when={props.showHeader}>
+        <div class="git-content-skeleton__table-header">
+          <GitSkeletonBlock class="git-content-skeleton__table-heading" />
+          <GitSkeletonBlock class="git-content-skeleton__table-heading" />
+          <GitSkeletonBlock class="git-content-skeleton__table-heading" />
+          <GitSkeletonBlock class="git-content-skeleton__table-heading" />
+        </div>
+      </Show>
+      <For each={Array.from({ length: props.rows }, (_, index) => index)}>
+        {(index) => (
+          <div class="git-content-skeleton__table-row" data-skeleton-row={index}>
+            <GitSkeletonBlock class="git-content-skeleton__table-path" />
+            <GitSkeletonBlock class="git-content-skeleton__table-pill" />
+            <GitSkeletonBlock class="git-content-skeleton__table-metrics" />
+            <GitSkeletonBlock class="git-content-skeleton__table-action" />
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
+function GitSkeletonGraph(props: { rows: number }) {
+  return (
+    <div class="git-content-skeleton__graph">
+      <For each={Array.from({ length: props.rows }, (_, index) => index)}>
+        {(index) => (
+          <div class="git-content-skeleton__graph-row" data-skeleton-row={index}>
+            <div class="git-content-skeleton__graph-rail">
+              <span class="git-content-skeleton__graph-line" />
+              <GitSkeletonBlock class="git-content-skeleton__graph-node" />
+            </div>
+            <div class="git-content-skeleton__graph-copy">
+              <GitSkeletonBlock class="git-content-skeleton__graph-subject" />
+              <GitSkeletonBlock class="git-content-skeleton__graph-meta" />
+            </div>
+            <div class="git-content-skeleton__graph-tail">
+              <GitSkeletonBlock class="git-content-skeleton__graph-hash" />
+              <GitSkeletonBlock class="git-content-skeleton__graph-time" />
+            </div>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
+export interface GitContentSkeletonProps {
+  label: JSX.Element;
+  detail?: JSX.Element;
+  variant?: GitContentSkeletonVariant;
+  rows?: number;
+  showHeader?: boolean;
+  busy?: boolean;
+  surface?: boolean;
   class?: string;
 }
 
-export function GitLoadingIndicator(props: GitLoadingIndicatorProps) {
+export function GitContentSkeleton(props: GitContentSkeletonProps) {
+  const variant = () => props.variant ?? 'commit-detail';
+  const busy = () => props.busy ?? true;
+  const rows = () => Math.max(2, Math.min(12, props.rows ?? 5));
+  const renderSkeleton = () => {
+    switch (variant()) {
+      case 'compact':
+        return (
+          <div class="git-content-skeleton__compact-card">
+            <div class="git-content-skeleton__compact-heading">
+              <GitSkeletonBlock class="git-content-skeleton__icon" />
+              <GitSkeletonBlock class="git-content-skeleton__title" />
+              <GitSkeletonBlock class="git-content-skeleton__badge" />
+            </div>
+            <GitSkeletonBlock class="git-content-skeleton__subtitle" />
+          </div>
+        );
+      case 'workspace-sidebar':
+        return (
+          <div class="git-content-skeleton__sidebar-card">
+            <div class="git-content-skeleton__compact-heading">
+              <GitSkeletonBlock class="git-content-skeleton__title" />
+              <GitSkeletonBlock class="git-content-skeleton__badge" />
+            </div>
+            <GitSkeletonBlock class="git-content-skeleton__subtitle" />
+            <div class="git-content-skeleton__sidebar-stack">
+              <For each={[0, 1, 2]}>
+                {(index) => (
+                  <div class="git-content-skeleton__sidebar-row" data-skeleton-row={index}>
+                    <GitSkeletonBlock class="git-content-skeleton__icon" />
+                    <div class="git-content-skeleton__sidebar-copy">
+                      <GitSkeletonBlock class="git-content-skeleton__sidebar-title" />
+                      <GitSkeletonBlock class="git-content-skeleton__sidebar-meta" />
+                    </div>
+                    <GitSkeletonBlock class="git-content-skeleton__badge" />
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        );
+      case 'branches-sidebar':
+        return (
+          <div class="git-content-skeleton__branch-groups">
+            <For each={[0, 1]}>
+              {(group) => (
+                <div class="git-content-skeleton__branch-group" data-skeleton-group={group}>
+                  <div class="git-content-skeleton__branch-group-heading">
+                    <GitSkeletonBlock class="git-content-skeleton__dot" />
+                    <GitSkeletonBlock class="git-content-skeleton__branch-label" />
+                    <GitSkeletonBlock class="git-content-skeleton__count" />
+                  </div>
+                  <For each={Array.from({ length: group === 0 ? 2 : 4 }, (_, index) => index)}>
+                    {(index) => (
+                      <div class="git-content-skeleton__branch-row" data-skeleton-row={index}>
+                        <GitSkeletonBlock class="git-content-skeleton__icon" />
+                        <div class="git-content-skeleton__sidebar-copy">
+                          <GitSkeletonBlock class="git-content-skeleton__sidebar-title" />
+                          <GitSkeletonBlock class="git-content-skeleton__sidebar-meta" />
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              )}
+            </For>
+          </div>
+        );
+      case 'commit-graph':
+        return <GitSkeletonGraph rows={rows()} />;
+      case 'commit-graph-detail':
+        return (
+          <div class="git-content-skeleton__split">
+            <GitSkeletonGraph rows={rows()} />
+            <div class="git-content-skeleton__detail-panel">
+              <div class="git-content-skeleton__detail-heading">
+                <div class="git-content-skeleton__detail-copy">
+                  <GitSkeletonBlock class="git-content-skeleton__detail-title" />
+                  <GitSkeletonBlock class="git-content-skeleton__detail-meta" />
+                </div>
+                <GitSkeletonBlock class="git-content-skeleton__badge" />
+              </div>
+              <div class="git-content-skeleton__action-row">
+                <GitSkeletonBlock class="git-content-skeleton__button" />
+                <GitSkeletonBlock class="git-content-skeleton__button" />
+                <GitSkeletonBlock class="git-content-skeleton__orb" />
+              </div>
+              <GitSkeletonTable rows={3} showHeader />
+            </div>
+          </div>
+        );
+      case 'changed-files':
+        return <GitSkeletonTable rows={rows()} showHeader={props.showHeader !== false} />;
+      case 'overview':
+        return (
+          <div class="git-content-skeleton__overview">
+            <For each={[0, 1, 2]}>
+              {(section) => (
+                <div class="git-content-skeleton__overview-section" data-skeleton-section={section}>
+                  <div class="git-content-skeleton__compact-heading">
+                    <GitSkeletonBlock class="git-content-skeleton__dot" />
+                    <GitSkeletonBlock class="git-content-skeleton__title" />
+                    <GitSkeletonBlock class="git-content-skeleton__badge" />
+                  </div>
+                  <GitSkeletonBlock class="git-content-skeleton__subtitle" />
+                  <div class="git-content-skeleton__stat-grid">
+                    <For each={[0, 1, 2, 3]}>{() => <GitSkeletonBlock class="git-content-skeleton__stat" />}</For>
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+        );
+      case 'comparison':
+        return (
+          <div class="git-content-skeleton__comparison">
+            <div class="git-content-skeleton__stat-grid">
+              <For each={[0, 1, 2, 3]}>{() => <GitSkeletonBlock class="git-content-skeleton__stat" />}</For>
+            </div>
+            <GitSkeletonTable rows={rows()} showHeader />
+          </div>
+        );
+      case 'patch':
+        return (
+          <div class="git-content-skeleton__patch">
+            <div class="git-content-skeleton__patch-heading">
+              <GitSkeletonBlock class="git-content-skeleton__patch-path" />
+              <GitSkeletonBlock class="git-content-skeleton__badge" />
+            </div>
+            <For each={Array.from({ length: rows() + 3 }, (_, index) => index)}>
+              {(index) => (
+                <div class="git-content-skeleton__code-row" data-skeleton-row={index}>
+                  <GitSkeletonBlock class="git-content-skeleton__line-number" />
+                  <GitSkeletonBlock class="git-content-skeleton__code-line" />
+                </div>
+              )}
+            </For>
+          </div>
+        );
+      case 'stash-list':
+        return (
+          <div class="git-content-skeleton__stash-list">
+            <For each={Array.from({ length: rows() }, (_, index) => index)}>
+              {(index) => (
+                <div class="git-content-skeleton__stash-row" data-skeleton-row={index}>
+                  <GitSkeletonBlock class="git-content-skeleton__icon" />
+                  <div class="git-content-skeleton__sidebar-copy">
+                    <GitSkeletonBlock class="git-content-skeleton__sidebar-title" />
+                    <GitSkeletonBlock class="git-content-skeleton__sidebar-meta" />
+                  </div>
+                  <GitSkeletonBlock class="git-content-skeleton__badge" />
+                </div>
+              )}
+            </For>
+          </div>
+        );
+      case 'form':
+        return (
+          <div class="git-content-skeleton__form">
+            <GitSkeletonBlock class="git-content-skeleton__form-icon" />
+            <GitSkeletonBlock class="git-content-skeleton__form-title" />
+            <GitSkeletonBlock class="git-content-skeleton__form-meta" />
+            <For each={[0, 1]}>{() => <GitSkeletonBlock class="git-content-skeleton__form-field" />}</For>
+            <GitSkeletonBlock class="git-content-skeleton__form-button" />
+          </div>
+        );
+      case 'commit-detail':
+      default:
+        return (
+          <div class="git-content-skeleton__detail-panel">
+            <div class="git-content-skeleton__detail-heading">
+              <div class="git-content-skeleton__detail-copy">
+                <GitSkeletonBlock class="git-content-skeleton__detail-title" />
+                <GitSkeletonBlock class="git-content-skeleton__detail-meta" />
+              </div>
+              <GitSkeletonBlock class="git-content-skeleton__badge" />
+            </div>
+            <div class="git-content-skeleton__action-row">
+              <GitSkeletonBlock class="git-content-skeleton__button" />
+              <GitSkeletonBlock class="git-content-skeleton__button" />
+              <GitSkeletonBlock class="git-content-skeleton__orb" />
+            </div>
+            <GitSkeletonTable rows={rows()} showHeader />
+          </div>
+        );
+    }
+  };
+
   return (
-    <span
+    <div
+      role={busy() ? 'status' : undefined}
+      aria-live={busy() ? 'polite' : undefined}
+      aria-busy={busy() ? 'true' : undefined}
+      aria-hidden={busy() ? undefined : 'true'}
+      data-git-content-skeleton={variant()}
+      data-git-skeleton-busy={busy() ? 'true' : 'false'}
       class={cn(
-        'git-loading-indicator',
-        props.variant === 'inline' && 'git-loading-indicator--inline',
-        props.tone === 'error' && 'git-loading-indicator--error',
+        'git-content-skeleton',
+        props.surface && 'git-content-skeleton--surface',
         props.class,
       )}
-      aria-hidden="true"
     >
-      <span class="git-loading-indicator__track">
-        <span class="git-loading-indicator__bar" />
-      </span>
-    </span>
+      <Show when={busy()}>
+        <span class="sr-only">{props.label}</span>
+        <Show when={props.detail}><span class="sr-only">{props.detail}</span></Show>
+      </Show>
+      <div aria-hidden="true">{renderSkeleton()}</div>
+    </div>
   );
 }
 
@@ -198,8 +464,8 @@ export function GitInlineLoadingStatus(props: GitInlineLoadingStatusProps) {
       aria-busy="true"
       class={cn('git-inline-loading-status', redevenSurfaceRoleClass('controlMuted'), props.class)}
     >
-      <GitLoadingIndicator variant="inline" />
-      <span class="git-inline-loading-status__label">{props.children}</span>
+      <span class="git-inline-loading-status__skeleton" aria-hidden="true" />
+      <span class="sr-only">{props.children}</span>
     </div>
   );
 }
@@ -239,16 +505,24 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
       </div>
 
       <div class="justify-self-stretch sm:justify-self-center">
-        <Button
-          size="sm"
-          variant="outline"
-          class={cn('w-full rounded-full px-3 text-[11px] font-medium transition-[background-color,border-color] duration-150 hover:bg-accent/60 sm:min-w-[8.75rem] sm:w-auto', redevenSurfaceRoleClass('control'))}
-          onClick={() => props.onLoadMore?.()}
-          loading={loading()}
-          disabled={!props.hasMore || loading()}
+        <Show
+          when={!loading()}
+          fallback={(
+            <div class="git-paged-footer__button-skeleton" aria-hidden="true">
+              <span class="git-content-skeleton__block" />
+            </div>
+          )}
         >
-          {buttonLabel()}
-        </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            class={cn('w-full rounded-full px-3 text-[11px] font-medium transition-[background-color,border-color] duration-150 hover:bg-accent/60 sm:min-w-[8.75rem] sm:w-auto', redevenSurfaceRoleClass('control'))}
+            onClick={() => props.onLoadMore?.()}
+            disabled={!props.hasMore}
+          >
+            {buttonLabel()}
+          </Button>
+        </Show>
       </div>
 
       <div class="min-w-0 justify-self-stretch sm:justify-self-end">
@@ -311,7 +585,9 @@ export interface GitStatePaneProps {
   message: JSX.Element;
   detail?: JSX.Element;
   loading?: boolean;
-  eyebrow?: JSX.Element;
+  loadingVariant?: GitContentSkeletonVariant;
+  loadingRows?: number;
+  loadingShowHeader?: boolean;
   tone?: 'muted' | 'error';
   surface?: boolean;
   class?: string;
@@ -319,13 +595,26 @@ export interface GitStatePaneProps {
 }
 
 export function GitStatePane(props: GitStatePaneProps) {
-  const i18n = useI18n();
   const tone = () => props.tone ?? 'muted';
   const surfaceClass = () => {
     if (!props.surface) return '';
     if (tone() === 'error') return 'rounded-md border border-error/20 bg-error/5';
     return cn('rounded-md border', redevenSurfaceRoleClass('inset'));
   };
+
+  if (props.loading) {
+    return (
+      <GitContentSkeleton
+        label={props.message}
+        detail={props.detail}
+        variant={props.loadingVariant}
+        rows={props.loadingRows}
+        showHeader={props.loadingShowHeader}
+        surface={props.surface}
+        class={props.class}
+      />
+    );
+  }
 
   return (
     <div
@@ -334,19 +623,8 @@ export function GitStatePane(props: GitStatePaneProps) {
         surfaceClass(),
         props.class,
       )}
-      role={props.loading ? 'status' : undefined}
-      aria-live={props.loading ? 'polite' : undefined}
-      aria-busy={props.loading ? 'true' : undefined}
     >
       <div class={cn('flex max-w-sm flex-col items-center justify-center gap-2.5', props.contentClass)}>
-        <Show when={props.loading}>
-          <div class="git-state-pane__loading-stack">
-            <div class={cn('git-state-pane__loading-eyebrow', tone() === 'error' && 'git-state-pane__loading-eyebrow--error')}>
-              {props.eyebrow ?? i18n.t('common.status.loading')}
-            </div>
-            <GitLoadingIndicator tone={tone()} />
-          </div>
-        </Show>
         <div class={cn('text-xs leading-relaxed break-words', tone() === 'error' ? 'text-error' : 'text-muted-foreground')}>
           {props.message}
         </div>
