@@ -966,7 +966,6 @@ export function EnvCodespacesPage() {
   const [runtimeCancelSubmitting, setRuntimeCancelSubmitting] = createSignal(false);
   const [busyActions, setBusyActions] = createSignal<Record<string, CodespaceBusyAction | undefined>>({});
   const [codespaceContextMenu, setCodespaceContextMenu] = createSignal<CodespaceContextMenuState | null>(null);
-  let codespaceContextMenuEl: HTMLDivElement | null = null;
 
   const browserEditorSetupRunning = () => (
     runtimeStatus()?.operation.action === "prepare_workspace_engine"
@@ -1062,36 +1061,6 @@ export function EnvCodespacesPage() {
       setRuntimePrepareLocalFailure(null);
       setRuntimePrepareLocalCancelled(false);
     }
-  });
-
-  createEffect(() => {
-    const menu = codespaceContextMenu();
-    if (!menu) return;
-
-    const closeMenu = () => {
-      setCodespaceContextMenu(null);
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && codespaceContextMenuEl?.contains(target)) return;
-      closeMenu();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeMenu();
-      }
-    };
-
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("resize", closeMenu);
-    window.addEventListener("scroll", closeMenu, true);
-    window.addEventListener("keydown", onKeyDown);
-    onCleanup(() => {
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("resize", closeMenu);
-      window.removeEventListener("scroll", closeMenu, true);
-      window.removeEventListener("keydown", onKeyDown);
-    });
   });
 
   const loadPickerDir = async (pickerPath: string) => {
@@ -1685,9 +1654,6 @@ export function EnvCodespacesPage() {
             ariaLabel={i18n.t("codespaces.title")}
             items={buildCodespaceContextMenuItems(menu.space)}
             onDismiss={() => setCodespaceContextMenu(null)}
-            menuRef={(el) => {
-              codespaceContextMenuEl = el;
-            }}
           />
         )}
       </Show>

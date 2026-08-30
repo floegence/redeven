@@ -87,6 +87,75 @@ describe('Git context action grouping', () => {
 });
 
 describe('FloatingContextMenu keyboard contract', () => {
+  it('owns outside-pointer dismissal without treating menu interaction as outside', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onDismiss = vi.fn();
+    const dispose = render(() => (
+      <FloatingContextMenu
+        x={0}
+        y={0}
+        ariaLabel="Actions"
+        items={[action('open', 'navigate')]}
+        onDismiss={onDismiss}
+      />
+    ), host);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    try {
+      host.querySelector('[role="menu"]')!
+        .dispatchEvent(new Event('scroll'));
+      host.querySelector('[role="menuitem"]')!
+        .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      expect(onDismiss).not.toHaveBeenCalled();
+
+      document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      expect(onDismiss).toHaveBeenCalledOnce();
+      expect(onDismiss).toHaveBeenCalledWith('outside-pointer');
+    } finally {
+      dispose();
+    }
+  });
+
+  it.each([
+    { event: 'outside focus', reason: 'outside-focus' },
+    { event: 'document scroll', reason: 'viewport-change' },
+    { event: 'window resize', reason: 'viewport-change' },
+    { event: 'window blur', reason: 'window-blur' },
+  ] as const)('dismisses on $event', async ({ event, reason }) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onDismiss = vi.fn();
+    const dispose = render(() => (
+      <FloatingContextMenu
+        x={0}
+        y={0}
+        ariaLabel="Actions"
+        items={[action('open', 'navigate')]}
+        onDismiss={onDismiss}
+      />
+    ), host);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    try {
+      if (event === 'outside focus') {
+        const outside = document.createElement('button');
+        document.body.appendChild(outside);
+        outside.focus();
+      } else if (event === 'document scroll') {
+        document.dispatchEvent(new Event('scroll'));
+      } else if (event === 'window resize') {
+        window.dispatchEvent(new Event('resize'));
+      } else {
+        window.dispatchEvent(new Event('blur'));
+      }
+      expect(onDismiss).toHaveBeenCalledOnce();
+      expect(onDismiss).toHaveBeenCalledWith(reason);
+    } finally {
+      dispose();
+    }
+  });
+
   it('preserves focus across item rebuilds and advances when the focused action becomes unavailable', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

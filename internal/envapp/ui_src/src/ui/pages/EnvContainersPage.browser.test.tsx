@@ -191,6 +191,19 @@ describe('native Containers responsive product surface', () => {
     await settle();
     expect(document.querySelector('[role="menu"]')?.getAttribute('aria-hidden')).toBe('true');
 
+    const columnSettings = root.querySelector<HTMLElement>(
+      '.container-column-picker [data-floe-dropdown-trigger]',
+    )!;
+    columnSettings.click();
+    await settle();
+    const columnMenu = Array.from(document.querySelectorAll<HTMLElement>('[role="menu"]'))
+      .find((menu) => menu.getAttribute('aria-hidden') !== 'true');
+    expect(columnMenu).not.toBeNull();
+    root.querySelector<HTMLElement>('.container-search-control')!
+      .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await settle();
+    expect(columnMenu?.isConnected && columnMenu.getAttribute('aria-hidden') !== 'true').toBe(false);
+
     rows[0].focus();
     rows[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     expect(document.activeElement).toBe(rows[1]);

@@ -2,7 +2,6 @@ import { For, createEffect, createMemo, createUniqueId, onCleanup, onMount, type
 import { cn } from '@floegence/floe-webapp-core';
 import {
   SurfaceFloatingLayer,
-  focusMenuItem,
   handleMenuKeyboardNavigation,
   type MenuDismissReason,
 } from '@floegence/floe-webapp-core/ui';
@@ -33,6 +32,11 @@ type FloatingContextMenuSeparatorItem = Readonly<{
 }>;
 
 export type FloatingContextMenuItem = FloatingContextMenuActionItem | FloatingContextMenuSeparatorItem;
+export type FloatingContextMenuDismissReason = MenuDismissReason
+  | 'outside-pointer'
+  | 'outside-focus'
+  | 'viewport-change'
+  | 'window-blur';
 
 export interface FloatingContextMenuProps {
   id?: string;
@@ -49,7 +53,7 @@ export interface FloatingContextMenuProps {
   contextMenuKind?: string;
   items: readonly FloatingContextMenuItem[];
   menuRef?: (el: HTMLDivElement | null) => void;
-  onDismiss: (reason: MenuDismissReason) => void;
+  onDismiss: (reason: FloatingContextMenuDismissReason) => void;
 }
 
 function isActionItem(item: FloatingContextMenuItem): item is FloatingContextMenuActionItem {
@@ -62,14 +66,23 @@ export function estimateFloatingContextMenuHeight(actionCount: number, separator
     + Math.max(0, separatorCount) * FLOATING_CONTEXT_MENU_SEPARATOR_HEIGHT_PX;
 }
 
+function eventOccursWithin(event: Event, element: HTMLElement | null): boolean {
+  if (!element) return false;
+  if (event.composedPath().includes(element)) return true;
+  return event.target instanceof Node && element.contains(event.target);
+}
+
 export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) => {
   let menuEl: HTMLDivElement | null = null;
+  let dismissalRequested = false;
   let lastFocusedItemId: string | null = null;
   let lastFocusedItemIndex = 0;
   const disabledDescriptionPrefix = createUniqueId();
   const itemsById = createMemo(() => new Map(props.items.map((item) => [item.id, item])));
 
-  const dismiss = (reason: MenuDismissReason) => {
+  const dismiss = (reason: FloatingContextMenuDismissReason) => {
+    if (dismissalRequested) return;
+    dismissalRequested = true;
     const focusAnchor = props.focusAnchor;
     const restoreFocus = reason === 'tab'
       || reason === 'shift-tab'
@@ -81,10 +94,48 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
   };
 
   onMount(() => {
-    const frame = requestAnimationFrame(() => focusMenuItem(menuEl, 'first', {
-      includeAriaDisabledItems: props.focusDisabledItems,
-    }));
-    onCleanup(() => cancelAnimationFrame(frame));
+    let focusDismissalArmed = false;
+    let viewportDismissalArmed = false;
+    const frame = requestAnimationFrame(() => {
+      const selector = props.focusDisabledItems
+        ? '[role="menuitem"]:not([disabled])'
+        : '[role="menuitem"]:not([disabled]):not([aria-disabled="true"])';
+      menuEl?.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
+      focusDismissalArmed = true;
+      viewportDismissalArmed = true;
+    });
+    const onPointerDown = (event: PointerEvent) => {
+      if (!eventOccursWithin(event, menuEl)) dismiss('outside-pointer');
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      if (focusDismissalArmed && !eventOccursWithin(event, menuEl)) dismiss('outside-focus');
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !eventOccursWithin(event, menuEl)) dismiss('escape');
+    };
+    const onScroll = (event: Event) => {
+      if (viewportDismissalArmed && !eventOccursWithin(event, menuEl)) dismiss('viewport-change');
+    };
+    const onResize = () => {
+      if (viewportDismissalArmed) dismiss('viewport-change');
+    };
+    const onWindowBlur = () => dismiss('window-blur');
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
+    window.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('blur', onWindowBlur);
+    onCleanup(() => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('blur', onWindowBlur);
+    });
   });
 
   onCleanup(() => props.menuRef?.(null));

@@ -208,24 +208,6 @@
 
 .container-filter-switch button[aria-pressed="true"] { color: var(--redeven-status-primary-foreground); background: var(--redeven-status-primary-soft); }
 .container-toolbar-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-.container-column-picker { position: relative; }
-.container-column-menu {
-  position: absolute;
-  z-index: 8;
-  top: calc(100% + 6px);
-  right: 0;
-  display: grid;
-  min-width: 170px;
-  gap: 2px;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--redeven-surface-overlay);
-  box-shadow: 0 12px 28px -12px var(--redeven-shadow-color);
-}
-.container-column-menu label { display: flex; min-height: 36px; align-items: center; gap: 9px; padding: 0 8px; border-radius: 6px; color: var(--foreground); font-size: 11px; }
-.container-column-menu label:hover { background: var(--redeven-surface-panel-hover); }
-.container-column-menu input { accent-color: var(--redeven-status-primary); }
 
 .container-metrics-strip {
   display: flex;
