@@ -383,6 +383,15 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('perspective: 1400px;');
   });
 
+  it('keeps managed operation text motion optional', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('.managed-operation-shimmer-text {');
+    expect(src).toContain('animation: managed-operation-text-shimmer 2.4s linear infinite;');
+    expect(src).toContain('@keyframes managed-operation-text-shimmer {');
+    expect(src).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.managed-operation-shimmer-text \{[\s\S]*?animation: none;/u);
+  });
+
   it('keeps git branch graph details compact and responsive', () => {
     const src = readRedevenCss();
 

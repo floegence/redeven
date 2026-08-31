@@ -5908,6 +5908,23 @@ html.dark .browser-editor-setup {
 
 /* ── Loading shimmer overlay ── */
 
+.managed-operation-shimmer-text {
+  color: var(--primary);
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--primary) 72%, var(--foreground)) 0%,
+    color-mix(in srgb, var(--primary) 72%, var(--foreground)) 36%,
+    color-mix(in srgb, var(--primary) 28%, var(--primary-foreground)) 50%,
+    color-mix(in srgb, var(--primary) 72%, var(--foreground)) 64%,
+    color-mix(in srgb, var(--primary) 72%, var(--foreground)) 100%
+  );
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: managed-operation-text-shimmer 2.4s linear infinite;
+}
+
 .redeven-loading-shimmer-overlay {
   position: absolute;
   inset: 0;
@@ -5945,6 +5962,16 @@ html.dark .browser-editor-setup {
 
   100% {
     background-position: -100% 0;
+  }
+}
+
+@keyframes managed-operation-text-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
   }
 }
 
@@ -6002,6 +6029,13 @@ html.dark .browser-editor-setup {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .managed-operation-shimmer-text {
+    color: var(--primary);
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    animation: none;
+  }
+
   .redeven-loading-shimmer-overlay::after {
     animation-duration: 1ms;
   }

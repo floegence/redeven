@@ -20,6 +20,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     dispose?.();
     dispose = undefined;
     document.body.replaceChildren();
+    document.documentElement.classList.remove('dark');
   });
 
   it('keeps notice geometry and scroll position fixed when acknowledgement changes', async () => {
@@ -197,7 +198,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           forward_id: 'pf-failed',
           runtime_port: 3000,
           brand_icon: 'deepseek-harness',
-          last_error_code: 'IMAGE_PULL_FAILED',
+          last_failure: { action: 'install', stage: 'pulling', error_code: 'IMAGE_PULL_FAILED', message: 'The image could not be pulled.' },
           update_available: false,
         }}
         busy={false}
@@ -223,6 +224,10 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(72);
     expect(getComputedStyle(retryButton).whiteSpace).toBe('nowrap');
     expect(retryButton.scrollHeight).toBeLessThanOrEqual(retryButton.clientHeight);
+    const failureButton = row.querySelector<HTMLButtonElement>('button[aria-label="Show failure details"]')!;
+    failureButton.focus();
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('The image could not be pulled.');
   });
 
   it('replaces a stale service error with contextual operation progress and details', async () => {
@@ -247,7 +252,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           forward_id: 'pf-failed',
           runtime_port: 3000,
           brand_icon: 'deepseek-harness',
-          last_error_code: 'IMAGE_PULL_FAILED',
+          last_failure: { action: 'install', stage: 'pulling', error_code: 'IMAGE_PULL_FAILED', message: 'The image could not be pulled.' },
           update_available: false,
         }}
         operation={{
@@ -258,6 +263,22 @@ describe('EnvPortForwardsPage browser presentation', () => {
           stage: 'pulling',
           progress_current: 2,
           progress_total: 7,
+          progress_detail: {
+            schema_version: 1,
+            stage_started_at_unix_ms: Date.now() - 2_000,
+            updated_at_unix_ms: Date.now(),
+            transfer: {
+              phase: 'pulling',
+              artifact_reference: 'ghcr.io/runzhliu/deepseek-harness@sha256:reviewed',
+              artifact_index: 1,
+              artifact_total: 1,
+              downloaded_bytes: 2_000,
+              total_bytes: 5_000,
+              bytes_per_second: 1_000,
+              completed_layers: 2,
+              total_layers: 5,
+            },
+          },
         }}
         busy
         canOpen
@@ -276,26 +297,29 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
     const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
     expect(progress.textContent).toContain('Pulling image');
-    expect(progress.textContent).toContain('2/7');
+    expect(progress.textContent).toContain('2.00 KB / 5.00 KB');
     expect(row.textContent).not.toContain('Error');
     expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(120);
-    const attached = row.querySelector<HTMLElement>('[data-testid="managed-operation-progress"]')!;
-    expect(attached.textContent).toContain('Retry');
-    expect(attached.textContent).toContain('Pulling image');
-    expect(attached.textContent).not.toContain('DeepSeek Harness');
+    expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
 
     await userEvent.click(progress);
     await settle();
 
     const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
     expect(details).toBeTruthy();
-    expect(details.textContent).toContain('mop-retry');
-    expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
+    expect(details.textContent).toContain('ghcr.io/runzhliu/deepseek-harness@sha256:reviewed');
+    expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
     expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
-    const dialog = details.closest<HTMLElement>('[role="dialog"]')!;
-    const dialogRect = dialog.getBoundingClientRect();
-    expect(dialogRect.left).toBeGreaterThanOrEqual(0);
-    expect(dialogRect.right).toBeLessThanOrEqual(1200);
-    expect(dialogRect.bottom).toBeLessThanOrEqual(800);
+    expect(details.closest('[role="dialog"]')).toBeNull();
+    const detailsRect = details.getBoundingClientRect();
+    expect(detailsRect.left).toBeGreaterThanOrEqual(0);
+    expect(detailsRect.right).toBeLessThanOrEqual(1200);
+
+    document.documentElement.classList.add('dark');
+    await page.viewport(640, 800);
+    host.style.width = '600px';
+    await settle();
+    expect(details.getBoundingClientRect().right).toBeLessThanOrEqual(640);
+    expect(getComputedStyle(progress.querySelector('.managed-operation-shimmer-text')!).animationName).toContain('managed-operation-text-shimmer');
   });
 });

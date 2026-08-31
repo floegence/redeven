@@ -33,7 +33,6 @@ import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useRedevenRpc } from "../protocol/redeven_v1";
 import { useI18n, type EnvAppTranslationKey } from "../i18n";
 import { ManagedServiceShapingOrb } from "./ManagedServiceShapingOrb";
-import type { ManagedOperation } from "./managedServiceOperationController";
 
 const CodeEditor = lazy(async () => {
   const module = await import("@floegence/floe-webapp-core/editor");
@@ -234,7 +233,6 @@ export function ManagedServiceSettingsDrawer(props: {
   serviceID: string;
   serviceName: string;
   canManage: boolean;
-  operation?: ManagedOperation | null;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
   onRequestStop: () => void;
@@ -244,7 +242,6 @@ export function ManagedServiceSettingsDrawer(props: {
     plan_digest: string;
     accepted_risk_ids: string[];
   }) => Promise<void>;
-  onCancelOperation: () => void;
 }) {
   const i18n = useI18n();
   const notify = useNotification();
@@ -605,28 +602,6 @@ export function ManagedServiceSettingsDrawer(props: {
           </Button>
         </Show>
       </Show>
-      <Show when={props.operation} keyed>
-        {(operation) => (
-          <div class="ml-auto flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <ManagedServiceShapingOrb running />
-            <span class="max-w-52 truncate">
-              {settingText("operationRunning", {
-                current: operation.progress_current,
-                total: operation.progress_total,
-              })}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              class="cursor-pointer"
-              onClick={props.onCancelOperation}
-              disabled={operation.state === "cancelling"}
-            >
-              {settingText("cancelOperation")}
-            </Button>
-          </div>
-        )}
-      </Show>
     </div>
   );
 
@@ -635,7 +610,7 @@ export function ManagedServiceSettingsDrawer(props: {
       <EnvAppDrawer
         open={props.open}
         onOpenChange={(open) => {
-          if (!applying() && !savingMetadata() && !props.operation)
+          if (!applying() && !savingMetadata())
             props.onOpenChange(open);
         }}
         class="managed-service-settings-drawer"

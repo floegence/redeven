@@ -119,10 +119,11 @@ type Event struct {
 }
 
 type OperationProgress struct {
-	Phase     string `json:"phase"`
-	Completed int64  `json:"completed,omitempty"`
-	Total     int64  `json:"total,omitempty"`
-	Unit      string `json:"unit,omitempty"`
+	Phase           string `json:"phase"`
+	DownloadedBytes int64  `json:"downloaded_bytes,omitempty"`
+	TotalBytes      int64  `json:"total_bytes,omitempty"`
+	CompletedLayers int64  `json:"completed_layers,omitempty"`
+	TotalLayers     int64  `json:"total_layers,omitempty"`
 }
 
 type ListOperationsRequest struct {

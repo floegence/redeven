@@ -41,7 +41,7 @@ func (d *containerTemplateDriver) FindReconfiguredRuntime(ctx context.Context, s
 	return d.FindRuntime(ctx, service.ServiceID)
 }
 
-func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress func(string, int64)) (string, string, error) {
+func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress operationProgress) (string, string, error) {
 	if d.adapter == nil {
 		return "", "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
 	}
@@ -60,7 +60,7 @@ func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregist
 	}
 
 	progress("pulling", 2)
-	pinnedImage, err := d.PrepareUpdateArtifact(ctx, spec)
+	pinnedImage, err := d.PrepareUpdateArtifact(ctx, spec, progress)
 	if err != nil {
 		return "", "", err
 	}
@@ -73,11 +73,11 @@ func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregist
 	return runtimeID, pinnedImage, nil
 }
 
-func (d *containerTemplateDriver) PrepareUpdateArtifact(ctx context.Context, spec TemplateSpec) (string, error) {
+func (d *containerTemplateDriver) PrepareUpdateArtifact(ctx context.Context, spec TemplateSpec, progress operationProgress) (string, error) {
 	if d.adapter == nil || spec.Container == nil {
 		return "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
 	}
-	pulled, err := pullManagedImage(ctx, d.adapter, spec.Container.Image)
+	pulled, err := pullManagedImage(ctx, d.adapter, spec.Container.Image, 1, 1, progress)
 	if err != nil {
 		return "", err
 	}
@@ -676,7 +676,7 @@ func (d *containerTemplateDriver) removeExactContainer(ctx context.Context, serv
 	return nil
 }
 
-func (d *containerTemplateDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+func (d *containerTemplateDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress operationProgress) error {
 	progress("stopping", 2)
 	exists, err := d.stopOwnedContainer(ctx, service)
 	if err != nil {

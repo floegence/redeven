@@ -1374,7 +1374,7 @@ describe('native Containers page', () => {
     }]);
     harness.listOperationEvents.mockResolvedValue([{
       sequence: 3, operation_id: 'container_operation_pull', type: 'progress', state: 'running',
-      payload: { phase: 'pulling', completed: 2, total: 5, unit: 'layers' }, created_at_unix_ms: 3,
+      payload: { phase: 'pulling', completed_layers: 2, total_layers: 5 }, created_at_unix_ms: 3,
     }]);
     const host = document.createElement('div');
     document.body.append(host);

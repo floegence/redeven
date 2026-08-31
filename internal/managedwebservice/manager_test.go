@@ -191,7 +191,7 @@ type captureInstallCatalogDriver struct {
 	installErr error
 }
 
-func (d *captureInstallCatalogDriver) Install(_ context.Context, _ *pfregistry.ManagedService, catalog catalogPayload, _ func(string, int64)) (string, string, error) {
+func (d *captureInstallCatalogDriver) Install(_ context.Context, _ *pfregistry.ManagedService, catalog catalogPayload, _ operationProgress) (string, string, error) {
 	d.catalog = catalog
 	return "", "", d.installErr
 }
@@ -204,7 +204,7 @@ func (*captureInstallCatalogDriver) Stop(context.Context, *pfregistry.ManagedSer
 	return errors.New("unexpected stop")
 }
 
-func (*captureInstallCatalogDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
+func (*captureInstallCatalogDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {
 	return errors.New("unexpected uninstall")
 }
 
@@ -222,7 +222,7 @@ type uninstallOwnershipDriver struct {
 	uninstallErr   error
 }
 
-func (d *uninstallOwnershipDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error) {
+func (d *uninstallOwnershipDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 
@@ -235,7 +235,7 @@ func (d *uninstallOwnershipDriver) Stop(context.Context, *pfregistry.ManagedServ
 	return errors.New("unexpected stop")
 }
 
-func (d *uninstallOwnershipDriver) Uninstall(_ context.Context, _ *pfregistry.ManagedService, _ bool, progress func(string, int64)) error {
+func (d *uninstallOwnershipDriver) Uninstall(_ context.Context, _ *pfregistry.ManagedService, _ bool, progress operationProgress) error {
 	d.uninstallCalls++
 	progress("stopping", 2)
 	progress("uninstalling", 5)
@@ -252,7 +252,7 @@ func (d *uninstallOwnershipDriver) Logs(context.Context, *pfregistry.ManagedServ
 
 type successfulStopDriver struct{}
 
-func (*successfulStopDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error) {
+func (*successfulStopDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 
@@ -262,7 +262,7 @@ func (*successfulStopDriver) Start(context.Context, *pfregistry.ManagedService) 
 
 func (*successfulStopDriver) Stop(context.Context, *pfregistry.ManagedService) error { return nil }
 
-func (*successfulStopDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
+func (*successfulStopDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {
 	return errors.New("unexpected uninstall")
 }
 
@@ -411,7 +411,7 @@ func TestRunStopClearsPreviousSnapshotError(t *testing.T) {
 	}
 }
 
-func TestListProjectsTheCurrentOperationArtifactReference(t *testing.T) {
+func TestListProjectsTheCurrentOperationDetail(t *testing.T) {
 	t.Parallel()
 	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
 	if err != nil {
@@ -427,6 +427,7 @@ func TestListProjectsTheCurrentOperationArtifactReference(t *testing.T) {
 		OperationID: "mop_artifact", ServiceID: service.ServiceID, RequestID: "request-artifact",
 		RequestFingerprint: "fingerprint-artifact", Action: "retry_install", State: "running", Stage: "pulling",
 		ProgressCurrent: 2, ProgressTotal: 7,
+		ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, Transfer: &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
 	}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, operation); err != nil {
 		t.Fatal(err)
@@ -436,11 +437,55 @@ func TestListProjectsTheCurrentOperationArtifactReference(t *testing.T) {
 	if err != nil || len(views) != 1 {
 		t.Fatalf("List() = %+v, err=%v", views, err)
 	}
-	if !strings.HasPrefix(views[0].OperationArtifactReference, "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:") {
-		t.Fatalf("operation artifact reference = %q", views[0].OperationArtifactReference)
-	}
 	if views[0].ActiveOperation == nil || views[0].ActiveOperation.OperationID != operation.OperationID {
 		t.Fatalf("active operation = %+v", views[0].ActiveOperation)
+	}
+	if detail := views[0].ActiveOperation.ProgressDetail; detail == nil || detail.Transfer == nil || !strings.HasPrefix(detail.Transfer.ArtifactReference, "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:") {
+		t.Fatalf("operation detail = %+v", detail)
+	}
+}
+
+func TestListProjectsStructuredLastFailureFromPersistedOperation(t *testing.T) {
+	t.Parallel()
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	service := pfregistry.ManagedService{ServiceID: "mws_failed", TemplateID: "template", TemplateSource: "custom", Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), DesiredState: "stopped", ObservedState: "error", ForwardID: "pf_failed", RuntimePort: 3080, LastErrorCode: "IMAGE_PULL_FAILED", LastErrorMessage: "The container image could not be pulled."}
+	operation := pfregistry.ManagedOperation{OperationID: "mop_failed", ServiceID: service.ServiceID, RequestID: "request-failed", RequestFingerprint: "fingerprint", Action: "install", State: "failed", Stage: "pulling", ProgressCurrent: 2, ProgressTotal: 7, ErrorCode: service.LastErrorCode, ErrorMessage: service.LastErrorMessage, FinishedAtUnixMs: 123, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, Transfer: &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "example.invalid/app:1"}}}
+	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, operation); err != nil {
+		t.Fatal(err)
+	}
+	views, err := (&Manager{registry: registry}).List(context.Background())
+	if err != nil || len(views) != 1 {
+		t.Fatalf("List()=%+v err=%v", views, err)
+	}
+	failure := views[0].LastFailure
+	if failure == nil || failure.Action != "install" || failure.Stage != "pulling" || failure.ErrorCode != service.LastErrorCode || failure.ArtifactReference != "example.invalid/app:1" || failure.OperationID != operation.OperationID || failure.OccurredAtUnixMs != 123 {
+		t.Fatalf("last failure=%+v", failure)
+	}
+}
+
+func TestServiceFailureViewOmitsUnprovenHistoricalContext(t *testing.T) {
+	t.Parallel()
+	service := pfregistry.ManagedService{
+		LastErrorCode: "IMAGE_PULL_FAILED", LastErrorMessage: "The current image pull failed.", UpdatedAtUnixMs: 20,
+	}
+	operation := &pfregistry.ManagedOperation{
+		OperationID: "mop_older", Action: "install", Stage: "pulling", ErrorCode: service.LastErrorCode,
+		ErrorMessage: "An older image pull failed.", UpdatedAtUnixMs: 10,
+		ProgressDetail: &pfregistry.ManagedOperationProgressDetail{
+			SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion,
+			Transfer:      &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "example.invalid/older:1"},
+		},
+	}
+	failure := serviceFailureView(service, operation)
+	if failure == nil || failure.ErrorCode != service.LastErrorCode || failure.Message != service.LastErrorMessage {
+		t.Fatalf("failure=%+v", failure)
+	}
+	if failure.Action != "" || failure.Stage != "" || failure.OperationID != "" || failure.ArtifactReference != "" || failure.OccurredAtUnixMs != 0 {
+		t.Fatalf("historical operation context was guessed: %+v", failure)
 	}
 }
 
@@ -468,6 +513,29 @@ func TestSubscribeReturnsTerminalSnapshotWithoutWaiting(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("terminal snapshot was not delivered")
+	}
+}
+
+func TestOperationProgressIsNotPublishedWhenPersistenceFails(t *testing.T) {
+	t.Parallel()
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	events := make(chan pfregistry.ManagedOperation, 1)
+	manager := &Manager{
+		registry: registry,
+		listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{
+			"mop_missing": {1: events},
+		},
+	}
+	op := pfregistry.ManagedOperation{OperationID: "mop_missing", ServiceID: "mws_missing", State: "running", Stage: "pulling"}
+	manager.saveAndPublish(&op)
+	select {
+	case event := <-events:
+		t.Fatalf("unpersisted operation progress was published: %+v", event)
+	default:
 	}
 }
 
@@ -548,7 +616,7 @@ type recoveryDriver struct {
 	startCalls   int
 }
 
-func (d *recoveryDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error) {
+func (d *recoveryDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 func (d *recoveryDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {
@@ -556,7 +624,7 @@ func (d *recoveryDriver) Start(context.Context, *pfregistry.ManagedService) (str
 	return "", errors.New("unexpected start")
 }
 func (d *recoveryDriver) Stop(context.Context, *pfregistry.ManagedService) error { return nil }
-func (d *recoveryDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
+func (d *recoveryDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {
 	return errors.New("unexpected uninstall")
 }
 func (d *recoveryDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
@@ -567,7 +635,7 @@ func (d *recoveryDriver) Logs(context.Context, *pfregistry.ManagedService, int) 
 	return nil, errors.New("unexpected logs")
 }
 
-func (d *blockingStopDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error) {
+func (d *blockingStopDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 func (d *blockingStopDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {
@@ -578,7 +646,7 @@ func (d *blockingStopDriver) Stop(ctx context.Context, _ *pfregistry.ManagedServ
 	<-ctx.Done()
 	return ctx.Err()
 }
-func (d *blockingStopDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
+func (d *blockingStopDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {
 	return errors.New("unexpected uninstall")
 }
 func (d *blockingStopDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {

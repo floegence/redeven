@@ -10,11 +10,25 @@ export type ManagedOperation = Readonly<{
   stage: string;
   progress_current: number;
   progress_total: number;
+  progress_detail?: Readonly<{
+    schema_version: 1;
+    stage_started_at_unix_ms?: number;
+    updated_at_unix_ms?: number;
+    transfer?: Readonly<{
+      phase?: string;
+      artifact_reference?: string;
+      artifact_index?: number;
+      artifact_total?: number;
+      downloaded_bytes?: number;
+      total_bytes?: number;
+      bytes_per_second?: number;
+      completed_layers?: number;
+      total_layers?: number;
+    }>;
+  }>;
   error_code?: string;
   error_message?: string;
 }>;
-
-export type ManagedOperationOwner = 'row' | 'update' | 'reconfigure' | 'uninstall';
 
 type ManagedOperationControllerOptions = Readonly<{
   streamFailedMessage: () => string;
@@ -28,7 +42,6 @@ type ActiveStream = Readonly<{
 
 type ManagedOperationState = Readonly<{
   operation: ManagedOperation;
-  owner: ManagedOperationOwner;
 }>;
 
 const operationTerminal = (operation: ManagedOperation) => ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(operation.state);
@@ -60,17 +73,11 @@ export function createManagedServiceOperationController(options: ManagedOperatio
   const [states, setStates] = createSignal<Record<string, ManagedOperationState>>({});
   const streams = new Map<string, ActiveStream>();
 
-  const update = (operation: ManagedOperation, owner?: ManagedOperationOwner) => {
-    setStates((current) => {
-      const existing = current[operation.service_id];
-      const resolvedOwner = existing?.operation.operation_id === operation.operation_id
-        ? existing.owner
-        : owner ?? 'row';
-      return { ...current, [operation.service_id]: { operation, owner: resolvedOwner } };
-    });
+  const update = (operation: ManagedOperation) => {
+    setStates((current) => ({ ...current, [operation.service_id]: { operation } }));
   };
 
-  const begin = (serviceID: string, action: ManagedOperation['action'], owner: ManagedOperationOwner): ManagedOperation => {
+  const begin = (serviceID: string, action: ManagedOperation['action']): ManagedOperation => {
     const operation: ManagedOperation = {
       operation_id: `submitting:${serviceID}:${action}`,
       service_id: serviceID,
@@ -80,12 +87,12 @@ export function createManagedServiceOperationController(options: ManagedOperatio
       progress_current: 0,
       progress_total: operationProgressTotal(action),
     };
-    update(operation, owner);
+    update(operation);
     return operation;
   };
 
-  const track = (operation: ManagedOperation, owner: ManagedOperationOwner): Promise<ManagedOperation> => {
-    update(operation, owner);
+  const track = (operation: ManagedOperation): Promise<ManagedOperation> => {
+    update(operation);
     if (operationTerminal(operation)) return Promise.resolve(operation);
     const existing = streams.get(operation.operation_id);
     if (existing) return existing.promise;
@@ -160,10 +167,7 @@ export function createManagedServiceOperationController(options: ManagedOperatio
     return updated;
   };
 
-  const ownedOperation = (serviceID: string, owner: ManagedOperationOwner) => {
-    const state = states()[serviceID];
-    return state?.owner === owner ? state.operation : null;
-  };
+  const operationForService = (serviceID: string) => states()[serviceID]?.operation ?? null;
   const knows = (operationID: string) => Object.values(states()).some((state) => state.operation.operation_id === operationID);
 
   const dispose = () => {
@@ -171,5 +175,5 @@ export function createManagedServiceOperationController(options: ManagedOperatio
     streams.clear();
   };
 
-  return { begin, track, clear, cancel, ownedOperation, knows, dispose };
+  return { begin, track, clear, cancel, operationForService, knows, dispose };
 }

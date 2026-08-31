@@ -4,9 +4,37 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/containerengine"
 )
+
+func TestManagedImageProgressReporterSeparatesLayersBytesAndSmoothsRate(t *testing.T) {
+	t.Parallel()
+	base := time.Unix(100, 0)
+	times := []time.Time{base, base.Add(time.Second), base.Add(1200 * time.Millisecond), base.Add(2 * time.Second)}
+	reporter := managedImageProgressReporter{
+		now: func() time.Time {
+			value := times[0]
+			times = times[1:]
+			return value
+		},
+		artifact: "example.invalid/app:1", artifactIndex: 2, artifactTotal: 3,
+	}
+	if transfer, emit := reporter.observe(containerengine.ImagePullProgress{Phase: "resolving"}); !emit || transfer.ArtifactIndex != 2 || transfer.ArtifactTotal != 3 {
+		t.Fatalf("initial transfer=%+v emit=%t", transfer, emit)
+	}
+	if transfer, emit := reporter.observe(containerengine.ImagePullProgress{Phase: "pulling", DownloadedBytes: 1_000_000, TotalBytes: 4_000_000, CompletedLayers: 1, TotalLayers: 4}); !emit || transfer.BytesPerSecond != 1_000_000 {
+		t.Fatalf("first byte transfer=%+v emit=%t", transfer, emit)
+	}
+	if _, emit := reporter.observe(containerengine.ImagePullProgress{Phase: "pulling", DownloadedBytes: 1_500_000, TotalBytes: 4_000_000, CompletedLayers: 1, TotalLayers: 4}); emit {
+		t.Fatal("sub-500ms update was emitted")
+	}
+	transfer, emit := reporter.observe(containerengine.ImagePullProgress{Phase: "pulling", DownloadedBytes: 2_500_000, TotalBytes: 4_000_000, CompletedLayers: 2, TotalLayers: 4})
+	if !emit || transfer.BytesPerSecond != 1_250_000 || transfer.DownloadedBytes != 2_500_000 || transfer.CompletedLayers != 2 {
+		t.Fatalf("smoothed transfer=%+v emit=%t", transfer, emit)
+	}
+}
 
 func TestManagedImagePullErrorMapsStableContainerFailures(t *testing.T) {
 	t.Parallel()

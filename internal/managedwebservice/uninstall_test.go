@@ -26,7 +26,9 @@ func TestContainerTemplateUninstallUsesOwnedRuntimeIdentityWithoutTemplateExecut
 	}
 	driver := &containerTemplateDriver{adapter: adapter}
 	var stages []string
-	if err := driver.Uninstall(context.Background(), service, false, func(stage string, _ int64) { stages = append(stages, stage) }); err != nil {
+	if err := driver.Uninstall(context.Background(), service, false, func(stage string, _ int64, _ ...pfregistry.ManagedOperationTransferProgress) {
+		stages = append(stages, stage)
+	}); err != nil {
 		t.Fatalf("Uninstall() error = %v", err)
 	}
 	if len(client.actions) != 2 || client.actions[0].Method != containerengine.MethodStop || client.actions[1].Method != containerengine.MethodRemove || client.actions[1].ContainerID != service.RuntimeIdentity {
@@ -114,7 +116,7 @@ func TestContainerTemplateUninstallAcceptsConfirmedMissingRuntime(t *testing.T) 
 		t.Fatal(err)
 	}
 	driver := &containerTemplateDriver{adapter: adapter}
-	if err := driver.Uninstall(context.Background(), service, false, func(string, int64) {}); err != nil {
+	if err := driver.Uninstall(context.Background(), service, false, discardOperationProgress); err != nil {
 		t.Fatalf("Uninstall() missing runtime error = %v", err)
 	}
 	if len(client.actions) != 0 {
@@ -148,7 +150,7 @@ func TestContainerTemplateUninstallRejectsChangedOwnership(t *testing.T) {
 				t.Fatal(err)
 			}
 			driver := &containerTemplateDriver{adapter: adapter}
-			err = driver.Uninstall(context.Background(), service, false, func(string, int64) {})
+			err = driver.Uninstall(context.Background(), service, false, discardOperationProgress)
 			if managedErrorCode(err) != "CONTAINER_IDENTITY_MISMATCH" {
 				t.Fatalf("changed ownership error = %v", err)
 			}
@@ -168,7 +170,7 @@ func TestContainerTemplateUninstallRejectsUnavailableEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 	driver := &containerTemplateDriver{adapter: adapter}
-	err = driver.Uninstall(context.Background(), service, false, func(string, int64) {})
+	err = driver.Uninstall(context.Background(), service, false, discardOperationProgress)
 	if managedErrorCode(err) != "CONTAINER_INSPECTION_FAILED" {
 		t.Fatalf("unavailable engine error = %v", err)
 	}
@@ -188,7 +190,7 @@ func TestDockerUninstallUsesOwnedRuntimeIdentityAndAcceptsMissingRuntime(t *test
 		t.Fatal(err)
 	}
 	driver := &dockerDriver{adapter: adapter}
-	if err := driver.Uninstall(context.Background(), service, false, func(string, int64) {}); err != nil {
+	if err := driver.Uninstall(context.Background(), service, false, discardOperationProgress); err != nil {
 		t.Fatalf("Uninstall() error = %v", err)
 	}
 	if len(client.actions) != 2 || client.actions[0].Method != containerengine.MethodStop || client.actions[1].Method != containerengine.MethodRemove {
@@ -200,7 +202,7 @@ func TestDockerUninstallUsesOwnedRuntimeIdentityAndAcceptsMissingRuntime(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := (&dockerDriver{adapter: missingAdapter}).Uninstall(context.Background(), service, false, func(string, int64) {}); err != nil {
+	if err := (&dockerDriver{adapter: missingAdapter}).Uninstall(context.Background(), service, false, discardOperationProgress); err != nil {
 		t.Fatalf("Uninstall() missing Docker runtime error = %v", err)
 	}
 	if len(missingClient.actions) != 0 {
@@ -218,7 +220,7 @@ func TestDockerUninstallRejectsChangedOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = (&dockerDriver{adapter: adapter}).Uninstall(context.Background(), service, false, func(string, int64) {})
+	err = (&dockerDriver{adapter: adapter}).Uninstall(context.Background(), service, false, discardOperationProgress)
 	if managedErrorCode(err) != "CONTAINER_IDENTITY_MISMATCH" {
 		t.Fatalf("changed Docker ownership error = %v", err)
 	}
@@ -269,7 +271,9 @@ func TestComposeTemplateUninstallUsesOwnedProjectIdentityWithoutTemplateExecutio
 	}
 	driver.adapter = adapter
 	var stages []string
-	if err := driver.Uninstall(context.Background(), service, false, func(stage string, _ int64) { stages = append(stages, stage) }); err != nil {
+	if err := driver.Uninstall(context.Background(), service, false, func(stage string, _ int64, _ ...pfregistry.ManagedOperationTransferProgress) {
+		stages = append(stages, stage)
+	}); err != nil {
 		t.Fatalf("Uninstall() error = %v", err)
 	}
 	if client.stopCalls != 1 || client.removeCalls != 1 {
@@ -319,7 +323,7 @@ func TestComposeTemplateUninstallRejectsChangedOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	driver.adapter = adapter
-	err = driver.Uninstall(context.Background(), service, false, func(string, int64) {})
+	err = driver.Uninstall(context.Background(), service, false, discardOperationProgress)
 	if managedErrorCode(err) != "COMPOSE_IDENTITY_MISMATCH" {
 		t.Fatalf("changed Compose ownership error = %v", err)
 	}
@@ -347,7 +351,7 @@ func TestHostUninstallRejectsInvalidExecutableDefinition(t *testing.T) {
 	if err := os.WriteFile(sentinel, []byte("preserved"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := driver.Uninstall(context.Background(), service, true, func(string, int64) {})
+	err := driver.Uninstall(context.Background(), service, true, discardOperationProgress)
 	if managedErrorCode(err) != "TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH" {
 		t.Fatalf("invalid host uninstall error = %v", err)
 	}

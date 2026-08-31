@@ -283,15 +283,23 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 		if err != nil {
 			return nil, err
 		}
+		var lastFailure *ServiceFailure
+		if service.ObservedState == "error" {
+			latestFailure, err := m.registry.GetLatestManagedOperationFailure(ctx, service.ServiceID)
+			if err != nil {
+				return nil, err
+			}
+			lastFailure = serviceFailureView(service, latestFailure)
+		}
 		name, description := m.serviceDisplayMetadata(ctx, service)
 		view := ServiceView{
-			ManagedService:             service,
-			Name:                       name,
-			Description:                description,
-			ActiveOperation:            active,
-			OperationArtifactReference: operationArtifactReference(service, active),
-			AccessMode:                 forward.AccessMode,
-			ContainerResources:         containerResourceLinks(service),
+			ManagedService:     service,
+			Name:               name,
+			Description:        description,
+			ActiveOperation:    active,
+			LastFailure:        lastFailure,
+			AccessMode:         forward.AccessMode,
+			ContainerResources: containerResourceLinks(service),
 		}
 		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
 			view.BrandIcon, view.LocalizationKey = definition.BrandIcon, definition.LocalizationKey
@@ -425,7 +433,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
-	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
 		return nil, serviceError("SERVICE_SECRETS_WRITE_FAILED", "The managed-service secret parameters could not be stored securely.", 500, false, err)
 	}
@@ -506,7 +514,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 			err = idErr
 		} else {
 			now := time.Now().UnixMilli()
-			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 			if err = m.registry.CreateManagedOperation(ctx, op); err == nil {
 				m.mu.Unlock()
 				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure})
@@ -634,7 +642,6 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 				op.ErrorCode = "CANCEL_CLEANUP_FAILED"
 				op.ErrorMessage = "The operation was cancelled, but its verified runtime resource could not be cleaned up."
 			}
-			m.saveAndPublish(&op)
 			desired, observed := "stopped", "error"
 			switch OperationAction(op.Action) {
 			case ActionStop:
@@ -644,7 +651,7 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 			case ActionUninstall:
 				desired, observed = service.DesiredState, service.ObservedState
 			}
-			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
+			m.finalizeAndPublish(&op, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
 			return
 		}
 		code, message, _, _ := ErrorDetails(err)
@@ -663,7 +670,8 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 	op.Stage = "completed"
 	op.ProgressCurrent = operationProgressTotal
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
-	m.saveAndPublish(&op)
+	blank := ""
+	m.finalizeAndPublish(&op, pfregistry.ManagedServicePatch{LastErrorCode: &blank, LastErrorMessage: &blank})
 }
 
 func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
@@ -677,7 +685,7 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 	}
 	stage := map[Deployment]string{DeploymentNative: "downloading", DeploymentDocker: "pulling", DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[Deployment(service.Deployment)]
 	m.progress(op, stage, 2)
-	runtimeID, artifact, err := driver.Install(ctx, service, payload, func(stage string, current int64) { m.progress(op, stage, current) })
+	runtimeID, artifact, err := driver.Install(ctx, service, payload, m.operationProgress(op))
 	if err != nil {
 		return err
 	}
@@ -742,9 +750,7 @@ func (m *Manager) runStop(ctx context.Context, service *pfregistry.ManagedServic
 }
 
 func (m *Manager) runUninstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, deleteData bool) error {
-	if err := driver.Uninstall(ctx, service, deleteData, func(stage string, current int64) {
-		m.progress(op, stage, current)
-	}); err != nil {
+	if err := driver.Uninstall(ctx, service, deleteData, m.operationProgress(op)); err != nil {
 		return err
 	}
 	if err := os.Remove(m.serviceSecretPath(service.ServiceID)); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -796,11 +802,13 @@ func (m *Manager) finishUpdateFailure(service *pfregistry.ManagedService, op *pf
 		op.State, op.Stage = "failed", "failed"
 		op.ErrorCode, op.ErrorMessage = "UPDATE_ROLLBACK_FAILED", "The update failed and Redeven could not restore the previous verified runtime."
 		desired, observed := "stopped", "error"
-		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
+		op.FinishedAtUnixMs = time.Now().UnixMilli()
+		m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
 		m.log.Error("roll back managed Web Service update", "service_id", service.ServiceID, "error", rollbackErr)
+		return
 	}
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
-	m.saveAndPublish(op)
+	m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{})
 }
 
 func (m *Manager) finishReconfigureFailure(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, err error) {
@@ -820,11 +828,13 @@ func (m *Manager) finishReconfigureFailure(service *pfregistry.ManagedService, o
 		op.State, op.Stage = "failed", "failed"
 		op.ErrorCode, op.ErrorMessage = "RECONFIGURE_ROLLBACK_FAILED", "The configuration change failed and Redeven could not restore the previous stopped Runtime."
 		desired, observed := "stopped", "error"
-		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
+		op.FinishedAtUnixMs = time.Now().UnixMilli()
+		m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
 		m.log.Error("roll back managed Web Service reconfiguration", "service_id", service.ServiceID, "error", rollbackErr)
+		return
 	}
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
-	m.saveAndPublish(op)
+	m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{})
 }
 
 func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService, operation pfregistry.ManagedOperation) {
@@ -900,18 +910,65 @@ func (m *Manager) fail(service *pfregistry.ManagedService, op *pfregistry.Manage
 	op.ErrorCode = code
 	op.ErrorMessage = message
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
-	m.saveAndPublish(op)
 	errorState, stopped := "error", "stopped"
-	_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &stopped, ObservedState: &errorState, LastErrorCode: &code, LastErrorMessage: &message})
+	m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &stopped, ObservedState: &errorState, LastErrorCode: &code, LastErrorMessage: &message})
 }
 
-func (m *Manager) progress(op *pfregistry.ManagedOperation, stage string, current int64) {
+type operationProgress func(stage string, current int64, transfer ...pfregistry.ManagedOperationTransferProgress)
+
+func discardOperationProgress(string, int64, ...pfregistry.ManagedOperationTransferProgress) {}
+
+func (m *Manager) operationProgress(op *pfregistry.ManagedOperation) operationProgress {
+	return func(stage string, current int64, transfer ...pfregistry.ManagedOperationTransferProgress) {
+		m.progress(op, stage, current, transfer...)
+	}
+}
+
+func (m *Manager) progress(op *pfregistry.ManagedOperation, stage string, current int64, transfer ...pfregistry.ManagedOperationTransferProgress) {
+	now := time.Now().UnixMilli()
+	if op.ProgressDetail == nil {
+		op.ProgressDetail = &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion}
+	} else if op.ProgressDetail.SchemaVersion == 0 {
+		op.ProgressDetail.SchemaVersion = pfregistry.ManagedOperationProgressDetailSchemaVersion
+	}
+	if op.Stage != stage || op.ProgressDetail.StageStartedAtUnixMs == 0 {
+		op.ProgressDetail.StageStartedAtUnixMs = now
+	}
 	op.Stage = stage
 	op.ProgressCurrent = current
+	op.ProgressDetail.UpdatedAtUnixMs = now
+	if len(transfer) > 0 {
+		value := transfer[len(transfer)-1]
+		op.ProgressDetail.Transfer = &value
+	} else if stage != "pulling" {
+		op.ProgressDetail.Transfer = nil
+	}
 	m.saveAndPublish(op)
 }
 func (m *Manager) saveAndPublish(op *pfregistry.ManagedOperation) {
-	_ = m.registry.UpdateManagedOperation(context.Background(), *op)
+	if err := m.registry.UpdateManagedOperation(context.Background(), *op); err != nil {
+		if m.log != nil {
+			m.log.Error("persist managed Web Service operation progress", "service_id", op.ServiceID, "operation_id", op.OperationID, "error", err)
+		}
+		return
+	}
+	refreshed, err := m.registry.GetManagedOperation(context.Background(), op.OperationID)
+	if err != nil && m.log != nil {
+		m.log.Error("reload managed Web Service operation progress", "service_id", op.ServiceID, "operation_id", op.OperationID, "error", err)
+	}
+	if refreshed != nil {
+		*op = *refreshed
+	}
+	m.publish(*op)
+}
+
+func (m *Manager) finalizeAndPublish(op *pfregistry.ManagedOperation, patch pfregistry.ManagedServicePatch) {
+	if err := m.registry.FinalizeManagedOperation(context.Background(), *op, patch); err != nil {
+		if m.log != nil {
+			m.log.Error("finalize managed Web Service operation", "service_id", op.ServiceID, "operation_id", op.OperationID, "error", err)
+		}
+		return
+	}
 	refreshed, _ := m.registry.GetManagedOperation(context.Background(), op.OperationID)
 	if refreshed != nil {
 		*op = *refreshed
@@ -1017,10 +1074,10 @@ func (m *Manager) Logs(ctx context.Context, serviceID string, tail int) (*LogRes
 }
 
 type deploymentDriver interface {
-	Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error)
+	Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error)
 	Start(context.Context, *pfregistry.ManagedService) (string, error)
 	Stop(context.Context, *pfregistry.ManagedService) error
-	Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error
+	Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error
 	CleanupPartial(context.Context, *pfregistry.ManagedService) error
 	Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error)
 }

@@ -342,18 +342,28 @@ type CreateResult struct {
 
 type ServiceView struct {
 	pfregistry.ManagedService
-	Name                       string                       `json:"name"`
-	Description                string                       `json:"description,omitempty"`
-	BrandIcon                  string                       `json:"brand_icon,omitempty"`
-	LocalizationKey            string                       `json:"localization_key,omitempty"`
-	UpdateAvailable            bool                         `json:"update_available"`
-	TargetRevision             int64                        `json:"target_revision,omitempty"`
-	TargetVersion              string                       `json:"target_version,omitempty"`
-	UpdateNotices              []TemplateNotice             `json:"update_notices,omitempty"`
-	ActiveOperation            *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
-	OperationArtifactReference string                       `json:"operation_artifact_reference,omitempty"`
-	AccessMode                 string                       `json:"access_mode"`
-	ContainerResources         []ContainerResourceLink      `json:"container_resources,omitempty"`
+	Name               string                       `json:"name"`
+	Description        string                       `json:"description,omitempty"`
+	BrandIcon          string                       `json:"brand_icon,omitempty"`
+	LocalizationKey    string                       `json:"localization_key,omitempty"`
+	UpdateAvailable    bool                         `json:"update_available"`
+	TargetRevision     int64                        `json:"target_revision,omitempty"`
+	TargetVersion      string                       `json:"target_version,omitempty"`
+	UpdateNotices      []TemplateNotice             `json:"update_notices,omitempty"`
+	ActiveOperation    *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
+	LastFailure        *ServiceFailure              `json:"last_failure,omitempty"`
+	AccessMode         string                       `json:"access_mode"`
+	ContainerResources []ContainerResourceLink      `json:"container_resources,omitempty"`
+}
+
+type ServiceFailure struct {
+	Action            string `json:"action,omitempty"`
+	Stage             string `json:"stage,omitempty"`
+	ErrorCode         string `json:"error_code"`
+	Message           string `json:"message"`
+	ArtifactReference string `json:"artifact_reference,omitempty"`
+	OperationID       string `json:"operation_id,omitempty"`
+	OccurredAtUnixMs  int64  `json:"occurred_at_unix_ms,omitempty"`
 }
 
 type ContainerResourceLink struct {

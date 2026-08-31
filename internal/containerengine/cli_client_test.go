@@ -345,6 +345,8 @@ func TestCLIClientPullImageReportsObservedLayerProgress(t *testing.T) {
 		"docker pull ghcr.io/acme/api:latest": {
 			"a1b2c3: Pulling fs layer",
 			"d4e5f6: Pulling fs layer",
+			"a1b2c3: Downloading [====>] 1.5MB/3MB",
+			"d4e5f6: Downloading [==>] 512kB / 1MB",
 			"a1b2c3: Download complete",
 			"a1b2c3: Pull complete",
 			"d4e5f6: Extracting",
@@ -368,8 +370,61 @@ func TestCLIClientPullImageReportsObservedLayerProgress(t *testing.T) {
 		t.Fatalf("progress = %+v, want resolving and observed pull phases", progress)
 	}
 	last := progress[len(progress)-1]
-	if last.Phase != "verifying" || last.Completed != 2 || last.Total != 2 || last.Unit != "layers" {
-		t.Fatalf("last progress = %+v, want verified 2/2 layers", last)
+	if last.Phase != "verifying" || last.CompletedLayers != 2 || last.TotalLayers != 2 || last.DownloadedBytes != 4_000_000 || last.TotalBytes != 4_000_000 {
+		t.Fatalf("last progress = %+v, want verified 2/2 layers and 4MB", last)
+	}
+}
+
+func TestCLIClientPullImageReportsPodmanBytesAndLayers(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCommandRunner{streams: map[string][]string{
+		"podman pull quay.io/acme/api:latest": {
+			"Copying blob a1b2c3 [========>] 1.5 MiB / 3 MiB",
+			"Copying blob d4e5f6 [====>] 512 KiB / 1 MiB",
+			"Copying blob a1b2c3 done   |",
+			"Copying blob d4e5f6 done   |",
+			"Writing manifest to image destination",
+		},
+	}}
+	client := &CLIClient{Runner: runner}
+	var progress []ImagePullProgress
+	result, err := client.PullImageWithProgress(context.Background(), EnginePodman, "quay.io/acme/api:latest", func(_ context.Context, item ImagePullProgress) error {
+		progress = append(progress, item)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("PullImageWithProgress() error = %v", err)
+	}
+	if !result.Completed || len(progress) < 4 {
+		t.Fatalf("result=%+v progress=%+v", result, progress)
+	}
+	last := progress[len(progress)-1]
+	if last.Phase != "verifying" || last.CompletedLayers != 2 || last.TotalLayers != 2 || last.DownloadedBytes != 4*1024*1024 || last.TotalBytes != 4*1024*1024 {
+		t.Fatalf("last progress = %+v, want verified Podman 2/2 layers and 4 MiB", last)
+	}
+}
+
+func TestImagePullProgressOmitsBytesUntilEveryObservedLayerHasTotal(t *testing.T) {
+	t.Parallel()
+
+	var progress []ImagePullProgress
+	tracker := newImagePullProgressTracker(EngineDocker, func(_ context.Context, item ImagePullProgress) error {
+		progress = append(progress, item)
+		return nil
+	})
+	for _, line := range []string{
+		"a1b2c3: Pulling fs layer",
+		"d4e5f6: Pulling fs layer",
+		"a1b2c3: Downloading [====>] 1MB/2MB",
+	} {
+		if err := tracker.consume(context.Background(), line); err != nil {
+			t.Fatal(err)
+		}
+	}
+	last := progress[len(progress)-1]
+	if last.DownloadedBytes != 0 || last.TotalBytes != 0 || last.TotalLayers != 2 {
+		t.Fatalf("partial byte totals must remain indeterminate: %+v", last)
 	}
 }
 

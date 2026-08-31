@@ -186,7 +186,7 @@ func (*recordingReconfigureDriver) FindReconfiguredRuntime(context.Context, *pfr
 	return "", nil
 }
 
-func (*recordingReconfigureDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error) {
+func (*recordingReconfigureDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 func (*recordingReconfigureDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {
@@ -195,7 +195,7 @@ func (*recordingReconfigureDriver) Start(context.Context, *pfregistry.ManagedSer
 func (*recordingReconfigureDriver) Stop(context.Context, *pfregistry.ManagedService) error {
 	return errors.New("unexpected stop")
 }
-func (*recordingReconfigureDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
+func (*recordingReconfigureDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {
 	return errors.New("unexpected uninstall")
 }
 func (*recordingReconfigureDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
