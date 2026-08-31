@@ -767,7 +767,7 @@ func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID
 		return err
 	}
 	_ = db
-	_ = s.broadcastThreadSummary(endpointID, threadID)
+	s.requestCanonicalThreadSummary(endpointID, threadID)
 	return nil
 }
 
@@ -796,11 +796,9 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 	if err != nil {
 		return nil, err
 	}
-	// Summary delivery observes the active run and may wait on Floret. Keep it
-	// out of the pin receipt path so metadata changes remain responsive.
-	go func() {
-		_ = s.broadcastThreadSummary(endpointID, threadID)
-	}()
+	// Summary delivery is owned by the lifecycle-bound publisher so metadata
+	// changes remain responsive without starting an untracked goroutine.
+	s.requestCanonicalThreadSummary(endpointID, threadID)
 	// Pinning is product metadata, independent of the active run lifecycle.
 	// Return a receipt instead of waiting for a canonical transcript read.
 	return &ThreadView{ThreadID: threadID, PinnedAtUnixMs: pinnedAt}, nil
@@ -985,7 +983,7 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if err := db.UpdateThreadModelAndReasoningSelection(ctx, endpointID, threadID, modelID, normalizedReasoningJSON); err != nil {
 		return err
 	}
-	_ = s.broadcastThreadSummary(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))
+	s.requestCanonicalThreadSummary(endpointID, threadID)
 	return nil
 }
 
@@ -1037,7 +1035,7 @@ func (s *Service) SetThreadReasoningSelection(ctx context.Context, meta *session
 	if err := db.UpdateThreadReasoningSelection(ctx, endpointID, threadID, normalizedJSON); err != nil {
 		return err
 	}
-	_ = s.broadcastThreadSummary(endpointID, threadID)
+	s.requestCanonicalThreadSummary(endpointID, threadID)
 	return nil
 }
 
@@ -1071,7 +1069,7 @@ func (s *Service) ClearThreadReasoningSelection(ctx context.Context, meta *sessi
 	if err := db.UpdateThreadReasoningSelection(ctx, endpointID, threadID, ""); err != nil {
 		return err
 	}
-	_ = s.broadcastThreadSummary(endpointID, threadID)
+	s.requestCanonicalThreadSummary(endpointID, threadID)
 	return nil
 }
 
@@ -1110,7 +1108,7 @@ func (s *Service) SetThreadPermissionType(ctx context.Context, meta *session.Met
 	if err := db.UpdateThreadPermissionType(ctx, endpointID, threadID, permissionTypeString(normalizedPermissionType)); err != nil {
 		return err
 	}
-	_ = s.broadcastThreadSummary(endpointID, threadID)
+	s.requestCanonicalThreadSummary(endpointID, threadID)
 	return nil
 }
 

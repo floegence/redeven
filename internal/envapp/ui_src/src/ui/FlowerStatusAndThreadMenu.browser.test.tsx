@@ -111,7 +111,7 @@ describe('Flower status motion and thread menu', () => {
     expect(getComputedStyle(dots!).animationName).toBe('none');
   });
 
-  it('keeps the real floating menu open across live thread metadata updates', async () => {
+  it('keeps the real floating menu open across live metadata updates and row replacement', async () => {
     await page.viewport(800, 600);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -142,11 +142,83 @@ describe('Flower status motion and thread menu', () => {
     const menu = document.querySelector('[role="menu"]');
     expect(menu).not.toBeNull();
 
-    setItems([thread({ title: 'Updated live task', status: 'waiting_approval', updated_at_ms: 2 })]);
+    const originalCard = host.querySelector('[data-flower-thread-card]');
+    setItems([thread({ title: 'Updated live task', status: 'waiting_approval', pinned: true, updated_at_ms: 2 })]);
     await nextFrame();
 
     expect(document.querySelector('[role="menu"]')).toBe(menu);
     expect(menu?.getAttribute('aria-label')).toContain('Updated live task');
+    expect(originalCard?.isConnected).toBe(false);
+  });
+
+  it('uses one stable menu contract for pointer, button, and keyboard entry', async () => {
+    await page.viewport(800, 600);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    disposers.push(render(() => (
+      <FlowerThreadList
+        items={[thread()]}
+        activeThreadID="thread-menu"
+        query=""
+        onQueryChange={() => undefined}
+        onSelect={() => undefined}
+        onRefresh={() => undefined}
+        onMenuAction={() => undefined}
+        canFork
+        canRename
+        canPin
+      />
+    ), host));
+    await nextFrame();
+
+    const card = host.querySelector('[data-flower-thread-card]') as HTMLElement;
+    const selectButton = card.querySelector('.flower-thread-card-select-button') as HTMLButtonElement;
+    const menuButton = card.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
+    const listScroll = host.querySelector('.flower-scroll') as HTMLElement;
+
+    for (let iteration = 0; iteration < 3; iteration += 1) {
+      card.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 120 + iteration,
+        clientY: 120 + iteration,
+      }));
+      await nextFrame();
+      expect(document.querySelector('[role="menu"]')).not.toBeNull();
+      window.dispatchEvent(new Event('scroll'));
+      await nextFrame();
+      expect(document.querySelector('[role="menu"]')).not.toBeNull();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await nextFrame();
+      expect(document.querySelector('[role="menu"]')).toBeNull();
+      expect(document.activeElement).toBe(selectButton);
+    }
+
+    menuButton.click();
+    await nextFrame();
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await nextFrame();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(menuButton);
+
+    menuButton.click();
+    await nextFrame();
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    listScroll.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(menuButton);
+
+    selectButton.focus();
+    selectButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }));
+    await nextFrame();
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
+    window.dispatchEvent(new Event('resize'));
+    await nextFrame();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(selectButton);
   });
 
   it('hides the pending label while thread actions are focused', async () => {

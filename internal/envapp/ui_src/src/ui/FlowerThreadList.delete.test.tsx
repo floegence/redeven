@@ -64,6 +64,11 @@ function thread(): FlowerThreadListItem {
   };
 }
 
+async function settleMenuFocus(): Promise<void> {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await Promise.resolve();
+}
+
 function renderList(showDeleteAction = true, initialItems: readonly FlowerThreadListItem[] = [thread()]) {
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -95,7 +100,7 @@ describe('FlowerThreadList deletion entry', () => {
     const menuTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
 
     menuTrigger.click();
-    await Promise.resolve();
+    await settleMenuFocus();
 
     const destructiveItems = host.querySelectorAll('[role="menuitem"][data-destructive="true"]');
     expect(destructiveItems).toHaveLength(1);
@@ -111,7 +116,7 @@ describe('FlowerThreadList deletion entry', () => {
   it('does not offer deletion when the surface adapter lacks that capability', async () => {
     const { host } = renderList(false);
     (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
-    await Promise.resolve();
+    await settleMenuFocus();
 
     expect(host.querySelector('[role="menuitem"][data-destructive="true"]')).toBeNull();
     expect(host.querySelector('[data-icon="trash"]')).toBeNull();
@@ -120,7 +125,7 @@ describe('FlowerThreadList deletion entry', () => {
   it('keeps an open menu on the latest thread metadata', async () => {
     const { host, onMenuAction, setItems } = renderList();
     (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
-    await Promise.resolve();
+    await settleMenuFocus();
 
     setItems([{ ...thread(), title: 'Updated release review', working_dir: '/workspace/latest', pinned: true }]);
     await Promise.resolve();
@@ -144,7 +149,7 @@ describe('FlowerThreadList deletion entry', () => {
   it('keeps an open menu while its thread remains present but leaves the filtered rows', async () => {
     const { host, setItems } = renderList();
     (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
-    await Promise.resolve();
+    await settleMenuFocus();
 
     setItems([{ ...thread(), title: '' }]);
     await Promise.resolve();
@@ -157,7 +162,7 @@ describe('FlowerThreadList deletion entry', () => {
     const { host } = renderList();
     const menuTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
     menuTrigger.click();
-    await Promise.resolve();
+    await settleMenuFocus();
     expect(host.querySelector('[role="menu"]')).toBeTruthy();
 
     menuTrigger.focus();
@@ -166,11 +171,11 @@ describe('FlowerThreadList deletion entry', () => {
     expect(host.querySelector('[role="menu"]')).toBeTruthy();
   });
 
-  it('closes on search, selection, outside focus, and Escape', async () => {
+  it('closes on search, selection, outside pointer or focus, and Escape', async () => {
     const { host, setQuery, setActiveThreadID } = renderList();
     const open = async () => {
       (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
-      await Promise.resolve();
+      await settleMenuFocus();
       expect(host.querySelector('[role="menu"]')).toBeTruthy();
     };
 
@@ -191,6 +196,11 @@ describe('FlowerThreadList deletion entry', () => {
     await open();
     const outside = document.createElement('button');
     document.body.appendChild(outside);
+    outside.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    await open();
     outside.focus();
     await Promise.resolve();
     expect(host.querySelector('[role="menu"]')).toBeNull();
@@ -208,6 +218,10 @@ describe('FlowerThreadList deletion entry', () => {
     await open();
     window.dispatchEvent(new Event('scroll'));
     await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+
+    (host.querySelector('.flower-scroll') as HTMLElement).dispatchEvent(new Event('scroll'));
+    await Promise.resolve();
     expect(host.querySelector('[role="menu"]')).toBeNull();
 
     await open();
@@ -220,7 +234,7 @@ describe('FlowerThreadList deletion entry', () => {
     const { host, setItems } = renderList();
     const originalTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
     originalTrigger.click();
-    await Promise.resolve();
+    await settleMenuFocus();
 
     setItems([{ ...thread(), pinned: true }]);
     await Promise.resolve();
@@ -236,7 +250,7 @@ describe('FlowerThreadList deletion entry', () => {
   it('closes an open menu when a same-length refresh replaces its thread', async () => {
     const { host, setItems } = renderList();
     (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
-    await Promise.resolve();
+    await settleMenuFocus();
     expect(host.querySelector('[role="menu"]')).toBeTruthy();
 
     setItems([{ ...thread(), thread_id: 'thread-replacement', title: 'Replacement' }]);
@@ -252,7 +266,7 @@ describe('FlowerThreadList deletion entry', () => {
 
     selectButton.focus();
     selectButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
-    await Promise.resolve();
+    await settleMenuFocus();
 
     expect(host.querySelector('[role="menu"]')).toBeTruthy();
     expect(menuTrigger.className).toContain('flower-thread-card-menu-button');

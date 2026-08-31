@@ -35,6 +35,7 @@ const (
 	flowerLiveSubscriberCloseBatchQueueLimit  flowerLiveSubscriberCloseReason = "batch_queue_limit"
 	flowerLiveSubscriberCloseByteQueueLimit   flowerLiveSubscriberCloseReason = "byte_queue_limit"
 	flowerLiveSubscriberCloseGlobalQueueLimit flowerLiveSubscriberCloseReason = "global_queue_limit"
+	flowerLiveSubscriberCloseSummaryRefresh   flowerLiveSubscriberCloseReason = "summary_refresh_failed"
 )
 
 type FlowerLiveStreamKind string
@@ -439,7 +440,7 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	service.flowerLiveMetrics.subscriberDropped(reason)
 	if service.log != nil && reason != flowerLiveSubscriberCloseClient && reason != flowerLiveSubscriberCloseService {
 		service.log.Warn(
-			"ai: Flower live subscriber closed by stream limit",
+			"ai: Flower live subscriber closed by reconnect fence",
 			"endpoint_id", logsafe.Text(subscriber.endpointID, 256),
 			"subscriber_id", subscriber.id,
 			"reason", reason,
@@ -448,6 +449,23 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 		)
 	}
 	close(subscriber.queue)
+}
+
+func (service *Service) fenceFlowerLiveEndpoint(endpointID string) {
+	if service == nil {
+		return
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	if endpointID == "" {
+		return
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	for _, subscriber := range service.flowerLiveSubscribers {
+		if subscriber.endpointID == endpointID {
+			closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseSummaryRefresh)
+		}
+	}
 }
 
 func closeFlowerLiveSubscribersLocked(service *Service) {

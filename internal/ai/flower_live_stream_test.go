@@ -359,7 +359,7 @@ func TestFlowerWorkspaceSummaryFrameContainsSnapshotNotProjectionEvent(t *testin
 		t.Fatalf("ready kind=%q", ready.Kind)
 	}
 
-	if err := svc.broadcastThreadSummary(meta.EndpointID, thread.ThreadID); err != nil {
+	if err := svc.publishCanonicalThreadSummary(ctx, meta.EndpointID, thread.ThreadID); err != nil {
 		t.Fatal(err)
 	}
 	frame := nextFlowerLiveStreamFrame(t, subscription)
@@ -378,6 +378,51 @@ func TestFlowerWorkspaceSummaryFrameContainsSnapshotNotProjectionEvent(t *testin
 	}
 	if envelope.Current != nil {
 		t.Fatalf("summary frame mixed detail/projection state: %s", frame.Data)
+	}
+}
+
+func TestFlowerLiveSummaryFailureReconnectsToCanonicalBaseline(t *testing.T) {
+	ctx := context.Background()
+	svc := newSendTurnTestService(t)
+	meta := &session.Meta{
+		ChannelID: "channel_summary_reconnect", EndpointID: "env_summary_reconnect",
+		UserPublicID: "user_summary_reconnect", NamespacePublicID: "namespace_summary_reconnect",
+		CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	thread, err := svc.CreateThread(ctx, meta, "Canonical reconnect title", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
+		t.Fatalf("ready kind=%q", ready.Kind)
+	}
+
+	svc.handleCanonicalThreadSummaryFailure(meta.EndpointID, thread.ThreadID, errors.New("summary read failed"))
+	nextCtx, cancelNext := context.WithTimeout(ctx, time.Second)
+	defer cancelNext()
+	if frame, nextErr := subscription.Next(nextCtx); !errors.Is(nextErr, io.EOF) || frame != nil {
+		t.Fatalf("fenced subscription frame=%#v error=%v, want EOF", frame, nextErr)
+	}
+
+	reconnected, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reconnected.Close()
+	ready := nextFlowerLiveStreamFrame(t, reconnected)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(ready.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if ready.Kind != FlowerLiveStreamReady || len(envelope.Summaries) != 1 {
+		t.Fatalf("reconnected baseline=%s", ready.Data)
+	}
+	if got := envelope.Summaries[0]; got.ThreadID != thread.ThreadID || got.Title != "Canonical reconnect title" || got.TitleStatus != string(flruntime.ThreadTitleStatusReady) {
+		t.Fatalf("reconnected canonical summary=%#v", got)
 	}
 }
 

@@ -177,13 +177,14 @@ type FlowerThreadContextMenuProps = Readonly<{
   showDeleteAction: boolean;
   actionsBusy: boolean;
   busyAction: FlowerThreadMenuAction | null;
-  restore?: HTMLElement;
+  resolveRestore: () => HTMLElement | undefined;
   onAction: (action: FlowerThreadMenuAction, item: FlowerThreadListItem) => void;
   onClose: () => void;
 }>;
 
 const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props) => {
   let menuRef: HTMLDivElement | undefined;
+  let disposed = false;
   const focusableItems = () => Array.from(menuRef?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? []);
   const focusItem = (delta: number) => {
     const items = focusableItems();
@@ -206,7 +207,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
   };
   createEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
-      if (eventPathContains(event, menuRef) || eventPathContains(event, props.restore)) return;
+      if (eventPathContains(event, menuRef) || eventPathContains(event, props.resolveRestore())) return;
       props.onClose();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -238,25 +239,19 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
         items[items.length - 1]?.focus();
       }
     };
-    const onFocusIn = (event: FocusEvent) => {
-      if (eventPathContains(event, menuRef) || eventPathContains(event, props.restore)) return;
-      props.onClose();
-    };
-    const onScrollOrResize = () => props.onClose();
+    const onResize = () => props.onClose();
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('focusin', onFocusIn, true);
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
-    queueMicrotask(() => {
+    window.addEventListener('resize', onResize);
+    const focusFrame = requestAnimationFrame(() => {
       focusMenu();
     });
     onCleanup(() => {
+      disposed = true;
+      cancelAnimationFrame(focusFrame);
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown, true);
-      document.removeEventListener('focusin', onFocusIn, true);
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('resize', onResize);
     });
   });
   const action = (kind: FlowerThreadMenuAction) => {
@@ -300,7 +295,17 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
         role="menu"
         tabIndex={-1}
         class="flower-thread-context-menu"
-		aria-label={props.copy.contextMenuLabel(props.item.title.trim())}
+        aria-label={props.copy.contextMenuLabel(props.item.title.trim())}
+        onFocusOut={(event) => {
+          const next = event.relatedTarget;
+          if (next instanceof Node && (menuRef?.contains(next) || props.resolveRestore()?.contains(next))) return;
+          queueMicrotask(() => {
+            if (disposed) return;
+            const active = document.activeElement;
+            if (active instanceof Node && (menuRef?.contains(active) || props.resolveRestore()?.contains(active))) return;
+            props.onClose();
+          });
+        }}
       >
         {itemButton('copy_thread_id', props.copy.copyThreadID, <Copy class="h-3.5 w-3.5" />)}
         {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
@@ -354,11 +359,12 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   )));
   const groupByKey = createMemo(() => new Map(groups().map((group) => [group.key, group] as const)));
   const groupKeys = createMemo(() => groups().map((group) => group.key));
+  // IMPORTANT: An open thread menu is owned by ThreadID and must survive summary
+  // refreshes and row replacement; only the explicit lifecycle events below may close it.
   const [menu, setMenu] = createSignal<{
     threadID: string;
     x: number;
     y: number;
-    restore?: HTMLElement;
     restoreControl: 'menu' | 'select';
   } | null>(null);
   const menuPresentation = createMemo(() => {
@@ -376,7 +382,6 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     event.stopPropagation();
     let x = 0;
     let y = 0;
-    let restore: HTMLElement | undefined;
     let restoreControl: 'menu' | 'select' = 'select';
     if (event instanceof MouseEvent && event.clientX > 0 && event.clientY > 0) {
       x = event.clientX;
@@ -388,21 +393,22 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
       y = rect ? rect.top + 18 : 24;
     }
     if (event.currentTarget instanceof HTMLButtonElement) {
-      restore = event.currentTarget;
       restoreControl = event.currentTarget.classList.contains('flower-thread-card-menu-button') ? 'menu' : 'select';
-    } else if (event.currentTarget instanceof HTMLElement) {
-      restore = event.currentTarget.querySelector('button') ?? undefined;
     }
-    setMenu({ threadID: item.thread_id, x, y, restore, restoreControl });
+    setMenu({ threadID: item.thread_id, x, y, restoreControl });
   };
 
   const resolveMenuRestore = (state: NonNullable<ReturnType<typeof menu>>): HTMLElement | undefined => {
-    if (state.restore?.isConnected) return state.restore;
     const card = Array.from(listRef?.querySelectorAll<HTMLElement>('[data-flower-thread-card]') ?? [])
       .find((candidate) => candidate.getAttribute('data-thread-id') === state.threadID);
     return card?.querySelector<HTMLElement>(state.restoreControl === 'menu'
       ? '.flower-thread-card-menu-button'
       : '.flower-thread-card-select-button') ?? undefined;
+  };
+
+  const resolveCurrentMenuRestore = (): HTMLElement | undefined => {
+    const state = menu();
+    return state ? resolveMenuRestore(state) : undefined;
   };
 
   const closeMenu = () => {
@@ -452,7 +458,12 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           onInput={(event) => props.onQueryChange(event.currentTarget.value)}
         />
       </label>
-      <div class="flower-scroll flex-1 space-y-2">
+      <div
+        class="flower-scroll flex-1 space-y-2"
+        onScroll={() => {
+          if (menu()) closeMenu();
+        }}
+      >
         <Show when={!showLoadingSkeleton()} fallback={(
           <div class="flower-thread-warmup-list" role="status" aria-live="polite" aria-label={copy().warmupDescription}>
             <For each={warmupRows}>
@@ -523,7 +534,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             showDeleteAction={props.showDeleteAction === true}
             actionsBusy={!!props.actionsBusy}
             busyAction={props.busyThreadID === state().threadID ? props.busyAction ?? null : null}
-            restore={state().restore}
+            resolveRestore={resolveCurrentMenuRestore}
             onClose={closeMenu}
             onAction={(action, item) => {
               const restore = resolveMenuRestore(state());
