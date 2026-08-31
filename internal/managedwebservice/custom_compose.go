@@ -452,7 +452,7 @@ func (d *composeTemplateDriver) verifyOwnedProject(ctx context.Context, service 
 	}
 	seen := make(map[string]struct{}, len(details.Containers))
 	for _, child := range details.Containers {
-		_, known := expectedImages[child.Service]
+		expectedImage, known := expectedImages[child.Service]
 		if !known {
 			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The managed Compose project contains an unexpected service.", 409, false, nil)
 		}
@@ -463,6 +463,13 @@ func (d *composeTemplateDriver) verifyOwnedProject(ctx context.Context, service 
 		matches, err := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID, Key: managedServiceLabel, Value: service.ServiceID})
 		if err != nil || !matches {
 			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A managed Compose container no longer has the exact service identity.", 409, false, err)
+		}
+		inspected, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID})
+		if err != nil {
+			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISSING", "A managed Compose container could not be inspected.", 409, false, err)
+		}
+		if inspected.Container.ContainerID != child.ContainerID || inspected.Container.Image.Reference != expectedImage || !inspected.Container.Image.DigestPinned {
+			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A managed Compose container image identity has changed.", 409, false, nil)
 		}
 	}
 	return details, nil
@@ -531,14 +538,33 @@ func (d *composeTemplateDriver) Stop(ctx context.Context, service *pfregistry.Ma
 	return nil
 }
 
-func (d *composeTemplateDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool) error {
+func (d *composeTemplateDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
 	if strings.TrimSpace(service.RuntimeIdentity) != "" {
-		if _, err := d.verifyProject(ctx, service); err != nil {
+		expectedImages, err := d.expectedImages(service)
+		if err != nil {
 			return err
 		}
-		if err := d.adapter.RemoveComposeDeployment(ctx, d.request(service), deleteData); err != nil {
-			return serviceError("COMPOSE_REMOVE_FAILED", "The exact managed Compose project could not be removed.", 502, true, err)
+		details, err := d.verifyOwnedProject(ctx, service, expectedImages)
+		if err != nil {
+			return err
 		}
+		progress("stopping", 2)
+		if len(details.Containers) > 0 {
+			if err := d.adapter.StopComposeDeployment(ctx, d.request(service)); err != nil {
+				return serviceError("STOP_FAILED", "The exact managed Compose project could not be stopped.", 502, true, err)
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			progress("uninstalling", 5)
+			if err := d.adapter.RemoveComposeDeployment(context.Background(), d.request(service), deleteData); err != nil {
+				return serviceError("COMPOSE_REMOVE_FAILED", "The exact managed Compose project could not be removed.", 502, true, err)
+			}
+		} else {
+			progress("uninstalling", 5)
+		}
+	} else {
+		progress("uninstalling", 5)
 	}
 	return os.RemoveAll(filepath.Dir(d.request(service).ConfigPath))
 }

@@ -220,16 +220,21 @@ func (d *hostScriptDriver) Stop(ctx context.Context, service *pfregistry.Managed
 	}
 }
 
-func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool) error {
+func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+	progress("stopping", 2)
 	if err := d.Stop(ctx, service); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	progress("uninstalling", 5)
 	spec, _, err := effectiveSpecFromService(service)
 	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(spec.Host.UninstallScript) != "" {
-		if err := d.runOneShot(ctx, service, spec.Host.UninstallScript, service.ArtifactReference, "uninstall"); err != nil {
+		if err := d.runOneShot(context.Background(), service, spec.Host.UninstallScript, service.ArtifactReference, "uninstall"); err != nil {
 			return serviceError("UNINSTALL_SCRIPT_FAILED", "The custom host uninstall script failed.", 502, true, err)
 		}
 	}

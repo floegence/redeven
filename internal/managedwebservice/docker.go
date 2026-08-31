@@ -252,10 +252,17 @@ func (d *dockerDriver) removeExactContainer(ctx context.Context, service *pfregi
 	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return nil
 	}
-	if err := d.verifyExactContainer(ctx, service, service.ArtifactReference); err != nil {
+	if err := d.Stop(ctx, service); err != nil {
 		return err
 	}
-	if err := d.Stop(ctx, service); err != nil {
+	return d.removeStoppedExactContainer(ctx, service)
+}
+
+func (d *dockerDriver) removeStoppedExactContainer(ctx context.Context, service *pfregistry.ManagedService) error {
+	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
+		return nil
+	}
+	if err := d.verifyExactContainer(ctx, service, service.ArtifactReference); err != nil {
 		return err
 	}
 	removed, err := d.adapter.Remove(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
@@ -265,9 +272,56 @@ func (d *dockerDriver) removeExactContainer(ctx context.Context, service *pfregi
 	return nil
 }
 
-func (d *dockerDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool) error {
-	if err := d.removeExactContainer(ctx, service); err != nil {
+func (d *dockerDriver) ownedContainer(ctx context.Context, service *pfregistry.ManagedService) (containerengine.ContainerInspect, bool, error) {
+	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
+		return containerengine.ContainerInspect{}, false, nil
+	}
+	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
+	if errors.Is(err, containerengine.ErrContainerNotFound) {
+		return containerengine.ContainerInspect{}, false, nil
+	}
+	if err != nil {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_INSPECTION_FAILED", "The managed Docker container could not be inspected before removal.", 502, true, err)
+	}
+	container := response.Container
+	labelMatches, labelErr := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, Key: managedServiceLabel, Value: service.ServiceID})
+	if labelErr != nil || container.ContainerID != service.RuntimeIdentity || container.Name != dockerContainerName(service.ServiceID) || container.Image.Reference != service.ArtifactReference || !container.Image.DigestPinned || !labelMatches {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_IDENTITY_MISMATCH", "The exact managed Docker container identity or audited image has changed.", 409, false, labelErr)
+	}
+	return container, true, nil
+}
+
+func (d *dockerDriver) stopOwnedContainer(ctx context.Context, service *pfregistry.ManagedService) (bool, error) {
+	container, exists, err := d.ownedContainer(ctx, service)
+	if err != nil || !exists {
+		return exists, err
+	}
+	if container.State != containerengine.ContainerStateRunning && container.State != containerengine.ContainerStateRestarting && container.State != containerengine.ContainerStatePaused {
+		return true, nil
+	}
+	stopped, err := d.adapter.Stop(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, TimeoutSec: 10})
+	if err != nil || !stopped.Completed || stopped.ContainerID != service.RuntimeIdentity {
+		return false, serviceError("STOP_FAILED", "The exact managed Docker container could not be stopped.", 502, true, err)
+	}
+	return true, nil
+}
+
+func (d *dockerDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+	progress("stopping", 2)
+	exists, err := d.stopOwnedContainer(ctx, service)
+	if err != nil {
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	progress("uninstalling", 5)
+	background := context.Background()
+	if exists {
+		removed, err := d.adapter.Remove(background, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
+		if !errors.Is(err, containerengine.ErrContainerNotFound) && (err != nil || !removed.Completed || removed.ContainerID != service.RuntimeIdentity) {
+			return serviceError("CONTAINER_REMOVE_FAILED", "The exact managed Docker container could not be removed.", 502, true, err)
+		}
 	}
 	if !deleteData {
 		return nil
@@ -284,11 +338,11 @@ func (d *dockerDriver) Uninstall(ctx context.Context, service *pfregistry.Manage
 	if err := decodeStrictJSON(raw, &marker); err != nil {
 		return serviceError("DATA_IDENTITY_INVALID", "The retained Docker data identity is invalid.", 409, false, err)
 	}
-	volume, err := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: marker.Name})
+	volume, err := d.adapter.InspectVolume(background, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: marker.Name})
 	if err != nil || volume.CreatedAtUnixMs != marker.CreatedAtUnixMs {
 		return serviceError("DATA_IDENTITY_MISMATCH", "Redeven will not delete a Docker volume whose identity has changed.", 409, false, err)
 	}
-	if err := d.adapter.RemoveVolume(ctx, containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: marker.Name}); err != nil {
+	if err := d.adapter.RemoveVolume(background, containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: marker.Name}); err != nil {
 		return serviceError("DATA_REMOVE_FAILED", "The DeepSeek Harness data volume could not be deleted.", 502, true, err)
 	}
 	return os.Remove(markerPath)

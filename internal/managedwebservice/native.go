@@ -617,10 +617,15 @@ func (d *nativeDriver) Stop(ctx context.Context, service *pfregistry.ManagedServ
 	}
 }
 
-func (d *nativeDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool) error {
+func (d *nativeDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+	progress("stopping", 2)
 	if err := d.Stop(ctx, service); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	progress("uninstalling", 5)
 	if err := os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "native")); err != nil {
 		return err
 	}

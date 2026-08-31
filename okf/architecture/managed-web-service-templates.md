@@ -48,7 +48,7 @@ An installed service retains its canonical definition and SHA-256. Editing its s
 
 ## Persistence and API
 
-Registry schema v3 adds `managed_web_service_templates` and idempotent template request records. A custom record stores metadata, deployment kind, revision, canonical JSON, SHA-256, duplicate lineage, unique service-family identity, and timestamps. Secrets are never part of template records.
+Registry schema v3 adds `managed_web_service_templates` and idempotent template request records. A custom record stores metadata, deployment kind, revision, canonical JSON, SHA-256, duplicate lineage, unique service-family identity, and timestamps. Reads verify the SHA-256 of the exact stored JSON bytes before strict typed decoding and policy validation; decoded structures are not reserialized into a competing identity. Secrets are never part of template records.
 
 Template routes are:
 

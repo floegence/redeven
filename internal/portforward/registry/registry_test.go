@@ -309,8 +309,20 @@ func TestOpen_MigratesV4ManagedConfigurationAtomically(t *testing.T) {
 			t.Fatalf("%s resource identity was not migrated: %v", field, item)
 		}
 	}
-	if len(service.TemplateSnapshotSHA256) != 64 {
-		t.Fatalf("migrated snapshot digest = %q", service.TemplateSnapshotSHA256)
+	snapshotDigest := sha256.Sum256([]byte(service.TemplateSnapshotJSON))
+	if service.TemplateSnapshotSHA256 != hex.EncodeToString(snapshotDigest[:]) {
+		t.Fatalf("migrated snapshot digest = %q, want exact document identity", service.TemplateSnapshotSHA256)
+	}
+	template, err := r.GetManagedTemplate(context.Background(), "template")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if template == nil {
+		t.Fatal("migrated custom template is missing")
+	}
+	templateDigest := sha256.Sum256([]byte(template.SpecJSON))
+	if template.SpecSHA256 != hex.EncodeToString(templateDigest[:]) {
+		t.Fatalf("migrated custom template digest = %q, want exact document identity", template.SpecSHA256)
 	}
 	resources, err := r.ListManagedServiceResources(context.Background(), service.ServiceID)
 	if err != nil || len(resources) != 0 {

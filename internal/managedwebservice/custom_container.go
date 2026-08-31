@@ -476,14 +476,12 @@ func (d *containerTemplateDriver) verifyExactContainer(ctx context.Context, serv
 	if strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return serviceError("CONTAINER_IDENTITY_MISSING", "The managed template container identity is missing.", 409, false, nil)
 	}
-	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
+	container, exists, err := d.ownedContainer(ctx, service)
 	if err != nil {
-		return serviceError("CONTAINER_IDENTITY_MISSING", "The exact managed template container no longer exists.", 409, false, err)
+		return err
 	}
-	container := response.Container
-	labelMatches, labelErr := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, Key: managedServiceLabel, Value: service.ServiceID})
-	if labelErr != nil || container.ContainerID != service.RuntimeIdentity || container.Name != customContainerName(service.ServiceID) || container.Image.Reference != service.ArtifactReference || !container.Image.DigestPinned || !labelMatches {
-		return serviceError("CONTAINER_IDENTITY_MISMATCH", "The exact managed template container identity or image has changed.", 409, false, labelErr)
+	if !exists {
+		return serviceError("CONTAINER_IDENTITY_MISSING", "The exact managed template container no longer exists.", 409, false, nil)
 	}
 	expectedMounts, err := d.containerMounts(ctx, service, spec.Container.Mounts, false)
 	if err != nil {
@@ -533,6 +531,40 @@ func (d *containerTemplateDriver) verifyExactContainer(ctx context.Context, serv
 		return serviceError("CONTAINER_NETWORK_MISMATCH", "The managed template container no longer matches its effective published-port configuration.", 409, false, nil)
 	}
 	return nil
+}
+
+func (d *containerTemplateDriver) ownedContainer(ctx context.Context, service *pfregistry.ManagedService) (containerengine.ContainerInspect, bool, error) {
+	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
+		return containerengine.ContainerInspect{}, false, nil
+	}
+	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
+	if errors.Is(err, containerengine.ErrContainerNotFound) {
+		return containerengine.ContainerInspect{}, false, nil
+	}
+	if err != nil {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_INSPECTION_FAILED", "The managed template container could not be inspected before removal.", 502, true, err)
+	}
+	container := response.Container
+	labelMatches, labelErr := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, Key: managedServiceLabel, Value: service.ServiceID})
+	if labelErr != nil || container.ContainerID != service.RuntimeIdentity || container.Name != customContainerName(service.ServiceID) || container.Image.Reference != service.ArtifactReference || !container.Image.DigestPinned || !labelMatches {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_IDENTITY_MISMATCH", "The exact managed template container identity or image has changed.", 409, false, labelErr)
+	}
+	return container, true, nil
+}
+
+func (d *containerTemplateDriver) stopOwnedContainer(ctx context.Context, service *pfregistry.ManagedService) (bool, error) {
+	container, exists, err := d.ownedContainer(ctx, service)
+	if err != nil || !exists {
+		return exists, err
+	}
+	if container.State != containerengine.ContainerStateRunning && container.State != containerengine.ContainerStateRestarting && container.State != containerengine.ContainerStatePaused {
+		return true, nil
+	}
+	stopped, err := d.adapter.Stop(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, TimeoutSec: 10})
+	if err != nil || !stopped.Completed || stopped.ContainerID != service.RuntimeIdentity {
+		return false, serviceError("STOP_FAILED", "The exact managed template container could not be stopped.", 502, true, err)
+	}
+	return true, nil
 }
 
 func namespaceModeMatches(actual, expected string) bool {
@@ -644,9 +676,22 @@ func (d *containerTemplateDriver) removeExactContainer(ctx context.Context, serv
 	return nil
 }
 
-func (d *containerTemplateDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool) error {
-	if err := d.removeExactContainer(ctx, service); err != nil {
+func (d *containerTemplateDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+	progress("stopping", 2)
+	exists, err := d.stopOwnedContainer(ctx, service)
+	if err != nil {
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	progress("uninstalling", 5)
+	background := context.Background()
+	if exists {
+		removed, err := d.adapter.Remove(background, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
+		if !errors.Is(err, containerengine.ErrContainerNotFound) && (err != nil || !removed.Completed || removed.ContainerID != service.RuntimeIdentity) {
+			return serviceError("CONTAINER_REMOVE_FAILED", "The exact managed template container could not be removed.", 502, true, err)
+		}
 	}
 	if !deleteData {
 		return nil
@@ -656,11 +701,11 @@ func (d *containerTemplateDriver) Uninstall(ctx context.Context, service *pfregi
 		return err
 	}
 	for _, identity := range marker.Volumes {
-		volume, err := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: identity.Name})
+		volume, err := d.adapter.InspectVolume(background, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: identity.Name})
 		if err != nil || volume.CreatedAtUnixMs != identity.CreatedAtUnixMs {
 			return serviceError("DATA_IDENTITY_MISMATCH", "Redeven will not delete a template data volume whose identity has changed.", 409, false, err)
 		}
-		if err := d.adapter.RemoveVolume(ctx, containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: identity.Name}); err != nil {
+		if err := d.adapter.RemoveVolume(background, containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: identity.Name}); err != nil {
 			return serviceError("DATA_REMOVE_FAILED", "A template data volume could not be deleted.", 502, true, err)
 		}
 	}

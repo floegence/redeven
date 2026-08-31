@@ -737,21 +737,14 @@ func (m *Manager) runStop(ctx context.Context, service *pfregistry.ManagedServic
 		return err
 	}
 	service.ObservedState = stopped
-	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &stopped})
+	blank := ""
+	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &stopped, LastErrorCode: &blank, LastErrorMessage: &blank})
 }
 
 func (m *Manager) runUninstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, deleteData bool) error {
-	m.progress(op, "stopping", 2)
-	if err := driver.Stop(ctx, service); err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	m.progress(op, "uninstalling", 5)
-	// Once destructive removal starts, finish it and its database transaction.
-	// Cancelling between those effects would leave an unverifiable half-uninstall.
-	if err := driver.Uninstall(context.Background(), service, deleteData); err != nil {
+	if err := driver.Uninstall(ctx, service, deleteData, func(stage string, current int64) {
+		m.progress(op, stage, current)
+	}); err != nil {
 		return err
 	}
 	if err := os.Remove(m.serviceSecretPath(service.ServiceID)); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -1027,7 +1020,7 @@ type deploymentDriver interface {
 	Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error)
 	Start(context.Context, *pfregistry.ManagedService) (string, error)
 	Stop(context.Context, *pfregistry.ManagedService) error
-	Uninstall(context.Context, *pfregistry.ManagedService, bool) error
+	Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error
 	CleanupPartial(context.Context, *pfregistry.ManagedService) error
 	Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error)
 }

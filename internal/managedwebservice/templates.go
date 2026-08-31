@@ -228,19 +228,12 @@ func duplicateKind(deployment, specKind Deployment) Deployment {
 }
 
 func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.ManagedTemplate) (*Template, error) {
-	spec := TemplateSpec{}
-	if err := decodeStrictJSON([]byte(record.SpecJSON), &spec); err != nil {
-		return nil, serviceError("TEMPLATE_SPEC_INVALID", "The saved template definition is invalid.", 409, false, err)
+	spec, err := verifiedTemplateSpec(record.SpecJSON, record.SpecSHA256)
+	if errors.Is(err, errTemplateSpecIdentityMismatch) {
+		return nil, serviceError("TEMPLATE_IDENTITY_MISMATCH", "The saved template definition identity has changed.", 409, false, err)
 	}
-	if err := validateTemplateSpec(spec); err != nil {
-		return nil, serviceError("TEMPLATE_SPEC_INVALID", "The saved template definition no longer satisfies the template policy.", 409, false, err)
-	}
-	_, digest, err := canonicalTemplateSpec(spec)
 	if err != nil {
-		return nil, err
-	}
-	if digest != strings.TrimSpace(record.SpecSHA256) {
-		return nil, serviceError("TEMPLATE_IDENTITY_MISMATCH", "The saved template definition identity has changed.", 409, false, nil)
+		return nil, serviceError("TEMPLATE_SPEC_INVALID", "The saved template definition is invalid or no longer satisfies the template policy.", 409, false, err)
 	}
 	available, code, reason := m.customTemplateAvailability(ctx, spec.Kind)
 	defaultWorkspacePath, err := m.prepareDefaultWorkspace(record.ServiceFamilyID)
@@ -533,6 +526,23 @@ func canonicalTemplateSpec(spec TemplateSpec) (string, string, error) {
 	return string(raw), hex.EncodeToString(digest[:]), nil
 }
 
+var errTemplateSpecIdentityMismatch = errors.New("template spec document identity mismatch")
+
+func verifiedTemplateSpec(raw, expectedDigest string) (TemplateSpec, error) {
+	digest := sha256.Sum256([]byte(raw))
+	if hex.EncodeToString(digest[:]) != strings.TrimSpace(expectedDigest) {
+		return TemplateSpec{}, errTemplateSpecIdentityMismatch
+	}
+	spec := TemplateSpec{}
+	if err := decodeStrictJSON([]byte(raw), &spec); err != nil {
+		return TemplateSpec{}, err
+	}
+	if err := validateTemplateSpec(spec); err != nil {
+		return TemplateSpec{}, err
+	}
+	return spec, nil
+}
+
 func templateRegistryError(err error) error {
 	switch {
 	case errors.Is(err, pfregistry.ErrManagedTemplateNameConflict):
@@ -722,19 +732,12 @@ func templateSpecFromService(service *pfregistry.ManagedService) (TemplateSpec, 
 	if service == nil || strings.TrimSpace(service.TemplateSnapshotJSON) == "" || service.TemplateSnapshotJSON == "{}" {
 		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_MISSING", "The managed service has no usable template snapshot.", 409, false, nil)
 	}
-	spec := TemplateSpec{}
-	if err := decodeStrictJSON([]byte(service.TemplateSnapshotJSON), &spec); err != nil {
-		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_INVALID", "The managed service template snapshot is invalid.", 409, false, err)
+	spec, err := verifiedTemplateSpec(service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256)
+	if errors.Is(err, errTemplateSpecIdentityMismatch) {
+		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH", "The managed service template snapshot identity has changed.", 409, false, err)
 	}
-	if err := validateTemplateSpec(spec); err != nil {
-		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_INVALID", "The managed service template snapshot no longer satisfies the runtime policy.", 409, false, err)
-	}
-	_, digest, err := canonicalTemplateSpec(spec)
 	if err != nil {
-		return TemplateSpec{}, err
-	}
-	if digest != strings.TrimSpace(service.TemplateSnapshotSHA256) {
-		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH", "The managed service template snapshot identity has changed.", 409, false, nil)
+		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_INVALID", "The managed service template snapshot is invalid or no longer satisfies the runtime policy.", 409, false, err)
 	}
 	return spec, nil
 }
