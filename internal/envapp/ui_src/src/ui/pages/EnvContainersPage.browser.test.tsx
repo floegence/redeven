@@ -44,6 +44,20 @@ vi.mock('../services/containerResourcesApi', () => ({
     endpoint_id: 'desktop-linux', engine: 'docker', state: 'ready', engine_version: '27.3.1', rootless: false,
     capabilities: { collection_stats: true, volume_files: false, exec: false },
   }, { engine: 'podman', state: 'not_installed' }]),
+  listContainerServices: vi.fn().mockResolvedValue([
+    {
+      service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running', version: '27.3.1',
+      capabilities: { start: false, stop: true, restart: true, configure_proxy: true, configure_advanced: true, open_external_config: false },
+      configuration_kind: 'json',
+    },
+    {
+      service_id: 'container_service_podman', engine: 'podman', name: 'Podman', implementation: 'unavailable', state: 'not_installed', guidance_code: 'install',
+      capabilities: { start: false, stop: false, restart: false, configure_proxy: false, configure_advanced: false, open_external_config: false },
+    },
+  ]),
+  getContainerServiceConfiguration: vi.fn().mockResolvedValue({
+    service_id: 'container_service_docker', format: 'json', content: '{}\n', base_revision: 'sha256:base', restart_required: false,
+  }),
   listContainerResources: browserHarness.listResources,
   getContainerResourceDetails: vi.fn().mockImplementation((_view: string, identity: string) => Promise.resolve({
     container_id: identity,
@@ -350,6 +364,27 @@ describe('native Containers responsive product surface', () => {
     await settle();
     expect(detailPage.querySelectorAll('[data-container-monitor-panel]')).toHaveLength(3);
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it('keeps service management readable and touchable on a narrow workbench', async () => {
+    await page.viewport(390, 844);
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    root.querySelector<HTMLButtonElement>('[aria-label="Container services"]')?.click();
+    await settle();
+
+    const servicePage = root.querySelector<HTMLElement>('[data-container-services-page]')!;
+    expect(servicePage).not.toBeNull();
+    expect(root.querySelector('.container-resource-tabs')).toBeNull();
+    expect(servicePage.querySelectorAll('.container-service-card')).toHaveLength(2);
+    expect(getComputedStyle(servicePage.querySelector<HTMLElement>('.container-services-grid')!).gridTemplateColumns.split(' ')).toHaveLength(1);
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    const visibleButtons = Array.from(servicePage.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.getClientRects().length > 0);
+    expect(visibleButtons.every((button) => button.getBoundingClientRect().height >= 44)).toBe(true);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 

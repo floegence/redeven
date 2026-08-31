@@ -28,6 +28,44 @@ export type ContainerRuntime =
       state: Exclude<ContainerRuntimeState, 'ready'>;
     }>;
 
+export type ContainerServiceState = 'running' | 'stopped' | 'not_installed' | 'permission' | 'unreachable' | 'error';
+export type ContainerServiceImplementation = 'docker_desktop' | 'docker_engine' | 'podman_machine' | 'podman_local' | 'remote' | 'unavailable';
+export type ContainerServiceConfigurationKind = 'json' | 'toml';
+
+export type ContainerService = Readonly<{
+  service_id: string;
+  engine: ContainerEngine;
+  name: string;
+  implementation: ContainerServiceImplementation;
+  state: ContainerServiceState;
+  version?: string;
+  rootless?: boolean;
+  remote?: boolean;
+  guidance_code?: 'install' | 'permission' | 'start_official' | 'check_active' | 'detection_failed' | 'select_docker_context' | 'desktop_managed' | 'externally_managed' | 'host_manager' | 'podman_daemonless' | 'podman_machine_managed' | 'remote_host';
+  capabilities: Readonly<{
+    start: boolean;
+    stop: boolean;
+    restart: boolean;
+    configure_proxy: boolean;
+    configure_advanced: boolean;
+    open_external_config: boolean;
+  }>;
+  configuration_kind?: ContainerServiceConfigurationKind;
+  restart_required?: boolean;
+  generation?: string;
+}>;
+
+export type ContainerServiceConfiguration = Readonly<{
+  service_id: string;
+  format: ContainerServiceConfigurationKind;
+  content: string;
+  base_revision: string;
+  http_proxy?: string;
+  https_proxy?: string;
+  no_proxy?: string;
+  restart_required: boolean;
+}>;
+
 export type ContainerManagement = Readonly<{
   managed: boolean;
   owner?: Readonly<{ kind: 'web_service'; service_id: string; name: string }>;
@@ -439,6 +477,21 @@ export async function listContainerOperations(): Promise<ContainerOperation[]> {
     { method: 'GET' },
   );
   return response.operations ?? [];
+}
+
+export async function listContainerServices(signal?: AbortSignal): Promise<ContainerService[]> {
+  const response = await fetchLocalApiJSON<{ services: ContainerService[] }>(
+    '/_redeven_proxy/api/container-resources/services',
+    { method: 'GET', cache: 'no-store', signal },
+  );
+  return response.services ?? [];
+}
+
+export async function getContainerServiceConfiguration(serviceID: string): Promise<ContainerServiceConfiguration> {
+  return fetchLocalApiJSON<ContainerServiceConfiguration>(
+    `/_redeven_proxy/api/container-resources/services/${encodeURIComponent(serviceID)}/configuration`,
+    { method: 'GET', cache: 'no-store' },
+  );
 }
 
 export async function listContainerOperationEvents(operationID: string): Promise<ContainerOperationEvent[]> {

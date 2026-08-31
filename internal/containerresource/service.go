@@ -87,7 +87,11 @@ func (s *Service) observeInterruptedOperation(ctx context.Context, operation Ope
 		Outcome       string `json:"outcome"`
 		ObservedCount int    `json:"observed_count,omitempty"`
 	}{Status: "observed", Outcome: "present"}
-	bound, _, err := s.engine.BindEndpoint(ctx, operation.Engine, operation.EndpointID)
+	bound := ctx
+	var err error
+	if operation.ResourceKind != ResourceContainerService {
+		bound, _, err = s.engine.BindEndpoint(ctx, operation.Engine, operation.EndpointID)
+	}
 	if err == nil {
 		switch operation.ResourceKind {
 		case ResourceContainer:
@@ -151,6 +155,11 @@ func (s *Service) observeInterruptedOperation(ctx context.Context, operation Ope
 						break
 					}
 				}
+			}
+		case ResourceContainerService:
+			_, err = s.engine.ContainerService(ctx, operation.ResourceIdentity)
+			if err == nil {
+				result.Outcome = "service_observed"
 			}
 		default:
 			err = ErrInvalidRequest
@@ -503,9 +512,12 @@ func (s *Service) decodeAndPreflight(ctx context.Context, method containerengine
 		}
 	}
 	engine, endpointID, kind, identity, identities := mutationIdentity(method, request)
-	bound, _, err := s.engine.BindEndpoint(ctx, engine, endpointID)
-	if err != nil {
-		return decodedMutation{}, err
+	bound := ctx
+	if kind != ResourceContainerService {
+		bound, _, err = s.engine.BindEndpoint(ctx, engine, endpointID)
+		if err != nil {
+			return decodedMutation{}, err
+		}
 	}
 	plan, err := s.buildPlan(bound, method, request)
 	if err != nil {
@@ -521,6 +533,12 @@ func (s *Service) decodeAndPreflight(ctx context.Context, method containerengine
 			return decodedMutation{}, fmt.Errorf("%w: encode canonical prune request", ErrInvalidRequest)
 		}
 		engine, endpointID, kind, identity, identities = mutationIdentity(method, request)
+	}
+	if kind == ResourceContainerService {
+		plan, err = s.enrichContainerServiceImpact(ctx, method, request, plan)
+		if err != nil {
+			return decodedMutation{}, err
+		}
 	}
 	// The reviewed digest still covers the canonical request, but raw mutation
 	// inputs (environment values, command arguments, and driver options) never
@@ -570,7 +588,7 @@ func canonicalPruneMutationRequest(request any, plan containerengine.ResourcePla
 }
 
 func (s *Service) management(ctx context.Context, engine containerengine.Engine, endpointID containerengine.EndpointID, kind ResourceKind, identity string, identities []string) (Management, error) {
-	if s.resolveOwner == nil || kind == ResourceImage || kind == ResourcePod {
+	if s.resolveOwner == nil || kind == ResourceImage || kind == ResourcePod || kind == ResourceContainerService {
 		return Management{}, nil
 	}
 	if len(identities) == 0 {
@@ -618,6 +636,10 @@ func decodeMutationRequest(method containerengine.Method, raw json.RawMessage) (
 		target = &containerengine.PodCreateRequest{}
 	case containerengine.MethodPodsStart, containerengine.MethodPodsStop, containerengine.MethodPodsRestart, containerengine.MethodPodsRemove:
 		target = &containerengine.PodRequest{}
+	case containerengine.MethodContainerServicesStart, containerengine.MethodContainerServicesStop, containerengine.MethodContainerServicesRestart:
+		target = &containerengine.ContainerServiceActionRequest{}
+	case containerengine.MethodContainerServicesConfig:
+		target = &containerengine.ContainerServiceConfigurationUpdateRequest{}
 	default:
 		return nil, fmt.Errorf("unsupported mutation method %q", method)
 	}
@@ -664,6 +686,10 @@ func mutationIdentity(method containerengine.Method, request any) (containerengi
 		return req.Engine, req.EndpointID, ResourcePod, strings.TrimSpace(req.Name), nil
 	case *containerengine.PodRequest:
 		return req.Engine, req.EndpointID, ResourcePod, strings.TrimSpace(req.PodID), nil
+	case *containerengine.ContainerServiceActionRequest:
+		return req.Engine, "", ResourceContainerService, strings.TrimSpace(req.ServiceID), nil
+	case *containerengine.ContainerServiceConfigurationUpdateRequest:
+		return req.Engine, "", ResourceContainerService, strings.TrimSpace(req.ServiceID), nil
 	default:
 		return "", "", "", "", nil
 	}
@@ -696,9 +722,76 @@ func (s *Service) buildPlan(ctx context.Context, method containerengine.Method, 
 		return s.engine.CreatePodPreflight(ctx, *req)
 	case *containerengine.PodRequest:
 		return s.engine.PodActionPreflight(ctx, method, *req)
+	case *containerengine.ContainerServiceActionRequest:
+		return s.engine.ContainerServiceActionPreflight(ctx, method, *req)
+	case *containerengine.ContainerServiceConfigurationUpdateRequest:
+		return s.engine.ContainerServiceConfigurationPreflight(ctx, *req)
 	default:
 		return containerengine.ResourcePlan{}, ErrInvalidRequest
 	}
+}
+
+func (s *Service) enrichContainerServiceImpact(ctx context.Context, method containerengine.Method, request any, plan containerengine.ResourcePlan) (containerengine.ResourcePlan, error) {
+	if method != containerengine.MethodContainerServicesStop && method != containerengine.MethodContainerServicesRestart && method != containerengine.MethodContainerServicesConfig {
+		return plan, nil
+	}
+	serviceID := ""
+	applyMode := containerengine.ContainerServiceApplyMode("")
+	switch req := request.(type) {
+	case *containerengine.ContainerServiceActionRequest:
+		serviceID = req.ServiceID
+	case *containerengine.ContainerServiceConfigurationUpdateRequest:
+		serviceID, applyMode = req.ServiceID, req.ApplyMode
+	}
+	if method == containerengine.MethodContainerServicesConfig && applyMode != containerengine.ContainerServiceSaveAndRestart {
+		return plan, nil
+	}
+	service, err := s.engine.ContainerService(ctx, serviceID)
+	if err != nil {
+		return containerengine.ResourcePlan{}, err
+	}
+	runningCount := 0
+	owners := make(map[string]string)
+	if service.State == containerengine.ContainerServiceStateRunning {
+		runtimes, runtimeErr := s.engine.ActiveRuntimes(ctx)
+		if runtimeErr != nil {
+			return containerengine.ResourcePlan{}, runtimeErr
+		}
+		var endpointID containerengine.EndpointID
+		for _, runtimeState := range runtimes.Engines {
+			if runtimeState.Engine == service.Engine && runtimeState.State == containerengine.RuntimeStateReady {
+				endpointID = runtimeState.EndpointID
+				break
+			}
+		}
+		if endpointID.Valid() {
+			items, listErr := s.Containers(ctx, containerengine.ContainerListRequest{Engine: service.Engine, EndpointID: endpointID, All: false})
+			if listErr != nil {
+				return containerengine.ResourcePlan{}, listErr
+			}
+			runningCount = len(items)
+			for _, item := range items {
+				if item.Management.Owner != nil {
+					owners[item.Management.Owner.ServiceID] = item.Management.Owner.Name
+				}
+			}
+		}
+	}
+	ownerNames := make([]string, 0, len(owners))
+	for _, name := range owners {
+		ownerNames = append(ownerNames, name)
+	}
+	sort.Strings(ownerNames)
+	target := make(map[string]any, len(plan.Target)+3)
+	for key, value := range plan.Target {
+		target[key] = value
+	}
+	target["running_container_count"] = runningCount
+	target["affected_web_service_count"] = len(ownerNames)
+	if len(ownerNames) > 0 {
+		target["affected_web_services"] = ownerNames
+	}
+	return containerengine.BuildResourcePlan(plan.Method, target, request, plan.RiskLevel, plan.RiskFlags, plan.RequiresAdmin, plan.Summary...)
 }
 
 func hashJSON(value any) string {
@@ -747,7 +840,11 @@ func publicOperationError(err error) (string, string) {
 	case errors.Is(err, containerengine.ErrPermissionDenied):
 		return "engine_permission_denied", "The container engine denied this operation."
 	case errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped):
-		return "engine_unavailable", "The selected container engine endpoint is unavailable."
+		return "engine_unavailable", "The container service is unavailable."
+	case errors.Is(err, containerengine.ErrContainerServiceConfigConflict):
+		return "container_service_configuration_conflict", "The container service configuration changed. Reload it before saving."
+	case errors.Is(err, containerengine.ErrContainerServiceRecoveryRequired):
+		return "service_recovery_required", "The container service could not be recovered automatically. Review its host configuration before retrying."
 	case errors.Is(err, containerengine.ErrInsufficientStorage):
 		return "insufficient_storage", "The container engine does not have enough storage to pull this image."
 	case errors.Is(err, containerengine.ErrImageRateLimited):

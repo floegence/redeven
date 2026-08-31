@@ -50,6 +50,12 @@ Containers default to Active; other views default to All. Shared Dropdown and
 Dialog primitives own outside-click, Escape, focus, and Workbench-safe floating
 behavior.
 
+The header's shared three-dot menu also opens the independent
+[Container service management](container-service-management.md) page. The
+normal resource surface never displays service implementation or endpoint
+selectors. Service operation progress stays on the owning service card and
+opens the existing Operations detail only when selected.
+
 Image and volume cleanup is not a primary toolbar action. It appears only in
 the shared three-dot menu with a Trash icon and danger tone; loading retains a
 disabled trigger with the same geometry. The UI sends only the selected runtime

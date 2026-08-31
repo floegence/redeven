@@ -25,6 +25,41 @@ type appserverContainerEngine struct {
 	volumes map[string]containerengine.VolumeRecord
 }
 
+const appserverContainerServiceID = "container_service_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+type appserverContainerServiceEngine struct {
+	*appserverContainerEngine
+}
+
+func (f *appserverContainerServiceEngine) ContainerServices(context.Context) ([]containerengine.ContainerService, error) {
+	return []containerengine.ContainerService{{
+		ServiceID: appserverContainerServiceID, Engine: containerengine.EngineDocker, Name: "Docker Engine",
+		Implementation: containerengine.ContainerServiceDockerEngine, State: containerengine.ContainerServiceStateStopped,
+		Capabilities:      containerengine.ContainerServiceCapabilities{Start: true, ConfigureProxy: true, ConfigureAdvanced: true},
+		ConfigurationKind: containerengine.ContainerServiceConfigurationJSON,
+	}}, nil
+}
+
+func (f *appserverContainerServiceEngine) ContainerServiceConfiguration(context.Context, string) (containerengine.ContainerServiceConfiguration, error) {
+	return containerengine.ContainerServiceConfiguration{
+		ServiceID: appserverContainerServiceID, Format: containerengine.ContainerServiceConfigurationJSON,
+		Content: `{"proxies":{"http-proxy":"http://user:secret@example.test"}}`, BaseRevision: "sha256:base",
+		HTTPProxy: "http://user:secret@example.test",
+	}, nil
+}
+
+func (f *appserverContainerServiceEngine) ContainerServiceAction(_ context.Context, _ containerengine.Method, _ containerengine.ContainerServiceActionRequest) (containerengine.ContainerServiceActionResult, error) {
+	return containerengine.ContainerServiceActionResult{ServiceID: appserverContainerServiceID, State: containerengine.ContainerServiceStateRunning}, nil
+}
+
+func (f *appserverContainerServiceEngine) ValidateContainerServiceConfiguration(context.Context, containerengine.ContainerServiceConfigurationUpdateRequest) error {
+	return nil
+}
+
+func (f *appserverContainerServiceEngine) UpdateContainerServiceConfiguration(_ context.Context, _ containerengine.ContainerServiceConfigurationUpdateRequest) (containerengine.ContainerServiceActionResult, error) {
+	return containerengine.ContainerServiceActionResult{ServiceID: appserverContainerServiceID, State: containerengine.ContainerServiceStateStopped, Revision: "sha256:updated", RestartRequired: true}, nil
+}
+
 func (f *appserverContainerEngine) Status(context.Context, containerengine.Engine) (containerengine.EngineStatus, error) {
 	return containerengine.EngineStatus{Engine: containerengine.EngineDocker, Available: true}, nil
 }
@@ -227,6 +262,21 @@ func newContainerRuntimeAPITestService(t *testing.T) *containerresource.Service 
 	return service
 }
 
+func newContainerServiceAPITestService(t *testing.T) *containerresource.Service {
+	t.Helper()
+	client := &appserverContainerServiceEngine{appserverContainerEngine: &appserverContainerEngine{volumes: make(map[string]containerengine.VolumeRecord)}}
+	adapter, err := containerengine.NewAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := containerresource.Open(containerresource.Options{DatabasePath: filepath.Join(t.TempDir(), "containers.sqlite"), Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	return service
+}
+
 func serveContainerAPI(t *testing.T, server *Server, channelID, method, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, target, strings.NewReader(body))
@@ -352,6 +402,69 @@ func TestContainerRuntimeDiscoveryKeepsEngineFailuresIndependent(t *testing.T) {
 	legacy := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/endpoints?engine=podman", "")
 	if legacy.Code != http.StatusNotFound {
 		t.Fatalf("legacy endpoint route status=%d body=%s", legacy.Code, legacy.Body.String())
+	}
+}
+
+func TestContainerServicesRequireAdminForConfigurationAndKeepSecretsOutOfAudit(t *testing.T) {
+	service := newContainerServiceAPITestService(t)
+	channelID := "ch_container_services"
+	readOnly := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+
+	response := serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/services", "")
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), appserverContainerServiceID) || strings.Contains(response.Body.String(), "secret") {
+		t.Fatalf("service list status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/services/"+appserverContainerServiceID+"/configuration", "")
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("non-admin configuration status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := &Server{containers: service, audit: auditStore, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true})}
+	response = serveContainerAPI(t, admin, channelID, http.MethodGet, containerResourcesAPIBase+"/services/"+appserverContainerServiceID+"/configuration", "")
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), "user:secret") {
+		t.Fatalf("admin configuration status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
+	}
+
+	request := `{"method":"container.services.configuration.update","request":{"engine":"docker","service_id":"` + appserverContainerServiceID + `","base_revision":"sha256:base","mode":"proxy","apply_mode":"save","http_proxy":"http://new-secret@example.test","confirmation_name":"Docker Engine"}}`
+	response = serveContainerAPI(t, admin, channelID, http.MethodPost, containerResourcesAPIBase+"/preflights", request)
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "new-secret") {
+		t.Fatalf("configuration preflight status=%d body=%s", response.Code, response.Body.String())
+	}
+	entries, err := auditStore.List(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawAudit, err := json.Marshal(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(rawAudit, []byte("user:secret")) || bytes.Contains(rawAudit, []byte("new-secret")) {
+		t.Fatalf("container service audit leaked configuration: %s", rawAudit)
+	}
+}
+
+func TestContainerServiceMutationsRequireFullRWXAndAdmin(t *testing.T) {
+	service := newContainerServiceAPITestService(t)
+	channelID := "ch_container_service_permissions"
+	request := `{"method":"container.services.start","request":{"engine":"docker","service_id":"` + appserverContainerServiceID + `"}}`
+	readExecute := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanExecute: true, CanAdmin: true})}
+	response := serveContainerAPI(t, readExecute, channelID, http.MethodPost, containerResourcesAPIBase+"/preflights", request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("service mutation without Write status=%d body=%s", response.Code, response.Body.String())
+	}
+	fullNonAdmin := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
+	response = serveContainerAPI(t, fullNonAdmin, channelID, http.MethodPost, containerResourcesAPIBase+"/preflights", request)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "ADMIN_REQUIRED") {
+		t.Fatalf("service mutation without Admin status=%d body=%s", response.Code, response.Body.String())
+	}
+	admin := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true})}
+	response = serveContainerAPI(t, admin, channelID, http.MethodPost, containerResourcesAPIBase+"/preflights", request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("service mutation with RWX+Admin status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 

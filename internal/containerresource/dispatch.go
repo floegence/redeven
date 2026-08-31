@@ -9,13 +9,20 @@ import (
 )
 
 type executionResult struct {
-	Identity string
+	Identity        string
+	State           string
+	Revision        string
+	RestartRequired bool
 }
 
 func (s *Service) execute(ctx context.Context, operationID string, decoded decodedMutation) (executionResult, error) {
-	bound, _, err := s.engine.BindEndpoint(ctx, decoded.preflight.Engine, decoded.preflight.EndpointID)
-	if err != nil {
-		return executionResult{}, err
+	bound := ctx
+	var err error
+	if decoded.preflight.ResourceKind != ResourceContainerService {
+		bound, _, err = s.engine.BindEndpoint(ctx, decoded.preflight.Engine, decoded.preflight.EndpointID)
+		if err != nil {
+			return executionResult{}, err
+		}
 	}
 	switch req := decoded.request.(type) {
 	case *containerengine.ContainerCreateRequest:
@@ -80,15 +87,49 @@ func (s *Service) execute(ctx context.Context, operationID string, decoded decod
 	case *containerengine.PodRequest:
 		result, err := s.engine.PodAction(bound, decoded.preflight.Method, *req)
 		return executionResult{Identity: result.Identity}, err
+	case *containerengine.ContainerServiceActionRequest:
+		result, err := s.engine.ContainerServiceAction(ctx, decoded.preflight.Method, *req)
+		if err == nil && (decoded.preflight.Method == containerengine.MethodContainerServicesStart || decoded.preflight.Method == containerengine.MethodContainerServicesRestart) {
+			state, stateErr := s.store.containerServiceConfigurationState(ctx, req.ServiceID)
+			if stateErr != nil {
+				return executionResult{}, stateErr
+			}
+			state.RestartRequired = false
+			state.UpdatedAtUnixMs = 0
+			if storeErr := s.store.upsertContainerServiceConfigurationState(ctx, state); storeErr != nil {
+				return executionResult{}, storeErr
+			}
+		}
+		return executionResult{Identity: result.ServiceID, State: string(result.State)}, err
+	case *containerengine.ContainerServiceConfigurationUpdateRequest:
+		result, err := s.engine.UpdateContainerServiceConfiguration(ctx, *req)
+		if err != nil {
+			return executionResult{}, err
+		}
+		service, serviceErr := s.engine.ContainerService(ctx, req.ServiceID)
+		if serviceErr != nil {
+			return executionResult{}, serviceErr
+		}
+		if storeErr := s.store.upsertContainerServiceConfigurationState(ctx, ContainerServiceConfigurationState{
+			ServiceID: req.ServiceID, ConfigurationRevision: result.Revision, RestartRequired: result.RestartRequired,
+			ServiceGeneration: service.Generation,
+		}); storeErr != nil {
+			return executionResult{}, storeErr
+		}
+		return executionResult{Identity: result.ServiceID, State: string(result.State), Revision: result.Revision, RestartRequired: result.RestartRequired}, nil
 	default:
 		return executionResult{}, ErrInvalidRequest
 	}
 }
 
 func (s *Service) reconcile(ctx context.Context, decoded decodedMutation, result executionResult) (json.RawMessage, error) {
-	bound, _, err := s.engine.BindEndpoint(ctx, decoded.preflight.Engine, decoded.preflight.EndpointID)
-	if err != nil {
-		return nil, err
+	bound := ctx
+	var err error
+	if decoded.preflight.ResourceKind != ResourceContainerService {
+		bound, _, err = s.engine.BindEndpoint(ctx, decoded.preflight.Engine, decoded.preflight.EndpointID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	status := struct {
 		Status   string `json:"status"`
@@ -199,11 +240,41 @@ func (s *Service) reconcile(ctx context.Context, decoded decodedMutation, result
 			status.State = inspected.Status
 			err = requireWorkspaceState(decoded.preflight.Method, inspected.Status)
 		}
+	case *containerengine.ContainerServiceActionRequest:
+		var service containerengine.ContainerService
+		service, err = s.engine.ContainerService(ctx, req.ServiceID)
+		if err == nil {
+			status.State = string(service.State)
+			err = requireContainerServiceState(decoded.preflight.Method, service.State)
+		}
+	case *containerengine.ContainerServiceConfigurationUpdateRequest:
+		var configuration containerengine.ContainerServiceConfiguration
+		configuration, err = s.engine.ContainerServiceConfiguration(ctx, req.ServiceID)
+		if err == nil && result.Revision != "" && configuration.BaseRevision != result.Revision {
+			err = errors.New("container service configuration revision was not reconciled")
+		}
+		status.State = result.State
 	}
 	if err != nil {
 		return nil, err
 	}
 	return json.Marshal(status)
+}
+
+func requireContainerServiceState(method containerengine.Method, state containerengine.ContainerServiceState) error {
+	matched := false
+	switch method {
+	case containerengine.MethodContainerServicesStart, containerengine.MethodContainerServicesRestart:
+		matched = state == containerengine.ContainerServiceStateRunning
+	case containerengine.MethodContainerServicesStop:
+		matched = state == containerengine.ContainerServiceStateStopped
+	default:
+		return nil
+	}
+	if !matched {
+		return errors.New("container service lifecycle state was not reconciled")
+	}
+	return nil
 }
 
 func requireContainerState(method containerengine.Method, state containerengine.ContainerState) error {

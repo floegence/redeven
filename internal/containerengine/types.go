@@ -73,6 +73,10 @@ const (
 	MethodPodsStop                  Method = "pods.stop"
 	MethodPodsRestart               Method = "pods.restart"
 	MethodPodsRemove                Method = "pods.remove"
+	MethodContainerServicesStart    Method = "container.services.start"
+	MethodContainerServicesStop     Method = "container.services.stop"
+	MethodContainerServicesRestart  Method = "container.services.restart"
+	MethodContainerServicesConfig   Method = "container.services.configuration.update"
 )
 
 func Methods() []Method {
@@ -98,6 +102,7 @@ func Methods() []Method {
 		MethodComposeProjectsStart, MethodComposeProjectsStop, MethodComposeProjectsRestart, MethodComposeProjectsDown,
 		MethodPodsList, MethodPodsInspect, MethodPodsCreatePreflight, MethodPodsCreate, MethodPodsActionPreflight,
 		MethodPodsStart, MethodPodsStop, MethodPodsRestart, MethodPodsRemove,
+		MethodContainerServicesStart, MethodContainerServicesStop, MethodContainerServicesRestart, MethodContainerServicesConfig,
 	}
 }
 

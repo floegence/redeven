@@ -47,10 +47,13 @@ func (f CommandRunnerFunc) Run(ctx context.Context, name string, args ...string)
 }
 
 type CLIClient struct {
-	Runner        CommandRunner
-	Timeout       time.Duration
-	PullTimeout   time.Duration
-	StreamTimeout time.Duration
+	Runner          CommandRunner
+	Timeout         time.Duration
+	PullTimeout     time.Duration
+	StreamTimeout   time.Duration
+	GOOS            string
+	EffectiveUserID func() int
+	UserConfigDir   func() (string, error)
 }
 
 func NewCLIClient() *CLIClient {
@@ -540,11 +543,15 @@ func (w *boundedCommandStderr) Write(value []byte) (int, error) {
 }
 
 func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return execRunner{}.RunEnv(ctx, processenv.Current(), name, args...)
+}
+
+func (execRunner) RunEnv(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
 	if _, err := exec.LookPath(name); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrCLIUnavailable, name)
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = processenv.Current()
+	cmd.Env = env
 	configureCommandProcessGroup(cmd)
 	cmd.Cancel = func() error {
 		return terminateCommandProcessTree(cmd)

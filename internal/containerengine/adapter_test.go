@@ -189,8 +189,8 @@ func TestBuildResourcePlanProducesStableDigest(t *testing.T) {
 
 func TestResourceCapabilityMethodCatalogIsClosedAndComplete(t *testing.T) {
 	methods := Methods()
-	if len(methods) != 52 {
-		t.Fatalf("Methods() count = %d, want 52", len(methods))
+	if len(methods) != 56 {
+		t.Fatalf("Methods() count = %d, want 56", len(methods))
 	}
 	seen := make(map[Method]struct{}, len(methods))
 	for _, method := range methods {
@@ -199,7 +199,7 @@ func TestResourceCapabilityMethodCatalogIsClosedAndComplete(t *testing.T) {
 		}
 		seen[method] = struct{}{}
 	}
-	for _, required := range []Method{MethodContainersStatsWatch, MethodImagesRemovePreflight, MethodImagesPrunePreflight, MethodVolumesPrunePreflight} {
+	for _, required := range []Method{MethodContainersStatsWatch, MethodImagesRemovePreflight, MethodImagesPrunePreflight, MethodVolumesPrunePreflight, MethodContainerServicesStart, MethodContainerServicesStop, MethodContainerServicesRestart, MethodContainerServicesConfig} {
 		if _, exists := seen[required]; !exists {
 			t.Fatalf("Methods() is missing %q", required)
 		}

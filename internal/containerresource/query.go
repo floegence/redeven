@@ -14,6 +14,34 @@ func (s *Service) Runtimes(ctx context.Context) (containerengine.ActiveRuntimeRe
 	return s.engine.ActiveRuntimes(ctx)
 }
 
+func (s *Service) ContainerServices(ctx context.Context) (containerengine.ContainerServicesResponse, error) {
+	response, err := s.engine.ContainerServices(ctx)
+	if err != nil {
+		return containerengine.ContainerServicesResponse{}, err
+	}
+	for index := range response.Services {
+		state, stateErr := s.store.containerServiceConfigurationState(ctx, response.Services[index].ServiceID)
+		if stateErr != nil {
+			return containerengine.ContainerServicesResponse{}, stateErr
+		}
+		response.Services[index].RestartRequired = state.RestartRequired
+	}
+	return response, nil
+}
+
+func (s *Service) ContainerServiceConfiguration(ctx context.Context, serviceID string) (containerengine.ContainerServiceConfiguration, error) {
+	configuration, err := s.engine.ContainerServiceConfiguration(ctx, serviceID)
+	if err != nil {
+		return containerengine.ContainerServiceConfiguration{}, err
+	}
+	state, err := s.store.containerServiceConfigurationState(ctx, serviceID)
+	if err != nil {
+		return containerengine.ContainerServiceConfiguration{}, err
+	}
+	configuration.RestartRequired = state.RestartRequired
+	return configuration, nil
+}
+
 func (s *Service) Containers(ctx context.Context, req containerengine.ContainerListRequest) ([]ContainerItem, error) {
 	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
 	if err != nil {

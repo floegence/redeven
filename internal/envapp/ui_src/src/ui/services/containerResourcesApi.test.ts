@@ -13,12 +13,14 @@ import {
   deleteComposeProjectDefinition,
   getComposeProjectDefinition,
   getContainerImageHistory,
+  getContainerServiceConfiguration,
   getRawContainerInspect,
   listContainerRuntimes,
   listContainerOperationEvents,
   listContainerResourceFiles,
   readContainerResourceFile,
   listContainerResources,
+  listContainerServices,
   preflightContainerOperation,
   subscribeContainerOperation,
   subscribeContainerOperationEvents,
@@ -86,6 +88,29 @@ describe('native container resources API', () => {
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
       '/_redeven_proxy/api/container-resources/runtimes',
       { method: 'GET', signal },
+    );
+  });
+
+  it('loads product-safe container services and no-store configuration', async () => {
+    const signal = new AbortController().signal;
+    const service = {
+      service_id: 'container_service_1', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
+      capabilities: { start: false, stop: true, restart: true, configure_proxy: true, configure_advanced: true, open_external_config: false },
+    };
+    const configuration = {
+      service_id: service.service_id, format: 'json', content: '{}\n', base_revision: 'sha256:base', restart_required: false,
+    };
+    localApiMocks.fetchLocalApiJSON.mockResolvedValueOnce({ services: [service] }).mockResolvedValueOnce(configuration);
+
+    await expect(listContainerServices(signal)).resolves.toEqual([service]);
+    await expect(getContainerServiceConfiguration(service.service_id)).resolves.toEqual(configuration);
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenNthCalledWith(1,
+      '/_redeven_proxy/api/container-resources/services',
+      { method: 'GET', cache: 'no-store', signal },
+    );
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenNthCalledWith(2,
+      '/_redeven_proxy/api/container-resources/services/container_service_1/configuration',
+      { method: 'GET', cache: 'no-store' },
     );
   });
 
