@@ -39,6 +39,27 @@ const template: ServiceTemplatePresentation = {
   editable: false,
 };
 
+const longContainerTemplate: ServiceTemplatePresentation = {
+  ...template,
+  id: 'container-details',
+  kind: 'container',
+  deploymentLabel: 'Container',
+  runtimeSpec: {
+    schema_version: 1,
+    kind: 'container',
+    endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/', startup_timeout_sec: 180 },
+    container: {
+      image: 'registry.example/desktop@sha256:1234567890',
+      environment: Object.fromEntries(Array.from({ length: 16 }, (_, index) => [`SETTING_${index}`, `${index}`])),
+      mounts: Array.from({ length: 12 }, (_, index) => ({ type: 'volume' as const, source: `volume-${index}`, target: `/data/${index}` })),
+      restart_policy: 'no',
+      network_mode: 'bridge',
+      read_only_root: true,
+      pids_limit: 512,
+    },
+  },
+};
+
 async function settle(): Promise<void> {
   await Promise.resolve();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -57,6 +78,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     dispose = undefined;
     document.body.replaceChildren();
     document.documentElement.classList.remove('light', 'dark');
+    document.documentElement.style.removeProperty('--redeven-desktop-titlebar-height');
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
     await page.viewport(1280, 720);
   });
@@ -82,6 +104,40 @@ describe('ServiceTemplateCatalog browser presentation', () => {
         onEdit={() => undefined}
         onDelete={() => undefined}
       />
+    ), host);
+  }
+
+  function mountInDrawer(templates: readonly ServiceTemplatePresentation[]): void {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    dispose = render(() => (
+      <EnvAppDrawer
+        open
+        onOpenChange={() => undefined}
+        class="service-template-explorer-drawer"
+        bodyClass="h-full"
+        title="Service templates"
+        description="Deploy a service in the current Environment."
+      >
+        <div class="service-template-drawer-shell h-full min-h-0 p-1" data-view="catalog" data-testid="service-template-drawer">
+          <ServiceTemplateCatalog
+            category="container"
+            query=""
+            hostCount={0}
+            containerCount={templates.length}
+            templates={templates}
+            loading={false}
+            canManage
+            onCategoryChange={() => undefined}
+            onQueryChange={() => undefined}
+            onCreate={() => undefined}
+            onDeploy={() => undefined}
+            onDuplicate={() => undefined}
+            onEdit={() => undefined}
+            onDelete={() => undefined}
+          />
+        </div>
+      </EnvAppDrawer>
     ), host);
   }
 
@@ -161,26 +217,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
   });
 
   it('keeps detailed runtime information scrollable while actions remain attached to the pane', () => {
-    mount([{
-      ...template,
-      id: 'container-details',
-      kind: 'container',
-      deploymentLabel: 'Container',
-      runtimeSpec: {
-        schema_version: 1,
-        kind: 'container',
-        endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/', startup_timeout_sec: 180 },
-        container: {
-          image: 'registry.example/desktop@sha256:1234567890',
-          environment: Object.fromEntries(Array.from({ length: 16 }, (_, index) => [`SETTING_${index}`, `${index}`])),
-          mounts: Array.from({ length: 12 }, (_, index) => ({ type: 'volume' as const, source: `volume-${index}`, target: `/data/${index}` })),
-          restart_policy: 'no',
-          network_mode: 'bridge',
-          read_only_root: true,
-          pids_limit: 512,
-        },
-      },
-    }]);
+    mount([longContainerTemplate]);
 
     const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
     const body = details.querySelector<HTMLElement>('.service-template-details__body')!;
@@ -189,6 +226,44 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
     expect(actions.getBoundingClientRect().bottom).toBeLessThanOrEqual(details.getBoundingClientRect().bottom + 1);
     expect(actions.getBoundingClientRect().top).toBeGreaterThan(body.getBoundingClientRect().top);
+  });
+
+  it('keeps long-detail actions inside the visible drawer footer edge', async () => {
+    await page.viewport(1280, 720);
+    document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '32px');
+    mountInDrawer([longContainerTemplate]);
+    await settle();
+
+    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
+    const body = details.querySelector<HTMLElement>('.service-template-details__body')!;
+    const actions = details.querySelector<HTMLElement>('.service-template-details__actions')!;
+    const primary = details.querySelector<HTMLElement>('[data-testid="service-template-primary"]')!;
+    const panelRect = panel.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    expect(actionsRect.bottom).toBeLessThanOrEqual(panelRect.bottom - 10);
+    expect(primary.getBoundingClientRect().bottom).toBeLessThanOrEqual(panelRect.bottom - 10);
+    expect(details.getBoundingClientRect().bottom).toBeLessThanOrEqual(panelRect.bottom - 10);
+  });
+
+  it('keeps short-detail actions directly after the content instead of forcing them to the drawer bottom', async () => {
+    await page.viewport(1280, 720);
+    document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '32px');
+    mountInDrawer([{ ...template, developerPreview: false, runtimeSpec: undefined }]);
+    await settle();
+
+    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
+    const body = details.querySelector<HTMLElement>('.service-template-details__body')!;
+    const actions = details.querySelector<HTMLElement>('.service-template-details__actions')!;
+    const panelRect = panel.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+
+    expect(Math.abs(actionsRect.top - bodyRect.bottom)).toBeLessThanOrEqual(1);
+    expect(panelRect.bottom - actionsRect.bottom).toBeGreaterThan(80);
   });
 
   it('stacks the selected template detail pane with touchable actions on narrow screens', async () => {
@@ -205,6 +280,27 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(getComputedStyle(details).borderTopWidth).toBe('1px');
     expect(deploy.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     expect(more.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  });
+
+  it('keeps long-detail actions visible at the drawer edge on narrow screens', async () => {
+    await page.viewport(700, 640);
+    mountInDrawer([longContainerTemplate]);
+    await settle();
+
+    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    const shell = document.querySelector<HTMLElement>('[data-testid="service-template-drawer"]')!;
+    const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
+    const actions = details.querySelector<HTMLElement>('.service-template-details__actions')!;
+    details.scrollIntoView({ block: 'start' });
+    await settle();
+
+    const panelRect = panel.getBoundingClientRect();
+    const shellRect = shell.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+    expect(getComputedStyle(actions).position).toBe('sticky');
+    expect(actionsRect.top).toBeGreaterThanOrEqual(shellRect.top);
+    expect(actionsRect.bottom).toBeLessThanOrEqual(shellRect.bottom + 1);
+    expect(actionsRect.bottom).toBeLessThanOrEqual(panelRect.bottom - 10);
   });
 
   it('removes decorative row and icon motion when reduced motion is requested', async () => {

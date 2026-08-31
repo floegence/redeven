@@ -7,6 +7,11 @@
     );
   }
 
+  .service-template-drawer-shell {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   .service-template-switcher {
     padding: 2px;
     border-radius: 10px;
@@ -178,6 +183,49 @@
     box-shadow: 0 -10px 16px -16px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent);
   }
 
+  @media (min-width: 780px) {
+    .service-template-drawer-shell[data-view='catalog'] {
+      overflow: hidden;
+    }
+
+    .service-template-drawer-shell[data-view='catalog'] .service-template-catalog {
+      display: flex;
+      height: 100%;
+      min-height: 0;
+      flex-direction: column;
+    }
+
+    .service-template-drawer-shell[data-view='catalog'] .service-template-toolbar {
+      flex: none;
+    }
+
+    .service-template-drawer-shell[data-view='catalog'] .service-template-category-stage {
+      min-height: 0;
+      flex: 1;
+    }
+
+    .service-template-drawer-shell[data-view='catalog'] .service-template-category-transition,
+    .service-template-drawer-shell[data-view='catalog'] .service-template-catalog__layout--with-details {
+      height: 100%;
+      min-height: 0;
+      max-height: 100%;
+    }
+
+    .service-template-drawer-shell[data-view='catalog'] .service-template-catalog__canvas {
+      max-height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    .service-template-drawer-shell[data-view='catalog'] .service-template-details {
+      position: static;
+      top: auto;
+      max-height: 100%;
+      align-self: start;
+    }
+  }
+
   .service-template-more {
     border-color: color-mix(in srgb, var(--redeven-stroke-overlay) 76%, var(--redeven-stroke-divider));
     background: color-mix(in srgb, var(--redeven-surface-control-muted) 48%, transparent);
@@ -298,6 +346,11 @@
     .service-template-details__body {
       overflow: visible;
       padding-right: 0;
+    }
+
+    .service-template-drawer-shell[data-view='catalog'] .service-template-details__actions {
+      position: sticky;
+      bottom: 0;
     }
   }
 

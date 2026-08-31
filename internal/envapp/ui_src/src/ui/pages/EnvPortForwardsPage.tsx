@@ -2691,6 +2691,7 @@ export function EnvPortForwardsPage() {
       <EnvAppDrawer
         open={templateDrawerOpen()}
         class="service-template-explorer-drawer"
+        bodyClass="h-full"
         onOpenChange={(open) => {
           if (templateSaving()) return;
           if (open) setTemplateDrawerOpen(true);
@@ -2713,7 +2714,7 @@ export function EnvPortForwardsPage() {
           </div>
         )}
       >
-        <div class="min-h-0 space-y-4 p-1" data-testid="service-template-drawer">
+        <div class="service-template-drawer-shell h-full min-h-0 space-y-4 p-1" data-view={templateDrawerView()} data-testid="service-template-drawer">
           <Show when={templateDrawerView() === 'catalog'}>
             <ServiceTemplateCatalog
               category={templateCategory()}
