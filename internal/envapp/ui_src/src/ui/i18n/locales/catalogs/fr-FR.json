@@ -3176,6 +3176,15 @@
       "containerDeployment": "Conteneur",
       "composeDeployment": "Docker Compose",
       "deployment": "Déploiement",
+      "details": {
+        "endpoint": "Point de terminaison du service",
+        "startupTimeout": "Délai de démarrage",
+        "templateRevision": "Révision du modèle",
+        "runtimeBundle": "Bundle d’exécution",
+        "runtimeProfile": "Profil d’exécution",
+        "hostArtifact": "Artefact d’exécution",
+        "configuredHooks": "Actions de cycle de vie configurées"
+      },
       "deploymentInformation": "Informations de déploiement",
       "customVersion": "Personnalisé",
       "managedPrivateData": "Stockage privé Redeven des services gérés",

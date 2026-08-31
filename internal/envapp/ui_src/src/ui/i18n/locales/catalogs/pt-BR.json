@@ -3176,6 +3176,15 @@
       "containerDeployment": "Contêiner",
       "composeDeployment": "Docker Compose",
       "deployment": "Implantação",
+      "details": {
+        "endpoint": "Endpoint do serviço",
+        "startupTimeout": "Tempo limite de inicialização",
+        "templateRevision": "Revisão do modelo",
+        "runtimeBundle": "Pacote de execução",
+        "runtimeProfile": "Perfil de execução",
+        "hostArtifact": "Artefato de execução",
+        "configuredHooks": "Ações de ciclo de vida configuradas"
+      },
       "deploymentInformation": "Informações da implantação",
       "customVersion": "Personalizado",
       "managedPrivateData": "Armazenamento privado de serviços gerenciados do Redeven",

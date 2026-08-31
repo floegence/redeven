@@ -3176,6 +3176,15 @@
       "containerDeployment": "Container",
       "composeDeployment": "Docker Compose",
       "deployment": "Bereitstellung",
+      "details": {
+        "endpoint": "Dienstendpunkt",
+        "startupTimeout": "Startzeitlimit",
+        "templateRevision": "Vorlagenrevision",
+        "runtimeBundle": "Laufzeitpaket",
+        "runtimeProfile": "Laufzeitprofil",
+        "hostArtifact": "Laufzeitartefakt",
+        "configuredHooks": "Konfigurierte Lebenszyklusaktionen"
+      },
       "deploymentInformation": "Bereitstellungsinformationen",
       "customVersion": "Benutzerdefiniert",
       "managedPrivateData": "Privater Redeven-Speicher für verwaltete Dienste",

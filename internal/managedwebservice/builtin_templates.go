@@ -198,6 +198,10 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 		if err != nil {
 			return nil, err
 		}
+		effectiveSpec, err := effectiveTemplateSpec(spec)
+		if err != nil {
+			return nil, err
+		}
 		items = append(items, Template{
 			TemplateID: definition.TemplateID, ServiceFamilyID: definition.ServiceFamilyID, Name: definition.Name, Description: definition.Description,
 			Version: definition.Version, LocalizationKey: definition.LocalizationKey, BrandIcon: definition.BrandIcon, Notices: definition.Notices,
@@ -207,7 +211,7 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 			Duplicateable: completeBuiltInDuplicateSpec(spec),
 			Available:     available, ReasonCode: reasonCode, Reason: reason, SortOrder: definition.SortOrder,
 			Deployments:          []DeploymentAvailability{{Deployment: definition.Deployment, Available: available, ReasonCode: reasonCode, Reason: reason}},
-			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec,
+			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: &effectiveSpec,
 			DefaultAccessMode: defaultAccessMode(definition.DefaultAccessMode),
 		})
 	}

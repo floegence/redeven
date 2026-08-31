@@ -3176,6 +3176,15 @@
       "containerDeployment": "コンテナ",
       "composeDeployment": "Docker Compose",
       "deployment": "デプロイ方式",
+      "details": {
+        "endpoint": "サービスエンドポイント",
+        "startupTimeout": "起動タイムアウト",
+        "templateRevision": "テンプレートリビジョン",
+        "runtimeBundle": "ランタイムバンドル",
+        "runtimeProfile": "ランタイムプロファイル",
+        "hostArtifact": "ランタイムアーティファクト",
+        "configuredHooks": "構成済みライフサイクル操作"
+      },
       "deploymentInformation": "デプロイ情報",
       "customVersion": "カスタム",
       "managedPrivateData": "Redeven の管理対象サービス用プライベートストレージ",

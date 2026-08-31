@@ -3176,6 +3176,15 @@
       "containerDeployment": "컨테이너",
       "composeDeployment": "Docker Compose",
       "deployment": "배포 방식",
+      "details": {
+        "endpoint": "서비스 엔드포인트",
+        "startupTimeout": "시작 제한 시간",
+        "templateRevision": "템플릿 리비전",
+        "runtimeBundle": "런타임 번들",
+        "runtimeProfile": "런타임 프로필",
+        "hostArtifact": "런타임 아티팩트",
+        "configuredHooks": "구성된 수명 주기 작업"
+      },
       "deploymentInformation": "배포 정보",
       "customVersion": "사용자 지정",
       "managedPrivateData": "Redeven 관리형 서비스 전용 저장소",

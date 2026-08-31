@@ -240,11 +240,15 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 	if err != nil {
 		return nil, err
 	}
+	effectiveSpec, err := effectiveTemplateSpec(spec)
+	if err != nil {
+		return nil, err
+	}
 	return &Template{
 		TemplateID: record.TemplateID, Name: record.Name, Description: record.Description, Version: record.Version, Source: "custom", Deployment: spec.Kind,
 		ContainerMode: containerMode(spec.Kind), Revision: record.Revision, Editable: true, Duplicateable: true, DerivedFromTemplateID: record.DerivedFromTemplateID,
 		DerivedFromRevision: record.DerivedFromRevision, ServiceFamilyID: record.ServiceFamilyID, Available: available, ReasonCode: code, Reason: reason,
-		Deployments: []DeploymentAvailability{{Deployment: spec.Kind, Available: available, ReasonCode: code, Reason: reason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: m.workspaceRoots(), Spec: &spec,
+		Deployments: []DeploymentAvailability{{Deployment: spec.Kind, Available: available, ReasonCode: code, Reason: reason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: &effectiveSpec,
 		DefaultAccessMode: pfregistry.AccessModeUnifiedProxy,
 	}, nil
 }
@@ -524,6 +528,21 @@ func canonicalTemplateSpec(spec TemplateSpec) (string, string, error) {
 	}
 	digest := sha256.Sum256(raw)
 	return string(raw), hex.EncodeToString(digest[:]), nil
+}
+
+func effectiveTemplateSpec(spec TemplateSpec) (TemplateSpec, error) {
+	raw, err := json.Marshal(spec)
+	if err != nil {
+		return TemplateSpec{}, err
+	}
+	effective := TemplateSpec{}
+	if err := decodeStrictJSON(raw, &effective); err != nil {
+		return TemplateSpec{}, err
+	}
+	if effective.Container != nil {
+		normalizeContainerTemplateDefaults(effective.Container)
+	}
+	return effective, nil
 }
 
 var errTemplateSpecIdentityMismatch = errors.New("template spec document identity mismatch")

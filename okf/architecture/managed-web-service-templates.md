@@ -3,7 +3,7 @@ type: Product Contract
 title: Managed Web Service Templates
 description: Discover, define, duplicate, and deploy Environment-local host, container, and Compose service definitions.
 tags: [web-services, templates, ui, containers, permissions]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-31T00:00:00Z
 ---
 # Summary
 
@@ -18,7 +18,9 @@ timestamp: 2026-08-27T00:00:00Z
 
 The Web Services header provides one **Service templates** action. It opens a large right-side drawer and replaces the separate one-click-deployment strip. The catalog uses one sticky toolbar for a low-contrast category switcher with counts, search, and a permission-aware create menu. Host and container definitions are distinct categories; built-in and custom definitions are separate groups inside each category. Managed and manually registered services remain in one responsive main grid.
 
-The catalog presents each group as one compact list: every row contains identity, one-line summary, deployment metadata, and a concise state. Installation uses only its status glyph and text; it never colors the whole row. A neutral selected-row treatment owns emphasis and opens the adjacent detail pane, which contains the full description, version, exact availability reason, primary deploy action, and labeled duplicate/edit/delete menu. This single action owner keeps interactive controls out of selectable rows and makes keyboard arrow navigation deterministic. Host and container category changes keep one stable content stage and present the next surface with one low-amplitude opacity settle from near-full visibility. Content position and size never animate, there is no blank intermediate frame, and reduced-motion preferences remove the settle. At narrow widths the detail pane moves below the list and action targets remain at least 44 px high.
+The catalog presents each group as one compact list: every row contains identity, one-line summary, deployment metadata, and a concise state. Installation uses only its status glyph and text; it never colors the whole row. A neutral selected-row treatment owns emphasis and opens the adjacent detail pane. That pane shows the Runtime-projected effective definition rather than repeating the row: containers expose the exact image, endpoint, process, environment names, mounts, resources, network, and security posture; host definitions expose endpoint, runtime bundle or artifact, and configured lifecycle operations; Compose definitions expose their main service and definition summary. Common revision, workspace, data, source, availability, and actions remain concise and use flat divided groups. Long technical values wrap inside the pane, its body scrolls independently when needed, and its actions remain available at the bottom. Renderer code never infers omitted Runtime defaults or parses Compose YAML into a competing model.
+
+This single action owner keeps interactive controls out of selectable rows and makes keyboard arrow navigation deterministic. Host and container category changes keep one stable content stage and present the next surface with one low-amplitude opacity settle from near-full visibility. Content position and size never animate, there is no blank intermediate frame, and reduced-motion preferences remove the settle. At narrow widths the detail pane moves below the list and action targets remain at least 44 px high.
 
 A reviewed built-in uses its official upstream application mark when an attributable asset is available; other definitions fall back to a neutral host, container, or Compose kind icon. Unavailable definitions remain fully readable; installed definitions use a success state. Catalog menus and child dialogs stay above the drawer and preserve their actions. The catalog has no redundant footer or cancel action and closes through the drawer close action, Escape, or a click on the backdrop outside the drawer. Deployment and editor views keep their fixed operation footer, and the deployment view reuses the selected service identity before workspace, deployment, data, and operation information. Interactive controls use pointer or disabled cursors while text-entry fields retain the text cursor.
 
@@ -59,7 +61,7 @@ Template routes are:
 
 Reads require Web Service read permission; mutations require read, write, and execute. Bodies are strict and bounded. Create and duplicate requests use opaque request identities and fingerprints so matching retries return the original definition and conflicting reuse fails. Audit events record only bounded name, identifier, kind, revision, and action—not definitions or script contents.
 
-Catalog responses include declarative `brand_icon` and `notices`. Install requests include `accepted_notice_revisions`; service views expose the target revision/version and `update_available` only when the Runtime-owned built-in definition is newer than the installed immutable snapshot. These are compatible local API additions and require no registry migration or snapshot rewrite.
+Catalog responses include declarative `brand_icon`, `notices`, and a read-only `effective_spec`. The effective specification is a detached projection of the validated raw `spec` after the same container defaults used by lifecycle execution are applied; the raw specification remains the sole editor, duplication, snapshot, and identity input. Install requests include `accepted_notice_revisions`; service views expose the target revision/version and `update_available` only when the Runtime-owned built-in definition is newer than the installed immutable snapshot. These are compatible local API additions and require no registry migration or snapshot rewrite.
 
 # Boundaries
 
@@ -68,6 +70,7 @@ Template presentation and defaults do not expand the Environment filesystem scop
 # Evidence
 
 - `redeven:internal/managedwebservice/templates.go` - Validates definitions, revisions, hashes, duplicate lineage, independent families, parameters, and availability.
+- `redeven:internal/managedwebservice/configuration.go` - Owns the Runtime container defaults reused by the read-only catalog effective specification.
 - `redeven:internal/managedwebservice/builtin_templates.go` - Owns the single built-in definition registry, pinned Webtop artifacts, declarative brands and notices, workspace families, and reserved runtime profile.
 - `redeven:internal/managedwebservice/types.go` - Defines public template, endpoint, host, container, Compose, and duplicate contracts.
 - `redeven:internal/managedwebservice/manager.go` - Prepares one explicit dedicated default workspace per service family and keeps writable filesystem roots as user-selectable scope only.

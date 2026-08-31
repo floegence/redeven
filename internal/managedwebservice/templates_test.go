@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -297,6 +298,35 @@ func TestTemplateFromRecordAcceptsPersistedDocumentIdentity(t *testing.T) {
 	}
 	if loaded.Spec == nil || loaded.Spec.Host == nil || loaded.Spec.Host.StartScript != spec.Host.StartScript {
 		t.Fatalf("loaded migrated custom template = %+v", loaded)
+	}
+	if loaded.EffectiveSpec == nil || loaded.EffectiveSpec.Host == nil || loaded.EffectiveSpec.Host.StartScript != spec.Host.StartScript {
+		t.Fatalf("effective migrated custom template = %+v", loaded.EffectiveSpec)
+	}
+}
+
+func TestEffectiveTemplateSpecAppliesRuntimeDefaultsWithoutChangingRawSpec(t *testing.T) {
+	t.Parallel()
+	raw := TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion,
+		Kind:          DeploymentContainer,
+		Endpoint:      WebEndpointSpec{Scheme: "http", ContainerPort: 3000},
+		Container:     &ContainerTemplateSpec{Image: "example.invalid/dashboard:1"},
+	}
+	effective, err := effectiveTemplateSpec(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw.Container.RestartPolicy != "" || raw.Container.NetworkMode != "" || raw.Container.PIDsLimit != 0 || raw.Container.ReadOnlyRoot || len(raw.Container.CapDrop) != 0 || len(raw.Container.SecurityOpts) != 0 {
+		t.Fatalf("raw template was changed: %+v", raw.Container)
+	}
+	if effective.Container == raw.Container {
+		t.Fatal("effective template must not alias the raw container definition")
+	}
+	if effective.Container.RestartPolicy != "no" || effective.Container.NetworkMode != "bridge" || effective.Container.PIDsLimit != 512 || !effective.Container.ReadOnlyRoot {
+		t.Fatalf("effective defaults = %+v", effective.Container)
+	}
+	if !slices.Equal(effective.Container.CapDrop, []string{"ALL"}) || !slices.Equal(effective.Container.SecurityOpts, []string{"no-new-privileges:true"}) {
+		t.Fatalf("effective security defaults = %+v", effective.Container)
 	}
 }
 
