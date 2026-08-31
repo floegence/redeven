@@ -312,6 +312,14 @@ type ResourcePlan struct {
 	RequiresAdmin bool           `json:"requires_admin"`
 }
 
+type ResourcePrunePlanItem struct {
+	Identity   string   `json:"identity"`
+	Name       string   `json:"name,omitempty"`
+	References []string `json:"references,omitempty"`
+	SizeBytes  int64    `json:"size_bytes,omitempty"`
+	Driver     string   `json:"driver,omitempty"`
+}
+
 type ContainerSummary struct {
 	ContainerID     string         `json:"container_id"`
 	Name            string         `json:"name,omitempty"`

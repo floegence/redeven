@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -268,6 +269,11 @@ func TestPrunePreflightCanonicalizesRequestHashAndLocks(t *testing.T) {
 	}
 	if got := fromTarget.preflight.Plan.Target["reclaimable_bytes"]; got != int64(4096) {
 		t.Fatalf("reclaimable_bytes = %#v, want 4096", got)
+	}
+	if got := fromTarget.preflight.Plan.Target["resources"]; !reflect.DeepEqual(got, []containerengine.ResourcePrunePlanItem{{
+		Identity: "sha256:shared", Name: "example/app:latest", References: []string{"example/app:latest", "example/app:stable"}, SizeBytes: 4096,
+	}}) {
+		t.Fatalf("resources = %#v, want one complete reviewed image", got)
 	}
 }
 

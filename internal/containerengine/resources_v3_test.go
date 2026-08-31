@@ -179,8 +179,8 @@ func TestAdapterPrunePreflightsContainExactSortedCandidates(t *testing.T) {
 		},
 		volumes: []VolumeRecord{
 			{Name: "used", ReferencedContainers: 1},
-			{Name: "z-cache"},
-			{Name: "a-data"},
+			{Name: "z-cache", Driver: "local"},
+			{Name: "a-data", Driver: "local"},
 		},
 	}
 	adapter := mustNewAdapter(t, client)
@@ -193,6 +193,13 @@ func TestAdapterPrunePreflightsContainExactSortedCandidates(t *testing.T) {
 		!reflect.DeepEqual(images.Target["resource_identities"], []string{"ghcr.io/acme/untagged:latest", "sha256:a-id", "sha256:b"}) {
 		t.Fatalf("PruneImagesPreflight() target = %#v", images.Target)
 	}
+	if !reflect.DeepEqual(images.Target["resources"], []ResourcePrunePlanItem{
+		{Identity: "ghcr.io/acme/untagged:latest", Name: "ghcr.io/acme/untagged:latest", References: []string{"ghcr.io/acme/untagged:latest"}, SizeBytes: 400},
+		{Identity: "sha256:a-id", SizeBytes: 300},
+		{Identity: "sha256:b", SizeBytes: 200},
+	}) {
+		t.Fatalf("PruneImagesPreflight() resources = %#v", images.Target["resources"])
+	}
 
 	volumes, err := adapter.PruneVolumesPreflight(context.Background(), ResourcePruneRequest{Engine: EngineDocker})
 	if err != nil {
@@ -200,6 +207,12 @@ func TestAdapterPrunePreflightsContainExactSortedCandidates(t *testing.T) {
 	}
 	if volumes.Target["resource_count"] != 2 || !reflect.DeepEqual(volumes.Target["resource_identities"], []string{"a-data", "z-cache"}) {
 		t.Fatalf("PruneVolumesPreflight() target = %#v", volumes.Target)
+	}
+	if !reflect.DeepEqual(volumes.Target["resources"], []ResourcePrunePlanItem{
+		{Identity: "a-data", Name: "a-data", Driver: "local"},
+		{Identity: "z-cache", Name: "z-cache", Driver: "local"},
+	}) {
+		t.Fatalf("PruneVolumesPreflight() resources = %#v", volumes.Target["resources"])
 	}
 }
 
@@ -233,6 +246,11 @@ func TestAdapterPruneImagesCanonicalizesDuplicateRowsByImageID(t *testing.T) {
 	}
 	if plan.Target["resource_count"] != 1 || plan.Target["reclaimable_bytes"] != int64(300) {
 		t.Fatalf("canonical target = %#v", plan.Target)
+	}
+	if !reflect.DeepEqual(plan.Target["resources"], []ResourcePrunePlanItem{{
+		Identity: "sha256:shared", Name: "example/app:first", References: []string{"example/app:first", "example/app:second"}, SizeBytes: 300,
+	}}) {
+		t.Fatalf("canonical resources = %#v", plan.Target["resources"])
 	}
 }
 

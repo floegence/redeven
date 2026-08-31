@@ -567,14 +567,66 @@ function formatBytes(value: number | undefined): string {
   return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
-function pruneReviewMetrics(preflight: ContainerPreflight): { resourceCount: number; reclaimableBytes?: number } | null {
+type PruneReviewResource = Readonly<{
+  identity: string;
+  name: string;
+  references: readonly string[];
+  sizeBytes?: number;
+  driver: string;
+}>;
+
+type PruneReviewModel = Readonly<{
+  kind: 'images' | 'volumes';
+  resourceCount: number;
+  reclaimableBytes?: number;
+  resources: readonly PruneReviewResource[];
+  complete: boolean;
+}>;
+
+function pruneReviewModel(preflight: ContainerPreflight): PruneReviewModel | null {
   if (preflight.method !== 'images.prune' && preflight.method !== 'volumes.prune') return null;
   const resourceCount = Number(preflight.plan.target.resource_count ?? 0);
   const reclaimableBytes = Number(preflight.plan.target.reclaimable_bytes);
+  const reviewedIdentities = Array.isArray(preflight.plan.target.resource_identities)
+    ? preflight.plan.target.resource_identities.map(compact).filter(Boolean)
+    : [];
+  const resources = Array.isArray(preflight.plan.target.resources)
+    ? preflight.plan.target.resources.flatMap((value): PruneReviewResource[] => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+      const resource = value as Record<string, unknown>;
+      const identity = compact(resource.identity);
+      if (!identity) return [];
+      const references = Array.isArray(resource.references)
+        ? Array.from(new Set(resource.references.map(compact).filter(Boolean))).sort((left, right) => left.localeCompare(right))
+        : [];
+      const sizeBytes = Number(resource.size_bytes);
+      return [{
+        identity,
+        name: compact(resource.name),
+        references,
+        sizeBytes: Number.isFinite(sizeBytes) && sizeBytes >= 0 ? sizeBytes : undefined,
+        driver: compact(resource.driver),
+      }];
+    })
+    : [];
+  const normalizedCount = Number.isFinite(resourceCount) ? Math.max(0, Math.floor(resourceCount)) : 0;
+  const resourceIdentities = resources.map((resource) => resource.identity);
   return {
-    resourceCount: Number.isFinite(resourceCount) ? Math.max(0, Math.floor(resourceCount)) : 0,
+    kind: preflight.method === 'images.prune' ? 'images' : 'volumes',
+    resourceCount: normalizedCount,
     reclaimableBytes: Number.isFinite(reclaimableBytes) && reclaimableBytes >= 0 ? reclaimableBytes : undefined,
+    resources,
+    complete: normalizedCount > 0
+      && resources.length === normalizedCount
+      && reviewedIdentities.length === normalizedCount
+      && new Set(resourceIdentities).size === normalizedCount
+      && resourceIdentities.every((identity, index) => identity === reviewedIdentities[index]),
   };
+}
+
+function shortPruneIdentity(identity: string): string {
+  const value = identity.startsWith('sha256:') ? identity.slice('sha256:'.length) : identity;
+  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
 function formatByteRate(value: number | undefined): string {
@@ -771,6 +823,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [execPreset, setExecPreset] = createSignal('/bin/sh');
   const [execExecutable, setExecExecutable] = createSignal('/bin/sh');
   const [execArguments, setExecArguments] = createSignal<ContainerRunArgument[]>([]);
+  const reviewedPrune = createMemo(() => {
+    const current = review();
+    return current ? pruneReviewModel(current.preflight) : null;
+  });
   let consoleLoadGeneration = 0;
   let consoleLoadAbort: AbortController | null = null;
   let waitingForEnvironment = false;
@@ -3103,12 +3159,56 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <Input class="mt-4" value={confirmation()} onInput={(event) => setConfirmation(event.currentTarget.value)} autocomplete="off" />
       </Dialog>
 
-      <Dialog open={review() !== null} onOpenChange={(open) => { if (!open) cancelReview(); }} title={i18n.t('containers.review.title')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelReview}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin())}>{i18n.t('containers.actions.run')}</Button></div>}>
-        <Show when={review()} keyed>{(current) => {
-          const metrics = pruneReviewMetrics(current.preflight);
-          return <div class="space-y-3"><div class="flex items-center justify-between rounded-lg border p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div><div class="mt-1 font-mono text-sm">{current.preflight.method}</div></div><Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{current.preflight.plan.risk_level}</Tag></div><Show when={metrics}>{(value) => <div class="grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.prune.resources')}</div><strong class="mt-1 block text-lg">{value().resourceCount}</strong></div><div><div class="text-xs text-muted-foreground">{i18n.t('containers.prune.reclaimable')}</div><strong class="mt-1 block text-lg">{formatBytes(value().reclaimableBytes)}</strong></div></div>}</Show><For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-sm text-muted-foreground">{summary}</p>}</For><For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3"><div class="text-sm font-medium text-[var(--redeven-status-warning-foreground)]">{flag.title}</div><p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.detail}</p></div>}</For><Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-sm text-destructive">{i18n.t('containers.permissions.admin')}</p></Show><div class="grid gap-1 rounded-lg bg-muted/40 p-3 font-mono text-[10px] text-muted-foreground"><span>{current.preflight.request_hash}</span><span>{current.preflight.plan_hash}</span></div></div>;
-        }}</Show>
+      <Dialog
+        open={review() !== null}
+        onOpenChange={(open) => { if (!open) cancelReview(); }}
+        title={reviewedPrune() ? i18n.t('containers.prune.reviewTitle') : i18n.t('containers.review.title')}
+        class={reviewedPrune() ? 'container-prune-review-dialog' : undefined}
+        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelReview}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" variant={reviewedPrune() ? 'destructive' : 'default'} onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin()) || Boolean(reviewedPrune() && !reviewedPrune()?.complete)}><Show when={reviewedPrune()}><Trash class="mr-1.5 h-3.5 w-3.5" /></Show>{reviewedPrune() ? i18n.t('containers.prune.confirm') : i18n.t('containers.actions.run')}</Button></div>}
+      >
+        <Show when={review()} keyed>{(current) => <Show when={reviewedPrune()} fallback={<div class="space-y-3"><div class="flex items-center justify-between rounded-lg border p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div><div class="mt-1 font-mono text-sm">{current.preflight.method}</div></div><Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{current.preflight.plan.risk_level}</Tag></div><For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-sm text-muted-foreground">{summary}</p>}</For><For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3"><div class="text-sm font-medium text-[var(--redeven-status-warning-foreground)]">{flag.title}</div><p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.detail}</p></div>}</For><Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-sm text-destructive">{i18n.t('containers.permissions.admin')}</p></Show><div class="grid gap-1 rounded-lg bg-muted/40 p-3 font-mono text-[10px] text-muted-foreground"><span>{current.preflight.request_hash}</span><span>{current.preflight.plan_hash}</span></div></div>}>{(model) => <PruneReviewPanel model={model()} />}</Show>}</Show>
       </Dialog>
+    </div>
+  );
+}
+
+function PruneReviewPanel(props: { model: PruneReviewModel }) {
+  const i18n = useI18n();
+  return (
+    <div class="container-prune-review">
+      <section class="container-prune-review__summary">
+        <span class="container-prune-review__mark"><Trash class="h-4 w-4" /></span>
+        <div class="container-prune-review__intro">
+          <strong>{i18n.t('containers.prune.permanentTitle')}</strong>
+          <span>{i18n.t('containers.prune.permanentMessage')}</span>
+        </div>
+        <div class="container-prune-review__metrics">
+          <div><span>{i18n.t('containers.prune.resources')}</span><strong>{props.model.resourceCount}</strong></div>
+          <div><span>{i18n.t('containers.prune.reclaimable')}</span><strong>{formatBytes(props.model.reclaimableBytes)}</strong></div>
+        </div>
+      </section>
+
+      <Show when={props.model.complete} fallback={<div class="container-prune-review__incomplete" role="alert"><AlertTriangle class="h-4 w-4" /><span>{i18n.t('containers.prune.listUnavailable')}</span></div>}>
+        <section class="container-prune-review__resources" aria-label={i18n.t('containers.prune.resourceList')}>
+          <div class="container-prune-review__heading">{i18n.t('containers.prune.resourceList')}</div>
+          <div class="container-prune-review__list" role="list" data-prune-review-list>
+            <For each={props.model.resources}>{(resource) => {
+              const name = resource.name || (props.model.kind === 'images' ? i18n.t('containers.prune.untaggedImage') : resource.identity);
+              const references = resource.references.filter((reference) => reference !== name);
+              return <div class="container-prune-review__row" role="listitem" data-prune-resource-id={resource.identity}>
+                <span class="container-prune-review__icon">{props.model.kind === 'images' ? <Package class="h-4 w-4" /> : <Database class="h-4 w-4" />}</span>
+                <div class="container-prune-review__identity">
+                  <strong title={name}>{name}</strong>
+                  <Show when={references.length > 0}><span title={references.join(', ')}>{references.join(' · ')}</span></Show>
+                </div>
+                <div class="container-prune-review__meta">
+                  <Show when={props.model.kind === 'images'} fallback={<span>{resource.driver || '—'}</span>}><code title={resource.identity}>{shortPruneIdentity(resource.identity)}</code><strong>{formatBytes(resource.sizeBytes)}</strong></Show>
+                </div>
+              </div>;
+            }}</For>
+          </div>
+        </section>
+      </Show>
     </div>
   );
 }

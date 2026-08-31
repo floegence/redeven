@@ -54,8 +54,13 @@ Image and volume cleanup is not a primary toolbar action. It appears only in
 the shared three-dot menu with a Trash icon and danger tone; loading retains a
 disabled trigger with the same geometry. The UI sends only the selected runtime
 to preflight and displays the server-reviewed resource count and reclaimable
-space. An empty set or incomplete reference state shows its concise typed reason
-and refreshes inventory instead of surfacing a generic mutation error.
+space. Cleanup review also lists every exact target from the signed plan: image
+name or tags, short identity, and size, or volume name and driver. The destructive
+confirmation stays disabled when that list is absent, duplicated, or does not
+match the reviewed count. Internal method names and request hashes are not shown
+as substitutes for resources. An empty set or incomplete reference state shows
+its concise typed reason and refreshes inventory instead of surfacing a generic
+mutation error.
 
 One action-presentation map supplies icons and tone to list buttons, detail
 buttons, and menus: Play for start or resume, Stop for stop, Refresh for restart,

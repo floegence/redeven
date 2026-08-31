@@ -1,6 +1,7 @@
 import '../../index.css';
 
 import { page } from 'vitest/browser';
+import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,12 +18,8 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   useNotification: () => browserHarness.notify,
 }));
 
-vi.mock('../primitives/EnvAppModal', () => ({
-  Dialog: (props: { open: boolean }) => props.open ? <section role="dialog" /> : null,
-}));
-
 vi.mock('../primitives/EnvAppDrawer', () => ({
-  EnvAppDrawer: (props: { open: boolean }) => props.open ? <aside data-drawer /> : null,
+  EnvAppDrawer: (props: { open: boolean }) => <Show when={props.open}><aside data-drawer /></Show>,
 }));
 
 vi.mock('./EnvContext', () => ({
@@ -157,7 +154,16 @@ describe('native Containers responsive product surface', () => {
     ]);
     browserHarness.preflight.mockReset().mockResolvedValue({
       method: 'images.prune', request_hash: 'request', plan_hash: 'plan',
-      plan: { method: 'images.prune', target: { resource_count: 1, reclaimable_bytes: 1024 }, plan_digest: 'plan', risk_level: 'high', risk_flags: [], requires_admin: true },
+      plan: {
+        method: 'images.prune',
+        target: {
+          resource_count: 1,
+          reclaimable_bytes: 1024,
+          resource_identities: ['sha256:unused'],
+          resources: [{ identity: 'sha256:unused', name: 'example/app:latest', references: ['example/app:latest'], size_bytes: 1024 }],
+        },
+        plan_digest: 'plan', risk_level: 'high', risk_flags: [], requires_admin: true,
+      },
       management: { managed: false },
     });
   });
@@ -248,7 +254,7 @@ describe('native Containers responsive product surface', () => {
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
-  it('places cleanup in a dismissible danger menu', async () => {
+  it('places cleanup in a dismissible danger menu and shows the exact reviewed resources', async () => {
     await page.viewport(1440, 900);
     browserHarness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [{
       id: 'sha256:unused', reference: 'example/app:latest', size_bytes: 1024, referenced_containers: 0,
@@ -258,6 +264,10 @@ describe('native Containers responsive product surface', () => {
     await settle();
 
     const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    const visiblePruneItem = () => Array.from(document.querySelectorAll<HTMLElement>('[role="menu"]'))
+      .reverse()
+      .find((menu) => menu.getAttribute('aria-hidden') !== 'true')
+      ?.querySelector<HTMLElement>('[role="menuitem"][data-tone="danger"]') ?? null;
     Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
       .find((button) => button.textContent?.includes('Images'))?.click();
     await settle();
@@ -266,7 +276,7 @@ describe('native Containers responsive product surface', () => {
     expect(more).not.toBeNull();
     more.click();
     await settle();
-    let pruneItem = document.querySelector<HTMLElement>('[role="menuitem"][data-tone="danger"]');
+    let pruneItem = visiblePruneItem();
     expect(pruneItem?.textContent).toContain('Prune unused');
     expect(pruneItem?.querySelector('svg')).not.toBeNull();
     expect(pruneItem?.classList.contains('text-destructive')).toBe(true);
@@ -278,10 +288,33 @@ describe('native Containers responsive product surface', () => {
 
     more.click();
     await settle();
-    pruneItem = document.querySelector<HTMLElement>('[role="menuitem"][data-tone="danger"]');
+    pruneItem = visiblePruneItem();
     pruneItem?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await settle();
     expect(pruneItem?.isConnected && pruneItem.closest('[role="menu"]')?.getAttribute('aria-hidden') !== 'true').toBe(false);
+
+    await new Promise((resolve) => window.setTimeout(resolve, 160));
+    more.click();
+    await settle();
+    pruneItem = visiblePruneItem();
+    expect(pruneItem).not.toBeNull();
+    expect((pruneItem as HTMLButtonElement | null)?.disabled).toBe(false);
+    pruneItem?.click();
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    await settle();
+    expect(browserHarness.preflight).toHaveBeenCalledWith('images.prune', {
+      engine: 'docker',
+      endpoint_id: 'desktop-linux',
+    });
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-floe-dialog-panel].container-prune-review-dialog')).not.toBeNull();
+    });
+    const dialog = document.querySelector<HTMLElement>('[data-floe-dialog-panel].container-prune-review-dialog');
+    if (!dialog) throw new Error('cleanup review dialog did not open');
+    expect(dialog.querySelector('[data-prune-review-list]')?.textContent).toContain('example/app:latest');
+    expect(dialog.querySelector('[data-prune-resource-id="sha256:unused"]')).not.toBeNull();
+    expect(dialog.textContent).not.toContain('images.prune');
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
   it.each([

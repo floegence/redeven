@@ -2822,6 +2822,10 @@ export const enUS = defineDictionary({
     review: { title: 'Review operation', operation: 'Operation' },
     prune: {
       moreActions: 'More actions', resources: 'Resources', reclaimable: 'Reclaimable',
+      reviewTitle: 'Review cleanup', permanentTitle: 'These resources will be permanently removed',
+      permanentMessage: 'Review every item before continuing. The list is locked to this preflight.',
+      resourceList: 'Resources to remove', untaggedImage: 'Untagged image', confirm: 'Clean up',
+      listUnavailable: 'The reviewed resource list is incomplete. Close this dialog and review the cleanup again.',
       nothingTitle: 'Nothing to clean up', nothingMessage: 'No unused images or volumes were found.',
       referenceIncompleteTitle: 'Usage could not be confirmed', referenceIncompleteMessage: 'Refresh the inventory and try again.',
     },
