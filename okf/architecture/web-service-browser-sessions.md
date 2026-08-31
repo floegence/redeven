@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Web Service browser sessions
 description: Address-first Web Service opening, ephemeral forward lifecycle, and isolated Desktop browsing.
 tags: [architecture, desktop, port-forward, security, ui]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-08-31T00:00:00Z
 ---
 # Summary
 
@@ -17,7 +17,7 @@ The address field accepts a numeric port such as `3000` or `:3000`, or an absolu
 
 Opening an address first searches the persistent registry for the normalized origin. A route-safe match reuses the existing forward identity, its access mode, and updates its last-opened time. Otherwise the Runtime creates an in-memory forward with a random DNS-safe identity and the requested mode. This also preserves managed-service records created by builds that used an underscore-delimited identity: the stored record remains lifecycle authority, while each browser session uses a temporary DNS-safe alias for the same verified loopback target. The alias exists only to keep already-installed services usable without rewriting their database records and can be removed only together with a reviewed migration of every affected managed forward. Temporary forwards are discoverable only by exact identity through the proxy path, are excluded from persistent list responses, and expire after two hours without access. Explicit Save requires a bounded name, then persists it, an optional description, the selected access mode, the existing identity, and normalized origin before removing the temporary entry. Later metadata edits update that same record. Runtime restart discards all unsaved entries by construction.
 
-A [Managed Web Service](managed-web-services.md) creates a persistent protected forward with a DNS-safe identity as part of its lifecycle transaction after the user requests installation. The managed-service coordinator, not the ordinary saved-forward controls, owns that identity and its removal. Both install-and-open and later card Open actions resolve the protected record through the same browser-session API before preparing the Local or remote route. Stopping the application retains the forward so Open, restart, recovery, and unavailable-service presentation remain attached to one stable route; ordinary delete-forward requests fail while that ownership exists.
+A [Managed Web Service](managed-web-services.md) creates a persistent protected forward with a DNS-safe identity as part of its lifecycle transaction after the user requests installation. The managed-service coordinator, not the ordinary saved-forward controls, owns that identity and its removal. Installation and start complete in the background without reserving or forcing a browser window. The later explicit card Open action resolves the protected record through the browser-session API before preparing the Local or remote route. Stopping the application retains the forward so Open, restart, recovery, and unavailable-service presentation remain attached to one stable route; ordinary delete-forward requests fail while that ownership exists.
 
 A persisted record created by an older build with a non-loopback target is not migrated, repaired, or deleted automatically. Runtime resolution, last-opened updates, session save, and record updates reject that target before use or mutation. Proxy parsing independently applies the same loopback-only normalizer, so a stored external address cannot bypass the service-level check.
 

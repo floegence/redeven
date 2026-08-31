@@ -3260,7 +3260,7 @@
       "communityImage": "社区 Docker 镜像",
       "communityImageNote": "此审核镜像由社区维护，并非 DeepSeek 官方发行版。Redeven 只会按已批准的 digest 拉取。",
       "apiKeyNote": "打开 DeepSeek Harness 后，请在其内部配置 API Key。Redeven 不会接收、复制或记录这些密钥。",
-      "installStart": "安装、启动并打开",
+      "installStart": "安装并启动",
       "logsTitle": "受管服务日志",
       "noLogs": "暂无日志。",
       "start": "启动",

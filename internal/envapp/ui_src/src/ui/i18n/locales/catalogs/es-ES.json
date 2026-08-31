@@ -3260,7 +3260,7 @@
       "communityImage": "Imagen Docker de la comunidad",
       "communityImageNote": "Esta imagen auditada la mantiene la comunidad y no es una distribución oficial de DeepSeek. Redeven solo obtiene su digest aprobado.",
       "apiKeyNote": "Configura las API Keys dentro de DeepSeek Harness después de abrirlo. Redeven no recibe, copia ni registra esas claves.",
-      "installStart": "Instalar, iniciar y abrir",
+      "installStart": "Instalar e iniciar",
       "logsTitle": "Registros del servicio administrado",
       "noLogs": "Aún no hay registros.",
       "start": "Iniciar",

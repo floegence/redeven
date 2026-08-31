@@ -3260,7 +3260,7 @@
       "communityImage": "社群 Docker 映像檔",
       "communityImageNote": "此經審核的映像檔由社群維護，並非 DeepSeek 官方發行版。Redeven 只會依核准的 digest 拉取。",
       "apiKeyNote": "開啟 DeepSeek Harness 後，請在其中設定 API Key。Redeven 不會接收、複製或記錄這些金鑰。",
-      "installStart": "安裝、啟動並開啟",
+      "installStart": "安裝並啟動",
       "logsTitle": "受管理服務記錄",
       "noLogs": "尚無記錄。",
       "start": "啟動",

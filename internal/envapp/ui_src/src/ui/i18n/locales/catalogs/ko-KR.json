@@ -3260,7 +3260,7 @@
       "communityImage": "커뮤니티 Docker 이미지",
       "communityImageNote": "이 검토된 이미지는 커뮤니티에서 관리하며 DeepSeek 공식 배포본이 아닙니다. Redeven은 승인된 digest만 가져옵니다.",
       "apiKeyNote": "DeepSeek Harness를 연 뒤 내부에서 API Key를 구성하세요. Redeven은 해당 키를 수신, 복사 또는 기록하지 않습니다.",
-      "installStart": "설치, 시작 및 열기",
+      "installStart": "설치 및 시작",
       "logsTitle": "관리형 서비스 로그",
       "noLogs": "아직 로그가 없습니다.",
       "start": "시작",

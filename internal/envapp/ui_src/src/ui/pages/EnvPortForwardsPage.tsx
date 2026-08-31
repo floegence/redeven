@@ -1566,7 +1566,6 @@ export function EnvPortForwardsPage() {
     streamFailedMessage: () => i18n.t('webServices.managed.operationStreamFailed'),
     timedOutMessage: () => i18n.t('webServices.managed.operationTimedOut'),
   });
-  const [managedInstallServiceID, setManagedInstallServiceID] = createSignal<string | null>(null);
   const [managedInstallSubmitting, setManagedInstallSubmitting] = createSignal(false);
   const [workspacePath, setWorkspacePath] = createSignal('');
   const [managedAccessMode, setManagedAccessMode] = createSignal<WebServiceAccessMode>('unified_proxy');
@@ -1589,11 +1588,6 @@ export function EnvPortForwardsPage() {
   const [managedUninstall, setManagedUninstall] = createSignal<ManagedUninstallRequest | null>(null);
   const [managedSettingsService, setManagedSettingsService] = createSignal<ManagedService | null>(null);
   const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
-  const managedInstallOperation = () => {
-    const serviceID = managedInstallServiceID();
-    return serviceID ? managedOperations.ownedOperation(serviceID, 'install') : null;
-  };
-  const managedInstallBusy = () => managedInstallSubmitting() || managedOperationActive(managedInstallOperation());
   const managedUpdateOperation = () => {
     const service = managedUpdate();
     return service ? managedOperations.ownedOperation(service.service_id, 'update') : null;
@@ -1696,50 +1690,56 @@ export function EnvPortForwardsPage() {
     });
   };
 
+  const closeTemplateDrawer = () => {
+    setTemplateDrawerOpen(false);
+    setTemplateDrawerView('catalog');
+    setSelectedTemplateID(null);
+    setTemplateDraft(null);
+    setInstallNoticeAcceptances({});
+    setTemplateValidationVisible(false);
+  };
+
   const installManaged = async () => {
     const template = selectedTemplate();
-    if (!template || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.service_family_id === template.service_family_id) || !canManageManagedService()) return;
+    if (!template || managedInstallSubmitting() || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.service_family_id === template.service_family_id) || !canManageManagedService()) return;
     setManagedInstallSubmitting(true);
-    setManagedInstallServiceID(null);
-    const useDesktopWindow = desktopShellWebServiceWindowOpenAvailable();
-    const reservedWindow = useDesktopWindow ? null : window.open('about:blank', `redeven_managed_${template.template_id}`);
-    let operationID = '';
     try {
       const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()) }) });
-      operationID = result.operation.operation_id;
-      setManagedInstallServiceID(result.service.service_id);
-      setManagedInstallSubmitting(false);
-      const operationPromise = managedOperations.track(result.operation, 'install');
-      await loadManaged(false);
-      const operation = await operationPromise;
-      await loadManaged(false);
-      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n.t('webServices.notifications.failedToAddTitle'), i18n));
-      setTemplateDrawerView('catalog');
-      setSelectedTemplateID(null);
-      setInstallNoticeAcceptances({});
-      setTemplateDrawerOpen(false);
-      await loadManaged(true);
-      bumpRefresh();
-      notify.success(i18n.t('webServices.notifications.serviceAddedTitle'), i18n.t('webServices.notifications.serviceAddedMessage'));
-      if (useDesktopWindow || reservedWindow) {
-        setBusyID(`managed:${result.service.service_id}`);
-        try {
-          const session = await resolveManagedForwardSession(result.service);
-          await performOpen(session.forward, session.app_path, useDesktopWindow, reservedWindow);
-        } finally {
-          setBusyID(null);
-          setBusyText('');
-        }
-      } else if (!useDesktopWindow && !reservedWindow) {
-        notify.error(i18n.t('webServices.notifications.failedToOpenTitle'), i18n.t('webServices.errors.popupBlocked'));
-      }
+      const operationPromise = managedOperations.track(result.operation, 'row');
+      void operationPromise
+        .then(async (operation) => {
+          await loadManaged(false);
+          bumpRefresh();
+          if (operation.state !== 'succeeded') {
+            notify.error(i18n.t('webServices.notifications.failedToAddTitle'), managedOperationFailureMessage(operation, i18n.t('webServices.notifications.failedToAddTitle'), i18n));
+            return;
+          }
+          notify.success(i18n.t('webServices.notifications.serviceAddedTitle'), i18n.t('webServices.notifications.serviceAddedMessage'));
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          notify.error(i18n.t('webServices.notifications.failedToAddTitle'), error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => managedOperations.clear(result.operation.operation_id));
+
+      setSearchQuery('');
+      closeTemplateDrawer();
+      void loadManaged(false).then(() => {
+        window.requestAnimationFrame(() => {
+          const row = Array.from(document.querySelectorAll<HTMLElement>('[data-managed-service-id]'))
+            .find((item) => item.dataset.managedServiceId === result.service.service_id);
+          if (typeof row?.scrollIntoView === 'function') {
+            row.scrollIntoView({
+              block: 'nearest',
+              behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+            });
+          }
+        });
+      });
     } catch (error) {
-      try { reservedWindow?.close(); } catch { /* ignore */ }
       notify.error(i18n.t('webServices.notifications.failedToAddTitle'), error instanceof Error ? error.message : String(error));
     } finally {
       setManagedInstallSubmitting(false);
-      setManagedInstallServiceID(null);
-      if (operationID) managedOperations.clear(operationID);
     }
   };
 
@@ -2611,18 +2611,20 @@ export function EnvPortForwardsPage() {
       <EnvAppDrawer
         open={templateDrawerOpen()}
         class="service-template-explorer-drawer"
-        onOpenChange={(open) => { if (!managedInstallBusy() && !templateSaving()) { setTemplateDrawerOpen(open); if (!open) { setInstallNoticeAcceptances({}); setTemplateValidationVisible(false); } } }}
+        onOpenChange={(open) => {
+          if (templateSaving()) return;
+          if (open) setTemplateDrawerOpen(true);
+          else closeTemplateDrawer();
+        }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
         footer={templateDrawerView() === 'catalog' ? undefined : (
           <div class="flex w-full items-center justify-between gap-2">
-            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); }} disabled={managedInstallBusy() || templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); }} disabled={templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             <div class="ml-auto flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setTemplateDrawerOpen(false)} disabled={managedInstallBusy() || templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button>
+              <Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{templateDrawerView() === 'install' ? i18n.t('common.actions.close') : i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
-                <Show when={managedInstallBusy()} fallback={<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={!canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{i18n.t('webServices.managed.installStart')}</Button>}>
-                  <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation(managedInstallOperation())} disabled={!managedInstallOperation() || managedInstallOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
-                </Show>
+                <Button size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : i18n.t('webServices.managed.installStart')}</Button>
               </Show>
               <Show when={templateDrawerView() === 'editor'}>
                 <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</Button>
@@ -2689,7 +2691,7 @@ export function EnvPortForwardsPage() {
                       class="shrink-0 gap-1.5"
                       data-testid="managed-workspace-picker-trigger"
                       onClick={openWorkspacePicker}
-                      disabled={managedInstallBusy()}
+                      disabled={managedInstallSubmitting()}
                     >
                       <FolderOpen class="h-3.5 w-3.5" aria-hidden="true" />
                       {i18n.t('webServices.managed.chooseWorkspace')}
@@ -2709,7 +2711,7 @@ export function EnvPortForwardsPage() {
                     variant="ghost"
                     class="mt-1.5 h-7 gap-1.5 px-2 text-xs"
                     onClick={() => setWorkspacePath(template.default_workspace_path)}
-                    disabled={managedInstallBusy()}
+                    disabled={managedInstallSubmitting()}
                   >
                     <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
                     {i18n.t('webServices.managed.restoreRecommendedWorkspace')}
@@ -2729,7 +2731,7 @@ export function EnvPortForwardsPage() {
                 <AccessModePicker
                   value={managedAccessMode()}
                   targetURL={`${template.spec?.endpoint.scheme ?? 'http'}://127.0.0.1`}
-                  disabled={managedInstallBusy()}
+                  disabled={managedInstallSubmitting()}
                   onChange={setManagedAccessMode}
                 />
               </section>
@@ -2737,12 +2739,11 @@ export function EnvPortForwardsPage() {
                 <ManagedTemplateNotices
                   notices={template.notices ?? []}
                   accepted={installNoticeAcceptances()}
-                  disabled={managedInstallBusy()}
+                  disabled={managedInstallSubmitting()}
                   onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
                 />
               </Show>
               <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
-              <Show when={managedInstallBusy() ? managedInstallOperation() : null} keyed>{(operation) => <ManagedOperationProgress operation={operation} serviceName={managedTemplateLocalizedIdentity(template, i18n).name} artifactReference={template.spec?.container?.image} canCancel={canManageManagedService()} onCancel={() => void cancelManagedOperation(operation)} />}</Show>
             </div>
           )}</Show>
 

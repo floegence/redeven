@@ -3172,7 +3172,7 @@ export const enUS = defineDictionary({
       communityImage: 'Community Docker image',
       communityImageNote: 'This audited image is maintained by the community and is not an official DeepSeek distribution. Redeven pulls only its approved digest.',
       apiKeyNote: 'Configure API keys inside DeepSeek Harness after it opens. Redeven does not receive, copy, or log those keys.',
-      installStart: 'Install, start and open',
+      installStart: 'Install and start',
       logsTitle: 'Managed service logs',
       noLogs: 'No logs yet.',
       start: 'Start',

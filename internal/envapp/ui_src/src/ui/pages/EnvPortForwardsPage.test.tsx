@@ -1165,7 +1165,7 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
 
     expect(host.textContent).toContain('Container root access and outbound network');
-    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Install, start and open');
+    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Install and start');
     expect(install?.disabled).toBe(true);
     host.querySelector<HTMLInputElement>('[data-testid="managed-template-notices"] input[type="checkbox"]')?.click();
     await flushPage();
@@ -1177,6 +1177,94 @@ describe('EnvPortForwardsPage', () => {
       workspace_path: templates[0].default_workspace_path,
       accepted_notice_revisions: { 'interactive-desktop-root-and-network': 1 },
     }));
+  });
+
+  it('hands an accepted install to its service row and lets the drawer close without cancelling', async () => {
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
+    const template = {
+      template_id: 'custom-background-install', service_family_id: 'custom-background-install', name: 'Background dashboard', description: 'Dashboard service',
+      source: 'custom', deployment: 'container', revision: 1, duplicateable: true, editable: true, available: true,
+      version: '1.0.0', developer_preview: false, notices: [], deployments: [{ deployment: 'container', available: true }],
+      default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/background-dashboard', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+      spec: { schema_version: 1, kind: 'container', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, container: { image: 'ghcr.io/example/dashboard@sha256:reviewed' } },
+    };
+    const operation = {
+      operation_id: 'mop-background-install', service_id: 'mws-background-install', action: 'install' as const,
+      state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7,
+    };
+    const service = {
+      service_id: operation.service_id, template_id: template.template_id, service_family_id: template.service_family_id,
+      template_source: 'custom', name: template.name, description: template.description, deployment: 'container',
+      workspace_path: template.default_workspace_path, version: template.version, desired_state: 'running', observed_state: 'installing',
+      forward_id: 'managed-background-install', runtime_port: 32101, access_mode: 'unified_proxy',
+      operation_artifact_reference: template.spec.container.image, active_operation: operation,
+    };
+    let installed = false;
+    let finished = false;
+    let streamSignal: AbortSignal | undefined;
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const createRequest = deferred<{ service: typeof service; operation: typeof operation }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
+      if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') {
+        return { services: installed ? [{ ...service, observed_state: finished ? 'running' : service.observed_state, active_operation: finished ? undefined : operation }] : [] };
+      }
+      if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'POST') return createRequest.promise;
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url.includes('/cancel') && init?.method === 'POST') throw new Error('Closing the drawer must not cancel deployment');
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockImplementation(async (_url: string, init?: RequestInit) => {
+      streamSignal = init?.signal ?? undefined;
+      return new Response(new ReadableStream({
+        start(controller) {
+          streamController = controller;
+          controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(operation)}\n\n`));
+        },
+      }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    });
+
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+      await flushPage();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
+      await flushPage();
+
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim().startsWith('Install'))?.click();
+
+      await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-services', expect.objectContaining({ method: 'POST' })));
+      const closeDrawer = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Close');
+      expect(closeDrawer?.disabled).toBe(false);
+      closeDrawer?.click();
+      await flushMicrotasks();
+      expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
+
+      installed = true;
+      createRequest.resolve({ service, operation: { ...operation, state: 'pending', stage: 'environment_check', progress_current: 0 } });
+
+      await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-background-install"]')).toBeTruthy());
+      const serviceRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
+      expect(serviceRow.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('2/7');
+      expect(serviceRow.querySelectorAll('[data-testid="managed-operation-progress"]')).toHaveLength(1);
+      expect(streamSignal?.aborted).toBe(false);
+      expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([url]) => String(url).includes('/cancel'))).toBe(false);
+
+      finished = true;
+      streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ ...operation, state: 'succeeded', stage: 'completed', progress_current: 7 })}\n\n`));
+      streamController?.close();
+      await waitForAssertion(() => {
+        const updatedRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
+        expect(updatedRow.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeNull();
+        expect(updatedRow.textContent).toContain('Running');
+      });
+      expect(openWindow).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
   });
 
   it('uses the same managed operation chain for Webtop updates and sends the notice revision', async () => {

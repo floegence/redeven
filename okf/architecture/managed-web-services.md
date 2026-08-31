@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Services
 description: Deploy, operate, recover, and expose immutable Web Service template snapshots through one Redeven-owned lifecycle boundary.
 tags: [architecture, web-services, runtime, containers, security]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-08-31T00:00:00Z
 ---
 # Summary
 
@@ -16,7 +16,7 @@ timestamp: 2026-08-30T00:00:00Z
 
 ## Deployment execution
 
-A deployment streams environment check, artifact preparation, verification, install, start, health, forward registration, and open through the authenticated Local API. Its card owns every lifecycle and log action while hiding the backing forward from manual controls. Container-backed cards receive exact Container and Image destinations from Runtime; Renderer never infers them from a template ID. Image navigation matches a complete image ID, reference, digest, tag, or pinned-reference alias from authoritative inventory, then opens its canonical identity. Partial matches are forbidden, and a missing target leaves the list stable with an explicit notice.
+Deployment streams environment check, artifact preparation, verification, install, start, health, and forward registration through the authenticated Local API. The template drawer owns configuration and submission only. After Runtime persists the service and operation, Renderer closes the drawer and transfers that operation and stream to its new service row. Drawer closure never cancels work; only the row Cancel action does. Deployment reserves no browser window and never force-opens the service. The card owns lifecycle and log actions while hiding its forward from manual controls. Container-backed cards receive exact Container and Image destinations from Runtime; Renderer never infers them from a template ID. Image navigation matches a complete image ID, reference, digest, tag, or pinned-reference alias from authoritative inventory, then opens its canonical identity. Partial matches are forbidden, and a missing target leaves the list stable with an explicit notice.
 
 One Runtime operation record and event stream own each lifecycle action. Renderer keys active work by service and operation; direct or recovered work replaces stale status from submission onward. Compact progress stays inside the owning service, aligned below its information column, and shows only action, stage, exact artifact, position, and cancellation. Its disclosure shows ordered stages. One operation has one presentation owner: no global tail progress, cross-service cancellation, or duplicate projection. Runtime supplies the artifact reference, and the shared `thinking-orbs` Shaping indicator respects reduced motion and visibility.
 
@@ -52,7 +52,7 @@ The two independent Webtop templates, their reserved `interactive_desktop` profi
 
 Port-forward registry schema v5 is the contiguous successor of v1 through v4. V3-to-v4 adds the constrained access mode and migrates existing DeepSeek forwards to `desktop_loopback`. V4-to-v5 versions and hashes configuration, adds service resource identities, and assigns stable IDs to historical typed resources while preserving records. Legacy volume markers are imported once and removed. Every edge verifies its exact source and commits atomically; drift, future versions, or failure leave the prior database unchanged.
 
-Service, stable protected forward, and initial install operation are created in one transaction. New protected forward identities are DNS-safe because the same value crosses the Runtime proxy, secure sandbox host, and Desktop browser route. Install-and-open and later card Open both resolve that record through the Web Service browser-session boundary; previously installed underscore-delimited records receive a temporary DNS-safe browser alias without changing lifecycle ownership or persistent data. Repeated request identities return the original operation only for the same fingerprint; conflicting reuse fails. At most one operation is pending, running, or cancelling per service.
+Service, stable protected forward, and initial install operation are created in one transaction. New protected forward identities are DNS-safe because the same value crosses the Runtime proxy, secure sandbox host, and Desktop browser route. The card Open action resolves that record through the Web Service browser-session boundary after the service is ready; previously installed underscore-delimited records receive a temporary DNS-safe browser alias without changing lifecycle ownership or persistent data. Repeated request identities return the original operation only for the same fingerprint; conflicting reuse fails. At most one operation is pending, running, or cancelling per service.
 
 Startup marks incomplete work `interrupted`, cleans only verifiable partial resources, and waits for Retry, except that an interrupted reviewed update follows its persisted finalize-or-rollback journal. A terminal instance with desired state `running` receives a recovery Start. Shutdown stops exact known runtimes while retaining desired state. Stop preserves the forward and card.
 
