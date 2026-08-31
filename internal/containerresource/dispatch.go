@@ -91,7 +91,7 @@ func (s *Service) execute(ctx context.Context, operationID string, decoded decod
 	case *containerengine.ContainerServiceActionRequest:
 		result, err := s.engine.ContainerServiceAction(ctx, decoded.preflight.Method, *req)
 		if err == nil && (decoded.preflight.Method == containerengine.MethodContainerServicesStart || decoded.preflight.Method == containerengine.MethodContainerServicesRestart) {
-			state, stateErr := s.store.containerServiceConfigurationState(ctx, req.ServiceID)
+			state, stateErr := s.store.containerServiceConfigurationState(ctx, req.ServiceID, containerengine.ContainerServiceConfigurationSourceEngine)
 			if stateErr != nil {
 				return executionResult{}, stateErr
 			}
@@ -112,7 +112,7 @@ func (s *Service) execute(ctx context.Context, operationID string, decoded decod
 			return executionResult{}, serviceErr
 		}
 		if storeErr := s.store.upsertContainerServiceConfigurationState(ctx, ContainerServiceConfigurationState{
-			ServiceID: req.ServiceID, ConfigurationRevision: result.Revision, RestartRequired: result.RestartRequired,
+			ServiceID: req.ServiceID, SourceID: req.SourceID, ConfigurationRevision: result.Revision, RestartRequired: result.RestartRequired,
 			ServiceGeneration: service.Generation,
 		}); storeErr != nil {
 			return executionResult{}, storeErr
@@ -251,8 +251,17 @@ func (s *Service) reconcile(ctx context.Context, decoded decodedMutation, result
 	case *containerengine.ContainerServiceConfigurationUpdateRequest:
 		var configuration containerengine.ContainerServiceConfiguration
 		configuration, err = s.engine.ContainerServiceConfiguration(ctx, req.ServiceID)
-		if err == nil && result.Revision != "" && configuration.BaseRevision != result.Revision {
-			err = errors.New("container service configuration revision was not reconciled")
+		if err == nil && result.Revision != "" {
+			matched := false
+			for _, source := range configuration.Sources {
+				if source.SourceID == req.SourceID {
+					matched = source.BaseRevision == result.Revision
+					break
+				}
+			}
+			if !matched {
+				err = errors.New("container service configuration revision was not reconciled")
+			}
 		}
 		status.State = result.State
 	}

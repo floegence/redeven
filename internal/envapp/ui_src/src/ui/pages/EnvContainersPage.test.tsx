@@ -147,10 +147,6 @@ vi.mock('../widgets/TextFilePreviewPane', () => ({
   TextFilePreviewPane: (props: any) => <textarea data-service-config-editor value={props.draftText} onInput={(event) => props.onDraftChange?.(event.currentTarget.value)} />,
 }));
 
-vi.mock('../services/desktopShellBridge', () => ({
-  openExternalURLInDesktopShell: vi.fn().mockResolvedValue(true),
-}));
-
 vi.mock('../primitives/EnvAppModal', () => ({
   Dialog: (props: any) => <Show when={props.open}><section data-dialog class={props.class}>{props.title}{props.children}{props.footer}</section></Show>,
 }));
@@ -271,17 +267,21 @@ describe('native Containers page', () => {
       {
         service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'stopped',
         capabilities: { start: true, stop: true, restart: true },
-        configuration: { mode: 'editable', format: 'json', sections: ['proxy', 'advanced'], owner: 'redeven' },
+        configuration: { mode: 'local', sources: ['engine', 'client_proxy'] },
       },
       {
         service_id: 'container_service_podman', engine: 'podman', name: 'Local Podman', implementation: 'podman_local', state: 'running',
         capabilities: { start: false, stop: false, restart: false },
-        configuration: { mode: 'editable', format: 'toml', sections: ['proxy', 'advanced'], owner: 'redeven' },
+        configuration: { mode: 'local', sources: ['engine'] },
         guidance_code: 'podman_daemonless', rootless: true,
       },
     ]);
     harness.getServiceConfiguration.mockReset().mockResolvedValue({
-      service_id: 'container_service_docker', format: 'json', content: '{}\n', base_revision: 'sha256:base', restart_required: false,
+      service_id: 'container_service_docker',
+      sources: [
+        { source_id: 'engine', display_path: '~/.docker/daemon.json', status: 'ready', exists: true, format: 'json', sections: ['advanced'], apply_modes: ['save', 'save_and_restart'], content: '{}\n', base_revision: 'sha256:engine' },
+        { source_id: 'client_proxy', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['proxy'], apply_modes: ['save'], base_revision: 'sha256:client', http_proxy: 'http://proxy.example.test' },
+      ],
     });
     harness.listResources.mockReset().mockResolvedValue([{
       container_id: 'container-1',
@@ -374,16 +374,23 @@ describe('native Containers page', () => {
     await settle();
 
     expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_docker');
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.httpProxy');
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.engineConfiguration');
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
   });
 
-  it('hands provider-owned configuration to the official service without showing a false editor', async () => {
+  it('edits Docker Desktop engine and CLI proxy sources without an external handoff', async () => {
     harness.listServices.mockResolvedValue([{
       service_id: 'container_service_desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'running',
       capabilities: { start: true, stop: true, restart: true },
-      configuration: { mode: 'external', owner: 'docker_desktop' },
-      guidance_code: 'desktop_managed',
+      configuration: { mode: 'local', sources: ['engine', 'client_proxy'] },
     }]);
+    harness.getServiceConfiguration.mockResolvedValue({
+      service_id: 'container_service_desktop',
+      sources: [
+        { source_id: 'engine', display_path: '~/.docker/daemon.json', status: 'missing', exists: false, format: 'json', sections: ['advanced'], apply_modes: ['save', 'save_and_restart'], content: '{}\n', base_revision: 'sha256:missing' },
+        { source_id: 'client_proxy', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['proxy'], apply_modes: ['save'], base_revision: 'sha256:client' },
+      ],
+    });
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
@@ -398,10 +405,62 @@ describe('native Containers page', () => {
       ?.click();
     await settle();
 
+    expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_desktop');
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
+    const clientProxyTab = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.services.clientProxy'));
+    clientProxyTab?.click();
+    await settle();
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.clientProxyScope');
+    expect(host.querySelector('[data-dialog]')?.textContent).not.toContain('containers.services.openSettings');
+    const httpProxy = host.querySelector<HTMLInputElement>('[data-dialog] .container-service-proxy-form input');
+    expect(httpProxy).not.toBeNull();
+    httpProxy!.value = 'http://updated-proxy.example.test:3128';
+    httpProxy!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const save = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button'))
+      .find((button) => button.textContent?.includes('containers.services.save'));
+    expect(save?.disabled).toBe(false);
+    save?.click();
+    await settle();
+    const confirmation = host.querySelector<HTMLInputElement>('[data-dialog] input');
+    expect(confirmation).not.toBeNull();
+    confirmation!.value = 'Docker Desktop';
+    confirmation!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button'))
+      .find((button) => button.textContent?.includes('containers.actions.review'))
+      ?.click();
+    await settle();
+    expect(harness.preflight).toHaveBeenCalledWith('container.services.configuration.update', expect.objectContaining({
+      source_id: 'client_proxy',
+      base_revision: 'sha256:client',
+      mode: 'proxy',
+      apply_mode: 'save',
+      http_proxy: 'http://updated-proxy.example.test:3128',
+    }));
+  });
+
+  it('explains why a running remote service cannot be configured locally', async () => {
+    harness.listServices.mockResolvedValue([{
+      service_id: 'container_service_remote', engine: 'docker', name: 'Remote Docker', implementation: 'remote', state: 'running', remote: true,
+      capabilities: { start: false, stop: false, restart: false },
+      configuration: { mode: 'unavailable' },
+      guidance_code: 'remote_host',
+    }]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
+      .find((button) => button.textContent?.includes('containers.services.title'))
+      ?.click();
+    await settle();
+
+    expect(host.querySelector('.container-service-card__guidance')?.textContent).toContain('containers.services.guidance.remote_host');
+    const configure = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button'))
+      .find((button) => button.textContent?.includes('containers.services.configure'));
+    expect(configure?.disabled).toBe(true);
     expect(harness.getServiceConfiguration).not.toHaveBeenCalled();
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.guidance.desktop_managed');
-    expect(host.querySelector('[data-dialog]')?.textContent).not.toContain('containers.services.httpProxy');
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.openSettings');
   });
 
   it('keeps prune in the danger menu and lets the server resolve the exact image set', async () => {
@@ -1152,12 +1211,12 @@ describe('native Containers page', () => {
       {
         service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
         capabilities: { start: false, stop: true, restart: true },
-        configuration: { mode: 'unavailable', owner: 'host' },
+        configuration: { mode: 'unavailable' },
       },
       {
         service_id: 'container_service_podman', engine: 'podman', name: 'Podman', implementation: 'unavailable', state: 'not_installed',
         capabilities: { start: false, stop: false, restart: false },
-        configuration: { mode: 'unavailable', owner: 'host' },
+        configuration: { mode: 'unavailable' },
         guidance_code: 'install',
       },
     ]);

@@ -10,7 +10,7 @@ import (
 
 const (
 	schemaKind           = "container_resources_product_v1"
-	currentSchemaVersion = 3
+	currentSchemaVersion = 4
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -23,6 +23,7 @@ func schemaSpec() sqliteutil.Spec {
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateToV4},
 		},
 		Verify: verifySchema,
 	}
@@ -80,18 +81,20 @@ CREATE UNIQUE INDEX idx_container_compose_projects_target_name
   ON container_compose_projects(engine, endpoint_id, name);
 
 CREATE TABLE container_service_configuration_state (
-  service_id TEXT PRIMARY KEY,
+  service_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
   configuration_revision TEXT NOT NULL DEFAULT '',
   restart_required INTEGER NOT NULL DEFAULT 0 CHECK(restart_required IN (0, 1)),
   service_generation TEXT NOT NULL DEFAULT '',
-  updated_at_unix_ms INTEGER NOT NULL
+  updated_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY(service_id, source_id)
 );
 `)
 	return err
 }
 
 func migrateToV2(tx *sql.Tx) error {
-	if err := verifyContainerResourceSchema(tx, false, false); err != nil {
+	if err := verifyContainerResourceSchema(tx, false, false, false); err != nil {
 		return fmt.Errorf("verify container resources v1 schema: %w", err)
 	}
 	_, err := tx.Exec(`
@@ -113,7 +116,7 @@ CREATE UNIQUE INDEX idx_container_compose_projects_target_name
 }
 
 func migrateToV3(tx *sql.Tx) error {
-	if err := verifyContainerResourceSchema(tx, true, false); err != nil {
+	if err := verifyContainerResourceSchema(tx, true, false, false); err != nil {
 		return fmt.Errorf("verify container resources v2 schema: %w", err)
 	}
 	_, err := tx.Exec(`
@@ -128,11 +131,36 @@ CREATE TABLE container_service_configuration_state (
 	return err
 }
 
-func verifySchema(tx *sql.Tx) error {
-	return verifyContainerResourceSchema(tx, true, true)
+func migrateToV4(tx *sql.Tx) error {
+	if err := verifyContainerResourceSchema(tx, true, true, false); err != nil {
+		return fmt.Errorf("verify container resources v3 schema: %w", err)
+	}
+	_, err := tx.Exec(`
+ALTER TABLE container_service_configuration_state RENAME TO container_service_configuration_state_v3;
+CREATE TABLE container_service_configuration_state (
+  service_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  configuration_revision TEXT NOT NULL DEFAULT '',
+  restart_required INTEGER NOT NULL DEFAULT 0 CHECK(restart_required IN (0, 1)),
+  service_generation TEXT NOT NULL DEFAULT '',
+  updated_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY(service_id, source_id)
+);
+INSERT INTO container_service_configuration_state(
+  service_id, source_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
+)
+SELECT service_id, 'engine', configuration_revision, restart_required, service_generation, updated_at_unix_ms
+FROM container_service_configuration_state_v3;
+DROP TABLE container_service_configuration_state_v3;
+`)
+	return err
 }
 
-func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects, includeContainerServices bool) error {
+func verifySchema(tx *sql.Tx) error {
+	return verifyContainerResourceSchema(tx, true, true, true)
+}
+
+func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects, includeContainerServices, multiSourceContainerServices bool) error {
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
@@ -160,6 +188,9 @@ func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects, includeCo
 	}
 	if includeContainerServices {
 		expected["container_service_configuration_state"] = []string{"service_id", "configuration_revision", "restart_required", "service_generation", "updated_at_unix_ms"}
+		if multiSourceContainerServices {
+			expected["container_service_configuration_state"] = []string{"service_id", "source_id", "configuration_revision", "restart_required", "service_generation", "updated_at_unix_ms"}
+		}
 	}
 	for table, want := range expected {
 		columns, err := sqliteutil.TableColumnNamesTx(tx, table)

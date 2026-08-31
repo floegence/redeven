@@ -24,10 +24,12 @@ creation uses the stable requested name. One key admits one mutation at a time,
 while unrelated keys may proceed concurrently.
 
 Container service operations have no resource endpoint because service identity
-must survive a stopped runtime. Their key is `(engine, container_service,
-service_id)`, and the same controller owns preflight discovery and terminal
-observation. Configuration operations persist only revision and restart state;
-their document and proxy values never enter operation evidence.
+must survive a stopped runtime. Lifecycle uses `(engine, container_service,
+service_id)`; configuration extends the lock identity with `source_id`, so
+independent local sources do not share mutable state. The same controller owns
+preflight discovery and terminal observation. Configuration operations persist
+only source ID, revision, and restart state; document and proxy values never
+enter operation evidence.
 
 Preflight returns normalized impact, risk, exact target, confirmation text,
 `request_hash`, and `plan_hash`. Operation creation recomputes the plan against

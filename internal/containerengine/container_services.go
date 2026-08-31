@@ -53,9 +53,15 @@ const (
 type ContainerServiceConfigurationAccessMode string
 
 const (
-	ContainerServiceConfigurationEditable    ContainerServiceConfigurationAccessMode = "editable"
-	ContainerServiceConfigurationExternal    ContainerServiceConfigurationAccessMode = "external"
+	ContainerServiceConfigurationLocal       ContainerServiceConfigurationAccessMode = "local"
 	ContainerServiceConfigurationUnavailable ContainerServiceConfigurationAccessMode = "unavailable"
+)
+
+type ContainerServiceConfigurationSourceID string
+
+const (
+	ContainerServiceConfigurationSourceEngine      ContainerServiceConfigurationSourceID = "engine"
+	ContainerServiceConfigurationSourceClientProxy ContainerServiceConfigurationSourceID = "client_proxy"
 )
 
 type ContainerServiceConfigurationSection string
@@ -65,23 +71,9 @@ const (
 	ContainerServiceConfigurationSectionAdvanced ContainerServiceConfigurationSection = "advanced"
 )
 
-type ContainerServiceConfigurationOwner string
-
-const (
-	ContainerServiceConfigurationOwnerRedeven       ContainerServiceConfigurationOwner = "redeven"
-	ContainerServiceConfigurationOwnerDockerDesktop ContainerServiceConfigurationOwner = "docker_desktop"
-	ContainerServiceConfigurationOwnerPodmanMachine ContainerServiceConfigurationOwner = "podman_machine"
-	ContainerServiceConfigurationOwnerRemoteHost    ContainerServiceConfigurationOwner = "remote_host"
-	ContainerServiceConfigurationOwnerHost          ContainerServiceConfigurationOwner = "host"
-)
-
-// ContainerServiceConfigurationAccess is the single product contract for
-// configuration placement. Each mode has one owner and one valid interaction.
 type ContainerServiceConfigurationAccess struct {
-	Mode     ContainerServiceConfigurationAccessMode `json:"mode"`
-	Format   ContainerServiceConfigurationKind       `json:"format,omitempty"`
-	Sections []ContainerServiceConfigurationSection  `json:"sections,omitempty"`
-	Owner    ContainerServiceConfigurationOwner      `json:"owner,omitempty"`
+	Mode    ContainerServiceConfigurationAccessMode `json:"mode"`
+	Sources []ContainerServiceConfigurationSourceID `json:"sources,omitempty"`
 }
 
 type ContainerServiceGuidanceCode string
@@ -93,7 +85,6 @@ const (
 	ContainerServiceGuidanceCheckActive       ContainerServiceGuidanceCode = "check_active"
 	ContainerServiceGuidanceDetectionFailed   ContainerServiceGuidanceCode = "detection_failed"
 	ContainerServiceGuidanceSelectDocker      ContainerServiceGuidanceCode = "select_docker_context"
-	ContainerServiceGuidanceDesktopManaged    ContainerServiceGuidanceCode = "desktop_managed"
 	ContainerServiceGuidanceExternallyManaged ContainerServiceGuidanceCode = "externally_managed"
 	ContainerServiceGuidanceHostManager       ContainerServiceGuidanceCode = "host_manager"
 	ContainerServiceGuidancePodmanDaemonless  ContainerServiceGuidanceCode = "podman_daemonless"
@@ -125,27 +116,46 @@ type ContainerService struct {
 	RestartRequired     bool                                `json:"restart_required,omitempty"`
 	Generation          string                              `json:"generation,omitempty"`
 
-	endpointID        EndpointID
-	configPath        string
-	serviceUnit       string
-	serviceUserUnit   bool
-	machineName       string
-	configurationKind ContainerServiceConfigurationKind
+	endpointID           EndpointID
+	serviceUnit          string
+	serviceUserUnit      bool
+	machineName          string
+	configurationSources []containerServiceConfigurationSourceDefinition
 }
 
 type ContainerServicesResponse struct {
 	Services []ContainerService `json:"services"`
 }
 
+type ContainerServiceConfigurationSourceStatus string
+
+const (
+	ContainerServiceConfigurationSourceReady       ContainerServiceConfigurationSourceStatus = "ready"
+	ContainerServiceConfigurationSourceMissing     ContainerServiceConfigurationSourceStatus = "missing"
+	ContainerServiceConfigurationSourcePermission  ContainerServiceConfigurationSourceStatus = "permission"
+	ContainerServiceConfigurationSourceInvalid     ContainerServiceConfigurationSourceStatus = "invalid"
+	ContainerServiceConfigurationSourceUnsupported ContainerServiceConfigurationSourceStatus = "unsupported"
+)
+
+type ContainerServiceConfigurationSource struct {
+	SourceID        ContainerServiceConfigurationSourceID     `json:"source_id"`
+	DisplayPath     string                                    `json:"display_path"`
+	Status          ContainerServiceConfigurationSourceStatus `json:"status"`
+	Exists          bool                                      `json:"exists"`
+	Format          ContainerServiceConfigurationKind         `json:"format"`
+	Sections        []ContainerServiceConfigurationSection    `json:"sections"`
+	ApplyModes      []ContainerServiceApplyMode               `json:"apply_modes"`
+	Content         string                                    `json:"content,omitempty"`
+	BaseRevision    string                                    `json:"base_revision,omitempty"`
+	HTTPProxy       string                                    `json:"http_proxy,omitempty"`
+	HTTPSProxy      string                                    `json:"https_proxy,omitempty"`
+	NoProxy         string                                    `json:"no_proxy,omitempty"`
+	RestartRequired bool                                      `json:"restart_required,omitempty"`
+}
+
 type ContainerServiceConfiguration struct {
-	ServiceID       string                            `json:"service_id"`
-	Format          ContainerServiceConfigurationKind `json:"format"`
-	Content         string                            `json:"content"`
-	BaseRevision    string                            `json:"base_revision"`
-	HTTPProxy       string                            `json:"http_proxy,omitempty"`
-	HTTPSProxy      string                            `json:"https_proxy,omitempty"`
-	NoProxy         string                            `json:"no_proxy,omitempty"`
-	RestartRequired bool                              `json:"restart_required,omitempty"`
+	ServiceID string                                `json:"service_id"`
+	Sources   []ContainerServiceConfigurationSource `json:"sources"`
 }
 
 type ContainerServiceActionRequest struct {
@@ -169,16 +179,17 @@ const (
 )
 
 type ContainerServiceConfigurationUpdateRequest struct {
-	Engine           Engine                            `json:"engine"`
-	ServiceID        string                            `json:"service_id"`
-	BaseRevision     string                            `json:"base_revision"`
-	Mode             ContainerServiceConfigurationMode `json:"mode"`
-	ApplyMode        ContainerServiceApplyMode         `json:"apply_mode"`
-	HTTPProxy        string                            `json:"http_proxy,omitempty"`
-	HTTPSProxy       string                            `json:"https_proxy,omitempty"`
-	NoProxy          string                            `json:"no_proxy,omitempty"`
-	Content          string                            `json:"content,omitempty"`
-	ConfirmationName string                            `json:"confirmation_name"`
+	Engine           Engine                                `json:"engine"`
+	ServiceID        string                                `json:"service_id"`
+	SourceID         ContainerServiceConfigurationSourceID `json:"source_id"`
+	BaseRevision     string                                `json:"base_revision"`
+	Mode             ContainerServiceConfigurationMode     `json:"mode"`
+	ApplyMode        ContainerServiceApplyMode             `json:"apply_mode"`
+	HTTPProxy        string                                `json:"http_proxy,omitempty"`
+	HTTPSProxy       string                                `json:"https_proxy,omitempty"`
+	NoProxy          string                                `json:"no_proxy,omitempty"`
+	Content          string                                `json:"content,omitempty"`
+	ConfirmationName string                                `json:"confirmation_name"`
 }
 
 type ContainerServiceActionResult struct {
@@ -276,7 +287,7 @@ func (a *Adapter) ContainerServiceConfigurationPreflight(ctx context.Context, re
 	if req.Engine != service.Engine || strings.TrimSpace(req.ConfirmationName) != service.Name {
 		return ResourcePlan{}, errors.New("container service confirmation is invalid")
 	}
-	if service.ConfigurationAccess.Mode != ContainerServiceConfigurationEditable {
+	if service.ConfigurationAccess.Mode != ContainerServiceConfigurationLocal {
 		return ResourcePlan{}, ErrContainerServiceConfigReadOnly
 	}
 	if err := validateContainerServiceConfigurationUpdate(req); err != nil {
@@ -286,7 +297,8 @@ func (a *Adapter) ContainerServiceConfigurationPreflight(ctx context.Context, re
 	if err != nil {
 		return ResourcePlan{}, err
 	}
-	if strings.TrimSpace(req.BaseRevision) != current.BaseRevision {
+	currentSource, ok := containerServiceConfigurationSource(current, req.SourceID)
+	if !ok || strings.TrimSpace(req.BaseRevision) != currentSource.BaseRevision {
 		return ResourcePlan{}, ErrContainerServiceConfigConflict
 	}
 	client, err := a.containerServiceController()
@@ -302,8 +314,8 @@ func (a *Adapter) ContainerServiceConfigurationPreflight(ctx context.Context, re
 	}
 	target := map[string]any{
 		"engine": string(service.Engine), "resource_kind": "container_service", "service_id": service.ServiceID,
-		"name": service.Name, "implementation": service.Implementation, "base_revision": current.BaseRevision,
-		"mode": req.Mode, "apply_mode": req.ApplyMode,
+		"name": service.Name, "implementation": service.Implementation, "source_id": req.SourceID,
+		"base_revision": currentSource.BaseRevision, "mode": req.Mode, "apply_mode": req.ApplyMode,
 	}
 	// The target intentionally excludes configuration content and proxy values.
 	return BuildResourcePlan(MethodContainerServicesConfig, target, req, RiskLevelHigh, flags, true, "Validate and replace this container service configuration")
@@ -353,7 +365,7 @@ func serviceSupportsMethod(service ContainerService, method Method) bool {
 }
 
 func validateContainerServiceConfigurationUpdate(req ContainerServiceConfigurationUpdateRequest) error {
-	if !req.Engine.Valid() || !validContainerServiceID(req.ServiceID) || strings.TrimSpace(req.BaseRevision) == "" {
+	if !req.Engine.Valid() || !validContainerServiceID(req.ServiceID) || !req.SourceID.valid() || strings.TrimSpace(req.BaseRevision) == "" {
 		return errors.New("container service configuration target is invalid")
 	}
 	if req.ApplyMode != ContainerServiceSave && req.ApplyMode != ContainerServiceSaveAndRestart {
@@ -380,6 +392,19 @@ func validateContainerServiceConfigurationUpdate(req ContainerServiceConfigurati
 		return errors.New("container service configuration mode is invalid")
 	}
 	return nil
+}
+
+func (id ContainerServiceConfigurationSourceID) valid() bool {
+	return id == ContainerServiceConfigurationSourceEngine || id == ContainerServiceConfigurationSourceClientProxy
+}
+
+func containerServiceConfigurationSource(configuration ContainerServiceConfiguration, sourceID ContainerServiceConfigurationSourceID) (ContainerServiceConfigurationSource, bool) {
+	for _, source := range configuration.Sources {
+		if source.SourceID == sourceID {
+			return source, true
+		}
+	}
+	return ContainerServiceConfigurationSource{}, false
 }
 
 func validContainerServiceID(value string) bool {

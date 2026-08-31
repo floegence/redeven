@@ -844,6 +844,59 @@ INSERT INTO container_compose_projects(
 	}
 }
 
+func TestSchemaMigratesV3ConfigurationStateToEngineSource(t *testing.T) {
+	client := &fakeEngineClient{volumes: make(map[string]containerengine.VolumeRecord), composeRunning: make(map[string]bool)}
+	adapter, err := containerengine.NewAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(t.TempDir(), "container-resources.sqlite3")
+	service, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.store.db.Exec(`
+ALTER TABLE container_service_configuration_state RENAME TO container_service_configuration_state_v4;
+CREATE TABLE container_service_configuration_state (
+  service_id TEXT PRIMARY KEY,
+  configuration_revision TEXT NOT NULL DEFAULT '',
+  restart_required INTEGER NOT NULL DEFAULT 0 CHECK(restart_required IN (0, 1)),
+  service_generation TEXT NOT NULL DEFAULT '',
+  updated_at_unix_ms INTEGER NOT NULL
+);
+INSERT INTO container_service_configuration_state(
+  service_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
+) VALUES('container_service_preserved', 'sha256:revision', 1, 'sha256:generation', 1234);
+DROP TABLE container_service_configuration_state_v4;
+PRAGMA user_version = 3;
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	engineState, err := reopened.store.containerServiceConfigurationState(context.Background(), "container_service_preserved", containerengine.ContainerServiceConfigurationSourceEngine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if engineState.ConfigurationRevision != "sha256:revision" || !engineState.RestartRequired || engineState.ServiceGeneration != "sha256:generation" {
+		t.Fatalf("migrated engine state = %+v", engineState)
+	}
+	clientState, err := reopened.store.containerServiceConfigurationState(context.Background(), "container_service_preserved", containerengine.ContainerServiceConfigurationSourceClientProxy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clientState.ConfigurationRevision != "" || clientState.RestartRequired {
+		t.Fatalf("unexpected migrated CLI proxy state = %+v", clientState)
+	}
+}
+
 func TestSchemaRejectsDrift(t *testing.T) {
 	service := newTestService(t, nil)
 	path := service.store.db
@@ -877,7 +930,7 @@ func TestSchemaRejectsWrongKindAndFutureVersion(t *testing.T) {
 		mutate string
 	}{
 		{name: "wrong kind", mutate: `UPDATE __redeven_db_meta SET db_kind = 'another_product' WHERE singleton = 1`},
-		{name: "future version", mutate: `PRAGMA user_version = 4`},
+		{name: "future version", mutate: `PRAGMA user_version = 5`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +24,16 @@ import (
 
 type CommandEnvironmentRunner interface {
 	RunEnv(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
+}
+
+type containerServiceConfigurationSourceDefinition struct {
+	sourceID        ContainerServiceConfigurationSourceID
+	path            string
+	displayPath     string
+	kind            ContainerServiceConfigurationKind
+	sections        []ContainerServiceConfigurationSection
+	supportsRestart bool
+	clientProxy     bool
 }
 
 func (c *CLIClient) ContainerServices(ctx context.Context) ([]ContainerService, error) {
@@ -49,7 +60,7 @@ func (c *CLIClient) ContainerServices(ctx context.Context) ([]ContainerService, 
 func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService {
 	base := ContainerService{
 		Engine: EngineDocker, Name: "Docker", Implementation: ContainerServiceUnavailable,
-		ConfigurationAccess: unavailableContainerServiceConfiguration(ContainerServiceConfigurationOwnerHost),
+		ConfigurationAccess: unavailableContainerServiceConfiguration(),
 	}
 	endpoints, err := c.listDockerContexts(ctx)
 	if err != nil {
@@ -70,7 +81,7 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EngineDocker, ContainerServiceRemote, string(endpoint.EndpointID)), Engine: EngineDocker,
 			Name: "Remote Docker", Implementation: ContainerServiceRemote, State: c.endpointServiceState(ctx, *endpoint),
 			Remote: true, GuidanceCode: ContainerServiceGuidanceRemoteHost, endpointID: endpoint.EndpointID,
-			ConfigurationAccess: externalContainerServiceConfiguration(ContainerServiceConfigurationOwnerRemoteHost),
+			ConfigurationAccess: unavailableContainerServiceConfiguration(),
 		}
 	}
 	bound, _, bindErr := c.BindEndpoint(ctx, EngineDocker, endpoint.EndpointID)
@@ -87,26 +98,43 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerDesktop, "local"), Engine: EngineDocker,
 			Name: "Docker Desktop", Implementation: ContainerServiceDockerDesktop, State: state, Version: status.Version,
 			Capabilities:        ContainerServiceCapabilities{Start: true, Stop: true, Restart: true},
-			ConfigurationAccess: externalContainerServiceConfiguration(ContainerServiceConfigurationOwnerDockerDesktop),
-			GuidanceCode:        ContainerServiceGuidanceDesktopManaged, endpointID: endpoint.EndpointID,
-			Generation: serviceGeneration(status.Version, state),
+			ConfigurationAccess: localContainerServiceConfiguration(ContainerServiceConfigurationSourceEngine, ContainerServiceConfigurationSourceClientProxy),
+			endpointID:          endpoint.EndpointID,
+			Generation:          serviceGeneration(status.Version, state),
+			configurationSources: []containerServiceConfigurationSourceDefinition{
+				c.dockerEngineConfigurationSource(true),
+				c.dockerClientProxyConfigurationSource(),
+			},
 		}
 	}
 	service := ContainerService{
 		ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerEngine, "local"), Engine: EngineDocker,
 		Name: "Docker Engine", Implementation: ContainerServiceDockerEngine, State: containerServiceStateFromStatus(status, statusErr),
 		Version: status.Version, endpointID: endpoint.EndpointID,
-		ConfigurationAccess: unavailableContainerServiceConfiguration(ContainerServiceConfigurationOwnerHost),
-		configurationKind:   ContainerServiceConfigurationJSON,
+		ConfigurationAccess: unavailableContainerServiceConfiguration(),
 	}
 	service.Generation = serviceGeneration(service.Version, service.State)
 	service.serviceUnit, service.serviceUserUnit = c.detectDockerSystemdUnit(ctx)
 	service.Capabilities.Start = service.serviceUnit != ""
 	service.Capabilities.Stop = service.serviceUnit != ""
 	service.Capabilities.Restart = service.serviceUnit != ""
-	service.configPath = c.dockerEngineConfigPath(service.serviceUserUnit)
-	if service.configPath != "" && safeConfigPath(service.configPath) {
-		service.ConfigurationAccess = editableContainerServiceConfiguration(ContainerServiceConfigurationJSON)
+	engineSource := c.dockerEngineConfigurationSource(false)
+	if service.serviceUserUnit {
+		engineSource = c.dockerRootlessEngineConfigurationSource()
+	}
+	clientSource := c.dockerClientProxyConfigurationSource()
+	if engineSource.path != "" {
+		service.configurationSources = append(service.configurationSources, engineSource)
+	}
+	if clientSource.path != "" {
+		service.configurationSources = append(service.configurationSources, clientSource)
+	}
+	if len(service.configurationSources) > 0 {
+		ids := make([]ContainerServiceConfigurationSourceID, 0, len(service.configurationSources))
+		for _, source := range service.configurationSources {
+			ids = append(ids, source.sourceID)
+		}
+		service.ConfigurationAccess = localContainerServiceConfiguration(ids...)
 	} else {
 		service.GuidanceCode = ContainerServiceGuidanceExternallyManaged
 	}
@@ -119,7 +147,7 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService {
 	base := ContainerService{
 		Engine: EnginePodman, Name: "Podman", Implementation: ContainerServiceUnavailable,
-		ConfigurationAccess: unavailableContainerServiceConfiguration(ContainerServiceConfigurationOwnerHost),
+		ConfigurationAccess: unavailableContainerServiceConfiguration(),
 	}
 	endpoints, err := c.listPodmanConnections(ctx)
 	if err != nil {
@@ -151,13 +179,13 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EnginePodman, ContainerServicePodmanLocal, "local"), Engine: EnginePodman,
 			Name: "Local Podman", Implementation: ContainerServicePodmanLocal, State: containerServiceStateFromStatus(status, statusErr),
 			Version: status.Version, Rootless: rootless, endpointID: endpoint.EndpointID,
-			ConfigurationAccess: unavailableContainerServiceConfiguration(ContainerServiceConfigurationOwnerHost),
-			configurationKind:   ContainerServiceConfigurationTOML, GuidanceCode: ContainerServiceGuidancePodmanDaemonless,
+			ConfigurationAccess: unavailableContainerServiceConfiguration(), GuidanceCode: ContainerServiceGuidancePodmanDaemonless,
 			Generation: serviceGeneration(status.Version, containerServiceStateFromStatus(status, statusErr)),
 		}
-		service.configPath = c.podmanConfigPath()
-		if service.configPath != "" && safeConfigPath(service.configPath) {
-			service.ConfigurationAccess = editableContainerServiceConfiguration(ContainerServiceConfigurationTOML)
+		source := c.podmanEngineConfigurationSource()
+		if source.path != "" {
+			service.configurationSources = []containerServiceConfigurationSourceDefinition{source}
+			service.ConfigurationAccess = localContainerServiceConfiguration(ContainerServiceConfigurationSourceEngine)
 		}
 		return service
 	}
@@ -167,7 +195,7 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EnginePodman, ContainerServiceRemote, string(endpoint.EndpointID)), Engine: EnginePodman,
 			Name: "Remote Podman", Implementation: ContainerServiceRemote, State: containerServiceStateFromStatus(status, statusErr),
 			Version: status.Version, Rootless: rootless, Remote: true, GuidanceCode: ContainerServiceGuidanceRemoteHost, endpointID: endpoint.EndpointID,
-			ConfigurationAccess: externalContainerServiceConfiguration(ContainerServiceConfigurationOwnerRemoteHost),
+			ConfigurationAccess: unavailableContainerServiceConfiguration(),
 			Generation:          serviceGeneration(status.Version, containerServiceStateFromStatus(status, statusErr)),
 		}
 	}
@@ -179,29 +207,77 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 		ServiceID: containerServiceID(EnginePodman, ContainerServicePodmanMachine, machine.Name), Engine: EnginePodman,
 		Name: "Podman Machine " + machine.Name, Implementation: ContainerServicePodmanMachine, State: state, Version: status.Version, Rootless: rootless,
 		Capabilities:        ContainerServiceCapabilities{Start: true, Stop: true, Restart: true},
-		ConfigurationAccess: externalContainerServiceConfiguration(ContainerServiceConfigurationOwnerPodmanMachine),
+		ConfigurationAccess: unavailableContainerServiceConfiguration(),
 		GuidanceCode:        ContainerServiceGuidancePodmanMachine, endpointID: endpoint.EndpointID, machineName: machine.Name,
 		Generation: serviceGeneration(status.Version, state),
 	}
 }
 
-func editableContainerServiceConfiguration(kind ContainerServiceConfigurationKind) ContainerServiceConfigurationAccess {
-	return ContainerServiceConfigurationAccess{
-		Mode: ContainerServiceConfigurationEditable, Format: kind,
-		Sections: []ContainerServiceConfigurationSection{
-			ContainerServiceConfigurationSectionProxy,
-			ContainerServiceConfigurationSectionAdvanced,
-		},
-		Owner: ContainerServiceConfigurationOwnerRedeven,
+func localContainerServiceConfiguration(sources ...ContainerServiceConfigurationSourceID) ContainerServiceConfigurationAccess {
+	return ContainerServiceConfigurationAccess{Mode: ContainerServiceConfigurationLocal, Sources: sources}
+}
+
+func unavailableContainerServiceConfiguration() ContainerServiceConfigurationAccess {
+	return ContainerServiceConfigurationAccess{Mode: ContainerServiceConfigurationUnavailable}
+}
+
+func (c *CLIClient) dockerEngineConfigurationSource(desktop bool) containerServiceConfigurationSourceDefinition {
+	path := c.dockerEngineConfigPath(false)
+	sections := []ContainerServiceConfigurationSection{ContainerServiceConfigurationSectionProxy, ContainerServiceConfigurationSectionAdvanced}
+	if desktop {
+		path = filepath.Join(c.userHomeDirectory(), ".docker", "daemon.json")
+		sections = []ContainerServiceConfigurationSection{ContainerServiceConfigurationSectionAdvanced}
+	}
+	return containerServiceConfigurationSourceDefinition{
+		sourceID: ContainerServiceConfigurationSourceEngine, path: path,
+		displayPath: displayContainerServiceConfigPath(path, c.userHomeDirectory()),
+		kind:        ContainerServiceConfigurationJSON, sections: sections, supportsRestart: true,
 	}
 }
 
-func externalContainerServiceConfiguration(owner ContainerServiceConfigurationOwner) ContainerServiceConfigurationAccess {
-	return ContainerServiceConfigurationAccess{Mode: ContainerServiceConfigurationExternal, Owner: owner}
+func (c *CLIClient) dockerRootlessEngineConfigurationSource() containerServiceConfigurationSourceDefinition {
+	path := filepath.Join(c.userConfigDirectory(), "docker", "daemon.json")
+	return containerServiceConfigurationSourceDefinition{
+		sourceID: ContainerServiceConfigurationSourceEngine, path: path,
+		displayPath:     displayContainerServiceConfigPath(path, c.userHomeDirectory()),
+		kind:            ContainerServiceConfigurationJSON,
+		sections:        []ContainerServiceConfigurationSection{ContainerServiceConfigurationSectionProxy, ContainerServiceConfigurationSectionAdvanced},
+		supportsRestart: true,
+	}
 }
 
-func unavailableContainerServiceConfiguration(owner ContainerServiceConfigurationOwner) ContainerServiceConfigurationAccess {
-	return ContainerServiceConfigurationAccess{Mode: ContainerServiceConfigurationUnavailable, Owner: owner}
+func (c *CLIClient) dockerClientProxyConfigurationSource() containerServiceConfigurationSourceDefinition {
+	path := filepath.Join(c.userHomeDirectory(), ".docker", "config.json")
+	return containerServiceConfigurationSourceDefinition{
+		sourceID: ContainerServiceConfigurationSourceClientProxy, path: path,
+		displayPath: displayContainerServiceConfigPath(path, c.userHomeDirectory()),
+		kind:        ContainerServiceConfigurationJSON,
+		sections:    []ContainerServiceConfigurationSection{ContainerServiceConfigurationSectionProxy},
+		clientProxy: true,
+	}
+}
+
+func (c *CLIClient) podmanEngineConfigurationSource() containerServiceConfigurationSourceDefinition {
+	path := c.podmanConfigPath()
+	return containerServiceConfigurationSourceDefinition{
+		sourceID: ContainerServiceConfigurationSourceEngine, path: path,
+		displayPath: displayContainerServiceConfigPath(path, c.userHomeDirectory()),
+		kind:        ContainerServiceConfigurationTOML,
+		sections:    []ContainerServiceConfigurationSection{ContainerServiceConfigurationSectionProxy, ContainerServiceConfigurationSectionAdvanced},
+	}
+}
+
+func displayContainerServiceConfigPath(path, home string) string {
+	path, home = filepath.Clean(strings.TrimSpace(path)), filepath.Clean(strings.TrimSpace(home))
+	if path == "." || path == "" {
+		return ""
+	}
+	if home != "." && home != "" {
+		if relative, err := filepath.Rel(home, path); err == nil && relative != "." && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return "~" + string(filepath.Separator) + relative
+		}
+	}
+	return path
 }
 
 func activeEndpoint(items []EngineEndpoint) *EngineEndpoint {
@@ -299,10 +375,7 @@ func (c *CLIClient) dockerEngineConfigPath(userUnit bool) string {
 	if userUnit {
 		return filepath.Join(c.userConfigDirectory(), "docker", "daemon.json")
 	}
-	if c.effectiveUserID() == 0 {
-		return "/etc/docker/daemon.json"
-	}
-	return ""
+	return "/etc/docker/daemon.json"
 }
 
 func (c *CLIClient) podmanConfigPath() string {
@@ -401,18 +474,111 @@ func (c *CLIClient) ContainerServiceConfiguration(ctx context.Context, serviceID
 	if err != nil {
 		return ContainerServiceConfiguration{}, err
 	}
-	if service.configPath == "" || service.ConfigurationAccess.Mode != ContainerServiceConfigurationEditable {
+	if service.ConfigurationAccess.Mode != ContainerServiceConfigurationLocal || len(service.configurationSources) == 0 {
 		return ContainerServiceConfiguration{}, ErrContainerServiceConfigReadOnly
 	}
-	raw, revision, err := readContainerServiceConfiguration(service.configPath, service.configurationKind)
-	if err != nil {
-		return ContainerServiceConfiguration{}, err
+	result := ContainerServiceConfiguration{ServiceID: service.ServiceID, Sources: make([]ContainerServiceConfigurationSource, 0, len(service.configurationSources))}
+	for _, definition := range service.configurationSources {
+		result.Sources = append(result.Sources, c.containerServiceConfigurationSource(service, definition))
 	}
-	httpProxy, httpsProxy, noProxy := extractContainerServiceProxy(service.configurationKind, raw)
-	return ContainerServiceConfiguration{
-		ServiceID: service.ServiceID, Format: service.configurationKind, Content: string(raw), BaseRevision: revision,
-		HTTPProxy: httpProxy, HTTPSProxy: httpsProxy, NoProxy: noProxy, RestartRequired: service.RestartRequired,
-	}, nil
+	return result, nil
+}
+
+func (c *CLIClient) containerServiceConfigurationSource(service ContainerService, definition containerServiceConfigurationSourceDefinition) ContainerServiceConfigurationSource {
+	result := ContainerServiceConfigurationSource{
+		SourceID: definition.sourceID, DisplayPath: definition.displayPath, Format: definition.kind,
+		Sections:   append([]ContainerServiceConfigurationSection(nil), definition.sections...),
+		ApplyModes: []ContainerServiceApplyMode{ContainerServiceSave},
+	}
+	if definition.supportsRestart && service.Capabilities.Restart {
+		result.ApplyModes = append(result.ApplyModes, ContainerServiceSaveAndRestart)
+	}
+	if definition.path == "" || !safeConfigPath(definition.path) {
+		result.Status = ContainerServiceConfigurationSourceUnsupported
+		return result
+	}
+	if info, err := os.Lstat(definition.path); err == nil {
+		result.Exists = true
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			result.Status = ContainerServiceConfigurationSourceUnsupported
+			return result
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, fs.ErrPermission) {
+			result.Status = ContainerServiceConfigurationSourcePermission
+		} else {
+			result.Status = ContainerServiceConfigurationSourceUnsupported
+		}
+		return result
+	}
+	raw, revision, err := readContainerServiceConfiguration(definition.path, definition.kind)
+	if err != nil {
+		if errors.Is(err, ErrPermissionDenied) {
+			result.Status = ContainerServiceConfigurationSourcePermission
+		} else {
+			result.Status = ContainerServiceConfigurationSourceUnsupported
+		}
+		return result
+	}
+	result.BaseRevision = revision
+	if !validContainerServiceConfigurationSyntax(definition.kind, raw) {
+		result.Status = ContainerServiceConfigurationSourceInvalid
+	} else if result.Exists {
+		result.Status = ContainerServiceConfigurationSourceReady
+	} else {
+		result.Status = ContainerServiceConfigurationSourceMissing
+	}
+	if definition.clientProxy {
+		result.HTTPProxy, result.HTTPSProxy, result.NoProxy = extractDockerCLIProxy(raw)
+	} else {
+		result.Content = string(raw)
+		result.HTTPProxy, result.HTTPSProxy, result.NoProxy = extractContainerServiceProxy(definition.kind, raw)
+	}
+	return result
+}
+
+func resolveContainerServiceConfigurationSource(service ContainerService, sourceID ContainerServiceConfigurationSourceID) (containerServiceConfigurationSourceDefinition, error) {
+	for _, source := range service.configurationSources {
+		if source.sourceID == sourceID {
+			return source, nil
+		}
+	}
+	return containerServiceConfigurationSourceDefinition{}, ErrContainerServiceConfigReadOnly
+}
+
+func candidateContainerServiceConfiguration(definition containerServiceConfigurationSourceDefinition, current []byte, req ContainerServiceConfigurationUpdateRequest) ([]byte, error) {
+	allowedApplyMode := req.ApplyMode == ContainerServiceSave || (req.ApplyMode == ContainerServiceSaveAndRestart && definition.supportsRestart)
+	if !allowedApplyMode {
+		return nil, ErrContainerServiceActionUnsupported
+	}
+	if definition.clientProxy {
+		if req.Mode != ContainerServiceConfigurationProxy || req.ApplyMode != ContainerServiceSave {
+			return nil, ErrContainerServiceActionUnsupported
+		}
+		candidate, err := mergeDockerCLIProxy(current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
+		if err != nil {
+			return nil, ErrContainerServiceConfigInvalid
+		}
+		return candidate, nil
+	}
+	switch req.Mode {
+	case ContainerServiceConfigurationProxy:
+		if !slices.Contains(definition.sections, ContainerServiceConfigurationSectionProxy) {
+			return nil, ErrContainerServiceActionUnsupported
+		}
+		candidate, err := mergeContainerServiceProxy(definition.kind, current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
+		if err != nil {
+			return nil, ErrContainerServiceConfigInvalid
+		}
+		return candidate, nil
+	case ContainerServiceConfigurationDocument:
+		if !slices.Contains(definition.sections, ContainerServiceConfigurationSectionAdvanced) {
+			return nil, ErrContainerServiceActionUnsupported
+		}
+		return []byte(req.Content), nil
+	default:
+		return nil, ErrContainerServiceConfigInvalid
+	}
 }
 
 func (c *CLIClient) ContainerServiceAction(ctx context.Context, method Method, req ContainerServiceActionRequest) (ContainerServiceActionResult, error) {
@@ -438,35 +604,39 @@ func (c *CLIClient) UpdateContainerServiceConfiguration(ctx context.Context, req
 	if err != nil {
 		return ContainerServiceActionResult{}, err
 	}
-	current, currentRevision, err := readContainerServiceConfiguration(service.configPath, service.configurationKind)
+	definition, err := resolveContainerServiceConfigurationSource(service, req.SourceID)
+	if err != nil {
+		return ContainerServiceActionResult{}, err
+	}
+	current, currentRevision, err := readContainerServiceConfiguration(definition.path, definition.kind)
 	if err != nil {
 		return ContainerServiceActionResult{}, err
 	}
 	if currentRevision != strings.TrimSpace(req.BaseRevision) {
 		return ContainerServiceActionResult{}, ErrContainerServiceConfigConflict
 	}
-	candidate := []byte(req.Content)
-	if req.Mode == ContainerServiceConfigurationProxy {
-		candidate, err = mergeContainerServiceProxy(service.configurationKind, current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
-		if err != nil {
-			return ContainerServiceActionResult{}, ErrContainerServiceConfigInvalid
-		}
+	candidate, err := candidateContainerServiceConfiguration(definition, current, req)
+	if err != nil {
+		return ContainerServiceActionResult{}, err
 	}
 	if len(candidate) > maxContainerServiceConfigurationBytes {
 		return ContainerServiceActionResult{}, ErrContainerServiceConfigInvalid
 	}
-	if err := c.validateContainerServiceCandidate(ctx, service, candidate); err != nil {
+	if err := c.validateContainerServiceCandidate(ctx, service, definition, candidate); err != nil {
 		return ContainerServiceActionResult{}, ErrContainerServiceConfigInvalid
 	}
-	if err := writeContainerServiceConfiguration(service.configPath, current, candidate); err != nil {
+	if err := writeContainerServiceConfiguration(definition.path, current, candidate); err != nil {
 		return ContainerServiceActionResult{}, err
 	}
 	revision := configurationRevision(candidate, true)
 	if req.ApplyMode == ContainerServiceSave {
-		return ContainerServiceActionResult{ServiceID: service.ServiceID, State: service.State, Revision: revision, RestartRequired: service.Implementation == ContainerServiceDockerEngine}, nil
+		return ContainerServiceActionResult{ServiceID: service.ServiceID, State: service.State, Revision: revision, RestartRequired: definition.supportsRestart}, nil
+	}
+	if !definition.supportsRestart || !service.Capabilities.Restart {
+		return ContainerServiceActionResult{}, ErrContainerServiceActionUnsupported
 	}
 	if err := c.runContainerServiceAction(ctx, service, MethodContainerServicesRestart); err != nil {
-		rollbackErr := writeContainerServiceConfiguration(service.configPath, candidate, current)
+		rollbackErr := writeContainerServiceConfiguration(definition.path, candidate, current)
 		restartErr := c.runContainerServiceAction(ctx, service, MethodContainerServicesRestart)
 		if rollbackErr != nil || restartErr != nil {
 			return ContainerServiceActionResult{}, ErrContainerServiceRecoveryRequired
@@ -481,24 +651,25 @@ func (c *CLIClient) ValidateContainerServiceConfiguration(ctx context.Context, r
 	if err != nil {
 		return err
 	}
-	current, currentRevision, err := readContainerServiceConfiguration(service.configPath, service.configurationKind)
+	definition, err := resolveContainerServiceConfigurationSource(service, req.SourceID)
+	if err != nil {
+		return err
+	}
+	current, currentRevision, err := readContainerServiceConfiguration(definition.path, definition.kind)
 	if err != nil {
 		return err
 	}
 	if currentRevision != strings.TrimSpace(req.BaseRevision) {
 		return ErrContainerServiceConfigConflict
 	}
-	candidate := []byte(req.Content)
-	if req.Mode == ContainerServiceConfigurationProxy {
-		candidate, err = mergeContainerServiceProxy(service.configurationKind, current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
-		if err != nil {
-			return ErrContainerServiceConfigInvalid
-		}
+	candidate, err := candidateContainerServiceConfiguration(definition, current, req)
+	if err != nil {
+		return err
 	}
 	if len(candidate) > maxContainerServiceConfigurationBytes {
 		return ErrContainerServiceConfigInvalid
 	}
-	if err := c.validateContainerServiceCandidate(ctx, service, candidate); err != nil {
+	if err := c.validateContainerServiceCandidate(ctx, service, definition, candidate); err != nil {
 		return ErrContainerServiceConfigInvalid
 	}
 	return nil
@@ -556,7 +727,23 @@ func (c *CLIClient) runContainerServiceAction(ctx context.Context, service Conta
 	return ErrContainerServiceActionUnsupported
 }
 
-func (c *CLIClient) validateContainerServiceCandidate(ctx context.Context, service ContainerService, candidate []byte) error {
+func (c *CLIClient) validateContainerServiceCandidate(ctx context.Context, service ContainerService, definition containerServiceConfigurationSourceDefinition, candidate []byte) error {
+	if definition.clientProxy {
+		var document map[string]json.RawMessage
+		if err := json.Unmarshal(candidate, &document); err != nil || document == nil {
+			return ErrContainerServiceConfigInvalid
+		}
+		return nil
+	}
+	if definition.kind == ContainerServiceConfigurationJSON {
+		var document map[string]any
+		if err := json.Unmarshal(candidate, &document); err != nil || document == nil {
+			return ErrContainerServiceConfigInvalid
+		}
+		if service.Implementation == ContainerServiceDockerDesktop {
+			return nil
+		}
+	}
 	temporary, err := os.CreateTemp("", "redeven-container-service-*")
 	if err != nil {
 		return ErrContainerServiceConfigInvalid
@@ -570,12 +757,8 @@ func (c *CLIClient) validateContainerServiceCandidate(ctx context.Context, servi
 	if err := temporary.Close(); err != nil {
 		return ErrContainerServiceConfigInvalid
 	}
-	switch service.configurationKind {
+	switch definition.kind {
 	case ContainerServiceConfigurationJSON:
-		var document map[string]any
-		if err := json.Unmarshal(candidate, &document); err != nil || document == nil {
-			return ErrContainerServiceConfigInvalid
-		}
 		_, err = c.runHostCommand(ctx, "dockerd", "--validate", "--config-file", path)
 	case ContainerServiceConfigurationTOML:
 		var document map[string]any
@@ -731,6 +914,88 @@ func extractContainerServiceProxy(kind ContainerServiceConfigurationKind, raw []
 		}
 	}
 	return "", "", ""
+}
+
+func validContainerServiceConfigurationSyntax(kind ContainerServiceConfigurationKind, raw []byte) bool {
+	switch kind {
+	case ContainerServiceConfigurationJSON:
+		var document map[string]json.RawMessage
+		return json.Unmarshal(raw, &document) == nil && document != nil
+	case ContainerServiceConfigurationTOML:
+		var document map[string]any
+		return toml.Unmarshal(raw, &document) == nil
+	default:
+		return false
+	}
+}
+
+func extractDockerCLIProxy(raw []byte) (string, string, string) {
+	var document struct {
+		Proxies map[string]struct {
+			HTTPProxy  string `json:"httpProxy"`
+			HTTPSProxy string `json:"httpsProxy"`
+			NoProxy    string `json:"noProxy"`
+		} `json:"proxies"`
+	}
+	if json.Unmarshal(raw, &document) != nil {
+		return "", "", ""
+	}
+	proxy := document.Proxies["default"]
+	return proxy.HTTPProxy, proxy.HTTPSProxy, proxy.NoProxy
+}
+
+func mergeDockerCLIProxy(raw []byte, httpProxy, httpsProxy, noProxy string) ([]byte, error) {
+	document := map[string]json.RawMessage{}
+	if len(bytes.TrimSpace(raw)) > 0 {
+		if err := json.Unmarshal(raw, &document); err != nil {
+			return nil, err
+		}
+	}
+	proxies := map[string]json.RawMessage{}
+	if existing := document["proxies"]; len(existing) > 0 {
+		if err := json.Unmarshal(existing, &proxies); err != nil {
+			return nil, err
+		}
+	}
+	defaults := map[string]json.RawMessage{}
+	if existing := proxies["default"]; len(existing) > 0 {
+		if err := json.Unmarshal(existing, &defaults); err != nil {
+			return nil, err
+		}
+	}
+	setOrDeleteRawJSONString(defaults, "httpProxy", httpProxy)
+	setOrDeleteRawJSONString(defaults, "httpsProxy", httpsProxy)
+	setOrDeleteRawJSONString(defaults, "noProxy", noProxy)
+	if len(defaults) == 0 {
+		delete(proxies, "default")
+	} else {
+		encoded, err := json.Marshal(defaults)
+		if err != nil {
+			return nil, err
+		}
+		proxies["default"] = encoded
+	}
+	if len(proxies) == 0 {
+		delete(document, "proxies")
+	} else {
+		encoded, err := json.Marshal(proxies)
+		if err != nil {
+			return nil, err
+		}
+		document["proxies"] = encoded
+	}
+	out, err := json.MarshalIndent(document, "", "  ")
+	return append(out, '\n'), err
+}
+
+func setOrDeleteRawJSONString(document map[string]json.RawMessage, key, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		delete(document, key)
+		return
+	}
+	encoded, _ := json.Marshal(value)
+	document[key] = encoded
 }
 
 func mergeContainerServiceProxy(kind ContainerServiceConfigurationKind, raw []byte, httpProxy, httpsProxy, noProxy string) ([]byte, error) {
@@ -909,6 +1174,18 @@ func (c *CLIClient) userConfigDirectory() string {
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		return filepath.Join(home, ".config")
+	}
+	return ""
+}
+
+func (c *CLIClient) userHomeDirectory() string {
+	if c.UserHomeDir != nil {
+		if value, err := c.UserHomeDir(); err == nil && strings.TrimSpace(value) != "" {
+			return filepath.Clean(value)
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		return filepath.Clean(home)
 	}
 	return ""
 }
