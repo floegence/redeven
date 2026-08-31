@@ -1344,7 +1344,7 @@ async function runFlowerBrowserSmoke(config) {
       throw new Error(`browser diagnostics are not clean: ${JSON.stringify({ console: telemetry.console_errors.length, page: telemetry.page_errors.length, responses: telemetry.failed_responses })}`);
     }
     const goMod = await readFile(path.join(config.worktree, 'go.mod'), 'utf8');
-    const floretVersion = goMod.match(/github\.com\/floegence\/floret\/v4\s+(v\S+)/u)?.[1] ?? '';
+    const floretVersion = goMod.match(/github\.com\/floegence\/floret\/v6\s+(v\S+)/u)?.[1] ?? '';
     const result = {
       schema_version: 1, redeven_commit: config.commit, runtime_commit: config.commit, floret_version: floretVersion,
       model: SMOKE_MODEL, provider: { configured: true },

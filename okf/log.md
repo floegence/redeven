@@ -6,8 +6,14 @@
   replacement. Floret title events request one lifecycle-owned canonical
   summary publisher outside the event callback; publication failure fences the
   live stream so reconnect restores the authoritative title baseline.
+* **Cross-Turn model switching and stable context**: Redeven now consumes
+  Floret v6.1.1. Persisted thread settings are the only model authority for an
+  existing thread; request model fields only validate the frozen choice. Idle
+  Flash to Pro to Flash switches retain append-only canonical history and
+  model-specific render prefixes without carrying provider continuation state
+  across models or compacting small context.
 * **Append-only Flower context and explicit completion**: Redeven now consumes
-  Floret v6.1.0, keeps the hosted Agent System Prompt stable, restores the
+  Floret v6.1.1, keeps the hosted Agent System Prompt stable, restores the
   original canonical Turn input after Ask User, appends mutable environment
   facts as per-turn supplemental context, fixes the model tool surface for the
   active generation, and requires structured `ask_user` or `task_complete`

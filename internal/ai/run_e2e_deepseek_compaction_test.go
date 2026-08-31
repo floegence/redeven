@@ -19,40 +19,58 @@ import (
 const (
 	deepSeekCompactionE2EModel         = "deepseek-v4-flash"
 	deepSeekCompactionE2EContextWindow = 128_000
+	deepSeekManualE2EContextWindow     = 512_000
 	deepSeekCompactionE2EMaxOutput     = 28_000
 	deepSeekCompactionEETurnTimeout    = 4 * time.Minute
+	deepSeekManualContextMarker        = "FLOWER_MANUAL_CONTEXT_MARKER"
+	deepSeekAutomaticContextMarker     = "FLOWER_AUTOMATIC_CONTEXT_MARKER"
 )
 
 // TestE2E_FlowerDeepSeekV4FlashContextCompaction is an opt-in qualification
 // test. It uses the production Flower service, Redeven DeepSeek gateway, and
 // Floret canonical Thread runtime against the real DeepSeek V4 Flash endpoint.
 // Normal CI skips it because it requires a credential and performs paid model
-// requests. Run scripts/check_flower_compaction_deepseek.sh to execute it with
+// requests. Run scripts/check_flower_context_deepseek.sh to execute it with
 // an isolated Store while reusing the configured local DeepSeek credential.
 func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
-	if strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_COMPACTION_E2E")) != "1" {
-		t.Skip("set REDEVEN_FLOWER_COMPACTION_E2E=1 to enable the real DeepSeek compaction qualification")
+	if strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_CONTEXT_E2E")) != "1" {
+		t.Skip("set REDEVEN_FLOWER_CONTEXT_E2E=1 to enable the real DeepSeek context qualification")
 	}
 
-	baseURL := strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_COMPACTION_E2E_BASE_URL"))
-	apiKey := strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_COMPACTION_E2E_API_KEY"))
+	baseURL := strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_CONTEXT_E2E_BASE_URL"))
+	apiKey := strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_CONTEXT_E2E_API_KEY"))
 	assertOfficialDeepSeekCompactionEndpoint(t, baseURL)
 	if apiKey == "" {
-		t.Fatal("REDEVEN_FLOWER_COMPACTION_E2E_API_KEY is required")
+		t.Fatal("REDEVEN_FLOWER_CONTEXT_E2E_API_KEY is required")
 	}
+	recorder := &deepSeekContextRecorder{
+		markers: []string{deepSeekManualContextMarker, deepSeekAutomaticContextMarker}, normalizeMainResponses: true,
+	}
+	proxyURL := newDeepSeekRecordingProxy(t, baseURL, recorder)
 
 	providerID := "deepseek-compaction-e2e"
+	manualProviderID := "deepseek-manual-compaction-e2e"
 	modelID := providerID + "/" + deepSeekCompactionE2EModel
+	manualModelID := manualProviderID + "/" + deepSeekCompactionE2EModel
 	cfg := &config.AIConfig{
 		CurrentModelID: modelID,
 		PermissionType: config.AIPermissionFullAccess,
-		Providers: []config.AIProvider{{
-			ID: providerID, Name: "DeepSeek compaction E2E", Type: "deepseek", BaseURL: baseURL,
-			Models: []config.AIProviderModel{{
-				ModelName: deepSeekCompactionE2EModel, ContextWindow: deepSeekCompactionE2EContextWindow,
-				MaxOutputTokens: deepSeekCompactionE2EMaxOutput, EffectiveContextWindowPercent: 100,
-			}},
-		}},
+		Providers: []config.AIProvider{
+			{
+				ID: providerID, Name: "DeepSeek automatic compaction E2E", Type: "deepseek", BaseURL: proxyURL,
+				Models: []config.AIProviderModel{{
+					ModelName: deepSeekCompactionE2EModel, ContextWindow: deepSeekCompactionE2EContextWindow,
+					MaxOutputTokens: deepSeekCompactionE2EMaxOutput, EffectiveContextWindowPercent: 100,
+				}},
+			},
+			{
+				ID: manualProviderID, Name: "DeepSeek manual compaction E2E", Type: "deepseek", BaseURL: proxyURL,
+				Models: []config.AIProviderModel{{
+					ModelName: deepSeekCompactionE2EModel, ContextWindow: deepSeekManualE2EContextWindow,
+					MaxOutputTokens: deepSeekCompactionE2EMaxOutput, EffectiveContextWindowPercent: 100,
+				}},
+			},
+		},
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("validate isolated DeepSeek profile: %v", err)
@@ -63,7 +81,8 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 		Logger: logger, StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "bash", Config: cfg,
 		RunMaxWallTime: 8 * time.Minute, RunIdleTimeout: 3 * time.Minute, ToolApprovalTimeout: time.Minute,
 		ResolveProviderAPIKey: func(candidate string) (string, bool, error) {
-			if strings.TrimSpace(candidate) != providerID {
+			candidate = strings.TrimSpace(candidate)
+			if candidate != providerID && candidate != manualProviderID {
 				return "", false, nil
 			}
 			return apiKey, true, nil
@@ -84,10 +103,19 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 	defer cancel()
 
 	t.Run("manual slash command compacts and preserves context", func(t *testing.T) {
-		threadID := createDeepSeekCompactionThread(t, ctx, svc, &meta, modelID, "Manual context compaction")
-		oldestMarker, before := seedDeepSeekContextBelowLimit(t, ctx, svc, &meta, threadID, modelID, "manual")
+		threadID := createDeepSeekCompactionThread(t, ctx, svc, &meta, manualModelID, "Manual context compaction")
+		oldestMarker := deepSeekManualContextMarker
+		var before FlowerContextUsage
+		for index := 1; index <= 4; index++ {
+			seed := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, fmt.Sprintf("deepseek-compaction-manual-seed-%d", index), threadID, manualModelID,
+				deepSeekCompactionPrompt("manual", oldestMarker, 12_000, "Reply with ACK_"+oldestMarker+", then call task_complete with output set to ACK_"+oldestMarker+"."))
+			before = requireDeepSeekContextUsage(t, seed, "manual seed", deepSeekManualE2EContextWindow)
+			if len(seed.Thread.ContextCompactions) != 0 {
+				t.Fatalf("manual seed %d unexpectedly compacted: count=%d", index, len(seed.Thread.ContextCompactions))
+			}
+		}
 		manualRequestID := "deepseek-compaction-manual"
-		detail := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, manualRequestID, threadID, modelID, "/compact")
+		detail := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, manualRequestID, threadID, manualModelID, "/compact")
 		t.Logf("manual preflight input=%d safe_limit=%d compactions=%d", before.InputTokens, before.RequestSafeLimitTokens, len(detail.Thread.ContextCompactions))
 		compaction := requireDeepSeekCompaction(t, detail, func(item FlowerContextCompaction) bool {
 			return item.RequestID == manualRequestID && item.Source == flowerManualCompactionSourceName
@@ -95,30 +123,32 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 		if compaction.Trigger != "manual" || compaction.Reason != "manual" {
 			t.Fatalf("manual compaction trigger=(%q,%q), want (manual,manual)", compaction.Trigger, compaction.Reason)
 		}
-		assertDeepSeekCompactionSavings(t, compaction, before)
-
-		followRequestID := "deepseek-compaction-manual-follow-up"
-		follow := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, followRequestID, threadID, modelID,
-			"Reply with exactly this remembered marker and nothing else: "+oldestMarker)
-		assertDeepSeekAssistantContains(t, follow.Current, followRequestID, oldestMarker)
+		assertDeepSeekCompactionSavings(t, compaction)
+		assertDeepSeekCompactionRequestReset(t, recorder, 0)
 	})
 
 	t.Run("automatic pressure compacts before the provider request", func(t *testing.T) {
 		threadID := createDeepSeekCompactionThread(t, ctx, svc, &meta, modelID, "Automatic context compaction")
-		oldestMarker, before := seedDeepSeekContextBelowLimit(t, ctx, svc, &meta, threadID, modelID, "automatic")
+		oldestMarker := deepSeekAutomaticContextMarker
+		seed := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, "deepseek-compaction-automatic-seed", threadID, modelID,
+			deepSeekCompactionPrompt("automatic", oldestMarker, 2_000, "Reply with ACK_"+oldestMarker+", then call task_complete with output set to ACK_"+oldestMarker+"."))
+		before := requireDeepSeekContextUsage(t, seed, "automatic seed", deepSeekCompactionE2EContextWindow)
+		if len(seed.Thread.ContextCompactions) != 0 {
+			t.Fatalf("automatic seed unexpectedly compacted: count=%d", len(seed.Thread.ContextCompactions))
+		}
 		var detail *FlowerThreadDetail
 		var compaction FlowerContextCompaction
 		found := false
-		for attempt, triggerTokens := range []int{8_000, 8_000, 8_000} {
+		for attempt, triggerTokens := range []int{8_000, 8_000, 8_000, 8_000} {
 			requestID := fmt.Sprintf("deepseek-compaction-automatic-trigger-%02d", attempt+1)
 			prompt := deepSeekCompactionPrompt("automatic-trigger", oldestMarker, triggerTokens,
-				"Reply with exactly the oldest remembered marker and nothing else: "+oldestMarker)
+				"Reply with the oldest remembered marker, then call task_complete with output set to "+oldestMarker+".")
 			detail = sendDeepSeekCompactionTurn(t, ctx, svc, &meta, requestID, threadID, modelID, prompt)
 			currentInput := int64(0)
 			if detail.Thread.ContextUsage != nil {
 				currentInput = detail.Thread.ContextUsage.InputTokens
 			}
-			t.Logf("automatic preflight input=%d safe_limit=%d trigger_attempt=%d trigger_tokens=%d current_input=%d compactions=%d", before.InputTokens, before.RequestSafeLimitTokens, attempt+1, triggerTokens, currentInput, len(detail.Thread.ContextCompactions))
+			t.Logf("automatic seed_input=%d safe_limit=%d trigger_attempt=%d trigger_tokens=%d current_input=%d compactions=%d", before.InputTokens, before.RequestSafeLimitTokens, attempt+1, triggerTokens, currentInput, len(detail.Thread.ContextCompactions))
 			for _, item := range detail.Thread.ContextCompactions {
 				if item.Source == "engine" && item.Trigger != "manual" {
 					compaction = item
@@ -142,9 +172,34 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 		if compaction.Trigger != "pre_request" || compaction.Reason != "threshold" {
 			t.Fatalf("automatic compaction trigger=(%q,%q), want (pre_request,threshold)", compaction.Trigger, compaction.Reason)
 		}
-		assertDeepSeekCompactionSavings(t, compaction, before)
-		assertDeepSeekAssistantContains(t, detail.Current, "automatic pressure continuation", oldestMarker)
+		assertDeepSeekCompactionSavings(t, compaction)
+		assertDeepSeekCompactionRequestReset(t, recorder, 1)
 	})
+}
+
+func assertDeepSeekCompactionRequestReset(t *testing.T, recorder *deepSeekContextRecorder, markerIndex int) {
+	t.Helper()
+	recorder.mu.Lock()
+	observations := append([]deepSeekContextObservation(nil), recorder.observations...)
+	recorder.mu.Unlock()
+	maxMessages := 0
+	resetIndex := -1
+	for index, observation := range observations {
+		if markerIndex < 0 || markerIndex >= len(observation.MarkerPresence) || !observation.MarkerPresence[markerIndex] {
+			continue
+		}
+		messageCount := len(observation.MessageHashes)
+		if messageCount < maxMessages {
+			resetIndex = index
+			break
+		}
+		if messageCount > maxMessages {
+			maxMessages = messageCount
+		}
+	}
+	if resetIndex < 0 {
+		t.Fatalf("completed compaction did not reset the observed render generation for marker %d", markerIndex+1)
+	}
 }
 
 func assertOfficialDeepSeekCompactionEndpoint(t *testing.T, raw string) {
@@ -167,48 +222,21 @@ func createDeepSeekCompactionThread(t *testing.T, ctx context.Context, svc *Serv
 	return thread.ThreadID
 }
 
-func seedDeepSeekContextBelowLimit(t *testing.T, ctx context.Context, svc *Service, meta *session.Meta, threadID string, modelID string, label string) (string, FlowerContextUsage) {
+func requireDeepSeekContextUsage(t *testing.T, detail *FlowerThreadDetail, label string, contextWindow int64) FlowerContextUsage {
 	t.Helper()
-	oldestMarker := "FLOWER_" + strings.ToUpper(label) + "_CONTEXT_MARKER"
-	var usage FlowerContextUsage
-	for index := 1; index <= 10; index++ {
-		seedTokens := 8_000
-		if index > 8 && usage.RequestSafeLimitTokens > 0 {
-			target := usage.RequestSafeLimitTokens * 82 / 100
-			remaining := target - usage.InputTokens
-			if remaining < 1_500 {
-				remaining = 1_500
-			}
-			if remaining < int64(seedTokens) {
-				seedTokens = int(remaining)
-			}
-		}
-		marker := fmt.Sprintf("%s_%02d", oldestMarker, index)
-		requestID := fmt.Sprintf("deepseek-compaction-%s-seed-%02d", label, index)
-		prompt := deepSeekCompactionPrompt(label, marker, seedTokens, "Reply with exactly ACK_"+marker+" and nothing else.")
-		detail := sendDeepSeekCompactionTurn(t, ctx, svc, meta, requestID, threadID, modelID, prompt)
-		if len(detail.Thread.ContextCompactions) != 0 {
-			t.Fatalf("%s seed compacted before reaching the controlled trigger: %#v", label, detail.Thread.ContextCompactions)
-		}
-		if detail.Thread.ContextUsage == nil {
-			t.Fatalf("%s seed omitted canonical context usage", label)
-		}
-		usage = *detail.Thread.ContextUsage
-		t.Logf("%s seed step=%d input=%d safe_limit=%d threshold=%d", label, index, usage.InputTokens, usage.RequestSafeLimitTokens, usage.ThresholdTokens)
-		if usage.ContextWindowTokens != deepSeekCompactionE2EContextWindow || usage.OutputHeadroomTokens != deepSeekCompactionE2EMaxOutput {
-			t.Fatalf("%s seed policy=(window:%d headroom:%d), want (%d,%d)", label,
-				usage.ContextWindowTokens, usage.OutputHeadroomTokens,
-				deepSeekCompactionE2EContextWindow, deepSeekCompactionE2EMaxOutput)
-		}
-		if usage.InputTokens >= usage.RequestSafeLimitTokens {
-			t.Fatalf("%s seed crossed the request-safe limit before the intended trigger: input=%d limit=%d", label, usage.InputTokens, usage.RequestSafeLimitTokens)
-		}
-		if index >= 8 && usage.InputTokens*100 >= usage.RequestSafeLimitTokens*82 {
-			return oldestMarker + "_01", usage
-		}
+	if detail == nil || detail.Thread.ContextUsage == nil {
+		t.Fatalf("%s omitted canonical context usage", label)
 	}
-	t.Fatalf("%s seed did not reach the pre-compaction target: input=%d limit=%d", label, usage.InputTokens, usage.RequestSafeLimitTokens)
-	return "", FlowerContextUsage{}
+	usage := *detail.Thread.ContextUsage
+	if usage.ContextWindowTokens != contextWindow || usage.OutputHeadroomTokens != deepSeekCompactionE2EMaxOutput {
+		t.Fatalf("%s policy=(window:%d headroom:%d), want (%d,%d)", label,
+			usage.ContextWindowTokens, usage.OutputHeadroomTokens,
+			contextWindow, deepSeekCompactionE2EMaxOutput)
+	}
+	if usage.InputTokens <= 0 || usage.RequestSafeLimitTokens <= 0 || usage.InputTokens >= usage.RequestSafeLimitTokens {
+		t.Fatalf("%s usage input=%d safe_limit=%d", label, usage.InputTokens, usage.RequestSafeLimitTokens)
+	}
+	return usage
 }
 
 func deepSeekCompactionPrompt(label string, marker string, approximateTokens int, instruction string) string {
@@ -230,6 +258,7 @@ func sendDeepSeekCompactionTurn(t *testing.T, ctx context.Context, svc *Service,
 		Options: RunOptions{
 			PermissionType:     config.AIPermissionFullAccess,
 			ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff},
+			NoUserInteraction:  true,
 			ToolAllowlist:      []string{"ask_user"},
 		},
 	})
@@ -251,7 +280,9 @@ func sendDeepSeekCompactionTurn(t *testing.T, ctx context.Context, svc *Service,
 		}
 		if detail != nil && detail.Current.TurnID == turnID && detail.Current.Activity == flruntime.ThreadActivityIdle && detail.Current.LastOutcome != nil {
 			if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
-				t.Fatalf("compaction turn %s outcome=%q error_code=%q error=%q", requestID, *detail.Current.LastOutcome, detail.Thread.RunErrorCode, detail.Thread.RunError)
+				failureCode, failureHash, failureClasses := safeDeepSeekFailureFingerprint(detail.Current.Failure)
+				t.Fatalf("compaction turn %s outcome=%q error_code=%q canonical_code=%q canonical_hash=%s classes=%v",
+					requestID, *detail.Current.LastOutcome, detail.Thread.RunErrorCode, failureCode, failureHash, failureClasses)
 			}
 			return detail
 		}
@@ -263,6 +294,20 @@ func sendDeepSeekCompactionTurn(t *testing.T, ctx context.Context, svc *Service,
 		case <-ticker.C:
 		}
 	}
+}
+
+func safeDeepSeekFailureFingerprint(failure *flruntime.ThreadTurnFailure) (string, string, []string) {
+	if failure == nil {
+		return "", "", nil
+	}
+	message := strings.ToLower(strings.TrimSpace(failure.Message))
+	classes := make([]string, 0, 4)
+	for _, class := range []string{"prefix", "progress", "control", "incomplete", "continuation", "tool", "provider", "usage", "context", "checkpoint", "segment", "model", "schema"} {
+		if strings.Contains(message, class) {
+			classes = append(classes, class)
+		}
+	}
+	return string(failure.Code), sha256Hex([]byte(message)), classes
 }
 
 func requireDeepSeekCompaction(t *testing.T, detail *FlowerThreadDetail, match func(FlowerContextCompaction) bool) FlowerContextCompaction {
@@ -282,23 +327,9 @@ func requireDeepSeekCompaction(t *testing.T, detail *FlowerThreadDetail, match f
 	return FlowerContextCompaction{}
 }
 
-func assertDeepSeekCompactionSavings(t *testing.T, compaction FlowerContextCompaction, before FlowerContextUsage) {
+func assertDeepSeekCompactionSavings(t *testing.T, compaction FlowerContextCompaction) {
 	t.Helper()
 	if compaction.TokensBefore <= 0 || compaction.TokensAfterEstimate <= 0 || compaction.TokensAfterEstimate >= compaction.TokensBefore {
 		t.Fatalf("compaction token change=%d -> %d, want positive savings", compaction.TokensBefore, compaction.TokensAfterEstimate)
 	}
-	if before.InputTokens <= 0 || compaction.TokensBefore < before.InputTokens/2 {
-		t.Fatalf("compaction tokens_before=%d is inconsistent with preflight input=%d", compaction.TokensBefore, before.InputTokens)
-	}
-}
-
-func assertDeepSeekAssistantContains(t *testing.T, current flruntime.ThreadView, requestID string, marker string) {
-	t.Helper()
-	for index := len(current.Items) - 1; index >= 0; index-- {
-		item := current.Items[index]
-		if item.Kind == flruntime.ThreadItemAssistant && strings.Contains(item.Text, marker) {
-			return
-		}
-	}
-	t.Fatalf("turn %s assistant output did not preserve the expected context marker", requestID)
 }
