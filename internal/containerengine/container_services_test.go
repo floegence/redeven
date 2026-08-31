@@ -67,8 +67,8 @@ func TestContainerServicesKeepEngineDetectionIndependent(t *testing.T) {
 	if services[1].Implementation != ContainerServicePodmanLocal || services[1].State != ContainerServiceStateRunning || services[1].Rootless == nil || !*services[1].Rootless {
 		t.Fatalf("Podman service = %+v", services[1])
 	}
-	if services[1].Capabilities.Start || !services[1].Capabilities.ConfigureAdvanced {
-		t.Fatalf("local Podman capabilities = %+v", services[1].Capabilities)
+	if services[1].Capabilities.Start || services[1].ConfigurationAccess.Mode != ContainerServiceConfigurationEditable || services[1].ConfigurationAccess.Format != ContainerServiceConfigurationTOML {
+		t.Fatalf("local Podman service = %+v", services[1])
 	}
 }
 
@@ -116,6 +116,27 @@ func TestDockerDesktopNotRunningIsStopped(t *testing.T) {
 	}
 }
 
+func TestDockerDesktopConfigurationIsOwnedByOfficialSettings(t *testing.T) {
+	runner := &runtimeDiscoveryRunner{outputs: map[string]string{
+		"docker context ls --format {{json .}}":                `{"Name":"default","Current":true,"DockerEndpoint":"unix:///var/run/docker.sock"}` + "\n",
+		"docker --context default version --format {{json .}}": `{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`,
+		"docker desktop status --format json":                  `{"status":"running"}`,
+	}, errors: map[string]error{"podman system connection list --format json": ErrCLIUnavailable}}
+	client := &CLIClient{Runner: runner}
+
+	services, err := client.ContainerServices(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	docker := services[0]
+	if docker.Implementation != ContainerServiceDockerDesktop || docker.ConfigurationAccess.Mode != ContainerServiceConfigurationExternal || docker.ConfigurationAccess.Owner != ContainerServiceConfigurationOwnerDockerDesktop {
+		t.Fatalf("Docker Desktop service = %+v", docker)
+	}
+	if docker.ConfigurationAccess.Format != "" || len(docker.ConfigurationAccess.Sections) != 0 {
+		t.Fatalf("Docker Desktop exposed a Redeven editor: %+v", docker.ConfigurationAccess)
+	}
+}
+
 func TestDockerSystemdUnitRequiresLoadedState(t *testing.T) {
 	runner := &runtimeDiscoveryRunner{outputs: map[string]string{
 		"systemctl --user show --property=LoadState --value docker.service": "not-found\n",
@@ -141,7 +162,7 @@ func TestPodmanMachineRequiresInspectAssociation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := services[1]; got.Implementation != ContainerServicePodmanMachine || got.State != ContainerServiceStateStopped || !got.Capabilities.Start {
+	if got := services[1]; got.Implementation != ContainerServicePodmanMachine || got.State != ContainerServiceStateStopped || !got.Capabilities.Start || got.ConfigurationAccess.Mode != ContainerServiceConfigurationExternal || got.ConfigurationAccess.Owner != ContainerServiceConfigurationOwnerPodmanMachine {
 		t.Fatalf("Podman Machine = %+v", got)
 	}
 }

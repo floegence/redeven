@@ -50,6 +50,40 @@ const (
 	ContainerServiceConfigurationTOML ContainerServiceConfigurationKind = "toml"
 )
 
+type ContainerServiceConfigurationAccessMode string
+
+const (
+	ContainerServiceConfigurationEditable    ContainerServiceConfigurationAccessMode = "editable"
+	ContainerServiceConfigurationExternal    ContainerServiceConfigurationAccessMode = "external"
+	ContainerServiceConfigurationUnavailable ContainerServiceConfigurationAccessMode = "unavailable"
+)
+
+type ContainerServiceConfigurationSection string
+
+const (
+	ContainerServiceConfigurationSectionProxy    ContainerServiceConfigurationSection = "proxy"
+	ContainerServiceConfigurationSectionAdvanced ContainerServiceConfigurationSection = "advanced"
+)
+
+type ContainerServiceConfigurationOwner string
+
+const (
+	ContainerServiceConfigurationOwnerRedeven       ContainerServiceConfigurationOwner = "redeven"
+	ContainerServiceConfigurationOwnerDockerDesktop ContainerServiceConfigurationOwner = "docker_desktop"
+	ContainerServiceConfigurationOwnerPodmanMachine ContainerServiceConfigurationOwner = "podman_machine"
+	ContainerServiceConfigurationOwnerRemoteHost    ContainerServiceConfigurationOwner = "remote_host"
+	ContainerServiceConfigurationOwnerHost          ContainerServiceConfigurationOwner = "host"
+)
+
+// ContainerServiceConfigurationAccess is the single product contract for
+// configuration placement. Each mode has one owner and one valid interaction.
+type ContainerServiceConfigurationAccess struct {
+	Mode     ContainerServiceConfigurationAccessMode `json:"mode"`
+	Format   ContainerServiceConfigurationKind       `json:"format,omitempty"`
+	Sections []ContainerServiceConfigurationSection  `json:"sections,omitempty"`
+	Owner    ContainerServiceConfigurationOwner      `json:"owner,omitempty"`
+}
+
 type ContainerServiceGuidanceCode string
 
 const (
@@ -68,37 +102,35 @@ const (
 )
 
 type ContainerServiceCapabilities struct {
-	Start              bool `json:"start"`
-	Stop               bool `json:"stop"`
-	Restart            bool `json:"restart"`
-	ConfigureProxy     bool `json:"configure_proxy"`
-	ConfigureAdvanced  bool `json:"configure_advanced"`
-	OpenExternalConfig bool `json:"open_external_config"`
+	Start   bool `json:"start"`
+	Stop    bool `json:"stop"`
+	Restart bool `json:"restart"`
 }
 
 // ContainerService is a product-safe projection of one active local container
 // implementation. Internal transport and configuration paths are intentionally
 // excluded from JSON.
 type ContainerService struct {
-	ServiceID         string                            `json:"service_id"`
-	Engine            Engine                            `json:"engine"`
-	Name              string                            `json:"name"`
-	Implementation    ContainerServiceImplementation    `json:"implementation"`
-	State             ContainerServiceState             `json:"state"`
-	Version           string                            `json:"version,omitempty"`
-	Rootless          *bool                             `json:"rootless,omitempty"`
-	Remote            bool                              `json:"remote"`
-	GuidanceCode      ContainerServiceGuidanceCode      `json:"guidance_code,omitempty"`
-	Capabilities      ContainerServiceCapabilities      `json:"capabilities"`
-	ConfigurationKind ContainerServiceConfigurationKind `json:"configuration_kind,omitempty"`
-	RestartRequired   bool                              `json:"restart_required,omitempty"`
-	Generation        string                            `json:"generation,omitempty"`
+	ServiceID           string                              `json:"service_id"`
+	Engine              Engine                              `json:"engine"`
+	Name                string                              `json:"name"`
+	Implementation      ContainerServiceImplementation      `json:"implementation"`
+	State               ContainerServiceState               `json:"state"`
+	Version             string                              `json:"version,omitempty"`
+	Rootless            *bool                               `json:"rootless,omitempty"`
+	Remote              bool                                `json:"remote"`
+	GuidanceCode        ContainerServiceGuidanceCode        `json:"guidance_code,omitempty"`
+	Capabilities        ContainerServiceCapabilities        `json:"capabilities"`
+	ConfigurationAccess ContainerServiceConfigurationAccess `json:"configuration"`
+	RestartRequired     bool                                `json:"restart_required,omitempty"`
+	Generation          string                              `json:"generation,omitempty"`
 
-	endpointID      EndpointID
-	configPath      string
-	serviceUnit     string
-	serviceUserUnit bool
-	machineName     string
+	endpointID        EndpointID
+	configPath        string
+	serviceUnit       string
+	serviceUserUnit   bool
+	machineName       string
+	configurationKind ContainerServiceConfigurationKind
 }
 
 type ContainerServicesResponse struct {
@@ -244,7 +276,7 @@ func (a *Adapter) ContainerServiceConfigurationPreflight(ctx context.Context, re
 	if req.Engine != service.Engine || strings.TrimSpace(req.ConfirmationName) != service.Name {
 		return ResourcePlan{}, errors.New("container service confirmation is invalid")
 	}
-	if !service.Capabilities.ConfigureProxy && !service.Capabilities.ConfigureAdvanced {
+	if service.ConfigurationAccess.Mode != ContainerServiceConfigurationEditable {
 		return ResourcePlan{}, ErrContainerServiceConfigReadOnly
 	}
 	if err := validateContainerServiceConfigurationUpdate(req); err != nil {
