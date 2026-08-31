@@ -57,7 +57,10 @@ Image and volume cleanup is server-owned. The client selects only the bound
 runtime; the current authoritative inventory determines the exact unused set.
 Image identity is resolved by ID, then digest, then reference, so multiple tag
 rows for one image produce one sorted target, one size contribution, one lock,
-and one mutation. The canonical preflight request owns the request hash,
+and one mutation. The reviewed plan includes the same sorted, structured
+resource list: image references, canonical identity, and size, or volume name
+and driver. This display list is part of the plan digest rather than a separate
+client projection. The canonical preflight request owns the request hash,
 resource locks, queued execution, and reconciliation. No eligible target returns
 `NOTHING_TO_PRUNE`; incomplete reference inspection returns
 `REFERENCE_STATE_INCOMPLETE`. Neither condition starts an operation.

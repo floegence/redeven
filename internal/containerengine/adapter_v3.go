@@ -249,7 +249,7 @@ func (a *Adapter) PruneImagesPreflight(ctx context.Context, req ResourcePruneReq
 	if err != nil {
 		return ResourcePlan{}, err
 	}
-	available := make(map[string]ImageRecord, len(items))
+	available := make(map[string]imagePruneCandidate, len(items))
 	var bytes int64
 	for _, item := range items {
 		if item.ReferenceInspectionFailures > 0 {
@@ -260,10 +260,9 @@ func (a *Adapter) PruneImagesPreflight(ctx context.Context, req ResourcePruneReq
 		}
 		identity := canonicalImagePruneIdentity(item)
 		if identity != "" {
-			if _, exists := available[identity]; exists {
-				continue
-			}
-			available[identity] = item
+			candidate := available[identity]
+			candidate.add(item)
+			available[identity] = candidate
 		}
 	}
 	identities, err := selectPruneIdentities(req.ResourceIdentities, available)
@@ -274,10 +273,10 @@ func (a *Adapter) PruneImagesPreflight(ctx context.Context, req ResourcePruneReq
 		return ResourcePlan{}, ErrNothingToPrune
 	}
 	for _, identity := range identities {
-		bytes += available[identity].SizeBytes
+		bytes += available[identity].sizeBytes
 	}
 	request := ResourcePruneRequest{Engine: req.Engine, EndpointID: req.EndpointID, ResourceIdentities: identities}
-	target := map[string]any{"engine": string(req.Engine), "resource_kind": "images", "resource_count": len(identities), "reclaimable_bytes": bytes, "resource_identities": identities}
+	target := map[string]any{"engine": string(req.Engine), "resource_kind": "images", "resource_count": len(identities), "reclaimable_bytes": bytes, "resource_identities": identities, "resources": imagePrunePlanItems(identities, available)}
 	addEndpointTarget(target, req.EndpointID)
 	return BuildResourcePlan(MethodImagesPrune, target, request, RiskLevelHigh, nil, true, "Remove the exact unused image set in this plan")
 }
@@ -427,7 +426,7 @@ func (a *Adapter) PruneVolumesPreflight(ctx context.Context, req ResourcePruneRe
 		return ResourcePlan{}, ErrNothingToPrune
 	}
 	request := ResourcePruneRequest{Engine: req.Engine, EndpointID: req.EndpointID, ResourceIdentities: identities}
-	target := map[string]any{"engine": string(req.Engine), "resource_kind": "volumes", "resource_count": len(identities), "resource_identities": identities}
+	target := map[string]any{"engine": string(req.Engine), "resource_kind": "volumes", "resource_count": len(identities), "resource_identities": identities, "resources": volumePrunePlanItems(identities, available)}
 	addEndpointTarget(target, req.EndpointID)
 	return BuildResourcePlan(MethodVolumesPrune, target, request, RiskLevelHigh, nil, true, "Remove the exact unused volume set in this plan")
 }
@@ -458,6 +457,64 @@ func (a *Adapter) PruneVolumes(ctx context.Context, req ResourcePruneRequest) er
 
 func canonicalImagePruneIdentity(item ImageRecord) string {
 	return firstNonEmpty(item.ID, item.Digest, item.Reference)
+}
+
+type imagePruneCandidate struct {
+	sizeBytes  int64
+	references map[string]struct{}
+}
+
+func (candidate *imagePruneCandidate) add(item ImageRecord) {
+	if item.SizeBytes > candidate.sizeBytes {
+		candidate.sizeBytes = item.SizeBytes
+	}
+	if candidate.references == nil {
+		candidate.references = make(map[string]struct{})
+	}
+	for _, reference := range append([]string{item.Reference}, item.Tags...) {
+		reference = strings.TrimSpace(reference)
+		if reference != "" && reference != "<none>" && reference != "<none>:<none>" {
+			candidate.references[reference] = struct{}{}
+		}
+	}
+}
+
+func imagePrunePlanItems(identities []string, available map[string]imagePruneCandidate) []ResourcePrunePlanItem {
+	resources := make([]ResourcePrunePlanItem, 0, len(identities))
+	for _, identity := range identities {
+		candidate := available[identity]
+		var references []string
+		if len(candidate.references) > 0 {
+			references = make([]string, 0, len(candidate.references))
+		}
+		for reference := range candidate.references {
+			references = append(references, reference)
+		}
+		sort.Strings(references)
+		name := ""
+		if len(references) > 0 {
+			name = references[0]
+		}
+		resources = append(resources, ResourcePrunePlanItem{
+			Identity:   identity,
+			Name:       name,
+			References: references,
+			SizeBytes:  candidate.sizeBytes,
+		})
+	}
+	return resources
+}
+
+func volumePrunePlanItems(identities []string, available map[string]VolumeRecord) []ResourcePrunePlanItem {
+	resources := make([]ResourcePrunePlanItem, 0, len(identities))
+	for _, identity := range identities {
+		resources = append(resources, ResourcePrunePlanItem{
+			Identity: identity,
+			Name:     identity,
+			Driver:   strings.TrimSpace(available[identity].Driver),
+		})
+	}
+	return resources
 }
 
 func exactPruneRequest(plan ResourcePlan) (ResourcePruneRequest, error) {
