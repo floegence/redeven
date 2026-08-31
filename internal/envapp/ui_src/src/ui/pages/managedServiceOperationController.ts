@@ -14,7 +14,7 @@ export type ManagedOperation = Readonly<{
   error_message?: string;
 }>;
 
-export type ManagedOperationOwner = 'row' | 'install' | 'update' | 'reconfigure' | 'uninstall';
+export type ManagedOperationOwner = 'row' | 'update' | 'reconfigure' | 'uninstall';
 
 type ManagedOperationControllerOptions = Readonly<{
   streamFailedMessage: () => string;
