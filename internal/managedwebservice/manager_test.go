@@ -204,7 +204,7 @@ func (*captureInstallCatalogDriver) Stop(context.Context, *pfregistry.ManagedSer
 	return errors.New("unexpected stop")
 }
 
-func (*captureInstallCatalogDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool) error {
+func (*captureInstallCatalogDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
 	return errors.New("unexpected uninstall")
 }
 
@@ -213,6 +213,64 @@ func (*captureInstallCatalogDriver) CleanupPartial(context.Context, *pfregistry.
 }
 
 func (*captureInstallCatalogDriver) Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error) {
+	return nil, errors.New("unexpected logs")
+}
+
+type uninstallOwnershipDriver struct {
+	stopCalls      int
+	uninstallCalls int
+	uninstallErr   error
+}
+
+func (d *uninstallOwnershipDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error) {
+	return "", "", errors.New("unexpected install")
+}
+
+func (d *uninstallOwnershipDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {
+	return "", errors.New("unexpected start")
+}
+
+func (d *uninstallOwnershipDriver) Stop(context.Context, *pfregistry.ManagedService) error {
+	d.stopCalls++
+	return errors.New("unexpected stop")
+}
+
+func (d *uninstallOwnershipDriver) Uninstall(_ context.Context, _ *pfregistry.ManagedService, _ bool, progress func(string, int64)) error {
+	d.uninstallCalls++
+	progress("stopping", 2)
+	progress("uninstalling", 5)
+	return d.uninstallErr
+}
+
+func (d *uninstallOwnershipDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
+	return errors.New("unexpected cleanup")
+}
+
+func (d *uninstallOwnershipDriver) Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error) {
+	return nil, errors.New("unexpected logs")
+}
+
+type successfulStopDriver struct{}
+
+func (*successfulStopDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error) {
+	return "", "", errors.New("unexpected install")
+}
+
+func (*successfulStopDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {
+	return "", errors.New("unexpected start")
+}
+
+func (*successfulStopDriver) Stop(context.Context, *pfregistry.ManagedService) error { return nil }
+
+func (*successfulStopDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
+	return errors.New("unexpected uninstall")
+}
+
+func (*successfulStopDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
+	return errors.New("unexpected cleanup")
+}
+
+func (*successfulStopDriver) Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error) {
 	return nil, errors.New("unexpected logs")
 }
 
@@ -306,6 +364,50 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 		case <-deadline:
 			t.Fatal("cancelled terminal event was not published")
 		}
+	}
+}
+
+func TestRunUninstallDelegatesLifecycleOwnershipOnce(t *testing.T) {
+	t.Parallel()
+	wantErr := errors.New("stop after uninstall delegation")
+	driver := &uninstallOwnershipDriver{uninstallErr: wantErr}
+	manager := &Manager{listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	service := &pfregistry.ManagedService{ServiceID: "mws_uninstall_once"}
+	op := &pfregistry.ManagedOperation{OperationID: "mop_uninstall_once", ServiceID: service.ServiceID, ProgressTotal: operationProgressTotal}
+	if err := manager.runUninstall(context.Background(), service, op, driver, false); !errors.Is(err, wantErr) {
+		t.Fatalf("runUninstall() error = %v", err)
+	}
+	if driver.stopCalls != 0 || driver.uninstallCalls != 1 {
+		t.Fatalf("uninstall lifecycle calls: stop=%d uninstall=%d", driver.stopCalls, driver.uninstallCalls)
+	}
+}
+
+func TestRunStopClearsPreviousSnapshotError(t *testing.T) {
+	t.Parallel()
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = registry.Close() })
+	service := pfregistry.ManagedService{
+		ServiceID: "mws_stop_clears_error", Deployment: string(DeploymentContainer),
+		DesiredState: "running", ObservedState: "error", ForwardID: "pf_stop_clears_error",
+		LastErrorCode: "TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH", LastErrorMessage: "stale snapshot error",
+	}
+	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3000"}); err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{registry: registry, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	op := &pfregistry.ManagedOperation{OperationID: "mop_stop_clears_error", ServiceID: service.ServiceID, ProgressTotal: operationProgressTotal}
+	if err := manager.runStop(context.Background(), &service, op, &successfulStopDriver{}); err != nil {
+		t.Fatalf("runStop() error = %v", err)
+	}
+	stored, err := registry.GetManagedService(context.Background(), service.ServiceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored == nil || stored.ObservedState != "stopped" || stored.LastErrorCode != "" || stored.LastErrorMessage != "" {
+		t.Fatalf("stored service after successful stop = %+v", stored)
 	}
 }
 
@@ -454,7 +556,7 @@ func (d *recoveryDriver) Start(context.Context, *pfregistry.ManagedService) (str
 	return "", errors.New("unexpected start")
 }
 func (d *recoveryDriver) Stop(context.Context, *pfregistry.ManagedService) error { return nil }
-func (d *recoveryDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool) error {
+func (d *recoveryDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
 	return errors.New("unexpected uninstall")
 }
 func (d *recoveryDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
@@ -476,7 +578,7 @@ func (d *blockingStopDriver) Stop(ctx context.Context, _ *pfregistry.ManagedServ
 	<-ctx.Done()
 	return ctx.Err()
 }
-func (d *blockingStopDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool) error {
+func (d *blockingStopDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
 	return errors.New("unexpected uninstall")
 }
 func (d *blockingStopDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {

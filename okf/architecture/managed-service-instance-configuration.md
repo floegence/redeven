@@ -48,7 +48,7 @@ This contract does not change template images, Compose topology, the primary Web
 
 # Persistence and API
 
-Registry schema v5 stores configuration revision and SHA-256 plus a service resource-identity table. The atomic v4-to-v5 migration converts existing non-secret configuration into the current override document, preserves all records and snapshots, assigns stable IDs to historical typed resources, and keeps exact-shape and future-version rejection. Historical retained-volume markers are imported once into the Registry and deleted; ordinary lifecycle no longer treats files as a second identity source.
+Registry schema v5 stores configuration revision and SHA-256 plus a service resource-identity table. The atomic v4-to-v5 migration converts existing non-secret configuration into the current override document, preserves every snapshot as a self-consistent stored document and hash, assigns stable IDs to historical typed resources, and keeps exact-shape and future-version rejection. Runtime readers verify that exact persisted document before typed policy validation, so migration serialization order cannot become a second semantic identity. Historical retained-volume markers are imported once into the Registry and deleted; ordinary lifecycle no longer treats files as a second identity source.
 
 The Local API additions are:
 

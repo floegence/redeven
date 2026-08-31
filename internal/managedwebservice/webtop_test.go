@@ -2,6 +2,10 @@ package managedwebservice
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -278,7 +282,12 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(smokeRoot) })
-	manager := &Manager{scope: scope, stateDir: filepath.Join(smokeRoot, "state"), containers: adapter}
+	registry, err := pfregistry.Open(filepath.Join(smokeRoot, "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = registry.Close() })
+	manager := &Manager{registry: registry, scope: scope, stateDir: filepath.Join(smokeRoot, "state"), containers: adapter}
 	driver := &containerTemplateDriver{manager: manager, adapter: adapter}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 	defer cancel()
@@ -300,6 +309,20 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		var migratedDocument map[string]any
+		if err := json.Unmarshal([]byte(snapshot), &migratedDocument); err != nil {
+			t.Fatal(err)
+		}
+		migratedSnapshot, err := json.Marshal(migratedDocument)
+		if err != nil {
+			t.Fatal(err)
+		}
+		migratedHash := sha256.Sum256(migratedSnapshot)
+		snapshot, hash = string(migratedSnapshot), hex.EncodeToString(migratedHash[:])
+		configuration, configurationHash, err := canonicalServiceConfiguration(newServiceConfiguration(nil, map[string]int64{"interactive-desktop-root-and-network": 1}))
+		if err != nil {
+			t.Fatal(err)
+		}
 		workspace := filepath.Join(smokeRoot, templateID)
 		if err := os.MkdirAll(workspace, 0o700); err != nil {
 			t.Fatal(err)
@@ -315,11 +338,19 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 			ServiceID:  "mws_smoke_" + strings.TrimPrefix(templateID, "linuxserver-webtop-") + "_" + stamp,
 			TemplateID: templateID, TemplateSource: "builtin", TemplateRevision: 1,
 			TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: hash,
+			ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash,
 			ServiceFamilyID: "webtop-smoke-" + strings.TrimPrefix(templateID, "linuxserver-webtop-") + "-" + stamp,
 			Deployment:      string(DeploymentContainer), WorkspacePath: workspace, RuntimePort: port,
-			DesiredState: "running", ObservedState: "installing",
+			DesiredState: "running", ObservedState: "installing", ForwardID: "pf_smoke_" + strings.TrimPrefix(templateID, "linuxserver-webtop-") + "_" + stamp,
 		}
-		volumeName := "redeven-mws-data-" + resourceNameSuffix(service.ServiceFamilyID) + "-0"
+		if err := registry.CreateManagedService(ctx, *service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: fmt.Sprintf("http://127.0.0.1:%d", port)}); err != nil {
+			t.Fatalf("register smoke service %s: %v", templateID, err)
+		}
+		effectiveSpec, _, err := effectiveSpecFromService(service)
+		if err != nil {
+			t.Fatalf("resolve smoke service %s: %v", templateID, err)
+		}
+		volumeName := "redeven-mws-data-" + resourceNameSuffix(service.ServiceFamilyID) + "-config"
 		t.Cleanup(func() {
 			_, _ = client.Action(context.Background(), containerengine.EngineActionRequest{Engine: containerengine.EngineDocker, Method: containerengine.MethodRemove, ContainerID: customContainerName(service.ServiceID), Force: true})
 			_ = adapter.RemoveVolume(context.Background(), containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: volumeName})
@@ -341,11 +372,16 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 		if err := exec.CommandContext(ctx, "docker", "exec", runtimeID, "touch", "/config/redeven-config-marker.txt").Run(); err != nil {
 			t.Fatalf("config write %s: %v", templateID, err)
 		}
-		running = append(running, runningService{service: service, spec: spec, volume: volumeName})
+		running = append(running, runningService{service: service, spec: effectiveSpec, volume: volumeName})
 	}
 
 	for _, item := range running {
 		if err := driver.VerifyRuntime(ctx, item.service, item.spec); err != nil {
+			if inspected, inspectErr := adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: item.service.RuntimeIdentity}); inspectErr == nil {
+				mounts, _ := driver.containerMounts(ctx, item.service, item.spec.Container.Mounts, false)
+				expected := containerCreateRequest(item.service, item.spec, item.service.ArtifactReference, mounts, nil)
+				t.Logf("runtime mismatch actual=%+v expected=%+v", inspected.Container.Runtime, expected)
+			}
 			t.Fatalf("verify simultaneous %s: %v", item.service.TemplateID, err)
 		}
 		if err := driver.Stop(ctx, item.service); err != nil {
@@ -357,7 +393,7 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 	}
 
 	for _, item := range running {
-		if err := driver.Uninstall(ctx, item.service, false); err != nil {
+		if err := driver.Uninstall(ctx, item.service, false, func(string, int64) {}); err != nil {
 			t.Fatalf("retain-data uninstall %s: %v", item.service.TemplateID, err)
 		}
 		item.service.RuntimeIdentity = ""
@@ -372,7 +408,7 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 		if err := exec.CommandContext(ctx, "docker", "exec", runtimeID, "test", "-f", "/config/redeven-config-marker.txt").Run(); err != nil {
 			t.Fatalf("retained config %s: %v", item.service.TemplateID, err)
 		}
-		if err := driver.Uninstall(ctx, item.service, true); err != nil {
+		if err := driver.Uninstall(ctx, item.service, true, func(string, int64) {}); err != nil {
 			t.Fatalf("delete-data uninstall %s: %v", item.service.TemplateID, err)
 		}
 		volumes, err := adapter.ListVolumes(ctx, containerengine.EngineDocker)

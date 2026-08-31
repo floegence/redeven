@@ -195,7 +195,7 @@ func (*recordingReconfigureDriver) Start(context.Context, *pfregistry.ManagedSer
 func (*recordingReconfigureDriver) Stop(context.Context, *pfregistry.ManagedService) error {
 	return errors.New("unexpected stop")
 }
-func (*recordingReconfigureDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool) error {
+func (*recordingReconfigureDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
 	return errors.New("unexpected uninstall")
 }
 func (*recordingReconfigureDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
