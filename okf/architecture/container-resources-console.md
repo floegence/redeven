@@ -51,9 +51,10 @@ Dialog primitives own outside-click, Escape, focus, and Workbench-safe floating
 behavior.
 
 One action-presentation map supplies icons and tone to list buttons, detail
-buttons, and menus: Play for start or resume, CircleStop for stop, Refresh for
-restart, Pause for pause, XCircle for force stop, and Trash for delete. Every
-menu action has its semantic icon; force stop and delete remain destructive.
+buttons, and menus: Play for start or resume, Stop for stop, Refresh for restart,
+Pause for pause, XCircle for force stop, and Trash for delete. Every menu action
+has its semantic icon; force stop and delete remain destructive. The managed
+resource filter always shows its Lock icon, localized label, and resource count.
 
 Selecting a resource opens a component-local detail page. Returning restores
 the owning list, query, filter, sort, and scroll position. Container inventory

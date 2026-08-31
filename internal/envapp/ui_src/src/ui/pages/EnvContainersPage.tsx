@@ -8,7 +8,6 @@ import {
   ArrowUp,
   Check,
   ChevronRight,
-  CircleStop,
   Copy,
   Cpu,
   Database,
@@ -21,6 +20,7 @@ import {
   FileText,
   Info,
   Layers,
+  Lock,
   Maximize,
   MoreVertical,
   Package,
@@ -29,6 +29,7 @@ import {
   Plus,
   Refresh,
   Search,
+  Stop,
   Terminal,
   Trash,
   X,
@@ -457,7 +458,7 @@ type ActionIconComponent = (props: { class?: string; 'aria-hidden'?: boolean | '
 
 function actionPresentation(method: string): Readonly<{ icon: ActionIconComponent; destructive: boolean }> {
   if (method.endsWith('.start') || method.endsWith('.unpause')) return { icon: Play, destructive: false };
-  if (method.endsWith('.stop')) return { icon: CircleStop, destructive: false };
+  if (method.endsWith('.stop')) return { icon: Stop, destructive: false };
   if (method.endsWith('.restart')) return { icon: Refresh, destructive: false };
   if (method.endsWith('.pause')) return { icon: Pause, destructive: false };
   if (method.endsWith('.kill')) return { icon: XCircle, destructive: true };
@@ -2643,7 +2644,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           )}</For>
           <Button size="sm" variant={execPreset() === 'custom' ? 'default' : 'outline'} onClick={() => setExecPreset('custom')} disabled={execBusy()}>{i18n.t('containers.exec.custom')}</Button>
         </div>
-        <Show when={execSessionID()}><Button size="sm" variant="ghost" onClick={() => void closeExecSession()} disabled={execBusy()}><CircleStop class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.close')}</Button></Show>
+        <Show when={execSessionID()}><Button size="sm" variant="ghost" onClick={() => void closeExecSession()} disabled={execBusy()}><Stop class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.close')}</Button></Show>
       </div>
       <Show when={execPreset() === 'custom'}>
         <div class="container-exec-custom">
@@ -2680,7 +2681,13 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         <button type="button" aria-pressed={resourceFilter() === 'all'} onClick={() => setResourceFilter('all')} disabled={pending}>{filterLabel('all')}</button>
         <button type="button" aria-pressed={resourceFilter() === 'active'} onClick={() => setResourceFilter('active')} disabled={pending}>{filterLabel('active')}</button>
         <button type="button" aria-pressed={resourceFilter() === 'inactive'} onClick={() => setResourceFilter('inactive')} disabled={pending}>{filterLabel('inactive')}</button>
-        <Show when={!pending && managedResourceCount() > 0}><button type="button" aria-pressed={resourceFilter() === 'managed'} onClick={() => setResourceFilter('managed')}><Layers class="h-3.5 w-3.5" /><span>{managedResourceCount()}</span><span class="sr-only">{filterLabel('managed')}</span></button></Show>
+        <Show when={!pending && managedResourceCount() > 0}>
+          <button type="button" aria-pressed={resourceFilter() === 'managed'} onClick={() => setResourceFilter('managed')}>
+            <Lock class="h-3.5 w-3.5" />
+            <span>{filterLabel('managed')}</span>
+            <span class="container-filter-count">{managedResourceCount()}</span>
+          </button>
+        </Show>
       </div>
       <div class="container-toolbar-actions">
         <div class="container-column-picker">
