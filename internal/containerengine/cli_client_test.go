@@ -375,6 +375,79 @@ func TestCLIClientPullImageReportsObservedLayerProgress(t *testing.T) {
 	}
 }
 
+func TestCLIClientPullImageReportsPinnedCachedLayersBeforeSilentRegistryCheck(t *testing.T) {
+	t.Parallel()
+
+	imageRef := "ghcr.io/acme/api@" + testSHA256Digest
+	runner := &fakeCommandRunner{
+		outputs: map[string]string{
+			"docker image inspect " + imageRef: `[{"Id":"` + testSHA256Digest + `","RootFS":{"Layers":["layer-a","layer-b","layer-c"]}}]`,
+		},
+		streams: map[string][]string{
+			"docker pull " + imageRef: {
+				"Digest: " + testSHA256Digest,
+				"Status: Image is up to date for " + imageRef,
+			},
+		},
+	}
+	client := &CLIClient{Runner: runner}
+	var progress []ImagePullProgress
+	result, err := client.PullImageWithProgress(context.Background(), EngineDocker, imageRef, func(_ context.Context, item ImagePullProgress) error {
+		progress = append(progress, item)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("PullImageWithProgress() error = %v", err)
+	}
+	if !result.Completed {
+		t.Fatalf("pull result = %+v", result)
+	}
+	if len(progress) < 2 {
+		t.Fatalf("progress = %+v, want cached progress before registry output", progress)
+	}
+	first := progress[0]
+	if first.Phase != "cached" || first.CompletedLayers != 3 || first.TotalLayers != 3 || first.DownloadedBytes != 0 || first.TotalBytes != 0 {
+		t.Fatalf("first progress = %+v, want cached 3/3 layers without fabricated bytes", first)
+	}
+	last := progress[len(progress)-1]
+	if last.Phase != "cached" || last.CompletedLayers != 3 || last.TotalLayers != 3 {
+		t.Fatalf("last progress = %+v, want cached metadata preserved through verification", last)
+	}
+}
+
+func TestCLIClientPullImageContinuesWhenPinnedImageIsNotCached(t *testing.T) {
+	t.Parallel()
+
+	imageRef := "ghcr.io/acme/api@" + testSHA256Digest
+	runner := &fakeCommandRunner{streams: map[string][]string{
+		"docker pull " + imageRef: {
+			"a1b2c3: Pulling fs layer",
+			"a1b2c3: Downloading [====>] 1MB/2MB",
+			"a1b2c3: Pull complete",
+			"Digest: " + testSHA256Digest,
+		},
+	}}
+	client := &CLIClient{Runner: runner}
+	var progress []ImagePullProgress
+	result, err := client.PullImageWithProgress(context.Background(), EngineDocker, imageRef, func(_ context.Context, item ImagePullProgress) error {
+		progress = append(progress, item)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("PullImageWithProgress() error = %v", err)
+	}
+	if !result.Completed || len(progress) < 3 {
+		t.Fatalf("result=%+v progress=%+v", result, progress)
+	}
+	if progress[0].Phase != "resolving" || progress[0].TotalLayers != 0 {
+		t.Fatalf("first progress = %+v, want indeterminate resolving after local cache miss", progress[0])
+	}
+	last := progress[len(progress)-1]
+	if last.Phase != "verifying" || last.CompletedLayers != 1 || last.TotalLayers != 1 || last.DownloadedBytes != 2_000_000 || last.TotalBytes != 2_000_000 {
+		t.Fatalf("last progress = %+v, want downloaded pinned image facts", last)
+	}
+}
+
 func TestCLIClientPullImageReportsPodmanBytesAndLayers(t *testing.T) {
 	t.Parallel()
 

@@ -580,7 +580,7 @@ describe('web service metadata and template validation', () => {
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
           forward_id: 'pf-retry', runtime_port: 3000, update_available: false,
         }}
-        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1, stage_started_at_unix_ms: 1_777_777_777_000, updated_at_unix_ms: 1_777_777_779_000, transfer: { phase: 'pulling', artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, downloaded_bytes: 2_000, total_bytes: 5_000, bytes_per_second: 1_000, completed_layers: 2, total_layers: 5 } } }}
+        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1, stage_started_at_unix_ms: Date.now() - 2_000, updated_at_unix_ms: Date.now(), transfer: { phase: 'pulling', artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, downloaded_bytes: 2_000, total_bytes: 5_000, bytes_per_second: 1_000, completed_layers: 2, total_layers: 5 } } }}
         busy={false}
         canOpen
         canManage
@@ -617,6 +617,65 @@ describe('web service metadata and template validation', () => {
     } finally {
       dispose();
       host.remove();
+    }
+  });
+
+  it('shows cached image facts and advances elapsed time during a silent registry check', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-31T12:00:00Z'));
+    const stageStartedAt = Date.now() - 3_000;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-cached', template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'linuxserver-webtop-debian-xfce',
+          name: 'LinuxServer Webtop · Debian XFCE', template_source: 'builtin', brand_icon: 'debian', deployment: 'docker',
+          workspace_path: '/workspace', version: '1', desired_state: 'running', observed_state: 'installing',
+          forward_id: 'pf-cached', runtime_port: 3000, update_available: false,
+        }}
+        operation={{
+          operation_id: 'mop-cached', service_id: 'mws-cached', action: 'install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7,
+          progress_detail: {
+            schema_version: 1,
+            stage_started_at_unix_ms: stageStartedAt,
+            updated_at_unix_ms: stageStartedAt,
+            transfer: {
+              phase: 'cached',
+              artifact_reference: 'lscr.io/linuxserver/webtop@sha256:reviewed',
+              artifact_index: 1,
+              artifact_total: 1,
+              completed_layers: 18,
+              total_layers: 18,
+            },
+          },
+        }}
+        busy
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onCancelOperation={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
+      const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
+      expect(details.textContent).toContain('0 B');
+      expect(details.textContent).toContain('0 B/s');
+      expect(details.textContent).toContain('18 / 18');
+      expect(details.textContent).toContain('3s');
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(details.textContent).toContain('5s');
+    } finally {
+      dispose();
+      host.remove();
+      vi.useRealTimers();
     }
   });
 });
