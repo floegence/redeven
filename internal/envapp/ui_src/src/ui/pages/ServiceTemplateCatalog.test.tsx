@@ -45,6 +45,17 @@ const builtIn: ServiceTemplatePresentation = {
   brandIcon: 'deepseek-harness',
   deploymentLabel: 'Host',
   version: '0.1.1-rc.2',
+  revision: 3,
+  diskBytes: 536870912,
+  dataLocation: '/srv/redeven/deepseek/data',
+  defaultWorkspacePath: '/workspace/deepseek-harness',
+  defaultAccessMode: 'desktop_loopback',
+  runtimeSpec: {
+    schema_version: 1,
+    kind: 'host',
+    endpoint: { scheme: 'http', path: '/', health_path: '/health', startup_timeout_sec: 45 },
+    host: { runtime_bundle: 'deepseek-harness', start_script: 'exec deepseek-harness web' },
+  },
   developerPreview: true,
   available: true,
   installed: false,
@@ -59,6 +70,7 @@ const custom: ServiceTemplatePresentation = {
   source: 'custom',
   kind: 'host',
   deploymentLabel: 'Host',
+  revision: 1,
   developerPreview: false,
   available: true,
   installed: false,
@@ -146,6 +158,51 @@ describe('ServiceTemplateCatalog', () => {
     expect(actions.onEdit).toHaveBeenCalledWith('custom-host');
     expect(actions.onDelete).toHaveBeenCalledWith('custom-host');
     expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('More');
+  });
+
+  it('shows the effective host and container runtime definitions instead of repeating catalog metadata', () => {
+    const container: ServiceTemplatePresentation = {
+      ...builtIn,
+      id: 'desktop-container',
+      name: 'Desktop container',
+      kind: 'container',
+      deploymentLabel: 'Container',
+      runtimeSpec: {
+        schema_version: 1,
+        kind: 'container',
+        endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/ready', startup_timeout_sec: 180 },
+        container: {
+          image: 'registry.example/desktop@sha256:1234',
+          environment: { PUID: '1000', PGID: '1000' },
+          mounts: [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'config', target: '/config' }],
+          restart_policy: 'no',
+          network_mode: 'bridge',
+          read_only_root: false,
+          pids_limit: 2048,
+          shm_size_bytes: 1073741824,
+          runtime_profile: 'interactive_desktop',
+        },
+      },
+    };
+    mount({ category: 'container', templates: [container], hostCount: 0, containerCount: 1 });
+
+    const details = host.querySelector('[data-testid="service-template-details"]')!;
+    expect(details.textContent).toContain('registry.example/desktop@sha256:1234');
+    expect(details.textContent).toContain('${WORKSPACE} → /workspace');
+    expect(details.textContent).toContain('config → /config');
+    expect(details.textContent).toContain('PGID, PUID');
+    expect(details.textContent).toContain('1 GiB');
+    const readOnlyRoot = Array.from(details.querySelectorAll('.service-template-detail-field')).find((field) => field.textContent?.includes('Read-only root filesystem'));
+    expect(readOnlyRoot?.textContent).toContain('No');
+
+    dispose?.();
+    host.remove();
+    mount({ templates: [builtIn] });
+    const hostDetails = host.querySelector('[data-testid="service-template-details"]')!;
+    expect(hostDetails.textContent).toContain('deepseek-harness');
+    expect(hostDetails.textContent).toContain('exec deepseek-harness web');
+    expect(hostDetails.textContent).toContain('HTTP · /');
+    expect(hostDetails.textContent).toContain('45s');
   });
 
   it('routes category and create-menu choices through the catalog toolbar', () => {

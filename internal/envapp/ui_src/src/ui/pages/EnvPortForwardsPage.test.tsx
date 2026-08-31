@@ -1123,6 +1123,10 @@ describe('EnvPortForwardsPage', () => {
         brand_icon: 'ubuntu', localization_key: 'linuxserverWebtopUbuntuKDE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         version: '654ea8e3-ls177', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
         default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+        effective_spec: {
+          schema_version: 1, kind: 'container', endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/', startup_timeout_sec: 180 },
+          container: { image: 'lscr.io/linuxserver/webtop@sha256:ubuntu', environment: { PUID: '${REDEVEN_RUNTIME_UID}' }, mounts: [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'config', target: '/config' }], restart_policy: 'no', network_mode: 'bridge', read_only_root: false, pids_limit: 2048, shm_size_bytes: 1073741824, runtime_profile: 'interactive_desktop' },
+        },
       },
       {
         template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'linuxserver-webtop-debian-xfce', name: 'Unlocalized Debian desktop', description: 'Unlocalized Debian description',
@@ -1161,6 +1165,10 @@ describe('EnvPortForwardsPage', () => {
     expect(host.querySelector('[data-brand-icon="debian"], [data-template-brand="debian"]')).toBeTruthy();
     expect(host.querySelector('[data-template-id="linuxserver-webtop-ubuntu-kde"]')?.textContent).toContain('LinuxServer Webtop · Ubuntu (KDE Plasma)');
     expect(host.querySelector('[data-template-id="linuxserver-webtop-debian-xfce"]')?.textContent).toContain('LinuxServer Webtop · Debian XFCE');
+    const templateDetails = host.querySelector('[data-testid="service-template-details"]')!;
+    expect(templateDetails.textContent).toContain('lscr.io/linuxserver/webtop@sha256:ubuntu');
+    expect(templateDetails.textContent).toContain('${WORKSPACE} → /workspace');
+    expect(templateDetails.textContent).toContain('1 GiB');
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
     await flushPage();
 

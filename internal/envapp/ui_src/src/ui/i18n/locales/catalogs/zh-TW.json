@@ -3176,6 +3176,15 @@
       "containerDeployment": "容器",
       "composeDeployment": "Docker Compose",
       "deployment": "部署方式",
+      "details": {
+        "endpoint": "服務端點",
+        "startupTimeout": "啟動逾時",
+        "templateRevision": "範本修訂版本",
+        "runtimeBundle": "執行階段套件",
+        "runtimeProfile": "執行階段設定檔",
+        "hostArtifact": "執行階段成品",
+        "configuredHooks": "已設定的生命週期操作"
+      },
       "deploymentInformation": "部署資訊",
       "customVersion": "自訂",
       "managedPrivateData": "Redeven 私有受管理服務儲存空間",

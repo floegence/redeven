@@ -3176,6 +3176,15 @@
       "containerDeployment": "容器",
       "composeDeployment": "Docker Compose",
       "deployment": "部署方式",
+      "details": {
+        "endpoint": "服务端点",
+        "startupTimeout": "启动超时",
+        "templateRevision": "模板修订版本",
+        "runtimeBundle": "运行时包",
+        "runtimeProfile": "运行配置档",
+        "hostArtifact": "运行时制品",
+        "configuredHooks": "已配置的生命周期操作"
+      },
       "deploymentInformation": "部署信息",
       "customVersion": "自定义",
       "managedPrivateData": "Redeven 私有受管服务存储",

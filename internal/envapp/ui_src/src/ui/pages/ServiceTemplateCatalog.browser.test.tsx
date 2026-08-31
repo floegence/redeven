@@ -25,6 +25,13 @@ const template: ServiceTemplatePresentation = {
   brandIcon: 'deepseek-harness',
   deploymentLabel: 'Host',
   version: '0.1.1-rc.2',
+  revision: 1,
+  runtimeSpec: {
+    schema_version: 1,
+    kind: 'host',
+    endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 },
+    host: { runtime_bundle: 'deepseek-harness', start_script: 'exec deepseek-harness web' },
+  },
   developerPreview: true,
   available: true,
   installed: false,
@@ -151,6 +158,37 @@ describe('ServiceTemplateCatalog browser presentation', () => {
       (detailsIcon.getBoundingClientRect().top + detailsIcon.getBoundingClientRect().height / 2)
       - (detailsTitle.getBoundingClientRect().top + detailsTitle.getBoundingClientRect().height / 2),
     )).toBeLessThan(18);
+  });
+
+  it('keeps detailed runtime information scrollable while actions remain attached to the pane', () => {
+    mount([{
+      ...template,
+      id: 'container-details',
+      kind: 'container',
+      deploymentLabel: 'Container',
+      runtimeSpec: {
+        schema_version: 1,
+        kind: 'container',
+        endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/', startup_timeout_sec: 180 },
+        container: {
+          image: 'registry.example/desktop@sha256:1234567890',
+          environment: Object.fromEntries(Array.from({ length: 16 }, (_, index) => [`SETTING_${index}`, `${index}`])),
+          mounts: Array.from({ length: 12 }, (_, index) => ({ type: 'volume' as const, source: `volume-${index}`, target: `/data/${index}` })),
+          restart_policy: 'no',
+          network_mode: 'bridge',
+          read_only_root: true,
+          pids_limit: 512,
+        },
+      },
+    }]);
+
+    const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
+    const body = details.querySelector<HTMLElement>('.service-template-details__body')!;
+    const actions = details.querySelector<HTMLElement>('.service-template-details__actions')!;
+    expect(getComputedStyle(body).overflowY).toBe('auto');
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    expect(actions.getBoundingClientRect().bottom).toBeLessThanOrEqual(details.getBoundingClientRect().bottom + 1);
+    expect(actions.getBoundingClientRect().top).toBeGreaterThan(body.getBoundingClientRect().top);
   });
 
   it('stacks the selected template detail pane with touchable actions on narrow screens', async () => {

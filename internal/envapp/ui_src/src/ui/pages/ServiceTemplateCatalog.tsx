@@ -20,6 +20,55 @@ import { DebianLogo, UbuntuLogo } from '../icons/DistributionBrandLogos';
 export type ServiceTemplateCategory = 'host' | 'container';
 export type ServiceTemplateKind = 'host' | 'container' | 'compose';
 
+export type ServiceTemplateRuntimeSpec = Readonly<{
+  schema_version: 1;
+  kind: ServiceTemplateKind;
+  endpoint: Readonly<{
+    scheme: 'http' | 'https';
+    container_port?: number;
+    fixed_host_port?: number;
+    path?: string;
+    health_path?: string;
+    health_protocol?: string;
+    startup_timeout_sec?: number;
+  }>;
+  parameters?: ReadonlyArray<Readonly<{ name: string; label: string; description?: string; type: 'text' | 'number' | 'boolean' | 'secret' | 'path'; required?: boolean; default?: string }>>;
+  host?: Readonly<{
+    install_script?: string;
+    start_script: string;
+    stop_script?: string;
+    uninstall_script?: string;
+    artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>;
+    runtime_bundle?: string;
+  }>;
+  container?: Readonly<{
+    image: string;
+    entrypoint?: ReadonlyArray<string>;
+    command?: ReadonlyArray<string>;
+    environment?: Readonly<Record<string, string>>;
+    labels?: Readonly<Record<string, string>>;
+    restart_policy?: string;
+    network_mode?: string;
+    pid_mode?: string;
+    ipc_mode?: string;
+    ports?: ReadonlyArray<Readonly<{ resource_id?: string; container_port: number; host_port?: number; host_ip?: string; protocol?: string }>>;
+    mounts?: ReadonlyArray<Readonly<{ resource_id?: string; type: 'workspace' | 'bind' | 'volume' | 'tmpfs'; source?: string; target: string; read_only?: boolean; tmpfs_options?: ReadonlyArray<string> }>>;
+    cap_add?: ReadonlyArray<string>;
+    cap_drop?: ReadonlyArray<string>;
+    devices?: ReadonlyArray<Readonly<{ resource_id?: string; host_path: string; container_path?: string; permissions?: string }>>;
+    privileged?: boolean;
+    security_opts?: ReadonlyArray<string>;
+    user?: string;
+    read_only_root: boolean;
+    memory_bytes?: number;
+    cpus?: number;
+    pids_limit?: number;
+    shm_size_bytes?: number;
+    runtime_profile?: 'restricted' | 'interactive_desktop';
+  }>;
+  compose?: Readonly<{ yaml: string; main_service: string }>;
+}>;
+
 export type ServiceTemplatePresentation = Readonly<{
   id: string;
   name: string;
@@ -29,6 +78,14 @@ export type ServiceTemplatePresentation = Readonly<{
   brandIcon?: 'deepseek-harness' | 'ubuntu' | 'debian';
   deploymentLabel: string;
   version?: string;
+  revision: number;
+  diskBytes?: number;
+  dataLocation?: string;
+  sourceURL?: string;
+  dockerSourceURL?: string;
+  defaultWorkspacePath?: string;
+  defaultAccessMode?: string;
+  runtimeSpec?: ServiceTemplateRuntimeSpec;
   developerPreview: boolean;
   available: boolean;
   availabilityReason?: string;
@@ -36,6 +93,189 @@ export type ServiceTemplatePresentation = Readonly<{
   duplicateable: boolean;
   editable: boolean;
 }>;
+
+function formatTemplateBytes(value: number | undefined, locale: string): string {
+  if (!value || value <= 0) return '—';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let amount = value;
+  let unit = 0;
+  while (amount >= 1024 && unit < units.length - 1) {
+    amount /= 1024;
+    unit += 1;
+  }
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: unit === 0 ? 0 : 1 }).format(amount)} ${units[unit]}`;
+}
+
+function DetailField(props: { label: string; value: JSX.Element | string | number | undefined; mono?: boolean; wide?: boolean }): JSX.Element {
+  const value = () => props.value === undefined || props.value === '' ? '—' : props.value;
+  return (
+    <div class={cn('service-template-detail-field min-w-0', props.wide && 'service-template-detail-field--wide')}>
+      <dt class="text-[10px] font-medium leading-4 text-muted-foreground">{props.label}</dt>
+      <dd class={cn('mt-0.5 min-w-0 break-words text-xs leading-5 text-foreground', props.mono && 'font-mono text-[11px]')} title={typeof props.value === 'string' ? props.value : undefined}>
+        {value()}
+      </dd>
+    </div>
+  );
+}
+
+function DetailSection(props: { title: string; children: JSX.Element }): JSX.Element {
+  return (
+    <section class="service-template-detail-section" data-testid="service-template-detail-section">
+      <h3 class="text-[11px] font-semibold leading-5 text-foreground">{props.title}</h3>
+      <dl class="service-template-detail-grid mt-2">{props.children}</dl>
+    </section>
+  );
+}
+
+function endpointAddress(spec: ServiceTemplateRuntimeSpec): string {
+  const endpoint = spec.endpoint;
+  const port = endpoint.container_port || endpoint.fixed_host_port;
+  return `${endpoint.scheme.toUpperCase()}${port ? ` · ${port}` : ''} · ${endpoint.path || '/'}`;
+}
+
+function commandLine(parts: readonly string[] | undefined): string {
+  return parts?.filter(Boolean).join(' ') || '—';
+}
+
+type ServiceTemplateMount = NonNullable<NonNullable<ServiceTemplateRuntimeSpec['container']>['mounts']>[number];
+
+function mountLine(mount: ServiceTemplateMount): string {
+  const source = mount.type === 'workspace'
+    ? '${WORKSPACE}'
+    : mount.type === 'tmpfs'
+      ? 'tmpfs'
+      : mount.source || mount.resource_id || mount.type;
+  return `${source} → ${mount.target}${mount.read_only ? ' · ro' : ''}`;
+}
+
+function EndpointTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec }): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <DetailSection title={i18n.t('webServices.managed.endpointSettings')}>
+      <DetailField label={i18n.t('webServices.managed.details.endpoint')} value={endpointAddress(props.spec)} mono wide />
+      <DetailField label={i18n.t('webServices.managed.healthPath')} value={`${props.spec.endpoint.health_protocol || props.spec.endpoint.scheme} ${props.spec.endpoint.health_path || '/'}`} mono />
+      <DetailField label={i18n.t('webServices.managed.details.startupTimeout')} value={props.spec.endpoint.startup_timeout_sec ? `${props.spec.endpoint.startup_timeout_sec}s` : '—'} />
+    </DetailSection>
+  );
+}
+
+function ContainerTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec }): JSX.Element {
+  const i18n = useI18n();
+  const container = () => props.spec.container;
+  const environmentNames = () => Object.keys(container()?.environment ?? {}).sort();
+  return (
+    <>
+      <EndpointTemplateDetails spec={props.spec} />
+      <DetailSection title={i18n.t('webServices.managed.serviceRuntimeSettings')}>
+        <DetailField label={i18n.t('webServices.managed.containerImage')} value={container()?.image} mono wide />
+        <DetailField label={i18n.t('webServices.managed.entrypoint')} value={commandLine(container()?.entrypoint)} mono />
+        <DetailField label={i18n.t('webServices.managed.commandArguments')} value={commandLine(container()?.command)} mono />
+        <DetailField label={i18n.t('webServices.managed.settings.containerUser')} value={container()?.user || 'root'} mono />
+        <DetailField label={i18n.t('webServices.managed.settings.restartPolicy')} value={container()?.restart_policy} mono />
+        <DetailField label={i18n.t('webServices.managed.details.runtimeProfile')} value={container()?.runtime_profile || 'restricted'} mono />
+        <DetailField label={i18n.t('webServices.managed.environmentVariables')} value={environmentNames().join(', ') || '—'} mono wide />
+        <Show when={Object.keys(container()?.labels ?? {}).length > 0}>
+          <DetailField label={i18n.t('webServices.managed.settings.labels')} value={Object.keys(container()?.labels ?? {}).sort().join(', ')} mono wide />
+        </Show>
+      </DetailSection>
+      <Show when={(container()?.mounts?.length ?? 0) > 0}>
+        <DetailSection title={i18n.t('webServices.managed.settings.section.storage')}>
+          <For each={container()?.mounts ?? []}>{(mount) => (
+            <DetailField label={mount.type} value={mountLine(mount)} mono wide />
+          )}</For>
+        </DetailSection>
+      </Show>
+      <DetailSection title={i18n.t('webServices.managed.settings.section.resources')}>
+        <DetailField label={i18n.t('webServices.managed.settings.cpus')} value={container()?.cpus || '—'} />
+        <DetailField label={i18n.t('webServices.managed.settings.memoryBytes')} value={formatTemplateBytes(container()?.memory_bytes, i18n.locale())} />
+        <DetailField label={i18n.t('webServices.managed.settings.pidsLimit')} value={container()?.pids_limit || '—'} />
+        <DetailField label={i18n.t('webServices.managed.settings.sharedMemoryBytes')} value={formatTemplateBytes(container()?.shm_size_bytes, i18n.locale())} />
+      </DetailSection>
+      <DetailSection title={i18n.t('webServices.managed.settings.section.network')}>
+        <DetailField label={i18n.t('webServices.managed.settings.networkMode')} value={container()?.network_mode} mono />
+        <Show when={container()?.pid_mode}>
+          <DetailField label={i18n.t('webServices.managed.settings.pidMode')} value={container()?.pid_mode} mono />
+        </Show>
+        <Show when={container()?.ipc_mode}>
+          <DetailField label={i18n.t('webServices.managed.settings.ipcMode')} value={container()?.ipc_mode} mono />
+        </Show>
+        <Show when={(container()?.ports?.length ?? 0) > 0}>
+          <DetailField
+            label={i18n.t('webServices.managed.settings.additionalPorts')}
+            value={(container()?.ports ?? []).map((port) => `${port.host_ip || '127.0.0.1'}:${port.host_port || 0} → ${port.container_port}/${port.protocol || 'tcp'}`).join(' · ')}
+            mono
+            wide
+          />
+        </Show>
+      </DetailSection>
+      <DetailSection title={i18n.t('webServices.managed.settings.section.security')}>
+        <DetailField label={i18n.t('webServices.managed.settings.readOnlyRoot')} value={container()?.read_only_root ? i18n.t('common.actions.yes') : i18n.t('common.actions.no')} />
+        <DetailField label={i18n.t('webServices.managed.settings.privileged')} value={container()?.privileged ? i18n.t('common.actions.yes') : i18n.t('common.actions.no')} />
+        <Show when={(container()?.cap_add?.length ?? 0) > 0}>
+          <DetailField label={i18n.t('webServices.managed.settings.capAdd')} value={container()?.cap_add?.join(', ')} mono wide />
+        </Show>
+        <Show when={(container()?.cap_drop?.length ?? 0) > 0}>
+          <DetailField label={i18n.t('webServices.managed.settings.capDrop')} value={container()?.cap_drop?.join(', ')} mono wide />
+        </Show>
+        <Show when={(container()?.devices?.length ?? 0) > 0}>
+          <DetailField
+            label={i18n.t('webServices.managed.settings.devices')}
+            value={(container()?.devices ?? []).map((device) => `${device.host_path} → ${device.container_path || device.host_path}${device.permissions ? ` · ${device.permissions}` : ''}`).join(' · ')}
+            mono
+            wide
+          />
+        </Show>
+        <DetailField label={i18n.t('webServices.managed.settings.securityOptions')} value={container()?.security_opts?.join(', ')} mono wide />
+      </DetailSection>
+    </>
+  );
+}
+
+function HostTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec }): JSX.Element {
+  const i18n = useI18n();
+  const host = () => props.spec.host;
+  const lifecycle = () => [
+    host()?.install_script ? i18n.t('webServices.managed.settings.install_script') : '',
+    host()?.start_script ? i18n.t('webServices.managed.settings.start_script') : '',
+    host()?.stop_script ? i18n.t('webServices.managed.settings.stop_script') : '',
+    host()?.uninstall_script ? i18n.t('webServices.managed.settings.uninstall_script') : '',
+  ].filter(Boolean).join(' · ');
+  return (
+    <>
+      <EndpointTemplateDetails spec={props.spec} />
+      <DetailSection title={i18n.t('webServices.managed.serviceRuntimeSettings')}>
+        <Show when={host()?.runtime_bundle}>
+          <DetailField label={i18n.t('webServices.managed.details.runtimeBundle')} value={host()?.runtime_bundle} mono wide />
+        </Show>
+        <Show when={host()?.artifact}>{(artifact) => (
+          <>
+            <DetailField label={i18n.t('webServices.managed.details.hostArtifact')} value={artifact().download_url} mono wide />
+            <DetailField label="SHA-256" value={artifact().sha256} mono wide />
+            <DetailField label={i18n.t('webServices.managed.disk')} value={formatTemplateBytes(artifact().size_bytes, i18n.locale())} />
+            <DetailField label={i18n.t('webServices.managed.entrypoint')} value={artifact().executable_rel_path} mono />
+          </>
+        )}</Show>
+      </DetailSection>
+      <DetailSection title={i18n.t('webServices.managed.settings.section.lifecycle')}>
+        <DetailField label={i18n.t('webServices.managed.details.configuredHooks')} value={lifecycle()} wide />
+        <DetailField label={i18n.t('webServices.managed.startScript')} value={host()?.start_script} mono wide />
+      </DetailSection>
+    </>
+  );
+}
+
+function ComposeTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec }): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <>
+      <EndpointTemplateDetails spec={props.spec} />
+      <DetailSection title={i18n.t('webServices.managed.serviceRuntimeSettings')}>
+        <DetailField label={i18n.t('webServices.managed.composeMainService')} value={props.spec.compose?.main_service} mono />
+        <DetailField label={i18n.t('webServices.managed.composeYAML')} value={props.spec.compose?.yaml.split('\n').length ?? 0} mono />
+      </DetailSection>
+    </>
+  );
+}
 
 export type ServiceTemplateCatalogProps = Readonly<{
   category: ServiceTemplateCategory;
@@ -274,22 +514,53 @@ export function ServiceTemplateDetailsPane(props: {
         </div>
       </div>
 
-      <dl class="service-template-details__metadata mt-4 grid grid-cols-2 gap-x-5 gap-y-3 border-y py-3 text-xs">
-        <div class="min-w-0">
-          <dt class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.deployment')}</dt>
-          <dd class="mt-1 truncate font-medium text-foreground">{props.template.deploymentLabel}</dd>
-        </div>
-        <div class="min-w-0">
-          <dt class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.version')}</dt>
-          <dd class="mt-1 truncate font-mono text-foreground">{props.template.version ? `v${props.template.version}` : i18n.t('webServices.managed.customVersion')}</dd>
-        </div>
-      </dl>
+      <div class="service-template-details__body">
+        <DetailSection title={i18n.t('webServices.managed.deploymentInformation')}>
+          <DetailField label={i18n.t('webServices.managed.deployment')} value={props.template.deploymentLabel} />
+          <DetailField label={i18n.t('webServices.managed.version')} value={props.template.version ? `v${props.template.version}` : i18n.t('webServices.managed.customVersion')} mono />
+          <DetailField label={i18n.t('webServices.managed.details.templateRevision')} value={props.template.revision} />
+          <DetailField label={i18n.t('webServices.managed.settings.accessMode')} value={props.template.defaultAccessMode || '—'} mono />
+          <Show when={(props.template.runtimeSpec?.parameters?.length ?? 0) > 0}>
+            <DetailField label={i18n.t('webServices.managed.settings.templateParameters')} value={props.template.runtimeSpec?.parameters?.map((parameter) => parameter.name).join(', ')} mono wide />
+          </Show>
+          <Show when={props.template.diskBytes}>
+            <DetailField label={i18n.t('webServices.managed.disk')} value={formatTemplateBytes(props.template.diskBytes, i18n.locale())} />
+          </Show>
+          <Show when={props.template.defaultWorkspacePath}>
+            <DetailField label={i18n.t('webServices.managed.workspace')} value={props.template.defaultWorkspacePath} mono wide />
+          </Show>
+          <Show when={props.template.dataLocation}>
+            <DetailField label={i18n.t('webServices.managed.dataLocation')} value={props.template.dataLocation} mono wide />
+          </Show>
+        </DetailSection>
 
-      <div class="mt-3.5">
-        <ServiceTemplateStatus template={props.template} detailed />
+        <Show when={props.template.runtimeSpec}>{(spec) => (
+          <Show when={spec().kind === 'container'} fallback={(
+            <Show when={spec().kind === 'host'} fallback={<ComposeTemplateDetails spec={spec()} />}>
+              <HostTemplateDetails spec={spec()} />
+            </Show>
+          )}>
+            <ContainerTemplateDetails spec={spec()} />
+          </Show>
+        )}</Show>
+
+        <Show when={props.template.sourceURL || props.template.dockerSourceURL}>
+          <div class="service-template-detail-links flex flex-wrap gap-x-4 gap-y-2">
+            <Show when={props.template.sourceURL}>
+              <a href={props.template.sourceURL} target="_blank" rel="noreferrer" class="text-xs font-medium text-primary hover:underline">{i18n.t('webServices.managed.sourceCode')}</a>
+            </Show>
+            <Show when={props.template.dockerSourceURL}>
+              <a href={props.template.dockerSourceURL} target="_blank" rel="noreferrer" class="text-xs font-medium text-primary hover:underline">{i18n.t('webServices.managed.communityImage')}</a>
+            </Show>
+          </div>
+        </Show>
+
+        <div class="service-template-details__status">
+          <ServiceTemplateStatus template={props.template} detailed />
+        </div>
       </div>
 
-      <div class="service-template-details__actions mt-4 flex items-center gap-2">
+      <div class="service-template-details__actions flex items-center gap-2">
         <Button
           size="sm"
           variant="default"

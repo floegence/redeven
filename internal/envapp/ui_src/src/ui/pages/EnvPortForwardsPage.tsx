@@ -47,6 +47,7 @@ import {
   type ServiceTemplateCategory,
   type ServiceTemplateKind,
   type ServiceTemplatePresentation,
+  type ServiceTemplateRuntimeSpec,
 } from './ServiceTemplateCatalog';
 import { ManagedServiceShapingOrb } from './ManagedServiceShapingOrb';
 import {
@@ -147,15 +148,7 @@ type ManagedTemplateNotice = Readonly<{
   acknowledgement_required: boolean;
 }>;
 
-type ManagedTemplateSpec = Readonly<{
-  schema_version: 1;
-  kind: 'host' | 'container' | 'compose';
-  endpoint: Readonly<{ scheme: 'http' | 'https'; container_port?: number; fixed_host_port?: number; path?: string; health_path?: string; startup_timeout_sec?: number }>;
-  parameters?: ReadonlyArray<Readonly<{ name: string; label: string; description?: string; type: 'text' | 'number' | 'boolean' | 'secret' | 'path'; required?: boolean; default?: string }>>;
-  host?: Readonly<{ install_script?: string; start_script: string; stop_script?: string; uninstall_script?: string; artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>; runtime_bundle?: string }>;
-  container?: Readonly<{ image: string; entrypoint?: ReadonlyArray<string>; command?: ReadonlyArray<string>; environment?: Readonly<Record<string, string>>; mounts?: ReadonlyArray<Readonly<{ type: 'workspace' | 'bind' | 'volume' | 'tmpfs'; source?: string; target: string; read_only?: boolean }>>; user?: string; read_only_root: boolean; memory_bytes?: number; cpus?: number; pids_limit?: number; runtime_profile?: 'restricted' | 'interactive_desktop' }>;
-  compose?: Readonly<{ yaml: string; main_service: string }>;
-}>;
+type ManagedTemplateSpec = ServiceTemplateRuntimeSpec;
 
 type ManagedCatalogTemplate = Readonly<{
   template_id: string;
@@ -186,6 +179,7 @@ type ManagedCatalogTemplate = Readonly<{
   workspace_roots: ReadonlyArray<{ id: string; label: string; path: string }>;
   default_access_mode?: WebServiceAccessMode;
   spec?: ManagedTemplateSpec;
+  effective_spec?: ManagedTemplateSpec;
 }>;
 
 type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
@@ -933,6 +927,7 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
     brandIcon: service.brand_icon,
     deploymentLabel: managedDeploymentLabel(service.deployment, i18n),
     version: service.version,
+    revision: 0,
     developerPreview: false,
     available: true,
     installed: true,
@@ -1858,6 +1853,14 @@ export function EnvPortForwardsPage() {
       brandIcon: template.brand_icon,
       deploymentLabel: managedDeploymentLabel(template.deployment, i18n),
       version: template.version,
+      revision: template.revision,
+      diskBytes: template.disk_bytes,
+      dataLocation: template.data_location,
+      sourceURL: template.source_url,
+      dockerSourceURL: template.docker_source_url,
+      defaultWorkspacePath: template.default_workspace_path,
+      defaultAccessMode: template.default_access_mode,
+      runtimeSpec: template.effective_spec,
       developerPreview: template.developer_preview,
       available: template.available,
       availabilityReason: templateUnavailableReason(template),

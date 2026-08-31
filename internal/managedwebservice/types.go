@@ -100,6 +100,7 @@ type Template struct {
 	ReasonCode            string                   `json:"reason_code,omitempty"`
 	Reason                string                   `json:"reason,omitempty"`
 	Spec                  *TemplateSpec            `json:"spec,omitempty"`
+	EffectiveSpec         *TemplateSpec            `json:"effective_spec,omitempty"`
 	SortOrder             int                      `json:"-"`
 }
 
