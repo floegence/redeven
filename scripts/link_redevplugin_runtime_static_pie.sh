@@ -27,6 +27,27 @@ for argument in "$@"; do
         link_args+=("$argument")
       fi
       ;;
+    */self-contained/crt1.o|*/self-contained/Scrt1.o)
+      if [[ "$direct_lld" == true ]]; then
+        link_args+=("${argument%/*}/rcrt1.o")
+      else
+        link_args+=("$argument")
+      fi
+      ;;
+    */self-contained/crtbegin.o)
+      if [[ "$direct_lld" == true ]]; then
+        link_args+=("${argument%/crtbegin.o}/crtbeginS.o")
+      else
+        link_args+=("$argument")
+      fi
+      ;;
+    */self-contained/crtend.o)
+      if [[ "$direct_lld" == true ]]; then
+        link_args+=("${argument%/crtend.o}/crtendS.o")
+      else
+        link_args+=("$argument")
+      fi
+      ;;
     *)
       link_args+=("$argument")
       ;;
@@ -41,7 +62,7 @@ if [[ "$direct_lld" == true ]]; then
     echo "Rust LLD is required for Darwin Linux runtime cross-linking" >&2
     exit 127
   }
-  exec "$compiler" -flavor gnu -pie "${link_args[@]}"
+  exec "$compiler" -flavor gnu -static -pie --no-dynamic-linker -z text "${link_args[@]}"
 fi
 
 exec "${REDEVPLUGIN_STATIC_PIE_CC:-cc}" "${link_args[@]}" -static-pie

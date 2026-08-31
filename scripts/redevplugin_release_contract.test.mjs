@@ -120,18 +120,36 @@ fi
     };
     delete environment.REDEVPLUGIN_STATIC_PIE_CC;
     runStaticPIELinker(
-      ['-m64', '-Wl,--as-needed,-z,relro', '-nostartfiles', '-static', '-no-pie', '-nodefaultlibs', 'input.o'],
+      [
+        '-m64',
+        '-Wl,--as-needed,-z,relro',
+        '-nostartfiles',
+        '-static',
+        '-no-pie',
+        '-nodefaultlibs',
+        '/fake/self-contained/crt1.o',
+        '/fake/self-contained/crtbegin.o',
+        'input.o',
+        '/fake/self-contained/crtend.o',
+      ],
       environment,
     );
 
     assert.deepEqual(readFileSync(capture, 'utf8').trim().split('\n'), [
       '-flavor',
       'gnu',
+      '-static',
       '-pie',
+      '--no-dynamic-linker',
+      '-z',
+      'text',
       '--as-needed',
       '-z',
       'relro',
+      '/fake/self-contained/rcrt1.o',
+      '/fake/self-contained/crtbeginS.o',
       'input.o',
+      '/fake/self-contained/crtendS.o',
     ]);
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -108,10 +108,9 @@ func newOfficialRuntimeModuleForPlatform(
 		ExpectedArtifactIdentity: descriptor,
 	})
 	if err != nil {
-		// Worker execution is an optional Host module. Older Linux kernels can
-		// reject the released sealed-memfd admission primitive; keep plugin
-		// management and the rest of Env App available without weakening or
-		// replacing ReDevPlugin's executable verification.
+		// Worker execution is an optional Host module. A platform that cannot
+		// satisfy ReDevPlugin's released executable-admission contract keeps
+		// plugin management available; all other admission failures remain fatal.
 		if errors.Is(err, host.ErrRuntimeAdmissionUnsupported) {
 			return nil, nil
 		}
