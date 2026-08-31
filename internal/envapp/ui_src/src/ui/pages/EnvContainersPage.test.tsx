@@ -56,7 +56,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   ArrowDown: icon('arrow-down'),
   ArrowUp: icon('arrow-up'),
   Check: icon('check'),
-  CircleStop: icon('circle-stop'),
+  Stop: icon('stop'),
   Cpu: icon('cpu'),
   Database: icon('database'),
   ExternalLink: icon('external-link'),
@@ -66,6 +66,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Filter: icon('filter'),
   Info: icon('info'),
   Layers: icon('layers'),
+  Lock: icon('lock'),
   Maximize: icon('maximize'),
   MoreVertical: icon('more-vertical'),
   Package: icon('package'),
@@ -501,6 +502,14 @@ describe('native Containers page', () => {
     expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(host.querySelector('tbody tr')?.textContent).not.toContain('container-1');
     expect(host.querySelector('.container-managed-label')?.textContent).toBe('');
+    const managedFilter = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-filter-switch button'))
+      .find((button) => button.textContent?.includes('containers.filters.managed'));
+    expect(managedFilter?.querySelector('[data-icon="lock"]')).not.toBeNull();
+    expect(managedFilter?.textContent).toContain('1');
+    managedFilter?.click();
+    await settle();
+    expect(managedFilter?.getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('tbody')?.textContent).toContain('Managed API');
 
     const allFilter = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-filter-switch button'))
       .find((button) => button.textContent?.includes('containers.filters.all'));
@@ -1335,7 +1344,7 @@ describe('native Containers page', () => {
 
     expect(host.querySelector('[data-icon="filter"]')).not.toBeNull();
     expect(host.querySelector('[data-icon="settings"]')).toBeNull();
-    expect(host.querySelector('button[aria-label="containers.actions.stop"] [data-icon="circle-stop"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="containers.actions.stop"] [data-icon="stop"]')).not.toBeNull();
     const menuIcons = Array.from(host.querySelectorAll('[data-test-dropdown-menu] [data-icon]'))
       .map((item) => item.getAttribute('data-icon'));
     expect(menuIcons).toEqual(expect.arrayContaining(['refresh', 'pause', 'x-circle', 'trash']));

@@ -170,6 +170,18 @@
 }
 
 .container-filter-switch button[aria-pressed="true"] { color: var(--redeven-status-primary-foreground); background: var(--redeven-status-primary-soft); }
+.container-filter-count {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentcolor 10%, transparent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
 .container-toolbar-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 
 .container-metrics-strip {
