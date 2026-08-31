@@ -85,6 +85,7 @@ import {
   type VolumeInventoryItem,
 } from '../services/containerResourcesApi';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
+import { LocalApiError } from '../services/localApi';
 import { consumeContainerResourceNavigation, subscribeContainerResourceNavigation, type ContainerResourceNavigation } from '../services/containerResourceNavigation';
 import { useI18n } from '../i18n';
 import { useRedevenRpc } from '../protocol/redeven_v1';
@@ -564,6 +565,16 @@ function formatBytes(value: number | undefined): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
   return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function pruneReviewMetrics(preflight: ContainerPreflight): { resourceCount: number; reclaimableBytes?: number } | null {
+  if (preflight.method !== 'images.prune' && preflight.method !== 'volumes.prune') return null;
+  const resourceCount = Number(preflight.plan.target.resource_count ?? 0);
+  const reclaimableBytes = Number(preflight.plan.target.reclaimable_bytes);
+  return {
+    resourceCount: Number.isFinite(resourceCount) ? Math.max(0, Math.floor(resourceCount)) : 0,
+    reclaimableBytes: Number.isFinite(reclaimableBytes) && reclaimableBytes >= 0 ? reclaimableBytes : undefined,
+  };
 }
 
 function formatByteRate(value: number | undefined): string {
@@ -1695,7 +1706,15 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     } catch (cause) {
       if (generation === consoleLoadGeneration) {
         if (draft.method === 'containers.create') setContainerRunOpen(true);
-        notify.error(i18n.t('containers.notifications.preflightFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+        if (cause instanceof LocalApiError && cause.code === 'NOTHING_TO_PRUNE') {
+          notify.info(i18n.t('containers.prune.nothingTitle'), i18n.t('containers.prune.nothingMessage'));
+          void reloadConsole();
+        } else if (cause instanceof LocalApiError && cause.code === 'REFERENCE_STATE_INCOMPLETE') {
+          notify.error(i18n.t('containers.prune.referenceIncompleteTitle'), i18n.t('containers.prune.referenceIncompleteMessage'));
+          void reloadConsole();
+        } else {
+          notify.error(i18n.t('containers.notifications.preflightFailedTitle'), cause instanceof Error ? cause.message : String(cause));
+        }
       }
     } finally {
       if (generation === consoleLoadGeneration) setMutationBusy(false);
@@ -1852,26 +1871,17 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     openContainerRun(resourceIdentity('images', entry.item), entry.target, containerRunSuggestedPorts(selectedDetailRecord()));
   };
 
-  const pruneCandidates = createMemo(() => readyRuntimesForView(runtimes(), view()).map((target) => {
-    const identities = inventory().filter((entry) => {
-      if (runtimeKey(entry.target) !== runtimeKey(target)) return false;
-      if (view() === 'images') return (entry.item as ImageInventoryItem).referenced_containers === 0;
-      if (view() === 'volumes') return (entry.item as VolumeInventoryItem).referenced_containers === 0 && !resourceManagement(entry.item)?.managed;
-      return false;
-    }).map((entry) => resourceIdentity(view(), entry.item));
-    return { target, identities };
-  }).filter((candidate) => candidate.identities.length > 0));
+  const pruneCandidates = createMemo(() => readyRuntimesForView(runtimes(), view()));
 
   const runPrune = (targetKey: string) => {
-    const candidate = pruneCandidates().find((item) => runtimeKey(item.target) === targetKey);
-    if (!candidate) return;
+    const target = pruneCandidates().find((item) => runtimeKey(item) === targetKey);
+    if (!target) return;
     setPruneOpen(false);
     beginMutation({
       method: view() === 'images' ? 'images.prune' : 'volumes.prune',
       request: {
-        engine: candidate.target.engine,
-        endpoint_id: candidate.target.endpoint_id,
-        resource_identities: candidate.identities,
+        engine: target.engine,
+        endpoint_id: target.endpoint_id,
       },
     });
   };
@@ -1880,11 +1890,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     const candidates = pruneCandidates();
     if (candidates.length === 0) return;
     if (candidates.length === 1) {
-      runPrune(runtimeKey(candidates[0].target));
+      runPrune(runtimeKey(candidates[0]));
       return;
     }
-    const preferred = candidates.find((candidate) => candidate.target.engine === 'docker') ?? candidates[0];
-    setPruneTargetKey(runtimeKey(preferred.target));
+    const preferred = candidates.find((candidate) => candidate.engine === 'docker') ?? candidates[0];
+    setPruneTargetKey(runtimeKey(preferred));
     setPruneOpen(true);
   };
 
@@ -2729,7 +2739,28 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           />
         </div>
         <Show when={view() === 'containers' && (pending || readyRuntimes().some((runtime) => runtime.capabilities?.collection_stats))}><Button size="sm" variant="ghost" onClick={() => setChartsOpen(!chartsOpen())} aria-pressed={!pending && chartsOpen()} disabled={pending}><Activity class="mr-1.5 h-3.5 w-3.5" />{chartsOpen() ? i18n.t('containers.detail.hideCharts') : i18n.t('containers.detail.showCharts')}</Button></Show>
-        <Show when={view() === 'images' || view() === 'volumes'}><Button size="sm" variant="ghost" onClick={prune} disabled={pending || !canRWX() || !canAdmin()}>{i18n.t('containers.actions.prune')}</Button></Show>
+        <Show when={view() === 'images' || view() === 'volumes'}>
+          <Dropdown
+            align="end"
+            disabled={pending}
+            items={[{
+              id: 'prune',
+              label: i18n.t('containers.actions.prune'),
+              icon: () => <Trash class="h-3.5 w-3.5" />,
+              tone: 'danger',
+              disabled: pending || !canRWX() || !canAdmin() || pruneCandidates().length === 0,
+            }]}
+            onSelect={(action) => {
+              if (action === 'prune') prune();
+            }}
+            triggerAriaLabel={i18n.t('containers.prune.moreActions')}
+            trigger={(
+              <button type="button" class="container-icon-action inline-flex items-center justify-center" title={i18n.t('containers.prune.moreActions')}>
+                <MoreVertical class="h-4 w-4" />
+              </button>
+            )}
+          />
+        </Show>
         <Show when={view() === 'containers'}><Button size="sm" onClick={() => openContainerRun()} disabled={pending || !canRWX() || Boolean(pendingContainerCreateOperationID())}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.container')}</Button></Show>
         <Show when={view() === 'images'}><Button size="sm" onClick={() => openCreation('image')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.image')}</Button></Show>
         <Show when={view() === 'volumes'}><Button size="sm" onClick={() => openCreation('volume')} disabled={pending || !canRWX()}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.create.volume')}</Button></Show>
@@ -2948,7 +2979,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
       <Dialog open={pruneOpen()} onOpenChange={setPruneOpen} title={i18n.t('containers.actions.prune')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setPruneOpen(false)}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => runPrune(pruneTargetKey())}>{i18n.t('containers.actions.review')}</Button></div>}>
         <label class="block text-sm font-medium">{i18n.t('containers.fields.runtime')}
-          <Select class="mt-1.5 w-full" value={pruneTargetKey()} onChange={setPruneTargetKey} options={pruneCandidates().map((candidate) => ({ value: runtimeKey(candidate.target), label: runtimeName(candidate.target.engine) }))} />
+          <Select class="mt-1.5 w-full" value={pruneTargetKey()} onChange={setPruneTargetKey} options={pruneCandidates().map((candidate) => ({ value: runtimeKey(candidate), label: runtimeName(candidate.engine) }))} />
         </label>
       </Dialog>
 
@@ -3073,7 +3104,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       </Dialog>
 
       <Dialog open={review() !== null} onOpenChange={(open) => { if (!open) cancelReview(); }} title={i18n.t('containers.review.title')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelReview}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin())}>{i18n.t('containers.actions.run')}</Button></div>}>
-        <Show when={review()} keyed>{(current) => <div class="space-y-3"><div class="flex items-center justify-between rounded-lg border p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div><div class="mt-1 font-mono text-sm">{current.preflight.method}</div></div><Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{current.preflight.plan.risk_level}</Tag></div><For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-sm text-muted-foreground">{summary}</p>}</For><For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3"><div class="text-sm font-medium text-[var(--redeven-status-warning-foreground)]">{flag.title}</div><p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.detail}</p></div>}</For><Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-sm text-destructive">{i18n.t('containers.permissions.admin')}</p></Show><div class="grid gap-1 rounded-lg bg-muted/40 p-3 font-mono text-[10px] text-muted-foreground"><span>{current.preflight.request_hash}</span><span>{current.preflight.plan_hash}</span></div></div>}</Show>
+        <Show when={review()} keyed>{(current) => {
+          const metrics = pruneReviewMetrics(current.preflight);
+          return <div class="space-y-3"><div class="flex items-center justify-between rounded-lg border p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div><div class="mt-1 font-mono text-sm">{current.preflight.method}</div></div><Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{current.preflight.plan.risk_level}</Tag></div><Show when={metrics}>{(value) => <div class="grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.prune.resources')}</div><strong class="mt-1 block text-lg">{value().resourceCount}</strong></div><div><div class="text-xs text-muted-foreground">{i18n.t('containers.prune.reclaimable')}</div><strong class="mt-1 block text-lg">{formatBytes(value().reclaimableBytes)}</strong></div></div>}</Show><For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-sm text-muted-foreground">{summary}</p>}</For><For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3"><div class="text-sm font-medium text-[var(--redeven-status-warning-foreground)]">{flag.title}</div><p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.detail}</p></div>}</For><Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-sm text-destructive">{i18n.t('containers.permissions.admin')}</p></Show><div class="grid gap-1 rounded-lg bg-muted/40 p-3 font-mono text-[10px] text-muted-foreground"><span>{current.preflight.request_hash}</span><span>{current.preflight.plan_hash}</span></div></div>;
+        }}</Show>
       </Dialog>
     </div>
   );

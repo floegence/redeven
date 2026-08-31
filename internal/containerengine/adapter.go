@@ -32,6 +32,7 @@ var (
 	ErrContainerRunning         = errors.New("container is running")
 	ErrContainerNotRunning      = errors.New("container is not running")
 	ErrResourcePlanStale        = errors.New("container resource plan is stale")
+	ErrNothingToPrune           = errors.New("no unused container resources are available to prune")
 	ErrReferenceStateIncomplete = errors.New("container resource reference state is incomplete")
 	ErrResourcePrunePartial     = errors.New("container resource prune partially completed")
 	ErrResourcePruneReconcile   = errors.New("container resource prune requires reconciliation")

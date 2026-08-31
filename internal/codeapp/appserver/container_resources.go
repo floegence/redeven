@@ -1045,7 +1045,7 @@ func writeContainerResourceError(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, containerresource.ErrManagedByWebService), errors.Is(err, containerengine.ErrPermissionDenied):
 		status = http.StatusForbidden
-	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerresource.ErrIdempotencyConflict), errors.Is(err, containerresource.ErrOperationTerminal), errors.Is(err, containerengine.ErrResourcePlanStale), errors.Is(err, containerengine.ErrContainerNotRunning):
+	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerresource.ErrIdempotencyConflict), errors.Is(err, containerresource.ErrOperationTerminal), errors.Is(err, containerengine.ErrResourcePlanStale), errors.Is(err, containerengine.ErrContainerNotRunning), errors.Is(err, containerengine.ErrNothingToPrune), errors.Is(err, containerengine.ErrReferenceStateIncomplete):
 		status = http.StatusConflict
 	case errors.Is(err, containerengine.ErrEngineUnavailable), errors.Is(err, containerengine.ErrCLIUnavailable), errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped), errors.Is(err, containerengine.ErrResourceCapabilityUnsupported):
 		status = http.StatusServiceUnavailable
@@ -1061,6 +1061,10 @@ func publicContainerResourceCode(err error) string {
 		return "REQUEST_INVALID"
 	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerengine.ErrResourcePlanStale):
 		return "PREFLIGHT_STALE"
+	case errors.Is(err, containerengine.ErrNothingToPrune):
+		return "NOTHING_TO_PRUNE"
+	case errors.Is(err, containerengine.ErrReferenceStateIncomplete):
+		return "REFERENCE_STATE_INCOMPLETE"
 	case errors.Is(err, containerresource.ErrIdempotencyConflict):
 		return "IDEMPOTENCY_CONFLICT"
 	case errors.Is(err, containerresource.ErrOperationNotFound):
@@ -1100,6 +1104,10 @@ func publicContainerResourceMessage(err error) string {
 		return "The container request is invalid."
 	case "PREFLIGHT_STALE":
 		return "The reviewed container plan is stale. Review it again before continuing."
+	case "NOTHING_TO_PRUNE":
+		return "There are no unused resources to clean up."
+	case "REFERENCE_STATE_INCOMPLETE":
+		return "Resource usage could not be confirmed. Refresh and try again."
 	case "IDEMPOTENCY_CONFLICT":
 		return "This request identifier is already used by another operation."
 	case "OPERATION_NOT_FOUND":

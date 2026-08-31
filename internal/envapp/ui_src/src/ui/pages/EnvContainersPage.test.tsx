@@ -93,7 +93,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => <button type="button" class={props.class} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
-  Dropdown: (props: any) => <div class="test-dropdown">{props.trigger}<div data-test-dropdown-menu>{props.items.map((item: any) => <button type="button" disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.icon}{item.label}</button>)}</div></div>,
+  Dropdown: (props: any) => <div class="test-dropdown">{props.trigger}<div data-test-dropdown-menu>{props.items.map((item: any) => <button type="button" data-tone={item.tone} disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.icon?.()}{item.label}</button>)}</div></div>,
   DirectoryPicker: (props: any) => <Show when={props.open}><section data-directory-picker>{props.title}<button type="button" data-directory-picker-confirm onClick={() => { props.onSelect?.('/workspace/data'); props.onOpenChange?.(false); }}>confirm folder</button></section></Show>,
   FileOpenPicker: (props: any) => <Show when={props.open}><section data-file-open-picker>{props.title}<button type="button" data-picker-confirm onClick={() => {
     props.onSelect?.(props.selectionMode === 'multiple'
@@ -211,6 +211,7 @@ vi.mock('../protocol/redeven_v1', () => ({
 }));
 
 import { EnvContainersPage } from './EnvContainersPage';
+import { LocalApiError } from '../services/localApi';
 import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 
 async function settle() {
@@ -318,6 +319,96 @@ describe('native Containers page', () => {
     expect(host.querySelectorAll('.container-touch-target')).toHaveLength(0);
     expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary', expect.anything());
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:widget-1')).toBe(true);
+  });
+
+  it('keeps prune in the danger menu and lets the server resolve the exact image set', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [
+      { id: 'sha256:shared', reference: 'example/app:latest', size_bytes: 4096, referenced_containers: 0 },
+      { id: 'sha256:shared', reference: 'example/app:stable', size_bytes: 4096, referenced_containers: 0 },
+    ] : []));
+    harness.preflight.mockResolvedValue({
+      method: 'images.prune', request_hash: 'canonical-request', plan_hash: 'canonical-plan',
+      plan: {
+        method: 'images.prune', target: { resource_count: 1, reclaimable_bytes: 4096 }, plan_digest: 'canonical-plan',
+        risk_level: 'high', risk_flags: [], requires_admin: true,
+      },
+      management: { managed: false },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.images'))?.click();
+    await settle();
+
+    const pruneAction = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
+      .find((button) => button.textContent?.includes('containers.actions.prune'));
+    expect(pruneAction?.getAttribute('data-tone')).toBe('danger');
+    expect(pruneAction?.querySelector('[data-icon="trash"]')).not.toBeNull();
+    expect(pruneAction?.closest('.container-toolbar-actions')).not.toBeNull();
+    pruneAction?.click();
+    await settle();
+
+    expect(harness.preflight).toHaveBeenCalledWith('images.prune', {
+      engine: 'docker', endpoint_id: 'docker-primary',
+    });
+    expect(harness.preflight.mock.calls[0]?.[1]).not.toHaveProperty('resource_identities');
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.prune.resources1');
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.prune.reclaimable4.0 KB');
+  });
+
+  it('explains an empty prune result and refreshes the authoritative inventory', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [
+      { id: 'sha256:used', reference: 'example/app:latest', referenced_containers: 1 },
+    ] : []));
+    harness.preflight.mockRejectedValue(new LocalApiError({
+      message: 'There are no unused resources to clean up.', status: 409, code: 'NOTHING_TO_PRUNE',
+    }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.images'))?.click();
+    await settle();
+    const callsBeforePrune = harness.listResources.mock.calls.length;
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
+      .find((button) => button.textContent?.includes('containers.actions.prune'))?.click();
+    await settle();
+
+    expect(harness.notify.info).toHaveBeenCalledWith('containers.prune.nothingTitle', 'containers.prune.nothingMessage');
+    expect(harness.notify.error).not.toHaveBeenCalledWith('containers.notifications.preflightFailedTitle', expect.anything());
+    expect(harness.listResources.mock.calls.length).toBeGreaterThan(callsBeforePrune);
+  });
+
+  it('explains incomplete reference state and refreshes before another cleanup attempt', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'volumes' ? [
+      { name: 'cache', driver: 'local', referenced_containers: 0 },
+    ] : []));
+    harness.preflight.mockRejectedValue(new LocalApiError({
+      message: 'Resource usage could not be confirmed. Refresh and try again.', status: 409, code: 'REFERENCE_STATE_INCOMPLETE',
+    }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.volumes'))?.click();
+    await settle();
+    const callsBeforePrune = harness.listResources.mock.calls.length;
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
+      .find((button) => button.textContent?.includes('containers.actions.prune'))?.click();
+    await settle();
+
+    expect(harness.notify.error).toHaveBeenCalledWith(
+      'containers.prune.referenceIncompleteTitle',
+      'containers.prune.referenceIncompleteMessage',
+    );
+    expect(harness.listResources.mock.calls.length).toBeGreaterThan(callsBeforePrune);
   });
 
   it('keeps one disabled loading surface until environment permissions are available', async () => {

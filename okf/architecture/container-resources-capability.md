@@ -53,6 +53,15 @@ serialize operations by engine, endpoint, resource kind, and canonical
 identity. A request ID is idempotent only for the same method and hashes;
 conflicting reuse fails visibly.
 
+Image and volume cleanup is server-owned. The client selects only the bound
+runtime; the current authoritative inventory determines the exact unused set.
+Image identity is resolved by ID, then digest, then reference, so multiple tag
+rows for one image produce one sorted target, one size contribution, one lock,
+and one mutation. The canonical preflight request owns the request hash,
+resource locks, queued execution, and reconciliation. No eligible target returns
+`NOTHING_TO_PRUNE`; incomplete reference inspection returns
+`REFERENCE_STATE_INCOMPLETE`. Neither condition starts an operation.
+
 The store kind is `container_resources_product_v1`. It persists operation
 identity, bounded state, sanitized errors, events, and redacted reconciliation
 evidence, but never raw mutation payloads, argv, engine output, secrets, URLs,
