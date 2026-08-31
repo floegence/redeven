@@ -134,6 +134,7 @@ type Service struct {
 	flowerLiveQueuedBytes           int
 	flowerLiveMetrics               flowerLiveMetrics
 	flowerRuntimeCurrentPublisher   *flowerRuntimeCurrentPublisher
+	flowerThreadSummaryPublisher    *flowerThreadSummaryPublisher
 	flowerRuntimeEndpointByThread   map[string]string
 	flowerRuntimeParentByThread     map[string]string
 	flowerRuntimeRouteKnown         map[string]bool
@@ -325,6 +326,12 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		svc.broadcastFlowerRuntimeProjection,
 	)
 	svc.flowerRuntimeCurrentPublisher.metrics = &svc.flowerLiveMetrics
+	svc.flowerThreadSummaryPublisher = newFlowerThreadSummaryPublisher(
+		lifecycleCtx,
+		persistTO,
+		svc.publishCanonicalThreadSummary,
+		svc.handleCanonicalThreadSummaryFailure,
+	)
 	svc.terminalProcesses = newTerminalProcessManager()
 	svc.terminalProcesses.SetWorkloadAdmission(opts.WorkloadAdmission)
 	if svc.skillManager != nil {
@@ -357,6 +364,9 @@ func closeServiceBeforeMaintenance(s *Service) {
 	}
 	if s.flowerRuntimeCurrentPublisher != nil {
 		s.flowerRuntimeCurrentPublisher.Close()
+	}
+	if s.flowerThreadSummaryPublisher != nil {
+		s.flowerThreadSummaryPublisher.Close()
 	}
 	if s.terminalProcesses != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
@@ -434,6 +444,7 @@ func (s *Service) Close() error {
 	maintenanceDoneCh := s.maintenanceDoneCh
 	lifecycleCancel := s.lifecycleCancel
 	currentPublisher := s.flowerRuntimeCurrentPublisher
+	summaryPublisher := s.flowerThreadSummaryPublisher
 	s.maintenanceStopCh = nil
 	s.maintenanceDoneCh = nil
 	s.mu.Unlock()
@@ -442,6 +453,9 @@ func (s *Service) Close() error {
 	}
 	if currentPublisher != nil {
 		currentPublisher.Close()
+	}
+	if summaryPublisher != nil {
+		summaryPublisher.Close()
 	}
 	s.releaseAllAIWorkloadLeases()
 

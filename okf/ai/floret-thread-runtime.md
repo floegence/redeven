@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret thread runtime integration
 description: Typed Floret v6 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-31T00:00:00Z
 ---
 # Summary
 
@@ -64,6 +64,14 @@ canonical permission snapshot before model dispatch.
 ## Redeven adapter
 
 Redeven keeps one typed adapter over the published Floret v6 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
+
+Floret title events are settlement notifications, not a second title source.
+The synchronous event sink requests one Service-owned, per-thread coalesced
+summary publication and returns without reading `ThreadService`. That publisher
+then reads the canonical current view and summary and emits the existing
+`summary.batch`. A failed canonical read fences the endpoint's live observers;
+reconnection restores the authoritative baseline instead of retrying, polling,
+or applying an event-derived title patch.
 
 The product Stop boundary is an idempotent command acknowledgement, not a
 thread-read boundary. Redeven invokes typed `Cancel`, discards its returned

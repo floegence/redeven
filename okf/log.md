@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-31
+* **Stable Flower menus and title summaries**: Thread menus now keep only
+  semantic ThreadID and trigger identity across summary refreshes and row
+  replacement. Floret title events request one lifecycle-owned canonical
+  summary publisher outside the event callback; publication failure fences the
+  live stream so reconnect restores the authoritative title baseline.
 * **Append-only Flower context and explicit completion**: Redeven now consumes
   Floret v6.1.0, keeps the hosted Agent System Prompt stable, restores the
   original canonical Turn input after Ask User, appends mutable environment

@@ -69,8 +69,8 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			return
 		}
 	}
-	if (ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed) && r.host.broadcastThreadSummary != nil {
-		_ = r.host.broadcastThreadSummary()
+	if isTitleEvent && r.host.requestThreadSummary != nil {
+		r.host.requestThreadSummary()
 	}
 	if !r.acceptsPresentationUpdates() {
 		return

@@ -13,7 +13,7 @@ import (
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
 	authorityThreadID         string
-	broadcastThreadSummary    func() error
+	requestThreadSummary      func()
 	lastVisibleTimelineAnchor func(context.Context) (FlowerTimelineAnchor, error)
 	resolveRunModel           func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
 	publishContextUsage       func(FlowerContextUsage)
@@ -34,8 +34,8 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 	if err != nil {
 		return runHostCapabilities{}, err
 	}
-	host.broadcastThreadSummary = func() error {
-		return s.broadcastThreadSummary(endpointID, threadID)
+	host.requestThreadSummary = func() {
+		s.requestCanonicalThreadSummary(endpointID, threadID)
 	}
 	host.lastVisibleTimelineAnchor = func(ctx context.Context) (FlowerTimelineAnchor, error) {
 		return FlowerTimelineAnchor{}, nil
