@@ -390,21 +390,21 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		},
 		"internal/envapp/ui_src/package.json": {
 			"\"@floegence/floe-webapp-boot\": \"0.46.7\"",
-			"\"@floegence/floe-webapp-core\": \"0.46.7\"",
+			"\"@floegence/floe-webapp-core\": \"0.46.8\"",
 			"\"@floegence/floe-webapp-protocol\": \"0.46.7\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.18.1\"",
 			"\"@floegence/flowersec-core\": \"3.2.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
 			"floe-webapp-boot-0.46.7.tgz",
-			"floe-webapp-core-0.46.7.tgz",
+			"floe-webapp-core-0.46.8.tgz",
 			"floe-webapp-protocol-0.46.7.tgz",
 			"floeterm-terminal-web-0.18.1.tgz",
 			"flowersec-core-3.2.0.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@0.46.7",
-			"@floegence/floe-webapp-core@0.46.7",
+			"@floegence/floe-webapp-core@0.46.8",
 			"@floegence/floe-webapp-protocol@0.46.7",
 			"@floegence/floeterm-terminal-web@0.18.1",
 			"@floegence/flowersec-core@3.2.0",
@@ -418,6 +418,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"THIRD_PARTY_NOTICES.md": {
 			"@floegence/floe-webapp-boot | 0.46.7",
 			"@floegence/floe-webapp-core | 0.46.7",
+			"@floegence/floe-webapp-core | 0.46.8",
 			"@floegence/floe-webapp-protocol | 0.46.7",
 			"@floegence/floeterm-terminal-web | 0.18.1",
 			"@floegence/flowersec-core | 3.2.0",
@@ -430,7 +431,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.18.1",
 			"semantic Presentation",
-			"Floe Webapp Boot, Core, and Protocol v0.46.7",
+			"Floe Webapp Boot and Protocol v0.46.7 plus Core v0.46.8",
 			"Flowersec Core v3.2.0",
 		},
 	}
@@ -691,7 +692,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v6"
-		floretVersion = "v6.1.0"
+		floretVersion = "v6.1.1"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -779,7 +780,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v6 v6.1.0",
+			"github.com/floegence/floret/v6 v6.1.1",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
 			"published Flowersec Go and Core v3.2.0 plus Floe Webapp v0.46.7",

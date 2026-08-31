@@ -73,7 +73,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			CurrentModelID: "openai/gpt-5-mini",
 			Providers: []config.AIProvider{{
 				ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: providerServer.URL + "/v1",
-				Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+				Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-5-nano"}},
 			}},
 		},
 		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
@@ -105,6 +105,21 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	prompt := waiting.WaitingPrompt
 	if prompt == nil || len(prompt.Questions) != 1 || prompt.Questions[0].ID != "target" {
 		t.Fatalf("waiting prompt=%#v, want canonical target question", prompt)
+	}
+	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "openai/gpt-5-nano"); !errors.Is(err, ErrThreadBusy) {
+		t.Fatalf("SetThreadModel while waiting error=%v, want ErrThreadBusy", err)
+	}
+	if _, err := svc.SubmitRequestUserInputResponse(context.Background(), meta, SubmitRequestUserInputResponseRequest{
+		ThreadID: thread.ThreadID, Model: "openai/gpt-5-nano",
+		Response: RequestUserInputResponse{
+			PromptID: prompt.PromptID,
+			Answers:  map[string]RequestUserInputAnswer{"target": {Text: "must not resume"}},
+		},
+	}); !errors.Is(err, ErrThreadModelConflict) {
+		t.Fatalf("SubmitRequestUserInputResponse mismatched model error=%v, want ErrThreadModelConflict", err)
+	}
+	if mainCalls.Load() != 1 {
+		t.Fatalf("mismatched continuation dispatched provider call; calls=%d", mainCalls.Load())
 	}
 	response, err := svc.SubmitRequestUserInputResponse(context.Background(), meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",

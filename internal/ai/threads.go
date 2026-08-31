@@ -202,7 +202,8 @@ func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpo
 	if endpointID == "" || threadID == "" {
 		return nil, nil, nil, errors.New("invalid thread identity")
 	}
-	unlock := func() {}
+	s.threadSettingsMu.Lock()
+	unlock := s.threadSettingsMu.Unlock
 	fail := func(err error) (*threadstore.Store, *threadstore.ThreadSettings, func(), error) {
 		unlock()
 		return nil, nil, nil, err
@@ -888,7 +889,7 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 }
 
 func canonicalThreadBusy(current flruntime.ThreadView) bool {
-	if current.Activity == flruntime.ThreadActivityActive {
+	if current.Activity == flruntime.ThreadActivityActive || len(current.Queue) > 0 {
 		return true
 	}
 	for _, interaction := range current.Interactions {
@@ -950,15 +951,15 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	}
 	defer unlockLifecycle()
 	currentModelID := strings.TrimSpace(th.ModelID)
-	if currentModelID == modelID {
-		return nil
-	}
 	preferenceBlocked, err := s.threadPreferenceChangeBlocked(ctx, threadID)
 	if err != nil {
 		return err
 	}
 	if preferenceBlocked {
 		return ErrThreadBusy
+	}
+	if currentModelID == modelID {
+		return nil
 	}
 
 	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, modelID)

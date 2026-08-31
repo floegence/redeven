@@ -19,6 +19,7 @@ var ErrWaitingUserQueueConflict = errors.New("waiting-user queue request conflic
 var ErrTurnIdempotencyConflict = errors.New("turn id conflicts with a different frozen command")
 var ErrInitialTurnStateConflict = errors.New("initial turn frozen state conflicts with canonical creation")
 var ErrReadOnlyThread = errors.New("thread is read only")
+var ErrThreadModelConflict = errors.New("turn model conflicts with persisted thread model")
 
 const (
 	LongTextAttachmentRequiredErrorCode = "long_text_attachment_required"
@@ -177,6 +178,16 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	} else if found {
 		return finish(existing, nil)
 	}
+	_, settings, unlockSettings, err := s.lockCanonicalThreadSettingsMutation(ctx, strings.TrimSpace(meta.EndpointID), req.ThreadID)
+	if err != nil {
+		return finish(SendUserTurnResponse{}, err)
+	}
+	defer unlockSettings()
+	modelID, err := freezeExistingThreadModel(req.Model, settings.ModelID)
+	if err != nil {
+		return finish(SendUserTurnResponse{}, err)
+	}
+	req.Model = modelID
 	if err := s.requireDesktopModelSourceForSend(ctx, meta, req); err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
@@ -255,14 +266,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 func (s *Service) requireDesktopModelSourceForSend(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) error {
 	modelID := strings.TrimSpace(req.Model)
 	if modelID == "" {
-		settings, err := s.threadSettingsForRead(ctx, meta, req.ThreadID)
-		if err != nil {
-			return err
-		}
-		if settings == nil {
-			return errors.New("thread not found")
-		}
-		modelID = strings.TrimSpace(settings.ModelID)
+		return errors.New("thread model is unavailable")
 	}
 	if !isDesktopModelSourceModelID(modelID) {
 		return nil
@@ -275,6 +279,18 @@ func (s *Service) requireDesktopModelSourceForSend(ctx context.Context, meta *se
 		return errors.New("desktop model is not available")
 	}
 	return nil
+}
+
+func freezeExistingThreadModel(requestedModel string, persistedModel string) (string, error) {
+	persistedModel = strings.TrimSpace(persistedModel)
+	if persistedModel == "" {
+		return "", errors.New("thread model is unavailable")
+	}
+	requestedModel = strings.TrimSpace(requestedModel)
+	if requestedModel != "" && requestedModel != persistedModel {
+		return "", ErrThreadModelConflict
+	}
+	return persistedModel, nil
 }
 
 func queuedInputFor(view flruntime.ThreadView, requestKey string) (flruntime.QueuedInput, bool) {
@@ -368,6 +384,14 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 		return SubmitRequestUserInputResponseResponse{}, errors.New("invalid request")
 	}
 	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
+	}
+	_, settings, unlockSettings, err := s.lockCanonicalThreadSettingsMutation(ctx, endpointID, threadID)
+	if err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
+	}
+	defer unlockSettings()
+	if _, err := freezeExistingThreadModel(req.Model, settings.ModelID); err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	typed, err := s.typedFloretRuntime()

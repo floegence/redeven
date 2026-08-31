@@ -120,6 +120,9 @@ type Service struct {
 	toolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, routing *threadstore.FlowerThreadRouting) ToolTargetPolicy
 
 	mu sync.Mutex
+	// threadSettingsMu serializes persisted thread-setting changes with the
+	// admission boundary that freezes settings for a new turn.
+	threadSettingsMu sync.Mutex
 
 	typedSendMu  sync.Mutex
 	typedSendOps map[string]*typedSendOperation
@@ -1385,9 +1388,13 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	model := ""
 	requestedModel = strings.TrimSpace(requestedModel)
 	threadModelID = strings.TrimSpace(threadModelID)
-	model = requestedModel
-	if model == "" {
+	if threadModelID != "" {
+		if requestedModel != "" && requestedModel != threadModelID {
+			return resolvedRunModel{}, ErrThreadModelConflict
+		}
 		model = threadModelID
+	} else {
+		model = requestedModel
 	}
 	if model == "" && s != nil {
 		if id, ok := s.resolvedDesktopModelSourceOverrideModel(ctx); ok {
