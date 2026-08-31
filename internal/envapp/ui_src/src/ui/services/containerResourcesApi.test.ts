@@ -96,10 +96,11 @@ describe('native container resources API', () => {
     const service = {
       service_id: 'container_service_1', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
       capabilities: { start: false, stop: true, restart: true },
-      configuration: { mode: 'editable', format: 'json', sections: ['proxy', 'advanced'], owner: 'redeven' },
+      configuration: { mode: 'local', sources: ['engine', 'client_proxy'] },
     };
     const configuration = {
-      service_id: service.service_id, format: 'json', content: '{}\n', base_revision: 'sha256:base', restart_required: false,
+      service_id: service.service_id,
+      sources: [{ source_id: 'engine', display_path: '~/.docker/daemon.json', status: 'ready', exists: true, format: 'json', sections: ['advanced'], apply_modes: ['save', 'save_and_restart'], content: '{}\n', base_revision: 'sha256:base' }],
     };
     localApiMocks.fetchLocalApiJSON.mockResolvedValueOnce({ services: [service] }).mockResolvedValueOnce(configuration);
 

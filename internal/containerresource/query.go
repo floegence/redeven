@@ -20,11 +20,13 @@ func (s *Service) ContainerServices(ctx context.Context) (containerengine.Contai
 		return containerengine.ContainerServicesResponse{}, err
 	}
 	for index := range response.Services {
-		state, stateErr := s.store.containerServiceConfigurationState(ctx, response.Services[index].ServiceID)
-		if stateErr != nil {
-			return containerengine.ContainerServicesResponse{}, stateErr
+		for _, sourceID := range response.Services[index].ConfigurationAccess.Sources {
+			state, stateErr := s.store.containerServiceConfigurationState(ctx, response.Services[index].ServiceID, sourceID)
+			if stateErr != nil {
+				return containerengine.ContainerServicesResponse{}, stateErr
+			}
+			response.Services[index].RestartRequired = response.Services[index].RestartRequired || state.RestartRequired
 		}
-		response.Services[index].RestartRequired = state.RestartRequired
 	}
 	return response, nil
 }
@@ -34,11 +36,13 @@ func (s *Service) ContainerServiceConfiguration(ctx context.Context, serviceID s
 	if err != nil {
 		return containerengine.ContainerServiceConfiguration{}, err
 	}
-	state, err := s.store.containerServiceConfigurationState(ctx, serviceID)
-	if err != nil {
-		return containerengine.ContainerServiceConfiguration{}, err
+	for index := range configuration.Sources {
+		state, stateErr := s.store.containerServiceConfigurationState(ctx, serviceID, configuration.Sources[index].SourceID)
+		if stateErr != nil {
+			return containerengine.ContainerServiceConfiguration{}, stateErr
+		}
+		configuration.Sources[index].RestartRequired = state.RestartRequired
 	}
-	configuration.RestartRequired = state.RestartRequired
 	return configuration, nil
 }
 

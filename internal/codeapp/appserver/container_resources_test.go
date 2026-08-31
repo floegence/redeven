@@ -37,18 +37,24 @@ func (f *appserverContainerServiceEngine) ContainerServices(context.Context) ([]
 		Implementation: containerengine.ContainerServiceDockerEngine, State: containerengine.ContainerServiceStateStopped,
 		Capabilities: containerengine.ContainerServiceCapabilities{Start: true},
 		ConfigurationAccess: containerengine.ContainerServiceConfigurationAccess{
-			Mode: containerengine.ContainerServiceConfigurationEditable, Format: containerengine.ContainerServiceConfigurationJSON,
-			Sections: []containerengine.ContainerServiceConfigurationSection{containerengine.ContainerServiceConfigurationSectionProxy, containerengine.ContainerServiceConfigurationSectionAdvanced},
-			Owner:    containerengine.ContainerServiceConfigurationOwnerRedeven,
+			Mode:    containerengine.ContainerServiceConfigurationLocal,
+			Sources: []containerengine.ContainerServiceConfigurationSourceID{containerengine.ContainerServiceConfigurationSourceEngine},
 		},
 	}}, nil
 }
 
 func (f *appserverContainerServiceEngine) ContainerServiceConfiguration(context.Context, string) (containerengine.ContainerServiceConfiguration, error) {
 	return containerengine.ContainerServiceConfiguration{
-		ServiceID: appserverContainerServiceID, Format: containerengine.ContainerServiceConfigurationJSON,
-		Content: `{"proxies":{"http-proxy":"http://user:secret@example.test"}}`, BaseRevision: "sha256:base",
-		HTTPProxy: "http://user:secret@example.test",
+		ServiceID: appserverContainerServiceID,
+		Sources: []containerengine.ContainerServiceConfigurationSource{{
+			SourceID: containerengine.ContainerServiceConfigurationSourceEngine, DisplayPath: "~/.docker/daemon.json",
+			Status: containerengine.ContainerServiceConfigurationSourceReady, Exists: true,
+			Format:     containerengine.ContainerServiceConfigurationJSON,
+			Sections:   []containerengine.ContainerServiceConfigurationSection{containerengine.ContainerServiceConfigurationSectionProxy, containerengine.ContainerServiceConfigurationSectionAdvanced},
+			ApplyModes: []containerengine.ContainerServiceApplyMode{containerengine.ContainerServiceSave},
+			Content:    `{"proxies":{"http-proxy":"http://user:secret@example.test"}}`, BaseRevision: "sha256:base",
+			HTTPProxy: "http://user:secret@example.test",
+		}},
 	}, nil
 }
 
@@ -415,7 +421,7 @@ func TestContainerServicesRequireAdminForConfigurationAndKeepSecretsOutOfAudit(t
 	readOnly := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
 
 	response := serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/services", "")
-	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), appserverContainerServiceID) || !strings.Contains(response.Body.String(), `"configuration":{"mode":"editable","format":"json","sections":["proxy","advanced"],"owner":"redeven"}`) || strings.Contains(response.Body.String(), "secret") || strings.Contains(response.Body.String(), "configure_proxy") {
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), appserverContainerServiceID) || !strings.Contains(response.Body.String(), `"configuration":{"mode":"local","sources":["engine"]}`) || strings.Contains(response.Body.String(), "secret") || strings.Contains(response.Body.String(), "configure_proxy") {
 		t.Fatalf("service list status=%d body=%s", response.Code, response.Body.String())
 	}
 	response = serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/services/"+appserverContainerServiceID+"/configuration", "")
@@ -433,7 +439,7 @@ func TestContainerServicesRequireAdminForConfigurationAndKeepSecretsOutOfAudit(t
 		t.Fatalf("admin configuration status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
 	}
 
-	request := `{"method":"container.services.configuration.update","request":{"engine":"docker","service_id":"` + appserverContainerServiceID + `","base_revision":"sha256:base","mode":"proxy","apply_mode":"save","http_proxy":"http://new-secret@example.test","confirmation_name":"Docker Engine"}}`
+	request := `{"method":"container.services.configuration.update","request":{"engine":"docker","service_id":"` + appserverContainerServiceID + `","source_id":"engine","base_revision":"sha256:base","mode":"proxy","apply_mode":"save","http_proxy":"http://new-secret@example.test","confirmation_name":"Docker Engine"}}`
 	response = serveContainerAPI(t, admin, channelID, http.MethodPost, containerResourcesAPIBase+"/preflights", request)
 	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "new-secret") {
 		t.Fatalf("configuration preflight status=%d body=%s", response.Code, response.Body.String())

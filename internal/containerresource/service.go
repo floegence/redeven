@@ -689,7 +689,8 @@ func mutationIdentity(method containerengine.Method, request any) (containerengi
 	case *containerengine.ContainerServiceActionRequest:
 		return req.Engine, "", ResourceContainerService, strings.TrimSpace(req.ServiceID), nil
 	case *containerengine.ContainerServiceConfigurationUpdateRequest:
-		return req.Engine, "", ResourceContainerService, strings.TrimSpace(req.ServiceID), nil
+		identity := strings.TrimSpace(req.ServiceID)
+		return req.Engine, "", ResourceContainerService, identity, []string{identity + ":" + string(req.SourceID)}
 	default:
 		return "", "", "", "", nil
 	}

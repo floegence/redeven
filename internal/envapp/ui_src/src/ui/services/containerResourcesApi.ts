@@ -31,20 +31,14 @@ export type ContainerRuntime =
 export type ContainerServiceState = 'running' | 'stopped' | 'not_installed' | 'permission' | 'unreachable' | 'error';
 export type ContainerServiceImplementation = 'docker_desktop' | 'docker_engine' | 'podman_machine' | 'podman_local' | 'remote' | 'unavailable';
 export type ContainerServiceConfigurationKind = 'json' | 'toml';
+export type ContainerServiceConfigurationSourceID = 'engine' | 'client_proxy';
 export type ContainerServiceConfigurationAccess =
   | Readonly<{
-      mode: 'editable';
-      format: ContainerServiceConfigurationKind;
-      sections: readonly ('proxy' | 'advanced')[];
-      owner: 'redeven';
-    }>
-  | Readonly<{
-      mode: 'external';
-      owner: 'docker_desktop' | 'podman_machine' | 'remote_host';
+      mode: 'local';
+      sources: readonly ContainerServiceConfigurationSourceID[];
     }>
   | Readonly<{
       mode: 'unavailable';
-      owner?: 'host';
     }>;
 
 export type ContainerService = Readonly<{
@@ -56,7 +50,7 @@ export type ContainerService = Readonly<{
   version?: string;
   rootless?: boolean;
   remote?: boolean;
-  guidance_code?: 'install' | 'permission' | 'start_official' | 'check_active' | 'detection_failed' | 'select_docker_context' | 'desktop_managed' | 'externally_managed' | 'host_manager' | 'podman_daemonless' | 'podman_machine_managed' | 'remote_host';
+  guidance_code?: 'install' | 'permission' | 'start_official' | 'check_active' | 'detection_failed' | 'select_docker_context' | 'externally_managed' | 'host_manager' | 'podman_daemonless' | 'podman_machine_managed' | 'remote_host';
   capabilities: Readonly<{
     start: boolean;
     stop: boolean;
@@ -69,13 +63,23 @@ export type ContainerService = Readonly<{
 
 export type ContainerServiceConfiguration = Readonly<{
   service_id: string;
+  sources: readonly ContainerServiceConfigurationSource[];
+}>;
+
+export type ContainerServiceConfigurationSource = Readonly<{
+  source_id: ContainerServiceConfigurationSourceID;
+  display_path: string;
+  status: 'ready' | 'missing' | 'permission' | 'invalid' | 'unsupported';
+  exists: boolean;
   format: ContainerServiceConfigurationKind;
-  content: string;
-  base_revision: string;
+  sections: readonly ('proxy' | 'advanced')[];
+  apply_modes: readonly ('save' | 'save_and_restart')[];
+  content?: string;
+  base_revision?: string;
   http_proxy?: string;
   https_proxy?: string;
   no_proxy?: string;
-  restart_required: boolean;
+  restart_required?: boolean;
 }>;
 
 export type ContainerManagement = Readonly<{

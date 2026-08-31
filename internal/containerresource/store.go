@@ -33,16 +33,16 @@ func (s *store) close() error {
 	return s.db.Close()
 }
 
-func (s *store) containerServiceConfigurationState(ctx context.Context, serviceID string) (ContainerServiceConfigurationState, error) {
+func (s *store) containerServiceConfigurationState(ctx context.Context, serviceID string, sourceID containerengine.ContainerServiceConfigurationSourceID) (ContainerServiceConfigurationState, error) {
 	var state ContainerServiceConfigurationState
 	var restartRequired int
 	err := s.db.QueryRowContext(ctx, `
-SELECT service_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
+SELECT service_id, source_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
 FROM container_service_configuration_state
-WHERE service_id = ?
-`, strings.TrimSpace(serviceID)).Scan(&state.ServiceID, &state.ConfigurationRevision, &restartRequired, &state.ServiceGeneration, &state.UpdatedAtUnixMs)
+WHERE service_id = ? AND source_id = ?
+`, strings.TrimSpace(serviceID), sourceID).Scan(&state.ServiceID, &state.SourceID, &state.ConfigurationRevision, &restartRequired, &state.ServiceGeneration, &state.UpdatedAtUnixMs)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ContainerServiceConfigurationState{ServiceID: strings.TrimSpace(serviceID)}, nil
+		return ContainerServiceConfigurationState{ServiceID: strings.TrimSpace(serviceID), SourceID: sourceID}, nil
 	}
 	if err != nil {
 		return ContainerServiceConfigurationState{}, err
@@ -52,7 +52,7 @@ WHERE service_id = ?
 }
 
 func (s *store) upsertContainerServiceConfigurationState(ctx context.Context, state ContainerServiceConfigurationState) error {
-	if strings.TrimSpace(state.ServiceID) == "" {
+	if strings.TrimSpace(state.ServiceID) == "" || state.SourceID == "" {
 		return ErrInvalidRequest
 	}
 	if state.UpdatedAtUnixMs == 0 {
@@ -64,14 +64,14 @@ func (s *store) upsertContainerServiceConfigurationState(ctx context.Context, st
 	}
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO container_service_configuration_state(
-  service_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?)
-ON CONFLICT(service_id) DO UPDATE SET
+  service_id, source_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?)
+ON CONFLICT(service_id, source_id) DO UPDATE SET
   configuration_revision = excluded.configuration_revision,
   restart_required = excluded.restart_required,
   service_generation = excluded.service_generation,
   updated_at_unix_ms = excluded.updated_at_unix_ms
-`, strings.TrimSpace(state.ServiceID), strings.TrimSpace(state.ConfigurationRevision), restartRequired, strings.TrimSpace(state.ServiceGeneration), state.UpdatedAtUnixMs)
+`, strings.TrimSpace(state.ServiceID), state.SourceID, strings.TrimSpace(state.ConfigurationRevision), restartRequired, strings.TrimSpace(state.ServiceGeneration), state.UpdatedAtUnixMs)
 	return err
 }
 

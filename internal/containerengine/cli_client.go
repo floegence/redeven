@@ -54,6 +54,7 @@ type CLIClient struct {
 	GOOS            string
 	EffectiveUserID func() int
 	UserConfigDir   func() (string, error)
+	UserHomeDir     func() (string, error)
 }
 
 func NewCLIClient() *CLIClient {

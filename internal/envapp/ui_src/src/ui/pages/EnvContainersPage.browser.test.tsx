@@ -1,6 +1,7 @@
 import '../../index.css';
 
 import { page } from 'vitest/browser';
+import { ThemeProvider } from '@floegence/floe-webapp-core';
 import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,16 +49,20 @@ vi.mock('../services/containerResourcesApi', () => ({
     {
       service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running', version: '27.3.1',
       capabilities: { start: false, stop: true, restart: true },
-      configuration: { mode: 'editable', format: 'json', sections: ['proxy', 'advanced'], owner: 'redeven' },
+      configuration: { mode: 'local', sources: ['engine', 'client_proxy'] },
     },
     {
       service_id: 'container_service_podman', engine: 'podman', name: 'Podman', implementation: 'unavailable', state: 'not_installed', guidance_code: 'install',
       capabilities: { start: false, stop: false, restart: false },
-      configuration: { mode: 'unavailable', owner: 'host' },
+      configuration: { mode: 'unavailable' },
     },
   ]),
   getContainerServiceConfiguration: vi.fn().mockResolvedValue({
-    service_id: 'container_service_docker', format: 'json', content: '{}\n', base_revision: 'sha256:base', restart_required: false,
+    service_id: 'container_service_docker',
+    sources: [
+      { source_id: 'engine', display_path: '~/.docker/daemon.json', status: 'ready', exists: true, format: 'json', sections: ['advanced'], apply_modes: ['save', 'save_and_restart'], content: '{}\n', base_revision: 'sha256:engine' },
+      { source_id: 'client_proxy', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['proxy'], apply_modes: ['save'], base_revision: 'sha256:client' },
+    ],
   }),
   listContainerResources: browserHarness.listResources,
   getContainerResourceDetails: vi.fn().mockImplementation((_view: string, identity: string) => Promise.resolve({
@@ -134,7 +139,7 @@ function mount(variant: 'activity' | 'workbench' = 'activity') {
   host.style.position = 'fixed';
   host.style.inset = '0';
   document.body.append(host);
-  const dispose = render(() => <I18nProvider><EnvContainersPage variant={variant} /></I18nProvider>, host);
+  const dispose = render(() => <ThemeProvider><I18nProvider><EnvContainersPage variant={variant} /></I18nProvider></ThemeProvider>, host);
   return { host, dispose };
 }
 
@@ -386,10 +391,19 @@ describe('native Containers responsive product surface', () => {
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     const visibleButtons = Array.from(servicePage.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.getClientRects().length > 0);
     expect(visibleButtons.every((button) => button.getBoundingClientRect().height >= 44)).toBe(true);
+    Array.from(servicePage.querySelectorAll<HTMLButtonElement>('.container-service-card button')).find((button) => button.textContent?.includes('Configure'))?.click();
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const dialogRect = dialog.getBoundingClientRect();
+    expect(dialogRect.left).toBeGreaterThanOrEqual(0);
+    expect(dialogRect.right).toBeLessThanOrEqual(390);
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('CLI proxy'))?.click();
+    await settle();
+    expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
-  it('shows official service branding and the owned proxy and advanced configuration surfaces', async () => {
+  it('shows official service branding and local engine and CLI proxy configuration', async () => {
     await page.viewport(1440, 900);
     const mounted = mount('workbench');
     dispose = mounted.dispose;
@@ -412,10 +426,10 @@ describe('native Containers responsive product surface', () => {
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog).not.toBeNull();
     expect(dialog.querySelectorAll('[role="tab"]')).toHaveLength(2);
-    expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
-    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Advanced'))?.click();
-    await settle();
     expect(dialog.querySelector('.container-service-config-editor')).not.toBeNull();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('CLI proxy'))?.click();
+    await settle();
+    expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
   });
 

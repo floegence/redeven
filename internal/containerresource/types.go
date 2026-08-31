@@ -25,6 +25,7 @@ type ContainerServiceItem struct {
 
 type ContainerServiceConfigurationState struct {
 	ServiceID             string
+	SourceID              containerengine.ContainerServiceConfigurationSourceID
 	ConfigurationRevision string
 	RestartRequired       bool
 	ServiceGeneration     string
