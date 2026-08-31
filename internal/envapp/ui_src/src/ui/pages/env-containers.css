@@ -4,6 +4,93 @@
   background: var(--redeven-surface-main);
 }
 
+.container-services-page {
+  height: 100%;
+  overflow: auto;
+  padding: 24px clamp(16px, 3vw, 40px) 40px;
+}
+
+.container-services-page__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  max-width: 1120px;
+  margin: 0 auto 24px;
+}
+
+.container-services-page__header h2 { margin: 0; font-size: 20px; font-weight: 650; }
+.container-services-page__header p { margin: 4px 0 0; color: var(--muted-foreground); font-size: 13px; }
+
+.container-services-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.container-service-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-content: start;
+  gap: 12px;
+  min-height: 210px;
+  padding: 18px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--muted) 38%, transparent);
+}
+
+.container-service-card--loading { grid-template-columns: auto minmax(0, 1fr); min-height: 180px; }
+.container-service-card__mark { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.container-service-card__identity { min-width: 0; }
+.container-service-card__identity > span { color: var(--primary); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; }
+.container-service-card__identity h3 { margin: 2px 0; overflow: hidden; font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.container-service-card__identity small { color: var(--muted-foreground); }
+.container-service-card__notice,
+.container-service-card__guidance,
+.container-service-operation,
+.container-service-card__actions { grid-column: 1 / -1; }
+.container-service-card__notice { display: flex; align-items: center; gap: 8px; color: var(--redeven-status-warning-foreground); font-size: 12px; }
+.container-service-card__guidance { margin: 0; min-height: 38px; color: var(--muted-foreground); font-size: 12px; line-height: 1.55; }
+.container-service-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; }
+
+.container-service-operation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  text-align: left;
+}
+.container-service-operation > span { width: 8px; height: 8px; border-radius: 999px; background: var(--primary); }
+.container-service-operation strong { font-size: 12px; }
+.container-service-operation small { color: var(--muted-foreground); font-size: 11px; }
+
+.container-service-configuration-dialog { width: min(880px, calc(100vw - 32px)); max-width: 880px; }
+.container-service-config-tabs { margin-bottom: 16px; }
+.container-service-config-editor { height: min(56vh, 520px); min-height: 320px; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.container-service-proxy-form { display: grid; gap: 14px; }
+.container-service-proxy-form label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+.container-service-proxy-form p { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.55; }
+.container-service-config-loading,
+.container-service-config-error { display: flex; min-height: 220px; align-items: center; justify-content: center; gap: 8px; color: var(--muted-foreground); }
+.container-service-impact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--redeven-status-warning-soft) 72%, transparent); }
+.container-service-impact > div { display: grid; gap: 2px; }
+.container-service-impact span { color: var(--muted-foreground); font-size: 11px; }
+.container-service-impact strong { font-size: 18px; }
+.container-service-impact p { grid-column: 1 / -1; margin: 0; color: var(--muted-foreground); font-size: 12px; }
+
+@media (max-width: 760px) {
+  .container-services-page { padding: 16px 12px 28px; }
+  .container-services-grid { grid-template-columns: minmax(0, 1fr); }
+  .container-service-card { min-height: 0; padding: 15px; }
+  .container-service-config-editor { min-height: 260px; }
+}
+
 .redeven-containers button,
 .redeven-containers select,
 .redeven-containers input {

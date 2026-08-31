@@ -734,6 +734,23 @@ func TestSavedComposeProjectSupportsRepeatableLifecycleOperations(t *testing.T) 
 	}
 }
 
+func TestContainerServiceOperationErrorsStayActionableAndRedacted(t *testing.T) {
+	tests := []struct {
+		err         error
+		wantCode    string
+		wantMessage string
+	}{
+		{err: containerengine.ErrContainerServiceConfigConflict, wantCode: "container_service_configuration_conflict", wantMessage: "The container service configuration changed. Reload it before saving."},
+		{err: containerengine.ErrContainerServiceRecoveryRequired, wantCode: "service_recovery_required", wantMessage: "The container service could not be recovered automatically. Review its host configuration before retrying."},
+	}
+	for _, test := range tests {
+		code, message := publicOperationError(test.err)
+		if code != test.wantCode || message != test.wantMessage {
+			t.Fatalf("publicOperationError(%v) = %q, %q", test.err, code, message)
+		}
+	}
+}
+
 func TestSchemaMigratesV1AndPreservesOperations(t *testing.T) {
 	client := &fakeEngineClient{volumes: make(map[string]containerengine.VolumeRecord), composeRunning: make(map[string]bool)}
 	adapter, err := containerengine.NewAdapter(client)
@@ -758,6 +775,9 @@ INSERT INTO container_resource_operations(
 	if _, err := service.store.db.Exec(`DROP TABLE container_compose_projects`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := service.store.db.Exec(`DROP TABLE container_service_configuration_state`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.store.db.Exec(`PRAGMA user_version = 1`); err != nil {
 		t.Fatal(err)
 	}
@@ -776,6 +796,51 @@ INSERT INTO container_resource_operations(
 	var tableName string
 	if err := reopened.store.db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'container_compose_projects'`).Scan(&tableName); err != nil || tableName == "" {
 		t.Fatalf("Compose project table after migration = %q, err=%v", tableName, err)
+	}
+}
+
+func TestSchemaMigratesV2AndPreservesComposeProjects(t *testing.T) {
+	client := &fakeEngineClient{volumes: make(map[string]containerengine.VolumeRecord), composeRunning: make(map[string]bool)}
+	adapter, err := containerengine.NewAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(t.TempDir(), "container-resources.sqlite3")
+	service, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UnixMilli()
+	if _, err := service.store.db.Exec(`
+INSERT INTO container_compose_projects(
+ project_id, engine, endpoint_id, name, config_paths_json, env_file_path, profiles_json,
+ created_at_unix_ms, updated_at_unix_ms
+) VALUES('compose-preserved', 'docker', 'endpoint-preserved', 'preserved', '["/workspace/compose.yaml"]', '', '["dev"]', ?, ?)
+`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.store.db.Exec(`DROP TABLE container_service_configuration_state`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.store.db.Exec(`PRAGMA user_version = 2`); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	definition, err := reopened.ComposeProjectDefinition(context.Background(), "compose-preserved")
+	if err != nil || definition.Name != "preserved" || len(definition.Profiles) != 1 || definition.Profiles[0] != "dev" {
+		t.Fatalf("preserved Compose definition = %+v, err=%v", definition, err)
+	}
+	var tableName string
+	if err := reopened.store.db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'container_service_configuration_state'`).Scan(&tableName); err != nil || tableName == "" {
+		t.Fatalf("container service state table after migration = %q, err=%v", tableName, err)
 	}
 }
 
@@ -812,7 +877,7 @@ func TestSchemaRejectsWrongKindAndFutureVersion(t *testing.T) {
 		mutate string
 	}{
 		{name: "wrong kind", mutate: `UPDATE __redeven_db_meta SET db_kind = 'another_product' WHERE singleton = 1`},
-		{name: "future version", mutate: `PRAGMA user_version = 3`},
+		{name: "future version", mutate: `PRAGMA user_version = 4`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

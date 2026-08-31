@@ -8,6 +8,7 @@ import {
   ArrowUp,
   Check,
   ChevronRight,
+  CircleStop,
   Copy,
   Cpu,
   Database,
@@ -29,7 +30,6 @@ import {
   Plus,
   Refresh,
   Search,
-  Stop,
   Terminal,
   Trash,
   X,
@@ -49,9 +49,11 @@ import {
   deleteComposeProjectDefinition,
   getComposeProjectDefinition,
   getContainerImageHistory,
+  getContainerServiceConfiguration,
   getRawContainerInspect,
   getContainerResourceDetails,
   listContainerOperations,
+  listContainerServices,
   listContainerOperationEvents,
   listContainerResources,
   listContainerRuntimes,
@@ -77,6 +79,8 @@ import {
   type ContainerStats,
   type ContainerRuntime,
   type ContainerRuntimeState,
+  type ContainerService,
+  type ContainerServiceConfiguration,
   type ContainerImageHistoryEntry,
   type ReadyContainerRuntime,
   type ContainerResourceFileEntry,
@@ -93,6 +97,8 @@ import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
 import { useEnvContext } from './EnvContext';
 import { ContainerExecTerminal } from '../widgets/ContainerExecTerminal';
+import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
+import { openExternalURLInDesktopShell } from '../services/desktopShellBridge';
 import './env-containers.css';
 
 type PersistedContainersState = Readonly<{
@@ -459,7 +465,7 @@ type ActionIconComponent = (props: { class?: string; 'aria-hidden'?: boolean | '
 
 function actionPresentation(method: string): Readonly<{ icon: ActionIconComponent; destructive: boolean }> {
   if (method.endsWith('.start') || method.endsWith('.unpause')) return { icon: Play, destructive: false };
-  if (method.endsWith('.stop')) return { icon: Stop, destructive: false };
+  if (method.endsWith('.stop')) return { icon: CircleStop, destructive: false };
   if (method.endsWith('.restart')) return { icon: Refresh, destructive: false };
   if (method.endsWith('.pause')) return { icon: Pause, destructive: false };
   if (method.endsWith('.kill')) return { icon: XCircle, destructive: true };
@@ -784,7 +790,20 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [composeProfileError, setComposeProfileError] = createSignal('');
   const [composeEditorBusy, setComposeEditorBusy] = createSignal(false);
   const [composeForget, setComposeForget] = createSignal<ContainerResourceEntry | null>(null);
-  const [runtimeStatusOpen, setRuntimeStatusOpen] = createSignal(false);
+  const [servicesOpen, setServicesOpen] = createSignal(false);
+  const [containerServices, setContainerServices] = createSignal<ContainerService[]>([]);
+  const [containerServicesLoading, setContainerServicesLoading] = createSignal(false);
+  const [containerServicesError, setContainerServicesError] = createSignal('');
+  const [serviceConfigurationOpen, setServiceConfigurationOpen] = createSignal(false);
+  const [serviceConfigurationLoading, setServiceConfigurationLoading] = createSignal(false);
+  const [serviceConfiguration, setServiceConfiguration] = createSignal<ContainerServiceConfiguration | null>(null);
+  const [serviceConfigurationTarget, setServiceConfigurationTarget] = createSignal<ContainerService | null>(null);
+  const [serviceConfigurationMode, setServiceConfigurationMode] = createSignal<'proxy' | 'advanced'>('proxy');
+  const [serviceConfigurationContent, setServiceConfigurationContent] = createSignal('');
+  const [serviceHTTPProxy, setServiceHTTPProxy] = createSignal('');
+  const [serviceHTTPSProxy, setServiceHTTPSProxy] = createSignal('');
+  const [serviceNoProxy, setServiceNoProxy] = createSignal('');
+  const [serviceConfigurationError, setServiceConfigurationError] = createSignal('');
   const [pruneOpen, setPruneOpen] = createSignal(false);
   const [pruneTargetKey, setPruneTargetKey] = createSignal('');
   const [pendingConfirmation, setPendingConfirmation] = createSignal<MutationDraft | null>(null);
@@ -833,6 +852,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const inventoryCache = new Map<string, readonly ContainerResourceInventoryItem[]>();
   let operationStreamAbort: AbortController | null = null;
   let operationDetailsAbort: AbortController | null = null;
+  let servicesLoadAbort: AbortController | null = null;
   let logViewElement: HTMLDivElement | undefined;
   let inventoryScrollElement: HTMLDivElement | undefined;
   let storedInventoryScrollTop = 0;
@@ -1013,6 +1033,70 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
     } catch {
       // Inventory remains usable when operation history is temporarily unavailable.
+    }
+  };
+
+  const loadContainerServices = async () => {
+    if (!canRead()) return;
+    servicesLoadAbort?.abort();
+    const controller = new AbortController();
+    servicesLoadAbort = controller;
+    setContainerServicesLoading(true);
+    setContainerServicesError('');
+    try {
+      const next = await listContainerServices(controller.signal);
+      if (!controller.signal.aborted) setContainerServices(next);
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        setContainerServices([]);
+        setContainerServicesError(cause instanceof Error ? cause.message : String(cause));
+      }
+    } finally {
+      if (!controller.signal.aborted) setContainerServicesLoading(false);
+    }
+  };
+
+  const openContainerServices = () => {
+    setServicesOpen(true);
+    setSelectedResourceKey('');
+    setDetails(null);
+    void loadContainerServices();
+  };
+
+  const closeContainerServices = () => {
+    setServicesOpen(false);
+    setServiceConfigurationOpen(false);
+    void reloadConsole(true);
+  };
+
+  const serviceOperation = (serviceID: string): ContainerOperation | undefined => operations().find((operation) => (
+    operation.resource_kind === 'container_service' && operation.resource_identity === serviceID
+  ));
+
+  const openServiceOperation = (operation: ContainerOperation) => {
+    setSelectedOperationID(operation.operation_id);
+    setOperationsOpen(true);
+  };
+
+  const openServiceConfiguration = async (service: ContainerService) => {
+    setServiceConfigurationTarget(service);
+    setServiceConfiguration(null);
+    setServiceConfigurationError('');
+    setServiceConfigurationLoading(true);
+    setServiceConfigurationOpen(true);
+    try {
+      const configuration = await getContainerServiceConfiguration(service.service_id);
+      if (serviceConfigurationTarget()?.service_id !== service.service_id) return;
+      setServiceConfiguration(configuration);
+      setServiceConfigurationContent(configuration.content);
+      setServiceHTTPProxy(configuration.http_proxy ?? '');
+      setServiceHTTPSProxy(configuration.https_proxy ?? '');
+      setServiceNoProxy(configuration.no_proxy ?? '');
+      setServiceConfigurationMode(service.capabilities.configure_proxy ? 'proxy' : 'advanced');
+    } catch (cause) {
+      setServiceConfigurationError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setServiceConfigurationLoading(false);
     }
   };
 
@@ -1450,6 +1534,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   onMount(() => void loadOperations());
   onCleanup(() => {
     consoleLoadAbort?.abort();
+    servicesLoadAbort?.abort();
     operationStreamAbort?.abort();
     operationDetailsAbort?.abort();
     void closeExecSession();
@@ -1714,6 +1799,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       'pods.stop': 'containers.actions.stop',
       'pods.restart': 'containers.actions.restart',
       'pods.remove': 'containers.actions.remove',
+      'container.services.start': 'containers.actions.start',
+      'container.services.stop': 'containers.actions.stop',
+      'container.services.restart': 'containers.actions.restart',
+      'container.services.configuration.update': 'containers.services.updateConfiguration',
     };
     const key = labels[method];
     return key ? i18n.t(key) : method;
@@ -1762,6 +1851,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     } catch (cause) {
       if (generation === consoleLoadGeneration) {
         if (draft.method === 'containers.create') setContainerRunOpen(true);
+        if (draft.method === 'container.services.configuration.update') setServiceConfigurationOpen(true);
         if (cause instanceof LocalApiError && cause.code === 'NOTHING_TO_PRUNE') {
           notify.info(i18n.t('containers.prune.nothingTitle'), i18n.t('containers.prune.nothingMessage'));
           void reloadConsole();
@@ -1803,8 +1893,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         setPendingContainerCreateOperationID(operation.operation_id);
       }
       setReview(null);
-      setOperationsOpen(true);
       setSelectedOperationID(operation.operation_id);
+      if (current.preflight.resource_kind !== 'container_service') setOperationsOpen(true);
       setOperations((previous) => [operation, ...previous.filter((item) => item.operation_id !== operation.operation_id)]);
       operationStreamAbort?.abort();
       const controller = new AbortController();
@@ -1813,6 +1903,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         setOperations((previous) => [next, ...previous.filter((item) => item.operation_id !== next.operation_id)]);
         if (TERMINAL_OPERATION_STATES.has(next.state)) {
           void reloadConsole();
+          if (next.resource_kind === 'container_service') void loadContainerServices();
           const ownsContainerDraft = pendingContainerCreateOperationID() === next.operation_id;
           if (ownsContainerDraft) setPendingContainerCreateOperationID('');
           if (next.state === 'succeeded') {
@@ -1835,6 +1926,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const cancelReview = () => {
     if (review()?.preflight.method === 'containers.create') setContainerRunOpen(true);
+    if (review()?.preflight.method === 'container.services.configuration.update') setServiceConfigurationOpen(true);
     setReview(null);
   };
 
@@ -1888,6 +1980,49 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const runAction = (method: string) => {
     const request = actionRequest(method);
     if (request) beginMutation(request);
+  };
+
+  const runContainerServiceAction = (service: ContainerService, action: 'start' | 'stop' | 'restart') => {
+    const method = `container.services.${action}`;
+    beginMutation({
+      method,
+      request: { engine: service.engine, service_id: service.service_id },
+      ...(action === 'stop' || action === 'restart'
+        ? { confirmationLabel: service.name, confirmationValue: service.name }
+        : {}),
+    });
+  };
+
+  const submitServiceConfiguration = (applyMode: 'save' | 'save_and_restart') => {
+    const service = serviceConfigurationTarget();
+    const configuration = serviceConfiguration();
+    if (!service || !configuration) return;
+    const mode = serviceConfigurationMode();
+    const request = {
+      engine: service.engine,
+      service_id: service.service_id,
+      base_revision: configuration.base_revision,
+      mode: mode === 'advanced' ? 'document' : 'proxy',
+      apply_mode: applyMode,
+      ...(mode === 'proxy'
+        ? { http_proxy: serviceHTTPProxy(), https_proxy: serviceHTTPSProxy(), no_proxy: serviceNoProxy() }
+        : { content: serviceConfigurationContent() }),
+    };
+    setServiceConfigurationOpen(false);
+    beginMutation({
+      method: 'container.services.configuration.update',
+      request,
+      confirmationLabel: service.name,
+      confirmationValue: service.name,
+    });
+  };
+
+  const openOfficialContainerSettings = async (service: ContainerService) => {
+    const url = service.implementation === 'docker_desktop'
+      ? 'https://docs.docker.com/desktop/settings-and-maintenance/settings/'
+      : 'https://podman-desktop.io/docs/preferences/preferences';
+    const opened = await openExternalURLInDesktopShell(url).catch(() => null);
+    if (!opened) window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const runRowAction = (event: MouseEvent, entry: ContainerResourceEntry, method: string) => {
@@ -2710,7 +2845,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           )}</For>
           <Button size="sm" variant={execPreset() === 'custom' ? 'default' : 'outline'} onClick={() => setExecPreset('custom')} disabled={execBusy()}>{i18n.t('containers.exec.custom')}</Button>
         </div>
-        <Show when={execSessionID()}><Button size="sm" variant="ghost" onClick={() => void closeExecSession()} disabled={execBusy()}><Stop class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.close')}</Button></Show>
+        <Show when={execSessionID()}><Button size="sm" variant="ghost" onClick={() => void closeExecSession()} disabled={execBusy()}><CircleStop class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.close')}</Button></Show>
       </div>
       <Show when={execPreset() === 'custom'}>
         <div class="container-exec-custom">
@@ -2888,10 +3023,49 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             <For each={state.runtimes}>{(runtime) => <div><span>{runtimeName(runtime.engine)}</span><strong>{i18n.t(`containers.runtimeStates.${runtime.state}` as Parameters<typeof i18n.t>[0])}</strong></div>}</For>
           </div>
         </Show>
-        <Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.engineState.retry')}</Button>
+        <div class="flex gap-2"><Button size="sm" variant="outline" onClick={() => void reloadConsole(true)}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.engineState.retry')}</Button><Button size="sm" onClick={openContainerServices}>{i18n.t('containers.services.open')}</Button></div>
       </div>
     );
   };
+
+  const serviceStateLabel = (state: ContainerService['state']) => i18n.t(`containers.services.states.${state}` as Parameters<typeof i18n.t>[0]);
+  const serviceGuidance = (service: ContainerService) => service.guidance_code
+    ? i18n.t(`containers.services.guidance.${service.guidance_code}` as Parameters<typeof i18n.t>[0], { engine: runtimeName(service.engine) })
+    : '';
+
+  const renderContainerServicesPage = (): JSX.Element => (
+    <section class="container-services-page" data-container-services-page>
+      <header class="container-services-page__header">
+        <Button size="sm" variant="ghost" class="container-icon-action" onClick={closeContainerServices} aria-label={i18n.t('containers.detail.back')}><ArrowLeft class="h-4 w-4" /></Button>
+        <div><h2>{i18n.t('containers.services.title')}</h2><p>{i18n.t('containers.services.description')}</p></div>
+      </header>
+      <Show when={!containerServicesLoading()} fallback={<div class="container-services-grid" aria-label={i18n.t('containers.loading')}><For each={[0, 1]}>{() => <div class="container-service-card container-service-card--loading"><span class="container-skeleton container-skeleton--resource-icon" /><span class="container-skeleton container-skeleton--name" /><span class="container-skeleton container-skeleton--secondary" /></div>}</For></div>}>
+        <Show when={!containerServicesError()} fallback={<div class="container-engine-state" role="alert"><AlertTriangle class="h-6 w-6" /><strong>{i18n.t('containers.services.loadFailed')}</strong><p>{containerServicesError()}</p><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>}>
+          <div class="container-services-grid">
+            <For each={containerServices()}>{(service) => {
+              const operation = () => serviceOperation(service.service_id);
+              const active = () => operation() && operationActive(operation()!);
+              return <article class="container-service-card" data-state={service.state}>
+                <div class="container-service-card__mark"><Layers class="h-5 w-5" /></div>
+                <div class="container-service-card__identity"><span>{runtimeName(service.engine)}</span><h3>{service.name}</h3><small>{i18n.t(`containers.services.implementations.${service.implementation}` as Parameters<typeof i18n.t>[0])}<Show when={service.version}> · {service.version}</Show><Show when={service.rootless}> · {i18n.t('containers.services.rootless')}</Show></small></div>
+                <Tag variant={service.state === 'running' ? 'success' : service.state === 'error' || service.state === 'permission' ? 'error' : 'neutral'} tone="soft" size="sm">{serviceStateLabel(service.state)}</Tag>
+                <Show when={service.restart_required}><div class="container-service-card__notice"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.restartRequired')}</div></Show>
+                <Show when={serviceGuidance(service)}><p class="container-service-card__guidance">{serviceGuidance(service)}</p></Show>
+                <Show when={operation()} keyed>{(item) => <button type="button" class="container-service-operation" data-state={item.state} onClick={() => openServiceOperation(item)}><span class={active() ? 'animate-pulse motion-reduce:animate-none' : ''} /><strong>{operationLabel(item.method)}</strong><small>{operationStateLabel(item.state)}</small><ChevronRight class="h-4 w-4" /></button>}</Show>
+                <div class="container-service-card__actions">
+                  <Show when={service.state !== 'running' && service.capabilities.start}><Button size="sm" onClick={() => runContainerServiceAction(service, 'start')} disabled={Boolean(active()) || !canRWX() || !canAdmin()}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.start')}</Button></Show>
+                  <Show when={service.state === 'running' && service.capabilities.stop}><Button size="sm" variant="outline" onClick={() => runContainerServiceAction(service, 'stop')} disabled={Boolean(active()) || !canRWX() || !canAdmin()}><CircleStop class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button></Show>
+                  <Show when={service.state === 'running' && service.capabilities.restart}><Button size="sm" variant="outline" onClick={() => runContainerServiceAction(service, 'restart')} disabled={Boolean(active()) || !canRWX() || !canAdmin()}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.restart')}</Button></Show>
+                  <Show when={service.capabilities.configure_proxy || service.capabilities.configure_advanced}><Button size="sm" variant="outline" onClick={() => void openServiceConfiguration(service)} disabled={Boolean(active()) || !canAdmin()}>{i18n.t('containers.services.configure')}</Button></Show>
+                  <Show when={service.capabilities.open_external_config}><Button size="sm" variant="ghost" onClick={() => void openOfficialContainerSettings(service)}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.services.openSettings')}</Button></Show>
+                </div>
+              </article>;
+            }}</For>
+          </div>
+        </Show>
+      </Show>
+    </section>
+  );
 
   return (
     <div class={`redeven-containers flex h-full min-h-0 flex-col ${redevenSurfaceRoleClass('main')}`} data-container-page data-variant={props.variant ?? 'activity'}>
@@ -2903,9 +3077,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           </div>
           <div class="container-header-controls">
             <Show when={readyRuntimes().length > 0 && runtimeIssues().length > 0}>
-              <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setRuntimeStatusOpen(true)} aria-label={i18n.t('containers.runtimeStatus.title')} title={i18n.t('containers.runtimeStatus.title')}><AlertTriangle class="h-4 w-4 text-[var(--redeven-status-warning-foreground)]" /></Button>
+              <Button size="sm" variant="ghost" class="container-icon-action" onClick={openContainerServices} aria-label={i18n.t('containers.services.title')} title={i18n.t('containers.services.title')}><AlertTriangle class="h-4 w-4 text-[var(--redeven-status-warning-foreground)]" /></Button>
             </Show>
-            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void reloadConsole(true)} disabled={consoleBusy()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${consoleBusy() ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
+            <Dropdown align="end" items={[{ id: 'services', label: i18n.t('containers.services.title'), icon: () => <Layers class="h-3.5 w-3.5" /> }]} onSelect={openContainerServices} triggerAriaLabel={i18n.t('containers.detail.actions')} trigger={<button type="button" class="container-icon-action inline-flex items-center justify-center" title={i18n.t('containers.detail.actions')}><MoreVertical class="h-4 w-4" /></button>} />
+            <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void (servicesOpen() ? loadContainerServices() : reloadConsole(true))} disabled={servicesOpen() ? containerServicesLoading() : consoleBusy()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${(servicesOpen() ? containerServicesLoading() : consoleBusy()) ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
             <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setOperationsOpen(true)} aria-label={i18n.t('containers.operations.title')} title={i18n.t('containers.operations.title')}>
               <Activity class="h-4 w-4" aria-hidden="true" />
               <Show when={activeOperationCount() > 0}><span class="container-operation-count">{activeOperationCount()}</span></Show>
@@ -2913,7 +3088,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           </div>
         </div>
 
-        <Tabs
+        <Show when={!servicesOpen()}><Tabs
           class="container-resource-tabs"
           items={resourceTabItems()}
           activeId={view()}
@@ -2922,11 +3097,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           ariaLabel={i18n.t('containers.resourceNavigation')}
           features={{ indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false }, containerBorder: false, scrollButtons: 'auto' }}
           slotClassNames={{ scrollContainer: 'container-resource-tabs__scroller', tab: 'container-resource-tabs__tab' }}
-        />
+        /></Show>
       </header>
 
       <main class="container-content min-h-0 flex-1 overflow-hidden" aria-busy={consoleBusy()}>
-        <Show when={readyConsole()} fallback={renderConsoleFallback()}>
+        <Show when={servicesOpen()} fallback={<Show when={readyConsole()} fallback={renderConsoleFallback()}>
         <Show when={selected()} keyed fallback={
           <div class="container-list-page">
             {renderInventoryToolbar()}
@@ -2956,7 +3131,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             </div>
           </div>
         }>{(item) => <article class="container-detail-page" data-container-detail-page><div class="container-detail-header"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}><ArrowLeft class="h-4 w-4" /></Button><div class="container-resource-icon container-resource-icon--large" data-tone={resourceStatusTone(resourceStatus(view(), item))}><ViewIcon view={view()} class="h-4 w-4" /></div><div class="container-detail-identity"><span>{viewLabel(view())}</span><h2>{resourceName(view(), item)}</h2><small>{resourceIdentity(view(), item).slice(0, 24)}</small></div><Show when={view() !== 'images' && view() !== 'volumes'}>{renderStatus(resourceStatus(view(), item))}</Show><div class="container-detail-actions"><Show when={selectedManagedOwner()} keyed>{(owner) => <Button size="sm" variant="outline" onClick={openManagedService}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{owner.name}</Button>}</Show><Show when={!selectedManagedOwner()}>{renderResourceActions()}</Show></div></div><Tabs class="container-detail-tabs" items={detailTabItems()} activeId={detailTab()} onChange={(id) => selectDetailTab(id as DetailTab)} size="md" ariaLabel={viewLabel(view())} features={{ indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false }, containerBorder: false, scrollButtons: 'auto' }} slotClassNames={{ scrollContainer: 'container-detail-tabs__scroller', tab: 'container-detail-tabs__tab' }} /><div class="container-detail-body"><Show when={detailTab() !== 'exec'}>{renderDetailContent()}</Show><Show when={view() === 'containers' && containerExecAvailable()}>{renderExecPanel()}</Show></div></article>}</Show>
-        </Show>
+        </Show>}>{renderContainerServicesPage()}</Show>
       </main>
 
       <EnvAppDrawer open={operationsOpen()} onOpenChange={setOperationsOpen} title={i18n.t('containers.operations.title')} description={i18n.t('containers.operations.description')} bodyClass="min-h-0">
@@ -2985,10 +3160,26 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </div>
       </EnvAppDrawer>
 
-      <Dialog open={runtimeStatusOpen()} onOpenChange={setRuntimeStatusOpen} title={i18n.t('containers.runtimeStatus.title')}>
-        <div class="container-runtime-state-list">
-          <For each={runtimes()}>{(runtime) => <div><span>{runtimeName(runtime.engine)}</span><strong>{i18n.t(`containers.runtimeStates.${runtime.state}` as Parameters<typeof i18n.t>[0])}</strong></div>}</For>
-        </div>
+      <Dialog
+        open={serviceConfigurationOpen()}
+        onOpenChange={(open) => { if (!open && !serviceConfigurationLoading()) setServiceConfigurationOpen(false); }}
+        title={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })}
+        class="container-service-configuration-dialog"
+        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setServiceConfigurationOpen(false)}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" variant="outline" onClick={() => submitServiceConfiguration('save')} disabled={!serviceConfiguration() || serviceConfigurationLoading() || !canRWX() || !canAdmin()}>{i18n.t('containers.services.save')}</Button><Button size="sm" onClick={() => submitServiceConfiguration('save_and_restart')} disabled={!serviceConfiguration() || serviceConfigurationLoading() || !serviceConfigurationTarget()?.capabilities.restart || !canRWX() || !canAdmin()}>{i18n.t('containers.services.saveRestart')}</Button></div>}
+      >
+        <Show when={!serviceConfigurationLoading()} fallback={<div class="container-service-config-loading"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" />{i18n.t('containers.loading')}</div>}>
+          <Show when={serviceConfiguration()} fallback={<div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div>}>
+            <Tabs class="container-service-config-tabs" items={[...(serviceConfigurationTarget()?.capabilities.configure_proxy ? [{ id: 'proxy', label: i18n.t('containers.services.proxy') }] : []), ...(serviceConfigurationTarget()?.capabilities.configure_advanced ? [{ id: 'advanced', label: i18n.t('containers.services.advanced') }] : [])]} activeId={serviceConfigurationMode()} onChange={(id) => setServiceConfigurationMode(id as 'proxy' | 'advanced')} size="sm" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false }, containerBorder: false }} />
+            <Show when={serviceConfigurationMode() === 'proxy'} fallback={<div class="container-service-config-editor"><TextFilePreviewPane path={serviceConfiguration()?.format === 'toml' ? 'containers.conf' : 'daemon.json'} descriptor={{ mode: 'text', textPresentation: 'code', language: serviceConfiguration()?.format ?? 'json', wrapText: false }} text={serviceConfiguration()?.content ?? ''} draftText={serviceConfigurationContent()} editing onDraftChange={setServiceConfigurationContent} saveError={serviceConfigurationError()} /></div>}>
+              <div class="container-service-proxy-form">
+                <label><span>{i18n.t('containers.services.httpProxy')}</span><Input value={serviceHTTPProxy()} onInput={(event) => setServiceHTTPProxy(event.currentTarget.value)} placeholder="http://proxy.example.com:3128" autocomplete="off" /></label>
+                <label><span>{i18n.t('containers.services.httpsProxy')}</span><Input value={serviceHTTPSProxy()} onInput={(event) => setServiceHTTPSProxy(event.currentTarget.value)} placeholder="https://proxy.example.com:3129" autocomplete="off" /></label>
+                <label><span>{i18n.t('containers.services.noProxy')}</span><Input value={serviceNoProxy()} onInput={(event) => setServiceNoProxy(event.currentTarget.value)} placeholder="localhost,127.0.0.1,.example.com" autocomplete="off" /></label>
+                <p>{i18n.t('containers.services.sensitiveNotice')}</p>
+              </div>
+            </Show>
+          </Show>
+        </Show>
       </Dialog>
 
       <Dialog
@@ -3166,7 +3357,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         class={reviewedPrune() ? 'container-prune-review-dialog' : undefined}
         footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelReview}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" variant={reviewedPrune() ? 'destructive' : 'default'} onClick={() => void runReviewedOperation()} disabled={mutationBusy() || (review()?.preflight.plan.requires_admin && !canAdmin()) || Boolean(reviewedPrune() && !reviewedPrune()?.complete)}><Show when={reviewedPrune()}><Trash class="mr-1.5 h-3.5 w-3.5" /></Show>{reviewedPrune() ? i18n.t('containers.prune.confirm') : i18n.t('containers.actions.run')}</Button></div>}
       >
-        <Show when={review()} keyed>{(current) => <Show when={reviewedPrune()} fallback={<div class="space-y-3"><div class="flex items-center justify-between rounded-lg border p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div><div class="mt-1 font-mono text-sm">{current.preflight.method}</div></div><Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{current.preflight.plan.risk_level}</Tag></div><For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-sm text-muted-foreground">{summary}</p>}</For><For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3"><div class="text-sm font-medium text-[var(--redeven-status-warning-foreground)]">{flag.title}</div><p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.detail}</p></div>}</For><Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-sm text-destructive">{i18n.t('containers.permissions.admin')}</p></Show><div class="grid gap-1 rounded-lg bg-muted/40 p-3 font-mono text-[10px] text-muted-foreground"><span>{current.preflight.request_hash}</span><span>{current.preflight.plan_hash}</span></div></div>}>{(model) => <PruneReviewPanel model={model()} />}</Show>}</Show>
+        <Show when={review()} keyed>{(current) => <Show when={reviewedPrune()} fallback={<div class="space-y-3"><div class="flex items-center justify-between rounded-lg border p-3"><div><div class="text-xs text-muted-foreground">{i18n.t('containers.review.operation')}</div><div class="mt-1 font-mono text-sm">{operationLabel(current.preflight.method)}</div></div><Tag variant={current.preflight.plan.risk_level === 'high' || current.preflight.plan.risk_level === 'critical' ? 'warning' : 'neutral'} tone="soft" size="sm">{current.preflight.plan.risk_level}</Tag></div><Show when={current.preflight.resource_kind === 'container_service'}><div class="container-service-impact"><div><span>{i18n.t('containers.services.runningContainers')}</span><strong>{Number(current.preflight.plan.target.running_container_count ?? 0)}</strong></div><div><span>{i18n.t('containers.services.affectedServices')}</span><strong>{Number(current.preflight.plan.target.affected_web_service_count ?? 0)}</strong></div><Show when={Array.isArray(current.preflight.plan.target.affected_web_service_names) && (current.preflight.plan.target.affected_web_service_names as string[]).length > 0}><p>{(current.preflight.plan.target.affected_web_service_names as string[]).join(', ')}</p></Show></div></Show><For each={current.preflight.plan.summary ?? []}>{(summary) => <p class="text-sm text-muted-foreground">{summary}</p>}</For><For each={current.preflight.plan.risk_flags ?? []}>{(flag) => <div class="rounded-lg border border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] p-3"><div class="text-sm font-medium text-[var(--redeven-status-warning-foreground)]">{flag.title}</div><p class="mt-1 text-xs leading-5 text-muted-foreground">{flag.detail}</p></div>}</For><Show when={current.preflight.plan.requires_admin && !canAdmin()}><p class="text-sm text-destructive">{i18n.t('containers.permissions.admin')}</p></Show><div class="grid gap-1 rounded-lg bg-muted/40 p-3 font-mono text-[10px] text-muted-foreground"><span>{current.preflight.request_hash}</span><span>{current.preflight.plan_hash}</span></div></div>}>{(model) => <PruneReviewPanel model={model()} />}</Show>}</Show>
       </Dialog>
     </div>
   );

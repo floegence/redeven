@@ -21,6 +21,9 @@ type EngineEndpoint struct {
 	EngineVersion string               `json:"engine_version,omitempty"`
 	Rootless      *bool                `json:"rootless,omitempty"`
 	Capabilities  EndpointCapabilities `json:"capabilities"`
+	// Address is an internal discovery hint. Product APIs identify the target
+	// with EndpointID and must never expose transport addresses or host paths.
+	Address string `json:"-"`
 }
 
 type EndpointCapabilities struct {
@@ -236,6 +239,32 @@ func (a *Adapter) EndpointStatus(ctx context.Context, req EndpointStatusRequest)
 // inventory remains an internal routing detail; inactive contexts and
 // connections are never probed by this product-facing discovery operation.
 func (a *Adapter) ActiveRuntimes(ctx context.Context) (ActiveRuntimeResponse, error) {
+	if services, ok := a.client.(ContainerServiceController); ok && !interfaceIsNil(services) {
+		items, err := services.ContainerServices(ctx)
+		if err != nil {
+			return ActiveRuntimeResponse{}, err
+		}
+		states := make([]RuntimeEngineState, 0, 2)
+		for _, engine := range [...]Engine{EngineDocker, EnginePodman} {
+			state := RuntimeEngineState{Engine: engine, State: RuntimeStateError}
+			for _, service := range items {
+				if service.Engine != engine {
+					continue
+				}
+				state.State = runtimeStateFromContainerService(service.State)
+				state.EngineVersion = service.Version
+				state.Rootless = service.Rootless
+				if service.State == ContainerServiceStateRunning && service.endpointID.Valid() {
+					capabilities := endpointCapabilities(engine)
+					state.EndpointID = service.endpointID
+					state.Capabilities = &capabilities
+				}
+				break
+			}
+			states = append(states, state)
+		}
+		return ActiveRuntimeResponse{Engines: states}, nil
+	}
 	engines := [...]Engine{EngineDocker, EnginePodman}
 	states := make([]RuntimeEngineState, len(engines))
 	var wait sync.WaitGroup
@@ -251,6 +280,23 @@ func (a *Adapter) ActiveRuntimes(ctx context.Context) (ActiveRuntimeResponse, er
 		return ActiveRuntimeResponse{}, err
 	}
 	return ActiveRuntimeResponse{Engines: states}, nil
+}
+
+func runtimeStateFromContainerService(state ContainerServiceState) RuntimeState {
+	switch state {
+	case ContainerServiceStateRunning:
+		return RuntimeStateReady
+	case ContainerServiceStateNotInstalled:
+		return RuntimeStateNotInstalled
+	case ContainerServiceStateStopped:
+		return RuntimeStateStopped
+	case ContainerServiceStatePermission:
+		return RuntimeStatePermission
+	case ContainerServiceStateUnreachable:
+		return RuntimeStateUnreachable
+	default:
+		return RuntimeStateError
+	}
 }
 
 func (a *Adapter) activeRuntime(ctx context.Context, engine Engine) RuntimeEngineState {

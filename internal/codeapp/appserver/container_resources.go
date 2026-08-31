@@ -178,6 +178,46 @@ func (g *Server) handleContainerReadRoute(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: response})
 		return true
 	}
+	if len(parts) == 1 && parts[0] == "services" {
+		if !containerQueryOnly(r.URL.Query()) {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		response, err := g.containers.ContainerServices(r.Context())
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: response})
+		return true
+	}
+	if len(parts) == 3 && parts[0] == "services" && parts[2] == "configuration" {
+		if !containerQueryOnly(r.URL.Query()) {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return true
+		}
+		serviceID, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		configuration, err := g.containers.ContainerServiceConfiguration(r.Context(), serviceID)
+		detail := map[string]any{"resource_kind": "container_service", "resource_identity": truncateString(serviceID, 160)}
+		if err != nil {
+			g.appendAudit(meta, "container_service_configuration_read", "failure", detail, errors.New(publicContainerResourceMessage(err)))
+			writeContainerResourceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "container_service_configuration_read", "success", detail, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: configuration})
+		return true
+	}
 	if len(parts) == 0 {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return true
@@ -1041,13 +1081,13 @@ func writeContainerResourceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, containerengine.ErrResourceFileLimit), errors.Is(err, containerengine.ErrCommandOutputLimit):
 		status = http.StatusRequestEntityTooLarge
-	case errors.Is(err, containerresource.ErrOperationNotFound), errors.Is(err, containerresource.ErrComposeProjectDefinitionNotFound), errors.Is(err, containerengine.ErrContainerNotFound), errors.Is(err, containerengine.ErrImageNotFound), errors.Is(err, containerengine.ErrEndpointNotFound):
+	case errors.Is(err, containerresource.ErrOperationNotFound), errors.Is(err, containerresource.ErrComposeProjectDefinitionNotFound), errors.Is(err, containerengine.ErrContainerNotFound), errors.Is(err, containerengine.ErrImageNotFound), errors.Is(err, containerengine.ErrEndpointNotFound), errors.Is(err, containerengine.ErrContainerServiceNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, containerresource.ErrManagedByWebService), errors.Is(err, containerengine.ErrPermissionDenied):
 		status = http.StatusForbidden
-	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerresource.ErrIdempotencyConflict), errors.Is(err, containerresource.ErrOperationTerminal), errors.Is(err, containerengine.ErrResourcePlanStale), errors.Is(err, containerengine.ErrContainerNotRunning), errors.Is(err, containerengine.ErrNothingToPrune), errors.Is(err, containerengine.ErrReferenceStateIncomplete):
+	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerresource.ErrIdempotencyConflict), errors.Is(err, containerresource.ErrOperationTerminal), errors.Is(err, containerengine.ErrResourcePlanStale), errors.Is(err, containerengine.ErrContainerNotRunning), errors.Is(err, containerengine.ErrNothingToPrune), errors.Is(err, containerengine.ErrReferenceStateIncomplete), errors.Is(err, containerengine.ErrContainerServiceConfigConflict):
 		status = http.StatusConflict
-	case errors.Is(err, containerengine.ErrEngineUnavailable), errors.Is(err, containerengine.ErrCLIUnavailable), errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped), errors.Is(err, containerengine.ErrResourceCapabilityUnsupported):
+	case errors.Is(err, containerengine.ErrEngineUnavailable), errors.Is(err, containerengine.ErrCLIUnavailable), errors.Is(err, containerengine.ErrBackendUnreachable), errors.Is(err, containerengine.ErrDaemonStopped), errors.Is(err, containerengine.ErrResourceCapabilityUnsupported), errors.Is(err, containerengine.ErrContainerServiceUnavailable), errors.Is(err, containerengine.ErrContainerServiceActionUnsupported), errors.Is(err, containerengine.ErrContainerServiceConfigReadOnly), errors.Is(err, containerengine.ErrContainerServiceRecoveryRequired):
 		status = http.StatusServiceUnavailable
 	case errors.Is(err, containerengine.ErrEngineTimeout), errors.Is(err, context.DeadlineExceeded):
 		status = http.StatusGatewayTimeout
@@ -1083,6 +1123,18 @@ func publicContainerResourceCode(err error) string {
 		return "IMAGE_NOT_FOUND"
 	case errors.Is(err, containerengine.ErrEndpointNotFound):
 		return "ENDPOINT_NOT_FOUND"
+	case errors.Is(err, containerengine.ErrContainerServiceNotFound):
+		return "CONTAINER_SERVICE_NOT_FOUND"
+	case errors.Is(err, containerengine.ErrContainerServiceConfigConflict):
+		return "CONTAINER_SERVICE_CONFIGURATION_CONFLICT"
+	case errors.Is(err, containerengine.ErrContainerServiceConfigInvalid):
+		return "CONTAINER_SERVICE_CONFIGURATION_INVALID"
+	case errors.Is(err, containerengine.ErrContainerServiceConfigReadOnly):
+		return "CONTAINER_SERVICE_CONFIGURATION_READ_ONLY"
+	case errors.Is(err, containerengine.ErrContainerServiceActionUnsupported):
+		return "CONTAINER_SERVICE_ACTION_UNSUPPORTED"
+	case errors.Is(err, containerengine.ErrContainerServiceRecoveryRequired):
+		return "SERVICE_RECOVERY_REQUIRED"
 	case errors.Is(err, containerengine.ErrPermissionDenied):
 		return "ENGINE_PERMISSION_DENIED"
 	case errors.Is(err, containerengine.ErrEngineTimeout), errors.Is(err, context.DeadlineExceeded):
@@ -1126,6 +1178,18 @@ func publicContainerResourceMessage(err error) string {
 		return "The image was not found."
 	case "ENDPOINT_NOT_FOUND":
 		return "The container engine endpoint was not found."
+	case "CONTAINER_SERVICE_NOT_FOUND":
+		return "The container service was not found. Refresh and try again."
+	case "CONTAINER_SERVICE_CONFIGURATION_CONFLICT":
+		return "The container service configuration changed. Reload it before saving."
+	case "CONTAINER_SERVICE_CONFIGURATION_INVALID":
+		return "The container service configuration is invalid."
+	case "CONTAINER_SERVICE_CONFIGURATION_READ_ONLY":
+		return "This container service configuration is managed outside Redeven."
+	case "CONTAINER_SERVICE_ACTION_UNSUPPORTED":
+		return "Manage this container service with its official host tool."
+	case "SERVICE_RECOVERY_REQUIRED":
+		return "The container service could not be recovered automatically. Review its host configuration before retrying."
 	case "ENGINE_PERMISSION_DENIED":
 		return "The container engine denied this request."
 	case "ENGINE_TIMEOUT":

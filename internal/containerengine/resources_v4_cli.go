@@ -88,8 +88,9 @@ func (c *CLIClient) listDockerContexts(ctx context.Context) ([]EngineEndpoint, e
 		return nil, err
 	}
 	type row struct {
-		Name    string `json:"Name"`
-		Current bool   `json:"Current"`
+		Name           string `json:"Name"`
+		Current        bool   `json:"Current"`
+		DockerEndpoint string `json:"DockerEndpoint"`
 	}
 	rows, err := decodeJSONLinesOrArray[row](raw)
 	if err != nil {
@@ -101,7 +102,8 @@ func (c *CLIClient) listDockerContexts(ctx context.Context) ([]EngineEndpoint, e
 		if invalidEndpointName(name) {
 			continue
 		}
-		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, name), Engine: EngineDocker, DisplayName: name, Default: item.Current, Capabilities: endpointCapabilities(EngineDocker)})
+		address := strings.TrimSpace(item.DockerEndpoint)
+		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, name), Engine: EngineDocker, DisplayName: name, Default: item.Current, Remote: remoteContainerAddress(address), Address: address, Capabilities: endpointCapabilities(EngineDocker)})
 	}
 	if len(out) == 0 {
 		out = append(out, EngineEndpoint{EndpointID: endpointID(EngineDocker, "default"), Engine: EngineDocker, DisplayName: "default", Default: true, Capabilities: endpointCapabilities(EngineDocker)})
@@ -115,6 +117,7 @@ func (c *CLIClient) listPodmanConnections(ctx context.Context) ([]EngineEndpoint
 		Name      string `json:"Name"`
 		Default   bool   `json:"Default"`
 		ReadWrite bool   `json:"ReadWrite"`
+		URI       string `json:"URI"`
 	}
 	raw, err := c.run(ctx, EnginePodman, "system", "connection", "list", "--format", "json")
 	if err != nil && !errors.Is(err, ErrBackendUnreachable) && !errors.Is(err, ErrDaemonStopped) {
@@ -132,10 +135,18 @@ func (c *CLIClient) listPodmanConnections(ctx context.Context) ([]EngineEndpoint
 		if invalidEndpointName(name) {
 			continue
 		}
-		out = append(out, EngineEndpoint{EndpointID: endpointID(EnginePodman, "connection:"+name), Engine: EnginePodman, DisplayName: name, Default: item.Default, Remote: true, Capabilities: endpointCapabilities(EnginePodman)})
+		out = append(out, EngineEndpoint{EndpointID: endpointID(EnginePodman, "connection:"+name), Engine: EnginePodman, DisplayName: name, Default: item.Default, Remote: true, Address: strings.TrimSpace(item.URI), Capabilities: endpointCapabilities(EnginePodman)})
 	}
 	ensureDefaultEndpoint(out)
 	return out, nil
+}
+
+func remoteContainerAddress(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" || strings.HasPrefix(value, "unix://") || strings.HasPrefix(value, "npipe://") {
+		return false
+	}
+	return strings.HasPrefix(value, "ssh://") || strings.HasPrefix(value, "tcp://") || strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }
 
 func (c *CLIClient) ListComposeProjects(ctx context.Context) ([]ComposeProject, error) {

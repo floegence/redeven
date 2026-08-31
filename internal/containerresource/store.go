@@ -33,6 +33,48 @@ func (s *store) close() error {
 	return s.db.Close()
 }
 
+func (s *store) containerServiceConfigurationState(ctx context.Context, serviceID string) (ContainerServiceConfigurationState, error) {
+	var state ContainerServiceConfigurationState
+	var restartRequired int
+	err := s.db.QueryRowContext(ctx, `
+SELECT service_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
+FROM container_service_configuration_state
+WHERE service_id = ?
+`, strings.TrimSpace(serviceID)).Scan(&state.ServiceID, &state.ConfigurationRevision, &restartRequired, &state.ServiceGeneration, &state.UpdatedAtUnixMs)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ContainerServiceConfigurationState{ServiceID: strings.TrimSpace(serviceID)}, nil
+	}
+	if err != nil {
+		return ContainerServiceConfigurationState{}, err
+	}
+	state.RestartRequired = restartRequired == 1
+	return state, nil
+}
+
+func (s *store) upsertContainerServiceConfigurationState(ctx context.Context, state ContainerServiceConfigurationState) error {
+	if strings.TrimSpace(state.ServiceID) == "" {
+		return ErrInvalidRequest
+	}
+	if state.UpdatedAtUnixMs == 0 {
+		state.UpdatedAtUnixMs = time.Now().UnixMilli()
+	}
+	restartRequired := 0
+	if state.RestartRequired {
+		restartRequired = 1
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO container_service_configuration_state(
+  service_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
+) VALUES(?, ?, ?, ?, ?)
+ON CONFLICT(service_id) DO UPDATE SET
+  configuration_revision = excluded.configuration_revision,
+  restart_required = excluded.restart_required,
+  service_generation = excluded.service_generation,
+  updated_at_unix_ms = excluded.updated_at_unix_ms
+`, strings.TrimSpace(state.ServiceID), strings.TrimSpace(state.ConfigurationRevision), restartRequired, strings.TrimSpace(state.ServiceGeneration), state.UpdatedAtUnixMs)
+	return err
+}
+
 func (s *store) activeOperations(ctx context.Context) ([]Operation, error) {
 	rows, err := s.db.QueryContext(ctx, operationSelectSQL+`
 WHERE state IN (?, ?, ?)

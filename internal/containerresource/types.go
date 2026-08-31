@@ -11,12 +11,25 @@ import (
 type ResourceKind string
 
 const (
-	ResourceContainer      ResourceKind = "container"
-	ResourceImage          ResourceKind = "image"
-	ResourceVolume         ResourceKind = "volume"
-	ResourceComposeProject ResourceKind = "compose_project"
-	ResourcePod            ResourceKind = "pod"
+	ResourceContainer        ResourceKind = "container"
+	ResourceImage            ResourceKind = "image"
+	ResourceVolume           ResourceKind = "volume"
+	ResourceComposeProject   ResourceKind = "compose_project"
+	ResourcePod              ResourceKind = "pod"
+	ResourceContainerService ResourceKind = "container_service"
 )
+
+type ContainerServiceItem struct {
+	containerengine.ContainerService
+}
+
+type ContainerServiceConfigurationState struct {
+	ServiceID             string
+	ConfigurationRevision string
+	RestartRequired       bool
+	ServiceGeneration     string
+	UpdatedAtUnixMs       int64
+}
 
 type OperationState string
 

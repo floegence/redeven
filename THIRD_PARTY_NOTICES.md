@@ -49,6 +49,7 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | github.com/mattn/go-isatty | v0.0.24 | MIT | Runtime | https://pkg.go.dev/github.com/mattn/go-isatty@v0.0.24 | Detected from LICENSE. |
 | github.com/ncruces/go-strftime | v1.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v1.0.0 | Detected from LICENSE. |
 | github.com/openai/openai-go | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go@v1.12.0 | Detected from LICENSE. |
+| github.com/pelletier/go-toml/v2 | v2.4.3 | MIT | Runtime | https://pkg.go.dev/github.com/pelletier/go-toml/v2@v2.4.3 | Detected from LICENSE. |
 | github.com/power-devops/perfstat | v0.0.0-20240221224432-82ca36839d55 | MIT | Runtime | https://pkg.go.dev/github.com/power-devops/perfstat@v0.0.0-20240221224432-82ca36839d55 | Detected from LICENSE. |
 | github.com/quic-go/qpack | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/qpack@v0.6.0 | Detected from LICENSE.md. |
 | github.com/quic-go/quic-go | v0.61.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/quic-go@v0.61.0 | Detected from LICENSE. |

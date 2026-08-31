@@ -18,6 +18,8 @@ const harness = vi.hoisted(() => ({
   storageWrites: [] as Array<{ key: string; value: unknown }>,
   storageValues: new Map<string, unknown>(),
   listRuntimes: vi.fn(),
+  listServices: vi.fn(),
+  getServiceConfiguration: vi.fn(),
   listResources: vi.fn(),
   resourceDetails: vi.fn(),
   listOperations: vi.fn(),
@@ -56,7 +58,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   ArrowDown: icon('arrow-down'),
   ArrowUp: icon('arrow-up'),
   Check: icon('check'),
-  Stop: icon('stop'),
+  CircleStop: icon('stop'),
   Cpu: icon('cpu'),
   Database: icon('database'),
   ExternalLink: icon('external-link'),
@@ -140,6 +142,14 @@ vi.mock('../widgets/ContainerExecTerminal', () => ({
   ContainerExecTerminal: (props: any) => <div data-container-exec-terminal data-session-id={props.sessionID} />,
 }));
 
+vi.mock('../widgets/TextFilePreviewPane', () => ({
+  TextFilePreviewPane: (props: any) => <textarea data-service-config-editor value={props.draftText} onInput={(event) => props.onDraftChange?.(event.currentTarget.value)} />,
+}));
+
+vi.mock('../services/desktopShellBridge', () => ({
+  openExternalURLInDesktopShell: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock('../primitives/EnvAppModal', () => ({
   Dialog: (props: any) => <Show when={props.open}><section data-dialog class={props.class}>{props.title}{props.children}{props.footer}</section></Show>,
 }));
@@ -180,6 +190,8 @@ vi.mock('../services/uiStorage', () => ({
 
 vi.mock('../services/containerResourcesApi', () => ({
   listContainerRuntimes: harness.listRuntimes,
+  listContainerServices: harness.listServices,
+  getContainerServiceConfiguration: harness.getServiceConfiguration,
   listContainerResources: harness.listResources,
   getContainerResourceDetails: harness.resourceDetails,
   listContainerOperations: harness.listOperations,
@@ -254,6 +266,21 @@ describe('native Containers page', () => {
       state: 'ready',
       capabilities: { collection_stats: true, volume_files: false, exec: false },
     }, { engine: 'podman', state: 'not_installed' }]);
+    harness.listServices.mockReset().mockResolvedValue([
+      {
+        service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'stopped',
+        capabilities: { start: true, stop: true, restart: true, configure_proxy: true, configure_advanced: true, open_external_config: false },
+        configuration_kind: 'json',
+      },
+      {
+        service_id: 'container_service_podman', engine: 'podman', name: 'Local Podman', implementation: 'podman_local', state: 'running',
+        capabilities: { start: false, stop: false, restart: false, configure_proxy: true, configure_advanced: true, open_external_config: false },
+        configuration_kind: 'toml', guidance_code: 'podman_daemonless', rootless: true,
+      },
+    ]);
+    harness.getServiceConfiguration.mockReset().mockResolvedValue({
+      service_id: 'container_service_docker', format: 'json', content: '{}\n', base_revision: 'sha256:base', restart_required: false,
+    });
     harness.listResources.mockReset().mockResolvedValue([{
       container_id: 'container-1',
       name: 'Managed API',
@@ -319,6 +346,32 @@ describe('native Containers page', () => {
     expect(host.querySelectorAll('.container-touch-target')).toHaveLength(0);
     expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary', expect.anything());
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:widget-1')).toBe(true);
+  });
+
+  it('opens one service-management surface and loads configuration on demand', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    const servicesAction = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
+      .find((button) => button.textContent?.includes('containers.services.title'));
+    servicesAction?.click();
+    await settle();
+
+    expect(harness.listServices).toHaveBeenCalledOnce();
+    expect(host.querySelector('[data-container-services-page]')).not.toBeNull();
+    expect(host.querySelector('.container-resource-tabs')).toBeNull();
+    expect(host.querySelectorAll('.container-service-card')).toHaveLength(2);
+    expect(host.querySelector('.container-service-card button')?.textContent).toContain('containers.actions.start');
+
+    const configure = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button'))
+      .find((button) => button.textContent?.includes('containers.services.configure'));
+    configure?.click();
+    await settle();
+
+    expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_docker');
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.httpProxy');
   });
 
   it('keeps prune in the danger menu and lets the server resolve the exact image set', async () => {
@@ -1065,16 +1118,28 @@ describe('native Containers page', () => {
   });
 
   it('keeps usable resources visible and explains a partial runtime failure', async () => {
+    harness.listServices.mockResolvedValue([
+      {
+        service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
+        capabilities: { start: false, stop: true, restart: true, configure_proxy: false, configure_advanced: false, open_external_config: false },
+      },
+      {
+        service_id: 'container_service_podman', engine: 'podman', name: 'Podman', implementation: 'unavailable', state: 'not_installed',
+        capabilities: { start: false, stop: false, restart: false, configure_proxy: false, configure_advanced: false, open_external_config: false },
+        guidance_code: 'install',
+      },
+    ]);
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
     expect(host.textContent).toContain('Managed API');
-    const warning = host.querySelector<HTMLButtonElement>('[aria-label="containers.runtimeStatus.title"]');
+    const warning = host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]');
     expect(warning).not.toBeNull();
     warning?.click();
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.runtimeStates.not_installed');
+    await settle();
+    expect(host.querySelector('[data-container-services-page]')?.textContent).toContain('containers.services.states.not_installed');
   });
 
   it('ignores retired v1 page state instead of restoring an endpoint selection', async () => {

@@ -10,7 +10,7 @@ import (
 
 const (
 	schemaKind           = "container_resources_product_v1"
-	currentSchemaVersion = 2
+	currentSchemaVersion = 3
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -22,6 +22,7 @@ func schemaSpec() sqliteutil.Spec {
 		Initialize:     createSchema,
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
 		},
 		Verify: verifySchema,
 	}
@@ -77,12 +78,20 @@ CREATE TABLE container_compose_projects (
 );
 CREATE UNIQUE INDEX idx_container_compose_projects_target_name
   ON container_compose_projects(engine, endpoint_id, name);
+
+CREATE TABLE container_service_configuration_state (
+  service_id TEXT PRIMARY KEY,
+  configuration_revision TEXT NOT NULL DEFAULT '',
+  restart_required INTEGER NOT NULL DEFAULT 0 CHECK(restart_required IN (0, 1)),
+  service_generation TEXT NOT NULL DEFAULT '',
+  updated_at_unix_ms INTEGER NOT NULL
+);
 `)
 	return err
 }
 
 func migrateToV2(tx *sql.Tx) error {
-	if err := verifyContainerResourceSchema(tx, false); err != nil {
+	if err := verifyContainerResourceSchema(tx, false, false); err != nil {
 		return fmt.Errorf("verify container resources v1 schema: %w", err)
 	}
 	_, err := tx.Exec(`
@@ -103,11 +112,27 @@ CREATE UNIQUE INDEX idx_container_compose_projects_target_name
 	return err
 }
 
-func verifySchema(tx *sql.Tx) error {
-	return verifyContainerResourceSchema(tx, true)
+func migrateToV3(tx *sql.Tx) error {
+	if err := verifyContainerResourceSchema(tx, true, false); err != nil {
+		return fmt.Errorf("verify container resources v2 schema: %w", err)
+	}
+	_, err := tx.Exec(`
+CREATE TABLE container_service_configuration_state (
+  service_id TEXT PRIMARY KEY,
+  configuration_revision TEXT NOT NULL DEFAULT '',
+  restart_required INTEGER NOT NULL DEFAULT 0 CHECK(restart_required IN (0, 1)),
+  service_generation TEXT NOT NULL DEFAULT '',
+  updated_at_unix_ms INTEGER NOT NULL
+);
+`)
+	return err
 }
 
-func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects bool) error {
+func verifySchema(tx *sql.Tx) error {
+	return verifyContainerResourceSchema(tx, true, true)
+}
+
+func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects, includeContainerServices bool) error {
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
@@ -115,6 +140,9 @@ func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects bool) erro
 	wantTables := []string{"container_resource_operation_events", "container_resource_operations"}
 	if includeComposeProjects {
 		wantTables = []string{"container_compose_projects", "container_resource_operation_events", "container_resource_operations"}
+	}
+	if includeContainerServices {
+		wantTables = []string{"container_compose_projects", "container_resource_operation_events", "container_resource_operations", "container_service_configuration_state"}
 	}
 	if !slices.Equal(tables, wantTables) {
 		return fmt.Errorf("container resource table set mismatch: got %v", tables)
@@ -129,6 +157,9 @@ func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects bool) erro
 	}
 	if includeComposeProjects {
 		expected["container_compose_projects"] = []string{"project_id", "engine", "endpoint_id", "name", "config_paths_json", "env_file_path", "profiles_json", "created_at_unix_ms", "updated_at_unix_ms"}
+	}
+	if includeContainerServices {
+		expected["container_service_configuration_state"] = []string{"service_id", "configuration_revision", "restart_required", "service_generation", "updated_at_unix_ms"}
 	}
 	for table, want := range expected {
 		columns, err := sqliteutil.TableColumnNamesTx(tx, table)

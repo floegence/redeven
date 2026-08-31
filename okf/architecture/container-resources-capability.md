@@ -170,6 +170,12 @@ Compose input, and responsive presentation contracts are owned by
 project only the targets and capabilities established here; it cannot create a
 second routing, mutation, or ownership path.
 
+Installation, host lifecycle, service configuration, non-elevation, and
+service-state reconciliation are owned by
+[Container service management](container-service-management.md). Resource
+runtime discovery consumes that single controller and does not maintain a
+second stopped, permission, or reachability projection.
+
 # Boundaries
 
 - `containerengine` owns typed Docker and Podman execution and redaction.
