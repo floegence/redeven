@@ -50,6 +50,13 @@ Containers default to Active; other views default to All. Shared Dropdown and
 Dialog primitives own outside-click, Escape, focus, and Workbench-safe floating
 behavior.
 
+Image and volume cleanup is not a primary toolbar action. It appears only in
+the shared three-dot menu with a Trash icon and danger tone; loading retains a
+disabled trigger with the same geometry. The UI sends only the selected runtime
+to preflight and displays the server-reviewed resource count and reclaimable
+space. An empty set or incomplete reference state shows its concise typed reason
+and refreshes inventory instead of surfacing a generic mutation error.
+
 One action-presentation map supplies icons and tone to list buttons, detail
 buttons, and menus: Play for start or resume, Stop for stop, Refresh for restart,
 Pause for pause, XCircle for force stop, and Trash for delete. Every menu action

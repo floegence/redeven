@@ -2820,6 +2820,11 @@ export const enUS = defineDictionary({
       typeName: 'Type “{name}” exactly to continue.',
     },
     review: { title: 'Review operation', operation: 'Operation' },
+    prune: {
+      moreActions: 'More actions', resources: 'Resources', reclaimable: 'Reclaimable',
+      nothingTitle: 'Nothing to clean up', nothingMessage: 'No unused images or volumes were found.',
+      referenceIncompleteTitle: 'Usage could not be confirmed', referenceIncompleteMessage: 'Refresh the inventory and try again.',
+    },
     compose: {
       add: 'Add project', edit: 'Edit project', forget: 'Forget project', saved: 'Saved', source: 'Compose file',
       editorAddTitle: 'Add Compose project', editorEditTitle: 'Edit Compose project', name: 'Project name',

@@ -228,7 +228,7 @@ func (s *Service) CreateOperation(ctx context.Context, req CreateOperationReques
 	s.operations[op.OperationID] = cancel
 	s.mu.Unlock()
 	s.wg.Add(1)
-	requestCopy := append(json.RawMessage(nil), req.Request...)
+	requestCopy := append(json.RawMessage(nil), decoded.canonical...)
 	go s.run(executionCtx, op.OperationID, req.Method, requestCopy)
 	return op, nil
 }
@@ -511,6 +511,17 @@ func (s *Service) decodeAndPreflight(ctx context.Context, method containerengine
 	if err != nil {
 		return decodedMutation{}, err
 	}
+	if method == containerengine.MethodImagesPrune || method == containerengine.MethodVolumesPrune {
+		request, err = canonicalPruneMutationRequest(request, plan)
+		if err != nil {
+			return decodedMutation{}, err
+		}
+		canonical, err = json.Marshal(request)
+		if err != nil {
+			return decodedMutation{}, fmt.Errorf("%w: encode canonical prune request", ErrInvalidRequest)
+		}
+		engine, endpointID, kind, identity, identities = mutationIdentity(method, request)
+	}
 	// The reviewed digest still covers the canonical request, but raw mutation
 	// inputs (environment values, command arguments, and driver options) never
 	// cross the native API or enter the operation database.
@@ -533,6 +544,29 @@ func (s *Service) decodeAndPreflight(ctx context.Context, method containerengine
 			RequestHash: requestHash, PlanHash: plan.PlanDigest, Plan: plan, Management: management,
 		},
 	}, nil
+}
+
+func canonicalPruneMutationRequest(request any, plan containerengine.ResourcePlan) (any, error) {
+	original, ok := request.(*containerengine.ResourcePruneRequest)
+	if !ok || original == nil {
+		return nil, ErrInvalidRequest
+	}
+	var exact containerengine.ResourcePruneRequest
+	switch value := plan.Request.(type) {
+	case containerengine.ResourcePruneRequest:
+		exact = value
+	case *containerengine.ResourcePruneRequest:
+		if value == nil {
+			return nil, ErrInvalidRequest
+		}
+		exact = *value
+	default:
+		return nil, ErrInvalidRequest
+	}
+	if exact.Engine != original.Engine || exact.EndpointID != original.EndpointID || len(exact.ResourceIdentities) == 0 {
+		return nil, ErrInvalidRequest
+	}
+	return &exact, nil
 }
 
 func (s *Service) management(ctx context.Context, engine containerengine.Engine, endpointID containerengine.EndpointID, kind ResourceKind, identity string, identities []string) (Management, error) {

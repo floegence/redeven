@@ -258,14 +258,20 @@ func (a *Adapter) PruneImagesPreflight(ctx context.Context, req ResourcePruneReq
 		if item.ReferencedContainers != 0 {
 			continue
 		}
-		identity := firstNonEmpty(item.Digest, item.ID, item.Reference)
+		identity := canonicalImagePruneIdentity(item)
 		if identity != "" {
+			if _, exists := available[identity]; exists {
+				continue
+			}
 			available[identity] = item
 		}
 	}
 	identities, err := selectPruneIdentities(req.ResourceIdentities, available)
 	if err != nil {
 		return ResourcePlan{}, err
+	}
+	if len(identities) == 0 {
+		return ResourcePlan{}, ErrNothingToPrune
 	}
 	for _, identity := range identities {
 		bytes += available[identity].SizeBytes
@@ -281,14 +287,16 @@ func (a *Adapter) PruneImages(ctx context.Context, req ResourcePruneRequest) err
 	if err != nil {
 		return err
 	}
-	if len(req.ResourceIdentities) == 0 {
-		return errors.New("resource_identities is required")
-	}
-	if _, err := a.PruneImagesPreflight(ctx, req); err != nil {
+	plan, err := a.PruneImagesPreflight(ctx, req)
+	if err != nil {
 		return err
 	}
-	mutationErr := ext.PruneImages(ctx, req)
-	items, reconciliationErr := ext.ListImages(ctx, req.Engine)
+	exact, err := exactPruneRequest(plan)
+	if err != nil {
+		return err
+	}
+	mutationErr := ext.PruneImages(ctx, exact)
+	items, reconciliationErr := ext.ListImages(ctx, exact.Engine)
 	present := make(map[string]struct{}, len(items))
 	for _, item := range items {
 		for _, identity := range append([]string{item.Digest, item.ID, item.Reference}, item.Tags...) {
@@ -297,7 +305,7 @@ func (a *Adapter) PruneImages(ctx context.Context, req ResourcePruneRequest) err
 			}
 		}
 	}
-	return reconcileExactPrune("image", req.ResourceIdentities, present, mutationErr, reconciliationErr)
+	return reconcileExactPrune("image", exact.ResourceIdentities, present, mutationErr, reconciliationErr)
 }
 
 func (a *Adapter) ListVolumes(ctx context.Context, engine Engine) ([]VolumeRecord, error) {
@@ -407,13 +415,16 @@ func (a *Adapter) PruneVolumesPreflight(ctx context.Context, req ResourcePruneRe
 		if item.ReferenceInspectionFailures > 0 {
 			return ResourcePlan{}, ErrReferenceStateIncomplete
 		}
-		if item.ReferencedContainers == 0 {
-			available[item.Name] = item
+		if name := strings.TrimSpace(item.Name); item.ReferencedContainers == 0 && name != "" {
+			available[name] = item
 		}
 	}
 	identities, err := selectPruneIdentities(req.ResourceIdentities, available)
 	if err != nil {
 		return ResourcePlan{}, err
+	}
+	if len(identities) == 0 {
+		return ResourcePlan{}, ErrNothingToPrune
 	}
 	request := ResourcePruneRequest{Engine: req.Engine, EndpointID: req.EndpointID, ResourceIdentities: identities}
 	target := map[string]any{"engine": string(req.Engine), "resource_kind": "volumes", "resource_count": len(identities), "resource_identities": identities}
@@ -426,21 +437,39 @@ func (a *Adapter) PruneVolumes(ctx context.Context, req ResourcePruneRequest) er
 	if err != nil {
 		return err
 	}
-	if len(req.ResourceIdentities) == 0 {
-		return errors.New("resource_identities is required")
-	}
-	if _, err := a.PruneVolumesPreflight(ctx, req); err != nil {
+	plan, err := a.PruneVolumesPreflight(ctx, req)
+	if err != nil {
 		return err
 	}
-	mutationErr := ext.PruneVolumes(ctx, req)
-	items, reconciliationErr := ext.ListVolumes(ctx, req.Engine)
+	exact, err := exactPruneRequest(plan)
+	if err != nil {
+		return err
+	}
+	mutationErr := ext.PruneVolumes(ctx, exact)
+	items, reconciliationErr := ext.ListVolumes(ctx, exact.Engine)
 	present := make(map[string]struct{}, len(items))
 	for _, item := range items {
 		if identity := strings.TrimSpace(item.Name); identity != "" {
 			present[identity] = struct{}{}
 		}
 	}
-	return reconcileExactPrune("volume", req.ResourceIdentities, present, mutationErr, reconciliationErr)
+	return reconcileExactPrune("volume", exact.ResourceIdentities, present, mutationErr, reconciliationErr)
+}
+
+func canonicalImagePruneIdentity(item ImageRecord) string {
+	return firstNonEmpty(item.ID, item.Digest, item.Reference)
+}
+
+func exactPruneRequest(plan ResourcePlan) (ResourcePruneRequest, error) {
+	switch request := plan.Request.(type) {
+	case ResourcePruneRequest:
+		return request, nil
+	case *ResourcePruneRequest:
+		if request != nil {
+			return *request, nil
+		}
+	}
+	return ResourcePruneRequest{}, errors.New("container resource prune plan has no canonical request")
 }
 
 func reconcileExactPrune(kind string, requested []string, present map[string]struct{}, mutationErr, reconciliationErr error) error {
@@ -512,7 +541,7 @@ func selectPruneIdentities[T any](requested []string, available map[string]T) ([
 			return nil, errors.New("resource identity is invalid")
 		}
 		if _, exists := seen[identity]; exists {
-			return nil, errors.New("resource identity is duplicated")
+			continue
 		}
 		if _, exists := available[identity]; !exists {
 			return nil, ErrResourcePlanStale

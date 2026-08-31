@@ -9,6 +9,7 @@ import { I18nProvider } from '../i18n';
 const browserHarness = vi.hoisted(() => ({
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   listResources: vi.fn(),
+  preflight: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
@@ -79,7 +80,7 @@ vi.mock('../services/containerResourcesApi', () => ({
     network_rx_bytes: 12_582_912,
     network_tx_bytes: 4_194_304,
   }),
-  preflightContainerOperation: vi.fn(),
+  preflightContainerOperation: browserHarness.preflight,
   subscribeContainerOperation: vi.fn(),
   subscribeContainerLogs: vi.fn().mockResolvedValue(undefined),
   subscribeContainerStats: vi.fn().mockImplementation(async (_identity: string, _engine: string, _endpoint: string, observe: (sample: unknown) => void) => {
@@ -154,6 +155,11 @@ describe('native Containers responsive product surface', () => {
         group_name: 'observability', created_at_unix_ms: 1_722_000_000_000, management: { managed: false },
       },
     ]);
+    browserHarness.preflight.mockReset().mockResolvedValue({
+      method: 'images.prune', request_hash: 'request', plan_hash: 'plan',
+      plan: { method: 'images.prune', target: { resource_count: 1, reclaimable_bytes: 1024 }, plan_digest: 'plan', risk_level: 'high', risk_flags: [], requires_admin: true },
+      management: { managed: false },
+    });
   });
 
   afterEach(async () => {
@@ -240,6 +246,42 @@ describe('native Containers responsive product surface', () => {
     expect(detailPage.querySelector('.container-sparkline')).toBeNull();
     expect(detailPage.querySelector('[data-container-network-panel]')?.textContent).toContain('/s');
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it('places cleanup in a dismissible danger menu', async () => {
+    await page.viewport(1440, 900);
+    browserHarness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [{
+      id: 'sha256:unused', reference: 'example/app:latest', size_bytes: 1024, referenced_containers: 0,
+    }] : []));
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('Images'))?.click();
+    await settle();
+
+    const more = root.querySelector<HTMLButtonElement>('[data-floe-dropdown-trigger][aria-label="More actions"]')!;
+    expect(more).not.toBeNull();
+    more.click();
+    await settle();
+    let pruneItem = document.querySelector<HTMLElement>('[role="menuitem"][data-tone="danger"]');
+    expect(pruneItem?.textContent).toContain('Prune unused');
+    expect(pruneItem?.querySelector('svg')).not.toBeNull();
+    expect(pruneItem?.classList.contains('text-destructive')).toBe(true);
+
+    root.querySelector<HTMLElement>('.container-search-control')!
+      .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await settle();
+    expect(pruneItem?.isConnected && pruneItem.closest('[role="menu"]')?.getAttribute('aria-hidden') !== 'true').toBe(false);
+
+    more.click();
+    await settle();
+    pruneItem = document.querySelector<HTMLElement>('[role="menuitem"][data-tone="danger"]');
+    pruneItem?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle();
+    expect(pruneItem?.isConnected && pruneItem.closest('[role="menu"]')?.getAttribute('aria-hidden') !== 'true').toBe(false);
   });
 
   it.each([

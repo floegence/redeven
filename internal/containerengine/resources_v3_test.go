@@ -190,7 +190,7 @@ func TestAdapterPrunePreflightsContainExactSortedCandidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	if images.Target["resource_count"] != 3 || images.Target["reclaimable_bytes"] != int64(900) ||
-		!reflect.DeepEqual(images.Target["resource_identities"], []string{"ghcr.io/acme/untagged:latest", "sha256:a", "sha256:b"}) {
+		!reflect.DeepEqual(images.Target["resource_identities"], []string{"ghcr.io/acme/untagged:latest", "sha256:a-id", "sha256:b"}) {
 		t.Fatalf("PruneImagesPreflight() target = %#v", images.Target)
 	}
 
@@ -200,6 +200,55 @@ func TestAdapterPrunePreflightsContainExactSortedCandidates(t *testing.T) {
 	}
 	if volumes.Target["resource_count"] != 2 || !reflect.DeepEqual(volumes.Target["resource_identities"], []string{"a-data", "z-cache"}) {
 		t.Fatalf("PruneVolumesPreflight() target = %#v", volumes.Target)
+	}
+}
+
+func TestAdapterPruneImagesCanonicalizesDuplicateRowsByImageID(t *testing.T) {
+	client := &resourceAuditEngineClient{
+		fakeEngineClient: &fakeEngineClient{},
+		images: []ImageRecord{
+			{ID: "sha256:shared", Digest: "sha256:digest", Reference: "example/app:first", SizeBytes: 300},
+			{ID: "sha256:shared", Digest: "sha256:digest", Reference: "example/app:second", SizeBytes: 300},
+			{Digest: "sha256:digest-only", Reference: "example/other:latest", SizeBytes: 400},
+		},
+	}
+	adapter := mustNewAdapter(t, client)
+
+	plan, err := adapter.PruneImagesPreflight(context.Background(), ResourcePruneRequest{
+		Engine: EngineDocker,
+		ResourceIdentities: []string{
+			"sha256:shared",
+			"sha256:shared",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, ok := plan.Request.(ResourcePruneRequest)
+	if !ok {
+		t.Fatalf("PruneImagesPreflight() request type = %T", plan.Request)
+	}
+	if !reflect.DeepEqual(request.ResourceIdentities, []string{"sha256:shared"}) {
+		t.Fatalf("canonical identities = %#v", request.ResourceIdentities)
+	}
+	if plan.Target["resource_count"] != 1 || plan.Target["reclaimable_bytes"] != int64(300) {
+		t.Fatalf("canonical target = %#v", plan.Target)
+	}
+}
+
+func TestAdapterPrunePreflightReportsNothingToPrune(t *testing.T) {
+	client := &resourceAuditEngineClient{
+		fakeEngineClient: &fakeEngineClient{},
+		images:           []ImageRecord{{ID: "sha256:used", ReferencedContainers: 1}},
+		volumes:          []VolumeRecord{{Name: "used", ReferencedContainers: 1}},
+	}
+	adapter := mustNewAdapter(t, client)
+
+	if _, err := adapter.PruneImagesPreflight(context.Background(), ResourcePruneRequest{Engine: EngineDocker}); !errors.Is(err, ErrNothingToPrune) {
+		t.Fatalf("PruneImagesPreflight() error = %v, want ErrNothingToPrune", err)
+	}
+	if _, err := adapter.PruneVolumesPreflight(context.Background(), ResourcePruneRequest{Engine: EngineDocker}); !errors.Is(err, ErrNothingToPrune) {
+		t.Fatalf("PruneVolumesPreflight() error = %v, want ErrNothingToPrune", err)
 	}
 }
 
@@ -250,6 +299,31 @@ func TestAdapterPruneOperationsRevalidateAndForwardExactIdentities(t *testing.T)
 	}
 	if !reflect.DeepEqual(client.prunedVolumes, []ResourcePruneRequest{{Engine: EngineDocker, ResourceIdentities: []string{"data"}}}) {
 		t.Fatalf("exact volume prune calls = %#v", client.prunedVolumes)
+	}
+}
+
+func TestAdapterPruneOperationsResolveTheAuthoritativeSet(t *testing.T) {
+	client := &resourceAuditEngineClient{
+		fakeEngineClient: &fakeEngineClient{},
+		images: []ImageRecord{
+			{ID: "sha256:unused", Digest: "sha256:digest", Reference: "example/app:latest", SizeBytes: 100},
+			{ID: "sha256:used", ReferencedContainers: 1},
+		},
+		volumes: []VolumeRecord{{Name: "cache"}, {Name: "used", ReferencedContainers: 1}},
+	}
+	adapter := mustNewAdapter(t, client)
+
+	if err := adapter.PruneImages(context.Background(), ResourcePruneRequest{Engine: EngineDocker}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(client.prunedImages, []ResourcePruneRequest{{Engine: EngineDocker, ResourceIdentities: []string{"sha256:unused"}}}) {
+		t.Fatalf("resolved image prune calls = %#v", client.prunedImages)
+	}
+	if err := adapter.PruneVolumes(context.Background(), ResourcePruneRequest{Engine: EngineDocker}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(client.prunedVolumes, []ResourcePruneRequest{{Engine: EngineDocker, ResourceIdentities: []string{"cache"}}}) {
+		t.Fatalf("resolved volume prune calls = %#v", client.prunedVolumes)
 	}
 }
 
@@ -380,30 +454,34 @@ func TestCLIClientReportsPartialReferenceInspectionAndDestructivePlansFailClosed
 }
 
 func TestCLIClientPrunesOnlyExactReviewedResources(t *testing.T) {
-	runner := &fakeCommandRunner{outputs: map[string]string{
-		"docker image rm sha256:a": "",
-		"docker image rm sha256:b": "",
-		"docker volume rm cache":   "",
-		"docker volume rm data":    "",
-	}}
-	client := &CLIClient{Runner: runner}
-	if err := client.PruneImages(context.Background(), ResourcePruneRequest{
-		Engine: EngineDocker, ResourceIdentities: []string{"sha256:a", "sha256:b"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := client.PruneVolumes(context.Background(), ResourcePruneRequest{
-		Engine: EngineDocker, ResourceIdentities: []string{"cache", "data"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(runner.calls) != 4 {
-		t.Fatalf("exact prune calls = %#v", runner.calls)
-	}
-	for _, forbidden := range []string{"image prune", "volume prune", "--force"} {
-		if strings.Contains(strings.Join(runner.calls, "\n"), forbidden) {
-			t.Fatalf("exact prune fell back to broad command %q: %#v", forbidden, runner.calls)
-		}
+	for _, engine := range []Engine{EngineDocker, EnginePodman} {
+		t.Run(string(engine), func(t *testing.T) {
+			runner := &fakeCommandRunner{outputs: map[string]string{
+				string(engine) + " image rm sha256:a": "",
+				string(engine) + " image rm sha256:b": "",
+				string(engine) + " volume rm cache":   "",
+				string(engine) + " volume rm data":    "",
+			}}
+			client := &CLIClient{Runner: runner}
+			if err := client.PruneImages(context.Background(), ResourcePruneRequest{
+				Engine: engine, ResourceIdentities: []string{"sha256:a", "sha256:b"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := client.PruneVolumes(context.Background(), ResourcePruneRequest{
+				Engine: engine, ResourceIdentities: []string{"cache", "data"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.calls) != 4 {
+				t.Fatalf("exact prune calls = %#v", runner.calls)
+			}
+			for _, forbidden := range []string{"image prune", "volume prune", "--force"} {
+				if strings.Contains(strings.Join(runner.calls, "\n"), forbidden) {
+					t.Fatalf("exact prune fell back to broad command %q: %#v", forbidden, runner.calls)
+				}
+			}
+		})
 	}
 }
 
@@ -686,7 +764,7 @@ func (c *resourceAuditEngineClient) PruneImages(_ context.Context, req ResourceP
 	}
 	kept := c.images[:0]
 	for _, item := range c.images {
-		identity := firstNonEmpty(item.Digest, item.ID, item.Reference)
+		identity := canonicalImagePruneIdentity(item)
 		if _, exists := removed[identity]; !exists {
 			kept = append(kept, item)
 		}

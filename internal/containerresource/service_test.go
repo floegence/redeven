@@ -15,6 +15,7 @@ import (
 
 type fakeEngineClient struct {
 	mu              sync.Mutex
+	images          []containerengine.ImageRecord
 	volumes         map[string]containerengine.VolumeRecord
 	createStarted   chan string
 	createRelease   <-chan struct{}
@@ -67,7 +68,9 @@ func (f *fakeEngineClient) Stats(context.Context, containerengine.Engine, string
 }
 
 func (f *fakeEngineClient) ListImages(context.Context, containerengine.Engine) ([]containerengine.ImageRecord, error) {
-	return nil, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]containerengine.ImageRecord(nil), f.images...), nil
 }
 
 func (f *fakeEngineClient) InspectImage(context.Context, containerengine.Engine, string) (containerengine.ImageRecord, error) {
@@ -222,6 +225,50 @@ func newTestServiceWithClient(t *testing.T, client *fakeEngineClient, resolver M
 	}
 	t.Cleanup(func() { _ = service.Close() })
 	return service
+}
+
+func TestPrunePreflightCanonicalizesRequestHashAndLocks(t *testing.T) {
+	client := &fakeEngineClient{
+		images: []containerengine.ImageRecord{
+			{ID: "sha256:shared", Reference: "example/app:latest", SizeBytes: 4096},
+			{ID: "sha256:shared", Reference: "example/app:stable", SizeBytes: 4096},
+		},
+		volumes:        make(map[string]containerengine.VolumeRecord),
+		composeRunning: make(map[string]bool),
+	}
+	service := newTestServiceWithClient(t, client, nil)
+
+	targetOnly := json.RawMessage(`{"engine":"docker"}`)
+	duplicateRows := json.RawMessage(`{"engine":"docker","resource_identities":["sha256:shared","sha256:shared"]}`)
+	fromTarget, err := service.decodeAndPreflight(context.Background(), "images.prune", targetOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromRows, err := service.decodeAndPreflight(context.Background(), "images.prune", duplicateRows)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if fromTarget.preflight.RequestHash != fromRows.preflight.RequestHash || fromTarget.preflight.PlanHash != fromRows.preflight.PlanHash {
+		t.Fatalf("canonical hashes differ: target=%s/%s rows=%s/%s", fromTarget.preflight.RequestHash, fromTarget.preflight.PlanHash, fromRows.preflight.RequestHash, fromRows.preflight.PlanHash)
+	}
+	lockKeys := fromTarget.lockKeys()
+	if len(lockKeys) != 1 || lockKeys[0] != "docker\x00\x00image\x00sha256:shared" {
+		t.Fatalf("lock keys = %#v, want one canonical image lock", lockKeys)
+	}
+	var canonical containerengine.ResourcePruneRequest
+	if err := json.Unmarshal(fromTarget.canonical, &canonical); err != nil {
+		t.Fatal(err)
+	}
+	if len(canonical.ResourceIdentities) != 1 || canonical.ResourceIdentities[0] != "sha256:shared" {
+		t.Fatalf("canonical request = %#v, want one image identity", canonical)
+	}
+	if got := fromTarget.preflight.Plan.Target["resource_count"]; got != 1 {
+		t.Fatalf("resource_count = %#v, want 1", got)
+	}
+	if got := fromTarget.preflight.Plan.Target["reclaimable_bytes"]; got != int64(4096) {
+		t.Fatalf("reclaimable_bytes = %#v, want 4096", got)
+	}
 }
 
 func TestStatsAddsAuthoritativeSampleTimestamp(t *testing.T) {
