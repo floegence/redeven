@@ -23,7 +23,7 @@ type composeTemplateDriver struct {
 }
 
 func (d *composeTemplateDriver) RebuildStoppedRuntime(ctx context.Context, service *pfregistry.ManagedService, _ TemplateSpec, _ string) (string, string, error) {
-	runtimeID, artifact, err := d.Install(ctx, service, catalogPayload{}, func(string, int64) {})
+	runtimeID, artifact, err := d.Install(ctx, service, catalogPayload{}, func(string, int64, ...pfregistry.ManagedOperationTransferProgress) {})
 	if err != nil {
 		return "", "", err
 	}
@@ -70,7 +70,7 @@ func (d *composeTemplateDriver) FindReconfiguredRuntime(ctx context.Context, ser
 	return d.identity(service, hex.EncodeToString(digest[:])), nil
 }
 
-func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress func(string, int64)) (string, string, error) {
+func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress operationProgress) (string, string, error) {
 	if d.adapter == nil {
 		return "", "", serviceError("DOCKER_UNAVAILABLE", "Docker Compose is not available in this Environment.", 409, true, nil)
 	}
@@ -86,7 +86,7 @@ func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry
 	if err != nil {
 		return "", "", err
 	}
-	generated, pinned, secretVariables, err := d.generateCompose(ctx, service, spec, configuration, secrets)
+	generated, pinned, secretVariables, err := d.generateCompose(ctx, service, spec, configuration, secrets, progress)
 	if err != nil {
 		return "", "", err
 	}
@@ -111,7 +111,7 @@ func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry
 	return d.identity(service, hex.EncodeToString(digest[:])), artifact, nil
 }
 
-func (d *composeTemplateDriver) generateCompose(ctx context.Context, service *pfregistry.ManagedService, spec TemplateSpec, configuration serviceConfiguration, secrets serviceSecrets) ([]byte, []string, map[string]string, error) {
+func (d *composeTemplateDriver) generateCompose(ctx context.Context, service *pfregistry.ManagedService, spec TemplateSpec, configuration serviceConfiguration, secrets serviceSecrets, progress operationProgress) ([]byte, []string, map[string]string, error) {
 	var document map[string]any
 	if err := yaml.Unmarshal([]byte(spec.Compose.YAML), &document); err != nil {
 		return nil, nil, nil, serviceError("TEMPLATE_COMPOSE_INVALID", "Compose YAML could not be parsed.", 400, false, err)
@@ -133,7 +133,7 @@ func (d *composeTemplateDriver) generateCompose(ctx context.Context, service *pf
 			return nil, nil, nil, serviceError("TEMPLATE_COMPOSE_INVALID", "A Compose service definition is invalid.", 400, false, nil)
 		}
 		image := strings.TrimSpace(fmt.Sprint(entry["image"]))
-		pulled, err := pullManagedImage(ctx, d.adapter, image)
+		pulled, err := pullManagedImage(ctx, d.adapter, image, int64(len(pinned)+1), int64(len(names)), progress)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -538,7 +538,7 @@ func (d *composeTemplateDriver) Stop(ctx context.Context, service *pfregistry.Ma
 	return nil
 }
 
-func (d *composeTemplateDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+func (d *composeTemplateDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress operationProgress) error {
 	if strings.TrimSpace(service.RuntimeIdentity) != "" {
 		expectedImages, err := d.expectedImages(service)
 		if err != nil {

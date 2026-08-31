@@ -33,7 +33,7 @@ func TestNativeDeepSeekHarnessReleaseInstallAndWeb(t *testing.T) {
 	}
 	workspace := t.TempDir()
 	service := &pfregistry.ManagedService{ServiceID: "mws_native_release_smoke", WorkspacePath: workspace}
-	_, executable, err := driver.Install(context.Background(), service, auditedNativeCatalog(), func(stage string, _ int64) { t.Log(stage) })
+	_, executable, err := driver.Install(context.Background(), service, auditedNativeCatalog(), func(stage string, _ int64, _ ...pfregistry.ManagedOperationTransferProgress) { t.Log(stage) })
 	if err != nil {
 		t.Fatal(err)
 	}

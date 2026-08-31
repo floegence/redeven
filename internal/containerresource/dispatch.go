@@ -52,7 +52,8 @@ func (s *Service) execute(ctx context.Context, operationID string, decoded decod
 	case *containerengine.ImagePullRequest:
 		_, err := s.engine.PullImageWithProgress(bound, *req, func(_ context.Context, progress containerengine.ImagePullProgress) error {
 			s.reportProgress(operationID, OperationProgress{
-				Phase: progress.Phase, Completed: progress.Completed, Total: progress.Total, Unit: progress.Unit,
+				Phase: progress.Phase, DownloadedBytes: progress.DownloadedBytes, TotalBytes: progress.TotalBytes,
+				CompletedLayers: progress.CompletedLayers, TotalLayers: progress.TotalLayers,
 			})
 			return nil
 		})

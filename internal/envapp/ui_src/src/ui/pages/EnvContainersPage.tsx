@@ -1823,10 +1823,24 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const progressFromEvent = (event: ContainerOperationEvent | undefined) => {
     const payload = event?.payload;
     const phase = typeof payload?.phase === 'string' ? payload.phase : event?.type ?? '';
-    const completed = typeof payload?.completed === 'number' ? payload.completed : 0;
-    const total = typeof payload?.total === 'number' ? payload.total : 0;
-    const unit = typeof payload?.unit === 'string' ? payload.unit : '';
-    return { phase, completed, total, unit };
+    const downloadedBytes = typeof payload?.downloaded_bytes === 'number' ? payload.downloaded_bytes : 0;
+    const totalBytes = typeof payload?.total_bytes === 'number' ? payload.total_bytes : 0;
+    const completedLayers = typeof payload?.completed_layers === 'number' ? payload.completed_layers : 0;
+    const totalLayers = typeof payload?.total_layers === 'number' ? payload.total_layers : 0;
+    if (totalBytes > 0) {
+      return {
+        phase,
+        current: downloadedBytes,
+        total: totalBytes,
+        summary: `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}`,
+      };
+    }
+    return {
+      phase,
+      current: completedLayers,
+      total: totalLayers,
+      summary: totalLayers > 0 ? `${completedLayers} / ${totalLayers} ${i18n.t('containers.operations.layers')}` : '',
+    };
   };
 
   const latestOperationProgress = createMemo(() => progressFromEvent([...operationEvents()].reverse().find((event) => event.type === 'progress')));
@@ -3143,16 +3157,16 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             <Show when={selectedOperation()} keyed>{(operation) => {
               const progress = () => latestOperationProgress();
               const phase = () => operationActive(operation) ? (progress().phase || operation.state) : operation.state;
-              const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().completed / progress().total) * 100)) : 0;
+              const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().current / progress().total) * 100)) : 0;
               return <section class="container-operation-detail" data-state={operation.state}>
                 <header><div><span>{operationLabel(operation.method)}</span><h3>{operation.resource_identity}</h3></div><Tag variant={operation.state === 'succeeded' ? 'success' : operation.state === 'failed' || operation.state === 'interrupted' ? 'error' : 'neutral'} tone="soft" size="sm">{operationStateLabel(operation.state)}</Tag></header>
                 <div class="container-operation-progress" data-indeterminate={operationActive(operation) && progress().total === 0 ? 'true' : 'false'}>
-                  <div><strong>{operationPhaseLabel(phase())}</strong><Show when={operationActive(operation) && progress().total > 0}><span>{progress().completed} / {progress().total} {progress().unit === 'layers' ? i18n.t('containers.operations.layers') : progress().unit}</span></Show></div>
-                  <div class="container-operation-progress__track" role="progressbar" aria-label={operationPhaseLabel(phase())} aria-valuemin={0} aria-valuemax={operationActive(operation) && progress().total ? progress().total : 100} aria-valuenow={operation.state === 'succeeded' ? 100 : operationActive(operation) && progress().total ? progress().completed : undefined}><span style={{ width: operation.state === 'succeeded' ? '100%' : progress().total ? `${percent()}%` : undefined }} /></div>
+                  <div><strong>{operationPhaseLabel(phase())}</strong><Show when={operationActive(operation) && progress().total > 0}><span>{progress().summary}</span></Show></div>
+                  <div class="container-operation-progress__track" role="progressbar" aria-label={operationPhaseLabel(phase())} aria-valuemin={0} aria-valuemax={operationActive(operation) && progress().total ? progress().total : 100} aria-valuenow={operation.state === 'succeeded' ? 100 : operationActive(operation) && progress().total ? progress().current : undefined}><span style={{ width: operation.state === 'succeeded' ? '100%' : progress().total ? `${percent()}%` : undefined }} /></div>
                 </div>
                 <dl class="container-operation-facts"><div><dt>{i18n.t('containers.operations.service')}</dt><dd>{runtimeName(operation.engine)}</dd></div><div><dt>{i18n.t('containers.operations.duration')}</dt><dd>{operationDuration(operation)}</dd></div><div><dt>{i18n.t('containers.operations.started')}</dt><dd>{formatDate(operation.started_at_unix_ms || operation.created_at_unix_ms)}</dd></div></dl>
                 <Show when={operation.error_message}><div class="container-operation-error" role="alert"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.operations.errorTitle')}</strong><p>{operation.error_message}</p><Show when={operation.error_code}><code>{operation.error_code}</code></Show></div></div></Show>
-                <div class="container-operation-timeline"><h4>{i18n.t('containers.operations.progressTitle')}</h4><Show when={!operationEventsLoading()} fallback={<div class="container-operation-timeline__loading">{i18n.t('containers.operations.loadingProgress')}</div>}><For each={operationEvents()}>{(event) => { const item = progressFromEvent(event); return <div class="container-operation-step" data-state={event.state}><span aria-hidden="true">{TERMINAL_OPERATION_STATES.has(event.state) && event.state !== 'succeeded' ? <X class="h-3 w-3" /> : <Check class="h-3 w-3" />}</span><div><strong>{operationPhaseLabel(item.phase)}</strong><Show when={item.total > 0}><small>{item.completed} / {item.total} {item.unit === 'layers' ? i18n.t('containers.operations.layers') : item.unit}</small></Show></div><time>{i18n.formatRelativeTime(event.created_at_unix_ms)}</time></div>; }}</For></Show></div>
+                <div class="container-operation-timeline"><h4>{i18n.t('containers.operations.progressTitle')}</h4><Show when={!operationEventsLoading()} fallback={<div class="container-operation-timeline__loading">{i18n.t('containers.operations.loadingProgress')}</div>}><For each={operationEvents()}>{(event) => { const item = progressFromEvent(event); return <div class="container-operation-step" data-state={event.state}><span aria-hidden="true">{TERMINAL_OPERATION_STATES.has(event.state) && event.state !== 'succeeded' ? <X class="h-3 w-3" /> : <Check class="h-3 w-3" />}</span><div><strong>{operationPhaseLabel(item.phase)}</strong><Show when={item.total > 0}><small>{item.summary}</small></Show></div><time>{i18n.formatRelativeTime(event.created_at_unix_ms)}</time></div>; }}</For></Show></div>
                 <Show when={operationActive(operation)}><div class="container-operation-detail__actions"><Button size="sm" variant="outline" onClick={() => void cancelContainerOperation(operation.operation_id).then(loadOperations)} disabled={!canExecute()}>{i18n.t('containers.actions.cancel')}</Button></div></Show>
               </section>;
             }}</Show>

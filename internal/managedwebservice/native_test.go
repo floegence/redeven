@@ -90,7 +90,7 @@ func TestNativeInstallBuildsPrivateReleaseLockedRuntime(t *testing.T) {
 	}
 	service := &pfregistry.ManagedService{ServiceID: "mws_native_install"}
 	catalog := catalogPayload{Platforms: map[string]nativeArtifact{currentPlatformKey(): artifact}}
-	_, executable, err := driver.Install(context.Background(), service, catalog, func(string, int64) {})
+	_, executable, err := driver.Install(context.Background(), service, catalog, discardOperationProgress)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestNativeInstallBuildsPrivateReleaseLockedRuntime(t *testing.T) {
 	if err := verifyInstalledNativeRuntime(installRoot, artifact); err != nil {
 		t.Fatalf("verify installed runtime: %v", err)
 	}
-	_, replayed, err := driver.Install(context.Background(), service, catalog, func(string, int64) {})
+	_, replayed, err := driver.Install(context.Background(), service, catalog, discardOperationProgress)
 	if err != nil || replayed != executable || installCalls != 1 {
 		t.Fatalf("idempotent native install executable=%q calls=%d err=%v", replayed, installCalls, err)
 	}

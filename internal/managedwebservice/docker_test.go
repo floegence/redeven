@@ -40,27 +40,6 @@ func TestAuditedDockerCatalogPinsReviewedPlatformDigests(t *testing.T) {
 	}
 }
 
-func TestDeepSeekOperationArtifactUsesCurrentAuditedRegistry(t *testing.T) {
-	t.Parallel()
-	service := pfregistry.ManagedService{
-		TemplateID:        DeepSeekHarnessContainerTemplateID,
-		Deployment:        string(DeploymentDocker),
-		ArtifactReference: "runzhliu/deepseek-harness:0.1.1-rc.2@sha256:" + strings.Repeat("f", 64),
-	}
-	operation := &pfregistry.ManagedOperation{Action: "retry_install"}
-	reference := operationArtifactReference(service, operation)
-	if !strings.HasPrefix(reference, "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:") {
-		t.Fatalf("operation artifact reference = %q", reference)
-	}
-	operation.Action = "stop"
-	if got := operationArtifactReference(service, operation); got != service.ArtifactReference {
-		t.Fatalf("stop operation artifact reference = %q, want installed %q", got, service.ArtifactReference)
-	}
-	if got := operationArtifactReference(service, nil); got != "" {
-		t.Fatalf("idle operation artifact reference = %q, want empty", got)
-	}
-}
-
 func TestHardenedDockerCreateRequestUsesExactIdentityAndLoopbackOnly(t *testing.T) {
 	t.Parallel()
 	service := &pfregistry.ManagedService{ServiceID: "mws_one", WorkspacePath: "/workspace/project", RuntimePort: 43123}

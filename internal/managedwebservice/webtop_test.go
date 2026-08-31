@@ -48,28 +48,6 @@ func TestWebtopArtifactsPinEverySupportedArchitecture(t *testing.T) {
 	}
 }
 
-func TestWebtopUpdateOperationProjectsTheTargetArtifact(t *testing.T) {
-	t.Parallel()
-	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
-		t.Skip("Webtop artifacts support amd64 and arm64")
-	}
-	service := pfregistry.ManagedService{
-		TemplateID:        WebtopUbuntuKDETemplateID,
-		Deployment:        string(DeploymentContainer),
-		TemplateRevision:  0,
-		ArtifactReference: webtopImage + "@sha256:" + strings.Repeat("f", 64),
-	}
-	operation := &pfregistry.ManagedOperation{Action: "update"}
-	artifact, ok := auditedWebtopArtifact(service.TemplateID, "linux-"+runtime.GOARCH)
-	if !ok {
-		t.Fatal("current Webtop artifact is unavailable")
-	}
-	want := artifact.Image + "@" + artifact.Digest
-	if got := operationArtifactReference(service, operation); got != want {
-		t.Fatalf("update artifact reference = %q, want %q", got, want)
-	}
-}
-
 func TestCatalogIncludesIndependentWebtopTemplatesWithDeclarativeSafety(t *testing.T) {
 	t.Parallel()
 	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
@@ -231,7 +209,7 @@ func TestWebtopArtifactPreparationRejectsAnyDigestDrift(t *testing.T) {
 	}
 	driver := containerTemplateDriver{adapter: adapter}
 	spec := webtopTemplateSpec(WebtopUbuntuKDETemplateID, dockerArtifact{Image: webtopImage, Digest: "sha256:" + strings.Repeat("a", 64)})
-	if _, err := driver.PrepareUpdateArtifact(context.Background(), spec); managedErrorCode(err) != "IMAGE_DIGEST_MISMATCH" {
+	if _, err := driver.PrepareUpdateArtifact(context.Background(), spec, discardOperationProgress); managedErrorCode(err) != "IMAGE_DIGEST_MISMATCH" {
 		t.Fatalf("digest drift error = %v", err)
 	}
 }
@@ -355,7 +333,7 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 			_, _ = client.Action(context.Background(), containerengine.EngineActionRequest{Engine: containerengine.EngineDocker, Method: containerengine.MethodRemove, ContainerID: customContainerName(service.ServiceID), Force: true})
 			_ = adapter.RemoveVolume(context.Background(), containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: volumeName})
 		})
-		runtimeID, artifactReference, err := driver.Install(ctx, service, catalogPayload{}, func(string, int64) {})
+		runtimeID, artifactReference, err := driver.Install(ctx, service, catalogPayload{}, discardOperationProgress)
 		if err != nil {
 			t.Fatalf("install %s: %v", templateID, err)
 		}
@@ -393,7 +371,7 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 	}
 
 	for _, item := range running {
-		if err := driver.Uninstall(ctx, item.service, false, func(string, int64) {}); err != nil {
+		if err := driver.Uninstall(ctx, item.service, false, discardOperationProgress); err != nil {
 			t.Fatalf("retain-data uninstall %s: %v", item.service.TemplateID, err)
 		}
 		item.service.RuntimeIdentity = ""
@@ -408,7 +386,7 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 		if err := exec.CommandContext(ctx, "docker", "exec", runtimeID, "test", "-f", "/config/redeven-config-marker.txt").Run(); err != nil {
 			t.Fatalf("retained config %s: %v", item.service.TemplateID, err)
 		}
-		if err := driver.Uninstall(ctx, item.service, true, func(string, int64) {}); err != nil {
+		if err := driver.Uninstall(ctx, item.service, true, discardOperationProgress); err != nil {
 			t.Fatalf("delete-data uninstall %s: %v", item.service.TemplateID, err)
 		}
 		volumes, err := adapter.ListVolumes(ctx, containerengine.EngineDocker)

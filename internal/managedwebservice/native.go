@@ -45,7 +45,7 @@ type nativeDriver struct {
 	processes        map[string]nativeProcess
 }
 
-func (d *nativeDriver) Install(ctx context.Context, service *pfregistry.ManagedService, catalog catalogPayload, progress func(string, int64)) (string, string, error) {
+func (d *nativeDriver) Install(ctx context.Context, service *pfregistry.ManagedService, catalog catalogPayload, progress operationProgress) (string, string, error) {
 	if d.processes == nil {
 		d.processes = map[string]nativeProcess{}
 	}
@@ -65,7 +65,7 @@ func (d *nativeDriver) Install(ctx context.Context, service *pfregistry.ManagedS
 	return "", executable, err
 }
 
-func (d *nativeDriver) installRuntimeBundle(ctx context.Context, service *pfregistry.ManagedService, artifact nativeArtifact, installRoot string, progress func(string, int64)) (string, error) {
+func (d *nativeDriver) installRuntimeBundle(ctx context.Context, service *pfregistry.ManagedService, artifact nativeArtifact, installRoot string, progress operationProgress) (string, error) {
 	executable := filepath.Join(installRoot, filepath.FromSlash(artifact.ExecutableRelPath))
 	if err := verifyInstalledNativeRuntime(installRoot, artifact); err == nil {
 		return executable, nil
@@ -617,7 +617,7 @@ func (d *nativeDriver) Stop(ctx context.Context, service *pfregistry.ManagedServ
 	}
 }
 
-func (d *nativeDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+func (d *nativeDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress operationProgress) error {
 	progress("stopping", 2)
 	if err := d.Stop(ctx, service); err != nil {
 		return err

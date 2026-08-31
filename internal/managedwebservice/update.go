@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -44,7 +45,7 @@ type containerUpdateJournal struct {
 
 type containerUpdateDriver interface {
 	deploymentDriver
-	PrepareUpdateArtifact(context.Context, TemplateSpec) (string, error)
+	PrepareUpdateArtifact(context.Context, TemplateSpec, operationProgress) (string, error)
 	CreateRuntime(context.Context, *pfregistry.ManagedService, TemplateSpec, string) (string, error)
 	RemoveRuntime(context.Context, *pfregistry.ManagedService) error
 	VerifyRuntime(context.Context, *pfregistry.ManagedService, TemplateSpec) error
@@ -142,7 +143,7 @@ func (m *Manager) runUpdate(ctx context.Context, service *pfregistry.ManagedServ
 	journalPersisted = true
 
 	m.progress(op, "pulling", 2)
-	artifact, err := driver.PrepareUpdateArtifact(ctx, *target.Spec)
+	artifact, err := driver.PrepareUpdateArtifact(ctx, *target.Spec, m.operationProgress(op))
 	if err != nil {
 		return err
 	}
@@ -379,7 +380,9 @@ func (m *Manager) recoverInterruptedContainerUpdate(service *pfregistry.ManagedS
 			}
 			operation.State, operation.Stage = "succeeded", "completed"
 			operation.ProgressCurrent = operation.ProgressTotal
-			return m.registry.UpdateManagedOperation(context.Background(), *operation)
+			operation.FinishedAtUnixMs = time.Now().UnixMilli()
+			blank := ""
+			return m.registry.FinalizeManagedOperation(context.Background(), *operation, pfregistry.ManagedServicePatch{LastErrorCode: &blank, LastErrorMessage: &blank})
 		}
 		m.log.Warn("finalize verified interrupted managed Web Service update", "service_id", service.ServiceID, "error", specErr)
 	}

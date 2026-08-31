@@ -5,7 +5,10 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"time"
 )
@@ -71,22 +74,101 @@ type ManagedService struct {
 }
 
 type ManagedOperation struct {
-	OperationID        string `json:"operation_id"`
-	ServiceID          string `json:"service_id"`
-	RequestID          string `json:"request_id"`
-	RequestFingerprint string `json:"-"`
-	Action             string `json:"action"`
-	DeleteData         bool   `json:"delete_data,omitempty"`
-	State              string `json:"state"`
-	Stage              string `json:"stage"`
-	ProgressCurrent    int64  `json:"progress_current"`
-	ProgressTotal      int64  `json:"progress_total"`
-	CancelRequested    bool   `json:"cancel_requested"`
-	ErrorCode          string `json:"error_code,omitempty"`
-	ErrorMessage       string `json:"error_message,omitempty"`
-	CreatedAtUnixMs    int64  `json:"created_at_unix_ms"`
-	UpdatedAtUnixMs    int64  `json:"updated_at_unix_ms"`
-	FinishedAtUnixMs   int64  `json:"finished_at_unix_ms,omitempty"`
+	OperationID        string                          `json:"operation_id"`
+	ServiceID          string                          `json:"service_id"`
+	RequestID          string                          `json:"request_id"`
+	RequestFingerprint string                          `json:"-"`
+	Action             string                          `json:"action"`
+	DeleteData         bool                            `json:"delete_data,omitempty"`
+	State              string                          `json:"state"`
+	Stage              string                          `json:"stage"`
+	ProgressCurrent    int64                           `json:"progress_current"`
+	ProgressTotal      int64                           `json:"progress_total"`
+	ProgressDetail     *ManagedOperationProgressDetail `json:"progress_detail,omitempty"`
+	CancelRequested    bool                            `json:"cancel_requested"`
+	ErrorCode          string                          `json:"error_code,omitempty"`
+	ErrorMessage       string                          `json:"error_message,omitempty"`
+	CreatedAtUnixMs    int64                           `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs    int64                           `json:"updated_at_unix_ms"`
+	FinishedAtUnixMs   int64                           `json:"finished_at_unix_ms,omitempty"`
+}
+
+const ManagedOperationProgressDetailSchemaVersion = 1
+
+const emptyManagedOperationProgressDetailJSON = `{"schema_version":1}`
+
+const managedOperationSelectColumns = "operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json"
+
+type ManagedOperationProgressDetail struct {
+	SchemaVersion        int                               `json:"schema_version"`
+	StageStartedAtUnixMs int64                             `json:"stage_started_at_unix_ms,omitempty"`
+	UpdatedAtUnixMs      int64                             `json:"updated_at_unix_ms,omitempty"`
+	Transfer             *ManagedOperationTransferProgress `json:"transfer,omitempty"`
+}
+
+type ManagedOperationTransferProgress struct {
+	Phase             string `json:"phase,omitempty"`
+	ArtifactReference string `json:"artifact_reference,omitempty"`
+	ArtifactIndex     int64  `json:"artifact_index,omitempty"`
+	ArtifactTotal     int64  `json:"artifact_total,omitempty"`
+	DownloadedBytes   int64  `json:"downloaded_bytes,omitempty"`
+	TotalBytes        int64  `json:"total_bytes,omitempty"`
+	BytesPerSecond    int64  `json:"bytes_per_second,omitempty"`
+	CompletedLayers   int64  `json:"completed_layers,omitempty"`
+	TotalLayers       int64  `json:"total_layers,omitempty"`
+}
+
+func canonicalManagedOperationProgressDetail(detail ManagedOperationProgressDetail) (ManagedOperationProgressDetail, string, error) {
+	if detail.SchemaVersion == 0 {
+		detail.SchemaVersion = ManagedOperationProgressDetailSchemaVersion
+	}
+	if detail.SchemaVersion != ManagedOperationProgressDetailSchemaVersion {
+		return ManagedOperationProgressDetail{}, "", fmt.Errorf("unsupported schema_version %d", detail.SchemaVersion)
+	}
+	if detail.StageStartedAtUnixMs < 0 || detail.UpdatedAtUnixMs < 0 {
+		return ManagedOperationProgressDetail{}, "", errors.New("progress detail timestamps must not be negative")
+	}
+	if transfer := detail.Transfer; transfer != nil {
+		if transfer.ArtifactIndex < 0 || transfer.ArtifactTotal < 0 || transfer.DownloadedBytes < 0 || transfer.TotalBytes < 0 || transfer.BytesPerSecond < 0 || transfer.CompletedLayers < 0 || transfer.TotalLayers < 0 {
+			return ManagedOperationProgressDetail{}, "", errors.New("transfer progress values must not be negative")
+		}
+		if transfer.ArtifactTotal > 0 && transfer.ArtifactIndex > transfer.ArtifactTotal {
+			return ManagedOperationProgressDetail{}, "", errors.New("transfer artifact index exceeds artifact total")
+		}
+		if transfer.TotalBytes > 0 && transfer.DownloadedBytes > transfer.TotalBytes {
+			transfer.DownloadedBytes = transfer.TotalBytes
+		}
+		if transfer.TotalLayers > 0 && transfer.CompletedLayers > transfer.TotalLayers {
+			transfer.CompletedLayers = transfer.TotalLayers
+		}
+	}
+	raw, err := json.Marshal(detail)
+	if err != nil {
+		return ManagedOperationProgressDetail{}, "", err
+	}
+	return detail, string(raw), nil
+}
+
+func decodeManagedOperationProgressDetail(raw string) (ManagedOperationProgressDetail, string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return ManagedOperationProgressDetail{}, "", errors.New("progress detail must not be empty")
+	}
+	decoder := json.NewDecoder(strings.NewReader(strings.TrimSpace(raw)))
+	decoder.DisallowUnknownFields()
+	detail := ManagedOperationProgressDetail{}
+	if err := decoder.Decode(&detail); err != nil {
+		return ManagedOperationProgressDetail{}, "", err
+	}
+	if detail.SchemaVersion != ManagedOperationProgressDetailSchemaVersion {
+		return ManagedOperationProgressDetail{}, "", fmt.Errorf("unsupported schema_version %d", detail.SchemaVersion)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return ManagedOperationProgressDetail{}, "", errors.New("progress detail contains multiple JSON values")
+		}
+		return ManagedOperationProgressDetail{}, "", err
+	}
+	return canonicalManagedOperationProgressDetail(detail)
 }
 
 type ManagedServicePatch struct {
@@ -352,12 +434,20 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 	if forward.UpdatedAtUnixMs <= 0 {
 		forward.UpdatedAtUnixMs = forward.CreatedAtUnixMs
 	}
+	operationProgressDetailJSON := emptyManagedOperationProgressDetailJSON
 	if operation != nil {
 		if operation.CreatedAtUnixMs <= 0 {
 			operation.CreatedAtUnixMs = now
 		}
 		if operation.UpdatedAtUnixMs <= 0 {
 			operation.UpdatedAtUnixMs = operation.CreatedAtUnixMs
+		}
+		if operation.ProgressDetail != nil {
+			detail, raw, detailErr := canonicalManagedOperationProgressDetail(*operation.ProgressDetail)
+			if detailErr != nil {
+				return detailErr
+			}
+			operation.ProgressDetail, operationProgressDetailJSON = &detail, raw
 		}
 	}
 	tx, err := r.db.BeginTx(nonNilContext(ctx), nil)
@@ -376,7 +466,7 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 		return err
 	}
 	if operation != nil {
-		if _, err = tx.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, operation.OperationID, operation.ServiceID, operation.RequestID, operation.RequestFingerprint, operation.Action, boolToInt(operation.DeleteData), operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.CreatedAtUnixMs, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs); err != nil {
+		if _, err = tx.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, operation.OperationID, operation.ServiceID, operation.RequestID, operation.RequestFingerprint, operation.Action, boolToInt(operation.DeleteData), operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.CreatedAtUnixMs, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs, operationProgressDetailJSON); err != nil {
 			return err
 		}
 	}
@@ -589,7 +679,16 @@ func (r *Registry) CompleteManagedServiceUninstall(ctx context.Context, serviceI
 		return err
 	}
 	operation.UpdatedAtUnixMs = time.Now().UnixMilli()
-	result, err := tx.Exec(`UPDATE managed_web_service_operations SET state=?,stage=?,progress_current=?,progress_total=?,cancel_requested=?,error_code=?,error_message=?,updated_at_unix_ms=?,finished_at_unix_ms=? WHERE operation_id=? AND service_id=?`, operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs, operation.OperationID, strings.TrimSpace(serviceID))
+	progressDetailJSON := emptyManagedOperationProgressDetailJSON
+	if operation.ProgressDetail != nil {
+		operation.ProgressDetail.UpdatedAtUnixMs = operation.UpdatedAtUnixMs
+		detail, raw, detailErr := canonicalManagedOperationProgressDetail(*operation.ProgressDetail)
+		if detailErr != nil {
+			return detailErr
+		}
+		operation.ProgressDetail, progressDetailJSON = &detail, raw
+	}
+	result, err := tx.Exec(`UPDATE managed_web_service_operations SET state=?,stage=?,progress_current=?,progress_total=?,cancel_requested=?,error_code=?,error_message=?,updated_at_unix_ms=?,finished_at_unix_ms=?,progress_detail_json=? WHERE operation_id=? AND service_id=?`, operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs, progressDetailJSON, operation.OperationID, strings.TrimSpace(serviceID))
 	if err != nil {
 		return err
 	}
@@ -619,7 +718,15 @@ func (r *Registry) CreateManagedOperation(ctx context.Context, operation Managed
 	if operation.UpdatedAtUnixMs <= 0 {
 		operation.UpdatedAtUnixMs = operation.CreatedAtUnixMs
 	}
-	_, err := r.db.ExecContext(nonNilContext(ctx), `INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, operation.OperationID, operation.ServiceID, operation.RequestID, operation.RequestFingerprint, operation.Action, boolToInt(operation.DeleteData), operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.CreatedAtUnixMs, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs)
+	progressDetailJSON := emptyManagedOperationProgressDetailJSON
+	if operation.ProgressDetail != nil {
+		detail, raw, detailErr := canonicalManagedOperationProgressDetail(*operation.ProgressDetail)
+		if detailErr != nil {
+			return detailErr
+		}
+		operation.ProgressDetail, progressDetailJSON = &detail, raw
+	}
+	_, err := r.db.ExecContext(nonNilContext(ctx), `INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, operation.OperationID, operation.ServiceID, operation.RequestID, operation.RequestFingerprint, operation.Action, boolToInt(operation.DeleteData), operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.CreatedAtUnixMs, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs, progressDetailJSON)
 	return err
 }
 
@@ -631,15 +738,19 @@ func (r *Registry) GetManagedOperationByRequestID(ctx context.Context, requestID
 }
 
 func (r *Registry) GetLatestManagedOperation(ctx context.Context, serviceID string) (*ManagedOperation, error) {
-	return r.queryManagedOperation(ctx, `SELECT operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms FROM managed_web_service_operations WHERE service_id = ? ORDER BY created_at_unix_ms DESC, operation_id DESC LIMIT 1`, serviceID)
+	return r.queryManagedOperation(ctx, `SELECT `+managedOperationSelectColumns+` FROM managed_web_service_operations WHERE service_id = ? ORDER BY created_at_unix_ms DESC, operation_id DESC LIMIT 1`, serviceID)
 }
 
 func (r *Registry) GetActiveManagedOperation(ctx context.Context, serviceID string) (*ManagedOperation, error) {
-	return r.queryManagedOperation(ctx, `SELECT operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms FROM managed_web_service_operations WHERE service_id = ? AND state IN ('pending','running','cancelling') ORDER BY created_at_unix_ms DESC, operation_id DESC LIMIT 1`, serviceID)
+	return r.queryManagedOperation(ctx, `SELECT `+managedOperationSelectColumns+` FROM managed_web_service_operations WHERE service_id = ? AND state IN ('pending','running','cancelling') ORDER BY created_at_unix_ms DESC, operation_id DESC LIMIT 1`, serviceID)
+}
+
+func (r *Registry) GetLatestManagedOperationFailure(ctx context.Context, serviceID string) (*ManagedOperation, error) {
+	return r.queryManagedOperation(ctx, `SELECT `+managedOperationSelectColumns+` FROM managed_web_service_operations WHERE service_id = ? AND error_code <> '' AND state IN ('failed','cancelled','interrupted') ORDER BY finished_at_unix_ms DESC, updated_at_unix_ms DESC, operation_id DESC LIMIT 1`, serviceID)
 }
 
 func (r *Registry) getManagedOperation(ctx context.Context, column, value string) (*ManagedOperation, error) {
-	return r.queryManagedOperation(ctx, `SELECT operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms FROM managed_web_service_operations WHERE `+column+` = ?`, value)
+	return r.queryManagedOperation(ctx, `SELECT `+managedOperationSelectColumns+` FROM managed_web_service_operations WHERE `+column+` = ?`, value)
 }
 
 func (r *Registry) queryManagedOperation(ctx context.Context, query, value string) (*ManagedOperation, error) {
@@ -648,7 +759,8 @@ func (r *Registry) queryManagedOperation(ctx context.Context, query, value strin
 	}
 	op := ManagedOperation{}
 	var cancel, deleteData int
-	err := r.db.QueryRowContext(nonNilContext(ctx), query, strings.TrimSpace(value)).Scan(&op.OperationID, &op.ServiceID, &op.RequestID, &op.RequestFingerprint, &op.Action, &deleteData, &op.State, &op.Stage, &op.ProgressCurrent, &op.ProgressTotal, &cancel, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAtUnixMs, &op.UpdatedAtUnixMs, &op.FinishedAtUnixMs)
+	var progressDetailJSON sql.NullString
+	err := r.db.QueryRowContext(nonNilContext(ctx), query, strings.TrimSpace(value)).Scan(&op.OperationID, &op.ServiceID, &op.RequestID, &op.RequestFingerprint, &op.Action, &deleteData, &op.State, &op.Stage, &op.ProgressCurrent, &op.ProgressTotal, &cancel, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAtUnixMs, &op.UpdatedAtUnixMs, &op.FinishedAtUnixMs, &progressDetailJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -657,6 +769,14 @@ func (r *Registry) queryManagedOperation(ctx context.Context, query, value strin
 	}
 	op.CancelRequested = cancel != 0
 	op.DeleteData = deleteData != 0
+	if !progressDetailJSON.Valid {
+		return nil, fmt.Errorf("managed Web Service operation %s progress detail is missing", op.OperationID)
+	}
+	detail, _, detailErr := decodeManagedOperationProgressDetail(progressDetailJSON.String)
+	if detailErr != nil {
+		return nil, fmt.Errorf("managed Web Service operation %s progress detail: %w", op.OperationID, detailErr)
+	}
+	op.ProgressDetail = &detail
 	return &op, nil
 }
 
@@ -671,7 +791,16 @@ func (r *Registry) UpdateManagedOperation(ctx context.Context, op ManagedOperati
 		return errors.New("registry not initialized")
 	}
 	op.UpdatedAtUnixMs = time.Now().UnixMilli()
-	result, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_service_operations SET state=?,stage=?,progress_current=?,progress_total=?,cancel_requested=?,error_code=?,error_message=?,updated_at_unix_ms=?,finished_at_unix_ms=? WHERE operation_id=?`, op.State, op.Stage, op.ProgressCurrent, op.ProgressTotal, boolToInt(op.CancelRequested), op.ErrorCode, op.ErrorMessage, op.UpdatedAtUnixMs, op.FinishedAtUnixMs, op.OperationID)
+	progressDetailJSON := emptyManagedOperationProgressDetailJSON
+	if op.ProgressDetail != nil {
+		op.ProgressDetail.UpdatedAtUnixMs = op.UpdatedAtUnixMs
+		detail, raw, detailErr := canonicalManagedOperationProgressDetail(*op.ProgressDetail)
+		if detailErr != nil {
+			return detailErr
+		}
+		op.ProgressDetail, progressDetailJSON = &detail, raw
+	}
+	result, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_service_operations SET state=?,stage=?,progress_current=?,progress_total=?,cancel_requested=?,error_code=?,error_message=?,updated_at_unix_ms=?,finished_at_unix_ms=?,progress_detail_json=? WHERE operation_id=?`, op.State, op.Stage, op.ProgressCurrent, op.ProgressTotal, boolToInt(op.CancelRequested), op.ErrorCode, op.ErrorMessage, op.UpdatedAtUnixMs, op.FinishedAtUnixMs, progressDetailJSON, op.OperationID)
 	if err != nil {
 		return err
 	}
@@ -685,10 +814,135 @@ func (r *Registry) UpdateManagedOperation(ctx context.Context, op ManagedOperati
 	return nil
 }
 
+// FinalizeManagedOperation commits the terminal operation and its service state
+// transition together. Failure diagnostics must never point at an operation
+// state that was not committed, or vice versa.
+func (r *Registry) FinalizeManagedOperation(ctx context.Context, op ManagedOperation, patch ManagedServicePatch) error {
+	if r == nil || r.db == nil {
+		return errors.New("registry not initialized")
+	}
+	if op.FinishedAtUnixMs <= 0 {
+		return errors.New("managed web service operation is not terminal")
+	}
+	op.UpdatedAtUnixMs = time.Now().UnixMilli()
+	progressDetailJSON := emptyManagedOperationProgressDetailJSON
+	if op.ProgressDetail != nil {
+		op.ProgressDetail.UpdatedAtUnixMs = op.UpdatedAtUnixMs
+		detail, raw, detailErr := canonicalManagedOperationProgressDetail(*op.ProgressDetail)
+		if detailErr != nil {
+			return detailErr
+		}
+		op.ProgressDetail, progressDetailJSON = &detail, raw
+	}
+	tx, err := r.db.BeginTx(nonNilContext(ctx), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.Exec(`UPDATE managed_web_service_operations SET state=?,stage=?,progress_current=?,progress_total=?,cancel_requested=?,error_code=?,error_message=?,updated_at_unix_ms=?,finished_at_unix_ms=?,progress_detail_json=? WHERE operation_id=? AND service_id=?`, op.State, op.Stage, op.ProgressCurrent, op.ProgressTotal, boolToInt(op.CancelRequested), op.ErrorCode, op.ErrorMessage, op.UpdatedAtUnixMs, op.FinishedAtUnixMs, progressDetailJSON, strings.TrimSpace(op.OperationID), strings.TrimSpace(op.ServiceID))
+	if err != nil {
+		return err
+	}
+	if count, err := result.RowsAffected(); err != nil || count != 1 {
+		if err != nil {
+			return err
+		}
+		return errors.New("managed web service operation not found")
+	}
+	sets, args := []string{}, []any{}
+	add := func(column string, value any) { sets = append(sets, column+" = ?"); args = append(args, value) }
+	if patch.DesiredState != nil {
+		add("desired_state", strings.TrimSpace(*patch.DesiredState))
+	}
+	if patch.ObservedState != nil {
+		add("observed_state", strings.TrimSpace(*patch.ObservedState))
+	}
+	if patch.RuntimeIdentity != nil {
+		add("runtime_identity", strings.TrimSpace(*patch.RuntimeIdentity))
+	}
+	if patch.RuntimeManifestJSON != nil {
+		add("runtime_manifest_json", strings.TrimSpace(*patch.RuntimeManifestJSON))
+	}
+	if patch.LastErrorCode != nil {
+		add("last_error_code", strings.TrimSpace(*patch.LastErrorCode))
+	}
+	if patch.LastErrorMessage != nil {
+		add("last_error_message", strings.TrimSpace(*patch.LastErrorMessage))
+	}
+	if len(sets) > 0 {
+		add("updated_at_unix_ms", op.UpdatedAtUnixMs)
+		args = append(args, strings.TrimSpace(op.ServiceID))
+		result, err = tx.Exec(`UPDATE managed_web_services SET `+strings.Join(sets, ", ")+` WHERE service_id = ?`, args...)
+		if err != nil {
+			return err
+		}
+		if count, err := result.RowsAffected(); err != nil || count != 1 {
+			if err != nil {
+				return err
+			}
+			return ErrManagedServiceNotFound
+		}
+	}
+	return tx.Commit()
+}
+
 func (r *Registry) MarkManagedOperationsInterrupted(ctx context.Context) error {
+	if r == nil || r.db == nil {
+		return errors.New("registry not initialized")
+	}
 	now := time.Now().UnixMilli()
-	_, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_service_operations SET state='interrupted',stage='interrupted',error_code='OPERATION_INTERRUPTED',error_message='The runtime stopped before this operation completed.',updated_at_unix_ms=?,finished_at_unix_ms=? WHERE state IN ('pending','running','cancelling')`, now, now)
-	return err
+	tx, err := r.db.BeginTx(nonNilContext(ctx), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.Query(`SELECT operation_id, service_id, progress_detail_json FROM managed_web_service_operations WHERE state IN ('pending','running','cancelling') ORDER BY operation_id`)
+	if err != nil {
+		return err
+	}
+	type interruptedDetail struct{ operationID, serviceID, raw string }
+	var details []interruptedDetail
+	for rows.Next() {
+		var operationID, serviceID, raw string
+		if err := rows.Scan(&operationID, &serviceID, &raw); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		detail, _, detailErr := decodeManagedOperationProgressDetail(raw)
+		if detailErr != nil {
+			_ = rows.Close()
+			return fmt.Errorf("managed Web Service operation %s progress detail: %w", operationID, detailErr)
+		}
+		detail.StageStartedAtUnixMs, detail.UpdatedAtUnixMs = now, now
+		_, canonical, err := canonicalManagedOperationProgressDetail(detail)
+		if err != nil {
+			_ = rows.Close()
+			return err
+		}
+		details = append(details, interruptedDetail{operationID: operationID, serviceID: serviceID, raw: canonical})
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, detail := range details {
+		if _, err := tx.Exec(`UPDATE managed_web_service_operations SET state='interrupted',stage='interrupted',error_code='OPERATION_INTERRUPTED',error_message='The runtime stopped before this operation completed.',updated_at_unix_ms=?,finished_at_unix_ms=?,progress_detail_json=? WHERE operation_id=?`, now, now, detail.raw, detail.operationID); err != nil {
+			return err
+		}
+		result, err := tx.Exec(`UPDATE managed_web_services SET desired_state='stopped',observed_state='error',last_error_code='OPERATION_INTERRUPTED',last_error_message='The runtime stopped before this operation completed.',updated_at_unix_ms=? WHERE service_id=?`, now, detail.serviceID)
+		if err != nil {
+			return err
+		}
+		if count, err := result.RowsAffected(); err != nil || count != 1 {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("managed Web Service %s for interrupted operation %s was not found", detail.serviceID, detail.operationID)
+		}
+	}
+	return tx.Commit()
 }
 
 func nonNilContext(ctx context.Context) context.Context {

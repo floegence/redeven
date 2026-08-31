@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -344,8 +345,9 @@ func (m *Manager) recoverInterruptedReconfigure(service *pfregistry.ManagedServi
 		m.removeReconfigureStage(service.ServiceID, journal.OperationID)
 		operation.State, operation.Stage = "succeeded", "completed"
 		operation.ProgressCurrent = operationProgressTotal
-		m.saveAndPublish(operation)
-		return nil
+		operation.FinishedAtUnixMs = time.Now().UnixMilli()
+		blank := ""
+		return m.registry.FinalizeManagedOperation(context.Background(), *operation, pfregistry.ManagedServicePatch{LastErrorCode: &blank, LastErrorMessage: &blank})
 	}
 	return m.rollbackReconfigure(context.Background(), service, journal, driver)
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,7 +17,7 @@ import (
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestOpen_CreatesV5SchemaForFreshDB(t *testing.T) {
+func TestOpen_CreatesV6SchemaForFreshDB(t *testing.T) {
 	t.Parallel()
 
 	p := filepath.Join(t.TempDir(), "registry.sqlite")
@@ -30,8 +31,8 @@ func TestOpen_CreatesV5SchemaForFreshDB(t *testing.T) {
 	if err := r.db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	if v != 5 {
-		t.Fatalf("user_version = %d, want 5", v)
+	if v != 6 {
+		t.Fatalf("user_version = %d, want 6", v)
 	}
 
 	cols, err := tableColumns(r.db, "port_forwards")
@@ -64,6 +65,13 @@ func TestOpen_CreatesV5SchemaForFreshDB(t *testing.T) {
 			t.Fatalf("missing managed service column %q in %v", column, managedColumns)
 		}
 	}
+	operationColumns, err := tableColumns(r.db, "managed_web_service_operations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(operationColumns, "progress_detail_json") {
+		t.Fatalf("missing managed operation progress detail column in %v", operationColumns)
+	}
 }
 
 func TestOpen_MigratesV1AndPreservesForwards(t *testing.T) {
@@ -91,7 +99,7 @@ func TestOpen_MigratesV1AndPreservesForwards(t *testing.T) {
 		t.Fatalf("preserved forward = %+v, err=%v", forward, err)
 	}
 	var version int
-	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 5 {
+	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 6 {
 		t.Fatalf("migrated version=%d, err=%v", version, err)
 	}
 }
@@ -196,6 +204,10 @@ func TestOpen_RollsBackFailedV3ToV4Migration(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
+	before, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	spec := registrySchemaSpec()
 	original := spec.Migrations[3].Apply
@@ -207,6 +219,13 @@ func TestOpen_RollsBackFailedV3ToV4Migration(t *testing.T) {
 	}
 	if _, err := sqliteutil.Open(p, spec); err == nil {
 		t.Fatal("migration unexpectedly succeeded")
+	}
+	after, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(after, before) {
+		t.Fatal("failed migration changed the registry database bytes")
 	}
 	raw, err := sql.Open("sqlite", p)
 	if err != nil {
@@ -327,6 +346,199 @@ func TestOpen_MigratesV4ManagedConfigurationAtomically(t *testing.T) {
 	resources, err := r.ListManagedServiceResources(context.Background(), service.ServiceID)
 	if err != nil || len(resources) != 0 {
 		t.Fatalf("resources=%v err=%v", resources, err)
+	}
+}
+
+func TestOpen_MigratesV5OperationDetailsWithoutRewritingManagedData(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV5TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := `{"schema_version":2,"parameters":{"TOKEN":"kept"}}`
+	configurationDigest := sha256.Sum256([]byte(configuration))
+	snapshot := `{"schema_version":1,"kind":"container","endpoint":{"scheme":"http","container_port":3000},"container":{"image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","resource_id":"runtime"}}`
+	snapshotDigest := sha256.Sum256([]byte(snapshot))
+	secretsPath := filepath.Join(filepath.Dir(p), "mws_keep.secrets.json")
+	secrets := []byte(`{"schema_version":1,"values":{"TOKEN":"preserved-secret"}}`)
+	if err := os.WriteFile(secretsPath, secrets, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES('pf_keep','http://127.0.0.1:3080','Keep','','',0,1,2,3,'unified_proxy')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256) VALUES('mws_keep','template','custom',4,?,?, 'family','container','/workspace',?,'1','stopped','error','pf_keep','container-1','{"kind":"managed_service_reconfigure_v1"}',3080,'example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','IMAGE_PULL_FAILED','The image could not be pulled.',4,5,7,?)`, snapshot, hex.EncodeToString(snapshotDigest[:]), configuration, hex.EncodeToString(configurationDigest[:])); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_service_templates(template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES('template','Preserved template','Description','custom','container','1',4,?,?,'',0,'family',6,7)`, snapshot, hex.EncodeToString(snapshotDigest[:])); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_service_resources(service_id,resource_id,kind,engine_identity,created_at_unix_ms) VALUES('mws_keep','resource-keep','container','container-1',8)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms) VALUES('mop_keep','mws_keep','request-keep','fingerprint','install',0,'failed','pulling',2,7,0,'IMAGE_PULL_FAILED','The image could not be pulled.',10,11,12)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	service, err := r.GetManagedService(context.Background(), "mws_keep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if service == nil || service.ConfigurationJSON != configuration || service.ConfigurationSHA256 != hex.EncodeToString(configurationDigest[:]) || service.ConfigurationRevision != 7 || service.TemplateSnapshotJSON != snapshot || service.TemplateSnapshotSHA256 != hex.EncodeToString(snapshotDigest[:]) || service.RuntimeManifestJSON != `{"kind":"managed_service_reconfigure_v1"}` || service.LastErrorCode != "IMAGE_PULL_FAILED" {
+		t.Fatalf("migrated service changed: %+v", service)
+	}
+	operation, err := r.GetManagedOperation(context.Background(), "mop_keep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation == nil || operation.Action != "install" || operation.Stage != "pulling" || operation.ErrorCode != "IMAGE_PULL_FAILED" || operation.CreatedAtUnixMs != 10 || operation.FinishedAtUnixMs != 12 || operation.ProgressDetail == nil || operation.ProgressDetail.SchemaVersion != 1 || operation.ProgressDetail.Transfer != nil {
+		t.Fatalf("migrated operation changed: %+v", operation)
+	}
+	template, err := r.GetManagedTemplate(context.Background(), "template")
+	if err != nil || template == nil || template.Name != "Preserved template" || template.SpecJSON != snapshot || template.SpecSHA256 != hex.EncodeToString(snapshotDigest[:]) {
+		t.Fatalf("migrated template=%+v err=%v", template, err)
+	}
+	resources, err := r.ListManagedServiceResources(context.Background(), "mws_keep")
+	if err != nil || len(resources) != 1 || resources[0].ResourceID != "resource-keep" || resources[0].EngineIdentity != "container-1" {
+		t.Fatalf("migrated resources=%+v err=%v", resources, err)
+	}
+	gotSecrets, err := os.ReadFile(secretsPath)
+	if err != nil || !slices.Equal(gotSecrets, secrets) {
+		t.Fatalf("managed service secrets changed: %q err=%v", gotSecrets, err)
+	}
+}
+
+func TestOpen_RollsBackFailedV5ToV6Migration(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV5TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms) VALUES('mop_keep','mws_keep','request-keep','fingerprint','start',0,'failed','starting',4,7,0,'START_FAILED','Start failed.',10,11,12)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	spec := registrySchemaSpec()
+	original := spec.Migrations[5].Apply
+	spec.Migrations[5].Apply = func(tx *sql.Tx) error {
+		if err := original(tx); err != nil {
+			return err
+		}
+		return errors.New("injected migration failure")
+	}
+	if _, err := sqliteutil.Open(p, spec); err == nil {
+		t.Fatal("migration unexpectedly succeeded")
+	}
+	raw, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var version, operations int
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM managed_web_service_operations WHERE operation_id='mop_keep' AND error_code='START_FAILED' AND finished_at_unix_ms=12`).Scan(&operations); err != nil {
+		t.Fatal(err)
+	}
+	columns, err := tableColumns(raw, "managed_web_service_operations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != 5 || operations != 1 || slices.Contains(columns, "progress_detail_json") {
+		t.Fatalf("failed migration changed v5 database: version=%d operations=%d columns=%v", version, operations, columns)
+	}
+}
+
+func TestOpenRejectsCorruptV6OperationProgressDetail(t *testing.T) {
+	t.Parallel()
+	for name, detail := range map[string]string{
+		"future schema":  `{"schema_version":999}`,
+		"missing schema": `{}`,
+		"unknown field":  `{"schema_version":1,"future":true}`,
+	} {
+		name, detail := name, detail
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := filepath.Join(t.TempDir(), "registry.sqlite")
+			r, err := Open(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.db.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES('mop_optional','mws_optional','request','fingerprint','install',0,'failed','failed',2,7,0,'IMAGE_PULL_FAILED','Pull failed.',1,2,2,?)`, detail); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if reopened, err := Open(p); err == nil {
+				_ = reopened.Close()
+				t.Fatal("Open accepted a corrupt v6 progress detail")
+			} else if !strings.Contains(err.Error(), "progress detail") {
+				t.Fatalf("Open error = %v, want actionable progress detail diagnostic", err)
+			}
+		})
+	}
+}
+
+func TestOpenRollsBackV5ToV6WhenManagedDocumentDigestIsInvalid(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV5TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_service_templates(template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES('drifted','Drifted','','custom','host','1',1,'{"schema_version":1}',?,'',0,'drifted-family',1,1)`, strings.Repeat("0", 64)); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(p); err == nil || !strings.Contains(err.Error(), "SHA-256 mismatch") {
+		t.Fatalf("Open error=%v, want managed document digest diagnostic", err)
+	}
+	after, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(after, before) {
+		t.Fatal("failed verification changed the registry database bytes")
+	}
+	raw, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var version int
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	columns, err := tableColumns(raw, "managed_web_service_operations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != 5 || slices.Contains(columns, "progress_detail_json") {
+		t.Fatalf("failed digest verification changed v5 database: version=%d columns=%v", version, columns)
 	}
 }
 
@@ -510,7 +722,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 		_ = r.Close()
 		t.Fatal(err)
 	}
-	if _, err := r.db.Exec(`PRAGMA user_version=6`); err != nil {
+	if _, err := r.db.Exec(`PRAGMA user_version=7`); err != nil {
 		_ = r.Close()
 		t.Fatal(err)
 	}
@@ -532,8 +744,92 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE forward_id='keep'`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if version != 6 || count != 1 {
+	if version != 7 || count != 1 {
 		t.Fatalf("future database changed: version=%d forward_count=%d", version, count)
+	}
+}
+
+func TestOpenRejectsWrongRegistryKindWithoutChangingIt(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, sqliteutil.Spec{
+		Kind:           "other_registry",
+		CurrentVersion: 1,
+		Migrations: []sqliteutil.Migration{{FromVersion: 0, ToVersion: 1, Apply: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`CREATE TABLE other_records(record_id TEXT PRIMARY KEY)`)
+			return err
+		}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO other_records(record_id) VALUES('keep')`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(p); err == nil || !strings.Contains(err.Error(), "wrong database kind") {
+		t.Fatalf("Open error=%v, want wrong database kind", err)
+	}
+	raw, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var version, count int
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM other_records WHERE record_id='keep'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if version != 1 || count != 1 {
+		t.Fatalf("wrong-kind database changed: version=%d records=%d", version, count)
+	}
+}
+
+func TestOpenV6IsIdempotent(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	r, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CreateForward(context.Background(), Forward{ForwardID: "keep", TargetURL: "http://127.0.0.1:3000"}); err != nil {
+		_ = r.Close()
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		reopened, err := Open(p)
+		if err != nil {
+			t.Fatalf("Open attempt %d: %v", attempt+1, err)
+		}
+		forward, err := reopened.GetForward(context.Background(), "keep")
+		if err != nil || forward == nil || forward.TargetURL != "http://127.0.0.1:3000" {
+			_ = reopened.Close()
+			t.Fatalf("Open attempt %d forward=%+v err=%v", attempt+1, forward, err)
+		}
+		columns, err := tableColumns(reopened.db, "managed_web_service_operations")
+		progressDetailColumns := 0
+		for _, column := range columns {
+			if column == "progress_detail_json" {
+				progressDetailColumns++
+			}
+		}
+		if err != nil || progressDetailColumns != 1 {
+			_ = reopened.Close()
+			t.Fatalf("Open attempt %d operation columns=%v err=%v", attempt+1, columns, err)
+		}
+		if err := reopened.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -758,6 +1054,52 @@ func TestRegistry_CreateManagedServiceWithOperationRollsBackTogether(t *testing.
 	}
 }
 
+func TestFinalizeManagedOperationCommitsOperationAndServiceErrorAtomically(t *testing.T) {
+	t.Parallel()
+	r, err := Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	service := ManagedService{ServiceID: "mws_finalize", TemplateID: "template", TemplateSource: "custom", TemplateRevision: 1, ServiceFamilyID: "family", Deployment: "container", WorkspacePath: "/workspace", Version: "1", DesiredState: "running", ObservedState: "installing", ForwardID: "pf_finalize", RuntimePort: 3000}
+	forward := Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3000"}
+	op := ManagedOperation{OperationID: "mop_finalize", ServiceID: service.ServiceID, RequestID: "request-finalize", RequestFingerprint: "fingerprint", Action: "install", State: "pending", Stage: "pulling", ProgressTotal: 7}
+	if err := r.CreateManagedServiceWithOperation(context.Background(), service, forward, op); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.db.Exec(`CREATE TRIGGER reject_service_finalize BEFORE UPDATE ON managed_web_services BEGIN SELECT RAISE(ABORT, 'injected service update failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	op.State, op.Stage, op.ErrorCode, op.ErrorMessage, op.FinishedAtUnixMs = "failed", "failed", "IMAGE_PULL_FAILED", "The image could not be pulled.", 12
+	desired, observed := "stopped", "error"
+	patch := ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage}
+	if err := r.FinalizeManagedOperation(context.Background(), op, patch); err == nil {
+		t.Fatal("FinalizeManagedOperation unexpectedly ignored the service update failure")
+	}
+	storedOperation, err := r.GetManagedOperation(context.Background(), op.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storedService, err := r.GetManagedService(context.Background(), service.ServiceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedOperation == nil || storedOperation.State != "pending" || storedOperation.FinishedAtUnixMs != 0 || storedService == nil || storedService.ObservedState != "installing" || storedService.LastErrorCode != "" {
+		t.Fatalf("failed finalization partially committed: operation=%+v service=%+v", storedOperation, storedService)
+	}
+	if _, err := r.db.Exec(`DROP TRIGGER reject_service_finalize`); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.FinalizeManagedOperation(context.Background(), op, patch); err != nil {
+		t.Fatal(err)
+	}
+	storedOperation, _ = r.GetManagedOperation(context.Background(), op.OperationID)
+	storedService, _ = r.GetManagedService(context.Background(), service.ServiceID)
+	if storedOperation == nil || storedOperation.State != "failed" || storedService == nil || storedService.ObservedState != "error" || storedService.LastErrorCode != "IMAGE_PULL_FAILED" {
+		t.Fatalf("successful finalization did not commit together: operation=%+v service=%+v", storedOperation, storedService)
+	}
+}
+
 func TestUpdateManagedServiceCommitsTemplateAndRuntimeIdentityTogether(t *testing.T) {
 	t.Parallel()
 	r, err := Open(filepath.Join(t.TempDir(), "registry.sqlite"))
@@ -894,6 +1236,23 @@ func registryV4TestSpec() sqliteutil.Spec {
 		},
 		Verify: func(tx *sql.Tx) error {
 			return verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v4")
+		},
+	}
+}
+
+func registryV5TestSpec() sqliteutil.Spec {
+	return sqliteutil.Spec{
+		Kind: registrySchemaKind, CurrentVersion: 5,
+		Pragmas: []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 0, ToVersion: 1, Apply: migrateRegistryToV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryToV5},
+		},
+		Verify: func(tx *sql.Tx) error {
+			return verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v5")
 		},
 	}
 }

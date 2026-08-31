@@ -1,7 +1,7 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Check, ChevronDown, Copy, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
   Button,
@@ -35,6 +35,7 @@ import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { writeTextToClipboard } from '../utils/clipboard';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
@@ -115,8 +116,15 @@ type ManagedService = Readonly<{
   observed_state: string;
   forward_id: string;
   runtime_port: number;
-  last_error_code?: string;
-  last_error_message?: string;
+  last_failure?: Readonly<{
+    action?: ManagedOperation['action'];
+    stage?: string;
+    error_code: string;
+    message: string;
+    artifact_reference?: string;
+    operation_id?: string;
+    occurred_at_unix_ms?: number;
+  }>;
   brand_icon?: ManagedBrandIcon;
   localization_key?: string;
   update_available: boolean;
@@ -124,7 +132,6 @@ type ManagedService = Readonly<{
   target_version?: string;
   update_notices?: ReadonlyArray<ManagedTemplateNotice>;
   active_operation?: ManagedOperation;
-  operation_artifact_reference?: string;
   access_mode?: WebServiceAccessMode;
   container_resources?: ReadonlyArray<Readonly<{
     kind: 'container' | 'image' | 'compose_project';
@@ -757,6 +764,12 @@ function managedOperationFailureMessage(operation: ManagedOperation, fallback: s
 
 const managedOperationActive = (operation: ManagedOperation | null | undefined) => Boolean(operation && ['submitting', 'pending', 'running', 'cancelling'].includes(operation.state));
 
+function managedOperationActivityLabel(operation: ManagedOperation, i18n: WebServicesI18n): string {
+  return operation.state === 'submitting'
+    ? i18n.t('webServices.managed.operationStarting')
+    : `${managedActionLabel(operation.action, i18n)} · ${managedStageLabel(operation.stage, i18n)}`;
+}
+
 function managedOperationStages(operation: ManagedOperation, deployment: ManagedDeployment): readonly string[] {
   switch (operation.action) {
     case 'start': return ['starting', 'health_check', 'completed'];
@@ -788,34 +801,99 @@ function managedOperationStepState(operation: ManagedOperation, steps: readonly 
   return 'pending';
 }
 
-export function ManagedOperationProgress(props: {
+function formatManagedBytes(value: number | undefined): string {
+  const bytes = Math.max(0, Number(value ?? 0));
+  if (bytes < 1000) return `${Math.round(bytes)} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let scaled = bytes;
+  let unit = 'B';
+  for (const candidate of units) {
+    scaled /= 1000;
+    unit = candidate;
+    if (scaled < 1000) break;
+  }
+  return `${scaled >= 100 ? scaled.toFixed(0) : scaled >= 10 ? scaled.toFixed(1) : scaled.toFixed(2)} ${unit}`;
+}
+
+function formatManagedElapsed(startedAt: number | undefined, updatedAt: number | undefined): string {
+  if (!startedAt) return '—';
+  const seconds = Math.max(0, Math.round(((updatedAt || Date.now()) - startedAt) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${seconds % 60}s`;
+}
+
+function managedTransferProgress(operation: ManagedOperation): Readonly<{ current: number; total: number }> {
+  const transfer = operation.progress_detail?.transfer;
+  if ((transfer?.total_bytes ?? 0) > 0) return { current: transfer?.downloaded_bytes ?? 0, total: transfer!.total_bytes! };
+  return { current: 0, total: 0 };
+}
+
+function ManagedOperationDisclosure(props: Readonly<{
   operation: ManagedOperation;
-  serviceName?: string;
-  artifactReference?: string;
+  deployment: ManagedDeployment;
+  expanded: boolean;
   canCancel: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   onCancel: () => void;
-  attached?: boolean;
-}) {
+}>) {
   const i18n = useI18n();
+  const transfer = () => props.operation.progress_detail?.transfer;
+  const progress = () => managedTransferProgress(props.operation);
+  const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().current / progress().total) * 100)) : 0;
+  const steps = () => managedOperationStages(props.operation, props.deployment);
+  const detailsID = () => `managed-operation-details-${props.operation.operation_id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const transferSummary = () => {
+    const item = transfer();
+    if (!item) return `${Math.min(props.operation.progress_current, props.operation.progress_total)}/${props.operation.progress_total}`;
+    if ((item.total_bytes ?? 0) > 0) return `${formatManagedBytes(item.downloaded_bytes)} / ${formatManagedBytes(item.total_bytes)}`;
+    if ((item.total_layers ?? 0) > 0) return i18n.t('webServices.managed.operationLayersValue', { current: item.completed_layers ?? 0, total: item.total_layers ?? 0 });
+    return `${Math.min(props.operation.progress_current, props.operation.progress_total)}/${props.operation.progress_total}`;
+  };
   return (
-    <div class={cn('relative flex min-w-0 items-center gap-2.5 border-t border-border/70 bg-muted/15 px-4 py-2.5 text-xs', props.attached && 'pl-[4.25rem]')} role="status" aria-live="polite" data-testid="managed-operation-progress">
-      <Show when={props.attached}>
+    <div class="relative border-t border-border/70 bg-muted/15" role="status" aria-live="polite" data-testid="managed-operation-disclosure">
+      <div class="flex min-w-0 items-stretch pl-[3.25rem] pr-3">
         <span class="absolute bottom-0 left-8 top-0 w-px bg-border/80" aria-hidden="true" />
-        <span class="absolute left-8 top-1/2 h-px w-5 bg-border/80" aria-hidden="true" />
-      </Show>
-      <ManagedServiceShapingOrb />
-      <div class="min-w-0 flex-1">
-        <div class="flex min-w-0 items-center gap-1.5">
-          <Show when={props.serviceName}><span class="truncate font-medium text-foreground">{props.serviceName}</span></Show>
-          <span class={cn('shrink-0 font-medium text-foreground', props.serviceName && 'text-muted-foreground')}><Show when={props.serviceName}>· </Show>{managedActionLabel(props.operation.action, i18n)}</span>
-          <span class="shrink-0 text-muted-foreground">· {managedStageLabel(props.operation.stage, i18n)}</span>
-        </div>
-        <Show when={props.artifactReference}>
-          <div class="mt-0.5 truncate font-mono text-[10px] leading-4 text-muted-foreground" title={props.artifactReference} data-testid="managed-operation-artifact">{props.artifactReference}</div>
-        </Show>
+        <span class="absolute left-8 top-[1.4rem] h-px w-5 bg-border/80" aria-hidden="true" />
+        <button
+          type="button"
+          class="group flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          aria-expanded={props.expanded}
+          aria-controls={detailsID()}
+          onClick={() => props.onExpandedChange(!props.expanded)}
+          data-testid="managed-service-operation-trigger"
+        >
+          <ManagedServiceShapingOrb />
+          <div class="min-w-0 flex-1">
+            <div class="managed-operation-shimmer-text truncate text-xs font-semibold">{managedOperationActivityLabel(props.operation, i18n)}</div>
+            <Show when={transfer()?.artifact_reference}>
+              <div class="mt-0.5 truncate font-mono text-[10px] leading-4 text-muted-foreground" title={transfer()?.artifact_reference} data-testid="managed-operation-artifact">{transfer()?.artifact_reference}</div>
+            </Show>
+          </div>
+          <span class="shrink-0 font-mono text-[10px] text-muted-foreground">{transferSummary()}</span>
+          <ChevronDown class={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none', props.expanded && 'rotate-180')} aria-hidden="true" />
+        </button>
+        <Button size="sm" variant="ghost" class="my-auto h-7 shrink-0 px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
       </div>
-      <span class="shrink-0 font-mono text-[10px] text-muted-foreground">{Math.min(props.operation.progress_current, props.operation.progress_total)}/{props.operation.progress_total}</span>
-      <Button size="sm" variant="ghost" class="h-7 shrink-0 px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+      <Show when={props.expanded}>
+        <div id={detailsID()} class="grid gap-4 border-t border-border/60 px-5 py-4 sm:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)]" data-testid="managed-service-operation-details">
+          <ol class="space-y-2">
+            <For each={steps()}>{(stage, index) => {
+              const state = () => managedOperationStepState(props.operation, steps(), index());
+              return <li class="flex items-center gap-2 text-xs" data-managed-operation-step data-state={state()}><span data-state={state()} class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] data-[state=complete]:border-success data-[state=complete]:bg-success/10 data-[state=complete]:text-success data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=failed]:border-destructive data-[state=failed]:bg-destructive/10 data-[state=failed]:text-destructive">{state() === 'complete' ? '✓' : index() + 1}</span><span class={state() === 'pending' ? 'text-muted-foreground' : 'font-medium text-foreground'}>{managedStageLabel(stage, i18n)}</span></li>;
+            }}</For>
+          </ol>
+          <div class="min-w-0 rounded-lg border border-border/70 bg-background/70 p-3">
+            <Show when={transfer()} fallback={<p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.operationPreparingDetails')}</p>} keyed>{(item) => (
+              <>
+                <div class="flex min-w-0 items-start gap-2"><div class="min-w-0 flex-1"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{i18n.t('webServices.managed.containerImage')}</div><div class="mt-1 truncate font-mono text-xs text-foreground" title={item.artifact_reference}>{item.artifact_reference || '—'}</div></div><Show when={(item.artifact_total ?? 0) > 1}><Tag variant="neutral" tone="soft" size="sm">{i18n.t('webServices.managed.operationImageSequence', { current: item.artifact_index ?? 0, total: item.artifact_total ?? 0 })}</Tag></Show></div>
+                <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={i18n.t('webServices.managed.operationTransferProgress')} aria-valuemin="0" aria-valuemax={progress().total || undefined} aria-valuenow={progress().total ? Math.min(progress().current, progress().total) : undefined} data-indeterminate={progress().total === 0 ? 'true' : undefined}><div class={cn('h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none', progress().total === 0 && 'w-1/3 animate-pulse motion-reduce:animate-none')} style={progress().total ? { width: `${percent()}%` } : undefined} /></div>
+                <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4"><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationDownloaded')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.total_bytes ?? 0) > 0 ? `${formatManagedBytes(item.downloaded_bytes)} / ${formatManagedBytes(item.total_bytes)}` : '—'}</dd></div><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationSpeed')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.bytes_per_second ?? 0) > 0 ? `${formatManagedBytes(item.bytes_per_second)}/s` : '—'}</dd></div><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationLayers')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.total_layers ?? 0) > 0 ? `${item.completed_layers ?? 0} / ${item.total_layers}` : '—'}</dd></div><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationElapsed')}</dt><dd class="mt-0.5 font-medium text-foreground">{formatManagedElapsed(props.operation.progress_detail?.stage_started_at_unix_ms, props.operation.progress_detail?.updated_at_unix_ms)}</dd></div></dl>
+              </>
+            )}</Show>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 }
@@ -936,23 +1014,58 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
   };
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onSettings?: () => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const [operationDetailsOpen, setOperationDetailsOpen] = createSignal(false);
+  const [failureDiagnosticCopied, setFailureDiagnosticCopied] = createSignal(false);
+  let failureDiagnosticResetTimer: number | undefined;
   const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
   const failed = () => props.service.observed_state === 'error';
   const operation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
   const busy = () => props.busy || managedOperationActive(props.operation);
-  const operationLabel = (value: ManagedOperation) => value.state === 'submitting'
-    ? i18n.t('webServices.managed.operationStarting')
-    : managedStageLabel(value.stage, i18n);
-  const operationProgress = (value: ManagedOperation) => Math.max(0, Math.min(value.progress_current, value.progress_total));
-  const operationPercent = (value: ManagedOperation) => value.progress_total > 0
-    ? Math.round((operationProgress(value) / value.progress_total) * 100)
-    : 0;
   const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
+  const failureOccurredAt = () => {
+    const occurredAt = props.service.last_failure?.occurred_at_unix_ms;
+    return occurredAt ? i18n.formatDateTime(occurredAt, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  };
+  const failureDiagnostic = () => {
+    const failure = props.service.last_failure;
+    if (!failure) return '';
+    return [
+      `${i18n.t('webServices.managed.failureDiagnosticService')}: ${presentation().name}`,
+      `${i18n.t('webServices.managed.failureDiagnosticServiceID')}: ${props.service.service_id}`,
+      ...(failure.action ? [`${i18n.t('webServices.managed.operationAction')}: ${managedActionLabel(failure.action, i18n)}`] : []),
+      ...(failure.stage ? [`${i18n.t('webServices.managed.failureDiagnosticStage')}: ${managedStageLabel(failure.stage, i18n)}`] : []),
+      `${i18n.t('webServices.managed.failureDiagnosticErrorCode')}: ${failure.error_code}`,
+      `${i18n.t('webServices.managed.failureDiagnosticMessage')}: ${failure.message}`,
+      ...(failure.artifact_reference ? [`${i18n.t('webServices.managed.containerImage')}: ${failure.artifact_reference}`] : []),
+      ...(failure.operation_id ? [`${i18n.t('webServices.managed.operationID')}: ${failure.operation_id}`] : []),
+      ...(failureOccurredAt() ? [`${i18n.t('webServices.managed.failureDiagnosticOccurred')}: ${failureOccurredAt()}`] : []),
+    ].join('\n');
+  };
+  const copyFailureDiagnostic = async () => {
+    try {
+      await writeTextToClipboard(failureDiagnostic());
+      setFailureDiagnosticCopied(true);
+      if (failureDiagnosticResetTimer !== undefined) window.clearTimeout(failureDiagnosticResetTimer);
+      failureDiagnosticResetTimer = window.setTimeout(() => {
+        setFailureDiagnosticCopied(false);
+        failureDiagnosticResetTimer = undefined;
+      }, 1_600);
+    } catch (error) {
+      props.onDiagnosticCopyFailure?.(error instanceof Error ? error.message : i18n.t('webServices.managed.failureDiagnosticCopyFailedMessage'));
+    }
+  };
+  createEffect(on(() => props.operation?.operation_id, () => setOperationDetailsOpen(false)));
+  createEffect(on(
+    () => [props.service.last_failure?.operation_id, props.service.last_failure?.occurred_at_unix_ms] as const,
+    () => setFailureDiagnosticCopied(false),
+  ));
+  onCleanup(() => {
+    if (failureDiagnosticResetTimer !== undefined) window.clearTimeout(failureDiagnosticResetTimer);
+  });
   const moreItems = (): DropdownItem[] => [
     ...(props.service.container_resources ?? []).map((resource) => ({
       id: `resource:${resource.kind}`,
@@ -1017,23 +1130,50 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
 
         <div class="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-0.5 lg:col-start-3 lg:row-start-1" data-testid="managed-service-status">
           <Show when={operation()} keyed fallback={(
-            <ServiceStatusIndicator
-              label={managedStatusLabel(props.service.observed_state, i18n)}
-              tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
-            />
+            <Show when={failed() && props.service.last_failure} keyed fallback={(
+              <ServiceStatusIndicator
+                label={managedStatusLabel(props.service.observed_state, i18n)}
+                tone={running() ? 'success' : props.service.observed_state === 'error' ? 'error' : 'neutral'}
+              />
+            )}>{(failure) => (
+              <div class="flex items-center gap-0.5" data-testid="managed-service-failure-diagnostic">
+                <Tooltip
+                  placement="top"
+                  content={(
+                    <div class="max-w-72 space-y-1.5 text-left">
+                      <div class="font-semibold text-popover-foreground">{failure.action ? managedActionLabel(failure.action, i18n) : managedStatusLabel('error', i18n)}</div>
+                      <div class="leading-5 text-popover-foreground/90">{failure.message}</div>
+                      <Show when={failure.stage || failureOccurredAt()}>
+                        <div class="text-[10px] text-muted-foreground">
+                          <Show when={failure.stage}>{managedStageLabel(failure.stage!, i18n)}</Show>
+                          <Show when={failure.stage && failureOccurredAt()}> · </Show>
+                          <Show when={failureOccurredAt()}>{failureOccurredAt()}</Show>
+                        </div>
+                      </Show>
+                    </div>
+                  )}
+                >
+                  <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={i18n.t('webServices.managed.failureDetails')}>
+                    <AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+                    {managedStatusLabel('error', i18n)}
+                  </button>
+                </Tooltip>
+                <Tooltip content={i18n.t('webServices.managed.copyFailureDiagnostic')} placement="top">
+                  <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={i18n.t('webServices.managed.copyFailureDiagnostic')} onClick={() => void copyFailureDiagnostic()} data-testid="managed-service-copy-failure">
+                    <Show when={failureDiagnosticCopied()} fallback={<Copy class="h-3.5 w-3.5" aria-hidden="true" />}>
+                      <Check class="h-3.5 w-3.5" aria-hidden="true" />
+                      <span class="sr-only" aria-live="polite">{i18n.t('webServices.managed.failureDiagnosticCopied')}</span>
+                    </Show>
+                  </button>
+                </Tooltip>
+              </div>
+            )}</Show>
           )}>{(activeOperation) => (
-            <button
-              type="button"
-              class="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              data-testid="managed-service-operation-trigger"
-              aria-haspopup="dialog"
-              aria-label={i18n.t('webServices.managed.operationDetailsTitle', { name: presentation().name })}
-              onClick={() => setOperationDetailsOpen(true)}
-            >
+            <div class="inline-flex min-h-8 max-w-full items-center gap-1.5 px-2 text-[11px] font-medium text-primary" data-testid="managed-service-active-status">
               <ManagedServiceShapingOrb />
-              <span class="sr-only">{operationLabel(activeOperation)}</span>
-              <span class="shrink-0 font-mono text-muted-foreground">{operationProgress(activeOperation)}/{activeOperation.progress_total}</span>
-            </button>
+              <span class="sr-only">{managedStageLabel(activeOperation.stage, i18n)}</span>
+              <span class="shrink-0 font-mono text-muted-foreground">{Math.min(activeOperation.progress_current, activeOperation.progress_total)}/{activeOperation.progress_total}</span>
+            </div>
           )}</Show>
           <Show when={props.service.update_available}><span class="text-[10px] font-medium text-warning">{i18n.t('webServices.managed.updateAvailable')}</span></Show>
         </div>
@@ -1068,61 +1208,15 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
         </div>
       </div>
       <Show when={operation()} keyed>{(activeOperation) => (
-        <ManagedOperationProgress
+        <ManagedOperationDisclosure
           operation={activeOperation}
-          artifactReference={props.service.operation_artifact_reference}
+          deployment={props.service.deployment}
+          expanded={operationDetailsOpen()}
           canCancel={props.canManage}
+          onExpandedChange={setOperationDetailsOpen}
           onCancel={() => props.onCancelOperation?.()}
-          attached
         />
       )}</Show>
-      <Show when={operation()} keyed>{(activeOperation) => {
-        const steps = () => managedOperationStages(activeOperation, props.service.deployment);
-        return (
-          <Dialog
-            open={operationDetailsOpen()}
-            onOpenChange={setOperationDetailsOpen}
-            title={i18n.t('webServices.managed.operationDetailsTitle', { name: presentation().name })}
-            footer={(
-              <div class="flex w-full justify-between gap-2">
-                <Show when={props.onCancelOperation}>
-                  <Button size="sm" variant="ghost" onClick={() => props.onCancelOperation?.()} disabled={!props.canManage || activeOperation.state === 'cancelling' || activeOperation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
-                </Show>
-                <Button size="sm" variant="outline" class="ml-auto" onClick={() => setOperationDetailsOpen(false)}>{i18n.t('common.actions.close')}</Button>
-              </div>
-            )}
-          >
-            <div class="space-y-4" data-testid="managed-service-operation-details">
-              <div>
-                <div class="flex items-baseline gap-2">
-                  <strong class="text-sm text-foreground">{operationLabel(activeOperation)}</strong>
-                  <span class="ml-auto font-mono text-xs text-muted-foreground">{operationProgress(activeOperation)}/{activeOperation.progress_total}</span>
-                </div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={i18n.t('webServices.managed.operationProgress')} aria-valuemin="0" aria-valuemax={activeOperation.progress_total} aria-valuenow={operationProgress(activeOperation)}>
-                  <div class="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none" style={{ width: `${operationPercent(activeOperation)}%` }} />
-                </div>
-              </div>
-              <ol class="space-y-2">
-                <For each={steps()}>{(stage, index) => {
-                  const state = () => managedOperationStepState(activeOperation, steps(), index());
-                  return (
-                    <li class="flex items-center gap-2 text-xs" data-managed-operation-step data-state={state()}>
-                      <span data-state={state()} class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] data-[state=complete]:border-success data-[state=complete]:bg-success/10 data-[state=complete]:text-success data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=failed]:border-destructive data-[state=failed]:bg-destructive/10 data-[state=failed]:text-destructive">{state() === 'complete' ? '✓' : index() + 1}</span>
-                      <span class={state() === 'pending' ? 'text-muted-foreground' : 'font-medium text-foreground'}>{managedStageLabel(stage, i18n)}</span>
-                    </li>
-                  );
-                }}</For>
-              </ol>
-              <dl class="grid gap-2 rounded-lg bg-muted/30 p-3 text-xs sm:grid-cols-2">
-                <div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationAction')}</dt><dd class="mt-0.5 font-medium text-foreground">{managedActionLabel(activeOperation.action, i18n)}</dd></div>
-                <Show when={activeOperation.operation_id && !activeOperation.operation_id.startsWith('submitting:')}><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationID')}</dt><dd class="mt-0.5 break-all font-mono text-foreground">{activeOperation.operation_id}</dd></div></Show>
-                <Show when={props.service.operation_artifact_reference}><div class="sm:col-span-2"><dt class="text-muted-foreground">{i18n.t('webServices.managed.containerImage')}</dt><dd class="mt-0.5 break-all font-mono text-foreground" data-testid="managed-operation-artifact">{props.service.operation_artifact_reference}</dd></div></Show>
-              </dl>
-              <Show when={activeOperation.error_message}><div class="rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive" role="alert">{activeOperation.error_message}</div></Show>
-            </div>
-          </Dialog>
-        );
-      }}</Show>
     </div>
   );
 }
@@ -1583,22 +1677,7 @@ export function EnvPortForwardsPage() {
   const [managedUninstall, setManagedUninstall] = createSignal<ManagedUninstallRequest | null>(null);
   const [managedSettingsService, setManagedSettingsService] = createSignal<ManagedService | null>(null);
   const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
-  const managedUpdateOperation = () => {
-    const service = managedUpdate();
-    return service ? managedOperations.ownedOperation(service.service_id, 'update') : null;
-  };
-  const managedUpdateBusy = () => managedOperationActive(managedUpdateOperation());
-  const managedUninstallOperation = () => {
-    const request = managedUninstall();
-    return request ? managedOperations.ownedOperation(request.service.service_id, 'uninstall') : null;
-  };
-  const managedUninstallBusy = () => managedOperationActive(managedUninstallOperation());
-  const managedSettingsOperation = () => {
-    const service = managedSettingsService();
-    return service ? managedOperations.ownedOperation(service.service_id, 'reconfigure') : null;
-  };
-  const managedRowOperation = (serviceID: string) => managedOperations.ownedOperation(serviceID, 'row');
-  const managedOperationArtifact = (serviceID: string) => managedState().find((service) => service.service_id === serviceID)?.operation_artifact_reference;
+  const managedRowOperation = (serviceID: string) => managedOperations.operationForService(serviceID);
 
   const workspacePicker = createFilesystemPickerDataSource({
     homePath: () => '/',
@@ -1639,7 +1718,7 @@ export function EnvPortForwardsPage() {
       for (const service of nextServices) {
         const activeOperation = service.active_operation;
         if (!activeOperation || managedOperations.knows(activeOperation.operation_id)) continue;
-        void managedOperations.track(activeOperation, 'row')
+        void managedOperations.track(activeOperation)
           .then(async (terminal) => {
             try {
               await loadManaged(false);
@@ -1700,7 +1779,7 @@ export function EnvPortForwardsPage() {
     setManagedInstallSubmitting(true);
     try {
       const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()) }) });
-      const operationPromise = managedOperations.track(result.operation, 'row');
+      const operationPromise = managedOperations.track(result.operation);
       void operationPromise
         .then(async (operation) => {
           await loadManaged(false);
@@ -1740,19 +1819,16 @@ export function EnvPortForwardsPage() {
 
   const managedAction = async (serviceID: string, action: 'start' | 'stop' | 'restart' | 'retry_install' | 'update', noticeRevisions: Readonly<Record<string, number>> = {}) => {
     if (!canManageManagedService()) return;
-    const owner = action === 'update' ? 'update' : 'row';
-    let operationID = managedOperations.begin(serviceID, action, owner).operation_id;
+    let operationID = managedOperations.begin(serviceID, action).operation_id;
     try {
       const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions }) });
       operationID = result.operation_id;
-      const operationPromise = managedOperations.track(result, owner);
+      const operationPromise = managedOperations.track(result);
       await loadManaged(false);
       const operation = await operationPromise;
       await loadManaged(false);
       if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, managedActionFailureTitle(action, i18n), i18n));
       if (action === 'update') {
-        setManagedUpdate(null);
-        setUpdateNoticeAcceptances({});
         notify.success(i18n.t('webServices.managed.updateComplete'), i18n.t('webServices.managed.updateCompleteMessage'));
       }
     } catch (error) { notify.error(managedActionFailureTitle(action, i18n), error instanceof Error ? error.message : String(error)); }
@@ -1761,18 +1837,20 @@ export function EnvPortForwardsPage() {
 
   const reconfigureManagedService = async (serviceID: string, request: ManagedReconfigureRequest) => {
     if (!canManageManagedService()) throw new Error(i18n.t('webServices.permission.executeRequired'));
-    let operationID = managedOperations.begin(serviceID, 'reconfigure', 'reconfigure').operation_id;
+    let operationID = managedOperations.begin(serviceID, 'reconfigure').operation_id;
     try {
       const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, {
         method: 'POST',
         body: JSON.stringify({ request_id: managedRequestID(), action: 'reconfigure', reconfigure: request }),
       });
       operationID = result.operation_id;
-      const operationPromise = managedOperations.track(result, 'reconfigure');
+      const operationPromise = managedOperations.track(result);
       await loadManaged(false);
       const operation = await operationPromise;
       await loadManaged(false);
       if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, managedActionFailureTitle('reconfigure', i18n), i18n));
+    } catch (error) {
+      notify.error(managedActionFailureTitle('reconfigure', i18n), error instanceof Error ? error.message : String(error));
     } finally {
       if (operationID) managedOperations.clear(operationID);
     }
@@ -1781,7 +1859,10 @@ export function EnvPortForwardsPage() {
   const updateManagedService = () => {
     const service = managedUpdate();
     if (!service || !service.update_available || !requiredNoticesAccepted(service.update_notices, updateNoticeAcceptances())) return;
-    void managedAction(service.service_id, 'update', acceptedNoticeRevisions(service.update_notices, updateNoticeAcceptances()));
+    const accepted = acceptedNoticeRevisions(service.update_notices, updateNoticeAcceptances());
+    setManagedUpdate(null);
+    setUpdateNoticeAcceptances({});
+    void managedAction(service.service_id, 'update', accepted);
   };
 
   const openManaged = async (service: ManagedService) => {
@@ -1798,12 +1879,13 @@ export function EnvPortForwardsPage() {
 
   const uninstallManaged = async (request: ManagedUninstallRequest) => {
     if (!canManageManagedService()) return;
-    let operationID = '';
+    setManagedUninstall(null);
+    setManagedDeleteConfirm(false);
+    let operationID = managedOperations.begin(request.service.service_id, 'uninstall').operation_id;
     try {
       const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(request.service.service_id)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action: 'uninstall', delete_data: request.deleteData }) });
       operationID = result.operation_id;
-      setManagedDeleteConfirm(false);
-      const operationPromise = managedOperations.track(result, 'uninstall');
+      const operationPromise = managedOperations.track(result);
       await loadManaged(false);
       const operation = await operationPromise;
       await loadManaged(false);
@@ -1814,8 +1896,6 @@ export function EnvPortForwardsPage() {
       notify.error(i18n.t('webServices.notifications.failedToDeleteTitle'), error instanceof Error ? error.message : String(error));
     } finally {
       if (operationID) managedOperations.clear(operationID);
-      setManagedUninstall(null);
-      setManagedDeleteConfirm(false);
     }
   };
 
@@ -2533,6 +2613,7 @@ export function EnvPortForwardsPage() {
                           onOpenResource={openManagedContainerResource}
                           onAction={(action) => void managedAction(service.service_id, action)}
                           onCancelOperation={() => void cancelManagedOperation(managedRowOperation(service.service_id))}
+                          onDiagnosticCopyFailure={(message) => notify.error(i18n.t('webServices.managed.failureDiagnosticCopyFailedTitle'), message)}
                           onSettings={() => setManagedSettingsService(service)}
                           onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }}
                           onLogs={() => void loadManagedLogs(service.service_id)}
@@ -2583,7 +2664,6 @@ export function EnvPortForwardsPage() {
         serviceID={managedSettingsService()?.service_id ?? ''}
         serviceName={managedSettingsService()?.name ?? ''}
         canManage={canManageManagedService()}
-        operation={managedSettingsOperation()}
         onOpenChange={(open) => { if (!open) setManagedSettingsService(null); }}
         onChanged={() => { void loadManaged(false); bumpRefresh(); }}
         onRequestStop={() => {
@@ -2595,11 +2675,8 @@ export function EnvPortForwardsPage() {
         onApply={async (request) => {
           const service = managedSettingsService();
           if (!service) return;
+          setManagedSettingsService(null);
           await reconfigureManagedService(service.service_id, request);
-        }}
-        onCancelOperation={() => {
-          const operation = managedSettingsOperation();
-          if (operation) void cancelManagedOperation(operation);
         }}
         onDuplicateTemplate={() => {
           const service = managedSettingsService();
@@ -2896,16 +2973,12 @@ export function EnvPortForwardsPage() {
 
       <Dialog
         open={managedUpdate() !== null}
-        onOpenChange={(open) => { if (!open && !managedUpdateBusy()) { setManagedUpdate(null); setUpdateNoticeAcceptances({}); } }}
+        onOpenChange={(open) => { if (!open) { setManagedUpdate(null); setUpdateNoticeAcceptances({}); } }}
         title={i18n.t('webServices.managed.updateTitle')}
         footer={(
           <div class="flex w-full justify-end gap-2">
-            <Show when={managedUpdateBusy()} fallback={<>
-              <Button size="sm" variant="outline" onClick={() => { setManagedUpdate(null); setUpdateNoticeAcceptances({}); }}>{i18n.t('webServices.actions.cancel')}</Button>
-              <Button size="sm" variant="default" onClick={updateManagedService} disabled={!requiredNoticesAccepted(managedUpdate()?.update_notices, updateNoticeAcceptances())}>{i18n.t('webServices.managed.update')}</Button>
-            </>}>
-              <Button size="sm" variant="outline" onClick={() => void cancelManagedOperation(managedUpdateOperation())} disabled={!managedUpdateOperation() || managedUpdateOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
-            </Show>
+            <Button size="sm" variant="outline" onClick={() => { setManagedUpdate(null); setUpdateNoticeAcceptances({}); }}>{i18n.t('webServices.actions.cancel')}</Button>
+            <Button size="sm" variant="default" onClick={updateManagedService} disabled={!requiredNoticesAccepted(managedUpdate()?.update_notices, updateNoticeAcceptances())}>{i18n.t('webServices.managed.update')}</Button>
           </div>
         )}
       >
@@ -2925,11 +2998,10 @@ export function EnvPortForwardsPage() {
                 <ManagedTemplateNotices
                   notices={service.update_notices ?? []}
                   accepted={updateNoticeAcceptances()}
-                  disabled={managedUpdateBusy()}
+                  disabled={false}
                   onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
                 />
               </Show>
-              <Show when={managedUpdateBusy() ? managedUpdateOperation() : null} keyed>{(operation) => <ManagedOperationProgress operation={operation} serviceName={identity().name} artifactReference={managedOperationArtifact(service.service_id)} canCancel={canManageManagedService()} onCancel={() => void cancelManagedOperation(operation)} />}</Show>
             </div>
           );
         }}</Show>
@@ -2937,15 +3009,14 @@ export function EnvPortForwardsPage() {
 
       <Dialog
         open={managedUninstall() !== null && !managedDeleteConfirm()}
-        onOpenChange={(open) => { if (!open && !managedUninstallBusy()) setManagedUninstall(null); }}
+        onOpenChange={(open) => { if (!open) setManagedUninstall(null); }}
         title={i18n.t('webServices.managed.uninstallTitle')}
-        footer={<div class="flex justify-end gap-2"><Show when={managedUninstallBusy()} fallback={<><Button size="sm" variant="outline" onClick={() => setManagedUninstall(null)}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="destructive" onClick={confirmManagedUninstall}>{i18n.t('webServices.managed.uninstall')}</Button></>}><Button size="sm" variant="outline" onClick={() => void cancelManagedOperation(managedUninstallOperation())} disabled={!managedUninstallOperation() || managedUninstallOperation()?.state === 'cancelling'}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show></div>}
+        footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setManagedUninstall(null)}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="destructive" onClick={confirmManagedUninstall}>{i18n.t('webServices.managed.uninstall')}</Button></div>}
       >
         <div class="space-y-3">
           <p class="text-sm">{i18n.t('webServices.managed.uninstallQuestion')}</p>
           <Checkbox checked={managedUninstall()?.deleteData ?? false} onChange={(checked) => setManagedUninstall((current) => current ? { ...current, deleteData: Boolean(checked) } : current)} label={i18n.t('webServices.managed.deleteData')} size="sm" disabled={!(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)} />
           <Show when={!(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)}><p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.adminRequired')}</p></Show>
-          <Show when={managedUninstallBusy() ? managedUninstallOperation() : null} keyed>{(operation) => <ManagedOperationProgress operation={operation} serviceName={managedServiceLocalizedIdentity(managedUninstall()!.service, i18n).name} artifactReference={managedOperationArtifact(operation.service_id)} canCancel={canManageManagedService()} onCancel={() => void cancelManagedOperation(operation)} />}</Show>
         </div>
       </Dialog>
 
@@ -2955,7 +3026,7 @@ export function EnvPortForwardsPage() {
         title={i18n.t('webServices.managed.deleteDataTitle')}
         confirmText={i18n.t('webServices.managed.deleteDataConfirm')}
         variant="destructive"
-        loading={managedUninstallBusy()}
+        loading={false}
         onConfirm={() => { const request = managedUninstall(); if (request) void uninstallManaged(request); }}
       >
         <p class="text-sm">{i18n.t('webServices.managed.deleteDataWarning')}</p>

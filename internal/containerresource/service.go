@@ -390,8 +390,8 @@ func (s *Service) run(ctx context.Context, operationID string, method containere
 
 func (s *Service) reportProgress(operationID string, progress OperationProgress) {
 	progress.Phase = sanitizeProgressToken(progress.Phase)
-	progress.Unit = sanitizeProgressToken(progress.Unit)
-	if progress.Phase == "" || progress.Completed < 0 || progress.Total < 0 || (progress.Total > 0 && progress.Completed > progress.Total) {
+	if progress.Phase == "" || progress.DownloadedBytes < 0 || progress.TotalBytes < 0 || progress.CompletedLayers < 0 || progress.TotalLayers < 0 ||
+		(progress.TotalBytes > 0 && progress.DownloadedBytes > progress.TotalBytes) || (progress.TotalLayers > 0 && progress.CompletedLayers > progress.TotalLayers) {
 		return
 	}
 	payload, err := json.Marshal(progress)

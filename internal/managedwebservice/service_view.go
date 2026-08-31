@@ -1,34 +1,32 @@
 package managedwebservice
 
 import (
-	"runtime"
 	"strings"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-func operationArtifactReference(service pfregistry.ManagedService, operation *pfregistry.ManagedOperation) string {
-	if operation == nil {
-		return ""
+func serviceFailureView(service pfregistry.ManagedService, operation *pfregistry.ManagedOperation) *ServiceFailure {
+	code, message := strings.TrimSpace(service.LastErrorCode), strings.TrimSpace(service.LastErrorMessage)
+	if code == "" && operation != nil {
+		code, message = strings.TrimSpace(operation.ErrorCode), strings.TrimSpace(operation.ErrorMessage)
 	}
-	if (operation.Action == "install" || operation.Action == "retry_install") && Deployment(service.Deployment) == DeploymentDocker && service.TemplateID == DeepSeekHarnessContainerTemplateID {
-		if artifact, ok := auditedDockerArtifact("linux-" + runtime.GOARCH); ok {
-			return artifact.Image + "@" + artifact.Digest
-		}
-		return strings.TrimSpace(service.ArtifactReference)
+	if code == "" {
+		return nil
 	}
-	if operation.Action == "update" {
-		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok && definition.Revision > service.TemplateRevision {
-			if artifact, artifactOK := auditedWebtopArtifact(definition.TemplateID, "linux-"+runtime.GOARCH); artifactOK {
-				return strings.TrimSpace(webtopTemplateSpec(definition.TemplateID, artifact).Container.Image)
-			}
-		}
+	failure := &ServiceFailure{ErrorCode: code, Message: message}
+	if operation == nil || strings.TrimSpace(operation.ErrorCode) != code || strings.TrimSpace(operation.ErrorMessage) != message || operation.UpdatedAtUnixMs != service.UpdatedAtUnixMs {
+		return failure
 	}
-	if Deployment(service.Deployment) == DeploymentContainer {
-		spec, _, err := effectiveSpecFromService(&service)
-		if err == nil && spec.Container != nil {
-			return strings.TrimSpace(spec.Container.Image)
-		}
+	failure.Action = strings.TrimSpace(operation.Action)
+	failure.Stage = strings.TrimSpace(operation.Stage)
+	failure.OperationID = strings.TrimSpace(operation.OperationID)
+	failure.OccurredAtUnixMs = operation.FinishedAtUnixMs
+	if failure.OccurredAtUnixMs == 0 {
+		failure.OccurredAtUnixMs = operation.UpdatedAtUnixMs
 	}
-	return strings.TrimSpace(service.ArtifactReference)
+	if operation.ProgressDetail != nil && operation.ProgressDetail.Transfer != nil {
+		failure.ArtifactReference = strings.TrimSpace(operation.ProgressDetail.Transfer.ArtifactReference)
+	}
+	return failure
 }

@@ -36,7 +36,7 @@ func TestHostStopScriptFailureStillCleansManagedProcess(t *testing.T) {
 		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest, ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
 	}
 	driver := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]nativeProcess{}}
-	if _, _, err := driver.Install(context.Background(), service, catalogPayload{}, func(string, int64) {}); err != nil {
+	if _, _, err := driver.Install(context.Background(), service, catalogPayload{}, discardOperationProgress); err != nil {
 		t.Fatal(err)
 	}
 	identity, err := driver.Start(context.Background(), service)

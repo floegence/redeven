@@ -21,7 +21,7 @@ type hostScriptDriver struct {
 	processes map[string]nativeProcess
 }
 
-func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress func(string, int64)) (string, string, error) {
+func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress operationProgress) (string, string, error) {
 	spec, _, err := effectiveSpecFromService(service)
 	if err != nil {
 		return "", "", err
@@ -220,7 +220,7 @@ func (d *hostScriptDriver) Stop(ctx context.Context, service *pfregistry.Managed
 	}
 }
 
-func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress operationProgress) error {
 	progress("stopping", 2)
 	if err := d.Stop(ctx, service); err != nil {
 		return err

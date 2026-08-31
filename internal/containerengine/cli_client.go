@@ -287,7 +287,7 @@ func (c *CLIClient) PullImageWithProgress(ctx context.Context, engine Engine, im
 		}
 		return EngineImageResult{}, err
 	}
-	if err := sink(ctx, ImagePullProgress{Phase: "verifying", Completed: tracker.completedCount(), Total: tracker.totalCount(), Unit: tracker.unit()}); err != nil {
+	if err := sink(ctx, tracker.snapshot("verifying")); err != nil {
 		return EngineImageResult{}, err
 	}
 	return EngineImageResult{
@@ -298,17 +298,21 @@ func (c *CLIClient) PullImageWithProgress(ctx context.Context, engine Engine, im
 }
 
 type imagePullProgressTracker struct {
-	engine    Engine
-	sink      ImagePullProgressSink
-	layers    map[string]string
-	digest    string
-	lastPhase string
-	lastDone  int64
-	lastTotal int64
+	engine Engine
+	sink   ImagePullProgressSink
+	layers map[string]imagePullLayerProgress
+	digest string
+	last   ImagePullProgress
+}
+
+type imagePullLayerProgress struct {
+	state      string
+	downloaded int64
+	total      int64
 }
 
 func newImagePullProgressTracker(engine Engine, sink ImagePullProgressSink) *imagePullProgressTracker {
-	return &imagePullProgressTracker{engine: engine, sink: sink, layers: make(map[string]string)}
+	return &imagePullProgressTracker{engine: engine, sink: sink, layers: make(map[string]imagePullLayerProgress)}
 }
 
 func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) error {
@@ -328,20 +332,28 @@ func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) erro
 	}
 
 	if id, state, ok := parsePullLayerState(line); ok {
-		t.layers[id] = state
+		layer := t.layers[id]
+		layer.state = state
+		if downloaded, total := parsePullLayerBytes(line); total > 0 {
+			layer.downloaded, layer.total = downloaded, total
+		}
+		if state == "complete" && layer.total > 0 {
+			layer.downloaded = layer.total
+		}
+		t.layers[id] = layer
 	}
-	done, total := t.completedCount(), t.totalCount()
-	if phase == t.lastPhase && done == t.lastDone && total == t.lastTotal {
+	snapshot := t.snapshot(phase)
+	if snapshot == t.last {
 		return nil
 	}
-	t.lastPhase, t.lastDone, t.lastTotal = phase, done, total
-	return t.sink(ctx, ImagePullProgress{Phase: phase, Completed: done, Total: total, Unit: t.unit()})
+	t.last = snapshot
+	return t.sink(ctx, snapshot)
 }
 
 func (t *imagePullProgressTracker) completedCount() int64 {
 	var completed int64
-	for _, state := range t.layers {
-		if state == "complete" {
+	for _, layer := range t.layers {
+		if layer.state == "complete" {
 			completed++
 		}
 	}
@@ -350,14 +362,63 @@ func (t *imagePullProgressTracker) completedCount() int64 {
 
 func (t *imagePullProgressTracker) totalCount() int64 { return int64(len(t.layers)) }
 
-func (t *imagePullProgressTracker) unit() string {
-	if len(t.layers) == 0 {
-		return ""
+func (t *imagePullProgressTracker) snapshot(phase string) ImagePullProgress {
+	progress := ImagePullProgress{Phase: phase, CompletedLayers: t.completedCount(), TotalLayers: t.totalCount()}
+	allLayerBytesKnown := len(t.layers) > 0
+	for _, layer := range t.layers {
+		if layer.total <= 0 {
+			allLayerBytesKnown = false
+			continue
+		}
+		progress.DownloadedBytes += min(layer.downloaded, layer.total)
+		progress.TotalBytes += layer.total
 	}
-	return "layers"
+	if !allLayerBytesKnown {
+		progress.DownloadedBytes, progress.TotalBytes = 0, 0
+	}
+	return progress
+}
+
+func parsePullLayerBytes(line string) (int64, int64) {
+	fields := strings.Fields(strings.TrimSpace(line))
+	for index := range fields {
+		for width := 1; width <= 5 && index+width <= len(fields); width++ {
+			candidate := strings.Trim(strings.Join(fields[index:index+width], ""), "[]()")
+			if !strings.Contains(candidate, "/") {
+				continue
+			}
+			downloaded, total := parsePairBytes(candidate)
+			if total > 0 {
+				return min(downloaded, total), total
+			}
+		}
+	}
+	return 0, 0
+}
+
+func parsePodmanPullLayerState(line string) (string, string, bool) {
+	fields := strings.Fields(strings.TrimSpace(line))
+	if len(fields) < 3 || !strings.EqualFold(fields[0], "copying") || (!strings.EqualFold(fields[1], "blob") && !strings.EqualFold(fields[1], "config")) {
+		return "", "", false
+	}
+	id := strings.TrimSpace(fields[2])
+	if id == "" || len(id) > 128 || hasControl(id) || strings.ContainsAny(id, "/\\") {
+		return "", "", false
+	}
+	state := "active"
+	for _, field := range fields[3:] {
+		if strings.EqualFold(strings.Trim(field, "|"), "done") {
+			state = "complete"
+			break
+		}
+	}
+	return id, state, true
 }
 
 func parsePullLayerState(line string) (string, string, bool) {
+	if id, state, ok := parsePodmanPullLayerState(line); ok {
+		return id, state, true
+	}
 	parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
 	if len(parts) != 2 {
 		return "", "", false

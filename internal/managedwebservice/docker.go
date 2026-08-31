@@ -60,7 +60,7 @@ type dockerDriver struct {
 	stateDir string
 }
 
-func (d *dockerDriver) Install(ctx context.Context, service *pfregistry.ManagedService, catalog catalogPayload, progress func(string, int64)) (string, string, error) {
+func (d *dockerDriver) Install(ctx context.Context, service *pfregistry.ManagedService, catalog catalogPayload, progress operationProgress) (string, string, error) {
 	if d.adapter == nil {
 		return "", "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
 	}
@@ -79,7 +79,7 @@ func (d *dockerDriver) Install(ctx context.Context, service *pfregistry.ManagedS
 		service.RuntimeIdentity = ""
 	}
 	progress("pulling", 2)
-	pulled, err := pullManagedImage(ctx, d.adapter, pinnedImage)
+	pulled, err := pullManagedImage(ctx, d.adapter, pinnedImage, 1, 1, progress)
 	if err != nil {
 		return "", "", err
 	}
@@ -306,7 +306,7 @@ func (d *dockerDriver) stopOwnedContainer(ctx context.Context, service *pfregist
 	return true, nil
 }
 
-func (d *dockerDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress func(string, int64)) error {
+func (d *dockerDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress operationProgress) error {
 	progress("stopping", 2)
 	exists, err := d.stopOwnedContainer(ctx, service)
 	if err != nil {

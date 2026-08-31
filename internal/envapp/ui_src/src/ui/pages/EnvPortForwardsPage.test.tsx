@@ -55,6 +55,10 @@ const containerNavigationMocks = vi.hoisted(() => ({
   request: vi.fn(),
 }));
 
+const clipboardMocks = vi.hoisted(() => ({
+  writeText: vi.fn(),
+}));
+
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' '),
   useNotification: () => notificationMocks,
@@ -76,6 +80,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   FolderOpen: (props: any) => <span class={props.class} data-testid="folder-open-icon" />,
   ShieldCheck: (props: any) => <span class={props.class} data-testid="shield-check-icon" />,
   Copy: (props: any) => <span class={props.class} data-testid="copy-icon" />,
+  Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
   Pencil: (props: any) => <span class={props.class} data-testid="pencil-icon" />,
   CheckCircle: (props: any) => <span class={props.class} data-testid="check-circle-icon" />,
   ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
@@ -168,6 +173,10 @@ vi.mock('../services/sandboxWindowRegistry', () => ({
 
 vi.mock('../services/containerResourceNavigation', () => ({
   requestContainerResourceNavigation: containerNavigationMocks.request,
+}));
+
+vi.mock('../utils/clipboard', () => ({
+  writeTextToClipboard: clipboardMocks.writeText,
 }));
 
 vi.mock('../primitives/Tooltip', () => ({
@@ -501,17 +510,19 @@ describe('web service metadata and template validation', () => {
     }
   });
 
-  it('keeps failed managed services on one row with one concise retry action', () => {
+  it('keeps failed managed services concise and copies only structured diagnostics', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const retry = vi.fn();
+    const copyFailure = vi.fn();
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
           service_id: 'mws-failed', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness',
           name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'container',
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
-          forward_id: 'pf-failed', runtime_port: 3000, last_error_code: 'IMAGE_PULL_FAILED', update_available: false,
+          forward_id: 'pf-failed', runtime_port: 3000, update_available: false,
+          last_failure: { action: 'install', stage: 'pulling', error_code: 'IMAGE_PULL_FAILED', message: 'The image could not be pulled.', operation_id: 'mop-failed', occurred_at_unix_ms: 1_777_777_777_000 },
         }}
         busy={false}
         canOpen
@@ -519,6 +530,7 @@ describe('web service metadata and template validation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={retry}
+        onDiagnosticCopyFailure={copyFailure}
         onUpdate={() => undefined}
         onLogs={() => undefined}
         onUninstall={() => undefined}
@@ -533,6 +545,20 @@ describe('web service metadata and template validation', () => {
       expect(retryButton?.className).toContain('whitespace-nowrap');
       expect(retryButton?.querySelector('[data-testid="restart-icon"]')).toBeNull();
       expect(row.textContent).not.toContain('Failed');
+
+      row.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
+      await Promise.resolve();
+      expect(clipboardMocks.writeText).toHaveBeenCalledOnce();
+      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('IMAGE_PULL_FAILED');
+      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('The image could not be pulled.');
+      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).not.toContain('Secret');
+      expect(notificationMocks.success).not.toHaveBeenCalled();
+      expect(row.querySelector('[data-testid="check-icon"]')).toBeTruthy();
+
+      clipboardMocks.writeText.mockRejectedValueOnce(new Error('Clipboard denied'));
+      row.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
+      await Promise.resolve();
+      expect(copyFailure).toHaveBeenCalledWith('Clipboard denied');
 
       retryButton?.click();
       expect(retry).toHaveBeenCalledWith('retry_install');
@@ -553,9 +579,8 @@ describe('web service metadata and template validation', () => {
           name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'docker',
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
           forward_id: 'pf-retry', runtime_port: 3000, update_available: false,
-          operation_artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed',
         }}
-        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 }}
+        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1, stage_started_at_unix_ms: 1_777_777_777_000, updated_at_unix_ms: 1_777_777_779_000, transfer: { phase: 'pulling', artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, downloaded_bytes: 2_000, total_bytes: 5_000, bytes_per_second: 1_000, completed_layers: 2, total_layers: 5 } } }}
         busy={false}
         canOpen
         canManage
@@ -571,23 +596,22 @@ describe('web service metadata and template validation', () => {
     try {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
       const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
-      const attached = row.querySelector<HTMLElement>('[data-testid="managed-operation-progress"]')!;
       expect(progress.textContent).toContain('Pulling image');
-      expect(progress.textContent).toContain('2/7');
-      expect(attached.textContent).toContain('Retry');
-      expect(attached.textContent).toContain('Pulling image');
-      expect(attached.textContent).not.toContain('DeepSeek Harness');
-      expect(attached.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
+      expect(progress.textContent).toContain('2.00 KB / 5.00 KB');
+      expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
       expect(row.textContent).not.toContain('Error');
       expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Retry')?.disabled).toBe(true);
 
       progress.click();
       const details = row.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
-      expect(details.textContent).toContain('mop-retry');
-      expect(details.textContent).toContain('Retry');
-      expect(details.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
+      expect(progress.getAttribute('aria-expanded')).toBe('true');
+      expect(details.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
+      expect(details.textContent).toContain('1.00 KB/s');
+      expect(details.textContent).toContain('2 / 5');
+      expect(details.textContent).toContain('2s');
       expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
-      expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
+      expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
+      expect(row.querySelector('[role="dialog"]')).toBeNull();
       Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation')?.click();
       expect(cancel).toHaveBeenCalledOnce();
     } finally {
@@ -604,6 +628,8 @@ describe('EnvPortForwardsPage', () => {
     vi.restoreAllMocks();
     notificationMocks.success.mockReset();
     notificationMocks.error.mockReset();
+    clipboardMocks.writeText.mockReset();
+    clipboardMocks.writeText.mockResolvedValue(undefined);
     controlplaneMocks.getLocalRuntime.mockReset();
     controlplaneMocks.getLocalRuntime.mockResolvedValue(localRuntime);
     controlplaneMocks.getEnvPublicIDFromSession.mockReset();
@@ -1199,13 +1225,14 @@ describe('EnvPortForwardsPage', () => {
     const operation = {
       operation_id: 'mop-background-install', service_id: 'mws-background-install', action: 'install' as const,
       state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7,
+      progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: template.spec.container.image, artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } },
     };
     const service = {
       service_id: operation.service_id, template_id: template.template_id, service_family_id: template.service_family_id,
       template_source: 'custom', name: template.name, description: template.description, deployment: 'container',
       workspace_path: template.default_workspace_path, version: template.version, desired_state: 'running', observed_state: 'installing',
       forward_id: 'managed-background-install', runtime_port: 32101, access_mode: 'unified_proxy',
-      operation_artifact_reference: template.spec.container.image, active_operation: operation,
+      active_operation: operation,
     };
     let installed = false;
     let finished = false;
@@ -1256,8 +1283,8 @@ describe('EnvPortForwardsPage', () => {
 
       await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-background-install"]')).toBeTruthy());
       const serviceRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
-      expect(serviceRow.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('2/7');
-      expect(serviceRow.querySelectorAll('[data-testid="managed-operation-progress"]')).toHaveLength(1);
+      expect(serviceRow.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('2/5 layers');
+      expect(serviceRow.querySelectorAll('[data-testid="managed-operation-disclosure"]')).toHaveLength(1);
       expect(streamSignal?.aborted).toBe(false);
       expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([url]) => String(url).includes('/cancel'))).toBe(false);
 
@@ -1288,6 +1315,7 @@ describe('EnvPortForwardsPage', () => {
     };
     let operationBody: Record<string, any> | null = null;
     let updated = false;
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ ...service, update_available: !updated, version: updated ? service.target_version : service.version }] };
@@ -1299,7 +1327,12 @@ describe('EnvPortForwardsPage', () => {
       }
       throw new Error(`Unexpected local API call: ${url}`);
     });
-    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-update', service_id: 'mws-webtop', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        streamController = controller;
+        controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-update', service_id: 'mws-webtop', action: 'update', state: 'running', stage: 'update_preparing', progress_current: 1, progress_total: 7 })}\n\n`));
+      },
+    }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
 
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.textContent).toContain('Update available'));
@@ -1318,6 +1351,11 @@ describe('EnvPortForwardsPage', () => {
       action: 'update',
       accepted_notice_revisions: { 'interactive-desktop-root-and-network': 2 },
     }));
+    expect(host.querySelector('[data-testid="managed-service-update-dialog"]')).toBeNull();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Update'));
+    expect(host.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
+    streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-update', service_id: 'mws-webtop', action: 'update', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`));
+    streamController?.close();
     await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service updated', expect.any(String)));
   });
 
@@ -1405,8 +1443,8 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('restores an active managed operation and exposes cancellation after a page reload', async () => {
-    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
-    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, operation_artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed', active_operation: activeOperation };
+    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
+    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, active_operation: activeOperation };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
@@ -1438,11 +1476,11 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('tracks every resumed service operation without a global list footer', async () => {
-    const operationOne = { operation_id: 'mop-one', service_id: 'mws-one', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
+    const operationOne = { operation_id: 'mop-one', service_id: 'mws-one', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:one', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
     const operationTwo = { operation_id: 'mop-two', service_id: 'mws-two', action: 'start' as const, state: 'running', stage: 'starting', progress_current: 4, progress_total: 7 };
     const services = [
-      { service_id: 'mws-one', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', deployment: 'docker', workspace_path: '/one', version: '1', desired_state: 'running', observed_state: 'error', forward_id: 'pf-one', runtime_port: 3001, operation_artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:one', active_operation: operationOne },
-      { service_id: 'mws-two', template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'webtop-two', name: 'Debian desktop', deployment: 'container', workspace_path: '/two', version: '1', desired_state: 'running', observed_state: 'stopped', forward_id: 'pf-two', runtime_port: 3002, operation_artifact_reference: 'lscr.io/linuxserver/webtop@sha256:two', active_operation: operationTwo },
+      { service_id: 'mws-one', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', deployment: 'docker', workspace_path: '/one', version: '1', desired_state: 'running', observed_state: 'error', forward_id: 'pf-one', runtime_port: 3001, active_operation: operationOne },
+      { service_id: 'mws-two', template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'webtop-two', name: 'Debian desktop', deployment: 'container', workspace_path: '/two', version: '1', desired_state: 'running', observed_state: 'stopped', forward_id: 'pf-two', runtime_port: 3002, active_operation: operationTwo },
       { service_id: 'mws-idle', template_id: 'custom-idle', service_family_id: 'idle', name: 'Idle service', deployment: 'container', workspace_path: '/idle', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-idle', runtime_port: 3003 },
     ];
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -1468,6 +1506,8 @@ describe('EnvPortForwardsPage', () => {
       const firstRow = rows.find((row) => row.dataset.managedServiceId === 'mws-one')!;
       firstRow.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
       expect(firstRow.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('deepseek-harness');
+      expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('data-indeterminate')).toBe('true');
+      expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBeNull();
       expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeNull();
       expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-one/events'), expect.objectContaining({ method: 'GET' }));
       expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-two/events'), expect.objectContaining({ method: 'GET' }));
@@ -1493,7 +1533,7 @@ describe('EnvPortForwardsPage', () => {
         return {
           services: baseServices.map((service) => {
             const active = operations.get(service.service_id);
-            return active ? { ...service, active_operation: active, operation_artifact_reference: `ghcr.io/example/${service.service_id}@sha256:exact` } : service;
+            return active ? { ...service, active_operation: active } : service;
           }),
         };
       }
@@ -1622,6 +1662,7 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(preflightBody).toMatchObject({ configuration_revision: 3, runtime: { container: { entrypoint: '/usr/local/bin/dashboard' } } }));
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Apply configuration')?.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'reconfigure', reconfigure: { plan_digest: 'exact-plan', draft: { configuration_revision: 3 } } }));
+    expect(host.querySelector('[data-testid="managed-service-settings"]')).toBeNull();
     expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-reconfigure/events'), expect.objectContaining({ method: 'GET' }));
   });
 

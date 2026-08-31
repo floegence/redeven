@@ -263,10 +263,10 @@ type fakeContainerUpdateDriver struct {
 	startErr error
 }
 
-func (d *fakeContainerUpdateDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, func(string, int64)) (string, string, error) {
+func (d *fakeContainerUpdateDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
-func (d *fakeContainerUpdateDriver) PrepareUpdateArtifact(_ context.Context, spec TemplateSpec) (string, error) {
+func (d *fakeContainerUpdateDriver) PrepareUpdateArtifact(_ context.Context, spec TemplateSpec, _ operationProgress) (string, error) {
 	d.events = append(d.events, "pull:target")
 	return spec.Container.Image, nil
 }
@@ -315,7 +315,7 @@ func (d *fakeContainerUpdateDriver) VerifyRuntime(_ context.Context, service *pf
 func (d *fakeContainerUpdateDriver) FindRuntime(context.Context, string) (string, error) {
 	return d.current, nil
 }
-func (d *fakeContainerUpdateDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, func(string, int64)) error {
+func (d *fakeContainerUpdateDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {
 	return errors.New("unexpected uninstall")
 }
 func (d *fakeContainerUpdateDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
