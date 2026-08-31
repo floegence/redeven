@@ -26,7 +26,6 @@ type floretProviderAdapter struct {
 
 	controls                   ProviderControls
 	budgets                    TurnBudgets
-	disabledCoreControlTools   map[string]struct{}
 	continuationSupported      bool
 	attachmentResolver         func(context.Context, flprovider.Attachment) (ContentPart, error)
 	requestAttachmentResolver  func(context.Context, flprovider.Request, flprovider.Attachment) (ContentPart, error)
@@ -199,9 +198,6 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 		var streamedText strings.Builder
 		var streamedReasoning strings.Builder
 		onEvent := func(ev StreamEvent) {
-			if p.isDisabledCoreControlTool(streamEventToolName(ev)) {
-				return
-			}
 			switch ev.Type {
 			case StreamEventTextDelta:
 				if ev.Text == "" {
@@ -249,11 +245,6 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventSources, Sources: flowerSourcesToFloret(result.Sources)})
 		}
 		if len(result.ToolCalls) > 0 {
-			if toolName := p.firstDisabledCoreControlToolCall(result.ToolCalls); toolName != "" {
-				err := fmt.Errorf("Floret core control tool %q is disabled for this run", toolName)
-				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
-				return
-			}
 			toolCalls, err := floretToolCallsFromFlower(result.ToolCalls)
 			if err != nil {
 				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
@@ -391,7 +382,6 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	if err != nil {
 		return ModelGatewayRequest{}, err
 	}
-	tools = p.filterDisabledCoreControlTools(tools)
 
 	budgets := p.budgets
 	if req.MaxOutputTokens > 0 {
@@ -405,47 +395,6 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		ProviderControls: controls,
 		WebSearchMode:    p.webSearch,
 	}, nil
-}
-
-func streamEventToolName(ev StreamEvent) string {
-	if ev.ToolCall == nil {
-		return ""
-	}
-	return strings.TrimSpace(ev.ToolCall.Name)
-}
-
-func (p *floretProviderAdapter) isDisabledCoreControlTool(name string) bool {
-	if p == nil || len(p.disabledCoreControlTools) == 0 {
-		return false
-	}
-	_, ok := p.disabledCoreControlTools[strings.TrimSpace(name)]
-	return ok
-}
-
-func (p *floretProviderAdapter) filterDisabledCoreControlTools(in []ToolDef) []ToolDef {
-	if p == nil || len(p.disabledCoreControlTools) == 0 || len(in) == 0 {
-		return in
-	}
-	out := make([]ToolDef, 0, len(in))
-	for _, def := range in {
-		if p.isDisabledCoreControlTool(def.Name) {
-			continue
-		}
-		out = append(out, def)
-	}
-	return out
-}
-
-func (p *floretProviderAdapter) firstDisabledCoreControlToolCall(calls []ToolCall) string {
-	if p == nil || len(p.disabledCoreControlTools) == 0 {
-		return ""
-	}
-	for _, call := range calls {
-		if name := strings.TrimSpace(call.Name); p.isDisabledCoreControlTool(name) {
-			return name
-		}
-	}
-	return ""
 }
 
 func (p *floretProviderAdapter) previousResponseID(state *flprovider.State) (string, error) {

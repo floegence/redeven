@@ -20,11 +20,9 @@ import (
 type openAIContinuationMock struct {
 	mu sync.Mutex
 
-	actualCallCount      int
-	previousResponseIDs  []string
-	issuedPreviousIDs    []string
-	issuedResponseIDs    []string
-	rejectPreviousIDOnce map[string]bool
+	actualCallCount     int
+	previousResponseIDs []string
+	issuedResponseIDs   []string
 }
 
 func (m *openAIContinuationMock) handle(w http.ResponseWriter, r *http.Request) {
@@ -56,26 +54,15 @@ func (m *openAIContinuationMock) handle(w http.ResponseWriter, r *http.Request) 
 	}
 
 	m.mu.Lock()
-	if m.rejectPreviousIDOnce == nil {
-		m.rejectPreviousIDOnce = map[string]bool{}
-	}
-	if previousResponseID != "" && m.rejectPreviousIDOnce[previousResponseID] {
-		delete(m.rejectPreviousIDOnce, previousResponseID)
-		m.previousResponseIDs = append(m.previousResponseIDs, previousResponseID)
-		m.mu.Unlock()
-		writeOpenAIAPIError(w, http.StatusBadRequest, "invalid previous_response_id", "previous_response_id", "invalid_previous_response_id")
-		return
-	}
 	m.actualCallCount++
 	call := m.actualCallCount
 	responseID := fmt.Sprintf("resp_run_%d", call)
 	token := fmt.Sprintf("CONTINUATION_TOKEN_%d", call)
 	m.previousResponseIDs = append(m.previousResponseIDs, previousResponseID)
-	m.issuedPreviousIDs = append(m.issuedPreviousIDs, previousResponseID)
 	m.issuedResponseIDs = append(m.issuedResponseIDs, responseID)
 	m.mu.Unlock()
 
-	writeOpenAIResponsesSSE(w, r, strings.TrimSpace(fmt.Sprint(req["model"])), responseID, token)
+	writeOpenAIResponsesSSE(w, r, strings.TrimSpace(fmt.Sprint(req["model"])), responseID, token, containsString(extractOpenAIToolNames(req), "task_complete"))
 }
 
 func (m *openAIContinuationMock) snapshot() ([]string, []string) {
@@ -84,13 +71,7 @@ func (m *openAIContinuationMock) snapshot() ([]string, []string) {
 	return append([]string(nil), m.previousResponseIDs...), append([]string(nil), m.issuedResponseIDs...)
 }
 
-func (m *openAIContinuationMock) successfulCalls() ([]string, []string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]string(nil), m.issuedPreviousIDs...), append([]string(nil), m.issuedResponseIDs...)
-}
-
-func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model string, responseID string, token string) {
+func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model string, responseID string, token string, complete bool) {
 	if strings.TrimSpace(model) == "" {
 		model = "gpt-5-mini"
 	}
@@ -133,6 +114,11 @@ func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model strin
 			"id":   itemID,
 		},
 	})
+	if complete {
+		call := map[string]any{"type": "function_call", "id": "fc_" + responseID, "call_id": "call_" + responseID, "name": "task_complete", "arguments": `{}`}
+		writeSSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 1, "item": call})
+		writeSSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 1, "item": call})
+	}
 	writeSSEJSON(w, flusher, map[string]any{
 		"type": "response.completed",
 		"response": map[string]any{
@@ -146,19 +132,6 @@ func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model strin
 	})
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()
-}
-
-func writeOpenAIAPIError(w http.ResponseWriter, status int, message string, param string, code string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]any{
-			"type":    "invalid_request_error",
-			"message": strings.TrimSpace(message),
-			"param":   strings.TrimSpace(param),
-			"code":    strings.TrimSpace(code),
-		},
-	})
 }
 
 func newOpenAIContinuationServiceForTest(t *testing.T, baseURL string) (*Service, session.Meta) {
@@ -233,7 +206,7 @@ func TestOpenAIProviderStreamTurnUsesPreviousResponseIDAndReturnsProviderState(t
 		mu.Lock()
 		captured = previousResponseID
 		mu.Unlock()
-		writeOpenAIResponsesSSE(w, r, "gpt-5-mini", "resp_next", "hello")
+		writeOpenAIResponsesSSE(w, r, "gpt-5-mini", "resp_next", "hello", false)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -263,7 +236,7 @@ func TestOpenAIProviderStreamTurnUsesPreviousResponseIDAndReturnsProviderState(t
 	}
 }
 
-func TestIntegrationServiceOpenAIContinuationPersistsInFloretAndResumes(t *testing.T) {
+func TestIntegrationServiceRuntimeContextDoesNotReuseOpaqueOpenAIContinuation(t *testing.T) {
 	t.Parallel()
 
 	mock := &openAIContinuationMock{}
@@ -288,53 +261,13 @@ func TestIntegrationServiceOpenAIContinuationPersistsInFloretAndResumes(t *testi
 		}
 	}
 
-	allPreviousIDs, _ := mock.snapshot()
-	if len(allPreviousIDs) < 2 || allPreviousIDs[0] != "" {
-		t.Fatalf("previous response ids=%v, want initial empty state and resumed turn", allPreviousIDs)
-	}
-	successfulPreviousIDs, _ := mock.successfulCalls()
-	if !containsString(successfulPreviousIDs, "resp_run_1") {
-		t.Fatalf("successful previous response ids=%v, want resp_run_1", successfulPreviousIDs)
-	}
-}
-
-func TestIntegrationServiceRejectedOpenAIContinuationFailsWithoutReplay(t *testing.T) {
-	t.Parallel()
-
-	mock := &openAIContinuationMock{rejectPreviousIDOnce: map[string]bool{"resp_run_1": true}}
-	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
-	t.Cleanup(srv.Close)
-	svc, meta := newOpenAIContinuationServiceForTest(t, strings.TrimSuffix(srv.URL, "/")+"/v1")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	thread, err := svc.CreateThread(ctx, &meta, "Continuation rejection", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, "run_replay_1", RunStartRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{},
-	}); err != nil {
-		t.Fatalf("typed Send first: %v", err)
-	}
-	_, err = runTypedTurnForTest(t, ctx, svc, &meta, "run_replay_2", RunStartRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "hello again"},
-		Options:  RunOptions{},
-	})
-	if err == nil || !strings.Contains(err.Error(), "previous_response_id") {
-		t.Fatalf("typed Send second error=%v, want rejected continuation", err)
-	}
-
 	previousIDs, issuedResponseIDs := mock.snapshot()
-	if !containsString(previousIDs, "resp_run_1") || !containsString(issuedResponseIDs, "resp_run_1") {
-		t.Fatalf("previous ids=%v issued ids=%v, want one rejected resp_run_1 continuation", previousIDs, issuedResponseIDs)
+	if len(previousIDs) < 2 || len(issuedResponseIDs) < 2 {
+		t.Fatalf("provider calls=(previous=%v responses=%v), want both turns", previousIDs, issuedResponseIDs)
 	}
-	if len(previousIDs) != 2 {
-		t.Fatalf("provider calls=%v, want no Redeven replay after rejection", previousIDs)
+	for _, previousID := range previousIDs {
+		if previousID != "" {
+			t.Fatalf("previous response ids=%v, runtime supplemental context must disable opaque continuation reuse", previousIDs)
+		}
 	}
 }

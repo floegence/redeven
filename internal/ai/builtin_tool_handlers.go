@@ -780,8 +780,8 @@ func builtInToolDefinitions() []ToolDef {
 
 func builtInControlSignalDefinitions() []ToolDef {
 	toSchema := toolSchemaRaw
-	defs := make([]ToolDef, 0, 1)
-	for _, core := range flruntime.CoreControlDefinitions(false) {
+	defs := make([]ToolDef, 0, 2)
+	for _, core := range flruntime.CoreControlDefinitions(true) {
 		name := strings.TrimSpace(core.Name)
 		description := strings.TrimSpace(core.Description)
 		inputSchema := core.InputSchema

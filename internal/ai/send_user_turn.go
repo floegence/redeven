@@ -180,69 +180,49 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	if err := s.requireDesktopModelSourceForSend(ctx, meta, req); err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
-	if turnInput, ok, inputErr := immediateTypedTurnInput(req.Input); inputErr != nil {
-		return finish(SendUserTurnResponse{}, inputErr)
-	} else if ok {
-		if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, ""); err != nil {
+	turnInput, simple, err := simpleTypedTurnInput(req.Input)
+	if err != nil {
+		return finish(SendUserTurnResponse{}, err)
+	}
+	var effect *threadEffect
+	var supplemental []flruntime.TurnSupplementalContextItem
+	if simple {
+		runtimeContext, contextErr := s.floretTurnRuntimeContextForAdmission(ctx, meta, req)
+		if contextErr != nil {
+			return finish(SendUserTurnResponse{}, contextErr)
+		}
+		supplemental = []flruntime.TurnSupplementalContextItem{runtimeContext}
+	} else {
+		effect, err = s.prepareThreadEffect(meta, executionKey, RunStartRequest{
+			ThreadID:          strings.TrimSpace(req.ThreadID),
+			Model:             strings.TrimSpace(req.Model),
+			Input:             req.Input,
+			Options:           req.Options,
+			StagingScopeID:    req.StagingScopeID,
+			StagingCapability: req.StagingCapability,
+		})
+		if err != nil {
 			return finish(SendUserTurnResponse{}, err)
 		}
-		s.floretEffects.put(identity.ThreadID(req.ThreadID), executionKey, floretEffectRequest{meta: *meta, req: req})
-		result, sendErr := s.threadRuntime.Send(ctx, flruntime.SendInput{
-			ThreadID: identity.ThreadID(req.ThreadID), Input: turnInput, RequestKey: flruntime.RequestKey(executionKey),
-		})
-		if sendErr != nil {
-			s.floretEffects.drop(identity.ThreadID(req.ThreadID), executionKey)
-			return finish(SendUserTurnResponse{}, sendErr)
+		projection, projectionErr := floretContextProjectionForInputWithAuthority(effect.req.Input, effect.builder.canonicalReferenceAuthority)
+		if projectionErr != nil {
+			return finish(SendUserTurnResponse{}, projectionErr)
 		}
-		if result.TurnID != "" {
-			if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, result.TurnID.String()); err != nil {
-				return finish(SendUserTurnResponse{}, err)
-			}
+		projection.Items = append(projection.Items, effect.builder.floretTurnRuntimeContext())
+		turnInput, err = effect.builder.floretTurnInput(ctx, effect.req.Input, projection.References)
+		if err != nil {
+			return finish(SendUserTurnResponse{}, err)
 		}
-		response := SendUserTurnResponse{
-			ClientRequestID: req.ClientRequestID,
-			ThreadID:        string(result.ThreadID),
-			TurnID:          string(result.TurnID),
-			RunID:           string(result.RunID),
-			Kind:            "start",
-			Current:         result,
-		}
-		if queuedInput, ok := queuedInputFor(result, executionKey); ok {
-			response.Kind = "queued"
-			response.QueueID = queuedInput.ID
-			response.QueuePosition = len(result.Queue)
-			response.TurnID = ""
-			response.RunID = ""
-		}
-		return finish(response, nil)
-	}
-	effect, err := s.prepareThreadEffect(meta, executionKey, RunStartRequest{
-		ThreadID:          strings.TrimSpace(req.ThreadID),
-		Model:             strings.TrimSpace(req.Model),
-		Input:             req.Input,
-		Options:           req.Options,
-		StagingScopeID:    req.StagingScopeID,
-		StagingCapability: req.StagingCapability,
-	})
-	if err != nil {
-		return finish(SendUserTurnResponse{}, err)
+		supplemental = projection.Items
 	}
 	if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, ""); err != nil {
-		return finish(SendUserTurnResponse{}, err)
-	}
-	projection, err := floretContextProjectionForInputWithAuthority(effect.req.Input, effect.builder.canonicalReferenceAuthority)
-	if err != nil {
-		return finish(SendUserTurnResponse{}, err)
-	}
-	turnInput, err := effect.builder.floretTurnInput(ctx, effect.req.Input, projection.References)
-	if err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
 	s.floretEffects.put(identity.ThreadID(req.ThreadID), executionKey, floretEffectRequest{meta: *meta, req: req, effect: effect})
 	result, err := s.threadRuntime.Send(ctx, flruntime.SendInput{
 		ThreadID:            identity.ThreadID(req.ThreadID),
 		Input:               turnInput,
-		SupplementalContext: projection.Items,
+		SupplementalContext: supplemental,
 		RequestKey:          flruntime.RequestKey(executionKey),
 	})
 	if err != nil {
@@ -306,7 +286,7 @@ func queuedInputFor(view flruntime.ThreadView, requestKey string) (flruntime.Que
 	return flruntime.QueuedInput{}, false
 }
 
-func immediateTypedTurnInput(input RunInput) (flruntime.TurnInput, bool, error) {
+func simpleTypedTurnInput(input RunInput) (flruntime.TurnInput, bool, error) {
 	if len(input.Attachments) > 0 || input.ContextAction != nil || input.StructuredResponse != nil || len(input.SecretAnswers) > 0 {
 		return flruntime.TurnInput{}, false, nil
 	}
@@ -315,6 +295,33 @@ func immediateTypedTurnInput(input RunInput) (flruntime.TurnInput, bool, error) 
 		return flruntime.TurnInput{}, true, err
 	}
 	return turnInput, true, nil
+}
+
+func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (flruntime.TurnSupplementalContextItem, error) {
+	settings, err := s.threadSettingsForRead(ctx, meta, req.ThreadID)
+	if err != nil {
+		return flruntime.TurnSupplementalContextItem{}, err
+	}
+	if settings == nil {
+		return flruntime.TurnSupplementalContextItem{}, errors.New("thread not found")
+	}
+	permission, err := threadPermissionType(settings)
+	if err != nil {
+		return flruntime.TurnSupplementalContextItem{}, err
+	}
+	workingDir, err := threadWorkingDir(settings)
+	if err != nil {
+		return flruntime.TurnSupplementalContextItem{}, err
+	}
+	metaCopy := *meta
+	r := newRun(runOptions{
+		Log: s.log, AgentHomeDir: s.agentHomeDir, WorkingDir: workingDir, FilesystemScope: s.scope, Shell: s.shell,
+		SessionMeta: &metaCopy, EndpointID: strings.TrimSpace(meta.EndpointID), ThreadID: strings.TrimSpace(req.ThreadID),
+		NoUserInteraction: req.Options.NoUserInteraction, FloretThreadRuntime: s.threadRuntime, SkillManager: s.skillManager,
+	})
+	r.setPermissionState(permission, PermissionSnapshot{})
+	r.subagentRuntime = newServiceFloretSubagentRuntime(s, r)
+	return r.floretTurnRuntimeContext(), nil
 }
 
 func (s *Service) typedSendLookup(ctx context.Context, threadID, requestID string) (SendUserTurnResponse, bool, error) {

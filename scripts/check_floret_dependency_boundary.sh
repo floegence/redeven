@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v6 dependency"
-rg -q '^\s*github\.com/floegence/floret/v6 v6\.0\.1$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v6 v6.0.1"
+rg -q '^\s*github\.com/floegence/floret/v6 v6\.1\.0$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v6 v6.1.0"
 if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v6\s*=>' go.mod; then
   fail "Floret must not use a Go module replacement"
 fi
@@ -43,6 +43,10 @@ fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
   'github\.com/floegence/floret/v6/internal/' internal cmd; then
   fail "Redeven must not import Floret internals"
+fi
+if rg -n --glob '*.go' --glob '!**/*_test.go' \
+  'WithAgentDynamicToolSurface|dynamicToolSurfaceProvider|buildDynamicToolSurfaceConfig' internal/ai; then
+  fail "Flower production must keep one fixed provider tool surface per hosted Agent"
 fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
   'CREATE TABLE floret_|INSERT INTO floret_|UPDATE floret_|DELETE FROM floret_' internal cmd; then

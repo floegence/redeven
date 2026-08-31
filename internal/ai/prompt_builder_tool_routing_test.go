@@ -38,7 +38,7 @@ func buildPromptForToolSetTest(t *testing.T, permission FlowerPermissionType, to
 	})
 	r.permissionType = permission
 	contract := resolveRunCapabilityContract(r, tools, nil, false)
-	return r.buildLayeredSystemPrompt("objective", permissionTypeString(permission), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
+	return r.buildLayeredSystemPrompt(permissionTypeString(permission), tools, contract)
 }
 
 func assertPromptContains(t *testing.T, prompt string, want string) {
@@ -159,7 +159,7 @@ func TestBuildLayeredSystemPrompt_UsesCanonicalToolNamesAndTerminalLimits(t *tes
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "Use canonical tool names exactly as listed in Current Context")
+	assertPromptContains(t, prompt, "Use canonical tool names exactly as exposed by the current tool definitions")
 	assertPromptContains(t, prompt, "terminal.exec interactive: use yield_ms for the initial wait")
 	assertPromptContains(t, prompt, "terminal.read is strictly incremental")
 	assertPromptContains(t, prompt, "pass the previous last_seq unchanged")
@@ -179,12 +179,28 @@ func TestBuildLayeredSystemPrompt_RequiresHumanReadableSubagentNames(t *testing.
 	assertPromptContains(t, prompt, "never use snake_case, kebab-case")
 }
 
-func TestBuildLayeredSystemPrompt_UsesNaturalCompletionWithoutRemovedSignal(t *testing.T) {
+func TestBuildLayeredSystemPrompt_RequiresExplicitCompletionSignal(t *testing.T) {
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptNotContains(t, prompt, "task_complete")
-	assertPromptContains(t, prompt, "reply directly in the assistant message")
+	assertPromptContains(t, prompt, "call task_complete")
+	assertPromptContains(t, prompt, "A natural text stop alone does not complete the task")
+}
+
+func TestBuildLayeredSystemPrompt_ExcludesMutableTurnFacts(t *testing.T) {
+	t.Parallel()
+
+	prompt := buildPromptForToolRoutingTest(t)
+	for _, forbidden := range []string{
+		"## Current Context",
+		"## Workspace Context",
+		"- Objective:",
+		"- Current date:",
+		"- Todo tracking:",
+		"### Delegation State",
+	} {
+		assertPromptNotContains(t, prompt, forbidden)
+	}
 }
 
 func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t *testing.T) {

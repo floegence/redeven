@@ -230,9 +230,9 @@ func (r *run) refreshFloretEffectPermissionSnapshot(ctx context.Context, authori
 	if r == nil {
 		return PermissionSnapshot{}, errors.New("current permission store is unavailable")
 	}
-	cfg := r.dynamicSurfaceConfig
+	cfg := r.effectPermissionSurfaceConfig
 	cfg.IncludeControlSignalsInSnapshot = true
-	surface, err := r.buildRunToolSurface(ctx, cfg)
+	surface, err := r.prepareRunToolSurface(ctx, cfg)
 	if err != nil {
 		return PermissionSnapshot{}, fmt.Errorf("refresh current permission snapshot: %w", err)
 	}

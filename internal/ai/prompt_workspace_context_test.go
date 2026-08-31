@@ -201,50 +201,48 @@ func TestCollectPromptDelegationState_SummarizesActiveSubagents(t *testing.T) {
 func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T) {
 	t.Parallel()
 
-	section := buildPromptWorkspaceContextSection(promptRuntimeSnapshot{
-		WorkspaceContext: promptWorkspaceContext{
-			Environment: promptEnvironmentFacts{
-				Shell:        "/bin/zsh",
-				AgentHomeDir: "/workspace/home",
-				FilesystemRoots: []promptFilesystemRootFact{
-					{ID: "home", Label: "Home", Path: "/workspace/home", Read: true, Write: true},
-					{ID: "computer", Label: "Computer", Path: "/", Read: true, Write: false},
-				},
-				PermissionType:     FlowerPermissionApprovalRequired,
-				SubagentDelegation: true,
+	section := buildPromptWorkspaceContextSection(promptWorkspaceContext{
+		Environment: promptEnvironmentFacts{
+			Shell:        "/bin/zsh",
+			AgentHomeDir: "/workspace/home",
+			FilesystemRoots: []promptFilesystemRootFact{
+				{ID: "home", Label: "Home", Path: "/workspace/home", Read: true, Write: true},
+				{ID: "computer", Label: "Computer", Path: "/", Read: true, Write: false},
 			},
-			Repository: promptRepositoryState{
-				Available:       true,
-				RepoRoot:        "/workspace/repo",
-				RelativeWorkdir: "internal/ai",
-				Branch:          "feat/workspace-context",
-				Upstream:        "origin/main",
-				LinkedWorktree:  true,
-				AheadCount:      2,
-				BehindCount:     1,
-				StagedCount:     1,
-				UnstagedCount:   2,
-				UntrackedCount:  3,
+			PermissionType:     FlowerPermissionApprovalRequired,
+			SubagentDelegation: true,
+		},
+		Repository: promptRepositoryState{
+			Available:       true,
+			RepoRoot:        "/workspace/repo",
+			RelativeWorkdir: "internal/ai",
+			Branch:          "feat/workspace-context",
+			Upstream:        "origin/main",
+			LinkedWorktree:  true,
+			AheadCount:      2,
+			BehindCount:     1,
+			StagedCount:     1,
+			UnstagedCount:   2,
+			UntrackedCount:  3,
+		},
+		RepoRules: []promptRepoRuleFile{
+			{
+				Label:     "AGENTS.md",
+				Content:   "Follow repo rules.",
+				Truncated: true,
 			},
-			RepoRules: []promptRepoRuleFile{
+		},
+		Delegation: promptDelegationState{
+			Enabled:      true,
+			ActiveCount:  1,
+			RunningCount: 1,
+			Items: []promptDelegationItem{
 				{
-					Label:     "AGENTS.md",
-					Content:   "Follow repo rules.",
-					Truncated: true,
-				},
-			},
-			Delegation: promptDelegationState{
-				Enabled:      true,
-				ActiveCount:  1,
-				RunningCount: 1,
-				Items: []promptDelegationItem{
-					{
-						ID:        "subagent_1",
-						AgentType: "worker",
-						Status:    "running",
-						Title:     "Rule sync",
-						Objective: "Sync repo rules",
-					},
+					ID:        "subagent_1",
+					AgentType: "worker",
+					Status:    "running",
+					Title:     "Rule sync",
+					Objective: "Sync repo rules",
 				},
 			},
 		},
@@ -266,6 +264,22 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 	} {
 		if !strings.Contains(section, want) {
 			t.Fatalf("workspace context section missing %q: %q", want, section)
+		}
+	}
+}
+
+func TestFloretTurnRuntimeContextCarriesMutableFactsOutsideSystemPrompt(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	r := newRun(runOptions{WorkingDir: workingDir, AgentHomeDir: t.TempDir(), Shell: "/bin/zsh"})
+	item := r.floretTurnRuntimeContext()
+	if item.Kind != "runtime_context" || !item.Sensitive {
+		t.Fatalf("runtime context item=%#v", item)
+	}
+	for _, want := range []string{"## Current Context", workingDir, "- Current date:", "- Timezone:", "## Workspace Context", "- Shell: /bin/zsh"} {
+		if !strings.Contains(item.Text, want) {
+			t.Fatalf("runtime context missing %q: %q", want, item.Text)
 		}
 	}
 }

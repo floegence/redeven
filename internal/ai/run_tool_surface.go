@@ -5,37 +5,28 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
 	fltools "github.com/floegence/floret/v6/tools"
 )
 
 type runToolSurface struct {
 	PermissionType     FlowerPermissionType
-	ActiveTools        []ToolDef
 	PermissionSnapshot PermissionSnapshot
 	CapabilityContract runCapabilityContract
 	FloretToolItems    []fltools.Tool
-	FloretTools        *fltools.Registry
 	SystemPrompt       string
 	HostContext        map[string]string
-	Epoch              string
 }
 
 type runToolSurfaceConfig struct {
-	TaskObjective                   string
-	TaskComplexity                  string
 	State                           *floretToolRuntimeState
 	HostLabels                      map[string]string
 	SupportsAskUserQuestionBatches  bool
 	IncludeControlSignalsInSnapshot bool
 }
 
-func (r *run) buildDynamicToolSurfaceConfig(taskObjective string, taskComplexity string, capabilitySupportsAskUserBatches bool, state *floretToolRuntimeState, hostLabels map[string]string) runToolSurfaceConfig {
+func (r *run) buildRunToolSurfaceConfig(capabilitySupportsAskUserBatches bool, state *floretToolRuntimeState, hostLabels map[string]string) runToolSurfaceConfig {
 	return runToolSurfaceConfig{
-		TaskObjective:                   strings.TrimSpace(taskObjective),
-		TaskComplexity:                  normalizeTaskComplexity(taskComplexity),
 		State:                           state,
 		HostLabels:                      cloneStringMap(hostLabels),
 		SupportsAskUserQuestionBatches:  capabilitySupportsAskUserBatches,
@@ -122,23 +113,9 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 	if err != nil {
 		return runToolSurface{}, err
 	}
-	flTools, err := fltools.NewRegistryE(floretToolItems...)
-	if err != nil {
-		return runToolSurface{}, err
-	}
-	state := todoRuntimeState{}
-	if cfg.State != nil {
-		state = cfg.State.snapshot()
-	}
 	systemPrompt := r.buildLayeredSystemPrompt(
-		cfg.TaskObjective,
 		permissionTypeString(permissionType),
-		cfg.TaskComplexity,
-		0,
-		true,
 		activeTools,
-		state,
-		"",
 		capabilityContract,
 	)
 	hostContext := cloneStringMap(cfg.HostLabels)
@@ -150,56 +127,12 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 	hostContext[floretToolHostContextAuthorityThreadIDKey] = strings.TrimSpace(r.threadID)
 	return runToolSurface{
 		PermissionType:     permissionType,
-		ActiveTools:        activeTools,
 		PermissionSnapshot: permissionSnapshot,
 		CapabilityContract: capabilityContract,
 		FloretToolItems:    floretToolItems,
-		FloretTools:        flTools,
 		SystemPrompt:       systemPrompt,
 		HostContext:        hostContext,
-		Epoch:              permissionSurfaceEpoch(permissionSnapshot),
 	}, nil
-}
-
-func (r *run) dynamicToolSurfaceProvider(cfg runToolSurfaceConfig, recordInitial bool) flruntime.ToolSurfaceProvider {
-	var mu sync.Mutex
-	lastEpoch := ""
-	initialSnapshot := r.currentPermissionSnapshot()
-	if recordInitial && permissionSnapshotActive(initialSnapshot) {
-		lastEpoch = permissionSurfaceEpoch(initialSnapshot)
-	}
-	return func(ctx context.Context, req flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
-		surface, err := r.buildRunToolSurface(ctx, cfg)
-		if err != nil {
-			return flruntime.ToolSurface{}, err
-		}
-		mu.Lock()
-		changed := surface.Epoch != "" && surface.Epoch != lastEpoch
-		if changed {
-			lastEpoch = surface.Epoch
-		}
-		mu.Unlock()
-		if changed {
-			r.recordRunDiagnostic("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
-				"phase":             strings.TrimSpace(req.Phase),
-				"step":              req.Step,
-				"permission_type":   permissionTypeString(surface.PermissionType),
-				"snapshot_id":       strings.TrimSpace(surface.PermissionSnapshot.SnapshotID),
-				"snapshot_hash":     strings.TrimSpace(surface.PermissionSnapshot.SnapshotHash),
-				"registry_hash":     strings.TrimSpace(surface.PermissionSnapshot.RegistryHash),
-				"schema_hash":       strings.TrimSpace(surface.PermissionSnapshot.SchemaHash),
-				"presentation_hash": strings.TrimSpace(surface.PermissionSnapshot.PresentationHash),
-			})
-			r.recordRunDiagnostic("capability.contract.resolved", RealtimeStreamKindLifecycle, surface.CapabilityContract.eventPayload())
-		}
-		return flruntime.ToolSurface{
-			Tools:        surface.FloretTools,
-			SystemPrompt: surface.SystemPrompt,
-			HostContext:  surface.HostContext,
-			Epoch:        surface.Epoch,
-			Reason:       "thread_permission",
-		}, nil
-	}
 }
 
 func permissionSurfaceEpoch(snapshot PermissionSnapshot) string {

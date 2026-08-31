@@ -2797,10 +2797,10 @@ func readAnyInt(raw any) int {
 	}
 }
 
-func (r *run) buildLayeredSystemPrompt(objective string, permissionType string, complexity string, round int, isFirstRound bool, tools []ToolDef, state todoRuntimeState, exceptionOverlay string, capability runCapabilityContract) string {
-	snapshot := buildPromptRuntimeSnapshot(r, objective, permissionType, complexity, round, isFirstRound, tools, state, exceptionOverlay, capability)
+func (r *run) buildLayeredSystemPrompt(permissionType string, tools []ToolDef, capability runCapabilityContract) string {
+	snapshot := buildPromptRuntimeSnapshot(r, permissionType, tools, capability)
 	document := buildPromptDocument(snapshot)
-	return document.render(layeredPromptStaticPrefixCache, promptStaticPrefixCacheKey(snapshot))
+	return document.render()
 }
 
 func (r *run) buildSocialSystemPrompt() string {
@@ -2885,31 +2885,6 @@ func buildSkillCatalogPrompt(skills []SkillMeta) string {
 		sb.WriteString(name)
 		sb.WriteString(": ")
 		sb.WriteString(desc)
-		sb.WriteString("\n")
-	}
-	return strings.TrimSpace(sb.String())
-}
-
-func buildSkillOverlayPrompt(active []SkillActivation) string {
-	if len(active) == 0 {
-		return ""
-	}
-	var sb strings.Builder
-	sb.WriteString("## Active Skill Overlay\n")
-	for _, skill := range active {
-		name := strings.TrimSpace(skill.Name)
-		if name == "" {
-			continue
-		}
-		sb.WriteString("### ")
-		sb.WriteString(name)
-		sb.WriteString("\n")
-		content := strings.TrimSpace(skill.Content)
-		if content == "" {
-			sb.WriteString("(no content)\n")
-			continue
-		}
-		sb.WriteString(truncateRunes(content, 1200))
 		sb.WriteString("\n")
 	}
 	return strings.TrimSpace(sb.String())

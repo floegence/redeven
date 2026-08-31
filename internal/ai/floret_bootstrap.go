@@ -134,12 +134,23 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 		UserEmail: strings.TrimSpace(authority.UserEmail), CanRead: true,
 		CanWrite: permission != FlowerPermissionReadonly, CanExecute: permission != FlowerPermissionReadonly,
 	}
+	canonicalInput, err := canonicalRunInputFromFloret(request)
+	if err != nil {
+		return floretEffectRequest{}, err
+	}
 	return floretEffectRequest{meta: meta, req: SendUserTurnRequest{
 		ClientRequestID: request.RequestKey, ThreadID: request.ThreadID.String(), Model: settings.ModelID,
-		Input: runInputFromFloret(request.Input), Options: RunOptions{
+		Input: canonicalInput, Options: RunOptions{
 			NoUserInteraction: strings.TrimSpace(settings.ParentThreadID) != "", PermissionType: settings.PermissionType,
 		},
 	}}, nil
+}
+
+func canonicalRunInputFromFloret(request flruntime.AgentRequest) (RunInput, error) {
+	if err := request.CanonicalTurnInput.Validate(); err != nil {
+		return RunInput{}, errors.New("Flower canonical turn input is unavailable")
+	}
+	return runInputFromFloret(request.CanonicalTurnInput), nil
 }
 
 func runInputFromFloret(input flruntime.UserInput) RunInput {

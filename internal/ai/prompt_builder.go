@@ -1,11 +1,6 @@
 package ai
 
-import (
-	"fmt"
-	"strings"
-	"sync"
-	"time"
-)
+import "strings"
 
 type promptSection struct {
 	Name  string
@@ -13,82 +8,15 @@ type promptSection struct {
 }
 
 type promptDocument struct {
-	StaticSections  []promptSection
-	DynamicSections []promptSection
-	OverlaySections []promptSection
-}
-
-type promptTodoStatus struct {
-	TrackingEnabled  bool
-	OpenCount        int
-	InProgressCount  int
-	SnapshotVersion  int64
-	LastUpdatedRound int
+	Sections []promptSection
 }
 
 type promptRuntimeSnapshot struct {
-	WorkingDir                     string
-	LocalTime                      promptLocalTimeContext
-	WorkspaceContext               promptWorkspaceContext
-	RoundIndex                     int
-	IsFirstRound                   bool
 	PermissionType                 string
-	Objective                      string
-	TaskComplexity                 string
 	PromptProfile                  string
-	TodoStatus                     promptTodoStatus
 	AvailableToolNames             string
-	AvailableSkills                []SkillMeta
-	ActiveSkills                   []SkillActivation
 	AllowUserInteraction           bool
 	SupportsAskUserQuestionBatches bool
-	ExceptionOverlay               string
-}
-
-type cachedPromptPrefixKey struct {
-	Profile                        string
-	PermissionType                 string
-	AllowUserInteraction           bool
-	SupportsAskUserQuestionBatches bool
-}
-
-type promptStaticPrefixCache struct {
-	mu      sync.RWMutex
-	entries map[cachedPromptPrefixKey]string
-}
-
-var layeredPromptStaticPrefixCache = newPromptStaticPrefixCache()
-
-func newPromptStaticPrefixCache() *promptStaticPrefixCache {
-	return &promptStaticPrefixCache{
-		entries: make(map[cachedPromptPrefixKey]string),
-	}
-}
-
-func (c *promptStaticPrefixCache) getOrBuild(key cachedPromptPrefixKey, build func() string) string {
-	if c == nil {
-		if build == nil {
-			return ""
-		}
-		return strings.TrimSpace(build())
-	}
-	c.mu.RLock()
-	if cached, ok := c.entries[key]; ok {
-		c.mu.RUnlock()
-		return cached
-	}
-	c.mu.RUnlock()
-	if build == nil {
-		return ""
-	}
-	rendered := strings.TrimSpace(build())
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if cached, ok := c.entries[key]; ok {
-		return cached
-	}
-	c.entries[key] = rendered
-	return rendered
 }
 
 func newPromptSection(name string, lines ...string) promptSection {
@@ -155,90 +83,33 @@ func renderPromptSections(sections []promptSection) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func (d promptDocument) render(cache *promptStaticPrefixCache, key cachedPromptPrefixKey) string {
-	parts := make([]string, 0, 3)
-	staticPart := ""
-	if len(d.StaticSections) > 0 {
-		builder := func() string {
-			return renderPromptSections(d.StaticSections)
-		}
-		if cache != nil {
-			staticPart = cache.getOrBuild(key, builder)
-		} else {
-			staticPart = strings.TrimSpace(builder())
-		}
-		if strings.TrimSpace(staticPart) != "" {
-			parts = append(parts, staticPart)
-		}
-	}
-	if dynamicPart := strings.TrimSpace(renderPromptSections(d.DynamicSections)); dynamicPart != "" {
-		parts = append(parts, dynamicPart)
-	}
-	if overlayPart := strings.TrimSpace(renderPromptSections(d.OverlaySections)); overlayPart != "" {
-		parts = append(parts, overlayPart)
-	}
-	return strings.Join(parts, "\n\n")
+func (d promptDocument) render() string {
+	return renderPromptSections(d.Sections)
 }
 
-func buildPromptRuntimeSnapshot(r *run, objective string, permissionType string, complexity string, round int, isFirstRound bool, tools []ToolDef, state todoRuntimeState, exceptionOverlay string, capability runCapabilityContract) promptRuntimeSnapshot {
-	complexity = normalizeTaskComplexity(complexity)
+func buildPromptRuntimeSnapshot(r *run, permissionType string, tools []ToolDef, capability runCapabilityContract) promptRuntimeSnapshot {
 	allowUserInteraction := capability.AllowUserInteraction
 	if !allowUserInteraction && strings.TrimSpace(capability.PromptProfile) == "" {
 		allowUserInteraction = r == nil || !r.noUserInteraction
 	}
-
-	cwd := promptWorkingDirForRun(r)
 
 	availableToolNames := joinToolNames(tools)
 	if len(capability.AllowedTools) > 0 || len(capability.AllowedSignals) > 0 {
 		availableToolNames = joinToolAndSignalNames(capability.AllowedTools, capability.AllowedSignals)
 	}
 
-	availableSkills := []SkillMeta{}
-	activeSkills := []SkillActivation{}
-	if r != nil {
-		availableSkills = r.listSkills()
-		activeSkills = r.activeSkills()
-	}
 	return promptRuntimeSnapshot{
-		WorkingDir:       cwd,
-		LocalTime:        currentPromptLocalTimeContext(time.Now),
-		WorkspaceContext: collectPromptWorkspaceContext(r, capability),
-		RoundIndex:       round,
-		IsFirstRound:     isFirstRound,
-		PermissionType:   strings.TrimSpace(permissionType),
-		Objective:        strings.TrimSpace(objective),
-		TaskComplexity:   complexity,
-		PromptProfile:    resolveRunPromptProfile(strings.TrimSpace(capability.PromptProfile), r, allowUserInteraction),
-		TodoStatus: promptTodoStatus{
-			TrackingEnabled:  state.TodoTrackingEnabled,
-			OpenCount:        state.TodoOpenCount,
-			InProgressCount:  state.TodoInProgressCount,
-			SnapshotVersion:  state.TodoSnapshotVersion,
-			LastUpdatedRound: state.TodoLastUpdatedRound,
-		},
+		PermissionType:                 strings.TrimSpace(permissionType),
+		PromptProfile:                  resolveRunPromptProfile(strings.TrimSpace(capability.PromptProfile), r, allowUserInteraction),
 		AvailableToolNames:             availableToolNames,
-		AvailableSkills:                availableSkills,
-		ActiveSkills:                   activeSkills,
 		AllowUserInteraction:           allowUserInteraction,
 		SupportsAskUserQuestionBatches: capability.SupportsAskUserQuestionBatches,
-		ExceptionOverlay:               strings.TrimSpace(exceptionOverlay),
 	}
 }
 
 func buildPromptDocument(snapshot promptRuntimeSnapshot) promptDocument {
 	spec := resolvePromptProfileSpec(snapshot.PromptProfile)
-	staticSections := buildPromptStaticSections(spec, snapshot)
-	dynamicSections := buildPromptDynamicSections(snapshot)
-	overlaySections := []promptSection{}
-	if overlay := newPromptSectionFromText("exception_overlay", snapshot.ExceptionOverlay); !overlay.isEmpty() {
-		overlaySections = append(overlaySections, overlay)
-	}
-	return promptDocument{
-		StaticSections:  staticSections,
-		DynamicSections: dynamicSections,
-		OverlaySections: overlaySections,
-	}
+	return promptDocument{Sections: buildPromptStaticSections(spec, snapshot)}
 }
 
 func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSnapshot) []promptSection {
@@ -264,29 +135,12 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 		buildPromptCommonWorkflowsSection(snapshot),
 		newPromptSection("markdown_output_contract", buildMarkdownOutputContractLines()...),
 		buildPromptSearchTemplateSection(snapshot),
+		buildPromptWebResearchCapabilitySection(snapshot),
 	)
 	if snapshot.AllowUserInteraction {
 		sections = append(sections, buildPromptAskUserPolicySection(snapshot))
 	} else if section := buildPromptAutonomousInteractionSection(spec); !section.isEmpty() {
 		sections = append(sections, section)
-	}
-	return sections
-}
-
-func buildPromptDynamicSections(snapshot promptRuntimeSnapshot) []promptSection {
-	sections := []promptSection{}
-	sections = append(sections, buildPromptRuntimeContextSection(snapshot))
-	sections = append(sections, buildPromptWebResearchCapabilitySection(snapshot))
-	if section := buildPromptWorkspaceContextSection(snapshot); !section.isEmpty() {
-		sections = append(sections, section)
-	}
-	if promptToolAvailable(snapshot.AvailableToolNames, "use_skill") {
-		if section := newPromptSectionFromText("skill_catalog", buildSkillCatalogPrompt(snapshot.AvailableSkills)); !section.isEmpty() {
-			sections = append(sections, section)
-		}
-		if section := newPromptSectionFromText("skill_overlay", buildSkillOverlayPrompt(snapshot.ActiveSkills)); !section.isEmpty() {
-			sections = append(sections, section)
-		}
 	}
 	return sections
 }
@@ -315,7 +169,7 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 			"1. **Investigate** — Use read_file/read_files, rgrep, and find for project-scoped workspace inspection. Follow Online Research Capability when external information is needed.",
 			"2. **Reason** — Identify what can be answered or verified with the readonly tools currently available.",
 			"3. **Verify** — Cross-check claims with additional readonly inspection or authoritative fetched sources. Shell commands and file mutation tools are unavailable in readonly permission.",
-			"4. **Respond** — Reply naturally when the turn is complete; use ask_user only when the next step truly depends on user input.",
+			"4. **Respond** — Provide the final assistant response, then call task_complete when the requested task is complete; use ask_user only when the next step truly depends on user input.",
 			"",
 			"Information source routing:",
 			"- Current workspace code and files -> read_file/read_files, rgrep, or find.",
@@ -337,7 +191,7 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 		"2. **Reason** — Identify what needs to be done based on the information gathered.",
 		"3. **Change** — Use the available file tools for file inspection and mutation, apply_patch for patch-shaped edits, and terminal.exec for validated command actions.",
 		"4. **Verify** — Use terminal.exec to run checks (tests/lint/build) and confirm correctness.",
-		"5. **Respond** — Reply naturally when the turn is complete; use ask_user only when the next step truly depends on user input.",
+		"5. **Respond** — Provide the final assistant response, then call task_complete when the requested task is complete; use ask_user only when the next step truly depends on user input.",
 		"",
 		"Information source routing:",
 		"- Current workspace code, files, builds, tests, and device state -> terminal.exec or file tools.",
@@ -471,8 +325,8 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 			"- Do NOT fabricate file contents, command outputs, or tool results. Always use available tools to get real data.",
 			"- Do NOT ask the user to gather logs, inspect files, or paste outputs that available readonly tools can obtain directly.",
 			"- Prefer autonomous continuation whenever available tools can make progress.",
-			"- If information is insufficient and tools cannot help, follow the interaction policy in runtime context.",
-			"- When the user uses relative dates such as today, tomorrow, or yesterday, resolve them against the current date and timezone in runtime context, and prefer explicit absolute dates when clarity matters.",
+			"- If information is insufficient and tools cannot help, use ask_user when it is available; otherwise explain the blocker.",
+			"- When the user uses relative dates such as today, tomorrow, or yesterday, resolve them against host-provided current date context when present, and prefer explicit absolute dates when clarity matters.",
 			"- Prefer concrete choices over template placeholders like `YYYY-MM-DD`; the UI already provides a custom fallback input.",
 		)
 		return newPromptSection("mandatory_rules", lines...)
@@ -481,7 +335,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Use OKF tools only for Redeven repository knowledge: okf.index for broad directory discovery, okf.search for short candidate lists, and okf.open for detailed concept facts.",
 		"- Do not answer detailed OKF-backed claims from search snippets alone; open the relevant concept Summary, then open the relevant section when details are needed.",
 		"- For source-level conclusions, verify OKF background with terminal.exec or file tools before final conclusions.",
-		"- Use canonical tool names exactly as listed in Current Context; do not convert punctuation in tool names or invent underscore variants.",
+		"- Use canonical tool names exactly as exposed by the current tool definitions; do not convert punctuation in tool names or invent underscore variants.",
 		"- Prefer the explicit file tools for direct file inspection or mutation when they are available.",
 		"- Prefer apply_patch for patch-shaped edits instead of shell redirection or ad-hoc overwrite commands.",
 		"- When the task asks for verification or a verification command, use terminal.exec for that verification; file inspection can supplement but does not replace a real verification command.",
@@ -498,8 +352,8 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",
 		"- Do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly.",
 		"- Prefer autonomous continuation whenever available tools can make progress.",
-		"- If information is insufficient and tools cannot help, follow the interaction policy in runtime context.",
-		"- When the user uses relative dates such as today, tomorrow, or yesterday, resolve them against the current date and timezone in runtime context, and prefer explicit absolute dates when clarity matters.",
+		"- If information is insufficient and tools cannot help, use ask_user when it is available; otherwise explain the blocker.",
+		"- When the user uses relative dates such as today, tomorrow, or yesterday, resolve them against host-provided current date context when present, and prefer explicit absolute dates when clarity matters.",
 		"- Prefer concrete choices over template placeholders like `YYYY-MM-DD`; the UI already provides a custom fallback input.",
 	)
 	return newPromptSection("mandatory_rules", lines...)
@@ -546,7 +400,7 @@ func buildPromptToolFailureRecoverySection(snapshot promptRuntimeSnapshot) promp
 		"- If file.edit fails because the target text no longer matches, re-read the file and regenerate a fresh exact replacement once.",
 		"- If file.write would overwrite the wrong content, inspect the current file first and then rewrite deterministically.",
 		"- If apply_patch fails, re-read the current file contents and regenerate a fresh canonical Begin/End Patch once; do NOT fall back to shell redirection or ad-hoc file overwrite commands for normal edits.",
-		"- If terminal.exec fails, reduce scope or switch tools; if blocked, follow the interaction policy in runtime context.",
+		"- If terminal.exec fails, reduce scope or switch tools; if blocked, use ask_user when available or explain the blocker.",
 		"- If terminal.exec returns a running process_id, inspect it with terminal.read instead of repeating the same command.",
 	)
 	return newPromptSection("tool_failure_recovery", lines...)
@@ -634,55 +488,6 @@ func buildPromptAutonomousInteractionSection(spec promptProfileSpec) promptSecti
 	lines := []string{"# Interaction Policy"}
 	lines = append(lines, spec.InteractionLines...)
 	return newPromptSection("interaction_policy", lines...)
-}
-
-func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSection {
-	todoStatus := "unknown"
-	if snapshot.TodoStatus.TrackingEnabled {
-		todoStatus = fmt.Sprintf(
-			"open=%d,in_progress=%d,version=%d,last_updated_round=%d",
-			snapshot.TodoStatus.OpenCount,
-			snapshot.TodoStatus.InProgressCount,
-			snapshot.TodoStatus.SnapshotVersion,
-			snapshot.TodoStatus.LastUpdatedRound,
-		)
-	}
-	lines := []string{
-		"## Current Context",
-		fmt.Sprintf("- Working directory: %s", snapshot.WorkingDir),
-	}
-	lines = append(lines, renderPromptLocalTimeContextLines(snapshot.LocalTime)...)
-	lines = append(lines,
-		fmt.Sprintf("- Current round: %d (first_round=%t)", snapshot.RoundIndex+1, snapshot.IsFirstRound),
-		fmt.Sprintf("- Prompt profile: %s", snapshot.PromptProfile),
-		fmt.Sprintf("- Task complexity: %s", snapshot.TaskComplexity),
-		fmt.Sprintf("- Available tools: %s", snapshot.AvailableToolNames),
-		fmt.Sprintf("- Objective: %s", snapshot.Objective),
-		fmt.Sprintf("- Todo tracking: %s", todoStatus),
-	)
-	if snapshot.AllowUserInteraction {
-		lines = append(lines, fmt.Sprintf("- Ask-user question batches supported: %t", snapshot.SupportsAskUserQuestionBatches))
-	} else if resolvePromptProfileSpec(snapshot.PromptProfile).PrefersParentFacingReporting {
-		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously and report blockers plus suggested parent actions in the assistant response.")
-	} else {
-		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously and report blockers plus concrete next-step guidance in the assistant response.")
-	}
-	if len(snapshot.AvailableSkills) > 0 {
-		if promptToolAvailable(snapshot.AvailableToolNames, "use_skill") {
-			lines = append(lines, fmt.Sprintf("- Available skills: %s", joinSkillNames(snapshot.AvailableSkills)))
-		}
-	}
-	return newPromptSection("runtime_context", lines...)
-}
-
-func promptStaticPrefixCacheKey(snapshot promptRuntimeSnapshot) cachedPromptPrefixKey {
-	permissionType := strings.ToLower(strings.TrimSpace(snapshot.PermissionType))
-	return cachedPromptPrefixKey{
-		Profile:                        resolveRunPromptProfile(snapshot.PromptProfile, nil, snapshot.AllowUserInteraction),
-		PermissionType:                 permissionType,
-		AllowUserInteraction:           snapshot.AllowUserInteraction,
-		SupportsAskUserQuestionBatches: snapshot.SupportsAskUserQuestionBatches,
-	}
 }
 
 func promptToolAvailable(names string, want string) bool {

@@ -31,7 +31,7 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 		seenTools[name] = struct{}{}
 		allowedTools = append(allowedTools, name)
 	}
-	allowedSignals := make([]string, 0, 1)
+	allowedSignals := make([]string, 0, 2)
 	seenSignals := make(map[string]struct{}, len(signals))
 	for _, def := range signals {
 		name := strings.TrimSpace(def.Name)
@@ -40,11 +40,11 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 		}
 		seenSignals[name] = struct{}{}
 	}
-	for _, signal := range []string{"ask_user"} {
+	for _, signal := range []string{"ask_user", "task_complete"} {
 		if _, ok := seenSignals[signal]; !ok {
 			continue
 		}
-		if !allowUserInteraction {
+		if signal == "ask_user" && !allowUserInteraction {
 			continue
 		}
 		allowedSignals = append(allowedSignals, signal)
