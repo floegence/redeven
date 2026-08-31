@@ -58,7 +58,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   ArrowDown: icon('arrow-down'),
   ArrowUp: icon('arrow-up'),
   Check: icon('check'),
-  CircleStop: icon('stop'),
+  StopFilled: icon('stop-filled'),
   Cpu: icon('cpu'),
   Database: icon('database'),
   ExternalLink: icon('external-link'),
@@ -76,6 +76,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Play: icon('play'),
   Plus: icon('plus'),
   Refresh: icon('refresh'),
+  Settings: icon('settings'),
   Search: icon('search'),
   Trash: icon('trash'),
   X: icon('x'),
@@ -269,13 +270,14 @@ describe('native Containers page', () => {
     harness.listServices.mockReset().mockResolvedValue([
       {
         service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'stopped',
-        capabilities: { start: true, stop: true, restart: true, configure_proxy: true, configure_advanced: true, open_external_config: false },
-        configuration_kind: 'json',
+        capabilities: { start: true, stop: true, restart: true },
+        configuration: { mode: 'editable', format: 'json', sections: ['proxy', 'advanced'], owner: 'redeven' },
       },
       {
         service_id: 'container_service_podman', engine: 'podman', name: 'Local Podman', implementation: 'podman_local', state: 'running',
-        capabilities: { start: false, stop: false, restart: false, configure_proxy: true, configure_advanced: true, open_external_config: false },
-        configuration_kind: 'toml', guidance_code: 'podman_daemonless', rootless: true,
+        capabilities: { start: false, stop: false, restart: false },
+        configuration: { mode: 'editable', format: 'toml', sections: ['proxy', 'advanced'], owner: 'redeven' },
+        guidance_code: 'podman_daemonless', rootless: true,
       },
     ]);
     harness.getServiceConfiguration.mockReset().mockResolvedValue({
@@ -364,6 +366,7 @@ describe('native Containers page', () => {
     expect(host.querySelector('.container-resource-tabs')).toBeNull();
     expect(host.querySelectorAll('.container-service-card')).toHaveLength(2);
     expect(host.querySelector('.container-service-card button')?.textContent).toContain('containers.actions.start');
+    expect(host.querySelector<HTMLImageElement>('.container-service-card img')?.src).toContain('/_redeven_proxy/env/container-service-icons/docker-default.svg');
 
     const configure = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button'))
       .find((button) => button.textContent?.includes('containers.services.configure'));
@@ -372,6 +375,33 @@ describe('native Containers page', () => {
 
     expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_docker');
     expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.httpProxy');
+  });
+
+  it('hands provider-owned configuration to the official service without showing a false editor', async () => {
+    harness.listServices.mockResolvedValue([{
+      service_id: 'container_service_desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'running',
+      capabilities: { start: true, stop: true, restart: true },
+      configuration: { mode: 'external', owner: 'docker_desktop' },
+      guidance_code: 'desktop_managed',
+    }]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
+      .find((button) => button.textContent?.includes('containers.services.title'))
+      ?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button'))
+      .find((button) => button.textContent?.includes('containers.services.configure'))
+      ?.click();
+    await settle();
+
+    expect(harness.getServiceConfiguration).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.guidance.desktop_managed');
+    expect(host.querySelector('[data-dialog]')?.textContent).not.toContain('containers.services.httpProxy');
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.openSettings');
   });
 
   it('keeps prune in the danger menu and lets the server resolve the exact image set', async () => {
@@ -1121,11 +1151,13 @@ describe('native Containers page', () => {
     harness.listServices.mockResolvedValue([
       {
         service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
-        capabilities: { start: false, stop: true, restart: true, configure_proxy: false, configure_advanced: false, open_external_config: false },
+        capabilities: { start: false, stop: true, restart: true },
+        configuration: { mode: 'unavailable', owner: 'host' },
       },
       {
         service_id: 'container_service_podman', engine: 'podman', name: 'Podman', implementation: 'unavailable', state: 'not_installed',
-        capabilities: { start: false, stop: false, restart: false, configure_proxy: false, configure_advanced: false, open_external_config: false },
+        capabilities: { start: false, stop: false, restart: false },
+        configuration: { mode: 'unavailable', owner: 'host' },
         guidance_code: 'install',
       },
     ]);
@@ -1583,7 +1615,7 @@ describe('native Containers page', () => {
 
     expect(host.querySelector('[data-icon="filter"]')).not.toBeNull();
     expect(host.querySelector('[data-icon="settings"]')).toBeNull();
-    expect(host.querySelector('button[aria-label="containers.actions.stop"] [data-icon="stop"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="containers.actions.stop"] [data-icon="stop-filled"]')).not.toBeNull();
     const menuIcons = Array.from(host.querySelectorAll('[data-test-dropdown-menu] [data-icon]'))
       .map((item) => item.getAttribute('data-icon'));
     expect(menuIcons).toEqual(expect.arrayContaining(['refresh', 'pause', 'x-circle', 'trash']));

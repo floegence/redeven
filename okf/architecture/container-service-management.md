@@ -7,30 +7,24 @@ timestamp: 2026-08-31T00:00:00Z
 ---
 # Summary
 
-Redeven presents Docker and Podman installation, availability, lifecycle, and
-configuration through one `ContainerServiceController` boundary in
-`containerengine`. A stable opaque service ID, rather than an endpoint, owns
-every read, preflight, lock, operation, and reconciliation. Unsupported or
-remote services stay observable but read-only. Host mutations require full RWX
-and Admin, never elevate privileges, and fail closed when ownership, authority,
-configuration revision, or final service state cannot be proved.
+One `ContainerServiceController` owns Docker and Podman discovery, lifecycle,
+configuration, preflight identity, and reconciliation. Stable opaque service
+IDs replace endpoints. Host mutations require full RWX and Admin, never elevate
+privileges, and fail closed when ownership, revision, or final state is unknown.
 
 # Contract
 
 ## Discovery and identity
 
-The controller detects Docker and Podman independently and returns one product
-service for each engine. Docker examines only the current context. Podman
-examines only the default connection, or the local runtime when no connection
-is configured. Detection never scans inactive contexts and never selects a
-fallback remote target.
+The controller returns one independently detected service per engine. Docker
+uses only the current context. Podman uses only the default connection or local
+runtime. Detection never scans or falls back to another target.
 
 Implementation is derived from official observable state:
 
 - Docker Desktop is identified and controlled through `docker desktop`.
-- Docker Engine is controllable only through a systemd unit already accessible
-  to the current user. User units use `systemctl --user`; system units are
-  available only when Redeven already runs as root.
+- Docker Engine is controllable only through an already-accessible systemd
+  user unit, or a system unit when Redeven already runs as root.
 - Podman Machine is associated with the active connection only when official
   `podman machine inspect` data matches that connection. A matching name alone
   is insufficient.
@@ -39,13 +33,11 @@ Implementation is derived from official observable state:
 - An unmatched remote Docker or Podman target exposes status and host-management
   guidance only.
 
-The service projection reports a typed implementation and one of `running`,
-`stopped`, `not_installed`, `permission`, `unreachable`, or `error`. Guidance is
-a localization code, not raw command output. Configuration paths, context
-addresses, socket paths, remote URLs, systemd unit details, and machine
-connection data never enter the DTO. Runtime discovery consumes this same
-projection, so service status and resource availability cannot diverge through
-parallel detection logic.
+The projection reports one implementation, state, and discriminated
+configuration access: `editable`, `external`, or `unavailable`. Each has one
+owner and UI path, replacing independent capability booleans. Guidance is a
+localization code. Host paths, addresses, unit details, and connection data
+never enter the DTO. Runtime discovery consumes the same projection.
 
 ## Lifecycle and authority
 
@@ -57,24 +49,24 @@ restart is an explicit stop followed by start. Redeven never invokes `sudo`,
 `pkexec`, a password prompt, polkit, group membership changes, or socket
 permission changes.
 
-Every lifecycle mutation uses the existing native preflight and operation API.
-It requires Read, Write, Execute, and Admin. Stop and restart additionally
-require the exact displayed service name. Their preflight resolves the current
-running-container count and the exact affected Web Service owners. Admin may
-continue after reviewing that impact; the UI is not an enforcement boundary.
-The operation stays locked by `(engine, container_service, service_id)` until a
-fresh controller read proves the required final state. Interrupted operations
-are observed and marked interrupted at startup and are never replayed.
+Every mutation uses native preflight and Operations with full RWX and Admin.
+Stop and restart also require the displayed service name. Preflight resolves
+running containers and affected Web Services. The service stays locked until a
+fresh read proves final state; interrupted operations are never replayed.
 
 ## Configuration
 
-`GET /_redeven_proxy/api/container-resources/services` requires Read.
+`GET /_redeven_proxy/api/container-resources/services` requires Read and exposes
+the discriminated configuration access value. `editable` includes the format
+and available proxy/advanced sections; `external` names the official owner;
+`unavailable` provides explanation only.
 `GET /_redeven_proxy/api/container-resources/services/{service_id}/configuration`
 requires Read and Admin and returns `Cache-Control: no-store`. Docker Engine may
 edit only its official `daemon.json`; local Podman may edit only the current
 user's `containers.conf`. Docker Desktop, Podman Machine, remote services,
 custom paths, symlinked paths, and externally managed or unwritable files are
-read-only and direct the user to the official owner.
+never represented as editable and direct the user to the official owner when
+one exists.
 
 Configuration has two exclusive UI modes. Proxy mode edits HTTP, HTTPS, and
 NO_PROXY values while preserving unrelated document fields. Advanced mode
@@ -83,40 +75,38 @@ editor. Each update includes the configuration `base_revision`, is limited to
 256 KiB, and requires the exact service name. A changed revision fails before
 write.
 
-The server builds a candidate in memory and validates it before review and
-again before execution. Docker candidates use `dockerd --validate
---config-file`; Podman candidates use an isolated temporary
-`CONTAINERS_CONF` with a read-only `podman info`. Replacement is an atomic
-same-directory rename that preserves file mode. “Save only” records whether a
-Docker Engine restart is pending. “Save and restart” restores the exact old
-bytes and attempts one recovery restart when the new configuration cannot be
-applied. Failure to restore or restart returns `SERVICE_RECOVERY_REQUIRED`
-without hidden retry loops.
+Candidates are validated before review and execution: Docker uses `dockerd
+--validate --config-file`; Podman uses temporary `CONTAINERS_CONF` and read-only
+`podman info`. Replacement is atomic and preserves mode. “Save and restart”
+restores old bytes and attempts one recovery start on failure; failed recovery
+returns `SERVICE_RECOVERY_REQUIRED` without hidden retries.
 
-Configuration documents, proxy values, embedded credentials, and host paths
-never enter the product database, operation row, event stream, reconciliation,
-audit detail, application log, or public error. Schema v3 stores only service
-ID, configuration revision, restart-required state, service generation, and
-update time. Its contiguous v2-to-v3 migration preserves saved Compose Projects
-and fails atomically on schema drift.
+Configuration, credentials, and host paths never enter the database,
+Operations, audit, logs, or public errors. Schema v3 stores only service ID,
+revision, restart-required state, generation, and update time. Its contiguous
+migration preserves Compose Projects and fails atomically on drift.
 
 ## Product surface and observation
 
-The Containers header exposes one “Container services” item in its shared
-three-dot menu. It opens a component-local service page; normal resource tabs
-and engine endpoints are not duplicated there. Service cards show status,
-short guidance, supported actions, and restart-required state. A service
-operation appears on its owning card, and selecting that progress row opens the
-existing Operations detail and durable event timeline. Service mutations do
-not automatically replace the page with the global drawer.
+The Containers header exposes one “Container services” item in its three-dot
+menu. It opens a component-local service page without duplicating resource tabs
+or endpoints. Compact cards use audited Docker and Podman marks from one pinned
+theSVG revision, status color, supported actions, and a short entrance/elevation
+transition. Reduced-motion removes movement; forced-colors replaces brand color
+with the audited monochrome variant. Skeletons preserve the final card geometry.
 
-The configuration dialog uses shared Tabs and form controls. Docker Desktop
-and Podman Machine provide an official-settings action instead of a false local
-editor. Refresh, operation completion, and return to resources reload service,
-runtime, inventory, and Web Service projections through their authoritative
-owners. Desktop, Workbench, and narrow layouts preserve keyboard access,
-44-pixel touch targets, reduced motion, forced colors, and every shipped
-locale.
+Every card has one configuration action. Editable services open shared Tabs for
+proxy and Monaco-backed advanced editing. Docker Desktop, Podman Machine, and
+remote services open an explicit owner handoff instead of a false editor.
+Unavailable configuration explains the boundary without a disabled empty
+surface. Service operation progress stays on its owning card and opens the
+existing Operations detail when selected.
+
+All container-service and resource stop actions use the shared filled stop
+glyph. List, detail, menu, and service-card surfaces consume the same operation
+presentation mapping; no surface substitutes a checkbox-like outlined symbol.
+Refresh and operation completion reload authoritative service, runtime,
+inventory, and Web Service state.
 
 # Boundaries
 
@@ -140,3 +130,4 @@ locale.
 - `redeven:internal/containerresource/schema.go` - Owns the v3 metadata-only schema and contiguous migration.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Exposes service reads and enforces Local API permissions, audit redaction, and no-store delivery.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Owns the service page, card-local operation progress, configuration modes, and official handoff.
+- `redeven:assets/container_service_icons.json` - Pins and hashes the audited Docker and Podman brand variants used by the service cards.

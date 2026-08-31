@@ -47,7 +47,10 @@ func (c *CLIClient) ContainerServices(ctx context.Context) ([]ContainerService, 
 }
 
 func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService {
-	base := ContainerService{Engine: EngineDocker, Name: "Docker", Implementation: ContainerServiceUnavailable}
+	base := ContainerService{
+		Engine: EngineDocker, Name: "Docker", Implementation: ContainerServiceUnavailable,
+		ConfigurationAccess: unavailableContainerServiceConfiguration(ContainerServiceConfigurationOwnerHost),
+	}
 	endpoints, err := c.listDockerContexts(ctx)
 	if err != nil {
 		base.State = containerServiceStateFromError(err)
@@ -67,6 +70,7 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EngineDocker, ContainerServiceRemote, string(endpoint.EndpointID)), Engine: EngineDocker,
 			Name: "Remote Docker", Implementation: ContainerServiceRemote, State: c.endpointServiceState(ctx, *endpoint),
 			Remote: true, GuidanceCode: ContainerServiceGuidanceRemoteHost, endpointID: endpoint.EndpointID,
+			ConfigurationAccess: externalContainerServiceConfiguration(ContainerServiceConfigurationOwnerRemoteHost),
 		}
 	}
 	bound, _, bindErr := c.BindEndpoint(ctx, EngineDocker, endpoint.EndpointID)
@@ -82,15 +86,18 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 		return ContainerService{
 			ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerDesktop, "local"), Engine: EngineDocker,
 			Name: "Docker Desktop", Implementation: ContainerServiceDockerDesktop, State: state, Version: status.Version,
-			Capabilities: ContainerServiceCapabilities{Start: true, Stop: true, Restart: true, OpenExternalConfig: true},
-			GuidanceCode: ContainerServiceGuidanceDesktopManaged, endpointID: endpoint.EndpointID,
+			Capabilities:        ContainerServiceCapabilities{Start: true, Stop: true, Restart: true},
+			ConfigurationAccess: externalContainerServiceConfiguration(ContainerServiceConfigurationOwnerDockerDesktop),
+			GuidanceCode:        ContainerServiceGuidanceDesktopManaged, endpointID: endpoint.EndpointID,
 			Generation: serviceGeneration(status.Version, state),
 		}
 	}
 	service := ContainerService{
 		ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerEngine, "local"), Engine: EngineDocker,
 		Name: "Docker Engine", Implementation: ContainerServiceDockerEngine, State: containerServiceStateFromStatus(status, statusErr),
-		Version: status.Version, endpointID: endpoint.EndpointID, ConfigurationKind: ContainerServiceConfigurationJSON,
+		Version: status.Version, endpointID: endpoint.EndpointID,
+		ConfigurationAccess: unavailableContainerServiceConfiguration(ContainerServiceConfigurationOwnerHost),
+		configurationKind:   ContainerServiceConfigurationJSON,
 	}
 	service.Generation = serviceGeneration(service.Version, service.State)
 	service.serviceUnit, service.serviceUserUnit = c.detectDockerSystemdUnit(ctx)
@@ -99,8 +106,7 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 	service.Capabilities.Restart = service.serviceUnit != ""
 	service.configPath = c.dockerEngineConfigPath(service.serviceUserUnit)
 	if service.configPath != "" && safeConfigPath(service.configPath) {
-		service.Capabilities.ConfigureProxy = true
-		service.Capabilities.ConfigureAdvanced = true
+		service.ConfigurationAccess = editableContainerServiceConfiguration(ContainerServiceConfigurationJSON)
 	} else {
 		service.GuidanceCode = ContainerServiceGuidanceExternallyManaged
 	}
@@ -111,7 +117,10 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 }
 
 func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService {
-	base := ContainerService{Engine: EnginePodman, Name: "Podman", Implementation: ContainerServiceUnavailable}
+	base := ContainerService{
+		Engine: EnginePodman, Name: "Podman", Implementation: ContainerServiceUnavailable,
+		ConfigurationAccess: unavailableContainerServiceConfiguration(ContainerServiceConfigurationOwnerHost),
+	}
 	endpoints, err := c.listPodmanConnections(ctx)
 	if err != nil {
 		base.State = containerServiceStateFromError(err)
@@ -142,13 +151,13 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EnginePodman, ContainerServicePodmanLocal, "local"), Engine: EnginePodman,
 			Name: "Local Podman", Implementation: ContainerServicePodmanLocal, State: containerServiceStateFromStatus(status, statusErr),
 			Version: status.Version, Rootless: rootless, endpointID: endpoint.EndpointID,
-			ConfigurationKind: ContainerServiceConfigurationTOML, GuidanceCode: ContainerServiceGuidancePodmanDaemonless,
+			ConfigurationAccess: unavailableContainerServiceConfiguration(ContainerServiceConfigurationOwnerHost),
+			configurationKind:   ContainerServiceConfigurationTOML, GuidanceCode: ContainerServiceGuidancePodmanDaemonless,
 			Generation: serviceGeneration(status.Version, containerServiceStateFromStatus(status, statusErr)),
 		}
 		service.configPath = c.podmanConfigPath()
 		if service.configPath != "" && safeConfigPath(service.configPath) {
-			service.Capabilities.ConfigureProxy = true
-			service.Capabilities.ConfigureAdvanced = true
+			service.ConfigurationAccess = editableContainerServiceConfiguration(ContainerServiceConfigurationTOML)
 		}
 		return service
 	}
@@ -158,7 +167,8 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EnginePodman, ContainerServiceRemote, string(endpoint.EndpointID)), Engine: EnginePodman,
 			Name: "Remote Podman", Implementation: ContainerServiceRemote, State: containerServiceStateFromStatus(status, statusErr),
 			Version: status.Version, Rootless: rootless, Remote: true, GuidanceCode: ContainerServiceGuidanceRemoteHost, endpointID: endpoint.EndpointID,
-			Generation: serviceGeneration(status.Version, containerServiceStateFromStatus(status, statusErr)),
+			ConfigurationAccess: externalContainerServiceConfiguration(ContainerServiceConfigurationOwnerRemoteHost),
+			Generation:          serviceGeneration(status.Version, containerServiceStateFromStatus(status, statusErr)),
 		}
 	}
 	state := containerServiceStateFromStatus(status, statusErr)
@@ -168,10 +178,30 @@ func (c *CLIClient) discoverPodmanService(ctx context.Context) ContainerService 
 	return ContainerService{
 		ServiceID: containerServiceID(EnginePodman, ContainerServicePodmanMachine, machine.Name), Engine: EnginePodman,
 		Name: "Podman Machine " + machine.Name, Implementation: ContainerServicePodmanMachine, State: state, Version: status.Version, Rootless: rootless,
-		Capabilities: ContainerServiceCapabilities{Start: true, Stop: true, Restart: true, OpenExternalConfig: true},
-		GuidanceCode: ContainerServiceGuidancePodmanMachine, endpointID: endpoint.EndpointID, machineName: machine.Name,
+		Capabilities:        ContainerServiceCapabilities{Start: true, Stop: true, Restart: true},
+		ConfigurationAccess: externalContainerServiceConfiguration(ContainerServiceConfigurationOwnerPodmanMachine),
+		GuidanceCode:        ContainerServiceGuidancePodmanMachine, endpointID: endpoint.EndpointID, machineName: machine.Name,
 		Generation: serviceGeneration(status.Version, state),
 	}
+}
+
+func editableContainerServiceConfiguration(kind ContainerServiceConfigurationKind) ContainerServiceConfigurationAccess {
+	return ContainerServiceConfigurationAccess{
+		Mode: ContainerServiceConfigurationEditable, Format: kind,
+		Sections: []ContainerServiceConfigurationSection{
+			ContainerServiceConfigurationSectionProxy,
+			ContainerServiceConfigurationSectionAdvanced,
+		},
+		Owner: ContainerServiceConfigurationOwnerRedeven,
+	}
+}
+
+func externalContainerServiceConfiguration(owner ContainerServiceConfigurationOwner) ContainerServiceConfigurationAccess {
+	return ContainerServiceConfigurationAccess{Mode: ContainerServiceConfigurationExternal, Owner: owner}
+}
+
+func unavailableContainerServiceConfiguration(owner ContainerServiceConfigurationOwner) ContainerServiceConfigurationAccess {
+	return ContainerServiceConfigurationAccess{Mode: ContainerServiceConfigurationUnavailable, Owner: owner}
 }
 
 func activeEndpoint(items []EngineEndpoint) *EngineEndpoint {
@@ -371,16 +401,16 @@ func (c *CLIClient) ContainerServiceConfiguration(ctx context.Context, serviceID
 	if err != nil {
 		return ContainerServiceConfiguration{}, err
 	}
-	if service.configPath == "" || (!service.Capabilities.ConfigureProxy && !service.Capabilities.ConfigureAdvanced) {
+	if service.configPath == "" || service.ConfigurationAccess.Mode != ContainerServiceConfigurationEditable {
 		return ContainerServiceConfiguration{}, ErrContainerServiceConfigReadOnly
 	}
-	raw, revision, err := readContainerServiceConfiguration(service.configPath, service.ConfigurationKind)
+	raw, revision, err := readContainerServiceConfiguration(service.configPath, service.configurationKind)
 	if err != nil {
 		return ContainerServiceConfiguration{}, err
 	}
-	httpProxy, httpsProxy, noProxy := extractContainerServiceProxy(service.ConfigurationKind, raw)
+	httpProxy, httpsProxy, noProxy := extractContainerServiceProxy(service.configurationKind, raw)
 	return ContainerServiceConfiguration{
-		ServiceID: service.ServiceID, Format: service.ConfigurationKind, Content: string(raw), BaseRevision: revision,
+		ServiceID: service.ServiceID, Format: service.configurationKind, Content: string(raw), BaseRevision: revision,
 		HTTPProxy: httpProxy, HTTPSProxy: httpsProxy, NoProxy: noProxy, RestartRequired: service.RestartRequired,
 	}, nil
 }
@@ -408,7 +438,7 @@ func (c *CLIClient) UpdateContainerServiceConfiguration(ctx context.Context, req
 	if err != nil {
 		return ContainerServiceActionResult{}, err
 	}
-	current, currentRevision, err := readContainerServiceConfiguration(service.configPath, service.ConfigurationKind)
+	current, currentRevision, err := readContainerServiceConfiguration(service.configPath, service.configurationKind)
 	if err != nil {
 		return ContainerServiceActionResult{}, err
 	}
@@ -417,7 +447,7 @@ func (c *CLIClient) UpdateContainerServiceConfiguration(ctx context.Context, req
 	}
 	candidate := []byte(req.Content)
 	if req.Mode == ContainerServiceConfigurationProxy {
-		candidate, err = mergeContainerServiceProxy(service.ConfigurationKind, current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
+		candidate, err = mergeContainerServiceProxy(service.configurationKind, current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
 		if err != nil {
 			return ContainerServiceActionResult{}, ErrContainerServiceConfigInvalid
 		}
@@ -451,7 +481,7 @@ func (c *CLIClient) ValidateContainerServiceConfiguration(ctx context.Context, r
 	if err != nil {
 		return err
 	}
-	current, currentRevision, err := readContainerServiceConfiguration(service.configPath, service.ConfigurationKind)
+	current, currentRevision, err := readContainerServiceConfiguration(service.configPath, service.configurationKind)
 	if err != nil {
 		return err
 	}
@@ -460,7 +490,7 @@ func (c *CLIClient) ValidateContainerServiceConfiguration(ctx context.Context, r
 	}
 	candidate := []byte(req.Content)
 	if req.Mode == ContainerServiceConfigurationProxy {
-		candidate, err = mergeContainerServiceProxy(service.ConfigurationKind, current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
+		candidate, err = mergeContainerServiceProxy(service.configurationKind, current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
 		if err != nil {
 			return ErrContainerServiceConfigInvalid
 		}
@@ -540,7 +570,7 @@ func (c *CLIClient) validateContainerServiceCandidate(ctx context.Context, servi
 	if err := temporary.Close(); err != nil {
 		return ErrContainerServiceConfigInvalid
 	}
-	switch service.ConfigurationKind {
+	switch service.configurationKind {
 	case ContainerServiceConfigurationJSON:
 		var document map[string]any
 		if err := json.Unmarshal(candidate, &document); err != nil || document == nil {

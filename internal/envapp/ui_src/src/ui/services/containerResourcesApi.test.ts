@@ -95,7 +95,8 @@ describe('native container resources API', () => {
     const signal = new AbortController().signal;
     const service = {
       service_id: 'container_service_1', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
-      capabilities: { start: false, stop: true, restart: true, configure_proxy: true, configure_advanced: true, open_external_config: false },
+      capabilities: { start: false, stop: true, restart: true },
+      configuration: { mode: 'editable', format: 'json', sections: ['proxy', 'advanced'], owner: 'redeven' },
     };
     const configuration = {
       service_id: service.service_id, format: 'json', content: '{}\n', base_revision: 'sha256:base', restart_required: false,

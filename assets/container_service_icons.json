@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "source": {
+    "label": "theSVG",
+    "repository": "https://github.com/glincker/thesvg",
+    "revision": "64a0c342e2ca60c3297080a7af41af9b3d2c9869",
+    "license": "MIT",
+    "license_file": "assets/licenses/thesvg-MIT.txt"
+  },
+  "assets": [
+    {
+      "identity": "docker",
+      "label": "Docker",
+      "default_file": "docker-default.svg",
+      "default_source_path": "public/icons/docker/default.svg",
+      "default_sha256": "29e91bf0593f02cf32efc849f2e9707dfddd4684b4d72b2a2b6a89da9626c60d",
+      "default_upstream_sha256": "29e91bf0593f02cf32efc849f2e9707dfddd4684b4d72b2a2b6a89da9626c60d",
+      "default_modified": false,
+      "mono_file": "docker-mono.svg",
+      "mono_source_path": "public/icons/docker/mono.svg",
+      "mono_sha256": "12c23b2939ddfb640dac0d205abc57766052941e227441693cdd1e06ef06aa81",
+      "mono_upstream_sha256": "65571291c261ef869c31540a38f3ca0f0ee3bb73f179c172211c8860f19a6359",
+      "mono_modified": "trailing_newline_only"
+    },
+    {
+      "identity": "podman",
+      "label": "Podman",
+      "default_file": "podman-default.svg",
+      "default_source_path": "public/icons/podman/default.svg",
+      "default_sha256": "a3bf051b85f5e398ce40f19e5e0c83523be7836ff8f909fe5b77a1d86e69bea4",
+      "default_upstream_sha256": "7d5dbd8c3d7ac8bf5afd8f128d38f2d3778597e47cbb6d5eb2cca735f00669ee",
+      "default_modified": "trailing_newline_only",
+      "mono_file": "podman-mono.svg",
+      "mono_source_path": "public/icons/podman/mono.svg",
+      "mono_sha256": "45d0b2053fb58d64fcc4611e9a7bb935cf857de683d4c9ba0b13eb830d47b53a",
+      "mono_upstream_sha256": "676f0e895fed6e004e2fbf55f364ba900ff1a6a6de26b78fb5066dde421e4e00",
+      "mono_modified": "trailing_newline_only"
+    }
+  ]
+}

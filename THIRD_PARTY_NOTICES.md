@@ -10,6 +10,15 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 
 The Ubuntu and Debian marks used to identify their corresponding built-in Webtop templates are derived from Simple Icons revision `1bd24ad0645f18ec68b17a087daa5649644bd303`, published under CC0-1.0. Product names and marks remain the property of their respective owners. Sources: https://github.com/simple-icons/simple-icons/blob/1bd24ad0645f18ec68b17a087daa5649644bd303/icons/ubuntu.svg and https://github.com/simple-icons/simple-icons/blob/1bd24ad0645f18ec68b17a087daa5649644bd303/icons/debian.svg.
 
+## Bundled Container Service Brand Assets
+
+The Docker and Podman marks identify the corresponding local container service. They are redistributed from pinned theSVG revision `64a0c342e2ca60c3297080a7af41af9b3d2c9869` under MIT. Product names and marks remain the property of their respective owners. The full theSVG MIT license is reproduced in the bundled Agent CLI brand asset section below.
+
+| Brand asset | License | Pinned source | Bundled file | Modification |
+| --- | --- | --- | --- | --- |
+| Docker | MIT | [default](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/docker/default.svg)<br>[mono](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/docker/mono.svg) | `internal/envapp/ui_src/public/container-service-icons/docker-default.svg`<br>`internal/envapp/ui_src/public/container-service-icons/docker-mono.svg` | Trailing newline only |
+| Podman | MIT | [default](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/podman/default.svg)<br>[mono](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/podman/mono.svg) | `internal/envapp/ui_src/public/container-service-icons/podman-default.svg`<br>`internal/envapp/ui_src/public/container-service-icons/podman-mono.svg` | Trailing newline only |
+
 ## On-Demand Managed Web Service Software
 
 Redeven can install the following software only after an authorized user explicitly requests a managed Web Service deployment. These artifacts are not embedded in the Redeven binary.
@@ -188,7 +197,8 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/floe-webapp-boot | 0.46.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.46.7 |  |
-| @floegence/floe-webapp-core | 0.46.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.46.7 |  |
+| @floegence/floe-webapp-core | 0.46.7 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.46.7 |  |
+| @floegence/floe-webapp-core | 0.46.8 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.46.8 |  |
 | @floegence/floe-webapp-protocol | 0.46.7 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.46.7 |  |
 | @floegence/floeterm-terminal-web | 0.18.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.18.1 | Built-in theme attribution and license texts are reproduced below from the verified 0.18.1 package. |
 | @floegence/flowersec-core | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/3.2.0 |  |

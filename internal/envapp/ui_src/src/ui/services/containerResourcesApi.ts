@@ -31,6 +31,21 @@ export type ContainerRuntime =
 export type ContainerServiceState = 'running' | 'stopped' | 'not_installed' | 'permission' | 'unreachable' | 'error';
 export type ContainerServiceImplementation = 'docker_desktop' | 'docker_engine' | 'podman_machine' | 'podman_local' | 'remote' | 'unavailable';
 export type ContainerServiceConfigurationKind = 'json' | 'toml';
+export type ContainerServiceConfigurationAccess =
+  | Readonly<{
+      mode: 'editable';
+      format: ContainerServiceConfigurationKind;
+      sections: readonly ('proxy' | 'advanced')[];
+      owner: 'redeven';
+    }>
+  | Readonly<{
+      mode: 'external';
+      owner: 'docker_desktop' | 'podman_machine' | 'remote_host';
+    }>
+  | Readonly<{
+      mode: 'unavailable';
+      owner?: 'host';
+    }>;
 
 export type ContainerService = Readonly<{
   service_id: string;
@@ -46,11 +61,8 @@ export type ContainerService = Readonly<{
     start: boolean;
     stop: boolean;
     restart: boolean;
-    configure_proxy: boolean;
-    configure_advanced: boolean;
-    open_external_config: boolean;
   }>;
-  configuration_kind?: ContainerServiceConfigurationKind;
+  configuration: ContainerServiceConfigurationAccess;
   restart_required?: boolean;
   generation?: string;
 }>;

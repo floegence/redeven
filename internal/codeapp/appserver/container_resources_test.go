@@ -35,8 +35,12 @@ func (f *appserverContainerServiceEngine) ContainerServices(context.Context) ([]
 	return []containerengine.ContainerService{{
 		ServiceID: appserverContainerServiceID, Engine: containerengine.EngineDocker, Name: "Docker Engine",
 		Implementation: containerengine.ContainerServiceDockerEngine, State: containerengine.ContainerServiceStateStopped,
-		Capabilities:      containerengine.ContainerServiceCapabilities{Start: true, ConfigureProxy: true, ConfigureAdvanced: true},
-		ConfigurationKind: containerengine.ContainerServiceConfigurationJSON,
+		Capabilities: containerengine.ContainerServiceCapabilities{Start: true},
+		ConfigurationAccess: containerengine.ContainerServiceConfigurationAccess{
+			Mode: containerengine.ContainerServiceConfigurationEditable, Format: containerengine.ContainerServiceConfigurationJSON,
+			Sections: []containerengine.ContainerServiceConfigurationSection{containerengine.ContainerServiceConfigurationSectionProxy, containerengine.ContainerServiceConfigurationSectionAdvanced},
+			Owner:    containerengine.ContainerServiceConfigurationOwnerRedeven,
+		},
 	}}, nil
 }
 
@@ -411,7 +415,7 @@ func TestContainerServicesRequireAdminForConfigurationAndKeepSecretsOutOfAudit(t
 	readOnly := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
 
 	response := serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/services", "")
-	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), appserverContainerServiceID) || strings.Contains(response.Body.String(), "secret") {
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), appserverContainerServiceID) || !strings.Contains(response.Body.String(), `"configuration":{"mode":"editable","format":"json","sections":["proxy","advanced"],"owner":"redeven"}`) || strings.Contains(response.Body.String(), "secret") || strings.Contains(response.Body.String(), "configure_proxy") {
 		t.Fatalf("service list status=%d body=%s", response.Code, response.Body.String())
 	}
 	response = serveContainerAPI(t, readOnly, channelID, http.MethodGet, containerResourcesAPIBase+"/services/"+appserverContainerServiceID+"/configuration", "")

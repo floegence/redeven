@@ -47,12 +47,13 @@ vi.mock('../services/containerResourcesApi', () => ({
   listContainerServices: vi.fn().mockResolvedValue([
     {
       service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running', version: '27.3.1',
-      capabilities: { start: false, stop: true, restart: true, configure_proxy: true, configure_advanced: true, open_external_config: false },
-      configuration_kind: 'json',
+      capabilities: { start: false, stop: true, restart: true },
+      configuration: { mode: 'editable', format: 'json', sections: ['proxy', 'advanced'], owner: 'redeven' },
     },
     {
       service_id: 'container_service_podman', engine: 'podman', name: 'Podman', implementation: 'unavailable', state: 'not_installed', guidance_code: 'install',
-      capabilities: { start: false, stop: false, restart: false, configure_proxy: false, configure_advanced: false, open_external_config: false },
+      capabilities: { start: false, stop: false, restart: false },
+      configuration: { mode: 'unavailable', owner: 'host' },
     },
   ]),
   getContainerServiceConfiguration: vi.fn().mockResolvedValue({
@@ -386,6 +387,36 @@ describe('native Containers responsive product surface', () => {
     const visibleButtons = Array.from(servicePage.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.getClientRects().length > 0);
     expect(visibleButtons.every((button) => button.getBoundingClientRect().height >= 44)).toBe(true);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it('shows official service branding and the owned proxy and advanced configuration surfaces', async () => {
+    await page.viewport(1440, 900);
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    root.querySelector<HTMLButtonElement>('[aria-label="Container services"]')?.click();
+    await settle();
+
+    const servicePage = root.querySelector<HTMLElement>('[data-container-services-page]')!;
+    const cards = Array.from(servicePage.querySelectorAll<HTMLElement>('.container-service-card'));
+    expect(cards).toHaveLength(2);
+    expect(cards[0].querySelector<HTMLImageElement>('.container-service-brand__color')?.getAttribute('src')).toBe('/_redeven_proxy/env/container-service-icons/docker-default.svg');
+    expect(cards[1].querySelector<HTMLImageElement>('.container-service-brand__color')?.getAttribute('src')).toBe('/_redeven_proxy/env/container-service-icons/podman-default.svg');
+    expect(getComputedStyle(servicePage.querySelector<HTMLElement>('.container-services-grid')!).gridTemplateColumns.split(' ')).toHaveLength(2);
+
+    Array.from(cards[0].querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Configure'))?.click();
+    await settle();
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Advanced'))?.click();
+    await settle();
+    expect(dialog.querySelector('.container-service-config-editor')).not.toBeNull();
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
   });
 
   it.each([
