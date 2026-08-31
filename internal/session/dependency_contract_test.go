@@ -691,7 +691,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v6"
-		floretVersion = "v6.0.1"
+		floretVersion = "v6.1.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -779,7 +779,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v6 v6.0.1",
+			"github.com/floegence/floret/v6 v6.1.0",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
 			"published Flowersec Go and Core v3.2.0 plus Floe Webapp v0.46.7",
@@ -1006,19 +1006,26 @@ func TestFloretCanonicalThreadCreationIsCreateCoordinatorOnly(t *testing.T) {
 	}
 }
 
-func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
+func TestFloretGatewayBoundaryUsesStableAgentIdentity(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
 	content := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_runtime.go"))
-	for _, marker := range []string{"flruntime.NewAgent", "flruntime.WithAgentThreadTitleMode", "flruntime.WithAgentDynamicToolSurface", "flruntime.ThreadTitleModeProvider"} {
+	for _, marker := range []string{
+		"flruntime.NewAgent",
+		"flruntime.WithAgentTools(surface.FloretToolItems...)",
+		"flruntime.WithAgentThreadTitleMode",
+		"flruntime.ThreadTitleModeProvider",
+		"flruntime.WithAgentTurnCompletionPolicy",
+		"flruntime.TurnCompletionExplicitSignal",
+	} {
 		if !strings.Contains(content, marker) {
-			t.Fatalf("floret_runtime.go must construct the immutable effect adapter Agent with %q", marker)
+			t.Fatalf("floret_runtime.go must construct the immutable hosted Agent with %q", marker)
 		}
 	}
-	for _, marker := range []string{"flconfig." + "ProviderFake", "Fake" + "Response", "TurnExecutionHostOptions", "RunTurnRequest"} {
+	for _, marker := range []string{"flruntime.WithAgentDynamicToolSurface", "flconfig." + "ProviderFake", "Fake" + "Response", "TurnExecutionHostOptions", "RunTurnRequest"} {
 		if strings.Contains(content, marker) {
-			t.Fatalf("floret_runtime.go retained removed gateway marker %q", marker)
+			t.Fatalf("floret_runtime.go retained removed hosted-Agent marker %q", marker)
 		}
 	}
 }

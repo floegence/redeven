@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/gitutil"
 )
 
@@ -433,25 +434,42 @@ func collectPromptDelegationState(r *run) promptDelegationState {
 	return out
 }
 
-func buildPromptWorkspaceContextSection(snapshot promptRuntimeSnapshot) promptSection {
+func buildPromptWorkspaceContextSection(workspace promptWorkspaceContext) promptSection {
 	lines := []string{"## Workspace Context"}
-	if envLines := renderPromptEnvironmentFactsLines(snapshot.WorkspaceContext.Environment); len(envLines) > 0 {
+	if envLines := renderPromptEnvironmentFactsLines(workspace.Environment); len(envLines) > 0 {
 		lines = append(lines, "### Environment Facts")
 		lines = append(lines, envLines...)
 	}
-	if repoLines := renderPromptRepositoryStateLines(snapshot.WorkspaceContext.Repository); len(repoLines) > 0 {
+	if repoLines := renderPromptRepositoryStateLines(workspace.Repository); len(repoLines) > 0 {
 		lines = append(lines, "### Repository State")
 		lines = append(lines, repoLines...)
 	}
-	if ruleLines := renderPromptRepoRuleLines(snapshot.WorkspaceContext.RepoRules); len(ruleLines) > 0 {
+	if ruleLines := renderPromptRepoRuleLines(workspace.RepoRules); len(ruleLines) > 0 {
 		lines = append(lines, "### Repository Rules")
 		lines = append(lines, ruleLines...)
 	}
-	if delegationLines := renderPromptDelegationLines(snapshot.WorkspaceContext.Delegation); len(delegationLines) > 0 {
+	if delegationLines := renderPromptDelegationLines(workspace.Delegation); len(delegationLines) > 0 {
 		lines = append(lines, "### Delegation State")
 		lines = append(lines, delegationLines...)
 	}
 	return newPromptSection("workspace_context", lines...)
+}
+
+func (r *run) floretTurnRuntimeContext() flruntime.TurnSupplementalContextItem {
+	capability := runCapabilityContract{AllowUserInteraction: r == nil || !r.noUserInteraction}
+	sections := []promptSection{
+		newPromptSection("current_context", buildBasicPromptCurrentContextLines(promptWorkingDirForRun(r), currentPromptLocalTimeContext(time.Now))...),
+		buildPromptWorkspaceContextSection(collectPromptWorkspaceContext(r, capability)),
+	}
+	if r != nil {
+		if catalog := newPromptSectionFromText("available_skills", buildSkillCatalogPrompt(r.listSkills())); !catalog.isEmpty() {
+			sections = append(sections, catalog)
+		}
+	}
+	text := truncateRunes(renderPromptSections(sections), flruntime.MaxTurnSupplementalContextTextRunes)
+	return flruntime.TurnSupplementalContextItem{
+		Kind: "runtime_context", Title: "Current environment context", Text: text, Sensitive: true,
+	}
 }
 
 func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {

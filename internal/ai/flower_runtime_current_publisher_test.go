@@ -146,6 +146,37 @@ func TestFlowerRuntimeCurrentPublisherStreamsThinkingAtVisualCadence(t *testing.
 	}
 }
 
+func TestFlowerRuntimeCurrentPublisherPublishesEveryRunPhaseBoundaryImmediately(t *testing.T) {
+	clock := newFakeFlowerRuntimePublishClock()
+	var published []recordedFlowerRuntimeCurrent
+	publisher := newFlowerRuntimeCurrentPublisher(50*time.Millisecond, clock, func(endpointID string, current flruntime.ThreadView) {
+		published = append(published, recordedFlowerRuntimeCurrent{endpointID: endpointID, current: current})
+	})
+	t.Cleanup(publisher.Close)
+
+	current := flruntime.ThreadView{
+		ThreadID: identity.ThreadID("thread-continuation"), TurnID: identity.TurnID("turn-continuation"),
+		RunID: identity.RunID("run-waiting"), ViewVersion: 1, Activity: flruntime.ThreadActivityActive,
+	}
+	publisher.Publish("env-local", current)
+
+	current.RunID = identity.RunID("run-continuation")
+	for index, phase := range []flruntime.ThreadRunPhase{
+		flruntime.ThreadRunPhasePreparing,
+		flruntime.ThreadRunPhaseWaitingResponse,
+		flruntime.ThreadRunPhaseStreaming,
+		flruntime.ThreadRunPhaseFinalizing,
+	} {
+		current.ViewVersion = uint64(index + 2)
+		current.RunProgress = &flruntime.ThreadRunProgress{Phase: phase}
+		publisher.Publish("env-local", current)
+	}
+
+	if got := publishedVersions(published); !equalUint64s(got, []uint64{1, 2, 3, 4, 5}) {
+		t.Fatalf("run phase publications=%v, want every phase without cadence delay", got)
+	}
+}
+
 func TestFlowerRuntimeCurrentPublisherPublishesSustainedThinkingBeforeCompletion(t *testing.T) {
 	clock := newFakeFlowerRuntimePublishClock()
 	var published []recordedFlowerRuntimeCurrent

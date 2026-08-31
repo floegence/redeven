@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/floret/v6/identity"
 	flruntime "github.com/floegence/floret/v6/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -56,7 +57,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			writeAskUserIntegrationCompletedResponse(w, flusher, "resp_waiting")
 			return
 		}
-		writeAskUserIntegrationTextResponse(w, flusher, "resp_resumed", "Deployment target accepted.")
+		writeAskUserIntegrationTaskCompleteResponse(w, flusher, "resp_resumed", "Deployment target accepted.")
 	}))
 	t.Cleanup(providerServer.Close)
 
@@ -136,12 +137,100 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	}
 }
 
+func TestRedevenHostedRunNaturalStopRequiresTaskComplete(t *testing.T) {
+	t.Parallel()
+
+	var mainCalls atomic.Int32
+	var sawExplicitContinuation atomic.Bool
+	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		var request map[string]any
+		if err := json.Unmarshal(body, &request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		flusher := w.(http.Flusher)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		tools, _ := request["tools"].([]any)
+		if len(tools) == 0 {
+			writeAskUserIntegrationTextResponse(w, flusher, "resp_title_explicit", "Explicit completion")
+			return
+		}
+		switch mainCalls.Add(1) {
+		case 1:
+			writeAskUserIntegrationTextResponse(w, flusher, "resp_natural_stop", "Draft before explicit completion.")
+		case 2:
+			if strings.Contains(string(body), "Draft before explicit completion.") &&
+				strings.Contains(string(body), "requires an explicit control signal") &&
+				strings.Contains(string(body), "ask_user") &&
+				strings.Contains(string(body), "task_complete") {
+				sawExplicitContinuation.Store(true)
+			}
+			writeAskUserIntegrationTaskCompleteResponse(w, flusher, "resp_explicit_complete", "Finished explicitly.")
+		default:
+			t.Fatalf("unexpected main provider request %d", mainCalls.Load())
+		}
+	}))
+	t.Cleanup(providerServer.Close)
+
+	stateDir := t.TempDir()
+	meta := &session.Meta{
+		EndpointID: "env_explicit_completion", ChannelID: "channel_explicit_completion",
+		NamespacePublicID: "namespace_explicit", UserPublicID: "user_explicit", UserEmail: "explicit@example.com",
+		CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
+	}
+	svc, err := NewService(Options{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
+		Config: &config.AIConfig{
+			CurrentModelID: "openai/gpt-5-mini",
+			Providers: []config.AIProvider{{
+				ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: providerServer.URL + "/v1",
+				Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			}},
+		},
+		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+		ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	thread, err := svc.CreateThread(context.Background(), meta, "", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Finish only when explicit."},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	completed := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
+		return strings.TrimSpace(view.RunStatus) == "success"
+	})
+	if mainCalls.Load() != 2 || !sawExplicitContinuation.Load() {
+		t.Fatalf("main calls=%d explicit continuation=%t", mainCalls.Load(), sawExplicitContinuation.Load())
+	}
+	if !strings.Contains(completed.LastMessagePreview, "Finished explicitly") {
+		t.Fatalf("last message=%q, want explicit completion output", completed.LastMessagePreview)
+	}
+	requireAssistantTimelineTextContains(t, context.Background(), svc, meta, thread.ThreadID, "Draft before explicit completion.")
+	requireAssistantTimelineTextContains(t, context.Background(), svc, meta, thread.ThreadID, "Finished explicitly.")
+}
+
 func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderCompletes(t *testing.T) {
 	t.Parallel()
 
 	var mainCalls atomic.Int32
+	var sawStableContinuationSystemPrompt atomic.Bool
 	providerStarted := make(chan struct{})
-	releaseProvider := make(chan struct{})
+	releaseProvider := make(chan struct{}, 1)
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -159,31 +248,31 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 
 		tools, _ := request["tools"].([]any)
 		if len(tools) == 0 {
-			writeAskUserIntegrationTextResponse(w, flusher, "resp_title_receipt", "Receipt boundary")
+			writeDeepSeekIntegrationTextResponse(w, flusher, "chat_title_receipt", "Receipt boundary")
 			return
 		}
 		if mainCalls.Add(1) == 1 {
 			args := `{"reason_code":"missing_external_input","required_from_user":["Provide a receipt value."],"evidence_refs":[],"questions":[{"id":"receipt","header":"Receipt","question":"What value should continue the run?","response_mode":"write","is_secret":false,"write_label":"Value","write_placeholder":"Type a value"}]}`
-			writeOpenAISSEJSON(w, flusher, map[string]any{
-				"type": "response.output_item.added", "output_index": 0,
-				"item": map[string]any{"type": "function_call", "id": "fc_receipt", "call_id": "call_receipt", "name": "ask_user", "arguments": args},
-			})
-			writeOpenAISSEJSON(w, flusher, map[string]any{
-				"type": "response.output_item.done", "output_index": 0,
-				"item": map[string]any{"type": "function_call", "id": "fc_receipt", "call_id": "call_receipt", "name": "ask_user", "arguments": args},
-			})
-			writeAskUserIntegrationCompletedResponse(w, flusher, "resp_waiting_receipt")
+			writeDeepSeekIntegrationToolCall(w, flusher, "chat_waiting_receipt", "call_receipt", "ask_user", args)
 			return
 		}
+		if deepSeekRequestHasStableSystemPrompt(request, "Ask for a receipt value.", "accepted") {
+			sawStableContinuationSystemPrompt.Store(true)
+		}
 		close(providerStarted)
+		writeDeepSeekIntegrationReasoningDelta(w, flusher, "chat_resumed_receipt", "Check")
+		writeDeepSeekIntegrationReasoningDelta(w, flusher, "chat_resumed_receipt", " receipt")
 		select {
 		case <-releaseProvider:
-			writeAskUserIntegrationTextResponse(w, flusher, "resp_resumed_receipt", "Receipt accepted.")
+			writeDeepSeekIntegrationTaskCompleteResponse(w, flusher, "chat_resumed_receipt", "Receipt accepted.")
 		case <-r.Context().Done():
 		}
 	}))
 	t.Cleanup(func() {
-		close(releaseProvider)
+		select {
+		case releaseProvider <- struct{}{}:
+		default:
+		}
 		providerServer.Close()
 	})
 
@@ -196,10 +285,10 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
 		Config: &config.AIConfig{
-			CurrentModelID: "openai/gpt-5-mini",
+			CurrentModelID: "deepseek/deepseek-v4-pro",
 			Providers: []config.AIProvider{{
-				ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: providerServer.URL + "/v1",
-				Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+				ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: providerServer.URL + "/v1",
+				Models: []config.AIProviderModel{{ModelName: "deepseek-v4-pro"}},
 			}},
 		},
 		RunMaxWallTime: 30 * time.Second, RunIdleTimeout: 30 * time.Second, PersistOpTimeout: 2 * time.Second,
@@ -209,12 +298,12 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 		t.Fatalf("NewService: %v", err)
 	}
 	t.Cleanup(func() { _ = svc.Close() })
-	thread, err := svc.CreateThread(context.Background(), meta, "", "openai/gpt-5-mini", "", "")
+	thread, err := svc.CreateThread(context.Background(), meta, "", "deepseek/deepseek-v4-pro", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
+		ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-pro",
 		Input: RunInput{Text: "Ask for a receipt value."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	}); err != nil {
 		t.Fatalf("SendUserTurn: %v", err)
@@ -223,6 +312,21 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 		return strings.TrimSpace(view.RunStatus) == "waiting_user" && view.WaitingPrompt != nil
 	})
 	prompt := waiting.WaitingPrompt
+	live, err := svc.SubscribeFlowerLiveStream(context.Background(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatalf("subscribe Flower live stream: %v", err)
+	}
+	defer live.Close()
+	_ = nextFlowerLiveStreamFrame(t, live)
+	baseline := nextFlowerLiveStreamFrame(t, live)
+	var baselineEnvelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(baseline.Data, &baselineEnvelope); err != nil {
+		t.Fatalf("decode waiting baseline: %v", err)
+	}
+	if baselineEnvelope.Current == nil || baselineEnvelope.Current.RunID == "" {
+		t.Fatalf("waiting baseline=%s, want active run identity", baseline.Data)
+	}
+	waitingRunID := baselineEnvelope.Current.RunID
 
 	router := sessionrpc.NewRouter()
 	rpcClient := newTestRPCPeer(router)
@@ -235,7 +339,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	submitted := make(chan submitResult, 1)
 	go func() {
 		payload, marshalErr := json.Marshal(aiSubmitRequestUserInputResponseReq{
-			ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
+			ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-pro",
 			Response: RequestUserInputResponse{
 				PromptID: prompt.PromptID,
 				Answers:  map[string]RequestUserInputAnswer{"receipt": {Text: "accepted"}},
@@ -271,9 +375,13 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 
 	select {
 	case <-providerStarted:
+		if !sawStableContinuationSystemPrompt.Load() {
+			t.Fatal("Ask User continuation rewrote the stable System Prompt with Turn input or answer")
+		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("resumed provider request did not start")
 	}
+	assertAskUserContinuationLiveThinking(t, live, thread.ThreadID, waitingRunID, "Check receipt")
 	select {
 	case result := <-submitted:
 		if result.err != nil || result.response.Kind != "accepted" ||
@@ -311,6 +419,65 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	case <-time.After(250 * time.Millisecond):
 		t.Fatal("structured response waited for provider execution after canonical admission")
 	}
+	releaseProvider <- struct{}{}
+}
+
+func deepSeekRequestHasStableSystemPrompt(request map[string]any, forbidden ...string) bool {
+	messages, _ := request["messages"].([]any)
+	for _, raw := range messages {
+		message, _ := raw.(map[string]any)
+		if strings.TrimSpace(anyToString(message["role"])) != "system" {
+			continue
+		}
+		content := anyToString(message["content"])
+		if strings.Contains(content, "- Objective:") {
+			return false
+		}
+		for _, value := range forbidden {
+			if value = strings.TrimSpace(value); value != "" && strings.Contains(content, value) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamSubscription, threadID string, waitingRunID identity.RunID, wantThinking string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	sawPreparing := false
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+		frame, err := live.Next(ctx)
+		cancel()
+		if err != nil {
+			t.Fatalf("read continuation live frame: %v", err)
+		}
+		if frame.Kind != FlowerLiveStreamThreadBatch {
+			continue
+		}
+		var envelope FlowerLiveStreamEnvelope
+		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+			t.Fatalf("decode continuation live frame: %v", err)
+		}
+		current := envelope.Current
+		if envelope.ThreadID != threadID || current == nil || current.RunID == "" || current.RunID == waitingRunID {
+			continue
+		}
+		if current.RunProgress != nil && current.RunProgress.Phase == flruntime.ThreadRunPhasePreparing {
+			sawPreparing = true
+		}
+		for _, item := range current.Items {
+			if item.Kind == flruntime.ThreadItemThinking && item.RunID == current.RunID && item.Live && item.Text == wantThinking {
+				if !sawPreparing {
+					t.Fatal("live thinking arrived before the new Run published preparing")
+				}
+				return
+			}
+		}
+	}
+	t.Fatalf("continuation did not publish new-run progress and live thinking %q before terminal", wantThinking)
 }
 
 func writeAskUserIntegrationCompletedResponse(w http.ResponseWriter, flusher http.Flusher, responseID string) {
@@ -328,6 +495,45 @@ func writeAskUserIntegrationCompletedResponse(w http.ResponseWriter, flusher htt
 func writeAskUserIntegrationTextResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
 	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": text})
 	writeAskUserIntegrationCompletedResponse(w, flusher, responseID)
+}
+
+func writeAskUserIntegrationTaskCompleteResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
+	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": text})
+	writeOpenAISSEJSON(w, flusher, map[string]any{
+		"type": "response.output_item.added", "output_index": 1,
+		"item": map[string]any{"type": "function_call", "id": "fc_" + responseID, "call_id": "call_" + responseID, "name": "task_complete", "arguments": `{}`},
+	})
+	writeOpenAISSEJSON(w, flusher, map[string]any{
+		"type": "response.output_item.done", "output_index": 1,
+		"item": map[string]any{"type": "function_call", "id": "fc_" + responseID, "call_id": "call_" + responseID, "name": "task_complete", "arguments": `{}`},
+	})
+	writeAskUserIntegrationCompletedResponse(w, flusher, responseID)
+}
+
+func writeDeepSeekIntegrationReasoningDelta(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
+	writeOpenAISSEJSON(w, flusher, map[string]any{
+		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
+		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{"reasoning_content": text}}},
+	})
+}
+
+func writeDeepSeekIntegrationTaskCompleteResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
+	writeOpenAISSEJSON(w, flusher, map[string]any{
+		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
+		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
+			"role": "assistant", "content": text,
+			"tool_calls": []any{map[string]any{
+				"index": 0, "id": "call_" + responseID, "type": "function",
+				"function": map[string]any{"name": "task_complete", "arguments": `{}`},
+			}},
+		}}},
+	})
+	writeOpenAISSEJSON(w, flusher, map[string]any{
+		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
+		"choices": []any{map[string]any{"index": 0, "finish_reason": "tool_calls", "delta": map[string]any{}}},
+	})
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	flusher.Flush()
 }
 
 func waitForAskUserIntegrationThread(t *testing.T, svc *Service, meta *session.Meta, threadID string, ready func(*ThreadView) bool) *ThreadView {

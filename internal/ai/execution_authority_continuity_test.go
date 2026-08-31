@@ -237,7 +237,7 @@ func TestSubagentInputsPersistAuthorityBeforeSendAndRestoreAutonomousOptions(t *
 	}
 	restored, err := svc.restoreFloretEffectRequest(ctx, flruntime.AgentRequest{
 		ThreadID: identity.ThreadID(childThreadID), TurnID: "turn-child-1", RequestKey: sendKeys[0],
-		Input: flruntime.UserInput{Text: "Review the child execution."},
+		Input: flruntime.UserInput{Text: "Review the child execution."}, CanonicalTurnInput: flruntime.UserInput{Text: "Review the child execution."},
 	})
 	if err != nil {
 		t.Fatal(err)

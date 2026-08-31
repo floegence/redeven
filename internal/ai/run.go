@@ -188,15 +188,15 @@ type run struct {
 	collectedWebSources     map[string]SourceRef // url -> source
 	collectedWebSourceOrder []string
 
-	subagentDepth               int
-	allowSubagentDelegate       bool
-	toolAllowlist               map[string]struct{}
-	noUserInteraction           bool
-	permissionSnapshot          PermissionSnapshot
-	dynamicSurfaceConfig        runToolSurfaceConfig
-	toolTargetPolicy            ToolTargetPolicy
-	canonicalReferenceAuthority *flowerCanonicalReferenceTargetAuthority
-	targetToolExecutor          TargetToolExecutor
+	subagentDepth                 int
+	allowSubagentDelegate         bool
+	toolAllowlist                 map[string]struct{}
+	noUserInteraction             bool
+	permissionSnapshot            PermissionSnapshot
+	effectPermissionSurfaceConfig runToolSurfaceConfig
+	toolTargetPolicy              ToolTargetPolicy
+	canonicalReferenceAuthority   *flowerCanonicalReferenceTargetAuthority
+	targetToolExecutor            TargetToolExecutor
 
 	skillManager    *skillManager
 	subagentRuntime subagentRuntime

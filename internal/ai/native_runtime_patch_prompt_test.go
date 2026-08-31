@@ -15,14 +15,8 @@ func TestBuildLayeredSystemPrompt_DocumentsCanonicalPatchUsage(t *testing.T) {
 	})
 
 	prompt := r.buildLayeredSystemPrompt(
-		"Update a source file",
 		permissionTypeString(FlowerPermissionApprovalRequired),
-		TaskComplexityStandard,
-		0,
-		true,
 		[]ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "file.edit"}, {Name: "file.write"}, {Name: "apply_patch"}},
-		newTodoRuntimeState(),
-		"",
 		runCapabilityContract{},
 	)
 

@@ -25,7 +25,7 @@ type floretHostedPreparation struct {
 	turnInput         flruntime.TurnInput
 }
 
-func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string, adapterOverride ...ModelGateway) (floretHostedPreparation, error) {
+func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, adapterOverride ...ModelGateway) (floretHostedPreparation, error) {
 	if r == nil {
 		return floretHostedPreparation{}, errors.New("nil run")
 	}
@@ -54,8 +54,6 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	if !capability.SupportsStrictJSONSchema && strings.EqualFold(strings.TrimSpace(req.Options.ResponseFormat), "json_schema") {
 		req.Options.ResponseFormat = "json_object"
 	}
-
-	taskComplexity := TaskComplexityStandard
 
 	var adapter ModelGateway
 	if len(adapterOverride) > 0 && adapterOverride[0] != nil {
@@ -92,11 +90,11 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		contextWindow = req.ModelCapability.MaxContextTokens
 	}
 	hostLabels := floretHostLabelsForRun(r)
-	surfaceConfig := r.buildDynamicToolSurfaceConfig(taskObjective, taskComplexity, req.ModelCapability.SupportsAskUserQuestionBatches, sharedState, hostLabels)
-	r.dynamicSurfaceConfig = surfaceConfig
-	initialSurface, err := r.prepareRunToolSurface(ctx, surfaceConfig)
+	surfaceConfig := r.buildRunToolSurfaceConfig(req.ModelCapability.SupportsAskUserQuestionBatches, sharedState, hostLabels)
+	r.effectPermissionSurfaceConfig = surfaceConfig
+	initialSurface, err := r.buildRunToolSurface(ctx, surfaceConfig)
 	if err != nil {
-		return floretHostedPreparation{}, r.failRun("Failed to initialize dynamic tool surface", err)
+		return floretHostedPreparation{}, r.failRun("Failed to initialize run tool surface", err)
 	}
 	req.Options.PermissionType = permissionTypeString(initialSurface.PermissionType)
 	r.recordRunDiagnostic("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
@@ -108,7 +106,6 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		"permission_type":               permissionTypeString(initialSurface.PermissionType),
 	})
 	r.recordRunDiagnostic("capability.contract.resolved", RealtimeStreamKindLifecycle, initialSurface.CapabilityContract.eventPayload())
-	toolSurfaceProvider := r.dynamicToolSurfaceProvider(surfaceConfig, true)
 	flProvider := newFloretProviderAdapter(
 		adapter,
 		providerType,
@@ -167,7 +164,6 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens, req.ModelCapability.MaxOutputTokens),
 		req.Options,
 		flProvider,
-		toolSurfaceProvider,
 		flowerManualCompactionSource(req.Input, r.executionKey),
 	)
 	if err != nil {
@@ -189,7 +185,6 @@ func buildFloretThreadAgent(
 	contextPolicy flconfig.ContextPolicy,
 	options RunOptions,
 	provider *floretProviderAdapter,
-	toolSurfaceProvider flruntime.ToolSurfaceProvider,
 	manualCompactions flruntime.ManualCompactionSource,
 ) (*flruntime.Agent, error) {
 	if r == nil || provider == nil {
@@ -199,9 +194,9 @@ func buildFloretThreadAgent(
 		flruntime.WithAgentTools(surface.FloretToolItems...),
 		flruntime.WithAgentEffectAuthorization(floretEffectAuthorizationGateForRun(r)),
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
-		flruntime.WithAgentDynamicToolSurface(toolSurfaceProvider),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+		flruntime.WithAgentTurnCompletionPolicy(flruntime.TurnCompletionExplicitSignal),
 	}
 	if manualCompactions != nil {
 		agentOptions = append(agentOptions, flruntime.WithAgentManualCompactions(manualCompactions))

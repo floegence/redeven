@@ -62,7 +62,7 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 				t.Fatalf("continuation omitted Floret unknown-tool result: %s", rawMessages)
 			}
 			sawUnknownToolResult.Store(true)
-			writeDeepSeekIntegrationTextResponse(w, flusher, "chat_recovered", "Recovered with the available tools.")
+			writeDeepSeekFlashIntegrationTaskCompleteResponse(w, flusher, "chat_recovered", "Recovered with the available tools.")
 		default:
 			t.Fatalf("unexpected main provider request %d", mainCalls.Load())
 		}
@@ -148,6 +148,25 @@ func writeDeepSeekIntegrationTextResponse(w http.ResponseWriter, flusher http.Fl
 	writeOpenAISSEJSON(w, flusher, map[string]any{
 		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-flash",
 		"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "delta": map[string]any{}}},
+	})
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	flusher.Flush()
+}
+
+func writeDeepSeekFlashIntegrationTaskCompleteResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
+	writeOpenAISSEJSON(w, flusher, map[string]any{
+		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-flash",
+		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
+			"role": "assistant", "content": text,
+			"tool_calls": []any{map[string]any{
+				"index": 0, "id": "call_" + responseID, "type": "function",
+				"function": map[string]any{"name": "task_complete", "arguments": `{}`},
+			}},
+		}}},
+	})
+	writeOpenAISSEJSON(w, flusher, map[string]any{
+		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-flash",
+		"choices": []any{map[string]any{"index": 0, "finish_reason": "tool_calls", "delta": map[string]any{}}},
 	})
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()

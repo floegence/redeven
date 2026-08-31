@@ -1,12 +1,24 @@
 # Redeven OKF Update Log
 
+## 2026-08-31
+* **Append-only Flower context and explicit completion**: Redeven now consumes
+  Floret v6.1.0, keeps the hosted Agent System Prompt stable, restores the
+  original canonical Turn input after Ask User, appends mutable environment
+  facts as per-turn supplemental context, fixes the model tool surface for the
+  active generation, and requires structured `ask_user` or `task_complete`
+  signals instead of treating a natural model stop as success.
+* **Ask User live continuation**: Floret publishes a clean `preparing` Run before
+  provider dispatch and fences attempts per Run. Redeven forwards the resulting
+  waiting-response, streaming reasoning, and assistant growth before terminal
+  settlement without polling or UI-generated progress.
+
 ## 2026-08-30
 * **Flower readiness admission**: Env App now mounts Flower only for `ready` or
   `degraded` AI readiness. Startup migration and recovery states issue no
   Flower business requests; losing readiness cleans up the live surface, while
   the Shell-owned composer coordinator preserves unsent drafts for one clean
   remount.
-* **Floret v6.0.1 fork migration adoption**: Redeven now consumes the published
+* **Floret fork migration adoption**: Redeven consumes the published
   Floret release that automatically removes verified terminal Effect Attempt
   history copied by legacy forks and prevents new forks from copying source-
   thread effect authority. Redeven keeps the Floret Store opaque and adds no

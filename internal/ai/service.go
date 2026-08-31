@@ -1360,7 +1360,7 @@ func (s *Service) buildThreadEffectAgent(ctx context.Context, effect *threadEffe
 	preparedAgent, err := r.prepareFloretHostedAgent(ctx, RunRequest{
 		Model: model, Input: effect.req.Input, Options: effect.req.Options,
 		ModelCapability: modelCapability, Retry: effect.req.Retry,
-	}, gateway.provider, gateway.apiKey, strings.TrimSpace(effect.req.Input.Text), gateway.adapterOverride)
+	}, gateway.provider, gateway.apiKey, gateway.adapterOverride)
 	if err != nil {
 		return nil, err
 	}

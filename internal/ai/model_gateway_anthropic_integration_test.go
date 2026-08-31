@@ -116,9 +116,22 @@ func (m *anthropicMock) handle(w http.ResponseWriter, r *http.Request) {
 		"type":  "content_block_stop",
 		"index": 0,
 	})
+	stopReason := resp.StopReason
+	if resp.StopReason == "end_turn" && containsString(toolNames, "task_complete") {
+		writeAnthropicSSEJSON(w, f, map[string]any{
+			"type": "content_block_start", "index": 1,
+			"content_block": map[string]any{"type": "tool_use", "id": "toolu_test_complete", "name": "task_complete", "input": map[string]any{}},
+		})
+		writeAnthropicSSEJSON(w, f, map[string]any{
+			"type": "content_block_delta", "index": 1,
+			"delta": map[string]any{"type": "input_json_delta", "partial_json": `{}`},
+		})
+		writeAnthropicSSEJSON(w, f, map[string]any{"type": "content_block_stop", "index": 1})
+		stopReason = "tool_use"
+	}
 	writeAnthropicSSEJSON(w, f, map[string]any{
 		"type":  "message_delta",
-		"delta": map[string]any{"stop_reason": resp.StopReason, "stop_sequence": nil},
+		"delta": map[string]any{"stop_reason": stopReason, "stop_sequence": nil},
 		"usage": map[string]any{"output_tokens": 1},
 	})
 	writeAnthropicSSEJSON(w, f, map[string]any{
@@ -340,7 +353,7 @@ func TestIntegration_ModelGateway_Anthropic_ContentFilterFails(t *testing.T) {
 
 }
 
-func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesWithNaturalStop(t *testing.T) {
+func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesWithExplicitSignal(t *testing.T) {
 	t.Parallel()
 
 	mock := &anthropicMock{
