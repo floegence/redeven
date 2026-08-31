@@ -36,6 +36,20 @@ func TestManagedImageProgressReporterSeparatesLayersBytesAndSmoothsRate(t *testi
 	}
 }
 
+func TestManagedImageProgressReporterPreservesPinnedCacheFacts(t *testing.T) {
+	t.Parallel()
+	reporter := managedImageProgressReporter{
+		now:           func() time.Time { return time.Unix(100, 0) },
+		artifact:      "example.invalid/app@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		artifactIndex: 1,
+		artifactTotal: 1,
+	}
+	transfer, emit := reporter.observe(containerengine.ImagePullProgress{Phase: "cached", CompletedLayers: 17, TotalLayers: 17})
+	if !emit || transfer.Phase != "cached" || transfer.CompletedLayers != 17 || transfer.TotalLayers != 17 || transfer.DownloadedBytes != 0 || transfer.TotalBytes != 0 || transfer.BytesPerSecond != 0 {
+		t.Fatalf("cached transfer=%+v emit=%t", transfer, emit)
+	}
+}
+
 func TestManagedImagePullErrorMapsStableContainerFailures(t *testing.T) {
 	t.Parallel()
 

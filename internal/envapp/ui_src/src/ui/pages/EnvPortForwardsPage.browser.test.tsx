@@ -322,4 +322,78 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(details.getBoundingClientRect().right).toBeLessThanOrEqual(640);
     expect(getComputedStyle(progress.querySelector('.managed-operation-shimmer-text')!).animationName).toContain('managed-operation-text-shimmer');
   });
+
+  it('keeps cached image facts populated while elapsed time advances', async () => {
+    await page.viewport(1200, 800);
+    const host = document.createElement('div');
+    host.style.width = '1024px';
+    document.body.appendChild(host);
+    dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-cached',
+          template_id: 'linuxserver-webtop-debian-xfce',
+          service_family_id: 'linuxserver-webtop-debian-xfce',
+          name: 'LinuxServer Webtop · Debian XFCE',
+          template_source: 'builtin',
+          deployment: 'container',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-debian-xfce',
+          version: 'reviewed',
+          desired_state: 'running',
+          observed_state: 'installing',
+          forward_id: 'pf-cached',
+          runtime_port: 3000,
+          brand_icon: 'debian',
+          update_available: false,
+        }}
+        operation={{
+          operation_id: 'mop-cached',
+          service_id: 'mws-cached',
+          action: 'install',
+          state: 'running',
+          stage: 'pulling',
+          progress_current: 2,
+          progress_total: 7,
+          progress_detail: {
+            schema_version: 1,
+            stage_started_at_unix_ms: Date.now() - 1_000,
+            updated_at_unix_ms: Date.now() - 1_000,
+            transfer: {
+              phase: 'cached',
+              artifact_reference: 'lscr.io/linuxserver/webtop@sha256:reviewed',
+              artifact_index: 1,
+              artifact_total: 1,
+              completed_layers: 17,
+              total_layers: 17,
+            },
+          },
+        }}
+        busy
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+        onCancelOperation={() => undefined}
+      />
+    ), host);
+    await settle();
+
+    const trigger = document.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+    expect(trigger.textContent).toContain('17 layers');
+    await userEvent.click(trigger);
+    await settle();
+
+    const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
+    const elapsed = details.querySelector<HTMLElement>('[data-testid="managed-operation-elapsed"]')!;
+    expect(details.textContent).toContain('0 B');
+    expect(details.textContent).toContain('0 B/s');
+    expect(details.textContent).toContain('17 / 17');
+    const before = Number.parseInt(elapsed.textContent ?? '', 10);
+    await new Promise((resolve) => window.setTimeout(resolve, 1_100));
+    expect(Number.parseInt(elapsed.textContent ?? '', 10)).toBeGreaterThan(before);
+  });
 });

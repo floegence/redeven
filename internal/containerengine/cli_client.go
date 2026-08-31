@@ -266,11 +266,20 @@ func (c *CLIClient) PullImageWithProgress(ctx context.Context, engine Engine, im
 	if sink == nil {
 		return EngineImageResult{}, errors.New("image pull progress sink is required")
 	}
-	if err := sink(ctx, ImagePullProgress{Phase: "resolving"}); err != nil {
+	cachedLayers, cached := c.pinnedCachedImageLayers(ctx, engine, imageRef)
+	initial := ImagePullProgress{Phase: "resolving"}
+	if cached {
+		initial.Phase = "cached"
+		initial.CompletedLayers = cachedLayers
+		initial.TotalLayers = cachedLayers
+	}
+	if err := sink(ctx, initial); err != nil {
 		return EngineImageResult{}, err
 	}
 
 	tracker := newImagePullProgressTracker(engine, sink)
+	tracker.cached, tracker.cachedLayers = cached, cachedLayers
+	tracker.last = initial
 	pullCtx, cancel := context.WithTimeout(ctx, c.imagePullTimeout())
 	defer cancel()
 	err := c.stream(pullCtx, engine, []string{"pull", imageRef}, func(lineCtx context.Context, raw []byte) error {
@@ -299,11 +308,14 @@ func (c *CLIClient) PullImageWithProgress(ctx context.Context, engine Engine, im
 }
 
 type imagePullProgressTracker struct {
-	engine Engine
-	sink   ImagePullProgressSink
-	layers map[string]imagePullLayerProgress
-	digest string
-	last   ImagePullProgress
+	engine           Engine
+	sink             ImagePullProgressSink
+	layers           map[string]imagePullLayerProgress
+	digest           string
+	last             ImagePullProgress
+	cached           bool
+	cachedLayers     int64
+	observedTransfer bool
 }
 
 type imagePullLayerProgress struct {
@@ -333,6 +345,7 @@ func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) erro
 	}
 
 	if id, state, ok := parsePullLayerState(line); ok {
+		t.observedTransfer = true
 		layer := t.layers[id]
 		layer.state = state
 		if downloaded, total := parsePullLayerBytes(line); total > 0 {
@@ -342,6 +355,9 @@ func (t *imagePullProgressTracker) consume(ctx context.Context, raw string) erro
 			layer.downloaded = layer.total
 		}
 		t.layers[id] = layer
+	}
+	if strings.Contains(lower, "image is up to date") || strings.Contains(lower, "image is already present") {
+		t.cached = true
 	}
 	snapshot := t.snapshot(phase)
 	if snapshot == t.last {
@@ -364,6 +380,9 @@ func (t *imagePullProgressTracker) completedCount() int64 {
 func (t *imagePullProgressTracker) totalCount() int64 { return int64(len(t.layers)) }
 
 func (t *imagePullProgressTracker) snapshot(phase string) ImagePullProgress {
+	if t.cached && !t.observedTransfer {
+		return ImagePullProgress{Phase: "cached", CompletedLayers: t.cachedLayers, TotalLayers: t.cachedLayers}
+	}
 	progress := ImagePullProgress{Phase: phase, CompletedLayers: t.completedCount(), TotalLayers: t.totalCount()}
 	allLayerBytesKnown := len(t.layers) > 0
 	for _, layer := range t.layers {
@@ -378,6 +397,25 @@ func (t *imagePullProgressTracker) snapshot(phase string) ImagePullProgress {
 		progress.DownloadedBytes, progress.TotalBytes = 0, 0
 	}
 	return progress
+}
+
+func (c *CLIClient) pinnedCachedImageLayers(ctx context.Context, engine Engine, imageRef string) (int64, bool) {
+	if _, pinned := canonicalImageReferenceDigest(imageRef); !pinned {
+		return 0, false
+	}
+	raw, err := c.run(ctx, engine, "image", "inspect", imageRef)
+	if err != nil {
+		return 0, false
+	}
+	var docs []struct {
+		RootFS struct {
+			Layers []string `json:"Layers"`
+		} `json:"RootFS"`
+	}
+	if err := json.Unmarshal(raw, &docs); err != nil || len(docs) != 1 {
+		return 0, false
+	}
+	return int64(len(docs[0].RootFS.Layers)), true
 }
 
 func parsePullLayerBytes(line string) (int64, int64) {
