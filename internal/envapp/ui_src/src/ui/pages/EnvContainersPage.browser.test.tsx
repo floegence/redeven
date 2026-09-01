@@ -423,7 +423,11 @@ describe('native Containers responsive product surface', () => {
     expect(cards[1].querySelector<HTMLImageElement>('.container-service-brand__color')?.getAttribute('src')).toBe('/_redeven_proxy/env/container-service-icons/podman-default.svg');
     expect(getComputedStyle(servicePage.querySelector<HTMLElement>('.container-services-grid')!).gridTemplateColumns.split(' ')).toHaveLength(2);
     const firstActions = cards[0].querySelector<HTMLElement>('.container-service-card__actions')!;
+    const secondActions = cards[1].querySelector<HTMLElement>('.container-service-card__actions')!;
+    expect(Math.abs(cards[0].getBoundingClientRect().height - cards[1].getBoundingClientRect().height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(firstActions.getBoundingClientRect().bottom - secondActions.getBoundingClientRect().bottom)).toBeLessThanOrEqual(1);
     expect(cards[0].getBoundingClientRect().bottom - firstActions.getBoundingClientRect().bottom).toBeLessThanOrEqual(18);
+    expect(cards[1].getBoundingClientRect().bottom - secondActions.getBoundingClientRect().bottom).toBeLessThanOrEqual(18);
 
     Array.from(cards[0].querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Configure'))?.click();
     await settle();

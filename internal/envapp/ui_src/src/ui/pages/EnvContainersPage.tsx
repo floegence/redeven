@@ -3204,10 +3204,14 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     <div class="container-services-grid container-services-grid--loading" aria-label={i18n.t('containers.loading')}>
       <For each={[{ guidance: false, actions: 3 }, { guidance: true, actions: 1 }]}>{(item) => (
         <div class="container-service-card container-service-card--loading">
-          <div class="container-service-card__mark"><span class="container-skeleton container-service-card__loading-brand" /></div>
-          <span class="container-service-card__loading-identity"><span class="container-skeleton container-skeleton--name" /><span class="container-skeleton container-skeleton--secondary" /></span>
-          <span class="container-skeleton container-service-card__loading-status" />
-          <Show when={item.guidance}><span class="container-skeleton container-service-card__loading-guidance" /></Show>
+          <div class="container-service-card__header">
+            <div class="container-service-card__mark"><span class="container-skeleton container-service-card__loading-brand" /></div>
+            <span class="container-service-card__loading-identity"><span class="container-skeleton container-skeleton--name" /><span class="container-skeleton container-skeleton--secondary" /></span>
+            <span class="container-skeleton container-service-card__loading-status" />
+          </div>
+          <div class="container-service-card__body">
+            <Show when={item.guidance}><span class="container-skeleton container-service-card__loading-guidance" /></Show>
+          </div>
           <span class="container-service-card__actions container-service-card__loading-actions"><For each={Array.from({ length: item.actions })}>{() => <span class="container-skeleton" />}</For></span>
         </div>
       )}</For>
@@ -3233,12 +3237,16 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 ? serviceGuidance(service)
                 : '';
               return <article class="container-service-card" data-state={service.state} data-active={active() ? 'true' : 'false'}>
-                <div class="container-service-card__mark"><ContainerServiceBrandMark engine={service.engine} remote={service.remote} /></div>
-                <div class="container-service-card__identity"><span>{runtimeName(service.engine)}</span><h3>{service.name}</h3><small>{i18n.t(`containers.services.implementations.${service.implementation}` as Parameters<typeof i18n.t>[0])}<Show when={service.version}> · {service.version}</Show><Show when={service.rootless}> · {i18n.t('containers.services.rootless')}</Show></small></div>
-                <Tag variant={service.state === 'running' ? 'success' : service.state === 'error' || service.state === 'permission' ? 'error' : 'neutral'} tone="soft" size="sm">{serviceStateLabel(service.state)}</Tag>
-                <Show when={service.restart_required}><div class="container-service-card__notice"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.restartRequired')}</div></Show>
-                <Show when={guidance()}><p class="container-service-card__guidance">{guidance()}</p></Show>
-                <Show when={operation()} keyed>{(item) => <button type="button" class="container-service-operation" data-state={item.state} onClick={() => openServiceOperation(item)}><span class={active() ? 'animate-pulse motion-reduce:animate-none' : ''} /><strong>{operationLabel(item.method)}</strong><small>{operationStateLabel(item.state)}</small><ChevronRight class="h-4 w-4" /></button>}</Show>
+                <div class="container-service-card__header">
+                  <div class="container-service-card__mark"><ContainerServiceBrandMark engine={service.engine} remote={service.remote} /></div>
+                  <div class="container-service-card__identity"><span>{runtimeName(service.engine)}</span><h3>{service.name}</h3><small>{i18n.t(`containers.services.implementations.${service.implementation}` as Parameters<typeof i18n.t>[0])}<Show when={service.version}> · {service.version}</Show><Show when={service.rootless}> · {i18n.t('containers.services.rootless')}</Show></small></div>
+                  <Tag variant={service.state === 'running' ? 'success' : service.state === 'error' || service.state === 'permission' ? 'error' : 'neutral'} tone="soft" size="sm">{serviceStateLabel(service.state)}</Tag>
+                </div>
+                <div class="container-service-card__body">
+                  <Show when={service.restart_required}><div class="container-service-card__notice"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.restartRequired')}</div></Show>
+                  <Show when={guidance()}><p class="container-service-card__guidance">{guidance()}</p></Show>
+                  <Show when={operation()} keyed>{(item) => <button type="button" class="container-service-operation" data-state={item.state} onClick={() => openServiceOperation(item)}><span class={active() ? 'animate-pulse motion-reduce:animate-none' : ''} /><strong>{operationLabel(item.method)}</strong><small>{operationStateLabel(item.state)}</small><ChevronRight class="h-4 w-4" /></button>}</Show>
+                </div>
                 <div class="container-service-card__actions">
                   <Show when={service.state !== 'running' && service.capabilities.start}><Button size="sm" onClick={() => runContainerServiceAction(service, 'start')} disabled={Boolean(active()) || !canRWX() || !canAdmin()}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.start')}</Button></Show>
                   <Show when={service.state === 'running' && service.capabilities.stop}><Button size="sm" variant="outline" onClick={() => runContainerServiceAction(service, 'stop')} disabled={Boolean(active()) || !canRWX() || !canAdmin()}><StopFilled class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.stop')}</Button></Show>
