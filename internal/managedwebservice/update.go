@@ -204,6 +204,11 @@ func (m *Manager) removeManagedHostRelease(service pfregistry.ManagedService, ar
 	if artifact == "." || artifact == keepArtifact {
 		return nil
 	}
+	historical := service
+	historical.ArtifactReference = artifact
+	if (&hostScriptDriver{manager: m}).legacyDeepSeekLayout(&historical) {
+		return os.RemoveAll(filepath.Join(m.stateDir, DeepSeekHarnessProductID, "native"))
+	}
 	releasesRoot := filepath.Join(m.stateDir, "instances", service.ServiceID, "releases")
 	rel, err := filepath.Rel(releasesRoot, artifact)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -630,7 +635,7 @@ func (m *Manager) recoverInterruptedContainerUpdate(service *pfregistry.ManagedS
 			blank := ""
 			return m.registry.FinalizeManagedOperation(context.Background(), *operation, pfregistry.ManagedServicePatch{LastErrorCode: &blank, LastErrorMessage: &blank})
 		}
-		m.log.Warn("finalize verified interrupted managed Web Service update", "service_id", service.ServiceID, "error", specErr)
+		m.log.Warn("finalize verified interrupted managed Web Service update", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(specErr))
 	}
 	if err := m.rollbackContainerUpdate(context.Background(), service, journal, driver); err != nil {
 		return fmt.Errorf("rollback interrupted update: %w", err)
@@ -648,9 +653,9 @@ func (m *Manager) recoverInterruptedHostUpdate(service *pfregistry.ManagedServic
 	}
 	if journal.Phase == updatePhaseTargetVerified {
 		target := serviceFromUpdateRelease(*service, journal.Target)
-		// A managed Host process is deliberately never adopted across Runtime
-		// generations. Clean shutdown has already stopped it, so restart the exact
-		// staged release and verify it before making the journal target authoritative.
+		// The staged target identity was never committed, so it cannot authorize
+		// restart adoption. Start that exact release afresh and verify it before
+		// making the journal target authoritative.
 		target.RuntimeIdentity = ""
 		runtimeID, startErr := driver.Start(context.Background(), &target)
 		if startErr == nil {
@@ -677,7 +682,7 @@ func (m *Manager) recoverInterruptedHostUpdate(service *pfregistry.ManagedServic
 			}
 			return m.removeManagedHostRelease(*service, journal.Old.ArtifactReference, journal.Target.ArtifactReference)
 		}
-		m.log.Warn("finalize verified interrupted managed Web Service Host update", "service_id", service.ServiceID, "error", startErr)
+		m.log.Warn("finalize verified interrupted managed Web Service Host update", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(startErr))
 	}
 	if err := m.rollbackHostReleaseUpdate(context.Background(), service, journal, driver); err != nil {
 		return fmt.Errorf("rollback interrupted Host update: %w", err)

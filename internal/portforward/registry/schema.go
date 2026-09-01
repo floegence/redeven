@@ -16,7 +16,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry"
-	registryCurrentSchemaVersion = 8
+	registryCurrentSchemaVersion = 9
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -33,6 +33,7 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 5, ToVersion: 6, Apply: migrateRegistryToV6},
 			{FromVersion: 6, ToVersion: 7, Apply: migrateRegistryToV7},
 			{FromVersion: 7, ToVersion: 8, Apply: migrateRegistryToV8},
+			{FromVersion: 8, ToVersion: 9, Apply: migrateRegistryToV9},
 		},
 		Verify: verifyRegistrySchema,
 	}
@@ -89,6 +90,7 @@ type registryHostTemplateSpec struct {
 	StartScript     string                      `json:"start_script"`
 	StopScript      string                      `json:"stop_script,omitempty"`
 	UninstallScript string                      `json:"uninstall_script,omitempty"`
+	Environment     map[string]string           `json:"environment,omitempty"`
 	Artifact        *registryHostArtifactSpec   `json:"artifact,omitempty"`
 	NPM             *registryNPMHostPackageSpec `json:"npm,omitempty"`
 	RuntimeBundle   string                      `json:"runtime_bundle,omitempty"`
@@ -187,7 +189,7 @@ func decodeRegistryTemplateSpec(raw string, schemaVersion int) (registryTemplate
 		if document.Host == nil || document.Container != nil || document.Compose != nil {
 			return document, errors.New("host template spec shape is invalid")
 		}
-		if (schemaVersion == 1 && document.Host.NPM != nil) || (schemaVersion == 2 && document.Host.RuntimeBundle != "") {
+		if (schemaVersion == 1 && document.Host.NPM != nil) || (schemaVersion >= 2 && document.Host.RuntimeBundle != "") || (schemaVersion < 3 && len(document.Host.Environment) != 0) {
 			return document, errors.New("host template package shape does not match its schema")
 		}
 	case "container":
@@ -205,6 +207,117 @@ func decodeRegistryTemplateSpec(raw string, schemaVersion int) (registryTemplate
 		return document, errors.New("template deployment kind is invalid")
 	}
 	return document, nil
+}
+
+type registryV9DocumentUpdate struct {
+	owner  string
+	raw    string
+	digest string
+}
+
+func migrateRegistryToV9(tx *sql.Tx) error {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v8"); err != nil {
+		return err
+	}
+	if err := verifyRegistryAccessModeColumn(tx); err != nil {
+		return err
+	}
+	if err := verifyRegistryProgressDetailColumn(tx); err != nil {
+		return err
+	}
+	if err := verifyRegistryReleaseIdentityColumns(tx); err != nil {
+		return err
+	}
+	if err := verifyRegistryManagedDocumentDigests(tx); err != nil {
+		return err
+	}
+	if err := verifyRegistryV8Documents(tx); err != nil {
+		return err
+	}
+	templates, err := migrateRegistryDeepSeekHostDocumentsToV3(tx, `SELECT template_id,source,template_id,spec_json FROM managed_web_service_templates ORDER BY template_id`)
+	if err != nil {
+		return err
+	}
+	services, err := migrateRegistryDeepSeekHostDocumentsToV3(tx, `SELECT service_id,template_source,template_id,template_snapshot_json FROM managed_web_services ORDER BY service_id`)
+	if err != nil {
+		return err
+	}
+	for _, item := range templates {
+		if _, err := tx.Exec(`UPDATE managed_web_service_templates SET spec_json=?,spec_sha256=? WHERE template_id=?`, item.raw, item.digest, item.owner); err != nil {
+			return err
+		}
+	}
+	for _, item := range services {
+		if _, err := tx.Exec(`UPDATE managed_web_services SET template_snapshot_json=?,template_snapshot_sha256=? WHERE service_id=?`, item.raw, item.digest, item.owner); err != nil {
+			return err
+		}
+	}
+	// A runtime-recovery start is created only for a service whose persisted
+	// desired state was running. v8 changed that state to stopped on failure;
+	// restore the proven intent only when no later user operation exists.
+	_, err = tx.Exec(`
+UPDATE managed_web_services AS service
+SET desired_state='running'
+WHERE service.template_source='builtin'
+  AND service.template_id IN ('deepseek-harness-host','deepseek-harness-container')
+  AND service.desired_state='stopped'
+  AND service.observed_state='error'
+  AND (SELECT operation.action FROM managed_web_service_operations AS operation WHERE operation.service_id=service.service_id ORDER BY operation.created_at_unix_ms DESC,operation.operation_id DESC LIMIT 1)='start'
+  AND (SELECT operation.state FROM managed_web_service_operations AS operation WHERE operation.service_id=service.service_id ORDER BY operation.created_at_unix_ms DESC,operation.operation_id DESC LIMIT 1)='failed'
+  AND substr(
+    (SELECT operation.request_id FROM managed_web_service_operations AS operation WHERE operation.service_id=service.service_id ORDER BY operation.created_at_unix_ms DESC,operation.operation_id DESC LIMIT 1),
+    1,
+    length('runtime-recovery-' || service.service_id || '-')
+  )='runtime-recovery-' || service.service_id || '-'
+`)
+	return err
+}
+
+func migrateRegistryDeepSeekHostDocumentsToV3(tx *sql.Tx, query string) ([]registryV9DocumentUpdate, error) {
+	rows, err := tx.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []registryV9DocumentUpdate{}
+	for rows.Next() {
+		var owner, source, templateID, raw string
+		if err := rows.Scan(&owner, &source, &templateID, &raw); err != nil {
+			return nil, err
+		}
+		if _, err := decodeRegistryTemplateSpec(raw, 2); err != nil {
+			return nil, fmt.Errorf("managed Web Service %s template spec v3 migration: %w", owner, err)
+		}
+		if source != "builtin" || templateID != "deepseek-harness-host" {
+			continue
+		}
+		document := map[string]any{}
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&document); err != nil {
+			return nil, err
+		}
+		document["schema_version"] = 3
+		host, ok := document["host"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("managed Web Service %s template spec v3 migration: built-in DeepSeek Host shape is invalid", owner)
+		}
+		host["environment"] = map[string]any{
+			"DSH_DESKTOP_ENABLED": "0",
+			"DSH_HOME":            "${REDEVEN_SERVICE_DATA_DIR}",
+			"HOME":                "${REDEVEN_WORKSPACE}",
+		}
+		encoded, err := json.Marshal(document)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := decodeRegistryTemplateSpec(string(encoded), 3); err != nil {
+			return nil, fmt.Errorf("managed Web Service %s migrated template spec v3: %w", owner, err)
+		}
+		digest := sha256.Sum256(encoded)
+		result = append(result, registryV9DocumentUpdate{owner: owner, raw: string(encoded), digest: hex.EncodeToString(digest[:])})
+	}
+	return result, rows.Err()
 }
 
 func migrateRegistryToV8(tx *sql.Tx) error {
@@ -855,7 +968,7 @@ func migrateRegistryToV1(tx *sql.Tx) error {
 }
 
 func verifyRegistrySchema(tx *sql.Tx) error {
-	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v8"); err != nil {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v9"); err != nil {
 		return err
 	}
 	if err := verifyRegistryAccessModeColumn(tx); err != nil {
@@ -870,7 +983,7 @@ func verifyRegistrySchema(tx *sql.Tx) error {
 	if err := verifyRegistryManagedDocumentDigests(tx); err != nil {
 		return err
 	}
-	if err := verifyRegistryV8Documents(tx); err != nil {
+	if err := verifyRegistryV9Documents(tx); err != nil {
 		return err
 	}
 	if err := verifyRegistryManagedServiceDeployments(tx); err != nil {
@@ -887,6 +1000,74 @@ func verifyRegistrySchema(tx *sql.Tx) error {
 		return fmt.Errorf("port forward registry has %d invalid access modes", invalid)
 	}
 	return nil
+}
+
+func verifyRegistryV9Documents(tx *sql.Tx) error {
+	rows, err := tx.Query(`
+SELECT 'template',template_id,source,template_id,spec_json,'' AS release_identity_json,'' AS release_identity_sha256
+FROM managed_web_service_templates
+UNION ALL
+SELECT 'service',service_id,template_source,template_id,template_snapshot_json,release_identity_json,release_identity_sha256
+FROM managed_web_services
+ORDER BY 1,2`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kind, owner, source, templateID, specRaw, releaseRaw, releaseDigest string
+		if err := rows.Scan(&kind, &owner, &source, &templateID, &specRaw, &releaseRaw, &releaseDigest); err != nil {
+			return err
+		}
+		document, err := decodeRegistryV9TemplateSpec(specRaw)
+		if err != nil {
+			return fmt.Errorf("managed Web Service %s %s template spec: %w", kind, owner, err)
+		}
+		if source == "builtin" && templateID == "deepseek-harness-host" && !registryDeepSeekHostEnvironmentMatches(document) {
+			return fmt.Errorf("managed Web Service %s %s DeepSeek Host environment is invalid", kind, owner)
+		}
+		if kind != "service" {
+			continue
+		}
+		if err := verifyRegistryDocumentDigest("managed Web Service release identity", owner, releaseRaw, releaseDigest); err != nil {
+			return err
+		}
+		var identity registryReleaseIdentityV1
+		decoder := json.NewDecoder(strings.NewReader(releaseRaw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&identity); err != nil {
+			return fmt.Errorf("managed Web Service release identity %s: %w", owner, err)
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			return fmt.Errorf("managed Web Service release identity %s contains trailing JSON", owner)
+		}
+		if identity.SchemaVersion != 1 || strings.TrimSpace(identity.Kind) == "" {
+			return fmt.Errorf("managed Web Service release identity %s is unsupported", owner)
+		}
+	}
+	return rows.Err()
+}
+
+func decodeRegistryV9TemplateSpec(raw string) (registryTemplateSpecDocument, error) {
+	header := struct {
+		SchemaVersion int `json:"schema_version"`
+	}{}
+	if err := json.Unmarshal([]byte(raw), &header); err != nil {
+		return registryTemplateSpecDocument{}, err
+	}
+	if header.SchemaVersion != 2 && header.SchemaVersion != 3 {
+		return registryTemplateSpecDocument{}, errors.New("template spec schema is unsupported")
+	}
+	return decodeRegistryTemplateSpec(raw, header.SchemaVersion)
+}
+
+func registryDeepSeekHostEnvironmentMatches(document registryTemplateSpecDocument) bool {
+	if document.SchemaVersion != 3 || document.Kind != "host" || document.Host == nil || len(document.Host.Environment) != 3 {
+		return false
+	}
+	return document.Host.Environment["DSH_DESKTOP_ENABLED"] == "0" &&
+		document.Host.Environment["DSH_HOME"] == "${REDEVEN_SERVICE_DATA_DIR}" &&
+		document.Host.Environment["HOME"] == "${REDEVEN_WORKSPACE}"
 }
 
 func verifyRegistryV8Documents(tx *sql.Tx) error {
@@ -1155,7 +1336,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return err
 	}
 	expectedTables := []string{"managed_web_service_operations", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}
-	if version == "v5" || version == "v6" || version == "v7" || version == "v8" {
+	if version == "v5" || version == "v6" || version == "v7" || version == "v8" || version == "v9" {
 		expectedTables = []string{"managed_web_service_operations", "managed_web_service_resources", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}
 	}
 	if !slices.Equal(tables, expectedTables) {
@@ -1185,10 +1366,10 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return fmt.Errorf("managed Web Service template request column mismatch: got %v, want %v", columns, templateRequestColumns)
 	}
 	managedServiceColumns := []string{"service_id", "template_id", "template_source", "template_revision", "template_snapshot_json", "template_snapshot_sha256", "service_family_id", "deployment", "workspace_path", "configuration_json", "version", "desired_state", "observed_state", "forward_id", "runtime_identity", "runtime_manifest_json", "runtime_port", "artifact_reference", "last_error_code", "last_error_message", "created_at_unix_ms", "updated_at_unix_ms"}
-	if version == "v5" || version == "v6" || version == "v7" || version == "v8" {
+	if version == "v5" || version == "v6" || version == "v7" || version == "v8" || version == "v9" {
 		managedServiceColumns = append(managedServiceColumns, "configuration_revision", "configuration_sha256")
 	}
-	if version == "v8" {
+	if version == "v8" || version == "v9" {
 		managedServiceColumns = append(managedServiceColumns, "release_identity_json", "release_identity_sha256")
 	}
 	columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_services")
@@ -1199,7 +1380,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return fmt.Errorf("managed web service column mismatch: got %v, want %v", columns, managedServiceColumns)
 	}
 	operationColumns := []string{"operation_id", "service_id", "request_id", "request_fingerprint", "action", "delete_data", "state", "stage", "progress_current", "progress_total", "cancel_requested", "error_code", "error_message", "created_at_unix_ms", "updated_at_unix_ms", "finished_at_unix_ms"}
-	if version == "v6" || version == "v7" || version == "v8" {
+	if version == "v6" || version == "v7" || version == "v8" || version == "v9" {
 		operationColumns = append(operationColumns, "progress_detail_json")
 	}
 	columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_service_operations")
@@ -1209,7 +1390,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 	if !slices.Equal(columns, operationColumns) {
 		return fmt.Errorf("managed web service operation column mismatch: got %v, want %v", columns, operationColumns)
 	}
-	if version == "v5" || version == "v6" || version == "v7" || version == "v8" {
+	if version == "v5" || version == "v6" || version == "v7" || version == "v8" || version == "v9" {
 		resourceColumns := []string{"service_id", "resource_id", "kind", "engine_identity", "created_at_unix_ms"}
 		columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_service_resources")
 		if err != nil {

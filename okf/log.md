@@ -12,6 +12,16 @@
   `ask_user` whenever another user answer is needed and forbids ending that
   Turn with a prose question. Natural stop remains valid when no answer is
   required.
+* **Managed Service v8 startup recovery**: Advanced the port-forward Registry
+  to v9 and TemplateSpec to v3. Exact built-in DeepSeek Host snapshots regain
+  their historical data environment and automatic recovery intent without
+  moving user paths; migrated Bundle runtimes keep their real install and log
+  layout. Host process ownership now binds boot and process-start identity, and
+  strictly verified legacy processes can be adopted and stopped after a
+  Runtime restart. Exact historical `redeven-dsh-*` containers remain operable
+  without weakening ID, label, digest, image, or configuration checks. Stable
+  error codes drive localized, path-free diagnostics while historical failure
+  operations remain intact.
 * **Friendly Agent startup progress**: Redeven now consumes Floret v7.0.2 and
   forwards its real migration and verification phases. Startup shows neutral
   phase copy, real elapsed time after ten seconds, a calm long-history note

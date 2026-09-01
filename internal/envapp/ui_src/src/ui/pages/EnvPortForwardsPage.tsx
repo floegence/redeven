@@ -454,9 +454,9 @@ function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string)
     startup_timeout_sec: original?.endpoint.startup_timeout_sec || 60,
     ...(draft.kind === 'host' ? {} : { container_port: Number(draft.containerPort) }),
   };
-	const common = { schema_version: 2 as const, kind: draft.kind, endpoint, parameters };
+  const common = { schema_version: 3 as const, kind: draft.kind, endpoint, parameters };
   const spec: ManagedTemplateSpec = draft.kind === 'host'
-	? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(!hasNPM && original?.host?.artifact ? { artifact: original.host.artifact } : {}), ...(hasNPM ? { npm: { package_name: draft.npmPackageName.trim(), version: draft.npmPackageVersion.trim(), registry_url: draft.npmRegistryURL.trim(), executable: draft.npmExecutable.trim(), ...(authTokenParameter ? { auth_token_parameter: authTokenParameter } : {}) } } : {}) } }
+    ? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.environment ? { environment: original.host.environment } : {}), ...(!hasNPM && original?.host?.artifact ? { artifact: original.host.artifact } : {}), ...(hasNPM ? { npm: { package_name: draft.npmPackageName.trim(), version: draft.npmPackageVersion.trim(), registry_url: draft.npmRegistryURL.trim(), executable: draft.npmExecutable.trim(), ...(authTokenParameter ? { auth_token_parameter: authTokenParameter } : {}) } } : {}) } }
     : draft.kind === 'container'
 	  ? { ...common, container: { image: draft.image.trim(), entrypoint: draft.entrypoint.trim() ? [draft.entrypoint.trim()] : [], command: draft.command.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean), environment: parseTemplateEnvironment(draft.environment), mounts: original?.container?.mounts ?? [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'data', target: '/data' }, { type: 'tmpfs', target: '/tmp' }], user: original?.container?.user ?? '', read_only_root: true, memory_bytes: original?.container?.memory_bytes, cpus: original?.container?.cpus, pids_limit: original?.container?.pids_limit || 512, ...(original?.container?.release_policy ? { release_policy: original.container.release_policy } : {}) } }
       : { ...common, compose: { yaml: draft.composeYAML, main_service: draft.mainService.trim() } };
@@ -852,8 +852,12 @@ function managedActionFailureTitle(action: ManagedOperation['action'], i18n: Web
   }
 }
 
-function managedOperationFailureMessage(operation: ManagedOperation, fallback: string, i18n: WebServicesI18n): string {
-  switch (operation.error_code) {
+function managedOperationFailureMessage(operation: ManagedOperation, i18n: WebServicesI18n): string {
+  return managedFailureMessage(operation.error_code || '', i18n);
+}
+
+function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string {
+  switch (errorCode) {
     case 'IMAGE_PULL_TIMEOUT': return i18n.t('webServices.managed.imagePullTimeout');
     case 'IMAGE_REGISTRY_UNAVAILABLE': return i18n.t('webServices.managed.imageRegistryUnavailable');
     case 'IMAGE_UNAVAILABLE': return i18n.t('webServices.managed.imageUnavailable');
@@ -861,7 +865,23 @@ function managedOperationFailureMessage(operation: ManagedOperation, fallback: s
     case 'IMAGE_REGISTRY_RATE_LIMITED': return i18n.t('webServices.managed.imageRegistryRateLimited');
     case 'IMAGE_PULL_STORAGE_EXHAUSTED': return i18n.t('webServices.managed.imagePullStorageExhausted');
     case 'IMAGE_PULL_FAILED': return i18n.t('webServices.managed.imagePullFailed');
-    default: return operation.error_message || fallback;
+    case 'CONTAINER_INSPECTION_FAILED': return i18n.t('webServices.managed.containerInspectionFailed');
+    case 'CONTAINER_IDENTITY_MISSING': return i18n.t('webServices.managed.containerMissing');
+    case 'CONTAINER_IDENTITY_MISMATCH': return i18n.t('webServices.managed.containerIdentityChanged');
+    case 'CONTAINER_NAME_MISMATCH': return i18n.t('webServices.managed.containerNameChanged');
+    case 'CONTAINER_IMAGE_MISMATCH': return i18n.t('webServices.managed.containerImageChanged');
+    case 'CONTAINER_LABEL_MISMATCH': return i18n.t('webServices.managed.containerOwnershipChanged');
+    case 'CONTAINER_CONFIGURATION_MISMATCH':
+    case 'CONTAINER_CAPABILITY_MISMATCH':
+    case 'CONTAINER_MOUNT_MISMATCH':
+    case 'CONTAINER_DEVICE_MISMATCH':
+    case 'CONTAINER_NETWORK_MISMATCH': return i18n.t('webServices.managed.containerConfigurationChanged');
+    case 'HOST_RUNTIME_PREPARE_FAILED':
+    case 'HOST_LOG_PREPARE_FAILED': return i18n.t('webServices.managed.hostRuntimePrepareFailed');
+    case 'HOST_PROCESS_IDENTITY_MISMATCH':
+    case 'HOST_PROCESS_IDENTITY_UNAVAILABLE': return i18n.t('webServices.managed.hostProcessIdentityChanged');
+    case 'MANAGED_WEB_SERVICE_INTERNAL': return i18n.t('webServices.managed.operationFailed');
+    default: return i18n.t('webServices.managed.operationFailed');
   }
 }
 
@@ -1236,13 +1256,14 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
   const failureDiagnostic = () => {
     const failure = props.service.last_failure;
     if (!failure) return '';
+    const message = managedFailureMessage(failure.error_code, i18n);
     return [
       `${i18n.t('webServices.managed.failureDiagnosticService')}: ${presentation().name}`,
       `${i18n.t('webServices.managed.failureDiagnosticServiceID')}: ${props.service.service_id}`,
       ...(failure.action ? [`${i18n.t('webServices.managed.operationAction')}: ${managedActionLabel(failure.action, i18n)}`] : []),
       ...(failure.stage ? [`${i18n.t('webServices.managed.failureDiagnosticStage')}: ${managedStageLabel(failure.stage, i18n)}`] : []),
       `${i18n.t('webServices.managed.failureDiagnosticErrorCode')}: ${failure.error_code}`,
-      `${i18n.t('webServices.managed.failureDiagnosticMessage')}: ${failure.message}`,
+      `${i18n.t('webServices.managed.failureDiagnosticMessage')}: ${message}`,
       ...(failure.artifact_reference ? [`${i18n.t('webServices.managed.containerImage')}: ${failure.artifact_reference}`] : []),
       ...(failure.operation_id ? [`${i18n.t('webServices.managed.operationID')}: ${failure.operation_id}`] : []),
       ...(failureOccurredAt() ? [`${i18n.t('webServices.managed.failureDiagnosticOccurred')}: ${failureOccurredAt()}`] : []),
@@ -1351,7 +1372,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
                   content={(
                     <div class="max-w-72 space-y-1.5 text-left">
                       <div class="font-semibold text-popover-foreground">{failure.action ? managedActionLabel(failure.action, i18n) : managedStatusLabel('error', i18n)}</div>
-                      <div class="leading-5 text-popover-foreground/90">{failure.message}</div>
+                      <div class="leading-5 text-popover-foreground/90">{managedFailureMessage(failure.error_code, i18n)}</div>
                       <Show when={failure.stage || failureOccurredAt()}>
                         <div class="text-[10px] text-muted-foreground">
                           <Show when={failure.stage}>{managedStageLabel(failure.stage!, i18n)}</Show>
@@ -2008,7 +2029,7 @@ export function EnvPortForwardsPage() {
           await loadManaged(false);
           bumpRefresh();
           if (operation.state !== 'succeeded') {
-            notify.error(i18n.t('webServices.notifications.failedToAddTitle'), managedOperationFailureMessage(operation, i18n.t('webServices.notifications.failedToAddTitle'), i18n));
+            notify.error(i18n.t('webServices.notifications.failedToAddTitle'), managedOperationFailureMessage(operation, i18n));
             return;
           }
           notify.success(i18n.t('webServices.notifications.serviceAddedTitle'), i18n.t('webServices.notifications.serviceAddedMessage'));
@@ -2050,7 +2071,7 @@ export function EnvPortForwardsPage() {
       await loadManaged(false);
       const operation = await operationPromise;
       await loadManaged(false);
-      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, managedActionFailureTitle(action, i18n), i18n));
+      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n));
       if (action === 'update') {
         notify.success(i18n.t('webServices.managed.updateComplete'), i18n.t('webServices.managed.updateCompleteMessage'));
       }
@@ -2071,7 +2092,7 @@ export function EnvPortForwardsPage() {
       await loadManaged(false);
       const operation = await operationPromise;
       await loadManaged(false);
-      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, managedActionFailureTitle('reconfigure', i18n), i18n));
+      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n));
     } catch (error) {
       notify.error(managedActionFailureTitle('reconfigure', i18n), error instanceof Error ? error.message : String(error));
     } finally {
@@ -2112,7 +2133,7 @@ export function EnvPortForwardsPage() {
       await loadManaged(false);
       const operation = await operationPromise;
       await loadManaged(false);
-      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n.t('webServices.notifications.failedToDeleteTitle'), i18n));
+      if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n));
       bumpRefresh();
       notify.success(i18n.t('webServices.managed.uninstallComplete'), i18n.t('webServices.managed.uninstallCompleteMessage'));
     } catch (error) {

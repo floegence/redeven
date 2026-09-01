@@ -24,7 +24,7 @@ The Manager waits a random 30–90 seconds after startup before the first backgr
 
 ## npm Host source and installation
 
-TemplateSpec v2 Host may declare one npm package with an exact SemVer, absolute HTTPS Registry URL, executable, and optional auth-token parameter that must reference a Secret input. Packument discovery accepts bounded metadata, valid `sha512` integrity, deprecation, publication time, dist-tags, and a Node engine range that the managed Runtime can prove compatible. Unknown range syntax remains visible but disabled. Tokens exist only in the candidate request and a task-owned mode-0600 npm configuration file; they never enter a template, Registry record, command line, log, lifecycle Hook environment, or cache key in plaintext.
+TemplateSpec v3 Host may declare one npm package with an exact SemVer, absolute HTTPS Registry URL, executable, optional auth-token parameter that must reference a Secret input, and validated non-secret process environment. Packument discovery accepts bounded metadata, valid `sha512` integrity, deprecation, publication time, dist-tags, and a Node engine range that the managed Runtime can prove compatible. Unknown range syntax remains visible but disabled. Tokens exist only in the candidate request and a task-owned mode-0600 npm configuration file; they never enter a template, Registry record, command line, log, lifecycle Hook environment, or cache key in plaintext.
 
 Installation first verifies the Redeven-managed Node artifact. It stages one version directory and runs npm with an exact `package@version`, no package lock, and scripts disabled. It deletes the token configuration before the explicitly confirmed rebuild enables lifecycle scripts. It then verifies the direct package version, Registry integrity, executable entry, Node artifact, and the complete managed Runtime tree before writing the manifest and atomically selecting that release. An install Hook runs only at its declared lifecycle position. The foreground start script remains the one launch owner and receives `REDEVEN_INSTALL_EXECUTABLE`.
 
@@ -56,9 +56,9 @@ Redeven does not mirror packages, images, metadata, or credentials and does not 
 - `redeven:internal/containerengine/registry_discovery.go` - Resolves paginated OCI tags, authentication challenges, manifests, platform digests, and stable errors.
 - `redeven:internal/containerengine/registry_credentials.go` - Reads Docker and Podman credential stores and helpers without product persistence.
 - `redeven:internal/managedwebservice/update.go` - Owns update-v2 staging, commit, rollback, and interrupted recovery.
-- `redeven:internal/portforward/registry/schema.go` - Migrates TemplateSpec v1 and historical release identity to schema v8 atomically.
+- `redeven:internal/portforward/registry/schema.go` - Migrates TemplateSpec v1 through v3 and historical release identity through Registry schema v9 atomically.
 - `redeven:internal/codeapp/appserver/managed_web_services.go` - Exposes permission-checked template and service candidate APIs.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Presents release identity, filters, disabled reasons, risk consent, and exact update selection.
 - `redeven:internal/managedwebservice/release_discovery_test.go` - Covers npm ordering, stale success, redaction, range compatibility, and update comparison.
 - `redeven:internal/containerengine/registry_discovery_test.go` - Covers OCI pagination, authentication, platform choice, digest verification, hostile links, limits, and cancellation.
-- `redeven:internal/portforward/registry/registry_test.go` - Covers v7-to-v8 preservation, exact identity backfill, ambiguity rollback, and idempotent current opens.
+- `redeven:internal/portforward/registry/registry_test.go` - Covers v7-to-v9 preservation, exact identity backfill, recovery-intent repair, rollback, and idempotent current opens.

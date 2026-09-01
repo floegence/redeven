@@ -17,7 +17,7 @@ import (
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestOpen_CreatesV8SchemaForFreshDB(t *testing.T) {
+func TestOpen_CreatesV9SchemaForFreshDB(t *testing.T) {
 	t.Parallel()
 
 	p := filepath.Join(t.TempDir(), "registry.sqlite")
@@ -31,8 +31,8 @@ func TestOpen_CreatesV8SchemaForFreshDB(t *testing.T) {
 	if err := r.db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	if v != 8 {
-		t.Fatalf("user_version = %d, want 8", v)
+	if v != 9 {
+		t.Fatalf("user_version = %d, want 9", v)
 	}
 
 	cols, err := tableColumns(r.db, "port_forwards")
@@ -99,7 +99,7 @@ func TestOpen_MigratesV1AndPreservesForwards(t *testing.T) {
 		t.Fatalf("preserved forward = %+v, err=%v", forward, err)
 	}
 	var version int
-	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 8 {
+	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
 		t.Fatalf("migrated version=%d, err=%v", version, err)
 	}
 }
@@ -397,7 +397,7 @@ func TestOpen_MigratesV5OperationDetailsWithoutRewritingManagedData(t *testing.T
 	if service == nil || service.ConfigurationJSON != configuration || service.ConfigurationSHA256 != hex.EncodeToString(configurationDigest[:]) || service.ConfigurationRevision != 7 || service.RuntimeManifestJSON != `{"kind":"managed_service_reconfigure_v1"}` || service.LastErrorCode != "IMAGE_PULL_FAILED" {
 		t.Fatalf("migrated service changed: %+v", service)
 	}
-	assertRegistryTemplateSpecV2(t, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256)
+	assertRegistryTemplateSpecVersion(t, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, 2)
 	operation, err := r.GetManagedOperation(context.Background(), "mop_keep")
 	if err != nil {
 		t.Fatal(err)
@@ -409,7 +409,7 @@ func TestOpen_MigratesV5OperationDetailsWithoutRewritingManagedData(t *testing.T
 	if err != nil || template == nil || template.Name != "Preserved template" {
 		t.Fatalf("migrated template=%+v err=%v", template, err)
 	}
-	assertRegistryTemplateSpecV2(t, template.SpecJSON, template.SpecSHA256)
+	assertRegistryTemplateSpecVersion(t, template.SpecJSON, template.SpecSHA256, 2)
 	resources, err := r.ListManagedServiceResources(context.Background(), "mws_keep")
 	if err != nil || len(resources) != 1 || resources[0].ResourceID != "resource-keep" || resources[0].EngineIdentity != "container-1" {
 		t.Fatalf("migrated resources=%+v err=%v", resources, err)
@@ -478,7 +478,11 @@ func TestOpen_MigratesV6DeepSeekFamiliesWithoutRewritingManagedData(t *testing.T
 			if service == nil || service.ServiceFamilyID != tt.templateID || service.TemplateID != tt.templateID || service.WorkspacePath != "/preserved/workspace" || service.ConfigurationJSON != configuration || service.ConfigurationSHA256 != hex.EncodeToString(configurationDigest[:]) || service.RuntimeManifestJSON != `{"kind":"managed_service_reconfigure_v1"}` || service.UpdatedAtUnixMs != 5 {
 				t.Fatalf("migrated service changed: %+v", service)
 			}
-			assertRegistryTemplateSpecV2(t, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256)
+			wantSchema := 2
+			if tt.deployment == "native" {
+				wantSchema = 3
+			}
+			assertRegistryTemplateSpecVersion(t, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, wantSchema)
 			if tt.deployment == "native" && service.Deployment != "host" {
 				t.Fatalf("migrated host deployment = %q", service.Deployment)
 			}
@@ -498,7 +502,7 @@ func TestOpen_MigratesV6DeepSeekFamiliesWithoutRewritingManagedData(t *testing.T
 				t.Fatalf("migrated resources=%+v err=%v", resources, err)
 			}
 			var version int
-			if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 8 {
+			if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 9 {
 				t.Fatalf("migrated version=%d err=%v", version, err)
 			}
 		})
@@ -535,7 +539,7 @@ func TestOpen_MigratesV7ReleaseIdentityAndTemplateSpecAtomically(t *testing.T) {
 	if err != nil || service == nil {
 		t.Fatalf("service=%+v err=%v", service, err)
 	}
-	assertRegistryTemplateSpecV2(t, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256)
+	assertRegistryTemplateSpecVersion(t, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, 3)
 	if service.WorkspacePath != "/preserved/workspace" || service.ConfigurationJSON != configuration || service.UpdatedAtUnixMs != 5 {
 		t.Fatalf("v7 user data changed: %+v", service)
 	}
@@ -548,6 +552,160 @@ func TestOpen_MigratesV7ReleaseIdentityAndTemplateSpecAtomically(t *testing.T) {
 	}
 	if err := verifyRegistryDocumentDigest("managed Web Service release identity", service.ServiceID, service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOpen_MigratesV8HostEnvironmentAndRestoresAutomaticRecoveryIntent(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV8TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostSnapshot := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http","path":"/","health_path":"/"},"host":{"start_script":"exec service","npm":{"package_name":"@deepseek-ai/dsh","version":"0.1.1-rc.2","registry_url":"https://registry.npmjs.org/","executable":"dsh"}}}`
+	containerSnapshot := `{"schema_version":2,"kind":"container","endpoint":{"scheme":"http","container_port":3080},"container":{"image":"ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","read_only_root":true}}`
+	customSnapshot := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http","path":"/","health_path":"/"},"host":{"install_script":"printf custom-install","start_script":"exec custom-start","stop_script":"printf custom-stop","uninstall_script":"printf custom-uninstall"}}`
+	configuration := `{"schema_version":2}`
+	configurationDigest := sha256.Sum256([]byte(configuration))
+	hostRelease := `{"schema_version":1,"kind":"npm","source":"@deepseek-ai/dsh","version":"0.1.1-rc.2","integrity":"sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg==","artifact_reference":"/managed/deepseek/bin/dsh","trust":"redeven_reviewed_legacy"}`
+	containerRelease := `{"schema_version":1,"kind":"oci","source":"ghcr.io/runzhliu/deepseek-harness","tag":"0.1.1-rc.2","digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","artifact_reference":"ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	fixtures := []struct {
+		id, templateID, deployment, snapshot, release, artifact, runtimeIdentity string
+	}{
+		{id: "recover", templateID: "deepseek-harness-host", deployment: "host", snapshot: hostSnapshot, release: hostRelease, artifact: "/managed/deepseek/bin/dsh", runtimeIdentity: "native:legacy:nonce:42"},
+		{id: "user_stopped", templateID: "deepseek-harness-container", deployment: "container", snapshot: containerSnapshot, release: containerRelease, artifact: "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", runtimeIdentity: "container-legacy"},
+	}
+	for _, fixture := range fixtures {
+		id := fixture.id
+		if _, err := db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES(?, 'http://127.0.0.1:3080','Keep','','/',0,1,2,3,'desktop_loopback')`, "pf_"+id); err != nil {
+			t.Fatal(err)
+		}
+		serviceID := "mws_" + id
+		snapshotDigest := sha256.Sum256([]byte(fixture.snapshot))
+		releaseDigest := sha256.Sum256([]byte(fixture.release))
+		if _, err := db.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256) VALUES(?,?, 'builtin',3,?,?,?,?,'/preserved/workspace',?,'0.1.1-rc.2','stopped','error',?,?,'{}',3080,?,'MANAGED_WEB_SERVICE_INTERNAL','preserved failure',4,5,2,?,?,?)`, serviceID, fixture.templateID, fixture.snapshot, hex.EncodeToString(snapshotDigest[:]), fixture.templateID, fixture.deployment, configuration, "pf_"+id, fixture.runtimeIdentity, fixture.artifact, hex.EncodeToString(configurationDigest[:]), fixture.release, hex.EncodeToString(releaseDigest[:])); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,state,stage,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES(?,?,?,?, 'start','failed','failed','MANAGED_WEB_SERVICE_INTERNAL','preserved failure',10,11,11,'{"schema_version":1}')`, "mop_recovery_"+id, serviceID, "runtime-recovery-"+serviceID+"-10", "fingerprint-"+id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,state,stage,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES('mop_user_stop','mws_user_stopped','request-user-stop','fingerprint-user-stop','stop','succeeded','completed',12,13,13,'{"schema_version":1}')`); err != nil {
+		t.Fatal(err)
+	}
+	customDigest := sha256.Sum256([]byte(customSnapshot))
+	if _, err := db.Exec(`INSERT INTO managed_web_service_templates(template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES('custom-preserved','Custom preserved','','custom','host','1.0.0',4,?,?,'',0,'custom-preserved',20,21)`, customSnapshot, hex.EncodeToString(customDigest[:])); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	recovered, err := r.GetManagedService(context.Background(), "mws_recover")
+	if err != nil || recovered == nil {
+		t.Fatalf("recovered service=%+v err=%v", recovered, err)
+	}
+	if recovered.DesiredState != "running" || recovered.ObservedState != "error" || recovered.LastErrorCode != "MANAGED_WEB_SERVICE_INTERNAL" {
+		t.Fatalf("automatic recovery intent was not restored: %+v", recovered)
+	}
+	if recovered.WorkspacePath != "/preserved/workspace" || recovered.ConfigurationJSON != configuration || recovered.ReleaseIdentityJSON != hostRelease || recovered.UpdatedAtUnixMs != 5 {
+		t.Fatalf("v8 user data changed: %+v", recovered)
+	}
+	var document registryTemplateSpecDocument
+	if err := json.Unmarshal([]byte(recovered.TemplateSnapshotJSON), &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.SchemaVersion != 3 || document.Host == nil || document.Host.Environment["DSH_HOME"] != "${REDEVEN_SERVICE_DATA_DIR}" || document.Host.Environment["HOME"] != "${REDEVEN_WORKSPACE}" {
+		t.Fatalf("migrated DeepSeek Host environment = %+v", document.Host)
+	}
+	userStopped, err := r.GetManagedService(context.Background(), "mws_user_stopped")
+	if err != nil || userStopped == nil || userStopped.DesiredState != "stopped" {
+		t.Fatalf("later user stop was overwritten: service=%+v err=%v", userStopped, err)
+	}
+	if userStopped.TemplateSnapshotJSON != containerSnapshot {
+		t.Fatalf("unrelated built-in container snapshot was rewritten: %s", userStopped.TemplateSnapshotJSON)
+	}
+	custom, err := r.GetManagedTemplate(context.Background(), "custom-preserved")
+	if err != nil || custom == nil {
+		t.Fatalf("custom template=%+v err=%v", custom, err)
+	}
+	if custom.SpecJSON != customSnapshot || custom.SpecSHA256 != hex.EncodeToString(customDigest[:]) {
+		t.Fatalf("custom template document was rewritten: %+v", custom)
+	}
+}
+
+func TestOpen_RollsBackFailedV8ToV9Migration(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV8TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http","path":"/","health_path":"/"},"host":{"start_script":"exec service","npm":{"package_name":"@deepseek-ai/dsh","version":"0.1.1-rc.2","registry_url":"https://registry.npmjs.org/","executable":"dsh"}}}`
+	digest := sha256.Sum256([]byte(snapshot))
+	if _, err := db.Exec(`INSERT INTO managed_web_service_templates(template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES('deepseek-harness-host','DeepSeek Harness','','builtin','host','0.1.1-rc.2',3,?,?,'',0,'deepseek-harness-host',1,1)`, snapshot, hex.EncodeToString(digest[:])); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := registrySchemaSpec()
+	original := spec.Migrations[8].Apply
+	spec.Migrations[8].Apply = func(tx *sql.Tx) error {
+		if err := original(tx); err != nil {
+			return err
+		}
+		return errors.New("injected v9 migration failure")
+	}
+	if _, err := sqliteutil.Open(p, spec); err == nil {
+		t.Fatal("migration unexpectedly succeeded")
+	}
+	after, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(before, after) {
+		t.Fatal("failed v8 to v9 migration changed the database bytes")
+	}
+}
+
+func TestOpen_RejectsV8TemplateSpecDriftWithoutModification(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV8TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http"},"host":{"start_script":"exec service"},"future_policy":true}`
+	digest := sha256.Sum256([]byte(snapshot))
+	if _, err := db.Exec(`INSERT INTO managed_web_service_templates(template_id,name,description,source,deployment,version,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES('drifted-v8','Drifted','','custom','host','1.0.0',1,?,?,'',0,'drifted-v8',1,1)`, snapshot, hex.EncodeToString(digest[:])); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(p); err == nil {
+		t.Fatal("drifted v8 template unexpectedly migrated")
+	}
+	after, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(before, after) {
+		t.Fatal("rejected v8 template drift changed the database bytes")
 	}
 }
 
@@ -1049,7 +1207,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 		_ = r.Close()
 		t.Fatal(err)
 	}
-	if _, err := r.db.Exec(`PRAGMA user_version=9`); err != nil {
+	if _, err := r.db.Exec(`PRAGMA user_version=10`); err != nil {
 		_ = r.Close()
 		t.Fatal(err)
 	}
@@ -1071,7 +1229,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE forward_id='keep'`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if version != 9 || count != 1 {
+	if version != 10 || count != 1 {
 		t.Fatalf("future database changed: version=%d forward_count=%d", version, count)
 	}
 }
@@ -1622,7 +1780,30 @@ func registryV7TestSpec() sqliteutil.Spec {
 	}
 }
 
-func assertRegistryTemplateSpecV2(t *testing.T, raw, digest string) {
+func registryV8TestSpec() sqliteutil.Spec {
+	return sqliteutil.Spec{
+		Kind: registrySchemaKind, CurrentVersion: 8,
+		Pragmas: []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 0, ToVersion: 1, Apply: migrateRegistryToV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryToV5},
+			{FromVersion: 5, ToVersion: 6, Apply: migrateRegistryToV6},
+			{FromVersion: 6, ToVersion: 7, Apply: migrateRegistryToV7},
+			{FromVersion: 7, ToVersion: 8, Apply: migrateRegistryToV8},
+		},
+		Verify: func(tx *sql.Tx) error {
+			if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v8"); err != nil {
+				return err
+			}
+			return verifyRegistryV8Documents(tx)
+		},
+	}
+}
+
+func assertRegistryTemplateSpecVersion(t *testing.T, raw, digest string, wantVersion int) {
 	t.Helper()
 	var document struct {
 		SchemaVersion int `json:"schema_version"`
@@ -1630,8 +1811,8 @@ func assertRegistryTemplateSpecV2(t *testing.T, raw, digest string) {
 	if err := json.Unmarshal([]byte(raw), &document); err != nil {
 		t.Fatalf("decode migrated template spec: %v", err)
 	}
-	if document.SchemaVersion != 2 {
-		t.Fatalf("migrated template spec schema_version = %d, want 2", document.SchemaVersion)
+	if document.SchemaVersion != wantVersion {
+		t.Fatalf("migrated template spec schema_version = %d, want %d", document.SchemaVersion, wantVersion)
 	}
 	sum := sha256.Sum256([]byte(raw))
 	if digest != hex.EncodeToString(sum[:]) {

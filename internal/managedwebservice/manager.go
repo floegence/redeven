@@ -41,7 +41,6 @@ type Manager struct {
 	containers    *containerengine.Adapter
 	downloads     *packageDownloadClient
 	nativeRuntime *nativeDriver
-	native        deploymentDriver
 	docker        deploymentDriver
 	host          deploymentDriver
 	container     deploymentDriver
@@ -90,10 +89,9 @@ func New(opts ManagerOptions) (*Manager, error) {
 		copy.CheckRedirect = releaseMetadataRedirectPolicy
 		m.releaseClient = &copy
 	}
-	m.nativeRuntime = &nativeDriver{log: logger, stateDir: root, client: m.downloads.packageHTTPClient(), packageOrigin: defaultNodePackageOrigin}
-	m.native = m.nativeRuntime
+	m.nativeRuntime = &nativeDriver{stateDir: root, client: m.downloads.packageHTTPClient(), packageOrigin: defaultNodePackageOrigin}
 	m.docker = &dockerDriver{adapter: opts.Containers, stateDir: root}
-	m.host = &hostScriptDriver{manager: m, processes: map[string]nativeProcess{}}
+	m.host = &hostScriptDriver{manager: m, processes: map[string]hostProcess{}}
 	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
 	m.compose = &composeTemplateDriver{manager: m, adapter: opts.Containers}
 	if err := m.registry.MarkManagedOperationsInterrupted(context.Background()); err != nil {
@@ -111,13 +109,13 @@ func (m *Manager) Start(ctx context.Context) {
 	m.startReleaseDiscovery()
 	services, err := m.registry.ListManagedServices(ctx)
 	if err != nil {
-		m.log.Error("list managed services for recovery", "error", err)
+		m.log.Error("list managed services for recovery", "cause", safeManagedFailureCause(err))
 		return
 	}
 	for _, service := range services {
 		latest, latestErr := m.registry.GetLatestManagedOperation(ctx, service.ServiceID)
 		if latestErr != nil {
-			m.log.Error("read managed Web Service recovery operation", "service_id", service.ServiceID, "error", latestErr)
+			m.log.Error("read managed Web Service recovery operation", "service_id", service.ServiceID, "cause", safeManagedFailureCause(latestErr))
 			continue
 		}
 		if latest != nil && latest.State == "interrupted" {
@@ -160,7 +158,7 @@ func (m *Manager) Close() error {
 				continue
 			}
 			if err := driver.Stop(context.Background(), &services[i]); err != nil {
-				m.log.Warn("stop managed Web Service during runtime shutdown", "service_id", services[i].ServiceID, "error", err)
+				m.log.Warn("stop managed Web Service during runtime shutdown", "service_id", services[i].ServiceID, "cause", safeManagedFailureCause(err))
 				continue
 			}
 			stopped := "stopped"
@@ -1009,7 +1007,7 @@ func (m *Manager) finishUpdateFailure(service *pfregistry.ManagedService, op *pf
 		desired, observed := "stopped", "error"
 		op.FinishedAtUnixMs = time.Now().UnixMilli()
 		m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
-		m.log.Error("roll back managed Web Service update", "service_id", service.ServiceID, "error", rollbackErr)
+		m.log.Error("roll back managed Web Service update", "service_id", service.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(rollbackErr))
 		return
 	}
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
@@ -1035,7 +1033,7 @@ func (m *Manager) finishReconfigureFailure(service *pfregistry.ManagedService, o
 		desired, observed := "stopped", "error"
 		op.FinishedAtUnixMs = time.Now().UnixMilli()
 		m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
-		m.log.Error("roll back managed Web Service reconfiguration", "service_id", service.ServiceID, "error", rollbackErr)
+		m.log.Error("roll back managed Web Service reconfiguration", "service_id", service.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(rollbackErr))
 		return
 	}
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
@@ -1067,7 +1065,7 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 				code, message := "UPDATE_RECOVERY_FAILED", "The interrupted Host update could not restore or finalize a verified Runtime."
 				desired, observed := "stopped", "error"
 				_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
-				m.log.Error("recover interrupted managed Web Service Host update", "service_id", service.ServiceID, "error", err)
+				m.log.Error("recover interrupted managed Web Service Host update", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(err))
 			}
 			return
 		}
@@ -1082,7 +1080,7 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 			code, message := "UPDATE_RECOVERY_FAILED", "The interrupted update could not restore or finalize a verified runtime."
 			desired, observed := "stopped", "error"
 			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
-			m.log.Error("recover interrupted managed Web Service update", "service_id", service.ServiceID, "error", err)
+			m.log.Error("recover interrupted managed Web Service update", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(err))
 		}
 		return
 	}
@@ -1091,7 +1089,7 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 			code, message := "RECONFIGURE_RECOVERY_FAILED", "The interrupted configuration change could not restore or finalize a verified stopped Runtime."
 			desired, observed := "stopped", "error"
 			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
-			m.log.Error("recover interrupted managed Web Service reconfiguration", "service_id", service.ServiceID, "error", err)
+			m.log.Error("recover interrupted managed Web Service reconfiguration", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(err))
 		}
 		return
 	}
@@ -1111,12 +1109,12 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 	}
 	if err != nil {
 		code, message = "INTERRUPTED_CLEANUP_FAILED", "The interrupted operation could not clean up its verified runtime resource."
-		m.log.Warn("clean up interrupted managed Web Service operation", "service_id", service.ServiceID, "operation_id", operation.OperationID, "error", err)
+		m.log.Warn("clean up interrupted managed Web Service operation", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(err))
 	}
 	desired, observed := "stopped", "error"
 	patch.DesiredState, patch.ObservedState, patch.LastErrorCode, patch.LastErrorMessage = &desired, &observed, &code, &message
 	if updateErr := m.registry.UpdateManagedService(context.Background(), service.ServiceID, patch); updateErr != nil {
-		m.log.Error("persist interrupted managed Web Service recovery", "service_id", service.ServiceID, "error", updateErr)
+		m.log.Error("persist interrupted managed Web Service recovery", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(updateErr))
 	}
 }
 
@@ -1130,6 +1128,9 @@ func (m *Manager) fail(service *pfregistry.ManagedService, op *pfregistry.Manage
 	if message == "" {
 		message = "The managed Web Service operation failed."
 	}
+	if cause != nil && m.log != nil {
+		m.log.Error("managed Web Service operation failed", "service_id", service.ServiceID, "operation_id", op.OperationID, "action", op.Action, "error_code", code, "cause", safeManagedFailureCause(cause))
+	}
 	op.State = "failed"
 	op.Stage = "failed"
 	op.ErrorCode = code
@@ -1137,6 +1138,32 @@ func (m *Manager) fail(service *pfregistry.ManagedService, op *pfregistry.Manage
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
 	errorState, stopped := "error", "stopped"
 	m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &stopped, ObservedState: &errorState, LastErrorCode: &code, LastErrorMessage: &message})
+}
+
+func safeManagedFailureCause(cause error) string {
+	if cause == nil {
+		return ""
+	}
+	var managedErr *Error
+	if errors.As(cause, &managedErr) && managedErr.Cause != nil {
+		cause = managedErr.Cause
+	}
+	switch {
+	case errors.Is(cause, os.ErrNotExist):
+		return "managed file not found"
+	case errors.Is(cause, os.ErrPermission):
+		return "managed file permission denied"
+	case errors.Is(cause, context.Canceled):
+		return "operation canceled"
+	case errors.Is(cause, context.DeadlineExceeded):
+		return "operation timed out"
+	case func() bool { var pathErr *os.PathError; return errors.As(cause, &pathErr) }():
+		return "managed file operation failed"
+	case func() bool { var networkErr net.Error; return errors.As(cause, &networkErr) }():
+		return "network operation failed"
+	default:
+		return fmt.Sprintf("%T", cause)
+	}
 }
 
 type operationProgress func(stage string, current int64, transfer ...pfregistry.ManagedOperationTransferProgress)
@@ -1173,13 +1200,13 @@ func (m *Manager) progress(op *pfregistry.ManagedOperation, stage string, curren
 func (m *Manager) saveAndPublish(op *pfregistry.ManagedOperation) {
 	if err := m.registry.UpdateManagedOperation(context.Background(), *op); err != nil {
 		if m.log != nil {
-			m.log.Error("persist managed Web Service operation progress", "service_id", op.ServiceID, "operation_id", op.OperationID, "error", err)
+			m.log.Error("persist managed Web Service operation progress", "service_id", op.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(err))
 		}
 		return
 	}
 	refreshed, err := m.registry.GetManagedOperation(context.Background(), op.OperationID)
 	if err != nil && m.log != nil {
-		m.log.Error("reload managed Web Service operation progress", "service_id", op.ServiceID, "operation_id", op.OperationID, "error", err)
+		m.log.Error("reload managed Web Service operation progress", "service_id", op.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(err))
 	}
 	if refreshed != nil {
 		*op = *refreshed
@@ -1190,7 +1217,7 @@ func (m *Manager) saveAndPublish(op *pfregistry.ManagedOperation) {
 func (m *Manager) finalizeAndPublish(op *pfregistry.ManagedOperation, patch pfregistry.ManagedServicePatch) {
 	if err := m.registry.FinalizeManagedOperation(context.Background(), *op, patch); err != nil {
 		if m.log != nil {
-			m.log.Error("finalize managed Web Service operation", "service_id", op.ServiceID, "operation_id", op.OperationID, "error", err)
+			m.log.Error("finalize managed Web Service operation", "service_id", op.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(err))
 		}
 		return
 	}
@@ -1310,7 +1337,7 @@ type deploymentDriver interface {
 func (m *Manager) driver(deployment Deployment) deploymentDriver {
 	switch deployment {
 	case DeploymentNative:
-		return m.native
+		return m.host
 	case DeploymentDocker:
 		return m.docker
 	case DeploymentHost:

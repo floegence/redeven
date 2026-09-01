@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,7 +92,7 @@ func TestNativeHostRevisionUpdateCommitsOnlyTemplateMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(views) != 1 || !views[0].UpdateAvailable || views[0].TargetRevision != 3 {
+	if len(views) != 1 || !views[0].UpdateAvailable || views[0].TargetRevision != 4 {
 		t.Fatalf("native update availability = %+v", views)
 	}
 
@@ -121,7 +122,7 @@ func TestNativeHostRevisionUpdateCommitsOnlyTemplateMetadata(t *testing.T) {
 	if storedOperation == nil || storedOperation.State != "succeeded" || updated == nil {
 		t.Fatalf("native metadata update result: operation=%+v service=%+v", storedOperation, updated)
 	}
-	if updated.TemplateRevision != 3 || !strings.Contains(updated.TemplateSnapshotJSON, `--no-open`) || updated.TemplateSnapshotSHA256 == legacyHash {
+	if updated.TemplateRevision != 4 || !strings.Contains(updated.TemplateSnapshotJSON, `--no-open`) || updated.TemplateSnapshotSHA256 == legacyHash {
 		t.Fatalf("native updated template identity = %+v", updated)
 	}
 	if updated.RuntimeIdentity != service.RuntimeIdentity || updated.ArtifactReference != service.ArtifactReference || updated.RuntimeManifestJSON != service.RuntimeManifestJSON || updated.RuntimePort != service.RuntimePort || updated.DesiredState != "running" || updated.ObservedState != "running" {
@@ -143,7 +144,7 @@ func TestNativeHostMetadataUpdateRejectsRuntimeChanges(t *testing.T) {
 		TemplateSource: "builtin", TemplateRevision: 1, TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: hash,
 		Deployment: string(DeploymentHost), Version: DeepSeekHarnessVersion, DesiredState: "stopped", ObservedState: "stopped",
 	}
-	_, err = hostTemplateUpdatePatch(service, Template{Deployment: DeploymentHost, Revision: 3, Version: DeepSeekHarnessVersion, Spec: &targetSpec})
+	_, err = hostTemplateUpdatePatch(service, Template{Deployment: DeploymentHost, Revision: 4, Version: DeepSeekHarnessVersion, Spec: &targetSpec})
 	if managedErrorCode(err) != "UPDATE_UNSUPPORTED" {
 		t.Fatalf("runtime-changing native update error = %v", err)
 	}
@@ -152,7 +153,7 @@ func TestNativeHostMetadataUpdateRejectsRuntimeChanges(t *testing.T) {
 func TestInterruptedNativeMetadataUpdateDoesNotTouchRuntime(t *testing.T) {
 	t.Parallel()
 	driver := &recoveryDriver{}
-	manager := &Manager{native: driver}
+	manager := &Manager{host: driver}
 	service := pfregistry.ManagedService{
 		ServiceID: "mws_native_update_interrupted", Deployment: string(DeploymentNative),
 		DesiredState: "running", ObservedState: "running", RuntimeIdentity: "native:preserved",
@@ -166,6 +167,38 @@ func TestInterruptedNativeMetadataUpdateDoesNotTouchRuntime(t *testing.T) {
 	}
 	if service.DesiredState != "running" || service.ObservedState != "running" || service.RuntimeIdentity != "native:preserved" {
 		t.Fatalf("interrupted metadata update changed service: %+v", service)
+	}
+}
+
+func TestSuccessfulHostReleaseUpdateRemovesOnlyTrustedHistoricalRuntime(t *testing.T) {
+	t.Parallel()
+	stateDir := t.TempDir()
+	nativeRoot := filepath.Join(stateDir, DeepSeekHarnessProductID, "native")
+	artifact := filepath.Join(nativeRoot, DeepSeekHarnessVersion, currentPlatformKey(), "bin", "dsh")
+	for _, path := range []string{artifact, filepath.Join(stateDir, DeepSeekHarnessProductID, "logs", "harness.log"), filepath.Join(stateDir, DeepSeekHarnessProductID, "data", "settings.json")} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("preserved"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := &pfregistry.ManagedService{
+		ServiceID: "mws_historical_update", TemplateID: DeepSeekHarnessHostTemplateID, TemplateSource: "builtin",
+		ServiceFamilyID: DeepSeekHarnessHostTemplateID, Version: DeepSeekHarnessVersion, ArtifactReference: artifact,
+	}
+	setLegacyDeepSeekReleaseIdentity(t, service)
+	manager := &Manager{stateDir: stateDir}
+	if err := manager.removeManagedHostRelease(*service, artifact, filepath.Join(stateDir, "instances", service.ServiceID, "releases", "target", "bin", "managed-service")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(nativeRoot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("historical Runtime was not removed: %v", err)
+	}
+	for _, path := range []string{filepath.Join(stateDir, DeepSeekHarnessProductID, "logs", "harness.log"), filepath.Join(stateDir, DeepSeekHarnessProductID, "data", "settings.json")} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("historical user state %q changed: %v", path, err)
+		}
 	}
 }
 

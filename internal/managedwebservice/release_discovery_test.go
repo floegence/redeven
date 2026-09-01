@@ -81,7 +81,7 @@ func TestDiscoverNPMCandidatesKeepsLastSuccessAndNeverReturnsToken(t *testing.T)
 	m := &Manager{
 		releaseClient: server.Client(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{},
 	}
-	spec := TemplateSpec{SchemaVersion: 2, Kind: DeploymentHost, Host: &HostTemplateSpec{NPM: &NPMHostPackageSpec{PackageName: "@scope/private", Version: "1.0.0", RegistryURL: server.URL, AuthTokenParameter: "registry_token", Executable: "private"}}}
+	spec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Host: &HostTemplateSpec{NPM: &NPMHostPackageSpec{PackageName: "@scope/private", Version: "1.0.0", RegistryURL: server.URL, AuthTokenParameter: "registry_token", Executable: "private"}}}
 	result, err := m.discoverAndCache(context.Background(), "template:private", "private", spec, map[string]string{"registry_token": "private-token"}, nil, "custom")
 	if err != nil {
 		t.Fatal(err)

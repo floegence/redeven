@@ -11,21 +11,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
-
-func TestNativeCommandUsesOnlySupportedWebFlags(t *testing.T) {
-	t.Parallel()
-	service := &pfregistry.ManagedService{RuntimePort: 43123}
-	want := []string{"web", "--host", "127.0.0.1", "--port", "43123", "--no-open"}
-	if got := nativeCommandArgs(service); !reflect.DeepEqual(got, want) {
-		t.Fatalf("native command args = %v, want %v", got, want)
-	}
-}
 
 func TestDownloadNativeArchiveReportsAuditedTransferProgress(t *testing.T) {
 	t.Parallel()

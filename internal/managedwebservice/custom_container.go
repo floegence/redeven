@@ -288,6 +288,26 @@ func customContainerName(serviceID string) string {
 	return "redeven-mws-" + strings.TrimPrefix(strings.TrimSpace(serviceID), "mws_")
 }
 
+func legacyDeepSeekContainerName(serviceID string) string {
+	return "redeven-dsh-" + strings.TrimPrefix(strings.TrimSpace(serviceID), "mws_")
+}
+
+func managedContainerNameMatches(service *pfregistry.ManagedService, actual string) bool {
+	if service == nil {
+		return false
+	}
+	actual = strings.TrimSpace(actual)
+	if actual == customContainerName(service.ServiceID) {
+		return true
+	}
+	// v7 and earlier created the built-in DeepSeek container with the dsh
+	// prefix. v8 changed only the logical deployment driver, so that exact
+	// product-owned name remains valid until the next release replacement.
+	return service.TemplateSource == "builtin" &&
+		service.TemplateID == DeepSeekHarnessContainerTemplateID &&
+		actual == legacyDeepSeekContainerName(service.ServiceID)
+}
+
 func resourceNameSuffix(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	var builder strings.Builder
@@ -546,8 +566,20 @@ func (d *containerTemplateDriver) ownedContainer(ctx context.Context, service *p
 	}
 	container := response.Container
 	labelMatches, labelErr := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, Key: managedServiceLabel, Value: service.ServiceID})
-	if labelErr != nil || container.ContainerID != service.RuntimeIdentity || container.Name != customContainerName(service.ServiceID) || container.Image.Reference != service.ArtifactReference || !container.Image.DigestPinned || !labelMatches {
-		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_IDENTITY_MISMATCH", "The exact managed template container identity or image has changed.", 409, false, labelErr)
+	if labelErr != nil {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_INSPECTION_FAILED", "The managed template container ownership could not be inspected.", 502, true, labelErr)
+	}
+	if container.ContainerID != service.RuntimeIdentity {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_IDENTITY_MISMATCH", "The managed template container ID no longer matches the saved runtime.", 409, false, nil)
+	}
+	if !managedContainerNameMatches(service, container.Name) {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_NAME_MISMATCH", "The managed template container name no longer matches the saved runtime.", 409, false, nil)
+	}
+	if container.Image.Reference != service.ArtifactReference || !container.Image.DigestPinned {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_IMAGE_MISMATCH", "The managed template container image no longer matches the saved release.", 409, false, nil)
+	}
+	if !labelMatches {
+		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_LABEL_MISMATCH", "The managed template container ownership label no longer matches the service.", 409, false, nil)
 	}
 	return container, true, nil
 }
