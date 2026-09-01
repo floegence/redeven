@@ -401,7 +401,7 @@ func (c *CLIClient) inspectComposeProjectRow(ctx context.Context, row composePro
 	if err != nil {
 		return ComposeProjectDetails{}, err
 	}
-	raw, err := c.run(ctx, EngineDocker, append(args, "ps", "--all", "--format", "json")...)
+	raw, err := c.run(ctx, EngineDocker, append(args, "ps", "--all", "--no-trunc", "--format", "json")...)
 	if err != nil {
 		return ComposeProjectDetails{}, err
 	}

@@ -968,7 +968,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   let logViewElement: HTMLDivElement | undefined;
   let inventoryScrollElement: HTMLDivElement | undefined;
   let storedInventoryScrollTop = 0;
-  let relatedNavigationOrigin: RelatedNavigationOrigin | null = null;
+  let relatedNavigationHistory: RelatedNavigationOrigin[] = [];
 
   const composeFilePicker = createFilesystemPickerDataSource({
     homePath: () => '/',
@@ -1359,6 +1359,16 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setMutationBusy(false);
   };
 
+  const restoreRelatedNavigation = (origin: RelatedNavigationOrigin) => {
+    if (relatedNavigationHistory.at(-1) === origin) relatedNavigationHistory.pop();
+    setConsoleState(origin.state);
+    setDetailTab(origin.detailTab);
+    queueMicrotask(() => {
+      if (inventoryScrollElement) inventoryScrollElement.scrollTop = origin.scrollTop;
+    });
+    notify.info(i18n.t('containers.notifications.relatedMissingTitle'), i18n.t('containers.notifications.relatedMissingMessage'));
+  };
+
   const loadConsole = async (
     requestedTarget: ContainerConsoleTarget,
     options: Readonly<{
@@ -1423,6 +1433,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
       const runtimeTargets = readyRuntimesForView(nextRuntimes, target.view);
       if (runtimeTargets.length === 0) {
+        if (options.restoreOnSelectionMissing) {
+          restoreRelatedNavigation(options.restoreOnSelectionMissing);
+          return;
+        }
         setConsoleState({ phase: 'unavailable', target, runtimes: nextRuntimes });
         return;
       }
@@ -1463,6 +1477,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         });
       }
       if (results.every((result) => 'cause' in result)) {
+        if (options.restoreOnSelectionMissing) {
+          restoreRelatedNavigation(options.restoreOnSelectionMissing);
+          return;
+        }
         setConsoleState({ phase: 'unavailable', target, runtimes: nextRuntimes });
         return;
       }
@@ -1478,16 +1496,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         nextSelectedResourceKey = selectedEntry?.key ?? '';
         navigationSelectionMissing = !selectedEntry;
       }
-      const selectedStillExists = !nextSelectedResourceKey || entries.some((entry) => entry.key === nextSelectedResourceKey);
+      const selectedStillExists = options.navigation
+        ? Boolean(nextSelectedResourceKey && entries.some((entry) => entry.key === nextSelectedResourceKey))
+        : !nextSelectedResourceKey || entries.some((entry) => entry.key === nextSelectedResourceKey);
       if (!selectedStillExists && options.restoreOnSelectionMissing) {
-        const origin = options.restoreOnSelectionMissing;
-        relatedNavigationOrigin = null;
-        setConsoleState(origin.state);
-        setDetailTab(origin.detailTab);
-        queueMicrotask(() => {
-          if (inventoryScrollElement) inventoryScrollElement.scrollTop = origin.scrollTop;
-        });
-        notify.info(i18n.t('containers.notifications.relatedMissingTitle'), i18n.t('containers.notifications.relatedMissingMessage'));
+        restoreRelatedNavigation(options.restoreOnSelectionMissing);
         return;
       }
       const readyTarget = { ...target, selectedResourceKey: selectedStillExists ? nextSelectedResourceKey : '' };
@@ -1497,6 +1510,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
     } catch (cause) {
       if (!current()) return;
+      if (options.restoreOnSelectionMissing) {
+        restoreRelatedNavigation(options.restoreOnSelectionMissing);
+        return;
+      }
       if (runtimeIssueFromError(cause) === 'permission') {
         setConsoleState({ phase: 'permission', target, runtimes: nextRuntimes });
       } else {
@@ -1526,19 +1543,22 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     void loadConsole(consoleState().target, { rediscoverRuntimes: true });
   });
 
-  const loadNavigation = (request: ContainerResourceNavigation) => loadConsole(
-    normalizeConsoleTarget({ view: request.view, selectedResourceKey: '' }),
-    {
-      rediscoverRuntimes: true,
-      resetListControls: true,
-      notifyIfSelectionMissing: true,
-      navigation: {
-        engine: request.engine,
-        endpointID: request.endpointID,
-        selectedIdentity: request.selectedIdentity,
+  const loadNavigation = (request: ContainerResourceNavigation) => {
+    relatedNavigationHistory = [];
+    return loadConsole(
+      normalizeConsoleTarget({ view: request.view, selectedResourceKey: '' }),
+      {
+        rediscoverRuntimes: true,
+        resetListControls: true,
+        notifyIfSelectionMissing: true,
+        navigation: {
+          engine: request.engine,
+          endpointID: request.endpointID,
+          selectedIdentity: request.selectedIdentity,
+        },
       },
-    },
-  );
+    );
+  };
 
   onMount(() => {
     const handlesNavigation = !compact(props.stateScope) || props.stateScope === 'activity';
@@ -1720,7 +1740,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     void closeExecSession();
   });
 
-  const openRelatedResource = async (
+  const openResourceDetail = async (
     source: ContainerResourceEntry,
     targetView: ContainerResourceView,
     match: (item: ContainerResourceInventoryItem) => boolean,
@@ -1746,7 +1766,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         return;
       }
       inventoryCache.set(inventoryCacheKey(source.target, targetView), items);
-      relatedNavigationOrigin = origin;
+      relatedNavigationHistory.push(origin);
       await loadConsole(
         { view: targetView, selectedResourceKey: resourceKey(source.target, targetView, matches[0]) },
         { restoreOnSelectionMissing: origin },
@@ -1764,7 +1784,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     const container = entry.item as ContainerInventoryItem;
     const imageID = canonicalImageID(container.image_id);
     const referenceAliases = identityAliases([container.image?.reference, container.image?.digest]);
-    void openRelatedResource(entry, 'images', (item) => {
+    void openResourceDetail(entry, 'images', (item) => {
       const image = item as ImageInventoryItem;
       if (imageID) return canonicalImageID(image.id) === imageID;
       const aliases = imageIdentityAliases(image);
@@ -1775,11 +1795,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const openNamedVolume = (name: string) => {
     const source = selectedEntry();
     if (!source || !compact(name)) return;
-    void openRelatedResource(source, 'volumes', (item) => resourceIdentity('volumes', item) === compact(name));
+    void openResourceDetail(source, 'volumes', (item) => resourceIdentity('volumes', item) === compact(name));
   };
 
   const selectResource = (entry: ContainerResourceEntry) => {
-    relatedNavigationOrigin = null;
+    relatedNavigationHistory = [];
     storedInventoryScrollTop = inventoryScrollElement?.scrollTop ?? 0;
     setSelectedResourceKey(entry.key);
     setDetailTab('overview');
@@ -1941,9 +1961,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const closeDetails = () => {
     void closeExecSession(true);
-    const origin = relatedNavigationOrigin;
+    const origin = relatedNavigationHistory.pop();
     if (origin) {
-      relatedNavigationOrigin = null;
       void loadConsole(origin.state.target).then(() => {
         setDetailTab(origin.detailTab);
         queueMicrotask(() => {
@@ -3003,7 +3022,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const selectResourceView = (nextView: ContainerResourceView) => {
     const state = consoleState();
     if (state.phase !== 'ready' || state.target.view === nextView) return;
-    relatedNavigationOrigin = null;
+    relatedNavigationHistory = [];
     void loadConsole(
       { view: nextView, selectedResourceKey: '' },
       { resetListControls: true },
@@ -3022,15 +3041,12 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             return (
               <button type="button" class="container-reference-row" disabled={!identity} onClick={() => {
                 if (!identity) return;
-                const ready = readyConsole();
-                const target = selectedTarget();
-                if (!ready || !target) return;
-                void loadConsole(
-                  { view: 'containers', selectedResourceKey: '' },
-                  {
-                    resetListControls: true,
-                    navigation: { engine: target.engine, endpointID: target.endpoint_id, selectedIdentity: identity },
-                  },
+                const source = selectedEntry();
+                if (!source) return;
+                void openResourceDetail(
+                  source,
+                  'containers',
+                  (item) => resourceIdentity('containers', item) === identity,
                 );
               }}>
                 <span class="container-status__dot" data-tone={resourceStatusTone(detailString(reference, 'state'))} />

@@ -1795,6 +1795,113 @@ describe('native Containers page', () => {
       .toContain('containers.views.containers');
   });
 
+  it('opens a Compose member as a container detail and restores the Compose detail on back', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects'
+      ? [{ project_id: 'project-1', name: 'Stack', status: 'running', container_count: 1, running_count: 1, management: { managed: false } }]
+      : [{ container_id: 'container-full-1', name: 'API', state: 'running', management: { managed: false } }]));
+    harness.resourceDetails.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects'
+      ? {
+        project: {
+          project_id: 'project-1', name: 'Stack', status: 'running',
+          containers: [{ container_id: 'container-full-1', name: 'API', state: 'running' }],
+        },
+        management: { managed: false },
+      }
+      : { container_id: 'container-full-1', name: 'API', state: 'running' }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.compose-projects'))?.click();
+    await settle();
+    host.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.containers'))?.click();
+    await settle();
+    host.querySelector<HTMLButtonElement>('.container-reference-row')?.click();
+    await settle();
+
+    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-full-1', 'docker', 'docker-primary');
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('API');
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.containers');
+
+    host.querySelector<HTMLButtonElement>('[data-container-detail-page] button[aria-label="containers.detail.back"]')?.click();
+    await settle();
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('Stack');
+    expect(host.querySelector('.container-detail-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.detailTabs.containers');
+  });
+
+  it('opens a volume user as a container detail and restores the volume detail on back', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'volumes'
+      ? [{ name: 'api-data', driver: 'local', referenced_containers: 1 }]
+      : [{ container_id: 'container-full-1', name: 'API', state: 'running', management: { managed: false } }]));
+    harness.resourceDetails.mockImplementation((nextView: string) => Promise.resolve(nextView === 'volumes'
+      ? { name: 'api-data', driver: 'local', used_by: [{ container_id: 'container-full-1', name: 'API', state: 'running' }] }
+      : { container_id: 'container-full-1', name: 'API', state: 'running' }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.volumes'))?.click();
+    await settle();
+    host.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.used-by'))?.click();
+    await settle();
+    host.querySelector<HTMLButtonElement>('.container-reference-row')?.click();
+    await settle();
+
+    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-full-1', 'docker', 'docker-primary');
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('API');
+
+    host.querySelector<HTMLButtonElement>('[data-container-detail-page] button[aria-label="containers.detail.back"]')?.click();
+    await settle();
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('api-data');
+    expect(host.querySelector('.container-detail-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.detailTabs.used-by');
+  });
+
+  it('keeps the source detail visible when a related container no longer exists', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'volumes'
+      ? [{ name: 'api-data', driver: 'local', referenced_containers: 1 }]
+      : []));
+    harness.resourceDetails.mockResolvedValue({
+      name: 'api-data', driver: 'local',
+      used_by: [{ container_id: 'container-removed', name: 'Removed API', state: 'stopped' }],
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.volumes'))?.click();
+    await settle();
+    host.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.used-by'))?.click();
+    await settle();
+    host.querySelector<HTMLButtonElement>('.container-reference-row')?.click();
+    await settle();
+
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('api-data');
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.volumes');
+    expect(harness.notify.info).toHaveBeenCalledWith(
+      'containers.notifications.relatedMissingTitle',
+      'containers.notifications.relatedMissingMessage',
+    );
+  });
+
   it('opens named volumes from Mounts while leaving bind mounts non-interactive', async () => {
     harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'volumes'
       ? [{ name: 'api-data', driver: 'local', referenced_containers: 1 }]
