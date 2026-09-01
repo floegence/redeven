@@ -27,6 +27,55 @@ func TestNativeCommandUsesOnlySupportedWebFlags(t *testing.T) {
 	}
 }
 
+func TestDownloadNativeArchiveReportsAuditedTransferProgress(t *testing.T) {
+	t.Parallel()
+	payload := bytes.Repeat([]byte("audited-native-package"), 4096)
+	digest := sha256.Sum256(payload)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+	artifact := nativeArtifact{
+		DownloadURL: server.URL + "/releases/node%20runtime.tar.gz?token=must-not-leak",
+		SHA256:      hex.EncodeToString(digest[:]),
+		SizeBytes:   int64(len(payload)),
+	}
+	type progressEvent struct {
+		stage    string
+		current  int64
+		transfer pfregistry.ManagedOperationTransferProgress
+	}
+	events := make([]progressEvent, 0, 2)
+	progress := func(stage string, current int64, transfers ...pfregistry.ManagedOperationTransferProgress) {
+		if len(transfers) != 1 {
+			t.Fatalf("progress transfer count = %d, want 1", len(transfers))
+		}
+		events = append(events, progressEvent{stage: stage, current: current, transfer: transfers[0]})
+	}
+	destination := filepath.Join(t.TempDir(), "package.tar.gz")
+	if err := downloadNativeArchive(context.Background(), server.Client(), artifact, destination, progress); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) < 2 {
+		t.Fatalf("progress event count = %d, want at least 2", len(events))
+	}
+	first, last := events[0], events[len(events)-1]
+	wantReference := "node runtime.tar.gz@sha256:" + artifact.SHA256
+	if first.stage != "downloading" || first.current != 2 || first.transfer.ArtifactReference != wantReference || first.transfer.ArtifactIndex != 1 || first.transfer.ArtifactTotal != 1 || first.transfer.DownloadedBytes != 0 || first.transfer.TotalBytes != artifact.SizeBytes {
+		t.Fatalf("initial progress = %+v", first)
+	}
+	if strings.Contains(first.transfer.ArtifactReference, "token") || last.transfer.DownloadedBytes != artifact.SizeBytes || last.transfer.TotalBytes != artifact.SizeBytes {
+		t.Fatalf("final progress = %+v", last)
+	}
+	written, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(written, payload) {
+		t.Fatal("downloaded package content differs from source")
+	}
+}
+
 func TestExtractManagedArchiveAcceptsFilesAndRejectsEscapes(t *testing.T) {
 	t.Parallel()
 	safeArchive := writeNativeTestArchive(t, []nativeTestArchiveEntry{{name: "bin/dsh", body: "launcher", mode: 0o755}})

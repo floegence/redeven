@@ -323,6 +323,78 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(getComputedStyle(progress.querySelector('.managed-operation-shimmer-text')!).animationName).toContain('managed-operation-text-shimmer');
   });
 
+  it('keeps host package transfer details visible inside the service row', async () => {
+    await page.viewport(720, 800);
+    const host = document.createElement('div');
+    host.style.width = '680px';
+    document.body.appendChild(host);
+    dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-native',
+          template_id: 'deepseek-harness-host',
+          service_family_id: 'deepseek-harness-host',
+          name: 'DeepSeek Harness',
+          template_source: 'builtin',
+          deployment: 'native',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness-host',
+          version: '0.1.1-rc.2',
+          desired_state: 'running',
+          observed_state: 'installing',
+          forward_id: 'pf-native',
+          runtime_port: 3000,
+          brand_icon: 'deepseek-harness',
+          update_available: false,
+        }}
+        operation={{
+          operation_id: 'mop-native',
+          service_id: 'mws-native',
+          action: 'install',
+          state: 'running',
+          stage: 'downloading',
+          progress_current: 2,
+          progress_total: 7,
+          progress_detail: {
+            schema_version: 1,
+            stage_started_at_unix_ms: Date.now() - 2_000,
+            updated_at_unix_ms: Date.now(),
+            transfer: {
+              phase: 'downloading',
+              artifact_reference: 'node-v24.19.0-darwin-arm64.tar.gz@sha256:reviewed',
+              artifact_index: 1,
+              artifact_total: 1,
+              downloaded_bytes: 2_000,
+              total_bytes: 5_000,
+              bytes_per_second: 1_000,
+            },
+          },
+        }}
+        busy
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+        onCancelOperation={() => undefined}
+      />
+    ), host);
+    await settle();
+
+    const trigger = document.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+    expect(trigger.textContent).toContain('2.00 KB / 5.00 KB');
+    await userEvent.click(trigger);
+    await settle();
+
+    const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
+    expect(details.textContent).toContain('Software package');
+    expect(details.textContent).toContain('1.00 KB/s');
+    expect(details.textContent).not.toContain('Layers');
+    expect(details.getBoundingClientRect().right).toBeLessThanOrEqual(720);
+  });
+
   it('keeps cached image facts populated while elapsed time advances', async () => {
     await page.viewport(1200, 800);
     const host = document.createElement('div');

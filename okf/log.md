@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-09-01
+* **Host package download progress**: Audited host packages now publish their
+  safe filename and digest, exact downloaded and total bytes, smoothed rate,
+  and elapsed time through the existing persisted operation stream. Host
+  install stages without byte-level telemetry keep elapsed time visible and do
+  not invent transfer totals or expose source URL query data.
 * **Exact DeepSeek template instances**: Host and container templates now own
   separate service families and template-specific default workspaces, so both
   may coexist without misleading installed state. Template Open reuses the

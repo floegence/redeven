@@ -14,8 +14,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -82,8 +84,7 @@ func (d *nativeDriver) installRuntimeBundle(ctx context.Context, service *pfregi
 	}
 	defer os.RemoveAll(stagingRoot)
 	archivePath := filepath.Join(stagingRoot, "package.tar.gz")
-	progress("downloading", 2)
-	if err := downloadNativeArchive(ctx, d.client, artifact, archivePath); err != nil {
+	if err := downloadNativeArchive(ctx, d.client, artifact, archivePath, progress); err != nil {
 		return "", err
 	}
 	progress("verifying", 3)
@@ -346,11 +347,65 @@ func installNativePackages(ctx context.Context, nodePath, npmCLIPath, appRoot, c
 	return nil
 }
 
-func downloadNativeArchive(ctx context.Context, client *http.Client, artifact nativeArtifact, destination string) error {
+type nativeArchiveProgressWriter struct {
+	destination io.Writer
+	reporter    *managedTransferProgressReporter
+	progress    operationProgress
+	transfer    pfregistry.ManagedOperationTransferProgress
+}
+
+func (w *nativeArchiveProgressWriter) Write(p []byte) (int, error) {
+	written, err := w.destination.Write(p)
+	w.transfer.DownloadedBytes += int64(written)
+	w.report(false)
+	return written, err
+}
+
+func (w *nativeArchiveProgressWriter) report(final bool) {
+	var emit bool
+	if final {
+		w.transfer = w.reporter.observeFinal(w.transfer)
+		emit = true
+	} else {
+		w.transfer, emit = w.reporter.observe(w.transfer)
+	}
+	if emit && w.progress != nil {
+		w.progress("downloading", 2, w.transfer)
+	}
+}
+
+func nativeArtifactProgressReference(artifact nativeArtifact) string {
+	name := "native-package"
+	if parsed, err := url.Parse(strings.TrimSpace(artifact.DownloadURL)); err == nil {
+		candidate := pathpkg.Base(strings.TrimSuffix(parsed.Path, "/"))
+		if decoded, decodeErr := url.PathUnescape(candidate); decodeErr == nil {
+			candidate = decoded
+		}
+		if candidate != "" && candidate != "." && candidate != "/" {
+			name = candidate
+		}
+	}
+	return name + "@sha256:" + strings.ToLower(strings.TrimSpace(artifact.SHA256))
+}
+
+func downloadNativeArchive(ctx context.Context, client *http.Client, artifact nativeArtifact, destination string, progress operationProgress) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, artifact.DownloadURL, nil)
 	if err != nil {
 		return err
 	}
+	reporter := managedTransferProgressReporter{now: time.Now}
+	writer := nativeArchiveProgressWriter{
+		reporter: &reporter,
+		progress: progress,
+		transfer: pfregistry.ManagedOperationTransferProgress{
+			Phase:             "downloading",
+			ArtifactReference: nativeArtifactProgressReference(artifact),
+			ArtifactIndex:     1,
+			ArtifactTotal:     1,
+			TotalBytes:        artifact.SizeBytes,
+		},
+	}
+	writer.report(false)
 	resp, err := client.Do(req)
 	if err != nil {
 		return serviceError("DOWNLOAD_FAILED", "The audited native package could not be downloaded.", 503, true, err)
@@ -366,15 +421,19 @@ func downloadNativeArchive(ctx context.Context, client *http.Client, artifact na
 	if err != nil {
 		return err
 	}
-	written, copyErr := io.Copy(file, io.LimitReader(resp.Body, artifact.SizeBytes+1))
+	writer.destination = file
+	written, copyErr := io.Copy(&writer, io.LimitReader(resp.Body, artifact.SizeBytes+1))
 	closeErr := file.Close()
 	if copyErr != nil {
+		writer.report(true)
 		return copyErr
 	}
 	if closeErr != nil {
+		writer.report(true)
 		return closeErr
 	}
 	if written != artifact.SizeBytes {
+		writer.report(true)
 		return serviceError("PACKAGE_SIZE_MISMATCH", "The native package size does not match the audited catalog.", 502, true, nil)
 	}
 	return nil

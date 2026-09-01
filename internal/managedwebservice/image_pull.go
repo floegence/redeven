@@ -9,67 +9,17 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-const (
-	managedImageProgressInterval = 500 * time.Millisecond
-	managedImageRateWindow       = 3 * time.Second
-)
-
-type managedImageRateSample struct {
-	at    time.Time
-	bytes int64
-}
-
-type managedImageProgressReporter struct {
-	now           func() time.Time
-	artifact      string
-	artifactIndex int64
-	artifactTotal int64
-	lastPhase     string
-	lastEmittedAt time.Time
-	samples       []managedImageRateSample
-}
-
-func (r *managedImageProgressReporter) observe(item containerengine.ImagePullProgress) (pfregistry.ManagedOperationTransferProgress, bool) {
-	now := r.now()
-	if len(r.samples) > 0 && item.DownloadedBytes < r.samples[len(r.samples)-1].bytes {
-		r.samples = nil
-	}
-	if len(r.samples) == 0 || item.DownloadedBytes != r.samples[len(r.samples)-1].bytes {
-		r.samples = append(r.samples, managedImageRateSample{at: now, bytes: item.DownloadedBytes})
-	}
-	cutoff := now.Add(-managedImageRateWindow)
-	first := 0
-	for first+1 < len(r.samples) && r.samples[first].at.Before(cutoff) {
-		first++
-	}
-	r.samples = r.samples[first:]
-	rate := int64(0)
-	if len(r.samples) > 1 {
-		oldest, latest := r.samples[0], r.samples[len(r.samples)-1]
-		if elapsed := latest.at.Sub(oldest.at); elapsed > 0 && latest.bytes >= oldest.bytes {
-			rate = int64(float64(latest.bytes-oldest.bytes) / elapsed.Seconds())
-		}
-	}
-	transfer := pfregistry.ManagedOperationTransferProgress{
-		Phase: item.Phase, ArtifactReference: r.artifact, ArtifactIndex: r.artifactIndex, ArtifactTotal: r.artifactTotal,
-		DownloadedBytes: item.DownloadedBytes, TotalBytes: item.TotalBytes, BytesPerSecond: rate,
-		CompletedLayers: item.CompletedLayers, TotalLayers: item.TotalLayers,
-	}
-	complete := item.TotalBytes > 0 && item.DownloadedBytes >= item.TotalBytes || item.TotalLayers > 0 && item.CompletedLayers >= item.TotalLayers
-	emit := r.lastEmittedAt.IsZero() || item.Phase != r.lastPhase || complete || now.Sub(r.lastEmittedAt) >= managedImageProgressInterval
-	if emit {
-		r.lastPhase, r.lastEmittedAt = item.Phase, now
-	}
-	return transfer, emit
-}
-
 func pullManagedImage(ctx context.Context, adapter *containerengine.Adapter, imageRef string, artifactIndex, artifactTotal int64, progress operationProgress) (containerengine.ImagePullResponse, error) {
 	if adapter == nil {
 		return containerengine.ImagePullResponse{}, managedImagePullError(containerengine.ErrEngineUnavailable)
 	}
-	reporter := managedImageProgressReporter{now: time.Now, artifact: imageRef, artifactIndex: artifactIndex, artifactTotal: artifactTotal}
+	reporter := managedTransferProgressReporter{now: time.Now}
 	pulled, err := adapter.PullImageWithProgress(ctx, containerengine.ImagePullRequest{Engine: containerengine.EngineDocker, ImageRef: imageRef}, func(_ context.Context, item containerengine.ImagePullProgress) error {
-		transfer, emit := reporter.observe(item)
+		transfer, emit := reporter.observe(pfregistry.ManagedOperationTransferProgress{
+			Phase: item.Phase, ArtifactReference: imageRef, ArtifactIndex: artifactIndex, ArtifactTotal: artifactTotal,
+			DownloadedBytes: item.DownloadedBytes, TotalBytes: item.TotalBytes,
+			CompletedLayers: item.CompletedLayers, TotalLayers: item.TotalLayers,
+		})
 		if emit && progress != nil {
 			progress("pulling", 2, transfer)
 		}

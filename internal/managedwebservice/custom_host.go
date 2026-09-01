@@ -66,8 +66,7 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 		}
 		defer os.RemoveAll(staging)
 		archive := filepath.Join(staging, "package.tar.gz")
-		progress("downloading", 2)
-		if err := downloadNativeArchive(ctx, d.manager.downloads.packageHTTPClient(), artifact, archive); err != nil {
+		if err := downloadNativeArchive(ctx, d.manager.downloads.packageHTTPClient(), artifact, archive, progress); err != nil {
 			return "", "", err
 		}
 		progress("verifying", 3)
