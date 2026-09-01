@@ -374,7 +374,7 @@ func (e *boundedJSONEncoder) quotedString(value string) error {
 			if err := e.writeString(value[start:index]); err != nil {
 				return err
 			}
-			if err := e.writeString(`\ufffd`); err != nil {
+			if err := e.writeString("\ufffd"); err != nil {
 				return err
 			}
 			index++
