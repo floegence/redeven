@@ -89,9 +89,17 @@ capability-gated Exec, and bounded statistics. A running, unmanaged container
 shows one Terminal action when the user has Read and Execute. It opens the Exec
 tab with `/bin/sh`; `/bin/bash`, `/bin/ash`, and exact custom argv remain
 explicit choices, and a missing executable reports its real terminal error
-without a silent fallback. The terminal stays mounted while detail tabs change
-and closes when container detail closes. Managed, stopped, paused, and
-unsupported targets never expose Exec. Image detail provides Overview,
+without a silent fallback. One page-owned Exec controller serializes initial
+entry, command changes, retry, close, and terminal lifecycle callbacks. Retry
+creates a fresh session with the last argv that reached an interactive state;
+when a replacement command exits before becoming interactive, retry returns to
+that known command, while a request-creation failure retries the requested
+argv. Session
+callbacks are accepted only for the current session identity, so a late close
+cannot clear its replacement. The selected command always matches the argv
+being retried. The terminal stays mounted while detail tabs change, fills the
+detail body's remaining height, and closes when container detail closes.
+Managed, stopped, paused, and unsupported targets never expose Exec. Image detail provides Overview,
 sanitized layers, references, Run, Tag, and Delete without security-analysis
 placeholders. Volume detail provides Overview, references, and
 capability-gated files. Compose Projects and Pods provide overview, members,

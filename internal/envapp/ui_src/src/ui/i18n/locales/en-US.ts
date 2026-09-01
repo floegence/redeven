@@ -2811,7 +2811,8 @@ export const enUS = defineDictionary({
       open: 'Exec', shell: 'Shell', custom: 'Custom', close: 'Close session', executable: 'Executable',
       arguments: 'Arguments', addArgument: 'Add argument', connect: 'Connect', connecting: 'Connecting…',
       ready: 'Choose a shell', readyHint: 'The session runs only inside this container.',
-      sessionEnded: 'The Exec session ended. Change the command and retry if needed.',
+      sessionEnded: 'The {name} Exec session ended. Retry to start a new session.',
+      commandEnded: '{name} ended before the terminal was ready. Choose another command or retry.',
     },
     fields: {
       name: 'Name', image: 'Image', driver: 'Driver', tag: 'New tag', command: 'Command',

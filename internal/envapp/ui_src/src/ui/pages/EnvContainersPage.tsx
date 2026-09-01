@@ -113,6 +113,17 @@ type PersistedContainersState = Readonly<{
 type CreationMode = 'image' | 'volume' | 'pod' | 'image-tag';
 
 type ContainerRunArgument = Readonly<{ id: string; value: string }>;
+type ContainerExecPhase = 'idle' | 'creating' | 'active' | 'ended' | 'error';
+type ContainerExecSessionState = Readonly<{
+  phase: ContainerExecPhase;
+  attempt: number;
+  resourceKey: string;
+  sessionID: string;
+  requestedArgv: readonly string[];
+  lastReadyArgv: readonly string[] | null;
+  ready: boolean;
+  error: string;
+}>;
 type ContainerRunKeyValue = Readonly<{ id: string; key: string; value: string; revealed?: boolean }>;
 type ContainerRunPort = Readonly<{
   id: string;
@@ -927,9 +938,19 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [filesLoading, setFilesLoading] = createSignal(false);
   const [filePreview, setFilePreview] = createSignal('');
   const [filePreviewName, setFilePreviewName] = createSignal('');
-  const [execSessionID, setExecSessionID] = createSignal('');
-  const [execBusy, setExecBusy] = createSignal(false);
-  const [execError, setExecError] = createSignal('');
+  const [execSession, setExecSession] = createSignal<ContainerExecSessionState>({
+    phase: 'idle',
+    attempt: 0,
+    resourceKey: '',
+    sessionID: '',
+    requestedArgv: [],
+    lastReadyArgv: null,
+    ready: false,
+    error: '',
+  });
+  const execSessionID = () => execSession().sessionID;
+  const execBusy = () => execSession().phase === 'creating';
+  const execError = () => execSession().error;
   const [execPreset, setExecPreset] = createSignal('/bin/sh');
   const [execExecutable, setExecExecutable] = createSignal('/bin/sh');
   const [execArguments, setExecArguments] = createSignal<ContainerRunArgument[]>([]);
@@ -1771,9 +1792,19 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setFileEntries([]);
   };
 
-  const closeExecSession = async () => {
-    const sessionID = execSessionID();
-    setExecSessionID('');
+  const closeExecSession = async (forgetCommand = false) => {
+    const current = execSession();
+    const sessionID = current.sessionID;
+    setExecSession({
+      phase: 'idle',
+      attempt: current.attempt + 1,
+      resourceKey: forgetCommand ? '' : current.resourceKey,
+      sessionID: '',
+      requestedArgv: forgetCommand ? [] : current.requestedArgv,
+      lastReadyArgv: forgetCommand ? null : current.lastReadyArgv,
+      ready: false,
+      error: '',
+    });
     if (!sessionID) return;
     await deleteContainerExecSession(sessionID).catch(() => undefined);
   };
@@ -1783,9 +1814,24 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     if (!entry || !containerExecAvailable() || execBusy()) return;
     const container = entry.item as ContainerInventoryItem;
     const selectedKey = entry.key;
-    setExecBusy(true);
-    setExecError('');
-    await closeExecSession();
+    const previous = execSession();
+    const attempt = previous.attempt + 1;
+    const previousSessionID = previous.sessionID;
+    const lastReadyArgv = previous.resourceKey === selectedKey ? previous.lastReadyArgv : null;
+    setExecSession({
+      phase: 'creating',
+      attempt,
+      resourceKey: selectedKey,
+      sessionID: '',
+      requestedArgv: [...argv],
+      lastReadyArgv,
+      ready: false,
+      error: '',
+    });
+    if (previousSessionID) {
+      await deleteContainerExecSession(previousSessionID).catch(() => undefined);
+    }
+    if (execSession().attempt !== attempt) return;
     try {
       const result = await createContainerExecSession(
         container.container_id,
@@ -1793,30 +1839,87 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         entry.target.endpoint_id,
         argv,
       );
-      if (selectedEntry()?.key !== selectedKey || !containerExecAvailable()) {
+      if (
+        execSession().attempt !== attempt
+        || selectedEntry()?.key !== selectedKey
+        || !containerExecAvailable()
+      ) {
         await deleteContainerExecSession(result.session_id).catch(() => undefined);
         return;
       }
-      setExecSessionID(result.session_id);
+      setExecSession((current) => ({
+        ...current,
+        phase: 'active',
+        sessionID: result.session_id,
+      }));
     } catch (cause) {
-      setExecError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setExecBusy(false);
+      if (execSession().attempt !== attempt) return;
+      setExecSession((current) => ({
+        ...current,
+        phase: 'error',
+        error: cause instanceof Error ? cause.message : String(cause),
+      }));
     }
+  };
+
+  const setExecDraftFromArgv = (argv: readonly string[]) => {
+    const executable = compact(argv[0]) || '/bin/sh';
+    const preset = argv.length === 1 && ['/bin/sh', '/bin/bash', '/bin/ash'].includes(executable)
+      ? executable
+      : 'custom';
+    setExecPreset(preset);
+    setExecExecutable(executable);
+    setExecArguments(argv.slice(1).map((value) => ({
+      id: containerRunRowID('exec-arg'),
+      value,
+    })));
+  };
+
+  const retryExecSession = () => {
+    const current = execSession();
+    const entry = selectedEntry();
+    if (!entry) return;
+    const requestedArgv = current.phase === 'ended' && !current.ready
+      ? current.lastReadyArgv ?? current.requestedArgv
+      : current.requestedArgv;
+    const argv = current.resourceKey === entry.key ? requestedArgv : [];
+    const nextArgv = argv.length > 0
+      ? argv
+      : [compact(execExecutable()) || '/bin/sh', ...containerRunArgv(execArguments())];
+    setExecDraftFromArgv(nextArgv);
+    void startExecSession(nextArgv);
+  };
+
+  const handleExecSessionReady = (sessionID: string) => {
+    setExecSession((current) => current.sessionID === sessionID
+      ? { ...current, ready: true, lastReadyArgv: current.requestedArgv }
+      : current);
+  };
+
+  const handleExecSessionGone = (sessionID: string) => {
+    setExecSession((current) => {
+      if (current.sessionID !== sessionID) return current;
+      const executable = compact(current.requestedArgv[0]) || '/bin/sh';
+      return {
+        ...current,
+        phase: 'ended',
+        sessionID: '',
+        error: i18n.t(current.ready ? 'containers.exec.sessionEnded' : 'containers.exec.commandEnded', {
+          name: executable,
+        }),
+      };
+    });
   };
 
   const openExecTab = (entry?: ContainerResourceEntry) => {
     if (entry) selectResource(entry);
     setDetailTab('exec');
-    setExecPreset('/bin/sh');
-    setExecExecutable('/bin/sh');
-    setExecArguments([]);
-    queueMicrotask(() => void startExecSession(['/bin/sh']));
+    queueMicrotask(() => retryExecSession());
   };
 
   const selectDetailTab = (tab: DetailTab) => {
     setDetailTab(tab);
-    if (tab === 'exec' && !execSessionID() && !execBusy()) {
+    if (tab === 'exec' && execSession().phase === 'idle') {
       const argv = [compact(execExecutable()) || '/bin/sh', ...containerRunArgv(execArguments())];
       void startExecSession(argv);
     }
@@ -1837,7 +1940,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   };
 
   const closeDetails = () => {
-    void closeExecSession();
+    void closeExecSession(true);
     const origin = relatedNavigationOrigin;
     if (origin) {
       relatedNavigationOrigin = null;
@@ -3025,9 +3128,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           <Button size="sm" onClick={runCustomExecProgram} disabled={execBusy() || !compact(execExecutable())}><Play class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.exec.connect')}</Button>
         </div>
       </Show>
-      <Show when={execError()}><div class="container-exec-error" role="alert"><AlertTriangle class="h-4 w-4" /><span>{execError()}</span><Button size="sm" variant="outline" onClick={() => void startExecSession([compact(execExecutable()) || '/bin/sh', ...containerRunArgv(execArguments())])}>{i18n.t('containers.actions.retry')}</Button></div></Show>
+      <Show when={execError()}><div class="container-exec-error" role="alert"><AlertTriangle class="h-4 w-4" /><span>{execError()}</span><Button size="sm" variant="outline" onClick={retryExecSession}>{i18n.t('containers.actions.retry')}</Button></div></Show>
       <Show when={execBusy()}><div class="container-exec-waiting"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" />{i18n.t('containers.exec.connecting')}</div></Show>
-      <Show when={execSessionID()} keyed>{(sessionID) => <ContainerExecTerminal sessionID={sessionID} name={`${resourceName('containers', selected()!)} · Exec`} active={() => detailTab() === 'exec'} onSessionGone={() => { setExecSessionID(''); setExecError(i18n.t('containers.exec.sessionEnded')); }} />}</Show>
+      <Show when={execSessionID()} keyed>{(sessionID) => <ContainerExecTerminal sessionID={sessionID} name={`${resourceName('containers', selected()!)} · Exec`} active={() => detailTab() === 'exec'} onSessionReady={handleExecSessionReady} onSessionGone={handleExecSessionGone} />}</Show>
       <Show when={!execSessionID() && !execBusy() && !execError()}><div class="container-exec-empty"><Terminal class="h-6 w-6" /><strong>{i18n.t('containers.exec.ready')}</strong><span>{i18n.t('containers.exec.readyHint')}</span></div></Show>
     </section>
   );
