@@ -25,12 +25,25 @@ const template: ServiceTemplatePresentation = {
   brandIcon: 'deepseek-harness',
   deploymentLabel: 'Host',
   version: '0.1.1-rc.2',
-  revision: 1,
+  revision: 2,
   runtimeSpec: {
     schema_version: 1,
     kind: 'host',
     endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 },
-    host: { runtime_bundle: 'deepseek-harness', start_script: 'exec deepseek-harness web' },
+    host: { runtime_bundle: 'deepseek-harness', start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open' },
+  },
+  hostLifecyclePlan: {
+    schema_version: 1,
+    driver: 'native',
+    runtime_bundle: 'deepseek-harness',
+    package: { reference: 'deepseek-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 536870912 },
+    install: { ownership: 'redeven', steps: [
+      { kind: 'prepare_verified_package', reference: 'deepseek-runtime.tar.gz@sha256:1234' },
+      { kind: 'run_locked_dependency_install', command_template: '<managed-node> <managed-npm-cli> ci --omit=dev --legacy-peer-deps=false --no-audit --fund=false --progress=false --strict-allow-scripts' },
+    ] },
+    start: { ownership: 'redeven', steps: [{ kind: 'launch_managed_runtime', command_template: '<managed-launcher> web --host 127.0.0.1 --port <reserved-port> --no-open' }] },
+    stop: { ownership: 'redeven', steps: [{ kind: 'terminate_managed_process_group' }] },
+    uninstall: { ownership: 'redeven', steps: [{ kind: 'remove_managed_installation' }, { kind: 'remove_managed_logs' }, { kind: 'remove_managed_data_on_request' }] },
   },
   developerPreview: true,
   available: true,
@@ -231,6 +244,23 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
     expect(actions.getBoundingClientRect().bottom).toBeLessThanOrEqual(details.getBoundingClientRect().bottom + 1);
     expect(actions.getBoundingClientRect().top).toBeGreaterThan(body.getBoundingClientRect().top);
+  });
+
+  it('keeps lifecycle commands readable without widening the detail pane', async () => {
+    await page.viewport(390, 760);
+    mount();
+    await settle();
+
+    const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
+    const plan = details.querySelector<HTMLElement>('[data-testid="host-lifecycle-plan"]')!;
+    const commands = Array.from(plan.querySelectorAll<HTMLElement>('.service-template-lifecycle-step__command'));
+    expect(plan.textContent).toContain('--strict-allow-scripts');
+    expect(plan.textContent).toContain('--no-open');
+    expect(commands.length).toBeGreaterThanOrEqual(2);
+    for (const command of commands) {
+      expect(command.getBoundingClientRect().right).toBeLessThanOrEqual(details.getBoundingClientRect().right + 1);
+    }
+    expect(details.scrollWidth).toBeLessThanOrEqual(details.clientWidth + 1);
   });
 
   it('keeps long-detail actions inside the visible drawer footer edge', async () => {

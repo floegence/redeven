@@ -333,10 +333,8 @@ func installNativePackages(ctx context.Context, nodePath, npmCLIPath, appRoot, c
 			env = append(env, key+"="+value)
 		}
 	}
-	cmd := exec.CommandContext(ctx, nodePath, npmCLIPath,
-		"ci", "--omit=dev", "--legacy-peer-deps=false", "--no-audit", "--fund=false", "--progress=false",
-		"--strict-allow-scripts",
-	)
+	commandArguments := append([]string{npmCLIPath}, nativePackageInstallArguments()...)
+	cmd := exec.CommandContext(ctx, nodePath, commandArguments...)
 	cmd.Dir = appRoot
 	cmd.Env = env
 	cmd.Stdout = io.Discard
@@ -630,7 +628,7 @@ func (d *nativeDriver) Start(_ context.Context, service *pfregistry.ManagedServi
 }
 
 func nativeCommandArgs(service *pfregistry.ManagedService) []string {
-	return []string{"web", "--host", "127.0.0.1", "--port", strconv.Itoa(service.RuntimePort), "--no-open"}
+	return nativeCommandArgsForPort(service.RuntimePort)
 }
 
 func (d *nativeDriver) Stop(ctx context.Context, service *pfregistry.ManagedService) error {

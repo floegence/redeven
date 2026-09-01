@@ -45,7 +45,7 @@ const builtIn: ServiceTemplatePresentation = {
   brandIcon: 'deepseek-harness',
   deploymentLabel: 'Host',
   version: '0.1.1-rc.2',
-  revision: 3,
+  revision: 2,
   diskBytes: 536870912,
   dataLocation: '/srv/redeven/deepseek/data',
   defaultWorkspacePath: '/workspace/deepseek-harness',
@@ -54,7 +54,20 @@ const builtIn: ServiceTemplatePresentation = {
     schema_version: 1,
     kind: 'host',
     endpoint: { scheme: 'http', path: '/', health_path: '/health', startup_timeout_sec: 45 },
-    host: { runtime_bundle: 'deepseek-harness', start_script: 'exec deepseek-harness web' },
+    host: { runtime_bundle: 'deepseek-harness', start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open' },
+  },
+  hostLifecyclePlan: {
+    schema_version: 1,
+    driver: 'native',
+    runtime_bundle: 'deepseek-harness',
+    package: { reference: 'deepseek-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 536870912 },
+    install: { ownership: 'redeven', steps: [
+      { kind: 'prepare_verified_package', reference: 'deepseek-runtime.tar.gz@sha256:1234' },
+      { kind: 'run_locked_dependency_install', command_template: '<managed-node> <managed-npm-cli> ci --omit=dev --legacy-peer-deps=false --no-audit --fund=false --progress=false --strict-allow-scripts' },
+    ] },
+    start: { ownership: 'redeven', steps: [{ kind: 'launch_managed_runtime', command_template: '<managed-launcher> web --host 127.0.0.1 --port <reserved-port> --no-open' }] },
+    stop: { ownership: 'redeven', steps: [{ kind: 'terminate_managed_process_group' }] },
+    uninstall: { ownership: 'redeven', steps: [{ kind: 'remove_managed_installation' }, { kind: 'remove_managed_logs' }, { kind: 'remove_managed_data_on_request' }] },
   },
   developerPreview: true,
   available: true,
@@ -202,7 +215,10 @@ describe('ServiceTemplateCatalog', () => {
     mount({ templates: [builtIn] });
     const hostDetails = host.querySelector('[data-testid="service-template-details"]')!;
     expect(hostDetails.textContent).toContain('deepseek-harness');
-    expect(hostDetails.textContent).toContain('exec deepseek-harness web');
+    expect(hostDetails.textContent).toContain('<managed-node> <managed-npm-cli> ci --omit=dev');
+    expect(hostDetails.textContent).toContain('<managed-launcher> web --host 127.0.0.1 --port <reserved-port> --no-open');
+    expect(hostDetails.textContent).toContain('Terminate the managed process group');
+    expect(hostDetails.textContent).toContain('Remove managed data only when the user requests it');
     expect(hostDetails.textContent).toContain('HTTP · /');
     expect(hostDetails.textContent).toContain('45s');
   });

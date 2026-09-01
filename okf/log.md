@@ -1,6 +1,17 @@
 # Redeven OKF Update Log
 
 ## 2026-09-01
+* **Transparent managed Host lifecycle**: Host template queries now project the
+  actual Runtime driver, safe package identity, and ordered install, start,
+  stop, and uninstall plan without persisting or hashing that projection.
+  Native installation, DeepSeek startup, the built-in Host template, and its
+  copied definition share one argument source and include `--no-open`.
+  User-authored Hooks stay in their original fields and are represented in the
+  plan only by safe placeholders. DeepSeek Host revision 2 is an opt-in update;
+  its strictly verified update atomically changes only reviewed template
+  metadata without stopping, restarting, or replacing the Native Runtime.
+  Registry remains v7 and historical custom templates, data, and digests are
+  unchanged.
 * **Host package download progress**: Audited host packages now publish their
   safe filename and digest, exact downloaded and total bytes, smoothed rate,
   and elapsed time through the existing persisted operation stream. Host

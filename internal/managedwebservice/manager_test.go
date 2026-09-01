@@ -71,6 +71,9 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 	if hostTemplate == nil || containerTemplate == nil {
 		t.Fatalf("built-in templates = %+v", templates)
 	}
+	if hostTemplate.Revision != 2 || hostTemplate.HostLifecyclePlan == nil || hostTemplate.HostLifecyclePlan.SchemaVersion != 1 || hostTemplate.HostLifecyclePlan.Driver != "native" {
+		t.Fatalf("DeepSeek host lifecycle projection = %+v", hostTemplate)
+	}
 	if hostTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback || containerTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback {
 		t.Fatalf("DeepSeek access modes = %q, %q", hostTemplate.DefaultAccessMode, containerTemplate.DefaultAccessMode)
 	}
@@ -650,6 +653,7 @@ type blockingStopDriver struct {
 type recoveryDriver struct {
 	cleanupCalls int
 	startCalls   int
+	stopCalls    int
 }
 
 func (d *recoveryDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
@@ -659,7 +663,10 @@ func (d *recoveryDriver) Start(context.Context, *pfregistry.ManagedService) (str
 	d.startCalls++
 	return "", errors.New("unexpected start")
 }
-func (d *recoveryDriver) Stop(context.Context, *pfregistry.ManagedService) error { return nil }
+func (d *recoveryDriver) Stop(context.Context, *pfregistry.ManagedService) error {
+	d.stopCalls++
+	return nil
+}
 func (d *recoveryDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {
 	return errors.New("unexpected uninstall")
 }

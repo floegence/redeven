@@ -70,6 +70,34 @@ type WorkspaceRoot struct {
 	Path  string `json:"path"`
 }
 
+type HostLifecyclePackage struct {
+	Reference string `json:"reference"`
+	SHA256    string `json:"sha256"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+type HostLifecycleStep struct {
+	Kind            string `json:"kind"`
+	Reference       string `json:"reference,omitempty"`
+	CommandTemplate string `json:"command_template,omitempty"`
+}
+
+type HostLifecycleActionPlan struct {
+	Ownership string              `json:"ownership"`
+	Steps     []HostLifecycleStep `json:"steps"`
+}
+
+type HostLifecyclePlan struct {
+	SchemaVersion int                     `json:"schema_version"`
+	Driver        string                  `json:"driver"`
+	RuntimeBundle string                  `json:"runtime_bundle,omitempty"`
+	Package       *HostLifecyclePackage   `json:"package,omitempty"`
+	Install       HostLifecycleActionPlan `json:"install"`
+	Start         HostLifecycleActionPlan `json:"start"`
+	Stop          HostLifecycleActionPlan `json:"stop"`
+	Uninstall     HostLifecycleActionPlan `json:"uninstall"`
+}
+
 type Template struct {
 	TemplateID            string                   `json:"template_id"`
 	Name                  string                   `json:"name"`
@@ -101,6 +129,7 @@ type Template struct {
 	Reason                string                   `json:"reason,omitempty"`
 	Spec                  *TemplateSpec            `json:"spec,omitempty"`
 	EffectiveSpec         *TemplateSpec            `json:"effective_spec,omitempty"`
+	HostLifecyclePlan     *HostLifecyclePlan       `json:"host_lifecycle_plan,omitempty"`
 	SortOrder             int                      `json:"-"`
 }
 

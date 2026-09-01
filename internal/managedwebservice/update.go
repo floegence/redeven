@@ -72,20 +72,67 @@ func (e *updateExecutionError) Unwrap() error {
 }
 
 func (m *Manager) serviceUpdateTarget(ctx context.Context, service pfregistry.ManagedService) (*Template, error) {
-	if service.TemplateSource != "builtin" || Deployment(service.Deployment) != DeploymentContainer {
+	deployment := Deployment(service.Deployment)
+	if service.TemplateSource != "builtin" || (deployment != DeploymentContainer && deployment != DeploymentNative) {
 		return nil, nil
 	}
 	target, err := m.Template(ctx, service.TemplateID)
 	if err != nil {
 		return nil, err
 	}
-	if target.Source != "builtin" || target.Deployment != DeploymentContainer || target.ServiceFamilyID != service.ServiceFamilyID || target.Revision <= service.TemplateRevision {
+	if target.Source != "builtin" || target.Deployment != deployment || target.ServiceFamilyID != service.ServiceFamilyID || target.Revision <= service.TemplateRevision {
 		return nil, nil
 	}
 	if !target.Available {
 		return nil, serviceError(target.ReasonCode, target.Reason, 409, true, nil)
 	}
+	if deployment == DeploymentNative {
+		if _, err := nativeTemplateUpdatePatch(service, *target); err != nil {
+			return nil, err
+		}
+	}
 	return target, nil
+}
+
+func nativeTemplateUpdatePatch(service pfregistry.ManagedService, target Template) (pfregistry.ManagedServicePatch, error) {
+	if Deployment(service.Deployment) != DeploymentNative || target.Deployment != DeploymentNative || target.Spec == nil || target.Spec.Kind != DeploymentHost || target.Spec.Host == nil {
+		return pfregistry.ManagedServicePatch{}, serviceError("UPDATE_UNSUPPORTED", "This Host update does not have a compatible Native template.", 409, false, nil)
+	}
+	if (service.DesiredState != "running" || service.ObservedState != "running") && (service.DesiredState != "stopped" || service.ObservedState != "stopped") {
+		return pfregistry.ManagedServicePatch{}, serviceError("UPDATE_STATE_INVALID", "Stop or fully start the service before updating it.", 409, true, nil)
+	}
+	if target.Version != service.Version {
+		return pfregistry.ManagedServicePatch{}, serviceError("UPDATE_UNSUPPORTED", "This Host update changes the managed Runtime and cannot be applied without a dedicated Runtime update path.", 409, false, nil)
+	}
+	current, err := templateSpecFromService(&service)
+	if err != nil {
+		return pfregistry.ManagedServicePatch{}, err
+	}
+	if current.Kind != DeploymentHost || current.Host == nil {
+		return pfregistry.ManagedServicePatch{}, serviceError("UPDATE_UNSUPPORTED", "The installed Host snapshot is not compatible with this update.", 409, false, nil)
+	}
+	compatible := current
+	compatibleHost := *current.Host
+	compatible.Host = &compatibleHost
+	compatible.Host.StartScript = target.Spec.Host.StartScript
+	compatibleJSON, _, err := canonicalTemplateSpec(compatible)
+	if err != nil {
+		return pfregistry.ManagedServicePatch{}, err
+	}
+	targetJSON, targetHash, err := canonicalTemplateSpec(*target.Spec)
+	if err != nil {
+		return pfregistry.ManagedServicePatch{}, err
+	}
+	if compatibleJSON != targetJSON {
+		return pfregistry.ManagedServicePatch{}, serviceError("UPDATE_UNSUPPORTED", "This Host update changes Runtime behavior and cannot be applied as a metadata-only revision.", 409, false, nil)
+	}
+	revision, version := target.Revision, target.Version
+	return pfregistry.ManagedServicePatch{
+		TemplateRevision:       &revision,
+		TemplateSnapshotJSON:   &targetJSON,
+		TemplateSnapshotSHA256: &targetHash,
+		Version:                &version,
+	}, nil
 }
 
 func (m *Manager) runUpdate(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, accepted map[string]int64, driver containerUpdateDriver) (runErr error) {
