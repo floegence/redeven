@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -47,13 +48,18 @@ type Manager struct {
 	compose       deploymentDriver
 	healthCheck   func(context.Context, *pfregistry.ManagedService) error
 
-	requestMu    sync.Mutex
-	mu           sync.Mutex
-	workers      sync.WaitGroup
-	cancelByOp   map[string]context.CancelFunc
-	listeners    map[string]map[uint64]chan pfregistry.ManagedOperation
-	nextListener uint64
-	closed       bool
+	requestMu     sync.Mutex
+	releaseMu     sync.Mutex
+	releaseItems  map[string]cachedReleaseCandidate
+	releaseViews  map[string]ReleaseCandidateResult
+	releaseCancel context.CancelFunc
+	releaseClient *http.Client
+	mu            sync.Mutex
+	workers       sync.WaitGroup
+	cancelByOp    map[string]context.CancelFunc
+	listeners     map[string]map[uint64]chan pfregistry.ManagedOperation
+	nextListener  uint64
+	closed        bool
 }
 
 func New(opts ManagerOptions) (*Manager, error) {
@@ -75,7 +81,15 @@ func New(opts ManagerOptions) (*Manager, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, downloads: defaultPackageDownloadClient(), cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	releaseBase := m.downloads.packageHTTPClient()
+	if releaseBase != nil {
+		copy := *releaseBase
+		copy.Timeout = 45 * time.Second
+		copy.Transport = newReleaseMetadataTransport(copy.Transport)
+		copy.CheckRedirect = releaseMetadataRedirectPolicy
+		m.releaseClient = &copy
+	}
 	m.nativeRuntime = &nativeDriver{log: logger, stateDir: root, client: m.downloads.packageHTTPClient(), packageOrigin: defaultNodePackageOrigin}
 	m.native = m.nativeRuntime
 	m.docker = &dockerDriver{adapter: opts.Containers, stateDir: root}
@@ -89,7 +103,12 @@ func New(opts ManagerOptions) (*Manager, error) {
 	return m, nil
 }
 
+func (m *Manager) releaseHTTPClient() *http.Client {
+	return m.releaseClient
+}
+
 func (m *Manager) Start(ctx context.Context) {
+	m.startReleaseDiscovery()
 	services, err := m.registry.ListManagedServices(ctx)
 	if err != nil {
 		m.log.Error("list managed services for recovery", "error", err)
@@ -121,6 +140,13 @@ func (m *Manager) Close() error {
 		cancels = append(cancels, cancel)
 	}
 	m.mu.Unlock()
+	m.releaseMu.Lock()
+	releaseCancel := m.releaseCancel
+	m.releaseCancel = nil
+	m.releaseMu.Unlock()
+	if releaseCancel != nil {
+		releaseCancel()
+	}
 	for _, cancel := range cancels {
 		cancel()
 	}
@@ -298,17 +324,52 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			AccessMode:         forward.AccessMode,
 			ContainerResources: containerResourceLinks(service),
 		}
+		if identity, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256); identityErr == nil {
+			view.ReleaseIdentity = identity
+		} else {
+			return nil, serviceError("RELEASE_IDENTITY_INVALID", "The managed Web Service release identity is invalid.", 409, false, identityErr)
+		}
 		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
 			view.BrandIcon, view.LocalizationKey = definition.BrandIcon, definition.LocalizationKey
 			deployment := Deployment(service.Deployment)
-			if service.TemplateSource == "builtin" && (deployment == DeploymentContainer || deployment == DeploymentNative) && definition.Revision > service.TemplateRevision {
+			if service.TemplateSource == "builtin" && (deployment == DeploymentContainer || deployment == DeploymentHost || deployment == DeploymentNative) && definition.Revision > service.TemplateRevision {
 				view.UpdateAvailable, view.TargetRevision, view.TargetVersion = true, definition.Revision, definition.Version
 				view.UpdateNotices = append([]TemplateNotice(nil), definition.Notices...)
+			}
+		}
+		if releaseView, ok := m.releaseView("service:" + service.ServiceID); ok {
+			view.ReleaseCheckedAt, view.ReleaseCheckError = releaseView.CheckedAtUnixMs, releaseView.LastErrorCode
+			for _, candidate := range releaseView.Candidates {
+				if candidate.Selectable && view.ReleaseIdentity != nil && releaseCandidateIsNewer(*view.ReleaseIdentity, candidate) {
+					view.UpdateAvailable = true
+					if candidate.Version != "" {
+						view.TargetVersion = candidate.Version
+					} else {
+						view.TargetVersion = candidate.Tag
+					}
+					break
+				}
 			}
 		}
 		out = append(out, view)
 	}
 	return out, nil
+}
+
+func releaseCandidateIsNewer(current ReleaseIdentity, candidate ReleaseCandidate) bool {
+	if candidate.TagMoved && current.Kind == "oci" && current.Tag == candidate.Tag {
+		return true
+	}
+	if current.Kind == "npm" && candidate.SourceKind == "npm" && current.Source == candidate.Source && current.Registry == candidate.Registry {
+		return compareReleaseVersions(candidate.Version, current.Version) > 0
+	}
+	if current.Kind == "oci" && candidate.SourceKind == "oci" && current.Source == candidate.Source {
+		currentTag, candidateTag := strings.TrimPrefix(current.Tag, "v"), strings.TrimPrefix(candidate.Tag, "v")
+		_, currentOK := parseSemanticVersion(currentTag)
+		_, candidateOK := parseSemanticVersion(candidateTag)
+		return currentOK && candidateOK && exactSemverPattern.MatchString(currentTag) && exactSemverPattern.MatchString(candidateTag) && compareReleaseVersions(candidateTag, currentTag) > 0
+	}
+	return false
 }
 
 func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry.ManagedService) (string, string) {
@@ -329,7 +390,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	defer m.requestMu.Unlock()
 	parameterJSON, _ := json.Marshal(req.Parameters)
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
-	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), strings.TrimSpace(req.AccessMode), string(parameterJSON), string(noticeJSON))
+	releaseRiskJSON, _ := json.Marshal(req.AcceptedReleaseRisks)
+	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), strings.TrimSpace(req.AccessMode), strings.TrimSpace(req.TargetReleaseID), string(parameterJSON), string(noticeJSON), string(releaseRiskJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -391,6 +453,33 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
+	var selectedRelease *cachedReleaseCandidate
+	if strings.TrimSpace(req.TargetReleaseID) != "" {
+		selectedRelease, err = m.resolveReleaseCandidate(ctx, "template:"+template.TemplateID, req.TargetReleaseID, secretValues, nil, template.Source)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateReleaseRisks(selectedRelease, nil, req.AcceptedReleaseRisks, selectedRelease.Spec.Host != nil && selectedRelease.Spec.Host.NPM != nil); err != nil {
+			return nil, err
+		}
+		updated := releaseCandidateTemplate(*template, *selectedRelease)
+		template = &updated
+	} else if template.Spec.Host != nil && template.Spec.Host.NPM != nil {
+		trust := "user_configured_registry"
+		if template.Source == "builtin" {
+			trust = "redeven_reviewed"
+		}
+		declared := cachedReleaseCandidate{
+			Candidate: ReleaseCandidate{SourceKind: "npm", Source: template.Spec.Host.NPM.PackageName, Version: template.Spec.Host.NPM.Version, Channel: "stable", Trust: trust},
+			Identity:  defaultReleaseIdentity(*template),
+		}
+		if strings.Contains(template.Spec.Host.NPM.Version, "-") {
+			declared.Candidate.Channel = "preview"
+		}
+		if err := validateReleaseRisks(&declared, nil, req.AcceptedReleaseRisks, true); err != nil {
+			return nil, err
+		}
+	}
 	configurationJSON, configurationHash, err := canonicalServiceConfiguration(configuration)
 	if err != nil {
 		return nil, err
@@ -419,7 +508,15 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	releaseIdentity := defaultReleaseIdentity(*template)
+	if selectedRelease != nil {
+		releaseIdentity = selectedRelease.Identity
+	}
+	releaseJSON, releaseHash, err := canonicalReleaseIdentity(releaseIdentity)
+	if err != nil {
+		return nil, err
+	}
+	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
@@ -431,6 +528,54 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	m.launch(service, op, operationInputs{})
 	return &CreateResult{Service: service, Operation: op}, nil
+}
+
+func defaultReleaseIdentity(template Template) ReleaseIdentity {
+	trust := "template_declared"
+	if template.Source == "builtin" {
+		trust = "redeven_reviewed"
+	}
+	identity := ReleaseIdentity{SchemaVersion: 1, Kind: "none", Version: template.Version, Trust: trust}
+	if template.Spec == nil {
+		return identity
+	}
+	if template.Spec.Host != nil && template.Spec.Host.NPM != nil {
+		identity.Kind = "npm"
+		identity.Source = template.Spec.Host.NPM.PackageName
+		identity.Registry = normalizedRegistryURL(template.Spec.Host.NPM.RegistryURL)
+		identity.Version = template.Spec.Host.NPM.Version
+		identity.Platform = currentPlatformKey()
+		return identity
+	}
+	if template.Spec.Container != nil {
+		image := strings.TrimSpace(template.Spec.Container.Image)
+		identity.Kind, identity.Source, identity.ArtifactReference, identity.Platform = "oci", releaseImageRepository(image), image, "linux/"+runtime.GOARCH
+		if before, digest, ok := strings.Cut(image, "@"); ok {
+			identity.Digest = digest
+			identity.Tag = releaseImageTag(before)
+		}
+	}
+	return identity
+}
+
+func releaseImageRepository(reference string) string {
+	reference = strings.TrimSpace(reference)
+	if before, _, ok := strings.Cut(reference, "@"); ok {
+		reference = before
+	}
+	lastSlash, lastColon := strings.LastIndex(reference, "/"), strings.LastIndex(reference, ":")
+	if lastColon > lastSlash {
+		reference = reference[:lastColon]
+	}
+	return strings.TrimSpace(reference)
+}
+
+func releaseImageTag(reference string) string {
+	lastSlash, lastColon := strings.LastIndex(reference, "/"), strings.LastIndex(reference, ":")
+	if lastColon > lastSlash {
+		return strings.TrimSpace(reference[lastColon+1:])
+	}
+	return ""
 }
 
 func validateServiceFamilyAvailability(existingServices []pfregistry.ManagedService, template Template) error {
@@ -450,7 +595,8 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	defer m.requestMu.Unlock()
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
 	reconfigureJSON, _ := json.Marshal(req.Reconfigure)
-	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), string(noticeJSON), string(reconfigureJSON))
+	releaseRiskJSON, _ := json.Marshal(req.AcceptedReleaseRisks)
+	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), strings.TrimSpace(req.TargetReleaseID), string(noticeJSON), string(reconfigureJSON), string(releaseRiskJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -491,7 +637,27 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 		}
 		reconfigure = &candidate
 	}
-	if req.Action == ActionUpdate {
+	var releaseCandidate *cachedReleaseCandidate
+	if req.Action == ActionUpdate && strings.TrimSpace(req.TargetReleaseID) != "" {
+		parameters, parameterErr := m.serviceParameters(service)
+		if parameterErr != nil {
+			return nil, parameterErr
+		}
+		current, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256)
+		if identityErr != nil {
+			return nil, serviceError("RELEASE_IDENTITY_INVALID", "The managed Web Service release identity is invalid.", 409, false, identityErr)
+		}
+		releaseCandidate, err = m.resolveReleaseCandidate(ctx, "service:"+service.ServiceID, req.TargetReleaseID, parameters, current, service.TemplateSource)
+		if err != nil {
+			return nil, err
+		}
+		if releaseIsDowngrade(*current, releaseCandidate.Identity) && (service.DesiredState != "stopped" || service.ObservedState != "stopped") {
+			return nil, serviceError("DOWNGRADE_REQUIRES_STOPPED", "Stop the service before selecting an older release.", 409, false, nil)
+		}
+		if err := validateReleaseRisks(releaseCandidate, current, req.AcceptedReleaseRisks, releaseCandidate.Spec.Host != nil && releaseCandidate.Spec.Host.NPM != nil); err != nil {
+			return nil, err
+		}
+	} else if req.Action == ActionUpdate {
 		target, err := m.serviceUpdateTarget(ctx, *service)
 		if err != nil {
 			return nil, err
@@ -514,7 +680,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 			if err = m.registry.CreateManagedOperation(ctx, op); err == nil {
 				m.mu.Unlock()
-				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure})
+				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure, Release: releaseCandidate})
 				return &op, nil
 			}
 		}
@@ -565,6 +731,7 @@ type operationInputs struct {
 	DeleteData              bool
 	AcceptedNoticeRevisions map[string]int64
 	Reconfigure             *reconfigureCandidate
+	Release                 *cachedReleaseCandidate
 }
 
 func (m *Manager) launch(service pfregistry.ManagedService, op pfregistry.ManagedOperation, inputs operationInputs) {
@@ -604,7 +771,20 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 			err = m.runStart(ctx, &service, &op, driver)
 		}
 	case ActionUpdate:
-		if Deployment(service.Deployment) == DeploymentNative {
+		if inputs.Release != nil {
+			switch Deployment(service.Deployment) {
+			case DeploymentHost:
+				err = m.runHostReleaseUpdate(ctx, &service, &op, *inputs.Release, driver)
+			case DeploymentContainer:
+				if updateDriver, ok := driver.(containerUpdateDriver); ok {
+					err = m.runContainerReleaseUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, *inputs.Release, updateDriver)
+				} else {
+					err = serviceError("UPDATE_UNSUPPORTED", "This single-container service does not support transactional release replacement.", 409, false, nil)
+				}
+			default:
+				err = serviceError("UPDATE_UNSUPPORTED", "This managed Web Service deployment cannot select releases in place.", 409, false, nil)
+			}
+		} else if Deployment(service.Deployment) == DeploymentNative || Deployment(service.Deployment) == DeploymentHost {
 			var target *Template
 			target, err = m.serviceUpdateTarget(ctx, service)
 			if err == nil && target == nil {
@@ -614,7 +794,7 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 			if err == nil {
 				m.progress(&op, "update_preparing", 1)
 				if err = ctx.Err(); err == nil {
-					patch, err = nativeTemplateUpdatePatch(service, *target)
+					patch, err = hostTemplateUpdatePatch(service, *target)
 				}
 			}
 			if err == nil {
@@ -707,7 +887,11 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 		return err
 	}
 	service.RuntimeIdentity, service.ArtifactReference = runtimeID, artifact
-	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeIdentity: &runtimeID, ArtifactReference: &artifact}); err != nil {
+	patch := pfregistry.ManagedServicePatch{RuntimeIdentity: &runtimeID, ArtifactReference: &artifact}
+	if service.ReleaseIdentityJSON != "" && service.ReleaseIdentitySHA256 != "" {
+		patch.ReleaseIdentityJSON, patch.ReleaseIdentitySHA256 = &service.ReleaseIdentityJSON, &service.ReleaseIdentitySHA256
+	}
+	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, patch); err != nil {
 		return err
 	}
 	m.progress(op, "starting", 5)
@@ -871,6 +1055,20 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 			// Native template updates are one Registry transaction and never touch
 			// the running process. An interruption therefore needs no Runtime work:
 			// the service already contains either the old or the complete new metadata.
+			return
+		}
+		if Deployment(service.Deployment) == DeploymentHost {
+			if strings.TrimSpace(service.RuntimeManifestJSON) == "" || strings.TrimSpace(service.RuntimeManifestJSON) == "{}" {
+				// Host template metadata updates commit atomically and do not write a
+				// Runtime journal, so there is no process transition to recover.
+				return
+			}
+			if err := m.recoverInterruptedHostUpdate(service, &operation, driver); err != nil {
+				code, message := "UPDATE_RECOVERY_FAILED", "The interrupted Host update could not restore or finalize a verified Runtime."
+				desired, observed := "stopped", "error"
+				_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+				m.log.Error("recover interrupted managed Web Service Host update", "service_id", service.ServiceID, "error", err)
+			}
 			return
 		}
 		updateDriver, ok := driver.(containerUpdateDriver)

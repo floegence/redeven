@@ -26,6 +26,14 @@ func nativePackageInstallArguments() []string {
 	return []string{"ci", "--omit=dev", "--legacy-peer-deps=false", "--no-audit", "--fund=false", "--progress=false", "--strict-allow-scripts"}
 }
 
+func npmPackageInstallArguments(packageName, version string) []string {
+	return []string{"install", strings.TrimSpace(packageName) + "@" + strings.TrimSpace(version), "--omit=dev", "--package-lock=false", "--ignore-scripts", "--legacy-peer-deps=false", "--no-audit", "--fund=false", "--progress=false"}
+}
+
+func npmPackageRebuildArguments() []string {
+	return []string{"rebuild", "--dangerously-allow-all-scripts", "--no-audit", "--fund=false", "--progress=false"}
+}
+
 func nativePackageInstallCommandTemplate() string {
 	return strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, nativePackageInstallArguments()...), " ")
 }
@@ -58,7 +66,27 @@ func hostLifecyclePlan(deployment Deployment, spec TemplateSpec) *HostLifecycleP
 	}
 
 	managedInstall := false
-	if host.RuntimeBundle != "" {
+	if host.NPM != nil {
+		managedInstall = true
+		copy := *host.NPM
+		copy.AuthTokenParameter = ""
+		plan.Driver = "npm_host"
+		plan.RuntimeBundle = "node-" + nodeVersion
+		plan.NPM = &copy
+		if artifact, ok := auditedNativeArtifact(currentPlatformKey()); ok {
+			plan.Package = lifecyclePackage(artifact)
+		}
+		plan.Install.Steps = append(plan.Install.Steps,
+			HostLifecycleStep{Kind: "prepare_verified_node_runtime", Reference: plan.RuntimeBundle},
+			HostLifecycleStep{Kind: "install_npm_package_without_scripts", Reference: copy.PackageName + "@" + copy.Version, CommandTemplate: strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, npmPackageInstallArguments(copy.PackageName, copy.Version)...), " ")},
+			HostLifecycleStep{Kind: "remove_temporary_registry_credentials"},
+			HostLifecycleStep{Kind: "run_npm_lifecycle_scripts", CommandTemplate: strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, npmPackageRebuildArguments()...), " ")},
+			HostLifecycleStep{Kind: "verify_npm_release_identity", Reference: copy.PackageName + "@" + copy.Version},
+		)
+		if copy.PackageName == "@deepseek-ai/dsh" && strings.TrimSpace(host.StartScript) == deepSeekHostStartScript() {
+			plan.Start.Steps[0].CommandTemplate = strings.Join(append([]string{"<managed-executable>"}, deepSeekWebArguments("<service-host>", "<service-port>")...), " ")
+		}
+	} else if host.RuntimeBundle != "" {
 		managedInstall = true
 		reference := host.RuntimeBundle
 		if artifact, ok := auditedNativeArtifact(currentPlatformKey()); ok {

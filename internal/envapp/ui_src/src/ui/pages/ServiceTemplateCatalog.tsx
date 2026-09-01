@@ -21,7 +21,7 @@ export type ServiceTemplateCategory = 'host' | 'container';
 export type ServiceTemplateKind = 'host' | 'container' | 'compose';
 
 export type ServiceTemplateRuntimeSpec = Readonly<{
-  schema_version: 1;
+	schema_version: 2;
   kind: ServiceTemplateKind;
   endpoint: Readonly<{
     scheme: 'http' | 'https';
@@ -38,8 +38,8 @@ export type ServiceTemplateRuntimeSpec = Readonly<{
     start_script: string;
     stop_script?: string;
     uninstall_script?: string;
-    artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>;
-    runtime_bundle?: string;
+		artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>;
+		npm?: Readonly<{ package_name: string; version: string; registry_url: string; auth_token_parameter?: string; executable: string }>;
   }>;
   container?: Readonly<{
     image: string;
@@ -65,12 +65,13 @@ export type ServiceTemplateRuntimeSpec = Readonly<{
     pids_limit?: number;
     shm_size_bytes?: number;
     runtime_profile?: 'restricted' | 'interactive_desktop';
+		release_policy?: Readonly<{ blocked_tag_prefixes?: ReadonlyArray<string> }>;
   }>;
   compose?: Readonly<{ yaml: string; main_service: string }>;
 }>;
 
 export type HostLifecycleStep = Readonly<{
-  kind: 'prepare_managed_directories' | 'prepare_verified_package' | 'run_locked_dependency_install' | 'run_template_script' | 'launch_managed_runtime' | 'terminate_managed_process_group' | 'remove_managed_installation' | 'remove_managed_logs' | 'remove_managed_data_on_request';
+	kind: 'prepare_managed_directories' | 'prepare_verified_package' | 'run_locked_dependency_install' | 'prepare_verified_node_runtime' | 'install_npm_package_without_scripts' | 'remove_temporary_registry_credentials' | 'run_npm_lifecycle_scripts' | 'verify_npm_release_identity' | 'run_template_script' | 'launch_managed_runtime' | 'terminate_managed_process_group' | 'remove_managed_installation' | 'remove_managed_logs' | 'remove_managed_data_on_request';
   reference?: string;
   command_template?: string;
 }>;
@@ -82,13 +83,14 @@ export type HostLifecycleActionPlan = Readonly<{
 
 export type HostLifecyclePlan = Readonly<{
   schema_version: 1;
-  driver: 'native' | 'host_script';
+	driver: 'native' | 'host_script' | 'npm_host';
   runtime_bundle?: string;
-  package?: Readonly<{
+	package?: Readonly<{
     reference: string;
     sha256: string;
     size_bytes: number;
-  }>;
+	}>;
+	npm?: Readonly<{ package_name: string; version: string; registry_url: string; executable: string }>;
   install: HostLifecycleActionPlan;
   start: HostLifecycleActionPlan;
   stop: HostLifecycleActionPlan;
@@ -386,7 +388,8 @@ export type ServiceTemplateCatalogProps = Readonly<{
   onQueryChange: (query: string) => void;
   onCreate: (kind: ServiceTemplateKind) => void;
   onDeploy: (templateID: string) => void;
-  onOpen: (templateID: string) => void;
+	onOpen: (templateID: string) => void;
+	onVersions?: (templateID: string) => void;
   onDuplicate: (templateID: string) => void;
   onEdit: (templateID: string) => void;
   onDelete: (templateID: string) => void;
@@ -554,7 +557,8 @@ export function ServiceTemplateDetailsPane(props: {
   template: ServiceTemplatePresentation;
   canManage: boolean;
   onDeploy: () => void;
-  onOpen: () => void;
+	onOpen: () => void;
+	onVersions?: () => void;
   onDuplicate: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -668,6 +672,11 @@ export function ServiceTemplateDetailsPane(props: {
       </div>
 
       <div class="service-template-details__actions flex items-center gap-2">
+		<Show when={props.template.kind === 'container' || Boolean(props.template.runtimeSpec?.host?.npm)}>
+			<Button size="sm" variant="outline" class="min-h-11 shrink-0 px-3 sm:min-h-9" onClick={() => props.onVersions?.()} disabled={!props.canManage}>
+				<Package class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.versions')}
+			</Button>
+		</Show>
         <Button
           size="sm"
           variant="default"
@@ -848,7 +857,8 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                       template={template}
                       canManage={props.canManage}
                       onDeploy={() => props.onDeploy(template.id)}
-                      onOpen={() => props.onOpen(template.id)}
+					  onOpen={() => props.onOpen(template.id)}
+					  onVersions={() => props.onVersions?.(template.id)}
                       onDuplicate={() => props.onDuplicate(template.id)}
                       onEdit={() => props.onEdit(template.id)}
                       onDelete={() => props.onDelete(template.id)}

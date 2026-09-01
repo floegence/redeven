@@ -121,6 +121,23 @@ func (g *Server) handleManagedTemplateRoute(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"valid": true}})
 		return true
 	}
+	if r.Method == http.MethodPost && len(parts) == 2 && strings.TrimSpace(parts[0]) != "" && parts[1] == "release-candidates" {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+			return true
+		}
+		var req managedwebservice.ReleaseCandidateRequest
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		result, err := g.managed.TemplateReleaseCandidates(r.Context(), parts[0], req)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return true
+	}
 	if r.Method == http.MethodPost && len(parts) == 0 {
 		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
 		if !ok {
@@ -247,6 +264,23 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	serviceID, action := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if r.Method == http.MethodPost && action == "release-candidates" {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+			return true
+		}
+		var req managedwebservice.ReleaseCandidateRequest
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		result, err := g.managed.ServiceReleaseCandidates(r.Context(), serviceID, req)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return true
+	}
 	if r.Method == http.MethodGet && action == "settings" {
 		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
 			return true

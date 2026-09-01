@@ -71,7 +71,7 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 	if hostTemplate == nil || containerTemplate == nil {
 		t.Fatalf("built-in templates = %+v", templates)
 	}
-	if hostTemplate.Revision != 2 || hostTemplate.HostLifecyclePlan == nil || hostTemplate.HostLifecyclePlan.SchemaVersion != 1 || hostTemplate.HostLifecyclePlan.Driver != "native" {
+	if hostTemplate.Revision != 3 || hostTemplate.HostLifecyclePlan == nil || hostTemplate.HostLifecyclePlan.SchemaVersion != 1 || hostTemplate.HostLifecyclePlan.Driver != "npm_host" {
 		t.Fatalf("DeepSeek host lifecycle projection = %+v", hostTemplate)
 	}
 	if hostTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback || containerTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback {
@@ -154,7 +154,7 @@ func TestCatalogMakesReleaseLockedHostRuntimeAvailableWithoutOnlineCatalog(t *te
 	if err != nil || len(templates) != 4 || hostTemplate == nil || !hostTemplate.Available || hostTemplate.ReasonCode != "" {
 		t.Fatalf("release-locked host availability = %+v, err=%v", templates, err)
 	}
-	if !hostTemplate.Duplicateable || hostTemplate.Spec == nil || hostTemplate.Spec.Host == nil || hostTemplate.Spec.Host.RuntimeBundle != deepSeekRuntimeBundleID {
+	if !hostTemplate.Duplicateable || hostTemplate.Spec == nil || hostTemplate.Spec.Host == nil || hostTemplate.Spec.Host.NPM == nil || hostTemplate.Spec.Host.NPM.PackageName != "@deepseek-ai/dsh" || hostTemplate.Spec.Host.NPM.Version != DeepSeekHarnessVersion {
 		t.Fatalf("release-locked host template = %+v", hostTemplate)
 	}
 }

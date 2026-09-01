@@ -79,7 +79,7 @@ func TestNativeHostRevisionUpdateCommitsOnlyTemplateMetadata(t *testing.T) {
 	service := pfregistry.ManagedService{
 		ServiceID: "mws_native_revision_one", TemplateID: DeepSeekHarnessHostTemplateID, TemplateSource: "builtin", TemplateRevision: 1,
 		TemplateSnapshotJSON: legacySnapshot, TemplateSnapshotSHA256: legacyHash, ServiceFamilyID: DeepSeekHarnessHostTemplateID,
-		Deployment: string(DeploymentNative), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
+		Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
 		DesiredState: "running", ObservedState: "running", ForwardID: "pf_native_revision_one", RuntimeIdentity: "native:preserved",
 		RuntimeManifestJSON: `{}`, RuntimePort: 43123, ArtifactReference: "/managed/runtime/preserved",
 	}
@@ -91,7 +91,7 @@ func TestNativeHostRevisionUpdateCommitsOnlyTemplateMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(views) != 1 || !views[0].UpdateAvailable || views[0].TargetRevision != 2 {
+	if len(views) != 1 || !views[0].UpdateAvailable || views[0].TargetRevision != 3 {
 		t.Fatalf("native update availability = %+v", views)
 	}
 
@@ -121,7 +121,7 @@ func TestNativeHostRevisionUpdateCommitsOnlyTemplateMetadata(t *testing.T) {
 	if storedOperation == nil || storedOperation.State != "succeeded" || updated == nil {
 		t.Fatalf("native metadata update result: operation=%+v service=%+v", storedOperation, updated)
 	}
-	if updated.TemplateRevision != 2 || !strings.Contains(updated.TemplateSnapshotJSON, `--no-open`) || updated.TemplateSnapshotSHA256 == legacyHash {
+	if updated.TemplateRevision != 3 || !strings.Contains(updated.TemplateSnapshotJSON, `--no-open`) || updated.TemplateSnapshotSHA256 == legacyHash {
 		t.Fatalf("native updated template identity = %+v", updated)
 	}
 	if updated.RuntimeIdentity != service.RuntimeIdentity || updated.ArtifactReference != service.ArtifactReference || updated.RuntimeManifestJSON != service.RuntimeManifestJSON || updated.RuntimePort != service.RuntimePort || updated.DesiredState != "running" || updated.ObservedState != "running" {
@@ -141,9 +141,9 @@ func TestNativeHostMetadataUpdateRejectsRuntimeChanges(t *testing.T) {
 	targetSpec.Endpoint.HealthPath = "/new-health-contract"
 	service := pfregistry.ManagedService{
 		TemplateSource: "builtin", TemplateRevision: 1, TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: hash,
-		Deployment: string(DeploymentNative), Version: DeepSeekHarnessVersion, DesiredState: "stopped", ObservedState: "stopped",
+		Deployment: string(DeploymentHost), Version: DeepSeekHarnessVersion, DesiredState: "stopped", ObservedState: "stopped",
 	}
-	_, err = nativeTemplateUpdatePatch(service, Template{Deployment: DeploymentNative, Revision: 2, Version: DeepSeekHarnessVersion, Spec: &targetSpec})
+	_, err = hostTemplateUpdatePatch(service, Template{Deployment: DeploymentHost, Revision: 3, Version: DeepSeekHarnessVersion, Spec: &targetSpec})
 	if managedErrorCode(err) != "UPDATE_UNSUPPORTED" {
 		t.Fatalf("runtime-changing native update error = %v", err)
 	}

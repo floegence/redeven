@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 
-import { ManagedServiceRow, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
+import { ManagedReleaseCandidates, ManagedServiceRow, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
 
 async function settle(): Promise<void> {
   await Promise.resolve();
@@ -23,7 +23,53 @@ describe('EnvPortForwardsPage browser presentation', () => {
     document.documentElement.classList.remove('dark');
   });
 
+  it('shows exact direct releases, current identity, filters, and disabled reasons at narrow width', async () => {
+    await page.viewport(390, 760);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [filter, setFilter] = createSignal<'all' | 'stable' | 'preview'>('all');
+    const [selected, setSelected] = createSignal('');
+    dispose = render(() => <ManagedReleaseCandidates
+      result={{
+        schema_version: 1,
+        current: { schema_version: 1, kind: 'npm', source: '@deepseek-ai/dsh', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', integrity: 'sha512-current', trust: 'registry_verified' },
+        checked_at_unix_ms: Date.now(),
+        candidates: [
+          { schema_version: 1, candidate_id: 'preview', source_kind: 'npm', source: '@deepseek-ai/dsh', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview' },
+          { schema_version: 1, candidate_id: 'stable', source_kind: 'npm', source: '@deepseek-ai/dsh', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', channel: 'stable', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-stable' },
+          { schema_version: 1, candidate_id: 'deprecated', source_kind: 'npm', source: '@deepseek-ai/dsh', registry: 'https://registry.npmjs.org/', version: '0.1.0', channel: 'stable', trust: 'upstream_registry', selectable: false, deprecated: true, reason_code: 'RELEASE_DEPRECATED' },
+        ],
+      }}
+      loading={false}
+      error=""
+      query=""
+      filter={filter()}
+      selectedID={selected()}
+      acceptedRisks={{}}
+      onQueryChange={() => undefined}
+      onFilterChange={setFilter}
+      onSelect={setSelected}
+      onRiskChange={() => undefined}
+    />, host);
+    await settle();
+
+    const surface = document.querySelector<HTMLElement>('[data-testid="managed-release-candidates"]')!;
+    expect(surface.textContent).toContain('Current installed release');
+    expect(surface.textContent).toContain('sha512-current');
+    expect(surface.textContent).toContain('0.1.2-alpha.3');
+    expect(surface.textContent).toContain('The npm Registry marks this release as deprecated.');
+    expect(document.querySelector<HTMLButtonElement>('[data-release-id="deprecated"]')?.disabled).toBe(true);
+    await userEvent.click(Array.from(surface.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Preview')!);
+    await settle();
+    expect(surface.textContent).toContain('0.1.2-alpha.3');
+    expect(surface.textContent).not.toContain('0.1.0');
+    await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-release-id="preview"]')!);
+    expect(selected()).toBe('preview');
+    expect(surface.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+  });
+
   it('keeps notice geometry and scroll position fixed when acknowledgement changes', async () => {
+    await page.viewport(1024, 768);
     const host = document.createElement('div');
     document.body.appendChild(host);
     const [accepted, setAccepted] = createSignal(false);

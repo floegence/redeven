@@ -15,6 +15,7 @@ import (
 const (
 	defaultNodePackageOrigin = "https://nodejs.org"
 	deepSeekRuntimeBundleID  = "deepseek-harness-0.1.1-rc.2-node-24.19.0"
+	nodeVersion              = "24.19.0"
 )
 
 type catalogPayload struct {
@@ -85,7 +86,6 @@ func decodeStrictJSON(raw []byte, destination any) error {
 func currentPlatformKey() string { return runtime.GOOS + "-" + runtime.GOARCH }
 
 func auditedNativeArtifact(platform string) (nativeArtifact, bool) {
-	const nodeVersion = "24.19.0"
 	type identity struct {
 		SHA256 string
 		Size   int64

@@ -43,12 +43,17 @@ domain records. The port-forward registry's contiguous v1-to-v2 migration adds
 managed Web Service and persistent operation records while retaining the exact
 v1 forward table and every user-owned forward; v2-to-v3 adds immutable template
 snapshots and service-family state; v3-to-v4 adds the constrained forward access
-mode. The v4 edge defaults ordinary forwards to the unified proxy and selects
-Desktop loopback only for an existing managed forward whose preserved family is
-DeepSeek Harness. It neither rewrites target data nor stores a duplicate mode on
-managed services. Drifted historical inputs, future versions, and failed migrations
-remain unchanged; managed service, protected
-forward, and first operation creation is separately atomic at runtime. The
+mode; v4-to-v5 versions configuration and typed resources; v5-to-v6 adds
+schema-v1 operation details; and v6-to-v7 separates the historical DeepSeek Host
+and container families. V7-to-v8 upgrades all TemplateSpec documents to v2,
+converts retired DeepSeek deployment names, and adds an exact, hashed release
+identity. It reconstructs only reviewed unambiguous historical npm integrity and
+exact OCI digests; ambiguity rejects the migration. Existing workspaces, data,
+volumes, secrets, forwards, configuration, operations, timestamps, Hooks, and
+journals remain unchanged. The v4 edge defaults ordinary forwards to the unified
+proxy and selects Desktop loopback only for an existing managed DeepSeek forward.
+Drifted historical inputs, future versions, and failed migrations remain unchanged;
+managed service, protected forward, and first operation creation is separately atomic at runtime. The
 shared engine rejects incomplete migration chains,
 unsupported old versions, future versions, malformed metadata, wrong database
 kinds, and unversioned non-empty databases. Migration and verification errors
@@ -98,6 +103,8 @@ opens an upstream database directly to manufacture a cross-store transaction.
 - `redeven:internal/persistence/sqliteutil/engine_test.go:13` - Covers fresh initialization, atomic rollback, unsupported versions, kind checks, malformed metadata, and concurrent opens.
 - `redeven:internal/persistence/sqliteutil/repository_contract_test.go:14` - Locks the reviewed Redeven, direct, and Floret SQLite opening inventories.
 - `redeven:internal/codeapp/codeapp.go:156` - Opens product stores during service composition before returning the Code App service.
+- `redeven:internal/portforward/registry/schema.go` - Owns the exact contiguous port-forward Registry v1-to-v8 migration chain and final verifier.
+- `redeven:internal/portforward/registry/registry_test.go` - Covers managed-service v7-to-v8 preservation, rollback, drift, future versions, and idempotent open.
 - `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
 - `redeven:internal/ai/threadstore/store.go` - Verifies exact supported historical or current product shape before writable open.
 - `redeven:internal/ai/threadstore/schema.go` - Defines current v2 and the atomic reviewed v1-to-v2 migration.

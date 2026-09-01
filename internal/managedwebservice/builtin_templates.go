@@ -46,7 +46,7 @@ func builtInTemplateDefinitions() []builtInTemplateDefinition {
 			TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID,
 			Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessHost", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
-			Deployment: DeploymentNative, Revision: 2, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
+			Deployment: DeploymentHost, Revision: 3, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
 			Notices:           deepSeekHarnessNotices(false),
 			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
 			DataDirectory:     DeepSeekHarnessProductID,
@@ -55,8 +55,8 @@ func builtInTemplateDefinitions() []builtInTemplateDefinition {
 			TemplateID: DeepSeekHarnessContainerTemplateID, ServiceFamilyID: DeepSeekHarnessContainerTemplateID,
 			Name: "DeepSeek Harness · Container", Description: "Run the reviewed community DeepSeek Harness image in Docker.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessContainer", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
-			DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Deployment: DeploymentDocker, ContainerMode: "single",
-			Revision: 1, SortOrder: 20, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, Notices: deepSeekHarnessNotices(true),
+			DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Deployment: DeploymentContainer, ContainerMode: "single",
+			Revision: 2, SortOrder: 20, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, Notices: deepSeekHarnessNotices(true),
 			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
 		},
 		{
@@ -150,7 +150,7 @@ func webtopTemplateSpec(templateID string, artifact dockerArtifact) TemplateSpec
 }
 
 func deepSeekHostTemplateSpec() TemplateSpec {
-	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: deepSeekHostStartScript(), RuntimeBundle: deepSeekRuntimeBundleID}}
+	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: deepSeekHostStartScript(), NPM: &NPMHostPackageSpec{PackageName: "@deepseek-ai/dsh", Version: DeepSeekHarnessVersion, RegistryURL: "https://registry.npmjs.org/", Executable: "dsh"}}}
 }
 
 func deepSeekContainerTemplateSpec(artifact dockerArtifact, available bool) TemplateSpec {
@@ -158,7 +158,7 @@ func deepSeekContainerTemplateSpec(artifact dockerArtifact, available bool) Temp
 	if available {
 		image = artifact.Image + "@" + artifact.Digest
 	}
-	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: image, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{ResourceID: "data", Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {ResourceID: "workspace", Type: "workspace", Target: "/workspace"}, {ResourceID: "tmp", Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512}}
+	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: image, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{ResourceID: "data", Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {ResourceID: "workspace", Type: "workspace", Target: "/workspace"}, {ResourceID: "tmp", Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512, ReleasePolicy: &OCIReleasePolicySpec{BlockedTagPrefixes: []string{"market"}}}}
 }
 
 func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {

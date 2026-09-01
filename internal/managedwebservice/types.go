@@ -92,6 +92,7 @@ type HostLifecyclePlan struct {
 	Driver        string                  `json:"driver"`
 	RuntimeBundle string                  `json:"runtime_bundle,omitempty"`
 	Package       *HostLifecyclePackage   `json:"package,omitempty"`
+	NPM           *NPMHostPackageSpec     `json:"npm,omitempty"`
 	Install       HostLifecycleActionPlan `json:"install"`
 	Start         HostLifecycleActionPlan `json:"start"`
 	Stop          HostLifecycleActionPlan `json:"stop"`
@@ -159,13 +160,24 @@ type HostArtifactSpec struct {
 	ExecutableRelPath string `json:"executable_rel_path"`
 }
 
+type NPMHostPackageSpec struct {
+	PackageName        string `json:"package_name"`
+	Version            string `json:"version"`
+	RegistryURL        string `json:"registry_url"`
+	AuthTokenParameter string `json:"auth_token_parameter,omitempty"`
+	Executable         string `json:"executable"`
+}
+
 type HostTemplateSpec struct {
-	InstallScript   string            `json:"install_script,omitempty"`
-	StartScript     string            `json:"start_script"`
-	StopScript      string            `json:"stop_script,omitempty"`
-	UninstallScript string            `json:"uninstall_script,omitempty"`
-	Artifact        *HostArtifactSpec `json:"artifact,omitempty"`
-	RuntimeBundle   string            `json:"runtime_bundle,omitempty"`
+	InstallScript   string              `json:"install_script,omitempty"`
+	StartScript     string              `json:"start_script"`
+	StopScript      string              `json:"stop_script,omitempty"`
+	UninstallScript string              `json:"uninstall_script,omitempty"`
+	Artifact        *HostArtifactSpec   `json:"artifact,omitempty"`
+	NPM             *NPMHostPackageSpec `json:"npm,omitempty"`
+	// RuntimeBundle is decoded only so v7 data can be migrated to the v2 npm
+	// contract. New v2 templates must not use it.
+	RuntimeBundle string `json:"runtime_bundle,omitempty"`
 }
 
 type ContainerMountSpec struct {
@@ -216,6 +228,11 @@ type ContainerTemplateSpec struct {
 	PIDsLimit      int64                 `json:"pids_limit,omitempty"`
 	ShmSizeBytes   int64                 `json:"shm_size_bytes,omitempty"`
 	RuntimeProfile string                `json:"runtime_profile,omitempty"`
+	ReleasePolicy  *OCIReleasePolicySpec `json:"release_policy,omitempty"`
+}
+
+type OCIReleasePolicySpec struct {
+	BlockedTagPrefixes []string `json:"blocked_tag_prefixes,omitempty"`
 }
 
 type ComposeTemplateSpec struct {
@@ -241,6 +258,8 @@ type CreateRequest struct {
 	Parameters              map[string]string `json:"parameters,omitempty"`
 	AcceptedNoticeRevisions map[string]int64  `json:"accepted_notice_revisions,omitempty"`
 	AccessMode              string            `json:"access_mode,omitempty"`
+	TargetReleaseID         string            `json:"target_release_id,omitempty"`
+	AcceptedReleaseRisks    []string          `json:"accepted_release_risks,omitempty"`
 }
 
 type TemplateWriteRequest struct {
@@ -262,6 +281,61 @@ type OperationRequest struct {
 	DeleteData              bool                `json:"delete_data,omitempty"`
 	AcceptedNoticeRevisions map[string]int64    `json:"accepted_notice_revisions,omitempty"`
 	Reconfigure             *ReconfigureRequest `json:"reconfigure,omitempty"`
+	TargetReleaseID         string              `json:"target_release_id,omitempty"`
+	AcceptedReleaseRisks    []string            `json:"accepted_release_risks,omitempty"`
+}
+
+type ReleaseIdentity struct {
+	SchemaVersion     int    `json:"schema_version"`
+	Kind              string `json:"kind"`
+	Source            string `json:"source,omitempty"`
+	Registry          string `json:"registry,omitempty"`
+	Version           string `json:"version,omitempty"`
+	Tag               string `json:"tag,omitempty"`
+	Digest            string `json:"digest,omitempty"`
+	Integrity         string `json:"integrity,omitempty"`
+	Platform          string `json:"platform,omitempty"`
+	ArtifactReference string `json:"artifact_reference,omitempty"`
+	Trust             string `json:"trust,omitempty"`
+}
+
+type ReleaseCandidate struct {
+	SchemaVersion      int    `json:"schema_version"`
+	CandidateID        string `json:"candidate_id"`
+	SourceKind         string `json:"source_kind"`
+	Source             string `json:"source"`
+	Registry           string `json:"registry,omitempty"`
+	Version            string `json:"version,omitempty"`
+	Tag                string `json:"tag,omitempty"`
+	PublishedAtUnixMs  int64  `json:"published_at_unix_ms,omitempty"`
+	Channel            string `json:"channel"`
+	Deprecated         bool   `json:"deprecated,omitempty"`
+	DeprecationMessage string `json:"deprecation_message,omitempty"`
+	Trust              string `json:"trust"`
+	Selectable         bool   `json:"selectable"`
+	ReasonCode         string `json:"reason_code,omitempty"`
+	Reason             string `json:"reason,omitempty"`
+	Platform           string `json:"platform,omitempty"`
+	IndexDigest        string `json:"index_digest,omitempty"`
+	Digest             string `json:"digest,omitempty"`
+	Integrity          string `json:"integrity,omitempty"`
+	TagMoved           bool   `json:"tag_moved,omitempty"`
+	Downgrade          bool   `json:"downgrade,omitempty"`
+}
+
+type ReleaseCandidateRequest struct {
+	Parameters map[string]string `json:"parameters,omitempty"`
+	Refresh    bool              `json:"refresh,omitempty"`
+}
+
+type ReleaseCandidateResult struct {
+	SchemaVersion     int                `json:"schema_version"`
+	Current           *ReleaseIdentity   `json:"current,omitempty"`
+	Candidates        []ReleaseCandidate `json:"candidates"`
+	CheckedAtUnixMs   int64              `json:"checked_at_unix_ms"`
+	NextCheckAtUnixMs int64              `json:"next_check_at_unix_ms,omitempty"`
+	LastErrorCode     string             `json:"last_error_code,omitempty"`
+	LastErrorMessage  string             `json:"last_error_message,omitempty"`
 }
 
 type ServiceMetadataPatch struct {
@@ -383,6 +457,9 @@ type ServiceView struct {
 	LastFailure        *ServiceFailure              `json:"last_failure,omitempty"`
 	AccessMode         string                       `json:"access_mode"`
 	ContainerResources []ContainerResourceLink      `json:"container_resources,omitempty"`
+	ReleaseIdentity    *ReleaseIdentity             `json:"release_identity,omitempty"`
+	ReleaseCheckedAt   int64                        `json:"release_checked_at_unix_ms,omitempty"`
+	ReleaseCheckError  string                       `json:"release_check_error_code,omitempty"`
 }
 
 type ServiceFailure struct {
@@ -451,7 +528,9 @@ type Backend interface {
 	DeleteTemplate(context.Context, string) error
 	DuplicateTemplate(context.Context, string, TemplateDuplicateRequest) (*Template, error)
 	ValidateTemplate(context.Context, TemplateWriteRequest) error
+	TemplateReleaseCandidates(context.Context, string, ReleaseCandidateRequest) (*ReleaseCandidateResult, error)
 	List(context.Context) ([]ServiceView, error)
+	ServiceReleaseCandidates(context.Context, string, ReleaseCandidateRequest) (*ReleaseCandidateResult, error)
 	Settings(context.Context, string) (*ServiceSettingsView, error)
 	UpdateSettings(context.Context, string, ServiceMetadataPatch) (*ServiceSettingsView, error)
 	PreflightReconfigure(context.Context, string, ReconfigureDraft) (*ReconfigurePlan, error)

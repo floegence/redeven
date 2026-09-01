@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 
@@ -14,7 +16,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry"
-	registryCurrentSchemaVersion = 7
+	registryCurrentSchemaVersion = 8
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -30,9 +32,452 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryToV5},
 			{FromVersion: 5, ToVersion: 6, Apply: migrateRegistryToV6},
 			{FromVersion: 6, ToVersion: 7, Apply: migrateRegistryToV7},
+			{FromVersion: 7, ToVersion: 8, Apply: migrateRegistryToV8},
 		},
 		Verify: verifyRegistrySchema,
 	}
+}
+
+type registryReleaseIdentityV1 struct {
+	SchemaVersion     int    `json:"schema_version"`
+	Kind              string `json:"kind"`
+	Source            string `json:"source,omitempty"`
+	Registry          string `json:"registry,omitempty"`
+	Version           string `json:"version,omitempty"`
+	Tag               string `json:"tag,omitempty"`
+	Digest            string `json:"digest,omitempty"`
+	Integrity         string `json:"integrity,omitempty"`
+	Platform          string `json:"platform,omitempty"`
+	ArtifactReference string `json:"artifact_reference,omitempty"`
+	Trust             string `json:"trust,omitempty"`
+}
+
+// registryTemplateSpecDocument is the migration-owned exact decoder. Keeping
+// it here lets Registry reject historical/current JSON drift before the
+// managed-service Manager starts, without importing the higher-level package.
+type registryTemplateSpecDocument struct {
+	SchemaVersion int                            `json:"schema_version"`
+	Kind          string                         `json:"kind"`
+	Endpoint      registryTemplateEndpoint       `json:"endpoint"`
+	Parameters    []registryTemplateParameter    `json:"parameters,omitempty"`
+	Host          *registryHostTemplateSpec      `json:"host,omitempty"`
+	Container     *registryContainerTemplateSpec `json:"container,omitempty"`
+	Compose       *registryComposeTemplateSpec   `json:"compose,omitempty"`
+}
+
+type registryTemplateEndpoint struct {
+	Scheme         string `json:"scheme"`
+	ContainerPort  int    `json:"container_port,omitempty"`
+	FixedHostPort  int    `json:"fixed_host_port,omitempty"`
+	Path           string `json:"path,omitempty"`
+	HealthPath     string `json:"health_path,omitempty"`
+	HealthProtocol string `json:"health_protocol,omitempty"`
+	StartupTimeout int    `json:"startup_timeout_sec,omitempty"`
+}
+
+type registryTemplateParameter struct {
+	Name        string `json:"name"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+	Type        string `json:"type"`
+	Required    bool   `json:"required,omitempty"`
+	Default     string `json:"default,omitempty"`
+}
+
+type registryHostTemplateSpec struct {
+	InstallScript   string                      `json:"install_script,omitempty"`
+	StartScript     string                      `json:"start_script"`
+	StopScript      string                      `json:"stop_script,omitempty"`
+	UninstallScript string                      `json:"uninstall_script,omitempty"`
+	Artifact        *registryHostArtifactSpec   `json:"artifact,omitempty"`
+	NPM             *registryNPMHostPackageSpec `json:"npm,omitempty"`
+	RuntimeBundle   string                      `json:"runtime_bundle,omitempty"`
+}
+
+type registryHostArtifactSpec struct {
+	DownloadURL       string `json:"download_url"`
+	SizeBytes         int64  `json:"size_bytes"`
+	SHA256            string `json:"sha256"`
+	ExecutableRelPath string `json:"executable_rel_path"`
+}
+
+type registryNPMHostPackageSpec struct {
+	PackageName        string `json:"package_name"`
+	Version            string `json:"version"`
+	RegistryURL        string `json:"registry_url"`
+	AuthTokenParameter string `json:"auth_token_parameter,omitempty"`
+	Executable         string `json:"executable"`
+}
+
+type registryContainerTemplateSpec struct {
+	Image          string                        `json:"image"`
+	Entrypoint     []string                      `json:"entrypoint,omitempty"`
+	Command        []string                      `json:"command,omitempty"`
+	Environment    map[string]string             `json:"environment,omitempty"`
+	Labels         map[string]string             `json:"labels,omitempty"`
+	RestartPolicy  string                        `json:"restart_policy,omitempty"`
+	NetworkMode    string                        `json:"network_mode,omitempty"`
+	PIDMode        string                        `json:"pid_mode,omitempty"`
+	IPCMode        string                        `json:"ipc_mode,omitempty"`
+	Ports          []registryContainerPortSpec   `json:"ports,omitempty"`
+	Mounts         []registryContainerMountSpec  `json:"mounts,omitempty"`
+	CapAdd         []string                      `json:"cap_add,omitempty"`
+	CapDrop        []string                      `json:"cap_drop,omitempty"`
+	Devices        []registryContainerDeviceSpec `json:"devices,omitempty"`
+	Privileged     bool                          `json:"privileged,omitempty"`
+	SecurityOpts   []string                      `json:"security_opts,omitempty"`
+	User           string                        `json:"user,omitempty"`
+	ReadOnlyRoot   bool                          `json:"read_only_root"`
+	MemoryBytes    int64                         `json:"memory_bytes,omitempty"`
+	CPUs           float64                       `json:"cpus,omitempty"`
+	PIDsLimit      int64                         `json:"pids_limit,omitempty"`
+	ShmSizeBytes   int64                         `json:"shm_size_bytes,omitempty"`
+	RuntimeProfile string                        `json:"runtime_profile,omitempty"`
+	ReleasePolicy  *registryOCIReleasePolicySpec `json:"release_policy,omitempty"`
+}
+
+type registryContainerMountSpec struct {
+	ResourceID   string   `json:"resource_id,omitempty"`
+	Type         string   `json:"type"`
+	Source       string   `json:"source,omitempty"`
+	Target       string   `json:"target"`
+	ReadOnly     bool     `json:"read_only,omitempty"`
+	TmpfsOptions []string `json:"tmpfs_options,omitempty"`
+}
+
+type registryContainerPortSpec struct {
+	ResourceID    string `json:"resource_id,omitempty"`
+	ContainerPort int    `json:"container_port"`
+	HostPort      int    `json:"host_port,omitempty"`
+	HostIP        string `json:"host_ip,omitempty"`
+	Protocol      string `json:"protocol,omitempty"`
+}
+
+type registryContainerDeviceSpec struct {
+	ResourceID    string `json:"resource_id,omitempty"`
+	HostPath      string `json:"host_path"`
+	ContainerPath string `json:"container_path,omitempty"`
+	Permissions   string `json:"permissions,omitempty"`
+}
+
+type registryOCIReleasePolicySpec struct {
+	BlockedTagPrefixes []string `json:"blocked_tag_prefixes,omitempty"`
+}
+
+type registryComposeTemplateSpec struct {
+	YAML        string `json:"yaml"`
+	MainService string `json:"main_service"`
+}
+
+func decodeRegistryTemplateSpec(raw string, schemaVersion int) (registryTemplateSpecDocument, error) {
+	document := registryTemplateSpecDocument{}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&document); err != nil {
+		return document, err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return document, errors.New("template spec contains trailing JSON")
+	}
+	if document.SchemaVersion != schemaVersion || document.Endpoint.Scheme == "" {
+		return document, errors.New("template spec schema or endpoint is invalid")
+	}
+	switch document.Kind {
+	case "host":
+		if document.Host == nil || document.Container != nil || document.Compose != nil {
+			return document, errors.New("host template spec shape is invalid")
+		}
+		if (schemaVersion == 1 && document.Host.NPM != nil) || (schemaVersion == 2 && document.Host.RuntimeBundle != "") {
+			return document, errors.New("host template package shape does not match its schema")
+		}
+	case "container":
+		if document.Container == nil || document.Host != nil || document.Compose != nil {
+			return document, errors.New("container template spec shape is invalid")
+		}
+		if schemaVersion == 1 && document.Container.ReleasePolicy != nil {
+			return document, errors.New("container release policy is not valid in schema v1")
+		}
+	case "compose":
+		if document.Compose == nil || document.Host != nil || document.Container != nil {
+			return document, errors.New("Compose template spec shape is invalid")
+		}
+	default:
+		return document, errors.New("template deployment kind is invalid")
+	}
+	return document, nil
+}
+
+func migrateRegistryToV8(tx *sql.Tx) error {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v7"); err != nil {
+		return err
+	}
+	if err := verifyRegistryManagedDocumentDigests(tx); err != nil {
+		return err
+	}
+	if err := verifyRegistryProgressDetailColumn(tx); err != nil {
+		return err
+	}
+	if err := verifyRegistryDeepSeekServiceFamilies(tx); err != nil {
+		return err
+	}
+	templates, err := migrateRegistryTemplateSpecsToV2(tx, `SELECT template_id,version,spec_json FROM managed_web_service_templates ORDER BY template_id`)
+	if err != nil {
+		return err
+	}
+	services, err := migrateRegistryServiceSpecsToV2(tx)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+ALTER TABLE managed_web_services ADD COLUMN release_identity_json TEXT NOT NULL DEFAULT '{"schema_version":1,"kind":"none"}';
+ALTER TABLE managed_web_services ADD COLUMN release_identity_sha256 TEXT NOT NULL DEFAULT '';
+`); err != nil {
+		return err
+	}
+	for _, item := range templates {
+		if _, err := tx.Exec(`UPDATE managed_web_service_templates SET spec_json=?,spec_sha256=? WHERE template_id=?`, item.encoded, item.digest, item.owner); err != nil {
+			return err
+		}
+	}
+	for _, item := range services {
+		if _, err := tx.Exec(`UPDATE managed_web_services SET template_snapshot_json=?,template_snapshot_sha256=?,deployment=?,release_identity_json=?,release_identity_sha256=? WHERE service_id=?`, item.spec.encoded, item.spec.digest, item.deployment, item.releaseJSON, item.releaseDigest, item.spec.owner); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateRegistryTemplateSpecsToV2(tx *sql.Tx, query string) ([]registryMigratedRuntimeSpec, error) {
+	rows, err := tx.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []registryMigratedRuntimeSpec
+	for rows.Next() {
+		var owner, version, raw string
+		if err := rows.Scan(&owner, &version, &raw); err != nil {
+			return nil, err
+		}
+		encoded, digest, err := migrateRegistryTemplateSpecV2(owner, version, raw)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, registryMigratedRuntimeSpec{owner: owner, encoded: encoded, digest: digest})
+	}
+	return result, rows.Err()
+}
+
+type registryMigratedServiceV8 struct {
+	spec          registryMigratedRuntimeSpec
+	deployment    string
+	releaseJSON   string
+	releaseDigest string
+}
+
+func migrateRegistryServiceSpecsToV2(tx *sql.Tx) ([]registryMigratedServiceV8, error) {
+	rows, err := tx.Query(`SELECT service_id,template_id,version,deployment,template_snapshot_json,artifact_reference FROM managed_web_services ORDER BY service_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []registryMigratedServiceV8
+	for rows.Next() {
+		var serviceID, templateID, version, deployment, raw, artifact string
+		if err := rows.Scan(&serviceID, &templateID, &version, &deployment, &raw, &artifact); err != nil {
+			return nil, err
+		}
+		encoded, digest, err := migrateRegistryServiceTemplateSpecV2(serviceID, templateID, version, deployment, raw, artifact)
+		if err != nil {
+			return nil, err
+		}
+		if templateID == "deepseek-harness-host" && deployment == "native" {
+			deployment = "host"
+		}
+		if templateID == "deepseek-harness-container" && deployment == "docker" {
+			deployment = "container"
+		}
+		migratedSpec := map[string]any{}
+		if err := json.Unmarshal([]byte(encoded), &migratedSpec); err != nil {
+			return nil, err
+		}
+		release := registryReleaseIdentityV1{SchemaVersion: 1, Kind: "none", Version: strings.TrimSpace(version)}
+		switch deployment {
+		case "container":
+			exactArtifact := registryExactImageReference(strings.TrimSpace(artifact))
+			container, _ := migratedSpec["container"].(map[string]any)
+			snapshotImage := registryExactImageReference(strings.TrimSpace(fmt.Sprint(container["image"])))
+			if exactArtifact == "" {
+				exactArtifact = snapshotImage
+			}
+			if exactArtifact != "" && snapshotImage != "" && registryImageRepository(exactArtifact) != registryImageRepository(snapshotImage) {
+				return nil, fmt.Errorf("managed Web Service %s release identity migration: container artifact and template source disagree", serviceID)
+			}
+			release.Kind, release.Source, release.ArtifactReference = "oci", registryImageRepository(exactArtifact), exactArtifact
+			if before, after, ok := strings.Cut(exactArtifact, "@"); ok {
+				release.Digest = after
+				release.Tag = registryImageTag(before)
+			}
+			if release.Source == "" || release.Digest == "" {
+				return nil, fmt.Errorf("managed Web Service %s release identity migration: exact container artifact reference is required", serviceID)
+			}
+		case "host":
+			host, _ := migratedSpec["host"].(map[string]any)
+			npm, _ := host["npm"].(map[string]any)
+			packageName := strings.TrimSpace(fmt.Sprint(npm["package_name"]))
+			packageVersion := strings.TrimSpace(fmt.Sprint(npm["version"]))
+			if packageName != "" && packageName != "<nil>" && packageVersion != "" && packageVersion != "<nil>" {
+				release.Kind, release.Source, release.Registry, release.Version = "npm", packageName, "https://registry.npmjs.org/", packageVersion
+				if packageName == "@deepseek-ai/dsh" && packageVersion == "0.1.1-rc.2" {
+					release.Integrity = "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg=="
+				} else {
+					return nil, fmt.Errorf("managed Web Service %s release identity migration: npm integrity is ambiguous", serviceID)
+				}
+				release.ArtifactReference = strings.TrimSpace(artifact)
+				release.Trust = "redeven_reviewed_legacy"
+			} else if strings.TrimSpace(artifact) != "" {
+				release.Kind, release.ArtifactReference = "legacy", strings.TrimSpace(artifact)
+			}
+		default:
+			if strings.TrimSpace(artifact) != "" {
+				release.Kind, release.ArtifactReference = "legacy", strings.TrimSpace(artifact)
+			}
+		}
+		releaseRaw, err := json.Marshal(release)
+		if err != nil {
+			return nil, err
+		}
+		releaseSum := sha256.Sum256(releaseRaw)
+		result = append(result, registryMigratedServiceV8{
+			spec: registryMigratedRuntimeSpec{owner: serviceID, encoded: encoded, digest: digest}, deployment: deployment,
+			releaseJSON: string(releaseRaw), releaseDigest: hex.EncodeToString(releaseSum[:]),
+		})
+	}
+	return result, rows.Err()
+}
+
+func migrateRegistryTemplateSpecV2(owner, version, raw string) (string, string, error) {
+	if _, err := decodeRegistryTemplateSpec(raw, 1); err != nil {
+		return "", "", fmt.Errorf("managed Web Service %s template spec v2 migration: %w", owner, err)
+	}
+	document := map[string]any{}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
+		return "", "", fmt.Errorf("managed Web Service %s template spec v2 migration: %w", owner, err)
+	}
+	schema, ok := document["schema_version"]
+	if !ok || fmt.Sprint(schema) != "1" {
+		return "", "", fmt.Errorf("managed Web Service %s template spec v2 migration: unsupported schema_version", owner)
+	}
+	document["schema_version"] = 2
+	if host, ok := document["host"].(map[string]any); ok {
+		if bundle, present := host["runtime_bundle"].(string); present && strings.TrimSpace(bundle) != "" {
+			if !strings.HasPrefix(strings.TrimSpace(bundle), "deepseek-harness-") {
+				return "", "", fmt.Errorf("managed Web Service %s template spec v2 migration: unsupported runtime bundle", owner)
+			}
+			delete(host, "runtime_bundle")
+			host["npm"] = map[string]any{
+				"package_name": "@deepseek-ai/dsh", "version": strings.TrimSpace(version),
+				"registry_url": "https://registry.npmjs.org/", "executable": "dsh",
+			}
+		}
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := decodeRegistryTemplateSpec(string(encoded), 2); err != nil {
+		return "", "", fmt.Errorf("managed Web Service %s migrated template spec v2: %w", owner, err)
+	}
+	sum := sha256.Sum256(encoded)
+	return string(encoded), hex.EncodeToString(sum[:]), nil
+}
+
+func migrateRegistryServiceTemplateSpecV2(owner, templateID, version, deployment, raw, artifact string) (string, string, error) {
+	document := map[string]any{}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
+		return "", "", fmt.Errorf("managed Web Service %s template spec v2 migration: %w", owner, err)
+	}
+	if len(document) == 0 {
+		switch templateID {
+		case "deepseek-harness-host":
+			document = map[string]any{
+				"schema_version": 1, "kind": "host",
+				"endpoint": map[string]any{"scheme": "http", "path": "/", "health_path": "/", "startup_timeout_sec": 45},
+				"host": map[string]any{
+					"start_script":   `exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open`,
+					"runtime_bundle": "deepseek-harness-" + strings.TrimSpace(version) + "-node-24.19.0",
+				},
+			}
+		case "deepseek-harness-container":
+			if registryExactImageReference(artifact) == "" {
+				return "", "", fmt.Errorf("managed Web Service %s template spec v2 migration: exact DeepSeek container artifact is required", owner)
+			}
+			document = map[string]any{
+				"schema_version": 1, "kind": "container",
+				"endpoint":  map[string]any{"scheme": "http", "container_port": 3080, "path": "/", "health_path": "/", "startup_timeout_sec": 45},
+				"container": map[string]any{"image": artifact, "read_only_root": true},
+			}
+		default:
+			return "", "", fmt.Errorf("managed Web Service %s template spec v2 migration: empty historical snapshot is ambiguous", owner)
+		}
+	}
+	// Historical built-in Host snapshots are authoritative for user scripts,
+	// while the package driver was previously implied by the template identity.
+	// Materialize that one implicit product contract without changing any Hook.
+	if templateID == "deepseek-harness-host" && (deployment == "native" || deployment == "host") {
+		host, ok := document["host"].(map[string]any)
+		if !ok {
+			return "", "", fmt.Errorf("managed Web Service %s template spec v2 migration: DeepSeek Host snapshot is invalid", owner)
+		}
+		if _, hasBundle := host["runtime_bundle"]; !hasBundle {
+			host["runtime_bundle"] = "deepseek-harness-" + strings.TrimSpace(version) + "-node-24.19.0"
+		}
+	}
+	encodedV1, err := json.Marshal(document)
+	if err != nil {
+		return "", "", err
+	}
+	return migrateRegistryTemplateSpecV2(owner, version, string(encodedV1))
+}
+
+func registryExactImageReference(reference string) string {
+	reference = strings.TrimSpace(reference)
+	_, digest, ok := strings.Cut(reference, "@")
+	if !ok || !strings.HasPrefix(digest, "sha256:") || len(digest) != len("sha256:")+64 {
+		return ""
+	}
+	for _, char := range strings.TrimPrefix(digest, "sha256:") {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", char) {
+			return ""
+		}
+	}
+	return reference
+}
+
+func registryImageRepository(reference string) string {
+	reference = strings.TrimSpace(reference)
+	if before, _, ok := strings.Cut(reference, "@"); ok {
+		reference = before
+	}
+	lastSlash := strings.LastIndex(reference, "/")
+	lastColon := strings.LastIndex(reference, ":")
+	if lastColon > lastSlash {
+		reference = reference[:lastColon]
+	}
+	return strings.TrimSpace(reference)
+}
+
+func registryImageTag(reference string) string {
+	lastSlash := strings.LastIndex(reference, "/")
+	lastColon := strings.LastIndex(reference, ":")
+	if lastColon > lastSlash {
+		return strings.TrimSpace(reference[lastColon+1:])
+	}
+	return ""
 }
 
 func migrateRegistryToV7(tx *sql.Tx) error {
@@ -410,7 +855,7 @@ func migrateRegistryToV1(tx *sql.Tx) error {
 }
 
 func verifyRegistrySchema(tx *sql.Tx) error {
-	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v7"); err != nil {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v8"); err != nil {
 		return err
 	}
 	if err := verifyRegistryAccessModeColumn(tx); err != nil {
@@ -419,7 +864,16 @@ func verifyRegistrySchema(tx *sql.Tx) error {
 	if err := verifyRegistryProgressDetailColumn(tx); err != nil {
 		return err
 	}
+	if err := verifyRegistryReleaseIdentityColumns(tx); err != nil {
+		return err
+	}
 	if err := verifyRegistryManagedDocumentDigests(tx); err != nil {
+		return err
+	}
+	if err := verifyRegistryV8Documents(tx); err != nil {
+		return err
+	}
+	if err := verifyRegistryManagedServiceDeployments(tx); err != nil {
 		return err
 	}
 	if err := verifyRegistryDeepSeekServiceFamilies(tx); err != nil {
@@ -431,6 +885,99 @@ func verifyRegistrySchema(tx *sql.Tx) error {
 	}
 	if invalid != 0 {
 		return fmt.Errorf("port forward registry has %d invalid access modes", invalid)
+	}
+	return nil
+}
+
+func verifyRegistryV8Documents(tx *sql.Tx) error {
+	rows, err := tx.Query(`
+SELECT 'template',template_id,spec_json,'' AS release_identity_json,'' AS release_identity_sha256
+FROM managed_web_service_templates
+UNION ALL
+SELECT 'service',service_id,template_snapshot_json,release_identity_json,release_identity_sha256
+FROM managed_web_services
+ORDER BY 1,2`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kind, owner, specRaw, releaseRaw, releaseDigest string
+		if err := rows.Scan(&kind, &owner, &specRaw, &releaseRaw, &releaseDigest); err != nil {
+			return err
+		}
+		if _, err := decodeRegistryTemplateSpec(specRaw, 2); err != nil {
+			return fmt.Errorf("managed Web Service %s %s template spec: %w", kind, owner, err)
+		}
+		if kind != "service" {
+			continue
+		}
+		if err := verifyRegistryDocumentDigest("managed Web Service release identity", owner, releaseRaw, releaseDigest); err != nil {
+			return err
+		}
+		var identity registryReleaseIdentityV1
+		decoder := json.NewDecoder(strings.NewReader(releaseRaw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&identity); err != nil {
+			return fmt.Errorf("managed Web Service release identity %s: %w", owner, err)
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			return fmt.Errorf("managed Web Service release identity %s contains trailing JSON", owner)
+		}
+		if identity.SchemaVersion != 1 || strings.TrimSpace(identity.Kind) == "" {
+			return fmt.Errorf("managed Web Service release identity %s is unsupported", owner)
+		}
+	}
+	return rows.Err()
+}
+
+func verifyRegistryManagedServiceDeployments(tx *sql.Tx) error {
+	var invalid int
+	if err := tx.QueryRow(`
+SELECT COUNT(1)
+FROM managed_web_services
+WHERE deployment NOT IN ('host','container','compose')
+`).Scan(&invalid); err != nil {
+		return err
+	}
+	if invalid != 0 {
+		return fmt.Errorf("managed Web Service registry has %d unsupported deployment kinds", invalid)
+	}
+	return nil
+}
+
+func verifyRegistryReleaseIdentityColumns(tx *sql.Tx) error {
+	expected := map[string]string{
+		"release_identity_json":   "'{\"schema_version\":1,\"kind\":\"none\"}'",
+		"release_identity_sha256": "''",
+	}
+	rows, err := tx.Query("PRAGMA table_info(managed_web_services)")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return err
+		}
+		want, relevant := expected[name]
+		if !relevant {
+			continue
+		}
+		defaultText, ok := defaultValue.(string)
+		if !ok || strings.ToUpper(strings.TrimSpace(columnType)) != "TEXT" || notNull != 1 || primaryKey != 0 || defaultText != want {
+			return fmt.Errorf("port forward registry v8 %s definition mismatch", name)
+		}
+		delete(expected, name)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(expected) != 0 {
+		return fmt.Errorf("port forward registry v8 release identity columns are missing")
 	}
 	return nil
 }
@@ -608,7 +1155,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return err
 	}
 	expectedTables := []string{"managed_web_service_operations", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}
-	if version == "v5" || version == "v6" || version == "v7" {
+	if version == "v5" || version == "v6" || version == "v7" || version == "v8" {
 		expectedTables = []string{"managed_web_service_operations", "managed_web_service_resources", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}
 	}
 	if !slices.Equal(tables, expectedTables) {
@@ -638,8 +1185,11 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return fmt.Errorf("managed Web Service template request column mismatch: got %v, want %v", columns, templateRequestColumns)
 	}
 	managedServiceColumns := []string{"service_id", "template_id", "template_source", "template_revision", "template_snapshot_json", "template_snapshot_sha256", "service_family_id", "deployment", "workspace_path", "configuration_json", "version", "desired_state", "observed_state", "forward_id", "runtime_identity", "runtime_manifest_json", "runtime_port", "artifact_reference", "last_error_code", "last_error_message", "created_at_unix_ms", "updated_at_unix_ms"}
-	if version == "v5" || version == "v6" || version == "v7" {
+	if version == "v5" || version == "v6" || version == "v7" || version == "v8" {
 		managedServiceColumns = append(managedServiceColumns, "configuration_revision", "configuration_sha256")
+	}
+	if version == "v8" {
+		managedServiceColumns = append(managedServiceColumns, "release_identity_json", "release_identity_sha256")
 	}
 	columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_services")
 	if err != nil {
@@ -649,7 +1199,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return fmt.Errorf("managed web service column mismatch: got %v, want %v", columns, managedServiceColumns)
 	}
 	operationColumns := []string{"operation_id", "service_id", "request_id", "request_fingerprint", "action", "delete_data", "state", "stage", "progress_current", "progress_total", "cancel_requested", "error_code", "error_message", "created_at_unix_ms", "updated_at_unix_ms", "finished_at_unix_ms"}
-	if version == "v6" || version == "v7" {
+	if version == "v6" || version == "v7" || version == "v8" {
 		operationColumns = append(operationColumns, "progress_detail_json")
 	}
 	columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_service_operations")
@@ -659,7 +1209,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 	if !slices.Equal(columns, operationColumns) {
 		return fmt.Errorf("managed web service operation column mismatch: got %v, want %v", columns, operationColumns)
 	}
-	if version == "v5" || version == "v6" || version == "v7" {
+	if version == "v5" || version == "v6" || version == "v7" || version == "v8" {
 		resourceColumns := []string{"service_id", "resource_id", "kind", "engine_identity", "created_at_unix_ms"}
 		columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_service_resources")
 		if err != nil {

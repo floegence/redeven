@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { AlertTriangle, Check, ChevronDown, Copy, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
@@ -142,6 +142,70 @@ type ManagedService = Readonly<{
     view: 'containers' | 'images' | 'compose-projects';
     identity: string;
   }>>;
+	release_identity?: ManagedReleaseIdentity;
+	release_checked_at_unix_ms?: number;
+	release_check_error_code?: string;
+}>;
+
+type ManagedReleaseIdentity = Readonly<{
+	schema_version: 1;
+	kind: 'none' | 'npm' | 'oci' | 'legacy';
+	source?: string;
+	registry?: string;
+	version?: string;
+	tag?: string;
+	digest?: string;
+	integrity?: string;
+	platform?: string;
+	trust?: string;
+}>;
+
+type ManagedReleaseCandidate = Readonly<{
+	schema_version: 1;
+	candidate_id: string;
+	source_kind: 'npm' | 'oci';
+	source: string;
+	registry?: string;
+	version?: string;
+	tag?: string;
+	published_at_unix_ms?: number;
+	channel: 'stable' | 'preview' | 'special';
+	deprecated?: boolean;
+	deprecation_message?: string;
+	trust: string;
+	selectable: boolean;
+	reason_code?: string;
+	reason?: string;
+	platform?: string;
+	index_digest?: string;
+	digest?: string;
+	integrity?: string;
+	tag_moved?: boolean;
+	downgrade?: boolean;
+}>;
+
+type ManagedReleaseCandidateResult = Readonly<{
+	schema_version: 1;
+	current?: ManagedReleaseIdentity;
+	candidates: ReadonlyArray<ManagedReleaseCandidate>;
+	checked_at_unix_ms: number;
+	next_check_at_unix_ms?: number;
+	last_error_code?: string;
+	last_error_message?: string;
+}>;
+
+type ManagedReleasePickerTarget = Readonly<{
+	kind: 'template' | 'service';
+	id: string;
+	name: string;
+	service?: ManagedService;
+	authTokenParameter?: string;
+}>;
+
+type SelectedTemplateRelease = Readonly<{
+	candidate: ManagedReleaseCandidate;
+	acceptedRisks: ReadonlyArray<string>;
+	parameters: Readonly<Record<string, string>>;
 }>;
 
 type ManagedContainerResource = NonNullable<ManagedService['container_resources']>[number];
@@ -213,6 +277,11 @@ export type TemplateEditorDraft = {
   startScript: string;
   stopScript: string;
   uninstallScript: string;
+  npmPackageName: string;
+  npmPackageVersion: string;
+  npmRegistryURL: string;
+  npmExecutable: string;
+  npmAuthTokenParameter: string;
   image: string;
   entrypoint: string;
   command: string;
@@ -223,8 +292,8 @@ export type TemplateEditorDraft = {
   hostLifecyclePlan?: HostLifecyclePlan;
 };
 
-export type TemplateEditorField = 'name' | 'description' | 'version' | 'path' | 'healthPath' | 'startScript' | 'image' | 'containerPort' | 'environment' | 'mainService' | 'composeYAML';
-export type TemplateEditorError = 'required' | 'nameInvalid' | 'descriptionTooLong' | 'versionTooLong' | 'pathInvalid' | 'portInvalid' | 'imageInvalid' | 'environmentInvalid' | 'serviceNameInvalid';
+export type TemplateEditorField = 'name' | 'description' | 'version' | 'path' | 'healthPath' | 'startScript' | 'npmPackageName' | 'npmPackageVersion' | 'npmRegistryURL' | 'npmExecutable' | 'npmAuthTokenParameter' | 'image' | 'containerPort' | 'environment' | 'mainService' | 'composeYAML';
+export type TemplateEditorError = 'required' | 'nameInvalid' | 'descriptionTooLong' | 'versionTooLong' | 'pathInvalid' | 'portInvalid' | 'imageInvalid' | 'environmentInvalid' | 'serviceNameInvalid' | 'npmPackageInvalid' | 'npmVersionInvalid' | 'npmRegistryInvalid' | 'npmExecutableInvalid' | 'parameterNameInvalid';
 
 function containsASCIIControl(value: string): boolean {
   return Array.from(value).some((character) => {
@@ -243,7 +312,24 @@ export function validateTemplateDraft(draft: TemplateEditorDraft): Partial<Recor
   if (draft.path.trim() && !draft.path.trim().startsWith('/')) errors.path = 'pathInvalid';
   if (draft.healthPath.trim() && !draft.healthPath.trim().startsWith('/')) errors.healthPath = 'pathInvalid';
 
-  if (draft.kind === 'host' && !draft.startScript.trim()) errors.startScript = 'required';
+  if (draft.kind === 'host') {
+    if (!draft.startScript.trim()) errors.startScript = 'required';
+    const hasNPM = [draft.npmPackageName, draft.npmPackageVersion, draft.npmRegistryURL, draft.npmExecutable, draft.npmAuthTokenParameter].some((value) => value.trim());
+    if (hasNPM) {
+      if (!/^(@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/u.test(draft.npmPackageName.trim())) errors.npmPackageName = 'npmPackageInvalid';
+      if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(draft.npmPackageVersion.trim())) errors.npmPackageVersion = 'npmVersionInvalid';
+      try {
+        const registry = new URL(draft.npmRegistryURL.trim());
+        if (registry.protocol !== 'https:' || registry.username || registry.password || registry.search || registry.hash) errors.npmRegistryURL = 'npmRegistryInvalid';
+      } catch {
+        errors.npmRegistryURL = 'npmRegistryInvalid';
+      }
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(draft.npmExecutable.trim())) errors.npmExecutable = 'npmExecutableInvalid';
+      if (draft.npmAuthTokenParameter.trim() && !/^[A-Z][A-Z0-9_]{0,63}$/u.test(draft.npmAuthTokenParameter.trim())) errors.npmAuthTokenParameter = 'parameterNameInvalid';
+      const existingParameter = draft.originalSpec?.parameters?.find((parameter) => parameter.name === draft.npmAuthTokenParameter.trim());
+      if (existingParameter && existingParameter.type !== 'secret') errors.npmAuthTokenParameter = 'parameterNameInvalid';
+    }
+  }
   if (draft.kind === 'container') {
     const image = draft.image.trim();
     if (!image) errors.image = 'required';
@@ -277,6 +363,7 @@ function emptyTemplateDraft(kind: 'host' | 'container' | 'compose'): TemplateEdi
   return {
     name: '', description: '', version: '', kind, scheme: 'http', path: '/', healthPath: '/', containerPort: '3000',
     installScript: '', startScript: kind === 'host' ? 'exec your-server --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"' : '', stopScript: '', uninstallScript: '',
+    npmPackageName: '', npmPackageVersion: '', npmRegistryURL: 'https://registry.npmjs.org/', npmExecutable: '', npmAuthTokenParameter: '',
     image: '', entrypoint: '', command: '', environment: '',
     composeYAML: 'services:\n  web:\n    image: nginx:stable-alpine\n', mainService: 'web',
   };
@@ -300,6 +387,11 @@ function draftFromTemplate(template: ManagedCatalogTemplate): TemplateEditorDraf
     startScript: spec?.host?.start_script ?? draft.startScript,
     stopScript: spec?.host?.stop_script ?? '',
     uninstallScript: spec?.host?.uninstall_script ?? '',
+    npmPackageName: spec?.host?.npm?.package_name ?? '',
+    npmPackageVersion: spec?.host?.npm?.version ?? '',
+    npmRegistryURL: spec?.host?.npm?.registry_url ?? 'https://registry.npmjs.org/',
+    npmExecutable: spec?.host?.npm?.executable ?? '',
+    npmAuthTokenParameter: spec?.host?.npm?.auth_token_parameter ?? '',
     image: spec?.container?.image ?? '',
     entrypoint: spec?.container?.entrypoint?.[0] ?? '',
     command: spec?.container?.command?.join('\n') ?? '',
@@ -348,6 +440,12 @@ function TemplateEditorGuidance(props: Readonly<{
 
 function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string) {
   const original = draft.originalSpec;
+  const hasNPM = draft.kind === 'host' && [draft.npmPackageName, draft.npmPackageVersion, draft.npmExecutable, draft.npmAuthTokenParameter].some((value) => value.trim());
+  const parameters = [...(original?.parameters ?? [])];
+  const authTokenParameter = draft.npmAuthTokenParameter.trim();
+  if (hasNPM && authTokenParameter && !parameters.some((parameter) => parameter.name === authTokenParameter)) {
+    parameters.push({ name: authTokenParameter, label: authTokenParameter, type: 'secret', required: true });
+  }
   const endpoint = {
     ...(original?.endpoint ?? {}),
     scheme: draft.scheme,
@@ -356,11 +454,11 @@ function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string)
     startup_timeout_sec: original?.endpoint.startup_timeout_sec || 60,
     ...(draft.kind === 'host' ? {} : { container_port: Number(draft.containerPort) }),
   };
-  const common = { schema_version: 1 as const, kind: draft.kind, endpoint, parameters: original?.parameters ?? [] };
+	const common = { schema_version: 2 as const, kind: draft.kind, endpoint, parameters };
   const spec: ManagedTemplateSpec = draft.kind === 'host'
-    ? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.artifact ? { artifact: original.host.artifact } : {}), ...(original?.host?.runtime_bundle ? { runtime_bundle: original.host.runtime_bundle } : {}) } }
+	? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(!hasNPM && original?.host?.artifact ? { artifact: original.host.artifact } : {}), ...(hasNPM ? { npm: { package_name: draft.npmPackageName.trim(), version: draft.npmPackageVersion.trim(), registry_url: draft.npmRegistryURL.trim(), executable: draft.npmExecutable.trim(), ...(authTokenParameter ? { auth_token_parameter: authTokenParameter } : {}) } } : {}) } }
     : draft.kind === 'container'
-      ? { ...common, container: { image: draft.image.trim(), entrypoint: draft.entrypoint.trim() ? [draft.entrypoint.trim()] : [], command: draft.command.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean), environment: parseTemplateEnvironment(draft.environment), mounts: original?.container?.mounts ?? [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'data', target: '/data' }, { type: 'tmpfs', target: '/tmp' }], user: original?.container?.user ?? '', read_only_root: true, memory_bytes: original?.container?.memory_bytes, cpus: original?.container?.cpus, pids_limit: original?.container?.pids_limit || 512 } }
+	  ? { ...common, container: { image: draft.image.trim(), entrypoint: draft.entrypoint.trim() ? [draft.entrypoint.trim()] : [], command: draft.command.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean), environment: parseTemplateEnvironment(draft.environment), mounts: original?.container?.mounts ?? [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'data', target: '/data' }, { type: 'tmpfs', target: '/tmp' }], user: original?.container?.user ?? '', read_only_root: true, memory_bytes: original?.container?.memory_bytes, cpus: original?.container?.cpus, pids_limit: original?.container?.pids_limit || 512, ...(original?.container?.release_policy ? { release_policy: original.container.release_policy } : {}) } }
       : { ...common, compose: { yaml: draft.composeYAML, main_service: draft.mainService.trim() } };
   return { request_id: requestID, name: draft.name.trim(), description: draft.description.trim(), version: draft.version.trim(), spec };
 }
@@ -1004,6 +1102,96 @@ export function ManagedTemplateNotices(props: {
   );
 }
 
+function releaseRiskIDs(candidate: ManagedReleaseCandidate | undefined): string[] {
+	if (!candidate) return [];
+	return [
+		...(candidate.source_kind === 'npm' ? ['npm_lifecycle_scripts'] : []),
+		...(candidate.channel === 'preview' ? ['preview_release'] : []),
+		...(candidate.trust !== 'redeven_reviewed' ? ['unreviewed_source'] : []),
+		...(candidate.downgrade ? ['downgrade'] : []),
+	];
+}
+
+function releaseRiskLabel(id: string, i18n: WebServicesI18n): string {
+	return i18n.t(`webServices.managed.releaseRisk.${id}` as EnvAppTranslationKey);
+}
+
+function releaseTrustLabel(trust: string, i18n: WebServicesI18n): string {
+	const known = new Set(['redeven_reviewed', 'redeven_reviewed_legacy', 'upstream_registry', 'user_configured_registry', 'registry_verified']);
+	return i18n.t(`webServices.managed.releaseTrust.${known.has(trust) ? trust : 'registry'}` as EnvAppTranslationKey);
+}
+
+function releaseReasonLabel(candidate: ManagedReleaseCandidate, i18n: WebServicesI18n): string {
+	const known = new Set(['NODE_RANGE_UNSUPPORTED', 'NODE_VERSION_UNAVAILABLE', 'PLATFORM_UNAVAILABLE', 'SPECIAL_TAG_BLOCKED', 'RELEASE_DEPRECATED']);
+	if (candidate.reason_code && known.has(candidate.reason_code)) {
+		return i18n.t(`webServices.managed.releaseReason.${candidate.reason_code}` as EnvAppTranslationKey);
+	}
+	return i18n.t('webServices.managed.releaseReason.unavailable');
+}
+
+function releaseIdentityLabel(identity: ManagedReleaseIdentity): string {
+	return identity.version || identity.tag || identity.digest || identity.integrity || '—';
+}
+
+export function ManagedReleaseCandidates(props: Readonly<{
+	result: ManagedReleaseCandidateResult | null;
+	loading: boolean;
+	error: string;
+	query: string;
+	filter: 'all' | 'stable' | 'preview';
+	selectedID: string;
+	acceptedRisks: Readonly<Record<string, boolean>>;
+	onQueryChange: (value: string) => void;
+	onFilterChange: (value: 'all' | 'stable' | 'preview') => void;
+	onSelect: (candidateID: string) => void;
+	onRiskChange: (riskID: string, accepted: boolean) => void;
+}>): JSX.Element {
+	const i18n = useI18n();
+	const candidates = createMemo(() => (props.result?.candidates ?? []).filter((candidate) => {
+		if (props.filter !== 'all' && candidate.channel !== props.filter) return false;
+		const query = props.query.trim().toLowerCase();
+		return !query || `${candidate.version ?? ''} ${candidate.tag ?? ''} ${candidate.source} ${candidate.registry ?? ''}`.toLowerCase().includes(query);
+	}));
+	const selected = createMemo(() => props.result?.candidates.find((candidate) => candidate.candidate_id === props.selectedID));
+	return (
+		<div class="space-y-4" data-testid="managed-release-candidates">
+			<Show when={props.result}>{(result) => <div class="grid gap-2 rounded-lg border bg-muted/20 p-3 text-xs sm:grid-cols-2">
+				<Show when={result().current}>{(identity) => <Show when={identity().kind !== 'none'}><div class="min-w-0"><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</div><div class="mt-1 truncate font-mono text-foreground" title={releaseIdentityLabel(identity())}>{releaseIdentityLabel(identity())}</div><Show when={identity().integrity || identity().digest}>{(exactIdentity) => <code class="mt-1 block truncate text-[10px] text-muted-foreground" title={exactIdentity()}>{exactIdentity()}</code>}</Show><div class="mt-1 truncate text-[10px] text-muted-foreground">{identity().source || '—'}<Show when={identity().registry}>{(registry) => ` · ${registry()}`}</Show> · {releaseTrustLabel(identity().trust || 'registry', i18n)}</div></div></Show>}</Show>
+				<div class="min-w-0"><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.releaseCheckedAt')}</div><div class="mt-1 text-foreground">{i18n.formatDateTime(result().checked_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' })}</div><div class="mt-1 text-[10px] text-muted-foreground">{i18n.t('webServices.managed.releaseDirectSource')}</div></div>
+			</div>}</Show>
+			<Show when={props.result?.last_error_message}><div class="rounded-lg border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.releaseCheckStale')}</div></Show>
+			<div class="flex flex-wrap gap-2">
+				<Input value={props.query} onInput={(event) => props.onQueryChange(event.currentTarget.value)} placeholder={i18n.t('webServices.managed.releaseSearch')} aria-label={i18n.t('webServices.managed.releaseSearch')} class="min-w-48 flex-1" />
+				<div class="inline-flex rounded-md border p-0.5" role="group" aria-label={i18n.t('webServices.managed.releaseFilterLabel')}>
+					<For each={['all', 'stable', 'preview'] as const}>{(filter) => <Button size="sm" variant={props.filter === filter ? 'default' : 'ghost'} onClick={() => props.onFilterChange(filter)}>{i18n.t(`webServices.managed.releaseFilter.${filter}` as EnvAppTranslationKey)}</Button>}</For>
+				</div>
+			</div>
+			<Show when={!props.loading} fallback={<div class="py-10 text-center text-sm text-muted-foreground">{i18n.t('common.status.loading')}</div>}>
+				<Show when={!props.error} fallback={<div class="rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive">{props.error}</div>}>
+					<div class="max-h-[22rem] space-y-2 overflow-auto pr-1">
+						<For each={candidates()} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => (
+							<button type="button" class={cn('w-full rounded-lg border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', props.selectedID === candidate.candidate_id && 'border-primary bg-primary/[0.06]', !candidate.selectable && 'cursor-not-allowed opacity-65')} disabled={!candidate.selectable} onClick={() => props.onSelect(candidate.candidate_id)} data-release-id={candidate.candidate_id}>
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0"><div class="font-mono text-sm font-semibold text-foreground">{candidate.version || candidate.tag}</div><div class="mt-1 truncate text-[11px] text-muted-foreground">{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div><div class="mt-1 text-[10px] text-muted-foreground">{releaseTrustLabel(candidate.trust, i18n)}<Show when={candidate.published_at_unix_ms}>{(published) => ` · ${i18n.formatDateTime(published(), { dateStyle: 'medium' })}`}</Show></div></div>
+									<div class="flex shrink-0 gap-1"><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
+								</div>
+								<Show when={candidate.integrity || candidate.digest}><code class="mt-2 block truncate text-[10px] text-muted-foreground" title={candidate.integrity || candidate.digest}>{candidate.integrity || candidate.digest}</code></Show>
+								<Show when={candidate.tag_moved}><p class="mt-2 text-[11px] text-warning">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
+								<Show when={!candidate.selectable}><p class="mt-2 text-[11px] text-warning">{releaseReasonLabel(candidate, i18n)}</p></Show>
+							</button>
+						)}</For>
+					</div>
+				</Show>
+			</Show>
+			<Show when={selected()} keyed>{(candidate) => (
+				<div class="space-y-2 rounded-lg border border-warning/25 bg-warning/[0.05] p-3">
+					<For each={releaseRiskIDs(candidate)}>{(risk) => <Checkbox checked={Boolean(props.acceptedRisks[risk])} onChange={(checked) => props.onRiskChange(risk, Boolean(checked))} label={releaseRiskLabel(risk, i18n)} size="sm" />}</For>
+				</div>
+			)}</Show>
+		</div>
+	);
+}
+
 function managedServicePresentation(service: ManagedService, i18n: WebServicesI18n): ServiceTemplatePresentation {
   const identity = managedServiceLocalizedIdentity(service, i18n);
   const kind = service.deployment === 'native' || service.deployment === 'host'
@@ -1029,7 +1217,7 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
   };
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onUpdate: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onUpdate: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const [operationDetailsOpen, setOperationDetailsOpen] = createSignal(false);
   const [failureDiagnosticCopied, setFailureDiagnosticCopied] = createSignal(false);
@@ -1095,6 +1283,11 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
       label: i18n.t('webServices.managed.update'),
       disabled: busy() || !props.canManage,
     }] : []),
+		...(props.service.release_identity?.kind === 'npm' || props.service.release_identity?.kind === 'oci' ? [{
+			id: 'versions',
+			label: i18n.t('webServices.managed.versions'),
+			disabled: busy() || !props.canManage,
+		}] : []),
     ...(props.onSettings ? [{
       id: 'settings',
       label: i18n.t('common.actions.settings'),
@@ -1122,6 +1315,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
       if (resource) props.onOpenResource(resource);
     }
     else if (id === 'update') props.onUpdate();
+		else if (id === 'versions') props.onVersions?.();
     else if (id === 'settings') props.onSettings?.();
     else if (id === 'restart') props.onAction('restart');
     else if (id === 'logs') props.onLogs();
@@ -1691,6 +1885,17 @@ export function EnvPortForwardsPage() {
   const [updateNoticeAcceptances, setUpdateNoticeAcceptances] = createSignal<Record<string, boolean>>({});
   const [managedUninstall, setManagedUninstall] = createSignal<ManagedUninstallRequest | null>(null);
   const [managedSettingsService, setManagedSettingsService] = createSignal<ManagedService | null>(null);
+	const [releasePickerTarget, setReleasePickerTarget] = createSignal<ManagedReleasePickerTarget | null>(null);
+	const [releaseCandidates, setReleaseCandidates] = createSignal<ManagedReleaseCandidateResult | null>(null);
+	const [releaseCandidatesLoading, setReleaseCandidatesLoading] = createSignal(false);
+	const [releaseCandidatesError, setReleaseCandidatesError] = createSignal('');
+	const [releaseQuery, setReleaseQuery] = createSignal('');
+	const [releaseFilter, setReleaseFilter] = createSignal<'all' | 'stable' | 'preview'>('all');
+	const [selectedReleaseID, setSelectedReleaseID] = createSignal('');
+	const [releaseRiskAcceptances, setReleaseRiskAcceptances] = createSignal<Record<string, boolean>>({});
+	const [releaseSecretParameters, setReleaseSecretParameters] = createSignal<Record<string, string>>({});
+	const [selectedTemplateRelease, setSelectedTemplateRelease] = createSignal<SelectedTemplateRelease | null>(null);
+	const [installReleaseRiskAcceptances, setInstallReleaseRiskAcceptances] = createSignal<Record<string, boolean>>({});
   const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
   const managedRowOperation = (serviceID: string) => managedOperations.operationForService(serviceID);
 
@@ -1786,14 +1991,17 @@ export function EnvPortForwardsPage() {
     setTemplateDraft(null);
     setInstallNoticeAcceptances({});
     setTemplateValidationVisible(false);
+		setSelectedTemplateRelease(null);
+		setInstallReleaseRiskAcceptances({});
   };
 
   const installManaged = async () => {
     const template = selectedTemplate();
-    if (!template || managedInstallSubmitting() || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.template_id === template.template_id) || !canManageManagedService()) return;
+	if (!template || managedInstallSubmitting() || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || !installReleaseRisksAccepted() || managedState().some((service) => service.template_id === template.template_id) || !canManageManagedService()) return;
     setManagedInstallSubmitting(true);
     try {
-      const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()) }) });
+		const selectedRelease = selectedTemplateRelease();
+		const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), parameters: selectedRelease?.parameters ?? {}, accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()), target_release_id: selectedRelease?.candidate.candidate_id, accepted_release_risks: installReleaseRisks().filter((risk) => installReleaseRiskAcceptances()[risk]) }) });
       const operationPromise = managedOperations.track(result.operation);
       void operationPromise
         .then(async (operation) => {
@@ -1832,11 +2040,11 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  const managedAction = async (serviceID: string, action: 'start' | 'stop' | 'restart' | 'retry_install' | 'update', noticeRevisions: Readonly<Record<string, number>> = {}) => {
+	const managedAction = async (serviceID: string, action: 'start' | 'stop' | 'restart' | 'retry_install' | 'update', noticeRevisions: Readonly<Record<string, number>> = {}, release?: Readonly<{ targetReleaseID: string; acceptedRisks: ReadonlyArray<string> }>) => {
     if (!canManageManagedService()) return;
     let operationID = managedOperations.begin(serviceID, action).operation_id;
     try {
-      const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions }) });
+		const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions, ...(release ? { target_release_id: release.targetReleaseID, accepted_release_risks: release.acceptedRisks } : {}) }) });
       operationID = result.operation_id;
       const operationPromise = managedOperations.track(result);
       await loadManaged(false);
@@ -2010,6 +2218,67 @@ export function EnvPortForwardsPage() {
     return Boolean(template?.default_workspace_path) && workspacePath() === template?.default_workspace_path;
   });
   const templateByID = (templateID: string) => managedTemplates().find((template) => template.template_id === templateID);
+	const selectedReleaseCandidate = createMemo(() => releaseCandidates()?.candidates.find((candidate) => candidate.candidate_id === selectedReleaseID()));
+	const releaseRisksAccepted = () => releaseRiskIDs(selectedReleaseCandidate()).every((risk) => releaseRiskAcceptances()[risk]);
+	const installReleaseRisks = createMemo(() => {
+		const selected = selectedTemplateRelease()?.candidate;
+		if (selected) return releaseRiskIDs(selected);
+		const template = selectedTemplate();
+		if (!template?.spec?.host?.npm) return [];
+		return [
+			'npm_lifecycle_scripts',
+			...(template.spec.host.npm.version.includes('-') ? ['preview_release'] : []),
+			...(template.source !== 'builtin' ? ['unreviewed_source'] : []),
+		];
+	});
+	const installReleaseRisksAccepted = () => installReleaseRisks().every((risk) => installReleaseRiskAcceptances()[risk]);
+
+	const closeReleasePicker = () => {
+		setReleasePickerTarget(null);
+		setReleaseCandidates(null);
+		setReleaseCandidatesError('');
+		setSelectedReleaseID('');
+		setReleaseRiskAcceptances({});
+		setReleaseQuery('');
+		setReleaseFilter('all');
+	};
+
+	const loadReleaseCandidates = async (target = releasePickerTarget()) => {
+		if (!target) return;
+		setReleaseCandidatesLoading(true);
+		setReleaseCandidatesError('');
+		try {
+			const endpoint = target.kind === 'template'
+				? `/_redeven_proxy/api/managed-web-service-templates/${encodeURIComponent(target.id)}/release-candidates`
+				: `/_redeven_proxy/api/managed-web-services/${encodeURIComponent(target.id)}/release-candidates`;
+			const result = await fetchLocalApiJSON<ManagedReleaseCandidateResult>(endpoint, { method: 'POST', body: JSON.stringify({ refresh: true, parameters: target.kind === 'template' ? releaseSecretParameters() : undefined }) });
+			setReleaseCandidates(result);
+			const first = result.candidates.find((candidate) => candidate.selectable);
+			setSelectedReleaseID(first?.candidate_id ?? '');
+			setReleaseRiskAcceptances({});
+		} catch (error) {
+			setReleaseCandidatesError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setReleaseCandidatesLoading(false);
+		}
+	};
+
+	const openTemplateReleasePicker = (templateID: string) => {
+		const template = templateByID(templateID);
+		if (!template) return;
+		const authTokenParameter = template.spec?.host?.npm?.auth_token_parameter;
+		const target: ManagedReleasePickerTarget = { kind: 'template', id: templateID, name: managedTemplateLocalizedIdentity(template, i18n).name, authTokenParameter };
+		setReleasePickerTarget(target);
+		setReleaseSecretParameters({});
+		if (!authTokenParameter) void loadReleaseCandidates(target);
+	};
+
+	const openServiceReleasePicker = (service: ManagedService) => {
+		const target: ManagedReleasePickerTarget = { kind: 'service', id: service.service_id, name: managedServiceLocalizedIdentity(service, i18n).name, service };
+		setReleasePickerTarget(target);
+		setReleaseSecretParameters({});
+		void loadReleaseCandidates(target);
+	};
 
   const openTemplateCatalog = () => {
     setTemplateDrawerView('catalog');
@@ -2020,14 +2289,36 @@ export function EnvPortForwardsPage() {
     setTemplateDrawerOpen(true);
   };
 
-  const beginTemplateInstall = (template: ManagedCatalogTemplate) => {
+	const beginTemplateInstall = (template: ManagedCatalogTemplate, preserveRelease = false) => {
     if (!template.available || installedServiceForTemplate(template)) return;
+		if (!preserveRelease) {
+			setSelectedTemplateRelease(null);
+			setInstallReleaseRiskAcceptances({});
+		}
     setSelectedTemplateID(template.template_id);
     setWorkspacePath(template.default_workspace_path);
     setManagedAccessMode(template.default_access_mode || 'unified_proxy');
     setInstallNoticeAcceptances({});
     setTemplateDrawerView('install');
   };
+
+	const confirmReleaseSelection = () => {
+		const target = releasePickerTarget();
+		const candidate = selectedReleaseCandidate();
+		if (!target || !candidate || !candidate.selectable || !releaseRisksAccepted()) return;
+		const acceptedRisks = releaseRiskIDs(candidate);
+		if (target.kind === 'template') {
+			const template = templateByID(target.id);
+			if (!template) return;
+			setSelectedTemplateRelease({ candidate, acceptedRisks, parameters: releaseSecretParameters() });
+			setInstallReleaseRiskAcceptances(Object.fromEntries(acceptedRisks.map((risk) => [risk, true])));
+			closeReleasePicker();
+			beginTemplateInstall(template, true);
+			return;
+		}
+		closeReleasePicker();
+		void managedAction(target.id, 'update', {}, { targetReleaseID: candidate.candidate_id, acceptedRisks });
+	};
 
   const beginTemplateCreate = (kind: 'host' | 'container' | 'compose') => {
     setTemplateDraft(emptyTemplateDraft(kind));
@@ -2651,6 +2942,7 @@ export function EnvPortForwardsPage() {
                           onDiagnosticCopyFailure={(message) => notify.error(i18n.t('webServices.managed.failureDiagnosticCopyFailedTitle'), message)}
                           onSettings={() => setManagedSettingsService(service)}
                           onUpdate={() => { setManagedUpdate(service); setUpdateNoticeAcceptances({}); }}
+						  onVersions={() => openServiceReleasePicker(service)}
                           onLogs={() => void loadManagedLogs(service.service_id)}
                           onUninstall={() => setManagedUninstall({ service, deleteData: false })}
                         />
@@ -2740,7 +3032,7 @@ export function EnvPortForwardsPage() {
             <div class="ml-auto flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{templateDrawerView() === 'install' ? i18n.t('common.actions.close') : i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
-                <Button size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : i18n.t('webServices.managed.installStart')}</Button>
+				<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances()) || !installReleaseRisksAccepted()}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : i18n.t('webServices.managed.installStart')}</Button>
               </Show>
               <Show when={templateDrawerView() === 'editor'}>
                 <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</Button>
@@ -2764,6 +3056,7 @@ export function EnvPortForwardsPage() {
               onCreate={beginTemplateCreate}
               onDeploy={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }}
               onOpen={openInstalledTemplate}
+			  onVersions={openTemplateReleasePicker}
               onDuplicate={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateDuplicate(template); }}
               onEdit={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateEdit(template); }}
               onDelete={(templateID) => { const template = templateByID(templateID); if (template) setTemplateDelete(template); }}
@@ -2777,6 +3070,14 @@ export function EnvPortForwardsPage() {
                   <ServiceTemplateIdentity template={presentation} />
                 </div>
               )}</Show>
+			  <section class="service-template-install-section border-t pt-4">
+				<div class="flex items-start justify-between gap-3">
+					<div><h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.versions')}</h3><p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.releaseSelectionDescription')}</p></div>
+					<Button size="sm" variant="outline" onClick={() => openTemplateReleasePicker(template.template_id)} disabled={managedInstallSubmitting()}>{i18n.t('webServices.managed.chooseVersion')}</Button>
+				</div>
+				<div class="mt-3 rounded-lg border bg-muted/20 p-3"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{i18n.t('webServices.managed.selectedRelease')}</div><div class="mt-1 font-mono text-sm text-foreground">{selectedTemplateRelease()?.candidate.version || selectedTemplateRelease()?.candidate.tag || template.version}</div></div>
+				<Show when={installReleaseRisks().length > 0}><div class="mt-3 space-y-2 rounded-lg border border-warning/25 bg-warning/[0.05] p-3"><For each={installReleaseRisks()}>{(risk) => <Checkbox checked={Boolean(installReleaseRiskAcceptances()[risk])} onChange={(checked) => setInstallReleaseRiskAcceptances((current) => ({ ...current, [risk]: Boolean(checked) }))} label={releaseRiskLabel(risk, i18n)} size="sm" />}</For></div></Show>
+			  </section>
               <section class="service-template-install-section border-t pt-4">
                 <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.workspaceSection')}</h3>
                 <p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.workspaceSectionDescription')}</p>
@@ -2920,6 +3221,36 @@ export function EnvPortForwardsPage() {
                   <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.serviceRuntimeSettings')}</h3>
                   <Show when={draft().kind === 'host'}>
                     <p class="mt-2 text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.hostScriptNote')}</p>
+                    <details class="service-template-editor__advanced mt-3" open={Boolean(draft().npmPackageName)}>
+                      <summary class="cursor-pointer py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.npmPackageSettings')}</summary>
+                      <div class="grid gap-x-4 gap-y-3 pb-1 pt-2 sm:grid-cols-2">
+                        <div>
+                          <TemplateEditorLabel for="template-editor-npm-package" label={i18n.t('webServices.managed.npmPackageName')} />
+                          <Input id="template-editor-npm-package" data-template-field="npmPackageName" value={draft().npmPackageName} class="font-mono" placeholder={i18n.t('webServices.managed.placeholders.npmPackageName')} aria-invalid={invalid('npmPackageName') ? 'true' : undefined} aria-describedby="template-editor-npm-package-help" onInput={(event) => update({ npmPackageName: event.currentTarget.value })} />
+                          <TemplateEditorGuidance id="template-editor-npm-package-help" help={i18n.t('webServices.managed.help.npmPackage')} error={error('npmPackageName')} visible={templateValidationVisible()} />
+                        </div>
+                        <div>
+                          <TemplateEditorLabel for="template-editor-npm-version" label={i18n.t('webServices.managed.npmPackageVersion')} />
+                          <Input id="template-editor-npm-version" data-template-field="npmPackageVersion" value={draft().npmPackageVersion} class="font-mono" placeholder={i18n.t('webServices.managed.placeholders.npmPackageVersion')} aria-invalid={invalid('npmPackageVersion') ? 'true' : undefined} aria-describedby="template-editor-npm-version-help" onInput={(event) => update({ npmPackageVersion: event.currentTarget.value })} />
+                          <TemplateEditorGuidance id="template-editor-npm-version-help" help={i18n.t('webServices.managed.help.npmVersion')} error={error('npmPackageVersion')} visible={templateValidationVisible()} />
+                        </div>
+                        <div>
+                          <TemplateEditorLabel for="template-editor-npm-registry" label={i18n.t('webServices.managed.npmRegistryURL')} />
+                          <Input id="template-editor-npm-registry" data-template-field="npmRegistryURL" value={draft().npmRegistryURL} class="font-mono" placeholder={i18n.t('webServices.managed.placeholders.npmRegistryURL')} aria-invalid={invalid('npmRegistryURL') ? 'true' : undefined} aria-describedby="template-editor-npm-registry-help" onInput={(event) => update({ npmRegistryURL: event.currentTarget.value })} />
+                          <TemplateEditorGuidance id="template-editor-npm-registry-help" help={i18n.t('webServices.managed.help.npmRegistry')} error={error('npmRegistryURL')} visible={templateValidationVisible()} />
+                        </div>
+                        <div>
+                          <TemplateEditorLabel for="template-editor-npm-executable" label={i18n.t('webServices.managed.npmExecutable')} />
+                          <Input id="template-editor-npm-executable" data-template-field="npmExecutable" value={draft().npmExecutable} class="font-mono" placeholder={i18n.t('webServices.managed.placeholders.npmExecutable')} aria-invalid={invalid('npmExecutable') ? 'true' : undefined} aria-describedby="template-editor-npm-executable-help" onInput={(event) => update({ npmExecutable: event.currentTarget.value })} />
+                          <TemplateEditorGuidance id="template-editor-npm-executable-help" help={i18n.t('webServices.managed.help.npmExecutable')} error={error('npmExecutable')} visible={templateValidationVisible()} />
+                        </div>
+                        <div class="sm:col-span-2">
+                          <TemplateEditorLabel for="template-editor-npm-token-parameter" label={i18n.t('webServices.managed.npmAuthTokenParameter')} />
+                          <Input id="template-editor-npm-token-parameter" data-template-field="npmAuthTokenParameter" value={draft().npmAuthTokenParameter} class="font-mono" placeholder={i18n.t('webServices.managed.placeholders.npmAuthTokenParameter')} aria-invalid={invalid('npmAuthTokenParameter') ? 'true' : undefined} aria-describedby="template-editor-npm-token-parameter-help" onInput={(event) => update({ npmAuthTokenParameter: event.currentTarget.value })} />
+                          <TemplateEditorGuidance id="template-editor-npm-token-parameter-help" help={i18n.t('webServices.managed.help.npmAuthTokenParameter')} error={error('npmAuthTokenParameter')} visible={templateValidationVisible()} />
+                        </div>
+                      </div>
+                    </details>
                     <Show when={draft().hostLifecyclePlan} fallback={(
                       <section class="service-template-lifecycle-plan mt-4" data-testid="host-lifecycle-plan-pending">
                         <h4 class="text-[11px] font-semibold leading-5 text-foreground">{i18n.t('webServices.managed.managedLifecycle')}</h4>
@@ -2941,11 +3272,11 @@ export function EnvPortForwardsPage() {
                         <div>
                           <TemplateEditorLabel
                             for="template-editor-install-script"
-                            label={i18n.t(draft().hostLifecyclePlan?.install.steps.some((step) => step.kind === 'prepare_verified_package') ? 'webServices.managed.afterInstallHook' : 'webServices.managed.installScript')}
+                            label={i18n.t(draft().hostLifecyclePlan?.install.steps.some((step) => step.kind === 'prepare_verified_package' || step.kind === 'prepare_verified_node_runtime') ? 'webServices.managed.afterInstallHook' : 'webServices.managed.installScript')}
                           />
                           <Textarea id="template-editor-install-script" value={draft().installScript} rows={5} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.installScript')} aria-describedby="template-editor-install-script-help" onInput={(event) => update({ installScript: event.currentTarget.value })} />
                           <p id="template-editor-install-script-help" class="mt-1 text-[11px] leading-4 text-muted-foreground">
-                            {i18n.t(draft().hostLifecyclePlan?.install.steps.some((step) => step.kind === 'prepare_verified_package') ? 'webServices.managed.help.afterInstallHook' : 'webServices.managed.help.installScript')}
+                            {i18n.t(draft().hostLifecyclePlan?.install.steps.some((step) => step.kind === 'prepare_verified_package' || step.kind === 'prepare_verified_node_runtime') ? 'webServices.managed.help.afterInstallHook' : 'webServices.managed.help.installScript')}
                             <Show when={!draft().installScript.trim()}> {i18n.t('webServices.managed.noAdditionalCommand')}</Show>
                           </p>
                         </div>
@@ -3039,6 +3370,19 @@ export function EnvPortForwardsPage() {
       <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-sm">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
 
       <Dialog open={managedLogs() !== null} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
+
+	  <Dialog
+		open={releasePickerTarget() !== null}
+		onOpenChange={(open) => { if (!open && !releaseCandidatesLoading()) closeReleasePicker(); }}
+		title={i18n.t('webServices.managed.releaseTitle', { name: releasePickerTarget()?.name ?? '' })}
+		footer={<div class="flex w-full items-center justify-between gap-2"><Button size="sm" variant="ghost" onClick={() => void loadReleaseCandidates()} disabled={releaseCandidatesLoading()}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('common.actions.refresh')}</Button><div class="flex gap-2"><Button size="sm" variant="outline" onClick={closeReleasePicker}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable || !releaseRisksAccepted() || Boolean(selectedReleaseCandidate()?.downgrade && (releasePickerTarget()?.service?.desired_state !== 'stopped' || releasePickerTarget()?.service?.observed_state !== 'stopped'))}>{releasePickerTarget()?.kind === 'service' ? i18n.t('webServices.managed.update') : i18n.t('webServices.managed.deploySelectedRelease')}</Button></div></div>}
+	  >
+		<div class="space-y-4">
+			<Show when={releasePickerTarget()?.authTokenParameter}>{(parameterName) => <div class="rounded-lg border p-3"><label class="mb-1 block text-xs font-medium" for="managed-release-token">{i18n.t('webServices.managed.registryToken', { parameter: parameterName() })}</label><Input id="managed-release-token" type="password" autocomplete="off" value={releaseSecretParameters()[parameterName()] ?? ''} onInput={(event) => setReleaseSecretParameters((current) => ({ ...current, [parameterName()]: event.currentTarget.value }))} /><p class="mt-1 text-[11px] text-muted-foreground">{i18n.t('webServices.managed.registryTokenDescription')}</p><Show when={!releaseCandidates() && !releaseCandidatesLoading()}><p class="mt-2 text-[11px] text-foreground">{i18n.t('webServices.managed.releaseTokenRefreshPrompt')}</p></Show></div>}</Show>
+			<Show when={selectedReleaseCandidate()?.downgrade && (releasePickerTarget()?.service?.desired_state !== 'stopped' || releasePickerTarget()?.service?.observed_state !== 'stopped')}><div class="rounded-lg border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.downgradeRequiresStopped')}</div></Show>
+			<ManagedReleaseCandidates result={releaseCandidates()} loading={releaseCandidatesLoading()} error={releaseCandidatesError()} query={releaseQuery()} filter={releaseFilter()} selectedID={selectedReleaseID()} acceptedRisks={releaseRiskAcceptances()} onQueryChange={setReleaseQuery} onFilterChange={setReleaseFilter} onSelect={(candidateID) => { setSelectedReleaseID(candidateID); setReleaseRiskAcceptances({}); }} onRiskChange={(riskID, accepted) => setReleaseRiskAcceptances((current) => ({ ...current, [riskID]: accepted }))} />
+		</div>
+	  </Dialog>
 
       <Dialog
         open={managedUpdate() !== null}
