@@ -30,8 +30,11 @@ surface. Runtime rediscovery clears stale ownership before a new target set may
 commit. One generation and cancellation signal fences runtime, inventory,
 detail, log, history, file, and statistics responses. Only `ready` may render
 resource data; loading keeps the production tabs, toolbar, table or cards, and
-responsive geometry in place. Cached data provides continuity only and cannot
-authorize a mutation without a current server preflight.
+responsive geometry in place. Related-resource and external navigation commit
+the target view synchronously: an exact cache match opens its detail at once;
+otherwise the `navigating` state renders a detail-shaped skeleton until the
+single target inventory request resolves. Cached data provides continuity only
+and cannot authorize a mutation without a current server preflight.
 
 Containers, Images, and Volumes aggregate every ready runtime. Compose Projects
 appears only for Docker and Pods only for Podman. With no ready runtime, the
@@ -85,16 +88,18 @@ volumes from bind, tmpfs, and redacted paths. Only a named volume opens the
 same-runtime volume detail.
 
 Every related-resource link uses that same navigation owner. Compose and Pod
-members plus Image and Volume references resolve an exact container from the
-source engine and endpoint before the visible view changes. Docker Compose asks
-for non-truncated container IDs so member identity matches the canonical
-container inventory. A missing, stale, ambiguous, or failed target leaves the
-source detail and its active tab visible with one concise notification; it can
-never degrade into a container list request. Successful related navigation
-pushes the source selection, detail tab, list controls, and scroll position onto
-the component-local history. Back restores that snapshot, including across
-chains such as Compose to Container to Image. A newer navigation generation
-still prevents an older inventory response from committing across targets.
+members plus Image and Volume references synchronously select their target view
+and exact source engine and endpoint. They never perform a hidden discovery
+request before visible feedback or start a second inventory request after
+selection. Docker Compose asks for non-truncated container IDs so member
+identity matches the canonical container inventory. A missing, stale,
+ambiguous, or failed target restores the source detail and its active tab with
+one concise notification; it can never degrade into a container list request.
+Successful related navigation pushes the source selection, detail tab, list
+controls, and scroll position onto the component-local history. Back restores
+that snapshot, including across chains such as Compose to Container to Image. A
+newer navigation generation still cancels the old request and prevents its
+response from committing across targets.
 
 Container detail provides Overview, live logs, redacted Inspect, mounts,
 capability-gated Exec, and bounded statistics. A running, unmanaged container

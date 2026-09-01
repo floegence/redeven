@@ -592,6 +592,26 @@
   padding: 14px 20px 10px;
 }
 
+.container-detail-skeleton__back { width: 32px; height: 32px; flex: none; }
+.container-detail-skeleton__icon { width: 40px; height: 40px; border-radius: 12px; }
+.container-detail-skeleton__identity { display: grid; min-width: 220px; gap: 7px; }
+.container-detail-skeleton__eyebrow { width: 66px; height: 8px; }
+.container-detail-skeleton__name { width: min(260px, 30cqw); height: 16px; }
+.container-detail-skeleton__identifier { width: min(180px, 22cqw); height: 8px; }
+.container-detail-skeleton__status { margin-left: 4px; }
+.container-detail-skeleton__actions { margin-left: auto; }
+.container-detail-tabs--loading { display: flex; align-items: center; gap: 28px; }
+.container-detail-skeleton__tab { width: 52px; height: 9px; }
+.container-detail-skeleton__tab[data-tab="1"] { width: 40px; }
+.container-detail-skeleton__tab[data-tab="2"] { width: 58px; }
+.container-detail-skeleton__tab[data-tab="3"] { width: 46px; }
+.container-detail-stack--loading { width: min(900px, 100%); }
+.container-detail-skeleton__section { display: grid; align-content: start; gap: 13px; }
+.container-detail-skeleton__section-title { width: 104px; height: 10px; }
+.container-detail-skeleton__section-title[data-section="1"] { width: 82px; }
+.container-detail-skeleton__line { width: 100%; height: 8px; }
+.container-detail-skeleton__line[data-line="short"] { width: 72%; }
+
 .container-detail-identity { min-width: 0; }
 .container-detail-identity > span { color: var(--redeven-status-primary-foreground); font-size: 10px; font-weight: 650; text-transform: uppercase; }
 .container-detail-identity h2 { overflow: hidden; margin-top: 2px; font-size: 20px; font-weight: 680; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
@@ -1003,6 +1023,10 @@
   .container-detail-header { min-height: 112px; padding: 12px; }
   .container-detail-identity { max-width: calc(100% - 108px); }
   .container-detail-identity h2 { font-size: 16px; }
+  .container-detail-skeleton__identity { min-width: 0; flex: 1; }
+  .container-detail-skeleton__name { width: min(180px, 45cqw); }
+  .container-detail-skeleton__identifier { width: min(160px, 40cqw); }
+  .container-detail-skeleton__status { display: none; }
   .container-detail-actions { margin-left: 0; }
   .container-detail-tabs { padding: 0 8px; }
   .container-detail-body { padding: 16px 12px 24px; }
