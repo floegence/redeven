@@ -84,6 +84,18 @@ or ambiguous targets leave the current page intact. Mounts separate named
 volumes from bind, tmpfs, and redacted paths. Only a named volume opens the
 same-runtime volume detail.
 
+Every related-resource link uses that same navigation owner. Compose and Pod
+members plus Image and Volume references resolve an exact container from the
+source engine and endpoint before the visible view changes. Docker Compose asks
+for non-truncated container IDs so member identity matches the canonical
+container inventory. A missing, stale, ambiguous, or failed target leaves the
+source detail and its active tab visible with one concise notification; it can
+never degrade into a container list request. Successful related navigation
+pushes the source selection, detail tab, list controls, and scroll position onto
+the component-local history. Back restores that snapshot, including across
+chains such as Compose to Container to Image. A newer navigation generation
+still prevents an older inventory response from committing across targets.
+
 Container detail provides Overview, live logs, redacted Inspect, mounts,
 capability-gated Exec, and bounded statistics. A running, unmanaged container
 shows one Terminal action when the user has Read and Execute. It opens the Exec
@@ -180,3 +192,4 @@ state rather than stale inventory.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Verifies Activity, Workbench, and narrow responsive interaction in Chromium.
 - `redeven:internal/flower_ui/src/filePicker/createFilesystemPickerDataSource.ts` - Adapts the read-only product filesystem RPC to the shared picker.
 - `redeven:internal/containerengine/cli_client.go` - Preserves image runtime identity across list and detail reads.
+- `redeven:internal/containerengine/resources_v4_cli.go` - Returns canonical non-truncated Compose member container identities.

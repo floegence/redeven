@@ -404,10 +404,10 @@ func TestAdapterV4ComposeDownRetainsVolumesAndBindsExactProject(t *testing.T) {
 	projectName := "application"
 	projectID := ComposeProjectID(projectName)
 	runner := &fakeCommandRunner{outputs: map[string]string{
-		"docker context ls --format {{json .}}":                                                                                     `{"Name":"production","Current":true}`,
-		"docker --context production compose ls --all --format json":                                                                `[{"Name":"application","Status":"running(1)","ConfigFiles":"/srv/application/compose.yml"}]`,
-		"docker --context production compose --file /srv/application/compose.yml --project-name application ps --all --format json": `[{"ID":"container-a","Name":"application-web","Service":"web","State":"running"}]`,
-		"docker --context production compose --file /srv/application/compose.yml --project-name application down":                   "",
+		"docker context ls --format {{json .}}":                      `{"Name":"production","Current":true}`,
+		"docker --context production compose ls --all --format json": `[{"Name":"application","Status":"running(1)","ConfigFiles":"/srv/application/compose.yml"}]`,
+		"docker --context production compose --file /srv/application/compose.yml --project-name application ps --all --no-trunc --format json": `[{"ID":"container-a","Name":"application-web","Service":"web","State":"running"}]`,
+		"docker --context production compose --file /srv/application/compose.yml --project-name application down":                              "",
 	}}
 	client := &CLIClient{Runner: runner}
 	endpoints, err := client.ListEndpoints(context.Background(), EngineDocker)

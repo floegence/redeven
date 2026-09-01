@@ -13,12 +13,12 @@ func TestCLIClientBindsManagedComposeActionsToExactFilesAndProject(t *testing.T)
 	request := ComposeDeploymentRequest{ConfigPath: filepath.Join(root, "compose.yaml"), EnvFilePath: filepath.Join(root, "template.env"), ProjectName: "redeven_preview"}
 	prefix := fmt.Sprintf("docker compose --file %s --project-name redeven_preview --env-file %s", request.ConfigPath, request.EnvFilePath)
 	runner := &fakeCommandRunner{outputs: map[string]string{
-		prefix + " config --quiet":               "",
-		prefix + " up --detach --remove-orphans": "",
-		prefix + " ps --all --format json":       `[{"ID":"container-one","Name":"redeven_preview-web-1","Service":"web","State":"running","Health":"healthy"}]`,
-		prefix + " stop":                         "",
-		prefix + " down --volumes":               "",
-		prefix + " logs --no-color --tail 20":    "web-1 | ready\n",
+		prefix + " config --quiet":                    "",
+		prefix + " up --detach --remove-orphans":      "",
+		prefix + " ps --all --no-trunc --format json": `[{"ID":"container-one","Name":"redeven_preview-web-1","Service":"web","State":"running","Health":"healthy"}]`,
+		prefix + " stop":                              "",
+		prefix + " down --volumes":                    "",
+		prefix + " logs --no-color --tail 20":         "web-1 | ready\n",
 	}}
 	client := &CLIClient{Runner: runner}
 	if err := client.ValidateComposeDeployment(context.Background(), request); err != nil {

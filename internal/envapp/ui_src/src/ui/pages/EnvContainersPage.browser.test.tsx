@@ -12,6 +12,7 @@ const browserHarness = vi.hoisted(() => ({
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
   listRuntimes: vi.fn(),
   listResources: vi.fn(),
+  resourceDetails: vi.fn(),
   preflight: vi.fn(),
   createExecSession: vi.fn(),
   deleteExecSession: vi.fn(),
@@ -73,14 +74,7 @@ vi.mock('../services/containerResourcesApi', () => ({
     ],
   }),
   listContainerResources: browserHarness.listResources,
-  getContainerResourceDetails: vi.fn().mockImplementation((_view: string, identity: string) => Promise.resolve({
-    container_id: identity,
-    name: identity.includes('8bbf') ? 'redeven-api' : 'postgres-development',
-    image: { reference: identity.includes('8bbf') ? 'ghcr.io/floegence/redeven-api:edge' : 'postgres:17-alpine' },
-    state: 'running', health: 'healthy', group_name: 'redeven-dev', created_at_unix_ms: 1_725_000_000_000,
-    runtime: { network_mode: 'redeven-dev', restart_policy: 'unless-stopped', user: '1000:1000', privileged: false, read_only_root: true },
-    ports: [{ protocol: 'tcp', host_ip: '127.0.0.1', host_port: 4318, port: 4318 }],
-  })),
+  getContainerResourceDetails: browserHarness.resourceDetails,
   listContainerOperations: vi.fn().mockResolvedValue([]),
   listContainerOperationEvents: vi.fn().mockResolvedValue([]),
   subscribeContainerOperationEvents: vi.fn().mockResolvedValue(undefined),
@@ -188,6 +182,14 @@ describe('native Containers responsive product surface', () => {
         group_name: 'observability', created_at_unix_ms: 1_722_000_000_000, management: { managed: false },
       },
     ]);
+    browserHarness.resourceDetails.mockReset().mockImplementation((_view: string, identity: string) => Promise.resolve({
+      container_id: identity,
+      name: identity.includes('8bbf') ? 'redeven-api' : 'postgres-development',
+      image: { reference: identity.includes('8bbf') ? 'ghcr.io/floegence/redeven-api:edge' : 'postgres:17-alpine' },
+      state: 'running', health: 'healthy', group_name: 'redeven-dev', created_at_unix_ms: 1_725_000_000_000,
+      runtime: { network_mode: 'redeven-dev', restart_policy: 'unless-stopped', user: '1000:1000', privileged: false, read_only_root: true },
+      ports: [{ protocol: 'tcp', host_ip: '127.0.0.1', host_port: 4318, port: 4318 }],
+    }));
     browserHarness.preflight.mockReset().mockResolvedValue({
       method: 'images.prune', request_hash: 'request', plan_hash: 'plan',
       plan: {
@@ -288,6 +290,39 @@ describe('native Containers responsive product surface', () => {
     expect(detailPage.querySelector('.container-sparkline')).toBeNull();
     expect(detailPage.querySelector('[data-container-network-panel]')?.textContent).toContain('/s');
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it('opens a volume user directly as a container detail and restores the source detail', async () => {
+    await page.viewport(1440, 900);
+    browserHarness.listResources.mockImplementation((view: string) => Promise.resolve(view === 'volumes'
+      ? [{ name: 'api-data', driver: 'local', referenced_containers: 1 }]
+      : [{ container_id: 'container-full-1', name: 'API', state: 'running', management: { managed: false } }]));
+    browserHarness.resourceDetails.mockImplementation((view: string) => Promise.resolve(view === 'volumes'
+      ? { name: 'api-data', driver: 'local', used_by: [{ container_id: 'container-full-1', name: 'API', state: 'running' }] }
+      : { container_id: 'container-full-1', name: 'API', state: 'running' }));
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('Volumes'))?.click();
+    await settle();
+    root.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('Used by'))?.click();
+    await settle();
+    root.querySelector<HTMLButtonElement>('.container-reference-row')?.click();
+    await settle();
+
+    expect(root.querySelector('[data-container-detail-page] h2')?.textContent).toBe('API');
+    expect(root.querySelector('[data-container-resource-table]')).toBeNull();
+    root.querySelector<HTMLButtonElement>('[data-container-detail-page] button[aria-label="Back"]')?.click();
+    await settle();
+    expect(root.querySelector('[data-container-detail-page] h2')?.textContent).toBe('api-data');
+    expect(Array.from(root.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('Used by'))?.getAttribute('aria-selected')).toBe('true');
   });
 
   it('places cleanup in a dismissible danger menu and shows the exact reviewed resources', async () => {
