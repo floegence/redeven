@@ -1,6 +1,17 @@
 # Redeven OKF Update Log
 
 ## 2026-09-01
+* **Structured tool history and stable lineage**: Redeven now consumes Floret
+  v7.0.5. Ask User resumes with one typed Assistant tool call and matching Tool
+  result, supplemental requests checkpoint only redacted lineage facts, and
+  provider-context v6 keeps unavailable-tool history valid across later Turns
+  without restoring deleted definitions or compacting. A new context policy
+  also starts without the previous model's latest usage while retaining the
+  canonical whole-thread totals.
+* **Required interactive control**: The Flower System Prompt now requires
+  `ask_user` whenever another user answer is needed and forbids ending that
+  Turn with a prose question. Natural stop remains valid when no answer is
+  required.
 * **Friendly Agent startup progress**: Redeven now consumes Floret v7.0.2 and
   forwards its real migration and verification phases. Startup shows neutral
   phase copy, real elapsed time after ten seconds, a calm long-history note
