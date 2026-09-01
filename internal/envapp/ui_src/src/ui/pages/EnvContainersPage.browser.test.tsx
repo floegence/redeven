@@ -149,6 +149,7 @@ describe('native Containers responsive product surface', () => {
   beforeEach(() => {
     document.documentElement.classList.add('dark');
     window.localStorage.clear();
+    window.localStorage.setItem('redeven_ui_language_preference', 'en-US');
     browserHarness.listResources.mockReset().mockResolvedValue([
       {
         container_id: '8bbf320351e557285fe1f143ee14a6d2334f24f5', name: 'redeven-api',
@@ -421,6 +422,8 @@ describe('native Containers responsive product surface', () => {
     expect(cards[0].querySelector<HTMLImageElement>('.container-service-brand__color')?.getAttribute('src')).toBe('/_redeven_proxy/env/container-service-icons/docker-default.svg');
     expect(cards[1].querySelector<HTMLImageElement>('.container-service-brand__color')?.getAttribute('src')).toBe('/_redeven_proxy/env/container-service-icons/podman-default.svg');
     expect(getComputedStyle(servicePage.querySelector<HTMLElement>('.container-services-grid')!).gridTemplateColumns.split(' ')).toHaveLength(2);
+    const firstActions = cards[0].querySelector<HTMLElement>('.container-service-card__actions')!;
+    expect(cards[0].getBoundingClientRect().bottom - firstActions.getBoundingClientRect().bottom).toBeLessThanOrEqual(18);
 
     Array.from(cards[0].querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Configure'))?.click();
     await settle();
@@ -431,6 +434,13 @@ describe('native Containers responsive product surface', () => {
     expect(dialog.querySelector('.container-service-config-editor')).not.toBeNull();
     Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Docker CLI'))?.click();
     await settle();
+    expect(dialog.querySelectorAll('.container-service-cli-setting-card')).toHaveLength(2);
+    const outputFormats = dialog.querySelector<HTMLDetailsElement>('.container-service-cli-disclosure')!;
+    expect(outputFormats.open).toBe(false);
+    outputFormats.querySelector<HTMLElement>('summary')?.click();
+    await settle();
+    expect(outputFormats.open).toBe(true);
+    expect(outputFormats.textContent).toContain('docker ps');
     Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Proxies'))?.click();
     await settle();
     expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();

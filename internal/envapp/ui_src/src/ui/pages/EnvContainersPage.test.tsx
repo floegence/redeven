@@ -356,8 +356,8 @@ describe('native Containers page', () => {
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
-    const servicesAction = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
-      .find((button) => button.textContent?.includes('containers.services.title'));
+    const servicesAction = host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]');
+    expect(servicesAction?.querySelector('[data-icon="settings"]')).not.toBeNull();
     servicesAction?.click();
     await settle();
 
@@ -378,6 +378,44 @@ describe('native Containers page', () => {
     expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
   });
 
+  it('keeps service cards stable while refreshing and uses matching geometry for the initial skeleton', async () => {
+    const services = [{
+      service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
+      capabilities: { start: false, stop: true, restart: true },
+      configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
+    }];
+    const initialLoad = deferred<typeof services>();
+    harness.listServices.mockImplementationOnce(() => initialLoad.promise);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click();
+    await settle();
+    const servicePage = host.querySelector<HTMLElement>('[data-container-services-page]')!;
+    expect(servicePage.getAttribute('aria-busy')).toBe('true');
+    expect(servicePage.querySelectorAll('.container-service-card--loading')).toHaveLength(2);
+    expect(servicePage.querySelector('.container-service-card--loading .container-service-card__mark')).not.toBeNull();
+    expect(servicePage.querySelector('.container-service-card--loading .container-service-card__actions')).not.toBeNull();
+
+    initialLoad.resolve(services);
+    await settle();
+    expect(servicePage.querySelectorAll('.container-service-card:not(.container-service-card--loading)')).toHaveLength(1);
+
+    const refreshLoad = deferred<typeof services>();
+    harness.listServices.mockImplementationOnce(() => refreshLoad.promise);
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.actions.refresh"]')?.click();
+    await settle();
+    expect(servicePage.getAttribute('aria-busy')).toBe('true');
+    expect(servicePage.querySelectorAll('.container-service-card:not(.container-service-card--loading)')).toHaveLength(1);
+    expect(servicePage.querySelector('.container-service-card--loading')).toBeNull();
+
+    refreshLoad.resolve(services);
+    await settle();
+    expect(servicePage.getAttribute('aria-busy')).toBe('false');
+  });
+
   it('edits one complete Docker CLI document without exposing registry credentials', async () => {
     harness.listServices.mockResolvedValue([{
       service_id: 'container_service_desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'running',
@@ -396,9 +434,7 @@ describe('native Containers page', () => {
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
-      .find((button) => button.textContent?.includes('containers.services.title'))
-      ?.click();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click();
     await settle();
     Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button'))
       .find((button) => button.textContent?.includes('containers.services.configure'))
@@ -413,6 +449,11 @@ describe('native Containers page', () => {
     await settle();
     expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.dockerCLIScope');
     expect(host.querySelector('[data-dialog]')?.textContent).not.toContain('containers.services.openSettings');
+    expect(host.querySelectorAll('[data-dialog] .container-service-cli-setting-card')).toHaveLength(2);
+    const outputFormats = host.querySelector<HTMLDetailsElement>('[data-dialog] .container-service-cli-disclosure');
+    expect(outputFormats?.open).toBe(false);
+    expect(outputFormats?.textContent).toContain('docker ps');
+    expect(outputFormats?.textContent).toContain('psFormat');
     Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] [role="tab"]'))
       .find((button) => button.textContent?.includes('containers.services.proxies'))
       ?.click();
@@ -458,9 +499,7 @@ describe('native Containers page', () => {
     dispose = render(() => <EnvContainersPage />, host);
     await settle();
 
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-test-dropdown-menu] button'))
-      .find((button) => button.textContent?.includes('containers.services.title'))
-      ?.click();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click();
     await settle();
 
     expect(host.querySelector('.container-service-card__guidance')?.textContent).toContain('containers.services.guidance.remote_host');
@@ -1680,7 +1719,8 @@ describe('native Containers page', () => {
     await settle();
 
     expect(host.querySelector('[data-icon="filter"]')).not.toBeNull();
-    expect(host.querySelector('[data-icon="settings"]')).toBeNull();
+    expect(host.querySelector('.container-resource-toolbar [data-icon="settings"]')).toBeNull();
+    expect(host.querySelector('[aria-label="containers.services.title"] [data-icon="settings"]')).not.toBeNull();
     expect(host.querySelector('button[aria-label="containers.actions.stop"] [data-icon="stop-filled"]')).not.toBeNull();
     const menuIcons = Array.from(host.querySelectorAll('[data-test-dropdown-menu] [data-icon]'))
       .map((item) => item.getAttribute('data-icon'));
