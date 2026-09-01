@@ -148,6 +148,23 @@ func TestMarshalJSONBoundedMatchesEncodingJSON(t *testing.T) {
 	}
 }
 
+func TestMarshalJSONBoundedReplacesInvalidUTF8LikeEncodingJSON(t *testing.T) {
+	value := struct {
+		Text string `json:"text"`
+	}{Text: string([]byte{'a', 0xff, 'b'})}
+	want, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := MarshalJSONBounded(value, MaxResponsePayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("bounded marshal = %q, want %q", got, want)
+	}
+}
+
 func TestMarshalJSONBoundedFailsClosedForUnsupportedTypes(t *testing.T) {
 	for _, value := range []any{
 		map[string]string{"unsupported": "map"},
