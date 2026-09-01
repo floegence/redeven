@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -28,12 +29,16 @@ type deepSeekContextObservation struct {
 	Model                  string
 	MessageHashes          []string
 	MessageRoles           []string
+	MessageToolCallNames   []string
+	MessageToolResultNames []string
+	DefinitionToolNames    []string
 	SystemHash             string
 	ToolsHash              string
 	MarkerPresence         []bool
 	MarkerMessageIndexes   []int
 	HasPreviousResponseID  bool
 	ProviderMetadataFields int
+	HasLegacyInteraction   bool
 	ResponseToolNames      []string
 	ResponseFinishReasons  []string
 }
@@ -73,6 +78,7 @@ func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservatio
 		MarkerPresence:        make([]bool, len(r.markers)),
 		MarkerMessageIndexes:  make([]int, len(r.markers)),
 		HasPreviousResponseID: len(envelope.PreviousResponseID) > 0 && string(envelope.PreviousResponseID) != "null",
+		HasLegacyInteraction:  bytes.Contains(body, []byte("Agent requested user input")) || bytes.Contains(body, []byte(`"interaction_response"`)),
 	}
 	if len(envelope.ResponseID) > 0 && string(envelope.ResponseID) != "null" {
 		observation.ProviderMetadataFields++
@@ -83,19 +89,58 @@ func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservatio
 	for i := range observation.MarkerMessageIndexes {
 		observation.MarkerMessageIndexes[i] = -1
 	}
+	toolNamesByCallID := make(map[string]string)
+	toolResultCallIDs := make([]string, 0, 2)
 	for messageIndex, message := range envelope.Messages {
 		observation.MessageHashes = append(observation.MessageHashes, sha256Hex(message))
 		var header struct {
-			Role string `json:"role"`
+			Role       string `json:"role"`
+			ToolCallID string `json:"tool_call_id"`
+			ToolCalls  []struct {
+				ID       string `json:"id"`
+				Function struct {
+					Name string `json:"name"`
+				} `json:"function"`
+			} `json:"tool_calls"`
 		}
 		_ = json.Unmarshal(message, &header)
 		if observation.SystemHash == "" && strings.TrimSpace(header.Role) == "system" {
 			observation.SystemHash = sha256Hex(message)
 		}
 		observation.MessageRoles = append(observation.MessageRoles, strings.TrimSpace(header.Role))
+		for _, call := range header.ToolCalls {
+			name := strings.TrimSpace(call.Function.Name)
+			if name == "" {
+				continue
+			}
+			observation.MessageToolCallNames = append(observation.MessageToolCallNames, name)
+			if callID := strings.TrimSpace(call.ID); callID != "" {
+				toolNamesByCallID[callID] = name
+			}
+		}
+		if strings.TrimSpace(header.Role) == "tool" {
+			toolResultCallIDs = append(toolResultCallIDs, strings.TrimSpace(header.ToolCallID))
+		}
 		for markerIndex, marker := range r.markers {
 			if observation.MarkerMessageIndexes[markerIndex] < 0 && bytes.Contains(message, []byte(marker)) {
 				observation.MarkerMessageIndexes[markerIndex] = messageIndex
+			}
+		}
+	}
+	for _, callID := range toolResultCallIDs {
+		if name := toolNamesByCallID[callID]; name != "" {
+			observation.MessageToolResultNames = append(observation.MessageToolResultNames, name)
+		}
+	}
+	for _, rawTool := range envelope.Tools {
+		var tool struct {
+			Function struct {
+				Name string `json:"name"`
+			} `json:"function"`
+		}
+		if json.Unmarshal(rawTool, &tool) == nil {
+			if name := strings.TrimSpace(tool.Function.Name); name != "" {
+				observation.DefinitionToolNames = append(observation.DefinitionToolNames, name)
 			}
 		}
 	}
@@ -210,6 +255,159 @@ func TestE2E_FlowerDeepSeekV4ContextPrefixAndModelSwitch(t *testing.T) {
 	assertNoDeepSeekContextCompaction(t, third, "second Flash turn")
 
 	assertDeepSeekContextObservations(t, recorder)
+}
+
+func TestE2E_FlowerDeepSeekV4AskUserStructuredContinuation(t *testing.T) {
+	if strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_CONTEXT_E2E")) != "1" {
+		t.Skip("set REDEVEN_FLOWER_CONTEXT_E2E=1 to enable the real DeepSeek context qualification")
+	}
+	baseURL := strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_CONTEXT_E2E_BASE_URL"))
+	apiKey := strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_CONTEXT_E2E_API_KEY"))
+	assertOfficialDeepSeekCompactionEndpoint(t, baseURL)
+	if apiKey == "" {
+		t.Fatal("REDEVEN_FLOWER_CONTEXT_E2E_API_KEY is required")
+	}
+
+	const marker = "FLOWER_ASK_USER_STRUCTURED_73C1"
+	recorder := &deepSeekContextRecorder{markers: []string{marker}}
+	proxyURL := newDeepSeekRecordingProxy(t, baseURL, recorder)
+	providerID := "deepseek-ask-user-e2e"
+	modelID := providerID + "/deepseek-v4-flash"
+	cfg := &config.AIConfig{
+		CurrentModelID: modelID,
+		PermissionType: config.AIPermissionFullAccess,
+		Providers: []config.AIProvider{{
+			ID: providerID, Name: "DeepSeek Ask User E2E", Type: "deepseek", BaseURL: proxyURL,
+			Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash", ContextWindow: 128_000, MaxOutputTokens: 28_000, EffectiveContextWindowPercent: 100}},
+		}},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate isolated DeepSeek profile: %v", err)
+	}
+
+	stateDir := t.TempDir()
+	svc, err := NewService(Options{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "bash", Config: cfg,
+		RunMaxWallTime: 8 * time.Minute, RunIdleTimeout: 3 * time.Minute, ToolApprovalTimeout: time.Minute,
+		ResolveProviderAPIKey: func(candidate string) (string, bool, error) {
+			if strings.TrimSpace(candidate) != providerID {
+				return "", false, nil
+			}
+			return apiKey, true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("create isolated Flower service: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	meta := session.Meta{
+		EndpointID: "env_deepseek_ask_user_e2e", NamespacePublicID: "ns_deepseek_ask_user_e2e",
+		ChannelID: "ch_deepseek_ask_user_e2e", UserPublicID: "user_deepseek_ask_user_e2e",
+		UserEmail: "deepseek-ask-user-e2e@example.invalid", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	threadID := createDeepSeekCompactionThread(t, ctx, svc, &meta, modelID, "Structured Ask User continuation")
+	response, err := svc.SendUserTurn(ctx, &meta, SendUserTurnRequest{
+		ClientRequestID: "deepseek-ask-user", ThreadID: threadID, Model: modelID,
+		Input:   RunInput{Text: "Qualification marker " + marker + ". Another user answer is required before you can continue. Call ask_user exactly once now with one non-secret write question whose id is target and asks for the deployment target. Do not end with a prose question. After the answer, acknowledge it briefly and stop naturally without another tool call."},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}},
+	})
+	if err != nil || response.Kind == "" {
+		t.Fatalf("send Ask User qualification turn: response=%#v err=%v", response, err)
+	}
+	waiting := waitForDeepSeekAskUserDetail(t, ctx, svc, &meta, threadID, func(detail *FlowerThreadDetail) bool {
+		return detail.Thread.WaitingPrompt != nil && detail.Thread.RunStatus == "waiting_user"
+	})
+	prompt := waiting.Thread.WaitingPrompt
+	if prompt == nil || len(prompt.Questions) != 1 || prompt.Questions[0].ID != "target" {
+		t.Fatalf("DeepSeek waiting prompt=%#v, want one target question", prompt)
+	}
+	accepted, err := svc.SubmitRequestUserInputResponse(ctx, &meta, SubmitRequestUserInputResponseRequest{
+		ThreadID: threadID, Model: modelID,
+		Response: RequestUserInputResponse{PromptID: prompt.PromptID, Answers: map[string]RequestUserInputAnswer{"target": {Text: "staging"}}},
+		Input:    RunInput{Text: "staging"},
+		Options:  RunOptions{PermissionType: config.AIPermissionFullAccess, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}},
+	})
+	if err != nil || accepted.Kind != "accepted" {
+		t.Fatalf("submit DeepSeek Ask User answer: response=%#v err=%v", accepted, err)
+	}
+	completed := waitForDeepSeekAskUserDetail(t, ctx, svc, &meta, threadID, func(detail *FlowerThreadDetail) bool {
+		return detail.Current.Activity == flruntime.ThreadActivityIdle && detail.Current.LastOutcome != nil
+	})
+	if completed.Current.LastOutcome == nil || *completed.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
+		t.Fatalf("DeepSeek Ask User outcome=%v failure=%#v", completed.Current.LastOutcome, completed.Current.Failure)
+	}
+	assertNoDeepSeekContextCompaction(t, completed, "Ask User continuation")
+	assertDeepSeekAskUserObservations(t, recorder)
+}
+
+func waitForDeepSeekAskUserDetail(t *testing.T, ctx context.Context, svc *Service, meta *session.Meta, threadID string, ready func(*FlowerThreadDetail) bool) *FlowerThreadDetail {
+	t.Helper()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		detail, err := svc.GetFlowerThreadDetail(ctx, meta, threadID)
+		if err != nil {
+			t.Fatalf("read DeepSeek Ask User thread: %v", err)
+		}
+		if detail != nil && ready(detail) {
+			return detail
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("wait for DeepSeek Ask User state: %v", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func assertDeepSeekAskUserObservations(t *testing.T, recorder *deepSeekContextRecorder) {
+	t.Helper()
+	recorder.mu.Lock()
+	observations := append([]deepSeekContextObservation(nil), recorder.observations...)
+	recordErr := recorder.err
+	recorder.mu.Unlock()
+	if recordErr != nil {
+		t.Fatal(recordErr)
+	}
+	var initial, resumed *deepSeekContextObservation
+	for i := range observations {
+		observation := &observations[i]
+		if containsString(observation.ResponseToolNames, "ask_user") {
+			initial = observation
+		}
+		if containsString(observation.MessageToolCallNames, "ask_user") && containsString(observation.MessageToolResultNames, "ask_user") {
+			resumed = observation
+		}
+	}
+	if initial == nil || resumed == nil {
+		t.Fatalf("DeepSeek Ask User observations missing structured pair: %#v", observations)
+	}
+	if initial.Model != "deepseek-v4-flash" || resumed.Model != initial.Model {
+		t.Fatalf("Ask User model drifted: initial=%q resumed=%q", initial.Model, resumed.Model)
+	}
+	if !containsString(initial.DefinitionToolNames, "ask_user") || !containsString(resumed.DefinitionToolNames, "ask_user") {
+		t.Fatal("current Ask User definition was omitted from the frozen Turn surface")
+	}
+	if initial.SystemHash == "" || initial.SystemHash != resumed.SystemHash || initial.ToolsHash == "" || initial.ToolsHash != resumed.ToolsHash {
+		t.Fatalf("Ask User Turn surface drifted: system=(%s,%s) tools=(%s,%s)", initial.SystemHash, resumed.SystemHash, initial.ToolsHash, resumed.ToolsHash)
+	}
+	initialMarker := initial.MarkerMessageIndexes[0]
+	resumedMarker := resumed.MarkerMessageIndexes[0]
+	if initialMarker < 0 || resumedMarker < 0 || initial.MessageHashes[initialMarker] != resumed.MessageHashes[resumedMarker] {
+		t.Fatal("Ask User durable canonical user message changed across the ephemeral resume boundary")
+	}
+	if initial.HasLegacyInteraction || resumed.HasLegacyInteraction {
+		t.Fatal("Ask User request contained the removed text interaction projection")
+	}
+	if !containsString(initial.ResponseFinishReasons, "tool_calls") {
+		t.Fatalf("initial Ask User finish reasons=%v, want tool_calls", initial.ResponseFinishReasons)
+	}
+	if len(resumed.ResponseToolNames) != 0 || !containsString(resumed.ResponseFinishReasons, "stop") {
+		t.Fatalf("resumed Ask User response tools=%v finishes=%v, want natural stop", resumed.ResponseToolNames, resumed.ResponseFinishReasons)
+	}
 }
 
 func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *deepSeekContextRecorder) string {

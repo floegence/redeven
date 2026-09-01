@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -22,6 +23,7 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 
 	var mainCalls atomic.Int32
 	var sawUnknownToolResult atomic.Bool
+	var sawHistoricalUnknownToolPair atomic.Bool
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -63,6 +65,11 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 			}
 			sawUnknownToolResult.Store(true)
 			writeDeepSeekIntegrationTextResponse(w, flusher, "chat_recovered", "Recovered with the available tools.")
+		case 3:
+			if requestContainsPairedToolHistory(request, "web_search") {
+				sawHistoricalUnknownToolPair.Store(true)
+			}
+			writeDeepSeekIntegrationTextResponse(w, flusher, "chat_history", "Historical tool activity remains readable.")
 		default:
 			t.Fatalf("unexpected main provider request %d", mainCalls.Load())
 		}
@@ -120,6 +127,45 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 	}
 	if mainCalls.Load() != 2 || !sawUnknownToolResult.Load() {
 		t.Fatalf("main_calls=%d saw_unknown_result=%t, want one recovery continuation", mainCalls.Load(), sawUnknownToolResult.Load())
+	}
+	detail, err := svc.GetFlowerThreadDetail(context.Background(), meta, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadDetail after unavailable tool: %v", err)
+	}
+	detailJSON, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("marshal Flower detail: %v", err)
+	}
+	if strings.Contains(string(detailJSON), "weather projects") {
+		t.Fatalf("neutral unknown-tool activity leaked historical arguments: %s", detailJSON)
+	}
+
+	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "deepseek/deepseek-v4-flash",
+		Input:    RunInput{Text: "Continue using only tools available in this version."},
+		Options: RunOptions{
+			PermissionType: config.AIPermissionFullAccess,
+			ToolAllowlist:  []string{"web_fetch"},
+		},
+	}); err != nil {
+		t.Fatalf("SendUserTurn after unavailable historical tool: %v", err)
+	}
+	continued := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
+		return strings.TrimSpace(view.RunStatus) == "failed" ||
+			(strings.TrimSpace(view.RunStatus) == "success" && strings.Contains(view.LastMessagePreview, "Historical tool activity"))
+	})
+	if continued.RunStatus == "failed" {
+		failedDetail, detailErr := svc.GetFlowerThreadDetail(context.Background(), meta, thread.ThreadID)
+		failedJSON, _ := json.Marshal(failedDetail)
+		failure := (*flruntime.ThreadTurnFailure)(nil)
+		if failedDetail != nil {
+			failure = failedDetail.Current.Failure
+		}
+		t.Fatalf("new Turn with unavailable tool history failed before/after provider call %d: failure=%#v detail=%s err=%v", mainCalls.Load(), failure, failedJSON, detailErr)
+	}
+	if mainCalls.Load() != 3 || !sawHistoricalUnknownToolPair.Load() {
+		t.Fatalf("main_calls=%d historical_unknown_pair=%t", mainCalls.Load(), sawHistoricalUnknownToolPair.Load())
 	}
 }
 

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,8 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	t.Parallel()
 
 	var mainCalls atomic.Int32
+	var sawStructuredContinuation atomic.Bool
+	var sawHistoricalAskUserPair atomic.Bool
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -44,7 +47,8 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			writeAskUserIntegrationTextResponse(w, flusher, "resp_title", "Clarify deployment")
 			return
 		}
-		if mainCalls.Add(1) == 1 {
+		switch mainCalls.Add(1) {
+		case 1:
 			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a deployment target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target should I deploy?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			writeOpenAISSEJSON(w, flusher, map[string]any{
 				"type": "response.output_item.added", "output_index": 0,
@@ -56,8 +60,20 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "resp_waiting")
 			return
+		case 2:
+			if requestContainsPairedToolHistory(request, "ask_user") && !requestContainsLegacyInteractionText(request) {
+				sawStructuredContinuation.Store(true)
+			}
+			writeAskUserIntegrationTextResponse(w, flusher, "resp_resumed", "Deployment target accepted.")
+			return
+		case 3:
+			pair := requestContainsPairedToolHistory(request, "ask_user")
+			sawHistoricalAskUserPair.Store(pair)
+			writeAskUserIntegrationTextResponse(w, flusher, "resp_history", "Historical interaction remains available.")
+			return
+		default:
+			t.Fatalf("unexpected main provider request %d", mainCalls.Load())
 		}
-		writeAskUserIntegrationTextResponse(w, flusher, "resp_resumed", "Deployment target accepted.")
 	}))
 	t.Cleanup(providerServer.Close)
 
@@ -153,6 +169,77 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	if mainCalls.Load() != 2 {
 		t.Fatalf("main provider calls=%d, want waiting and resumed calls", mainCalls.Load())
 	}
+	if !sawStructuredContinuation.Load() {
+		t.Fatal("Ask User continuation did not preserve a paired tool call/result history")
+	}
+
+	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
+		Input:   RunInput{Text: "Confirm that the earlier answer remains available."},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	}); err != nil {
+		t.Fatalf("SendUserTurn after Ask User continuation: %v", err)
+	}
+	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
+		return strings.TrimSpace(view.RunStatus) == "success" && strings.Contains(view.LastMessagePreview, "Historical interaction")
+	})
+	if mainCalls.Load() != 3 || !sawHistoricalAskUserPair.Load() {
+		t.Fatalf("main_calls=%d historical_pair=%t", mainCalls.Load(), sawHistoricalAskUserPair.Load())
+	}
+}
+
+func requestContainsPairedToolHistory(request map[string]any, toolName string) bool {
+	calls := make(map[string]struct{})
+	results := make(map[string]struct{})
+	var visit func(any)
+	visit = func(value any) {
+		switch typed := value.(type) {
+		case []any:
+			for _, item := range typed {
+				visit(item)
+			}
+		case map[string]any:
+			typeName := strings.TrimSpace(anyToString(typed["type"]))
+			role := strings.TrimSpace(anyToString(typed["role"]))
+			if typeName == "function_call" && strings.TrimSpace(anyToString(typed["name"])) == toolName {
+				calls[strings.TrimSpace(anyToString(typed["call_id"]))] = struct{}{}
+			}
+			if typeName == "function_call_output" {
+				results[strings.TrimSpace(anyToString(typed["call_id"]))] = struct{}{}
+			}
+			if role == "assistant" {
+				if toolCalls, ok := typed["tool_calls"].([]any); ok {
+					for _, rawCall := range toolCalls {
+						call, _ := rawCall.(map[string]any)
+						function, _ := call["function"].(map[string]any)
+						if strings.TrimSpace(anyToString(function["name"])) == toolName {
+							calls[strings.TrimSpace(anyToString(call["id"]))] = struct{}{}
+						}
+					}
+				}
+			}
+			if role == "tool" && (strings.TrimSpace(anyToString(typed["name"])) == toolName || strings.TrimSpace(anyToString(typed["name"])) == "") {
+				results[strings.TrimSpace(anyToString(typed["tool_call_id"]))] = struct{}{}
+			}
+			for _, child := range typed {
+				visit(child)
+			}
+		}
+	}
+	visit(request)
+	for callID := range calls {
+		if callID != "" {
+			if _, ok := results[callID]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func requestContainsLegacyInteractionText(request map[string]any) bool {
+	raw, _ := json.Marshal(request)
+	return bytes.Contains(raw, []byte("Agent requested user input")) || bytes.Contains(raw, []byte(`"interaction_response"`))
 }
 
 func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {

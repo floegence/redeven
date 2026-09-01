@@ -186,6 +186,16 @@ func TestBuildLayeredSystemPromptUsesNaturalCompletion(t *testing.T) {
 	assertPromptContains(t, prompt, "When the task is complete, provide the final assistant response")
 }
 
+func TestBuildLayeredSystemPromptRequiresAskUserForBlockingQuestions(t *testing.T) {
+	t.Parallel()
+
+	prompt := buildPromptForToolRoutingTest(t)
+	assertPromptContains(t, prompt, "you MUST call ask_user in that provider response")
+	assertPromptContains(t, prompt, "Do not end the Turn with a prose question")
+	assertPromptContains(t, prompt, "A natural stop is valid only when the Turn does not require another user answer")
+	assertPromptNotContains(t, prompt, "prefer ask_user over freeform markdown option lists")
+}
+
 func TestBuildLayeredSystemPrompt_ExcludesMutableTurnFacts(t *testing.T) {
 	t.Parallel()
 

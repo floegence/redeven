@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,6 +108,38 @@ func TestPublishedFloretV7MigratesTargetThreadCopyAndAcceptsNewTurn(t *testing.T
 	}
 	if sourceHash != afterSourceHash {
 		t.Fatal("source database changed while qualifying its copy")
+	}
+
+	wantAskUserPairs := 0
+	if raw := strings.TrimSpace(os.Getenv("REDEVEN_FLOWER_MIGRATION_EXPECT_ASK_USER_PAIRS")); raw != "" {
+		wantAskUserPairs, err = strconv.Atoi(raw)
+		if err != nil || wantAskUserPairs < 0 {
+			t.Fatalf("invalid REDEVEN_FLOWER_MIGRATION_EXPECT_ASK_USER_PAIRS=%q", raw)
+		}
+	}
+	if wantAskUserPairs > 0 {
+		requests := gateway.Requests()
+		if len(requests) != 1 {
+			t.Fatalf("target thread provider requests=%d, want 1", len(requests))
+		}
+		calls := 0
+		results := 0
+		for _, message := range requests[0].Messages {
+			for _, call := range message.ToolCalls {
+				if call.Name == "ask_user" {
+					calls++
+				}
+			}
+			if message.ToolResult != nil && message.ToolResult.ToolName == "ask_user" {
+				results++
+			}
+			if message.Role == flprovider.RoleUser && (strings.Contains(message.Text, "Agent requested user input") || strings.Contains(message.Text, `"interaction_response"`)) {
+				t.Fatalf("target thread retained legacy interaction text: %#v", message)
+			}
+		}
+		if calls != wantAskUserPairs || results != wantAskUserPairs {
+			t.Fatalf("target thread ask_user pairs=(calls:%d results:%d), want %d: %#v", calls, results, wantAskUserPairs, requests[0].Messages)
+		}
 	}
 }
 

@@ -448,7 +448,8 @@ func buildPromptSearchTemplateSection(snapshot promptRuntimeSnapshot) promptSect
 func buildPromptAskUserPolicySection(snapshot promptRuntimeSnapshot) promptSection {
 	lines := []string{
 		"# Ask User Policy",
-		"- Use ask_user when you genuinely need the user's next structured input to continue.",
+		"- When another user answer is required to continue, you MUST call ask_user in that provider response. Do not end the Turn with a prose question.",
+		"- A natural stop is valid only when the Turn does not require another user answer.",
 		"- Allowed ask_user cases include true external blockers and guided interaction turns where the next step depends on an explicit user choice or typed answer.",
 		"- Do NOT use ask_user to delegate commands, file inspection, log gathering, screenshots, or web research that available tools can do directly.",
 		"- ask_user must include reason_code, required_from_user, and evidence_refs.",
@@ -457,7 +458,7 @@ func buildPromptAskUserPolicySection(snapshot promptRuntimeSnapshot) promptSecti
 		"- evidence_refs must reference relevant tool IDs when evidence exists; use an empty array when no tool evidence exists.",
 		"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, and response_mode.",
 		"- Any question with fixed choices MUST also declare `choices_exhaustive`.",
-		"- For guided questionnaires, interviews, quizzes, guessing games, or decision trees, prefer ask_user over freeform markdown option lists.",
+		"- For guided questionnaires, interviews, quizzes, guessing games, or decision trees, use ask_user instead of freeform markdown option lists.",
 		"- If you are going to call `ask_user`, do NOT first emit a separate markdown questionnaire, duplicated prose question, or A/B/C option list outside the structured ask_user payload.",
 		"- Preserve explicit interaction-shape constraints from the user, such as fixed options, clickable choices, one-question-at-a-time, indirect questioning, or similar format requirements.",
 		"- When the user requires an indirect, non-leading, or proxy-based interaction, preserve that constraint in both `question` and `choices[]`. Do NOT directly name, bucket, or reveal the target attribute the user asked you to infer indirectly; ask about proxy signals or correlated situations instead.",
