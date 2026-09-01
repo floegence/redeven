@@ -49,7 +49,7 @@ vi.mock('../services/containerResourcesApi', () => ({
     {
       service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running', version: '27.3.1',
       capabilities: { start: false, stop: true, restart: true },
-      configuration: { mode: 'local', sources: ['engine', 'client_proxy'] },
+      configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
     },
     {
       service_id: 'container_service_podman', engine: 'podman', name: 'Podman', implementation: 'unavailable', state: 'not_installed', guidance_code: 'install',
@@ -61,7 +61,7 @@ vi.mock('../services/containerResourcesApi', () => ({
     service_id: 'container_service_docker',
     sources: [
       { source_id: 'engine', display_path: '~/.docker/daemon.json', status: 'ready', exists: true, format: 'json', sections: ['advanced'], apply_modes: ['save', 'save_and_restart'], content: '{}\n', base_revision: 'sha256:engine' },
-      { source_id: 'client_proxy', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['proxy'], apply_modes: ['save'], base_revision: 'sha256:client' },
+      { source_id: 'docker_cli', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['general', 'proxy', 'credentials', 'advanced'], apply_modes: ['save'], base_revision: 'sha256:client', content: '{\n  "currentContext": "desktop-linux",\n  "credsStore": "desktop",\n  "proxies": {\n    "default": {}\n  }\n}\n', protected_registries: ['registry.example.test'], context_options: ['default', 'desktop-linux'] },
     ],
   }),
   listContainerResources: browserHarness.listResources,
@@ -397,13 +397,15 @@ describe('native Containers responsive product surface', () => {
     const dialogRect = dialog.getBoundingClientRect();
     expect(dialogRect.left).toBeGreaterThanOrEqual(0);
     expect(dialogRect.right).toBeLessThanOrEqual(390);
-    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('CLI proxy'))?.click();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Docker CLI'))?.click();
+    await settle();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Proxies'))?.click();
     await settle();
     expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
-  it('shows official service branding and local engine and CLI proxy configuration', async () => {
+  it('shows official service branding and complete local Docker CLI configuration', async () => {
     await page.viewport(1440, 900);
     const mounted = mount('workbench');
     dispose = mounted.dispose;
@@ -427,7 +429,9 @@ describe('native Containers responsive product surface', () => {
     expect(dialog).not.toBeNull();
     expect(dialog.querySelectorAll('[role="tab"]')).toHaveLength(2);
     expect(dialog.querySelector('.container-service-config-editor')).not.toBeNull();
-    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('CLI proxy'))?.click();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Docker CLI'))?.click();
+    await settle();
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Proxies'))?.click();
     await settle();
     expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);

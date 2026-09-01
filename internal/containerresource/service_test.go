@@ -888,12 +888,74 @@ PRAGMA user_version = 3;
 	if engineState.ConfigurationRevision != "sha256:revision" || !engineState.RestartRequired || engineState.ServiceGeneration != "sha256:generation" {
 		t.Fatalf("migrated engine state = %+v", engineState)
 	}
-	clientState, err := reopened.store.containerServiceConfigurationState(context.Background(), "container_service_preserved", containerengine.ContainerServiceConfigurationSourceClientProxy)
+	clientState, err := reopened.store.containerServiceConfigurationState(context.Background(), "container_service_preserved", containerengine.ContainerServiceConfigurationSourceDockerCLI)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if clientState.ConfigurationRevision != "" || clientState.RestartRequired {
-		t.Fatalf("unexpected migrated CLI proxy state = %+v", clientState)
+		t.Fatalf("unexpected migrated Docker CLI state = %+v", clientState)
+	}
+}
+
+func TestSchemaMigratesV4ClientProxyStateToDockerCLI(t *testing.T) {
+	adapter, err := containerengine.NewAdapter(&fakeEngineClient{volumes: make(map[string]containerengine.VolumeRecord)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(t.TempDir(), "container-resources.sqlite3")
+	service, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.store.db.Exec(`
+INSERT INTO container_service_configuration_state(
+  service_id, source_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
+) VALUES('container_service_preserved', 'client_proxy', 'sha256:client', 0, 'sha256:generation', 1234);
+PRAGMA user_version = 4;
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	state, err := reopened.store.containerServiceConfigurationState(context.Background(), "container_service_preserved", containerengine.ContainerServiceConfigurationSourceDockerCLI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ConfigurationRevision != "sha256:client" || state.RestartRequired {
+		t.Fatalf("migrated Docker CLI state = %+v", state)
+	}
+}
+
+func TestSchemaRejectsUnknownV4ConfigurationSource(t *testing.T) {
+	adapter, err := containerengine.NewAdapter(&fakeEngineClient{volumes: make(map[string]containerengine.VolumeRecord)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(t.TempDir(), "container-resources.sqlite3")
+	service, err := Open(Options{DatabasePath: databasePath, Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.store.db.Exec(`
+INSERT INTO container_service_configuration_state(
+  service_id, source_id, configuration_revision, restart_required, service_generation, updated_at_unix_ms
+) VALUES('container_service_drift', 'unknown', '', 0, '', 1234);
+PRAGMA user_version = 4;
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(Options{DatabasePath: databasePath, Engine: adapter}); err == nil {
+		t.Fatal("Open() accepted an unknown v4 configuration source")
 	}
 }
 
@@ -930,7 +992,7 @@ func TestSchemaRejectsWrongKindAndFutureVersion(t *testing.T) {
 		mutate string
 	}{
 		{name: "wrong kind", mutate: `UPDATE __redeven_db_meta SET db_kind = 'another_product' WHERE singleton = 1`},
-		{name: "future version", mutate: `PRAGMA user_version = 5`},
+		{name: "future version", mutate: `PRAGMA user_version = 6`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

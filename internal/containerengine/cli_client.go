@@ -55,6 +55,8 @@ type CLIClient struct {
 	EffectiveUserID func() int
 	UserConfigDir   func() (string, error)
 	UserHomeDir     func() (string, error)
+	DockerConfigDir func() string
+	Environment     func(string) (string, bool)
 }
 
 func NewCLIClient() *CLIClient {

@@ -96,7 +96,7 @@ describe('native container resources API', () => {
     const service = {
       service_id: 'container_service_1', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
       capabilities: { start: false, stop: true, restart: true },
-      configuration: { mode: 'local', sources: ['engine', 'client_proxy'] },
+      configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
     };
     const configuration = {
       service_id: service.service_id,

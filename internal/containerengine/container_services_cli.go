@@ -33,7 +33,7 @@ type containerServiceConfigurationSourceDefinition struct {
 	kind            ContainerServiceConfigurationKind
 	sections        []ContainerServiceConfigurationSection
 	supportsRestart bool
-	clientProxy     bool
+	dockerCLI       bool
 }
 
 func (c *CLIClient) ContainerServices(ctx context.Context) ([]ContainerService, error) {
@@ -98,12 +98,12 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 			ServiceID: containerServiceID(EngineDocker, ContainerServiceDockerDesktop, "local"), Engine: EngineDocker,
 			Name: "Docker Desktop", Implementation: ContainerServiceDockerDesktop, State: state, Version: status.Version,
 			Capabilities:        ContainerServiceCapabilities{Start: true, Stop: true, Restart: true},
-			ConfigurationAccess: localContainerServiceConfiguration(ContainerServiceConfigurationSourceEngine, ContainerServiceConfigurationSourceClientProxy),
+			ConfigurationAccess: localContainerServiceConfiguration(ContainerServiceConfigurationSourceEngine, ContainerServiceConfigurationSourceDockerCLI),
 			endpointID:          endpoint.EndpointID,
 			Generation:          serviceGeneration(status.Version, state),
 			configurationSources: []containerServiceConfigurationSourceDefinition{
 				c.dockerEngineConfigurationSource(true),
-				c.dockerClientProxyConfigurationSource(),
+				c.dockerCLIConfigurationSource(),
 			},
 		}
 	}
@@ -122,7 +122,7 @@ func (c *CLIClient) discoverDockerService(ctx context.Context) ContainerService 
 	if service.serviceUserUnit {
 		engineSource = c.dockerRootlessEngineConfigurationSource()
 	}
-	clientSource := c.dockerClientProxyConfigurationSource()
+	clientSource := c.dockerCLIConfigurationSource()
 	if engineSource.path != "" {
 		service.configurationSources = append(service.configurationSources, engineSource)
 	}
@@ -246,14 +246,23 @@ func (c *CLIClient) dockerRootlessEngineConfigurationSource() containerServiceCo
 	}
 }
 
-func (c *CLIClient) dockerClientProxyConfigurationSource() containerServiceConfigurationSourceDefinition {
-	path := filepath.Join(c.userHomeDirectory(), ".docker", "config.json")
+func (c *CLIClient) dockerCLIConfigurationSource() containerServiceConfigurationSourceDefinition {
+	directory := c.dockerConfigurationDirectory()
+	path := ""
+	if directory != "" {
+		path = filepath.Join(directory, "config.json")
+	}
 	return containerServiceConfigurationSourceDefinition{
-		sourceID: ContainerServiceConfigurationSourceClientProxy, path: path,
+		sourceID: ContainerServiceConfigurationSourceDockerCLI, path: path,
 		displayPath: displayContainerServiceConfigPath(path, c.userHomeDirectory()),
 		kind:        ContainerServiceConfigurationJSON,
-		sections:    []ContainerServiceConfigurationSection{ContainerServiceConfigurationSectionProxy},
-		clientProxy: true,
+		sections: []ContainerServiceConfigurationSection{
+			ContainerServiceConfigurationSectionGeneral,
+			ContainerServiceConfigurationSectionProxy,
+			ContainerServiceConfigurationSectionCredentials,
+			ContainerServiceConfigurationSectionAdvanced,
+		},
+		dockerCLI: true,
 	}
 }
 
@@ -479,12 +488,12 @@ func (c *CLIClient) ContainerServiceConfiguration(ctx context.Context, serviceID
 	}
 	result := ContainerServiceConfiguration{ServiceID: service.ServiceID, Sources: make([]ContainerServiceConfigurationSource, 0, len(service.configurationSources))}
 	for _, definition := range service.configurationSources {
-		result.Sources = append(result.Sources, c.containerServiceConfigurationSource(service, definition))
+		result.Sources = append(result.Sources, c.containerServiceConfigurationSource(ctx, service, definition))
 	}
 	return result, nil
 }
 
-func (c *CLIClient) containerServiceConfigurationSource(service ContainerService, definition containerServiceConfigurationSourceDefinition) ContainerServiceConfigurationSource {
+func (c *CLIClient) containerServiceConfigurationSource(ctx context.Context, service ContainerService, definition containerServiceConfigurationSourceDefinition) ContainerServiceConfigurationSource {
 	result := ContainerServiceConfigurationSource{
 		SourceID: definition.sourceID, DisplayPath: definition.displayPath, Format: definition.kind,
 		Sections:   append([]ContainerServiceConfigurationSection(nil), definition.sections...),
@@ -528,8 +537,30 @@ func (c *CLIClient) containerServiceConfigurationSource(service ContainerService
 	} else {
 		result.Status = ContainerServiceConfigurationSourceMissing
 	}
-	if definition.clientProxy {
-		result.HTTPProxy, result.HTTPSProxy, result.NoProxy = extractDockerCLIProxy(raw)
+	if definition.dockerCLI {
+		if result.Status == ContainerServiceConfigurationSourceInvalid {
+			return result
+		}
+		content, registries, err := safeDockerCLIConfiguration(raw)
+		if err != nil {
+			result.Status = ContainerServiceConfigurationSourceInvalid
+			return result
+		}
+		result.Content = string(content)
+		result.ProtectedRegistries = registries
+		if endpoints, err := c.listDockerContexts(ctx); err == nil {
+			for _, endpoint := range endpoints {
+				if name := strings.TrimSpace(endpoint.DisplayName); name != "" {
+					result.ContextOptions = append(result.ContextOptions, name)
+				}
+			}
+			sort.Strings(result.ContextOptions)
+		}
+		if _, ok := c.environmentValue("DOCKER_CONTEXT"); ok {
+			result.ContextOverriddenBy = "DOCKER_CONTEXT"
+		} else if _, ok := c.environmentValue("DOCKER_HOST"); ok {
+			result.ContextOverriddenBy = "DOCKER_HOST"
+		}
 	} else {
 		result.Content = string(raw)
 		result.HTTPProxy, result.HTTPSProxy, result.NoProxy = extractContainerServiceProxy(definition.kind, raw)
@@ -551,11 +582,11 @@ func candidateContainerServiceConfiguration(definition containerServiceConfigura
 	if !allowedApplyMode {
 		return nil, ErrContainerServiceActionUnsupported
 	}
-	if definition.clientProxy {
-		if req.Mode != ContainerServiceConfigurationProxy || req.ApplyMode != ContainerServiceSave {
+	if definition.dockerCLI {
+		if req.Mode != ContainerServiceConfigurationDocument || req.ApplyMode != ContainerServiceSave {
 			return nil, ErrContainerServiceActionUnsupported
 		}
-		candidate, err := mergeDockerCLIProxy(current, req.HTTPProxy, req.HTTPSProxy, req.NoProxy)
+		candidate, err := mergeDockerCLIConfiguration(current, []byte(req.Content))
 		if err != nil {
 			return nil, ErrContainerServiceConfigInvalid
 		}
@@ -728,7 +759,7 @@ func (c *CLIClient) runContainerServiceAction(ctx context.Context, service Conta
 }
 
 func (c *CLIClient) validateContainerServiceCandidate(ctx context.Context, service ContainerService, definition containerServiceConfigurationSourceDefinition, candidate []byte) error {
-	if definition.clientProxy {
+	if definition.dockerCLI {
 		var document map[string]json.RawMessage
 		if err := json.Unmarshal(candidate, &document); err != nil || document == nil {
 			return ErrContainerServiceConfigInvalid
@@ -929,73 +960,61 @@ func validContainerServiceConfigurationSyntax(kind ContainerServiceConfiguration
 	}
 }
 
-func extractDockerCLIProxy(raw []byte) (string, string, string) {
-	var document struct {
-		Proxies map[string]struct {
-			HTTPProxy  string `json:"httpProxy"`
-			HTTPSProxy string `json:"httpsProxy"`
-			NoProxy    string `json:"noProxy"`
-		} `json:"proxies"`
-	}
-	if json.Unmarshal(raw, &document) != nil {
-		return "", "", ""
-	}
-	proxy := document.Proxies["default"]
-	return proxy.HTTPProxy, proxy.HTTPSProxy, proxy.NoProxy
-}
-
-func mergeDockerCLIProxy(raw []byte, httpProxy, httpsProxy, noProxy string) ([]byte, error) {
+func safeDockerCLIConfiguration(raw []byte) ([]byte, []string, error) {
 	document := map[string]json.RawMessage{}
 	if len(bytes.TrimSpace(raw)) > 0 {
 		if err := json.Unmarshal(raw, &document); err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		if document == nil {
+			return nil, nil, errors.New("Docker CLI configuration must be a JSON object")
 		}
 	}
-	proxies := map[string]json.RawMessage{}
-	if existing := document["proxies"]; len(existing) > 0 {
-		if err := json.Unmarshal(existing, &proxies); err != nil {
-			return nil, err
+	registries := make([]string, 0)
+	if encoded := document["auths"]; len(encoded) > 0 {
+		var auths map[string]json.RawMessage
+		if err := json.Unmarshal(encoded, &auths); err != nil {
+			return nil, nil, err
 		}
-	}
-	defaults := map[string]json.RawMessage{}
-	if existing := proxies["default"]; len(existing) > 0 {
-		if err := json.Unmarshal(existing, &defaults); err != nil {
-			return nil, err
+		for registry := range auths {
+			if value := strings.TrimSpace(registry); value != "" {
+				registries = append(registries, value)
+			}
 		}
+		sort.Strings(registries)
 	}
-	setOrDeleteRawJSONString(defaults, "httpProxy", httpProxy)
-	setOrDeleteRawJSONString(defaults, "httpsProxy", httpsProxy)
-	setOrDeleteRawJSONString(defaults, "noProxy", noProxy)
-	if len(defaults) == 0 {
-		delete(proxies, "default")
-	} else {
-		encoded, err := json.Marshal(defaults)
-		if err != nil {
-			return nil, err
-		}
-		proxies["default"] = encoded
-	}
-	if len(proxies) == 0 {
-		delete(document, "proxies")
-	} else {
-		encoded, err := json.Marshal(proxies)
-		if err != nil {
-			return nil, err
-		}
-		document["proxies"] = encoded
-	}
+	delete(document, "auths")
 	out, err := json.MarshalIndent(document, "", "  ")
-	return append(out, '\n'), err
+	return append(out, '\n'), registries, err
 }
 
-func setOrDeleteRawJSONString(document map[string]json.RawMessage, key, value string) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		delete(document, key)
-		return
+func mergeDockerCLIConfiguration(current, safeCandidate []byte) ([]byte, error) {
+	currentDocument := map[string]json.RawMessage{}
+	if len(bytes.TrimSpace(current)) > 0 {
+		if err := json.Unmarshal(current, &currentDocument); err != nil {
+			return nil, err
+		}
+		if currentDocument == nil {
+			return nil, errors.New("Docker CLI configuration must be a JSON object")
+		}
 	}
-	encoded, _ := json.Marshal(value)
-	document[key] = encoded
+	candidateDocument := map[string]json.RawMessage{}
+	if len(bytes.TrimSpace(safeCandidate)) > 0 {
+		if err := json.Unmarshal(safeCandidate, &candidateDocument); err != nil {
+			return nil, err
+		}
+		if candidateDocument == nil {
+			return nil, errors.New("Docker CLI configuration must be a JSON object")
+		}
+	}
+	if _, attemptsCredentialWrite := candidateDocument["auths"]; attemptsCredentialWrite {
+		return nil, errors.New("Docker registry credentials must be managed through docker login")
+	}
+	if protected := currentDocument["auths"]; len(protected) > 0 {
+		candidateDocument["auths"] = protected
+	}
+	out, err := json.MarshalIndent(candidateDocument, "", "  ")
+	return append(out, '\n'), err
 }
 
 func mergeContainerServiceProxy(kind ContainerServiceConfigurationKind, raw []byte, httpProxy, httpsProxy, noProxy string) ([]byte, error) {
@@ -1188,4 +1207,29 @@ func (c *CLIClient) userHomeDirectory() string {
 		return filepath.Clean(home)
 	}
 	return ""
+}
+
+func (c *CLIClient) dockerConfigurationDirectory() string {
+	if c.DockerConfigDir != nil {
+		if value := strings.TrimSpace(c.DockerConfigDir()); filepath.IsAbs(value) {
+			return filepath.Clean(value)
+		}
+	}
+	if value, ok := c.environmentValue("DOCKER_CONFIG"); ok && filepath.IsAbs(value) {
+		return filepath.Clean(value)
+	}
+	home := c.userHomeDirectory()
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".docker")
+}
+
+func (c *CLIClient) environmentValue(name string) (string, bool) {
+	if c.Environment != nil {
+		value, ok := c.Environment(name)
+		return strings.TrimSpace(value), ok && strings.TrimSpace(value) != ""
+	}
+	value, ok := os.LookupEnv(name)
+	return strings.TrimSpace(value), ok && strings.TrimSpace(value) != ""
 }

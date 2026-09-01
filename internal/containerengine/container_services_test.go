@@ -119,7 +119,7 @@ func TestDockerDesktopNotRunningIsStopped(t *testing.T) {
 	}
 }
 
-func TestDockerDesktopExposesLocalEngineAndClientConfiguration(t *testing.T) {
+func TestDockerDesktopExposesLocalEngineAndCLIConfiguration(t *testing.T) {
 	runner := &runtimeDiscoveryRunner{outputs: map[string]string{
 		"docker context ls --format {{json .}}":                `{"Name":"default","Current":true,"DockerEndpoint":"unix:///var/run/docker.sock"}` + "\n",
 		"docker --context default version --format {{json .}}": `{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`,
@@ -133,7 +133,7 @@ func TestDockerDesktopExposesLocalEngineAndClientConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	docker := services[0]
-	if docker.Implementation != ContainerServiceDockerDesktop || docker.ConfigurationAccess.Mode != ContainerServiceConfigurationLocal || !slices.Equal(docker.ConfigurationAccess.Sources, []ContainerServiceConfigurationSourceID{ContainerServiceConfigurationSourceEngine, ContainerServiceConfigurationSourceClientProxy}) {
+	if docker.Implementation != ContainerServiceDockerDesktop || docker.ConfigurationAccess.Mode != ContainerServiceConfigurationLocal || !slices.Equal(docker.ConfigurationAccess.Sources, []ContainerServiceConfigurationSourceID{ContainerServiceConfigurationSourceEngine, ContainerServiceConfigurationSourceDockerCLI}) {
 		t.Fatalf("Docker Desktop service = %+v", docker)
 	}
 	configuration, err := client.ContainerServiceConfiguration(context.Background(), docker.ServiceID)
@@ -339,14 +339,14 @@ func TestContainerServiceConfigurationReportsRecoveryRequired(t *testing.T) {
 	}
 }
 
-func TestDockerCLIProxyUpdatePreservesUnrelatedConfiguration(t *testing.T) {
+func TestDockerCLIConfigurationExposesAllNonCredentialFieldsAndPreservesAuth(t *testing.T) {
 	home := t.TempDir()
 	dockerDirectory := filepath.Join(home, ".docker")
 	if err := os.MkdirAll(dockerDirectory, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dockerDirectory, "config.json")
-	current := []byte(`{"auths":{"registry.example":{"auth":"secret"}},"credsStore":"desktop","proxies":{"tcp://remote":{"noProxy":"internal"},"default":{"ftpProxy":"ftp://old","httpProxy":"http://old"}}}` + "\n")
+	current := []byte(`{"auths":{"registry.example":{"auth":"secret"}},"credsStore":"desktop","currentContext":"default","detachKeys":"ctrl-e,e","HttpHeaders":{"X-Trace":"enabled"},"plugins":{"buildx":{"default-load":"true"}},"proxies":{"tcp://remote":{"noProxy":"internal"},"default":{"ftpProxy":"ftp://old","httpProxy":"http://old"}}}` + "\n")
 	if err := os.WriteFile(path, current, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -368,19 +368,22 @@ func TestDockerCLIProxyUpdatePreservesUnrelatedConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(encodedConfiguration, []byte("secret")) || bytes.Contains(encodedConfiguration, []byte("credsStore")) || !bytes.Contains(encodedConfiguration, []byte("http://old")) {
-		t.Fatalf("safe CLI proxy projection = %s", encodedConfiguration)
+	if bytes.Contains(encodedConfiguration, []byte("secret")) || !bytes.Contains(encodedConfiguration, []byte("credsStore")) || !bytes.Contains(encodedConfiguration, []byte("X-Trace")) || !bytes.Contains(encodedConfiguration, []byte("default-load")) || !bytes.Contains(encodedConfiguration, []byte("http://old")) || !bytes.Contains(encodedConfiguration, []byte("registry.example")) {
+		t.Fatalf("safe CLI configuration projection = %s", encodedConfiguration)
 	}
+	safeContent := configuration.Sources[1].Content
+	safeContent = strings.Replace(safeContent, `"currentContext": "default"`, `"currentContext": "desktop-linux"`, 1)
+	safeContent = strings.Replace(safeContent, `"httpProxy": "http://old"`, `"httpProxy": "http://new"`, 1)
 	result, err := client.UpdateContainerServiceConfiguration(context.Background(), ContainerServiceConfigurationUpdateRequest{
-		Engine: EngineDocker, ServiceID: services[0].ServiceID, SourceID: ContainerServiceConfigurationSourceClientProxy,
-		BaseRevision: configurationRevision(current, true), Mode: ContainerServiceConfigurationProxy, ApplyMode: ContainerServiceSave,
-		HTTPProxy: "http://new", HTTPSProxy: "https://new", NoProxy: "localhost",
+		Engine: EngineDocker, ServiceID: services[0].ServiceID, SourceID: ContainerServiceConfigurationSourceDockerCLI,
+		BaseRevision: configurationRevision(current, true), Mode: ContainerServiceConfigurationDocument, ApplyMode: ContainerServiceSave,
+		Content: safeContent,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.RestartRequired {
-		t.Fatalf("CLI proxy unexpectedly requires restart: %+v", result)
+		t.Fatalf("Docker CLI configuration unexpectedly requires restart: %+v", result)
 	}
 	updated, err := os.ReadFile(path)
 	if err != nil {
@@ -391,9 +394,31 @@ func TestDockerCLIProxyUpdatePreservesUnrelatedConfiguration(t *testing.T) {
 	if err := json.Unmarshal(updated, &document); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"auth": "secret"`, `"credsStore": "desktop"`, `"tcp://remote"`, `"ftpProxy": "ftp://old"`, `"httpProxy": "http://new"`} {
+	for _, want := range []string{`"auth": "secret"`, `"credsStore": "desktop"`, `"tcp://remote"`, `"ftpProxy": "ftp://old"`, `"httpProxy": "http://new"`, `"currentContext": "desktop-linux"`, `"X-Trace": "enabled"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("updated CLI configuration = %s, want %s", text, want)
 		}
+	}
+}
+
+func TestDockerCLIConfigurationRejectsCredentialDocumentWrites(t *testing.T) {
+	current := []byte(`{"auths":{"registry.example":{"auth":"secret"}},"credsStore":"desktop"}`)
+	if _, err := mergeDockerCLIConfiguration(current, []byte(`{"auths":{},"credsStore":"desktop"}`)); err == nil {
+		t.Fatal("expected protected auths write to be rejected")
+	}
+	if _, _, err := safeDockerCLIConfiguration([]byte(`null`)); err == nil {
+		t.Fatal("expected a non-object Docker CLI file to be rejected")
+	}
+	if _, err := mergeDockerCLIConfiguration(current, []byte(`null`)); err == nil {
+		t.Fatal("expected a non-object Docker CLI candidate to be rejected")
+	}
+}
+
+func TestDockerCLIConfigurationUsesDockerConfigDirectory(t *testing.T) {
+	directory := t.TempDir()
+	client := &CLIClient{DockerConfigDir: func() string { return directory }, UserHomeDir: func() (string, error) { return t.TempDir(), nil }}
+	definition := client.dockerCLIConfigurationSource()
+	if definition.path != filepath.Join(directory, "config.json") {
+		t.Fatalf("Docker CLI config path = %q", definition.path)
 	}
 }
