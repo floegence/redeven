@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-09-01
+* **Friendly Agent startup progress**: Redeven now consumes Floret v7.0.2 and
+  forwards its real migration and verification phases. Startup shows neutral
+  phase copy, real elapsed time after ten seconds, a calm long-history note
+  after thirty seconds, sanitized details, and one non-blocking ready notice.
+  Polling countdowns, guessed progress, and obsolete commit or rollback facts
+  are removed from the readiness contract.
 * **Transparent managed Host lifecycle**: Host template queries now project the
   actual Runtime driver, safe package identity, and ordered install, start,
   stop, and uninstall plan without persisting or hashing that projection.
@@ -18,7 +24,7 @@
   install stages without byte-level telemetry keep elapsed time visible and do
   not invent transfer totals or expose source URL query data.
 * **Floret v7 Turn surfaces and natural completion**: Redeven now consumes
-  Floret v7.0.1. Each new Turn uses the current persisted settings, System
+  Floret v7.0.2. Each new Turn uses the current persisted settings, System
   Prompt, and tools; Ask User, tool loops, retries, and restart recovery reuse
   the immutable checkpointed surface. Natural provider stop completes the
   Turn, and removed historical tools use the neutral Activity presentation.

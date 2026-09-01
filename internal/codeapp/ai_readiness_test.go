@@ -110,7 +110,7 @@ func TestAIReadinessControllerSerializesAttemptsAndSanitizesFailures(t *testing.
 	}
 	waitForAIReadinessState(t, controller, appserver.AIReadinessBlocked)
 	snapshot = controller.AIReadiness()
-	if snapshot.ReasonCode != "ai_service_startup_error" || snapshot.Retryable || snapshot.SafeToRetry || snapshot.Committed || snapshot.RolledBack {
+	if snapshot.ReasonCode != "ai_service_startup_error" || snapshot.Retryable || snapshot.SafeToRetry {
 		t.Fatalf("generic failure snapshot = %#v", snapshot)
 	}
 	_ = controller.Close()
@@ -255,12 +255,15 @@ func TestAIReadinessControllerClosesLateStartupResult(t *testing.T) {
 func TestAIReadinessControllerPublishesObservedMaintenancePhases(t *testing.T) {
 	allowInspect := make(chan struct{})
 	allowOptimize := make(chan struct{})
+	allowMigrate := make(chan struct{})
 	allowVerify := make(chan struct{})
 	controller := newAIReadinessController(context.Background(), ai.Options{}, func(_ context.Context, opts ai.Options) (*ai.Service, error) {
 		opts.StoreStartupProgress(ai.FloretStoreStartupInspecting)
 		<-allowInspect
 		opts.StoreStartupProgress(ai.FloretStoreStartupOptimizing)
 		<-allowOptimize
+		opts.StoreStartupProgress(ai.FloretStoreStartupMigrating)
+		<-allowMigrate
 		opts.StoreStartupProgress(ai.FloretStoreStartupVerifying)
 		<-allowVerify
 		return new(ai.Service), nil
@@ -270,6 +273,8 @@ func TestAIReadinessControllerPublishesObservedMaintenancePhases(t *testing.T) {
 	close(allowInspect)
 	waitForAIReadinessState(t, controller, appserver.AIReadinessOptimizing)
 	close(allowOptimize)
+	waitForAIReadinessState(t, controller, appserver.AIReadinessMigrating)
+	close(allowMigrate)
 	waitForAIReadinessState(t, controller, appserver.AIReadinessVerifying)
 	close(allowVerify)
 	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)

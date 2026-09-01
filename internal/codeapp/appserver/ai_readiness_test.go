@@ -360,14 +360,14 @@ func TestSanitizeAIReadinessSnapshotRejectsUnknownContractValues(t *testing.T) {
 		{
 			name: "unknown blocked reason",
 			in: AIReadinessSnapshot{
-				State: AIReadinessBlocked, ReasonCode: "database path /private/secret", Committed: true,
+				State: AIReadinessBlocked, ReasonCode: "database path /private/secret",
 			},
 			want: AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode},
 		},
 		{
 			name: "ready clears failure fields",
 			in: AIReadinessSnapshot{
-				State: AIReadinessReady, ReasonCode: AIServiceStartupErrorReasonCode, Retryable: true, RolledBack: true,
+				State: AIReadinessReady, ReasonCode: AIServiceStartupErrorReasonCode, Retryable: true,
 			},
 			want: AIReadinessSnapshot{State: AIReadinessReady},
 		},

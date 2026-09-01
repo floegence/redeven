@@ -17,8 +17,6 @@ function blockedSnapshot(): AIReadinessSnapshot {
     reason_code: 'store_integrity_error',
     retryable: false,
     safe_to_retry: false,
-    committed: false,
-    rolled_back: false,
   };
 }
 
@@ -29,8 +27,6 @@ function degradedSnapshot(): AIReadinessSnapshot {
     issue_count: 1,
     retryable: false,
     safe_to_retry: false,
-    committed: false,
-    rolled_back: false,
   };
 }
 
@@ -71,7 +67,9 @@ function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSna
     snapshot,
     loading,
     retryPending: () => false,
-    nextCheckAt: () => null,
+    busyStartedAt: () => null,
+    startupElapsedMs: () => null,
+    longStartupReadySequence: () => 0,
     refresh,
     retry: async () => snapshot(),
     pause: () => undefined,
@@ -121,7 +119,7 @@ describe('AIReadinessSettingsSection', () => {
       .mockResolvedValueOnce({ issue_count: 0, items: [] });
     const fixture = mountSettings(undefined, {
       state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 1,
-      retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+      retryable: false, safe_to_retry: false,
     });
     buttonWithText(fixture.host, 'Review').click();
     await flushMicrotasks();

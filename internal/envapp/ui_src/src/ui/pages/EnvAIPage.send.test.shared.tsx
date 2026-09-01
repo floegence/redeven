@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => {
     omitReadState: false,
     currentItems: null,
     currentInteractions: [],
-    readinessSnapshot: () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
+    readinessSnapshot: () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false }),
     setReadinessSnapshot: () => undefined,
     settingsGate: null,
   };
@@ -43,7 +43,7 @@ const mocks = vi.hoisted(() => {
   }]);
   const fetchLocalApiJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === '/_redeven_proxy/api/ai/readiness') {
-      return { state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false };
+      return { state: 'ready', reason_code: '', retryable: false, safe_to_retry: false };
     }
     if (url.includes('/file-action-open-target')) {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
@@ -334,7 +334,9 @@ vi.mock('./EnvContext', () => ({
       snapshot: () => mocks.state.readinessSnapshot(),
       loading: () => false,
       retryPending: () => false,
-      nextCheckAt: () => null,
+      busyStartedAt: () => null,
+      startupElapsedMs: () => null,
+      longStartupReadySequence: () => 0,
       refresh: async () => mocks.state.readinessSnapshot(),
       retry: async () => mocks.state.readinessSnapshot(),
       pause: () => undefined,
@@ -506,7 +508,7 @@ export function registerEnvAIPageSendTests() {
       mocks.state.omitReadState = false;
       mocks.state.settingsGate = null;
       const [readinessSnapshot, setReadinessSnapshot] = createSignal<Record<string, unknown>>({
-        state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+        state: 'ready', reason_code: '', retryable: false, safe_to_retry: false,
       });
       mocks.state.readinessSnapshot = readinessSnapshot;
       mocks.state.setReadinessSnapshot = setReadinessSnapshot;
@@ -533,7 +535,7 @@ export function registerEnvAIPageSendTests() {
 
     it('admits Flower requests only while AI readiness is operational and preserves the external draft', async () => {
       mocks.state.setReadinessSnapshot({
-        state: 'migrating', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+        state: 'migrating', reason_code: '', retryable: false, safe_to_retry: false,
       });
       const { host, dispose, draftCoordinator } = await renderPage(false);
       try {
@@ -543,7 +545,7 @@ export function registerEnvAIPageSendTests() {
         expect(mocks.subscribeThreadMock).not.toHaveBeenCalled();
 
         mocks.state.setReadinessSnapshot({
-          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false,
         });
         for (let attempt = 0; attempt < 20 && !host.querySelector('textarea'); attempt += 1) await flush();
         expect(host.querySelector('.flower-component-thread-rail')).not.toBeNull();
@@ -558,14 +560,14 @@ export function registerEnvAIPageSendTests() {
         const requestsAfterReady = mocks.fetchLocalApiJSONMock.mock.calls.length;
 
         mocks.state.setReadinessSnapshot({
-          state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+          state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false,
         });
         await flush();
         expect(host.querySelector('.flower-component-thread-rail')).toBeNull();
         expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledTimes(requestsAfterReady);
 
         mocks.state.setReadinessSnapshot({
-          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false,
         });
         for (let attempt = 0; attempt < 20 && !host.querySelector('textarea'); attempt += 1) await flush();
         await flush();
@@ -583,18 +585,18 @@ export function registerEnvAIPageSendTests() {
       const settingsGate = deferred<void>();
       mocks.state.settingsGate = settingsGate.promise;
       mocks.state.setReadinessSnapshot({
-        state: 'migrating', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+        state: 'migrating', reason_code: '', retryable: false, safe_to_retry: false,
       });
       const { host, dispose } = await renderPage(false);
       try {
         mocks.state.setReadinessSnapshot({
-          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+          state: 'ready', reason_code: '', retryable: false, safe_to_retry: false,
         });
         for (let attempt = 0; attempt < 20 && mocks.fetchLocalApiJSONMock.mock.calls.length === 0; attempt += 1) await flush();
         expect(mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url)).toEqual(['/_redeven_proxy/api/settings']);
 
         mocks.state.setReadinessSnapshot({
-          state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+          state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false,
         });
         await flush();
         expect(host.querySelector('.flower-component-thread-rail')).toBeNull();

@@ -17,8 +17,6 @@ function snapshot(
     reason_code: reasonCode,
     retryable: reasonCode === 'temporarily_blocked',
     safe_to_retry: reasonCode === 'temporarily_blocked',
-    committed: false,
-    rolled_back: false,
     ...overrides,
   };
 }
@@ -38,7 +36,8 @@ function mount(
     focusEnabled?: boolean;
     canRetryGeneration?: boolean;
     canReviewIssues?: boolean;
-    nextCheckAt?: number | null;
+    busyStartedAt?: number | null;
+    startupElapsedMs?: number | null;
     renderContent?: () => JSX.Element;
   }> = {},
 ) {
@@ -57,7 +56,9 @@ function mount(
     snapshot: current,
     loading: () => false,
     retryPending,
-    nextCheckAt: () => options.nextCheckAt ?? null,
+    busyStartedAt: () => options.busyStartedAt ?? null,
+    startupElapsedMs: () => options.startupElapsedMs ?? null,
+    longStartupReadySequence: () => 0,
     refresh: async () => current(),
     retry,
     pause: vi.fn(),
@@ -227,19 +228,46 @@ describe('AIReadinessBoundary', () => {
     fixture.dispose();
   });
 
-  it('shows the next-check countdown without making it a live region', () => {
+  it('shows real elapsed time after ten seconds without making it a live region', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-25T00:00:00.000Z'));
     try {
       const fixture = mount(
-        snapshot(),
+        snapshot('', { state: 'migrating', retryable: false, safe_to_retry: false }),
         undefined,
-        { nextCheckAt: Date.now() + 2_500 },
+        { busyStartedAt: Date.now() },
       );
-      const countdown = fixture.host.querySelector<HTMLElement>('[data-ai-readiness-next-check]');
-      expect(countdown?.textContent).toBe('Next check in 3s');
-      expect(countdown?.hasAttribute('aria-live')).toBe(false);
-      expect(countdown?.getAttribute('role')).toBeNull();
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(fixture.host.querySelector('[data-ai-readiness-elapsed]')).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      const elapsed = fixture.host.querySelector<HTMLElement>('[data-ai-readiness-elapsed]');
+      expect(elapsed?.textContent).toContain('Elapsed: 10s');
+      expect(elapsed?.hasAttribute('aria-live')).toBe(false);
+      expect(elapsed?.getAttribute('role')).toBeNull();
+      fixture.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a long startup neutral, reassuring, and free of retry or cancel actions', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-25T00:00:00.000Z'));
+    try {
+      const fixture = mount(
+        snapshot('', { state: 'verifying', retryable: false, safe_to_retry: false, startup_phase: 'verifying' }),
+        undefined,
+        { busyStartedAt: Date.now() },
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      const longTask = fixture.host.querySelector<HTMLElement>('[data-ai-readiness-long-task]');
+      expect(longTask?.textContent).toContain('The first update can take longer when there is more history.');
+      expect(fixture.host.textContent).toContain('Closing the app will not damage data');
+      expect(fixture.host.textContent).not.toContain('Check again');
+      expect(fixture.host.textContent).not.toContain('Cancel');
+      expect(fixture.host.querySelector('.ai-readiness-status-icon--danger')).toBeNull();
+      buttonWithText(fixture.host, 'View diagnostics').click();
+      expect(fixture.host.querySelectorAll('.ai-readiness-diagnostics__row')).toHaveLength(4);
       fixture.dispose();
     } finally {
       vi.useRealTimers();
@@ -297,7 +325,7 @@ describe('AIReadinessBoundary', () => {
         retry_reason: 'temporary_store_open',
       }));
       await vi.advanceTimersByTimeAsync(150);
-      expect(fixture.host.textContent).toContain('Agent data is temporarily in use');
+      expect(fixture.host.textContent).toContain('Preparing Agent data');
       expect(fixture.host.textContent).not.toContain('Agent data is unavailable');
       expect(fixture.host.textContent).not.toContain('Check again');
       fixture.dispose();

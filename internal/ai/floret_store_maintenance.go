@@ -22,6 +22,7 @@ type FloretStoreStartupPhase string
 const (
 	FloretStoreStartupInspecting FloretStoreStartupPhase = "inspecting"
 	FloretStoreStartupOptimizing FloretStoreStartupPhase = "optimizing"
+	FloretStoreStartupMigrating  FloretStoreStartupPhase = "migrating"
 	FloretStoreStartupVerifying  FloretStoreStartupPhase = "verifying"
 	FloretStoreStartupRecovering FloretStoreStartupPhase = "recovering"
 )
@@ -110,9 +111,18 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 	if err := ctx.Err(); err != nil {
 		return nil, floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
 	}
-	reportFloretStorePhase(progress, FloretStoreStartupVerifying)
 	source := flstorage.SQLite(path)
-	host, err := open(ctx, flruntime.Options{Storage: source})
+	host, err := open(ctx, flruntime.Options{
+		Storage: source,
+		StartupProgress: flruntime.StartupProgressFunc(func(phase flruntime.StartupPhase) {
+			switch phase {
+			case flruntime.StartupPhaseMigrating:
+				reportFloretStorePhase(progress, FloretStoreStartupMigrating)
+			case flruntime.StartupPhaseVerifying:
+				reportFloretStorePhase(progress, FloretStoreStartupVerifying)
+			}
+		}),
+	})
 	var classified error
 	if err != nil {
 		classified = classifyFloretStorageOpenError(err)

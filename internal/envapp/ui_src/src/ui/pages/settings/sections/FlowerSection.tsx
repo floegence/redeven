@@ -176,9 +176,7 @@ function validateAIValue(cfg: AIConfig, i18n: I18nHelpers) {
 
 export function FlowerSection() {
   const ctx = useEnvSettingsPage(); const i18n = useI18n();
-  const readinessController = ctx.env.aiReadinessController ?? createAIReadinessController({
-    canAutomaticallyRetry: ctx.canAdmin,
-  });
+  const readinessController = ctx.env.aiReadinessController ?? createAIReadinessController();
 
   const [permissionType, setPermissionType] = createSignal<AIPermissionType>('approval_required');
   const [confirmedPermissionType, setConfirmedPermissionType] = createSignal<AIPermissionType>('approval_required');

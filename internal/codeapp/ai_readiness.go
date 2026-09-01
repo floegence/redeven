@@ -334,6 +334,8 @@ func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreSta
 	switch phase {
 	case ai.FloretStoreStartupOptimizing:
 		state = appserver.AIReadinessOptimizing
+	case ai.FloretStoreStartupMigrating:
+		state = appserver.AIReadinessMigrating
 	case ai.FloretStoreStartupVerifying:
 		state = appserver.AIReadinessVerifying
 	case ai.FloretStoreStartupInspecting:

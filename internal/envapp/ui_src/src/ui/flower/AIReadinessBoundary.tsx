@@ -30,17 +30,31 @@ export type AIReadinessBoundaryProps = Readonly<{
 
 export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   const i18n = useI18n();
-  const projection = createMemo(() => createAIReadinessPresentation(
-    props.controller.snapshot(),
-    i18n,
-    { canRetryGeneration: props.canRetryGeneration },
-  ));
   const [busyVisible, setBusyVisible] = createSignal(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
   const [copyPending, setCopyPending] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
   const [copyFailed, setCopyFailed] = createSignal(false);
   const [clockMs, setClockMs] = createSignal(Date.now());
+  const elapsedMs = createMemo(() => {
+    const startedAt = props.controller.busyStartedAt();
+    return startedAt === null
+      ? (props.controller.startupElapsedMs() ?? -1)
+      : Math.max(0, clockMs() - startedAt);
+  });
+  const elapsedText = createMemo(() => {
+    const seconds = Math.max(0, Math.floor(elapsedMs() / 1_000));
+    return seconds < 60
+      ? i18n.t('aiReadiness.diagnostics.elapsedSeconds', { seconds })
+      : i18n.t('aiReadiness.diagnostics.elapsedMinutes', { minutes: Math.floor(seconds / 60) });
+  });
+  const slowBusy = createMemo(() => elapsedMs() >= 10_000 && elapsedMs() < 30_000);
+  const longBusy = createMemo(() => elapsedMs() >= 30_000);
+  const projection = createMemo(() => createAIReadinessPresentation(
+    props.controller.snapshot(),
+    i18n,
+    { canRetryGeneration: props.canRetryGeneration, elapsedMs: elapsedMs() },
+  ));
   const operational = createMemo(() => {
     const state = props.controller.snapshot().state;
     return state === 'ready' || state === 'degraded';
@@ -68,16 +82,11 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   });
 
   createEffect(() => {
-    const nextCheckAt = props.controller.nextCheckAt();
-    if (nextCheckAt === null) return;
+    const startedAt = props.controller.busyStartedAt();
+    if (startedAt === null || operational()) return;
     setClockMs(Date.now());
     const timer = window.setInterval(() => setClockMs(Date.now()), 1_000);
     onCleanup(() => window.clearInterval(timer));
-  });
-
-  const nextCheckSeconds = createMemo(() => {
-    const nextCheckAt = props.controller.nextCheckAt();
-    return nextCheckAt === null ? 0 : Math.max(0, Math.ceil((nextCheckAt - clockMs()) / 1_000));
   });
 
   createEffect(() => {
@@ -262,10 +271,27 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
               <ShieldCheck class="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{projection().dataStatement}</span>
             </div>
-            <Show when={nextCheckSeconds() > 0}>
-              <p class="ai-readiness-next-check" data-ai-readiness-next-check>
-                {i18n.t('aiReadiness.actions.nextCheck', { seconds: nextCheckSeconds() })}
+            <Show when={slowBusy() || longBusy()}>
+              <p class="ai-readiness-elapsed" data-ai-readiness-elapsed>
+                {i18n.t('aiReadiness.slow.elapsed', { duration: elapsedText() })}
               </p>
+            </Show>
+            <Show when={longBusy() && projection().mode === 'busy'}>
+              <div class="ai-readiness-long-task" data-ai-readiness-long-task>
+                <p>{i18n.t('aiReadiness.slow.longDescription')}</p>
+                <button
+                  ref={diagnosticsButton}
+                  type="button"
+                  class="ai-readiness-long-task__details"
+                  aria-expanded={diagnosticsOpen()}
+                  aria-controls={diagnosticContentID}
+                  onClick={toggleDiagnostics}
+                >
+                  {diagnosticsOpen()
+                    ? i18n.t('aiReadiness.actions.hideDiagnostics')
+                    : i18n.t('aiReadiness.actions.showDiagnostics')}
+                </button>
+              </div>
             </Show>
 
             <Show when={projection().primaryAction || projection().secondaryAction}>
