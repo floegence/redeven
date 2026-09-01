@@ -599,7 +599,7 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(p, "/_redeven_proxy/") {
 		// Hardening: keep UI surfaces separated by origin.
 		// - env-<env_id>.<region>.<base-sandbox-domain> serves Env App UI only
-		// - cs-<id>.<region>.<base-sandbox-domain> serves inject.js only (no Env App UI)
+		// - cs-<id> and pf-<id> origins serve inject.js only (no Env App UI)
 		switch {
 		case strings.HasPrefix(p, "/_redeven_proxy/env"):
 			if originRole != originRoleEnv {
@@ -607,9 +607,10 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case p == "/_redeven_proxy/inject.js":
-			// inject.js patches untrusted codespace pages only; plugin and Env origins
-			// must not receive code-server bridge helpers.
-			if originRole != originRoleCodeSpace {
+			// inject.js installs the current Flowersec app bridge in untrusted
+			// codespace and port-forward pages. Plugin and Env origins must not
+			// receive application bridge helpers.
+			if originRole != originRoleCodeSpace && originRole != originRolePortForward {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
