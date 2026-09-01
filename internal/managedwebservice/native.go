@@ -60,7 +60,7 @@ func (d *nativeDriver) Install(ctx context.Context, service *pfregistry.ManagedS
 	if err := validateNativeArtifact(artifact, d.client, packageOrigin); err != nil {
 		return "", "", err
 	}
-	installRoot := filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "native", DeepSeekHarnessVersion, currentPlatformKey())
+	installRoot := filepath.Join(d.stateDir, DeepSeekHarnessProductID, "native", DeepSeekHarnessVersion, currentPlatformKey())
 	executable, err := d.installRuntimeBundle(ctx, service, artifact, installRoot, progress)
 	return "", executable, err
 }
@@ -514,7 +514,7 @@ func (d *nativeDriver) Start(_ context.Context, service *pfregistry.ManagedServi
 		return "", serviceError("RUNTIME_IDENTITY_MISMATCH", "A process still uses the saved managed identity, but this Runtime did not create it.", 409, false, nil)
 	}
 	executable := filepath.Clean(strings.TrimSpace(service.ArtifactReference))
-	installRoot := filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "native")
+	installRoot := filepath.Join(d.stateDir, DeepSeekHarnessProductID, "native")
 	rel, err := filepath.Rel(installRoot, executable)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", serviceError("INSTALL_IDENTITY_MISMATCH", "The native launcher is outside the managed runtime directory.", 409, false, err)
@@ -522,8 +522,8 @@ func (d *nativeDriver) Start(_ context.Context, service *pfregistry.ManagedServi
 	if info, err := os.Stat(executable); err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
 		return "", serviceError("INSTALL_NOT_READY", "The native DeepSeek Harness launcher is not installed.", 409, true, err)
 	}
-	dataDir := filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "data")
-	logDir := filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "logs")
+	dataDir := filepath.Join(d.stateDir, DeepSeekHarnessProductID, "data")
+	logDir := filepath.Join(d.stateDir, DeepSeekHarnessProductID, "logs")
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return "", err
 	}
@@ -626,15 +626,15 @@ func (d *nativeDriver) Uninstall(ctx context.Context, service *pfregistry.Manage
 		return err
 	}
 	progress("uninstalling", 5)
-	if err := os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "native")); err != nil {
+	if err := os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessProductID, "native")); err != nil {
 		return err
 	}
 	if deleteData {
-		if err := os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "data")); err != nil {
+		if err := os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessProductID, "data")); err != nil {
 			return err
 		}
 	}
-	return os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "logs"))
+	return os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessProductID, "logs"))
 }
 func (d *nativeDriver) CleanupPartial(ctx context.Context, service *pfregistry.ManagedService) error {
 	if err := d.Stop(ctx, service); err != nil {
@@ -644,7 +644,7 @@ func (d *nativeDriver) CleanupPartial(ctx context.Context, service *pfregistry.M
 }
 
 func (d *nativeDriver) Logs(_ context.Context, _ *pfregistry.ManagedService, tail int) (*LogResult, error) {
-	return tailRedactedFile(filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "logs", "harness.log"), tail)
+	return tailRedactedFile(filepath.Join(d.stateDir, DeepSeekHarnessProductID, "logs", "harness.log"), tail)
 }
 
 func nativePIDFromIdentity(identity string) int {

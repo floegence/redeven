@@ -83,7 +83,10 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     await page.viewport(1280, 720);
   });
 
-  function mount(templates: readonly ServiceTemplatePresentation[] = [template]): void {
+  function mount(
+    templates: readonly ServiceTemplatePresentation[] = [template],
+    onOpen: (templateID: string) => void = () => undefined,
+  ): void {
     const host = document.createElement('div');
     host.className = 'mx-auto w-[900px] max-w-full bg-card p-4';
     document.body.appendChild(host);
@@ -100,6 +103,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
         onQueryChange={() => undefined}
         onCreate={() => undefined}
         onDeploy={() => undefined}
+        onOpen={onOpen}
         onDuplicate={() => undefined}
         onEdit={() => undefined}
         onDelete={() => undefined}
@@ -132,6 +136,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
             onQueryChange={() => undefined}
             onCreate={() => undefined}
             onDeploy={() => undefined}
+            onOpen={() => undefined}
             onDuplicate={() => undefined}
             onEdit={() => undefined}
             onDelete={() => undefined}
@@ -324,6 +329,24 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(getComputedStyle(search).cursor).toBe('text');
   });
 
+  it('opens an installed service from the template menu with the keyboard', async () => {
+    let openedTemplateID = '';
+    mount([{ ...template, installed: true, openable: true }], (templateID) => { openedTemplateID = templateID; });
+
+    const more = document.querySelector<HTMLElement>('[data-testid="service-template-more"]')!;
+    const trigger = more.closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    await settle();
+    const open = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.trim() === 'Open')!;
+    expect(document.activeElement).toBe(open);
+
+    await userEvent.keyboard('{Enter}');
+    await settle();
+    expect(openedTemplateID).toBe('deepseek-harness-host');
+  });
+
   it('presents the selected category without moving its layout and honors reduced motion', async () => {
     const host = document.createElement('div');
     host.className = 'mx-auto w-[900px] max-w-full bg-card p-4';
@@ -348,6 +371,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
         onQueryChange={() => undefined}
         onCreate={() => undefined}
         onDeploy={() => undefined}
+        onOpen={() => undefined}
         onDuplicate={() => undefined}
         onEdit={() => undefined}
         onDelete={() => undefined}
@@ -416,6 +440,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
             onQueryChange={() => undefined}
             onCreate={(kind) => setAction(`create:${kind}`)}
             onDeploy={() => undefined}
+            onOpen={() => undefined}
             onDuplicate={() => setAction('duplicate')}
             onEdit={() => undefined}
             onDelete={() => undefined}

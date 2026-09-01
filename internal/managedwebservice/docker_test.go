@@ -16,7 +16,7 @@ func TestAuditedDockerCatalogPinsReviewedPlatformDigests(t *testing.T) {
 	if auditedDockerImage != "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2" {
 		t.Fatalf("audited Docker image = %q", auditedDockerImage)
 	}
-	if catalog.TemplateID != DeepSeekHarnessTemplateID || catalog.Version != DeepSeekHarnessVersion {
+	if catalog.TemplateID != DeepSeekHarnessProductID || catalog.Version != DeepSeekHarnessVersion {
 		t.Fatalf("audited Docker catalog identity = %+v", catalog)
 	}
 	if len(catalog.Docker) != 2 {

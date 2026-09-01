@@ -126,7 +126,7 @@ func auditedNativeCatalog() catalogPayload {
 		artifact, _ := auditedNativeArtifact(platform)
 		platforms[platform] = artifact
 	}
-	return catalogPayload{TemplateID: DeepSeekHarnessTemplateID, Version: DeepSeekHarnessVersion, Platforms: platforms}
+	return catalogPayload{TemplateID: DeepSeekHarnessProductID, Version: DeepSeekHarnessVersion, Platforms: platforms}
 }
 
 func validatePackageURL(raw, origin string) error {

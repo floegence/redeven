@@ -1779,7 +1779,7 @@ export function EnvPortForwardsPage() {
 
   const installManaged = async () => {
     const template = selectedTemplate();
-    if (!template || managedInstallSubmitting() || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.service_family_id === template.service_family_id) || !canManageManagedService()) return;
+    if (!template || managedInstallSubmitting() || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.template_id === template.template_id) || !canManageManagedService()) return;
     setManagedInstallSubmitting(true);
     try {
       const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()) }) });
@@ -1925,9 +1925,26 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  const templateInstalled = (template: ManagedCatalogTemplate) => managedState().some((service) => service.service_family_id === template.service_family_id);
+  const installedServiceForTemplate = (template: ManagedCatalogTemplate) => managedState().find((service) => service.template_id === template.template_id);
+  const templateOpenUnavailableReason = (service: ManagedService | undefined) => {
+    if (!service) return '';
+    if (managedOperationActive(managedRowOperation(service.service_id))) return i18n.t('webServices.managed.openUnavailableOperation');
+    if (service.observed_state !== 'running') return i18n.t('webServices.managed.openUnavailableNotRunning');
+    if (!canExecute()) return i18n.t('webServices.permission.executeRequired');
+    if (busyID() === `managed:${service.service_id}`) return i18n.t('webServices.status.opening');
+    if (service.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()) return i18n.t('webServices.errors.desktopLoopbackRequiresDesktop');
+    return '';
+  };
+  const openInstalledTemplate = (templateID: string) => {
+    const template = templateByID(templateID);
+    const service = template ? installedServiceForTemplate(template) : undefined;
+    if (!service || templateOpenUnavailableReason(service)) return;
+    void openManaged(service);
+  };
   const templatePresentation = (template: ManagedCatalogTemplate): ServiceTemplatePresentation => {
     const identity = managedTemplateLocalizedIdentity(template, i18n);
+    const installedService = installedServiceForTemplate(template);
+    const openUnavailableReason = templateOpenUnavailableReason(installedService);
     return {
       id: template.template_id,
       name: identity.name,
@@ -1948,7 +1965,9 @@ export function EnvPortForwardsPage() {
       developerPreview: template.developer_preview,
       available: template.available,
       availabilityReason: templateUnavailableReason(template),
-      installed: templateInstalled(template),
+      installed: Boolean(installedService),
+      openable: Boolean(installedService) && !openUnavailableReason,
+      openUnavailableReason,
       duplicateable: template.duplicateable,
       editable: template.editable,
     };
@@ -1990,7 +2009,7 @@ export function EnvPortForwardsPage() {
   };
 
   const beginTemplateInstall = (template: ManagedCatalogTemplate) => {
-    if (!template.available || templateInstalled(template)) return;
+    if (!template.available || installedServiceForTemplate(template)) return;
     setSelectedTemplateID(template.template_id);
     setWorkspacePath(template.default_workspace_path);
     setManagedAccessMode(template.default_access_mode || 'unified_proxy');
@@ -2732,6 +2751,7 @@ export function EnvPortForwardsPage() {
               onQueryChange={setTemplateSearch}
               onCreate={beginTemplateCreate}
               onDeploy={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }}
+              onOpen={openInstalledTemplate}
               onDuplicate={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateDuplicate(template); }}
               onEdit={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateEdit(template); }}
               onDelete={(templateID) => { const template = templateByID(templateID); if (template) setTemplateDelete(template); }}

@@ -82,9 +82,6 @@ func New(opts ManagerOptions) (*Manager, error) {
 	m.host = &hostScriptDriver{manager: m, processes: map[string]nativeProcess{}}
 	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
 	m.compose = &composeTemplateDriver{manager: m, adapter: opts.Containers}
-	if _, err := m.prepareDefaultWorkspace(DeepSeekHarnessTemplateID); err != nil {
-		return nil, err
-	}
 	if err := m.registry.MarkManagedOperationsInterrupted(context.Background()); err != nil {
 		return nil, err
 	}
@@ -181,10 +178,10 @@ func (m *Manager) workspaceRoots() []WorkspaceRoot {
 	return workspaceRoots
 }
 
-func (m *Manager) defaultWorkspacePath(serviceFamilyID string) (string, error) {
-	serviceFamilyID = strings.TrimSpace(serviceFamilyID)
-	if !managedWorkspaceFamilyPattern.MatchString(serviceFamilyID) {
-		return "", serviceError("TEMPLATE_IDENTITY_INVALID", "The service template family identity is invalid.", 409, false, nil)
+func (m *Manager) defaultWorkspacePath(templateID string) (string, error) {
+	templateID = strings.TrimSpace(templateID)
+	if !managedWorkspaceIdentityPattern.MatchString(templateID) {
+		return "", serviceError("TEMPLATE_IDENTITY_INVALID", "The service template identity is invalid.", 409, false, nil)
 	}
 	pathContext := m.scope.PathContext()
 	var selectedRoot string
@@ -213,11 +210,11 @@ func (m *Manager) defaultWorkspacePath(serviceFamilyID string) (string, error) {
 	if selectedRoot == "" {
 		return "", serviceError("WORKSPACE_UNAVAILABLE", "The Environment does not expose a writable root for managed-service workspaces.", 409, false, nil)
 	}
-	return filepath.Join(selectedRoot, "Redeven", "workspaces", "managed-services", serviceFamilyID), nil
+	return filepath.Join(selectedRoot, "Redeven", "workspaces", "managed-services", templateID), nil
 }
 
-func (m *Manager) prepareDefaultWorkspace(serviceFamilyID string) (string, error) {
-	path, err := m.defaultWorkspacePath(serviceFamilyID)
+func (m *Manager) prepareDefaultWorkspace(templateID string) (string, error) {
+	path, err := m.defaultWorkspacePath(templateID)
 	if err != nil || path == "" {
 		return path, err
 	}
@@ -347,15 +344,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		}
 		return &CreateResult{Service: *service, Operation: *existing}, nil
 	}
-	templateID := strings.TrimSpace(req.TemplateID)
-	if templateID == DeepSeekHarnessTemplateID {
-		if req.Deployment == DeploymentDocker {
-			templateID = DeepSeekHarnessContainerTemplateID
-		} else {
-			templateID = DeepSeekHarnessHostTemplateID
-		}
-	}
-	template, err := m.Template(ctx, templateID)
+	template, err := m.Template(ctx, strings.TrimSpace(req.TemplateID))
 	if err != nil {
 		return nil, err
 	}
@@ -369,10 +358,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	for _, existing := range existingServices {
-		if existing.ServiceFamilyID == template.ServiceFamilyID {
-			return nil, serviceError("INSTANCE_ALREADY_EXISTS", "This service template family already has an instance in the Environment.", 409, false, nil)
-		}
+	if err := validateServiceFamilyAvailability(existingServices, *template); err != nil {
+		return nil, err
 	}
 	if template.Spec == nil {
 		return nil, serviceError("TEMPLATE_UNAVAILABLE", "The template deployment definition is unavailable.", 409, true, nil)
@@ -387,7 +374,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if accessMode == pfregistry.AccessModeDesktopLoopback && template.Spec.Endpoint.Scheme != "http" {
 		return nil, serviceError("ACCESS_MODE_UNAVAILABLE", "Desktop local compatibility requires an HTTP service.", 409, false, nil)
 	}
-	if req.Deployment != "" && req.TemplateID != DeepSeekHarnessTemplateID && req.Deployment != template.Deployment {
+	if req.Deployment != "" && req.Deployment != template.Deployment {
 		return nil, serviceError("DEPLOYMENT_INVALID", "The requested deployment type does not match the selected template.", 400, false, nil)
 	}
 	resolved, err := m.scope.Resolve(strings.TrimSpace(req.WorkspacePath), filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true, ForWrite: true})
@@ -443,6 +430,15 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	m.launch(service, op, operationInputs{})
 	return &CreateResult{Service: service, Operation: op}, nil
+}
+
+func validateServiceFamilyAvailability(existingServices []pfregistry.ManagedService, template Template) error {
+	for _, existing := range existingServices {
+		if existing.ServiceFamilyID == template.ServiceFamilyID {
+			return serviceError("INSTANCE_ALREADY_EXISTS", "This service template family already has an instance in the Environment.", 409, false, nil)
+		}
+	}
+	return nil
 }
 
 func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRequest) (*pfregistry.ManagedOperation, error) {

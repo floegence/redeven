@@ -90,6 +90,8 @@ export type ServiceTemplatePresentation = Readonly<{
   available: boolean;
   availabilityReason?: string;
   installed: boolean;
+  openable?: boolean;
+  openUnavailableReason?: string;
   duplicateable: boolean;
   editable: boolean;
 }>;
@@ -289,6 +291,7 @@ export type ServiceTemplateCatalogProps = Readonly<{
   onQueryChange: (query: string) => void;
   onCreate: (kind: ServiceTemplateKind) => void;
   onDeploy: (templateID: string) => void;
+  onOpen: (templateID: string) => void;
   onDuplicate: (templateID: string) => void;
   onEdit: (templateID: string) => void;
   onDelete: (templateID: string) => void;
@@ -456,12 +459,20 @@ export function ServiceTemplateDetailsPane(props: {
   template: ServiceTemplatePresentation;
   canManage: boolean;
   onDeploy: () => void;
+  onOpen: () => void;
   onDuplicate: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }): JSX.Element {
   const i18n = useI18n();
   const menuItems = (): DropdownItem[] => [
+    ...(props.template.installed ? [{
+      id: 'open',
+      label: props.template.openUnavailableReason
+        ? `${i18n.t('webServices.actions.open')} · ${props.template.openUnavailableReason}`
+        : i18n.t('webServices.actions.open'),
+      disabled: !props.template.openable,
+    }] : []),
     {
       id: 'duplicate',
       label: i18n.t('webServices.managed.duplicate'),
@@ -481,7 +492,8 @@ export function ServiceTemplateDetailsPane(props: {
     ] : []),
   ];
   const selectMenuItem = (id: string) => {
-    if (id === 'duplicate') props.onDuplicate();
+    if (id === 'open') props.onOpen();
+    else if (id === 'duplicate') props.onDuplicate();
     else if (id === 'edit') props.onEdit();
     else if (id === 'delete') props.onDelete();
   };
@@ -527,7 +539,7 @@ export function ServiceTemplateDetailsPane(props: {
             <DetailField label={i18n.t('webServices.managed.disk')} value={formatTemplateBytes(props.template.diskBytes, i18n.locale())} />
           </Show>
           <Show when={props.template.defaultWorkspacePath}>
-            <DetailField label={i18n.t('webServices.managed.workspace')} value={props.template.defaultWorkspacePath} mono wide />
+            <DetailField label={i18n.t('webServices.managed.defaultWorkspace')} value={props.template.defaultWorkspacePath} mono wide />
           </Show>
           <Show when={props.template.dataLocation}>
             <DetailField label={i18n.t('webServices.managed.dataLocation')} value={props.template.dataLocation} mono wide />
@@ -582,7 +594,7 @@ export function ServiceTemplateDetailsPane(props: {
               type="button"
               class="service-template-more inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
               data-testid="service-template-more"
-              disabled={menuItems().every((item) => item.disabled)}
+              disabled={!props.template.installed && menuItems().every((item) => item.disabled)}
               title={i18n.t('webServices.managed.moreTemplateActions')}
             >
               <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
@@ -741,6 +753,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                       template={template}
                       canManage={props.canManage}
                       onDeploy={() => props.onDeploy(template.id)}
+                      onOpen={() => props.onOpen(template.id)}
                       onDuplicate={() => props.onDuplicate(template.id)}
                       onEdit={() => props.onEdit(template.id)}
                       onDelete={() => props.onDelete(template.id)}

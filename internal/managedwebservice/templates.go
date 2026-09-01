@@ -21,11 +21,11 @@ import (
 const templateSpecSchemaVersion = 1
 
 var (
-	templateNamePattern           = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
-	templateParameterPattern      = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
-	managedWorkspaceFamilyPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
-	composeServicePattern         = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
-	composeVolumePattern          = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+	templateNamePattern             = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
+	templateParameterPattern        = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+	managedWorkspaceIdentityPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+	composeServicePattern           = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
+	composeVolumePattern            = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 )
 
 func (m *Manager) Template(ctx context.Context, templateID string) (*Template, error) {
@@ -89,7 +89,7 @@ func (m *Manager) CreateTemplate(ctx context.Context, req TemplateWriteRequest) 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := m.prepareDefaultWorkspace(familyID); err != nil {
+	if _, err := m.prepareDefaultWorkspace(templateID); err != nil {
 		return nil, err
 	}
 	record := pfregistry.ManagedTemplate{
@@ -191,7 +191,7 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := m.prepareDefaultWorkspace(familyID); err != nil {
+	if _, err := m.prepareDefaultWorkspace(templateID); err != nil {
 		return nil, err
 	}
 	record := pfregistry.ManagedTemplate{
@@ -236,7 +236,7 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 		return nil, serviceError("TEMPLATE_SPEC_INVALID", "The saved template definition is invalid or no longer satisfies the template policy.", 409, false, err)
 	}
 	available, code, reason := m.customTemplateAvailability(ctx, spec.Kind)
-	defaultWorkspacePath, err := m.prepareDefaultWorkspace(record.ServiceFamilyID)
+	defaultWorkspacePath, err := m.prepareDefaultWorkspace(record.TemplateID)
 	if err != nil {
 		return nil, err
 	}

@@ -44,7 +44,7 @@ func auditedDockerCatalog() catalogPayload {
 		docker[platform] = artifact
 	}
 	return catalogPayload{
-		TemplateID: DeepSeekHarnessTemplateID,
+		TemplateID: DeepSeekHarnessProductID,
 		Version:    DeepSeekHarnessVersion,
 		Docker:     docker,
 	}
@@ -127,7 +127,7 @@ func dockerContainerName(serviceID string) string {
 	return "redeven-dsh-" + strings.TrimPrefix(strings.TrimSpace(serviceID), "mws_")
 }
 func (d *dockerDriver) markerPath() string {
-	return filepath.Join(d.stateDir, DeepSeekHarnessTemplateID, "docker-volume.json")
+	return filepath.Join(d.stateDir, DeepSeekHarnessProductID, "docker-volume.json")
 }
 
 func (d *dockerDriver) ensureDataVolume(ctx context.Context, service *pfregistry.ManagedService) (string, error) {

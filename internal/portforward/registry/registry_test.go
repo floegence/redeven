@@ -17,7 +17,7 @@ import (
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestOpen_CreatesV6SchemaForFreshDB(t *testing.T) {
+func TestOpen_CreatesV7SchemaForFreshDB(t *testing.T) {
 	t.Parallel()
 
 	p := filepath.Join(t.TempDir(), "registry.sqlite")
@@ -31,8 +31,8 @@ func TestOpen_CreatesV6SchemaForFreshDB(t *testing.T) {
 	if err := r.db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	if v != 6 {
-		t.Fatalf("user_version = %d, want 6", v)
+	if v != 7 {
+		t.Fatalf("user_version = %d, want 7", v)
 	}
 
 	cols, err := tableColumns(r.db, "port_forwards")
@@ -99,7 +99,7 @@ func TestOpen_MigratesV1AndPreservesForwards(t *testing.T) {
 		t.Fatalf("preserved forward = %+v, err=%v", forward, err)
 	}
 	var version int
-	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 6 {
+	if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 7 {
 		t.Fatalf("migrated version=%d, err=%v", version, err)
 	}
 }
@@ -417,6 +417,176 @@ func TestOpen_MigratesV5OperationDetailsWithoutRewritingManagedData(t *testing.T
 	}
 }
 
+func TestOpen_MigratesV6DeepSeekFamiliesWithoutRewritingManagedData(t *testing.T) {
+	tests := []struct {
+		name       string
+		templateID string
+		deployment string
+		snapshot   string
+	}{
+		{
+			name:       "host",
+			templateID: "deepseek-harness-host",
+			deployment: "native",
+			snapshot:   `{"schema_version":1,"kind":"host","endpoint":{"scheme":"http"},"host":{"start_script":"exec service"}}`,
+		},
+		{
+			name:       "container",
+			templateID: "deepseek-harness-container",
+			deployment: "docker",
+			snapshot:   `{"schema_version":1,"kind":"container","endpoint":{"scheme":"http","container_port":3080},"container":{"image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","read_only_root":true}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "registry.sqlite")
+			db, err := sqliteutil.Open(p, registryV6TestSpec())
+			if err != nil {
+				t.Fatal(err)
+			}
+			configuration := `{"schema_version":2,"parameters":{"TOKEN":"kept"}}`
+			configurationDigest := sha256.Sum256([]byte(configuration))
+			snapshotDigest := sha256.Sum256([]byte(tt.snapshot))
+			if _, err := db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES('pf_keep','http://127.0.0.1:3080','Keep','Description','/health',0,1,2,3,'desktop_loopback')`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256) VALUES('mws_keep',?,'builtin',1,?,?,'deepseek-harness',?,'/preserved/workspace',?,'0.1.1-rc.2','stopped','error','pf_keep','runtime-identity','{"kind":"managed_service_reconfigure_v1"}',3080,'artifact-reference','START_FAILED','Preserved failure.',4,5,7,?)`, tt.templateID, tt.snapshot, hex.EncodeToString(snapshotDigest[:]), tt.deployment, configuration, hex.EncodeToString(configurationDigest[:])); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`INSERT INTO managed_web_service_resources(service_id,resource_id,kind,engine_identity,created_at_unix_ms) VALUES('mws_keep','resource-keep','volume','engine-resource',8)`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES('mop_keep','mws_keep','request-keep','fingerprint','start',0,'failed','starting',4,7,0,'START_FAILED','Preserved failure.',10,11,12,'{"schema_version":1}')`); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			r, err := Open(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			service, err := r.GetManagedService(context.Background(), "mws_keep")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if service == nil || service.ServiceFamilyID != tt.templateID || service.TemplateID != tt.templateID || service.WorkspacePath != "/preserved/workspace" || service.ConfigurationJSON != configuration || service.ConfigurationSHA256 != hex.EncodeToString(configurationDigest[:]) || service.TemplateSnapshotJSON != tt.snapshot || service.TemplateSnapshotSHA256 != hex.EncodeToString(snapshotDigest[:]) || service.RuntimeManifestJSON != `{"kind":"managed_service_reconfigure_v1"}` || service.UpdatedAtUnixMs != 5 {
+				t.Fatalf("migrated service changed: %+v", service)
+			}
+			forward, err := r.GetForward(context.Background(), "pf_keep")
+			if err != nil || forward == nil || forward.Description != "Description" || forward.LastOpenedAtUnixMs != 3 {
+				t.Fatalf("migrated forward=%+v err=%v", forward, err)
+			}
+			operation, err := r.GetManagedOperation(context.Background(), "mop_keep")
+			if err != nil || operation == nil || operation.ErrorCode != "START_FAILED" || operation.FinishedAtUnixMs != 12 || operation.ProgressDetail == nil || operation.ProgressDetail.SchemaVersion != 1 {
+				t.Fatalf("migrated operation=%+v err=%v", operation, err)
+			}
+			resources, err := r.ListManagedServiceResources(context.Background(), "mws_keep")
+			if err != nil || len(resources) != 1 || resources[0].EngineIdentity != "engine-resource" {
+				t.Fatalf("migrated resources=%+v err=%v", resources, err)
+			}
+			var version int
+			if err := r.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 7 {
+				t.Fatalf("migrated version=%d err=%v", version, err)
+			}
+		})
+	}
+}
+
+func TestOpen_RollsBackFailedV6ToV7Migration(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	db, err := sqliteutil.Open(p, registryV6TestSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES('pf_keep','http://127.0.0.1:3080','Keep','','',0,1,2,3,'desktop_loopback')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256) VALUES('mws_keep','deepseek-harness-host','builtin',1,'{}','','deepseek-harness','native','/workspace','{}','0.1.1-rc.2','stopped','stopped','pf_keep','','{}',3080,'','','',4,5,1,'')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := registrySchemaSpec()
+	original := spec.Migrations[6].Apply
+	spec.Migrations[6].Apply = func(tx *sql.Tx) error {
+		if err := original(tx); err != nil {
+			return err
+		}
+		return errors.New("injected migration failure")
+	}
+	if _, err := sqliteutil.Open(p, spec); err == nil {
+		t.Fatal("migration unexpectedly succeeded")
+	}
+	after, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(after, before) {
+		t.Fatal("failed migration changed the registry database bytes")
+	}
+	raw, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var version int
+	var family string
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`SELECT service_family_id FROM managed_web_services WHERE service_id='mws_keep'`).Scan(&family); err != nil {
+		t.Fatal(err)
+	}
+	if version != 6 || family != "deepseek-harness" {
+		t.Fatalf("failed migration changed registry state: version=%d family=%q", version, family)
+	}
+}
+
+func TestOpen_RejectsV7DeepSeekFamilyDriftWithoutModification(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "registry.sqlite")
+	r, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES('pf_drift','http://127.0.0.1:3080','Drift','','',0,1,2,3,'desktop_loopback')`); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := `{}`
+	snapshotDigest := sha256.Sum256([]byte(snapshot))
+	configuration := `{"schema_version":2}`
+	configurationDigest := sha256.Sum256([]byte(configuration))
+	if _, err := r.db.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256) VALUES('mws_drift','deepseek-harness-host','builtin',1,?,?,'deepseek-harness','native','/workspace',?,'0.1.1-rc.2','stopped','stopped','pf_drift','','{}',3080,'','','',4,5,1,?)`, snapshot, hex.EncodeToString(snapshotDigest[:]), configuration, hex.EncodeToString(configurationDigest[:])); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(p); err == nil {
+		t.Fatal("Open accepted mismatched DeepSeek Harness family identity")
+	}
+	after, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(before, after) {
+		t.Fatal("failed v7 verification changed the database file")
+	}
+}
+
 func TestOpen_RollsBackFailedV5ToV6Migration(t *testing.T) {
 	t.Parallel()
 	p := filepath.Join(t.TempDir(), "registry.sqlite")
@@ -570,7 +740,7 @@ func TestOpen_MigratesV2AndPreservesManagedService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if service == nil || service.TemplateID != "deepseek-harness-container" || service.TemplateSource != "builtin" || service.TemplateRevision != 1 || service.ServiceFamilyID != "deepseek-harness" || service.ForwardID != "pf_keep" {
+	if service == nil || service.TemplateID != "deepseek-harness-container" || service.TemplateSource != "builtin" || service.TemplateRevision != 1 || service.ServiceFamilyID != "deepseek-harness-container" || service.ForwardID != "pf_keep" {
 		t.Fatalf("migrated service = %+v", service)
 	}
 	forward, err := r.GetForward(context.Background(), "pf_keep")
@@ -722,7 +892,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 		_ = r.Close()
 		t.Fatal(err)
 	}
-	if _, err := r.db.Exec(`PRAGMA user_version=7`); err != nil {
+	if _, err := r.db.Exec(`PRAGMA user_version=8`); err != nil {
 		_ = r.Close()
 		t.Fatal(err)
 	}
@@ -744,7 +914,7 @@ func TestOpen_RejectsFutureVersionWithoutChangingIt(t *testing.T) {
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE forward_id='keep'`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if version != 7 || count != 1 {
+	if version != 8 || count != 1 {
 		t.Fatalf("future database changed: version=%d forward_count=%d", version, count)
 	}
 }
@@ -791,7 +961,7 @@ func TestOpenRejectsWrongRegistryKindWithoutChangingIt(t *testing.T) {
 	}
 }
 
-func TestOpenV6IsIdempotent(t *testing.T) {
+func TestOpenV7IsIdempotent(t *testing.T) {
 	t.Parallel()
 	p := filepath.Join(t.TempDir(), "registry.sqlite")
 	r, err := Open(p)
@@ -1253,6 +1423,24 @@ func registryV5TestSpec() sqliteutil.Spec {
 		},
 		Verify: func(tx *sql.Tx) error {
 			return verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v5")
+		},
+	}
+}
+
+func registryV6TestSpec() sqliteutil.Spec {
+	return sqliteutil.Spec{
+		Kind: registrySchemaKind, CurrentVersion: 6,
+		Pragmas: []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 0, ToVersion: 1, Apply: migrateRegistryToV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryToV5},
+			{FromVersion: 5, ToVersion: 6, Apply: migrateRegistryToV6},
+		},
+		Verify: func(tx *sql.Tx) error {
+			return verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v6")
 		},
 	}
 }
