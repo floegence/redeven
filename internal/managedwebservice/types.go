@@ -173,6 +173,7 @@ type HostTemplateSpec struct {
 	StartScript     string              `json:"start_script"`
 	StopScript      string              `json:"stop_script,omitempty"`
 	UninstallScript string              `json:"uninstall_script,omitempty"`
+	Environment     map[string]string   `json:"environment,omitempty"`
 	Artifact        *HostArtifactSpec   `json:"artifact,omitempty"`
 	NPM             *NPMHostPackageSpec `json:"npm,omitempty"`
 	// RuntimeBundle is decoded only so v7 data can be migrated to the v2 npm

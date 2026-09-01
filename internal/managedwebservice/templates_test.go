@@ -294,6 +294,28 @@ func TestTemplateSpecFromServiceRejectsSnapshotIdentityDrift(t *testing.T) {
 	}
 }
 
+func TestVerifiedTemplateSpecKeepsHistoricalV2DocumentReadable(t *testing.T) {
+	t.Parallel()
+	raw := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http","health_path":"/health"},"host":{"start_script":"exec preview --port $REDEVEN_SERVICE_PORT","npm":{"package_name":"example-package","version":"1.0.0","registry_url":"https://registry.npmjs.org/","executable":"preview"}}}`
+	digest := sha256.Sum256([]byte(raw))
+	spec, err := verifiedTemplateSpec(raw, hex.EncodeToString(digest[:]))
+	if err != nil {
+		t.Fatalf("historical TemplateSpec v2 error = %v", err)
+	}
+	if spec.SchemaVersion != 2 || spec.Host == nil || spec.Host.StartScript != "exec preview --port $REDEVEN_SERVICE_PORT" {
+		t.Fatalf("historical TemplateSpec v2 = %+v", spec)
+	}
+}
+
+func TestVerifiedTemplateSpecRejectsHostEnvironmentInV2(t *testing.T) {
+	t.Parallel()
+	raw := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http"},"host":{"start_script":"exec preview","environment":{"HOME":"/unsafe"}}}`
+	digest := sha256.Sum256([]byte(raw))
+	if _, err := verifiedTemplateSpec(raw, hex.EncodeToString(digest[:])); err == nil {
+		t.Fatal("TemplateSpec v2 unexpectedly accepted a Host environment")
+	}
+}
+
 func TestTemplateSpecFromServiceAcceptsPersistedDocumentIdentity(t *testing.T) {
 	t.Parallel()
 	spec := TemplateSpec{

@@ -46,7 +46,7 @@ func builtInTemplateDefinitions() []builtInTemplateDefinition {
 			TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID,
 			Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessHost", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
-			Deployment: DeploymentHost, Revision: 3, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
+			Deployment: DeploymentHost, Revision: 4, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
 			Notices:           deepSeekHarnessNotices(false),
 			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
 			DataDirectory:     DeepSeekHarnessProductID,
@@ -150,7 +150,7 @@ func webtopTemplateSpec(templateID string, artifact dockerArtifact) TemplateSpec
 }
 
 func deepSeekHostTemplateSpec() TemplateSpec {
-	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: deepSeekHostStartScript(), NPM: &NPMHostPackageSpec{PackageName: "@deepseek-ai/dsh", Version: DeepSeekHarnessVersion, RegistryURL: "https://registry.npmjs.org/", Executable: "dsh"}}}
+	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: deepSeekHostStartScript(), Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "${REDEVEN_SERVICE_DATA_DIR}", "HOME": "${REDEVEN_WORKSPACE}"}, NPM: &NPMHostPackageSpec{PackageName: "@deepseek-ai/dsh", Version: DeepSeekHarnessVersion, RegistryURL: "https://registry.npmjs.org/", Executable: "dsh"}}}
 }
 
 func deepSeekContainerTemplateSpec(artifact dockerArtifact, available bool) TemplateSpec {

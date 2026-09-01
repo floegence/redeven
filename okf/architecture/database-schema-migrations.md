@@ -50,7 +50,15 @@ converts retired DeepSeek deployment names, and adds an exact, hashed release
 identity. It reconstructs only reviewed unambiguous historical npm integrity and
 exact OCI digests; ambiguity rejects the migration. Existing workspaces, data,
 volumes, secrets, forwards, configuration, operations, timestamps, Hooks, and
-journals remain unchanged. The v4 edge defaults ordinary forwards to the unified
+journals remain unchanged. V8-to-v9 introduces TemplateSpec v3 and adds managed
+environment only to exact built-in DeepSeek Host definitions. Other built-in
+and custom v2 documents remain byte-for-byte valid until an explicit edit. The
+edge restores the original desired-running intent only for the latest failed
+Runtime-generated recovery Start. A later user operation always wins. The edge
+recomputes affected document digests without moving historical Host directories
+or container volumes and preserves release identity, secrets, forwards,
+configuration, operation history, failure facts, timestamps, Hooks, and
+journals. The v4 edge defaults ordinary forwards to the unified
 proxy and selects Desktop loopback only for an existing managed DeepSeek forward.
 Drifted historical inputs, future versions, and failed migrations remain unchanged;
 managed service, protected forward, and first operation creation is separately atomic at runtime. The
@@ -103,8 +111,8 @@ opens an upstream database directly to manufacture a cross-store transaction.
 - `redeven:internal/persistence/sqliteutil/engine_test.go:13` - Covers fresh initialization, atomic rollback, unsupported versions, kind checks, malformed metadata, and concurrent opens.
 - `redeven:internal/persistence/sqliteutil/repository_contract_test.go:14` - Locks the reviewed Redeven, direct, and Floret SQLite opening inventories.
 - `redeven:internal/codeapp/codeapp.go:156` - Opens product stores during service composition before returning the Code App service.
-- `redeven:internal/portforward/registry/schema.go` - Owns the exact contiguous port-forward Registry v1-to-v8 migration chain and final verifier.
-- `redeven:internal/portforward/registry/registry_test.go` - Covers managed-service v7-to-v8 preservation, rollback, drift, future versions, and idempotent open.
+- `redeven:internal/portforward/registry/schema.go` - Owns the exact contiguous port-forward Registry v1-to-v9 migration chain and final verifier.
+- `redeven:internal/portforward/registry/registry_test.go` - Covers managed-service v7-to-v9 preservation, recovery intent, rollback, drift, future versions, and idempotent open.
 - `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
 - `redeven:internal/ai/threadstore/store.go` - Verifies exact supported historical or current product shape before writable open.
 - `redeven:internal/ai/threadstore/schema.go` - Defines current v2 and the atomic reviewed v1-to-v2 migration.

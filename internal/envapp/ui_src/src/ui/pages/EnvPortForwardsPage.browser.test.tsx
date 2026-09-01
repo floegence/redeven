@@ -244,7 +244,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           forward_id: 'pf-failed',
           runtime_port: 3000,
           brand_icon: 'deepseek-harness',
-          last_failure: { action: 'install', stage: 'pulling', error_code: 'IMAGE_PULL_FAILED', message: 'The image could not be pulled.' },
+          last_failure: { action: 'start', stage: 'failed', error_code: 'CONTAINER_NAME_MISMATCH', message: 'raw backend identity detail' },
           update_available: false,
         }}
         busy={false}
@@ -273,7 +273,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const failureButton = row.querySelector<HTMLButtonElement>('button[aria-label="Show failure details"]')!;
     failureButton.focus();
     await new Promise((resolve) => window.setTimeout(resolve, 350));
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('The image could not be pulled.');
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('The container name no longer matches this managed service.');
+    expect(document.querySelector('[role="tooltip"]')?.textContent).not.toContain('raw backend identity detail');
   });
 
   it('replaces a stale service error with contextual operation progress and details', async () => {

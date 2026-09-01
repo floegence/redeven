@@ -19,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const templateSpecSchemaVersion = 2
+const templateSpecSchemaVersion = 3
 
 var (
 	templateNamePattern             = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
@@ -170,6 +170,7 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 		return nil, serviceError("TEMPLATE_DUPLICATION_UNAVAILABLE", "This built-in template cannot be duplicated because its runtime safety contract is managed by Redeven.", 409, false, nil)
 	}
 	spec := *source.Spec
+	spec.SchemaVersion = templateSpecSchemaVersion
 	spec.Kind = duplicateKind(source.Deployment, spec.Kind)
 	if source.Source == "builtin" && !completeBuiltInDuplicateSpec(spec) {
 		return nil, serviceError("TEMPLATE_UNAVAILABLE", "This built-in template cannot be duplicated until its exact audited deployment definition is available.", 409, true, nil)
@@ -360,6 +361,14 @@ func validateTemplateSpec(spec TemplateSpec) error {
 				return serviceError("TEMPLATE_HOST_INVALID", "A host lifecycle script is too large or invalid.", 400, false, nil)
 			}
 		}
+		if len(spec.Host.Environment) > 256 {
+			return serviceError("TEMPLATE_HOST_INVALID", "A host template can define at most 256 environment variables.", 400, false, nil)
+		}
+		for key, value := range spec.Host.Environment {
+			if !templateParameterPattern.MatchString(key) || strings.HasPrefix(key, "REDEVEN_") || strings.ContainsAny(value, "\x00\r\n") {
+				return serviceError("TEMPLATE_HOST_INVALID", "A host environment variable is invalid or reserved.", 400, false, nil)
+			}
+		}
 		managedInstallers := 0
 		if spec.Host.Artifact != nil {
 			managedInstallers++
@@ -368,7 +377,7 @@ func validateTemplateSpec(spec TemplateSpec) error {
 			managedInstallers++
 		}
 		if spec.Host.RuntimeBundle != "" || managedInstallers > 1 {
-			return serviceError("TEMPLATE_HOST_PACKAGE_INVALID", "Host templates may declare one artifact or npm package; legacy Runtime Bundles are not accepted by schema v2.", 400, false, nil)
+			return serviceError("TEMPLATE_HOST_PACKAGE_INVALID", "Host templates may declare one artifact or npm package; legacy Runtime Bundles are not accepted by the current schema.", 400, false, nil)
 		}
 		if spec.Host.NPM != nil {
 			if err := validateNPMHostPackage(*spec.Host.NPM, spec.Parameters); err != nil {
@@ -594,10 +603,20 @@ func verifiedTemplateSpec(raw, expectedDigest string) (TemplateSpec, error) {
 	if err := decodeStrictJSON([]byte(raw), &spec); err != nil {
 		return TemplateSpec{}, err
 	}
-	if err := validateTemplateSpec(spec); err != nil {
+	if err := validatePersistedTemplateSpec(spec); err != nil {
 		return TemplateSpec{}, err
 	}
 	return spec, nil
+}
+
+func validatePersistedTemplateSpec(spec TemplateSpec) error {
+	if spec.SchemaVersion == 2 {
+		if spec.Host != nil && len(spec.Host.Environment) != 0 {
+			return serviceError("TEMPLATE_SCHEMA_UNSUPPORTED", "TemplateSpec v2 cannot contain Host environment declarations.", 400, false, nil)
+		}
+		spec.SchemaVersion = templateSpecSchemaVersion
+	}
+	return validateTemplateSpec(spec)
 }
 
 func templateRegistryError(err error) error {

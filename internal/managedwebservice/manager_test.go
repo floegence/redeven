@@ -3,6 +3,7 @@ package managedwebservice
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -71,7 +72,7 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 	if hostTemplate == nil || containerTemplate == nil {
 		t.Fatalf("built-in templates = %+v", templates)
 	}
-	if hostTemplate.Revision != 3 || hostTemplate.HostLifecyclePlan == nil || hostTemplate.HostLifecyclePlan.SchemaVersion != 1 || hostTemplate.HostLifecyclePlan.Driver != "npm_host" {
+	if hostTemplate.Revision != 4 || hostTemplate.HostLifecyclePlan == nil || hostTemplate.HostLifecyclePlan.SchemaVersion != 1 || hostTemplate.HostLifecyclePlan.Driver != "npm_host" {
 		t.Fatalf("DeepSeek host lifecycle projection = %+v", hostTemplate)
 	}
 	if hostTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback || containerTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback {
@@ -358,7 +359,7 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	driver := &blockingStopDriver{started: make(chan struct{})}
-	manager := &Manager{registry: registry, native: driver, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	manager := &Manager{registry: registry, host: driver, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
 
 	op, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{RequestID: "request-stop-one", Action: ActionStop})
 	if err != nil {
@@ -528,6 +529,26 @@ func TestServiceFailureViewOmitsUnprovenHistoricalContext(t *testing.T) {
 	}
 }
 
+func TestServiceFailureViewNeverExposesHostArtifactPath(t *testing.T) {
+	t.Parallel()
+	service := pfregistry.ManagedService{
+		Deployment: string(DeploymentHost), LastErrorCode: "HOST_LOG_PREPARE_FAILED",
+		LastErrorMessage: "The managed Host log could not be prepared.", UpdatedAtUnixMs: 20,
+	}
+	operation := &pfregistry.ManagedOperation{
+		OperationID: "mop_host", Action: "start", Stage: "failed", ErrorCode: service.LastErrorCode,
+		ErrorMessage: service.LastErrorMessage, UpdatedAtUnixMs: service.UpdatedAtUnixMs,
+		ProgressDetail: &pfregistry.ManagedOperationProgressDetail{
+			SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion,
+			Transfer:      &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "/Users/private/managed/bin/dsh"},
+		},
+	}
+	failure := serviceFailureView(service, operation)
+	if failure == nil || failure.OperationID != operation.OperationID || failure.ArtifactReference != "" {
+		t.Fatalf("host failure exposed its managed artifact path: %+v", failure)
+	}
+}
+
 func TestSubscribeReturnsTerminalSnapshotWithoutWaiting(t *testing.T) {
 	t.Parallel()
 	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
@@ -591,7 +612,7 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manager := &Manager{registry: registry, native: &recoveryDriver{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	manager := &Manager{registry: registry, host: &recoveryDriver{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
 	views, err := manager.List(context.Background())
 	if err != nil || len(views) != 1 || views[0].ActiveOperation == nil || views[0].ActiveOperation.OperationID != op.OperationID {
 		t.Fatalf("active operation view = %+v, err=%v", views, err)
@@ -608,20 +629,20 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 	if updated == nil || updated.DesiredState != "stopped" || updated.ObservedState != "error" || updated.LastErrorCode != "OPERATION_INTERRUPTED" || updated.RuntimeIdentity != "" {
 		t.Fatalf("interrupted service = %+v", updated)
 	}
-	driver := manager.native.(*recoveryDriver)
+	driver := manager.host.(*recoveryDriver)
 	if driver.cleanupCalls != 1 || driver.startCalls != 0 {
 		t.Fatalf("recovery calls: cleanup=%d start=%d", driver.cleanupCalls, driver.startCalls)
 	}
 }
 
-func TestNativeIdentityParsingAndCredentialRedaction(t *testing.T) {
+func TestHistoricalHostIdentityParsingAndCredentialRedaction(t *testing.T) {
 	t.Parallel()
-	if got := nativePIDFromIdentity("native:mws_one:proc_nonce:4242"); got != 4242 {
-		t.Fatalf("native PID = %d, want 4242", got)
+	if got := hostPIDFromIdentity("native:mws_one:proc_nonce:4242"); got != 4242 {
+		t.Fatalf("historical Host PID = %d, want 4242", got)
 	}
 	for _, invalid := range []string{"", "native:mws_one:4242", "docker:mws_one:proc_nonce:4242", "native:mws_one:proc_nonce:not-a-pid"} {
-		if got := nativePIDFromIdentity(invalid); got != 0 {
-			t.Fatalf("nativePIDFromIdentity(%q) = %d, want 0", invalid, got)
+		if got := hostPIDFromIdentity(invalid); got != 0 {
+			t.Fatalf("hostPIDFromIdentity(%q) = %d, want 0", invalid, got)
 		}
 	}
 	redacted := strings.Join([]string{
@@ -636,12 +657,12 @@ func TestNativeIdentityParsingAndCredentialRedaction(t *testing.T) {
 	}
 }
 
-func TestNativeStopRejectsMismatchedProcessIdentity(t *testing.T) {
+func TestSafeManagedFailureCauseOmitsPathAndSecret(t *testing.T) {
 	t.Parallel()
-	driver := &nativeDriver{processes: map[string]nativeProcess{"mws_one": {identity: "native:mws_one:nonce:123"}}}
-	err := driver.Stop(context.Background(), &pfregistry.ManagedService{ServiceID: "mws_one", RuntimeIdentity: "native:mws_one:other:123"})
-	if managedErrorCode(err) != "RUNTIME_IDENTITY_MISMATCH" {
-		t.Fatalf("identity mismatch error = %v", err)
+	cause := fmt.Errorf("open /Users/private/token-secret: %w", os.ErrNotExist)
+	got := safeManagedFailureCause(cause)
+	if got != "managed file not found" || strings.Contains(got, "/Users/") || strings.Contains(got, "token-secret") {
+		t.Fatalf("safe failure cause = %q", got)
 	}
 }
 

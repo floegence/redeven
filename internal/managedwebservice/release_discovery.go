@@ -535,7 +535,7 @@ func randomReleaseDelay(limit time.Duration) time.Duration {
 func (m *Manager) refreshInstalledReleases(ctx context.Context) {
 	services, err := m.registry.ListManagedServices(ctx)
 	if err != nil {
-		m.log.Warn("check managed Web Service releases", "error", err)
+		m.log.Warn("check managed Web Service releases", "cause", safeManagedFailureCause(err))
 		return
 	}
 	for index := range services {

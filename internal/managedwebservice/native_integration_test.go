@@ -2,8 +2,6 @@ package managedwebservice
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -25,15 +23,26 @@ func TestNativeDeepSeekHarnessReleaseInstallAndWeb(t *testing.T) {
 		t.Skip("the current platform does not have a release-locked native runtime")
 	}
 	stateDir := t.TempDir()
-	driver := &nativeDriver{
-		log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	installer := &nativeDriver{
 		stateDir:      stateDir,
 		client:        defaultPackageDownloadClient().packageHTTPClient(),
 		packageOrigin: defaultNodePackageOrigin,
 	}
 	workspace := t.TempDir()
-	service := &pfregistry.ManagedService{ServiceID: "mws_native_release_smoke", WorkspacePath: workspace}
-	_, executable, err := driver.Install(context.Background(), service, auditedNativeCatalog(), func(stage string, _ int64, _ ...pfregistry.ManagedOperationTransferProgress) { t.Log(stage) })
+	snapshot, snapshotDigest, err := canonicalTemplateSpec(deepSeekHostTemplateSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration, configurationDigest, err := canonicalServiceConfiguration(newServiceConfiguration(nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &pfregistry.ManagedService{
+		ServiceID: "mws_native_release_smoke", TemplateID: DeepSeekHarnessHostTemplateID, TemplateSource: "builtin", ServiceFamilyID: DeepSeekHarnessHostTemplateID,
+		WorkspacePath: workspace, Version: DeepSeekHarnessVersion, TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: snapshotDigest,
+		ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
+	}
+	_, executable, err := installer.Install(context.Background(), service, auditedNativeCatalog(), func(stage string, _ int64, _ ...pfregistry.ManagedOperationTransferProgress) { t.Log(stage) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +57,8 @@ func TestNativeDeepSeekHarnessReleaseInstallAndWeb(t *testing.T) {
 	service.RuntimePort = listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
 	service.ArtifactReference = executable
+	setLegacyDeepSeekReleaseIdentity(t, service)
+	driver := &hostScriptDriver{manager: &Manager{stateDir: stateDir}, processes: map[string]hostProcess{}}
 	identity, err := driver.Start(context.Background(), service)
 	if err != nil {
 		t.Fatal(err)

@@ -523,7 +523,7 @@ describe('web service metadata and template validation', () => {
           name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'container',
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
           forward_id: 'pf-failed', runtime_port: 3000, update_available: false,
-          last_failure: { action: 'install', stage: 'pulling', error_code: 'IMAGE_PULL_FAILED', message: 'The image could not be pulled.', operation_id: 'mop-failed', occurred_at_unix_ms: 1_777_777_777_000 },
+          last_failure: { action: 'start', stage: 'starting', error_code: 'CONTAINER_NAME_MISMATCH', message: 'Raw backend message must not be shown.', operation_id: 'mop-failed', occurred_at_unix_ms: 1_777_777_777_000 },
         }}
         busy={false}
         canOpen
@@ -550,8 +550,9 @@ describe('web service metadata and template validation', () => {
       row.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
       await Promise.resolve();
       expect(clipboardMocks.writeText).toHaveBeenCalledOnce();
-      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('IMAGE_PULL_FAILED');
-      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('The image could not be pulled.');
+      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('CONTAINER_NAME_MISMATCH');
+      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('The container name no longer matches this managed service.');
+      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).not.toContain('Raw backend message');
       expect(clipboardMocks.writeText.mock.calls[0]?.[0]).not.toContain('Secret');
       expect(notificationMocks.success).not.toHaveBeenCalled();
       expect(row.querySelector('[data-testid="check-icon"]')).toBeTruthy();
@@ -1661,7 +1662,7 @@ describe('EnvPortForwardsPage', () => {
       template_id: 'tmpl-host-copy', service_family_id: 'family-copy', name: 'DeepSeek Harness host copy', description: 'Host deployment',
       source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, version: '0.1.1-rc.2', developer_preview: false,
       deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }],
-      spec: { schema_version: 2, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open', npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' } } },
+      spec: { schema_version: 3, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open', environment: { SERVICE_MODE: 'preserved' }, npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' } } },
       host_lifecycle_plan: {
         schema_version: 1,
         driver: 'npm_host',
@@ -1709,6 +1710,9 @@ describe('EnvPortForwardsPage', () => {
     save?.click();
 
     await waitForAssertion(() => expect(updateBody?.spec?.host?.npm).toEqual({ package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }));
+    const submitted = updateBody as Record<string, any> | null;
+    expect(submitted?.spec?.schema_version).toBe(3);
+    expect(submitted?.spec?.host?.environment).toEqual({ SERVICE_MODE: 'preserved' });
     expect(updateBody).not.toHaveProperty('host_lifecycle_plan');
   });
 

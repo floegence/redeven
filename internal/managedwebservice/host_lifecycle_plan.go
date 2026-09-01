@@ -1,9 +1,6 @@
 package managedwebservice
 
-import (
-	"strconv"
-	"strings"
-)
+import "strings"
 
 const hostLifecyclePlanSchemaVersion = 1
 
@@ -157,8 +154,4 @@ func lifecyclePackage(artifact nativeArtifact) *HostLifecyclePackage {
 		SHA256:    strings.ToLower(strings.TrimSpace(artifact.SHA256)),
 		SizeBytes: artifact.SizeBytes,
 	}
-}
-
-func nativeCommandArgsForPort(port int) []string {
-	return deepSeekWebArguments("127.0.0.1", strconv.Itoa(port))
 }

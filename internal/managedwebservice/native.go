@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,9 +19,7 @@ import (
 	pathpkg "path"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -31,26 +28,14 @@ import (
 const maxNativeArchiveBytes = 4 * 1024 * 1024 * 1024
 const maxNativeExtractedBytes = 4 * 1024 * 1024 * 1024
 
-type nativeProcess struct {
-	cmd      *exec.Cmd
-	identity string
-	done     <-chan struct{}
-}
-
 type nativeDriver struct {
-	log              *slog.Logger
 	stateDir         string
 	client           *http.Client
 	packageOrigin    string
 	packageInstaller func(context.Context, string, string, string, string) error
-	mu               sync.Mutex
-	processes        map[string]nativeProcess
 }
 
 func (d *nativeDriver) Install(ctx context.Context, service *pfregistry.ManagedService, catalog catalogPayload, progress operationProgress) (string, string, error) {
-	if d.processes == nil {
-		d.processes = map[string]nativeProcess{}
-	}
 	artifact, ok := catalog.Platforms[currentPlatformKey()]
 	if !ok {
 		return "", "", serviceError("PLATFORM_UNSUPPORTED", "This Redeven release does not include a host runtime for the Environment platform.", 409, false, nil)
@@ -549,168 +534,6 @@ func extractManagedArchiveWithOptions(archivePath, destination string, skipSymli
 			return fmt.Errorf("archive entry type %d is not allowed", header.Typeflag)
 		}
 	}
-}
-
-func (d *nativeDriver) Start(_ context.Context, service *pfregistry.ManagedService) (string, error) {
-	if service == nil {
-		return "", errors.New("service is required")
-	}
-	d.mu.Lock()
-	if d.processes == nil {
-		d.processes = map[string]nativeProcess{}
-	}
-	if current, ok := d.processes[service.ServiceID]; ok && current.cmd.ProcessState == nil {
-		d.mu.Unlock()
-		if service.RuntimeIdentity != "" && current.identity != service.RuntimeIdentity {
-			return "", serviceError("RUNTIME_IDENTITY_MISMATCH", "The managed native process identity does not match the persisted instance.", 409, false, nil)
-		}
-		return current.identity, nil
-	}
-	d.mu.Unlock()
-	if pid := nativePIDFromIdentity(service.RuntimeIdentity); pid > 0 && managedProcessAlive(pid) {
-		return "", serviceError("RUNTIME_IDENTITY_MISMATCH", "A process still uses the saved managed identity, but this Runtime did not create it.", 409, false, nil)
-	}
-	executable := filepath.Clean(strings.TrimSpace(service.ArtifactReference))
-	installRoot := filepath.Join(d.stateDir, DeepSeekHarnessProductID, "native")
-	rel, err := filepath.Rel(installRoot, executable)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", serviceError("INSTALL_IDENTITY_MISMATCH", "The native launcher is outside the managed runtime directory.", 409, false, err)
-	}
-	if info, err := os.Stat(executable); err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
-		return "", serviceError("INSTALL_NOT_READY", "The native DeepSeek Harness launcher is not installed.", 409, true, err)
-	}
-	dataDir := filepath.Join(d.stateDir, DeepSeekHarnessProductID, "data")
-	logDir := filepath.Join(d.stateDir, DeepSeekHarnessProductID, "logs")
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(logDir, 0o700); err != nil {
-		return "", err
-	}
-	logFile, err := os.OpenFile(filepath.Join(logDir, "harness.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", err
-	}
-	cmd := exec.Command(executable, nativeCommandArgs(service)...)
-	cmd.Dir = service.WorkspacePath
-	cmd.Env = append(os.Environ(), "DSH_DESKTOP_ENABLED=0", "DSH_HOME="+dataDir, "HOME="+service.WorkspacePath)
-	cmd.Stdout, cmd.Stderr = logFile, logFile
-	configureManagedProcess(cmd)
-	if err := cmd.Start(); err != nil {
-		_ = logFile.Close()
-		return "", serviceError("START_FAILED", "DeepSeek Harness could not be started.", 502, true, err)
-	}
-	nonce, err := randomID("proc")
-	if err != nil {
-		_ = terminateManagedProcess(cmd)
-		_ = logFile.Close()
-		return "", err
-	}
-	identity := "native:" + service.ServiceID + ":" + nonce + ":" + strconv.Itoa(cmd.Process.Pid)
-	done := make(chan struct{})
-	d.mu.Lock()
-	d.processes[service.ServiceID] = nativeProcess{cmd: cmd, identity: identity, done: done}
-	d.mu.Unlock()
-	go func() {
-		waitErr := cmd.Wait()
-		_ = logFile.Close()
-		d.mu.Lock()
-		if current, ok := d.processes[service.ServiceID]; ok && current.identity == identity {
-			delete(d.processes, service.ServiceID)
-		}
-		d.mu.Unlock()
-		close(done)
-		if waitErr != nil {
-			d.log.Info("managed DeepSeek Harness process exited", "service_id", service.ServiceID, "error", waitErr)
-		}
-	}()
-	return identity, nil
-}
-
-func nativeCommandArgs(service *pfregistry.ManagedService) []string {
-	return nativeCommandArgsForPort(service.RuntimePort)
-}
-
-func (d *nativeDriver) Stop(ctx context.Context, service *pfregistry.ManagedService) error {
-	if service == nil {
-		return nil
-	}
-	d.mu.Lock()
-	current, ok := d.processes[service.ServiceID]
-	d.mu.Unlock()
-	if !ok {
-		if pid := nativePIDFromIdentity(service.RuntimeIdentity); pid > 0 && managedProcessAlive(pid) {
-			return serviceError("RUNTIME_IDENTITY_MISMATCH", "Redeven will not stop a native process it did not create in this Runtime generation.", 409, false, nil)
-		}
-		return nil
-	}
-	if current.identity != service.RuntimeIdentity {
-		return serviceError("RUNTIME_IDENTITY_MISMATCH", "Redeven will not stop a process whose instance identity does not match.", 409, false, nil)
-	}
-	if err := terminateManagedProcess(current.cmd); err != nil {
-		return serviceError("STOP_FAILED", "DeepSeek Harness could not be stopped cleanly.", 502, true, err)
-	}
-	deadline := time.NewTimer(8 * time.Second)
-	defer deadline.Stop()
-	select {
-	case <-current.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-deadline.C:
-		if err := killManagedProcess(current.cmd); err != nil {
-			return serviceError("STOP_FAILED", "DeepSeek Harness could not be killed after the stop timeout.", 502, true, err)
-		}
-	}
-	killDeadline := time.NewTimer(2 * time.Second)
-	defer killDeadline.Stop()
-	select {
-	case <-current.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-killDeadline.C:
-		return serviceError("STOP_FAILED", "DeepSeek Harness did not exit after it was killed.", 502, true, nil)
-	}
-}
-
-func (d *nativeDriver) Uninstall(ctx context.Context, service *pfregistry.ManagedService, deleteData bool, progress operationProgress) error {
-	progress("stopping", 2)
-	if err := d.Stop(ctx, service); err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	progress("uninstalling", 5)
-	if err := os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessProductID, "native")); err != nil {
-		return err
-	}
-	if deleteData {
-		if err := os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessProductID, "data")); err != nil {
-			return err
-		}
-	}
-	return os.RemoveAll(filepath.Join(d.stateDir, DeepSeekHarnessProductID, "logs"))
-}
-func (d *nativeDriver) CleanupPartial(ctx context.Context, service *pfregistry.ManagedService) error {
-	if err := d.Stop(ctx, service); err != nil {
-		return err
-	}
-	return os.RemoveAll(filepath.Join(d.stateDir, ".staging", service.ServiceID))
-}
-
-func (d *nativeDriver) Logs(_ context.Context, _ *pfregistry.ManagedService, tail int) (*LogResult, error) {
-	return tailRedactedFile(filepath.Join(d.stateDir, DeepSeekHarnessProductID, "logs", "harness.log"), tail)
-}
-
-func nativePIDFromIdentity(identity string) int {
-	parts := strings.Split(strings.TrimSpace(identity), ":")
-	if len(parts) != 4 || parts[0] != "native" {
-		return 0
-	}
-	value, _ := strconv.Atoi(parts[3])
-	return value
 }
 
 var (

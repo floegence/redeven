@@ -39,6 +39,26 @@ func TestContainerTemplateUninstallUsesOwnedRuntimeIdentityWithoutTemplateExecut
 	}
 }
 
+func TestContainerTemplateUninstallAcceptsMigratedDeepSeekContainerName(t *testing.T) {
+	t.Parallel()
+	service := uninstallContainerService()
+	service.TemplateID = DeepSeekHarnessContainerTemplateID
+	service.TemplateSource = "builtin"
+	container := uninstallEngineContainer(service)
+	container.Name = legacyDeepSeekContainerName(service.ServiceID)
+	client := &uninstallContainerEngineClient{container: container}
+	adapter, err := containerengine.NewAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (&containerTemplateDriver{adapter: adapter}).Uninstall(context.Background(), service, false, discardOperationProgress); err != nil {
+		t.Fatalf("Uninstall() migrated DeepSeek container error = %v", err)
+	}
+	if len(client.actions) != 1 || client.actions[0].Method != containerengine.MethodRemove {
+		t.Fatalf("migrated DeepSeek container actions = %+v", client.actions)
+	}
+}
+
 func TestManagerUninstallConvergesMigratedWebtopService(t *testing.T) {
 	t.Parallel()
 	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
@@ -127,15 +147,16 @@ func TestContainerTemplateUninstallAcceptsConfirmedMissingRuntime(t *testing.T) 
 func TestContainerTemplateUninstallRejectsChangedOwnership(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name   string
-		change func(*containerengine.EngineContainer)
+		name     string
+		wantCode string
+		change   func(*containerengine.EngineContainer)
 	}{
-		{name: "runtime id", change: func(container *containerengine.EngineContainer) { container.ContainerID = "container_other" }},
-		{name: "managed name", change: func(container *containerengine.EngineContainer) { container.Name = "redeven-mws-other" }},
-		{name: "image", change: func(container *containerengine.EngineContainer) {
+		{name: "runtime id", wantCode: "CONTAINER_IDENTITY_MISMATCH", change: func(container *containerengine.EngineContainer) { container.ContainerID = "container_other" }},
+		{name: "managed name", wantCode: "CONTAINER_NAME_MISMATCH", change: func(container *containerengine.EngineContainer) { container.Name = "redeven-mws-other" }},
+		{name: "image", wantCode: "CONTAINER_IMAGE_MISMATCH", change: func(container *containerengine.EngineContainer) {
 			container.Image.Reference = "registry.example/redeven/other@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		}},
-		{name: "service label", change: func(container *containerengine.EngineContainer) {
+		{name: "service label", wantCode: "CONTAINER_LABEL_MISMATCH", change: func(container *containerengine.EngineContainer) {
 			container.Runtime.Labels[managedServiceLabel] = "mws_other"
 		}},
 	}
@@ -151,7 +172,7 @@ func TestContainerTemplateUninstallRejectsChangedOwnership(t *testing.T) {
 			}
 			driver := &containerTemplateDriver{adapter: adapter}
 			err = driver.Uninstall(context.Background(), service, false, discardOperationProgress)
-			if managedErrorCode(err) != "CONTAINER_IDENTITY_MISMATCH" {
+			if managedErrorCode(err) != test.wantCode {
 				t.Fatalf("changed ownership error = %v", err)
 			}
 			if len(client.actions) != 0 {
@@ -336,7 +357,7 @@ func TestHostUninstallRejectsInvalidExecutableDefinition(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
 	manager := &Manager{stateDir: stateDir}
-	driver := &hostScriptDriver{manager: manager, processes: map[string]nativeProcess{}}
+	driver := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	service := &pfregistry.ManagedService{
 		ServiceID:              "mws_host_invalid_uninstall",
 		ServiceFamilyID:        "host-invalid-uninstall",

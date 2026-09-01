@@ -21,7 +21,7 @@ export type ServiceTemplateCategory = 'host' | 'container';
 export type ServiceTemplateKind = 'host' | 'container' | 'compose';
 
 export type ServiceTemplateRuntimeSpec = Readonly<{
-	schema_version: 2;
+  schema_version: 2 | 3;
   kind: ServiceTemplateKind;
   endpoint: Readonly<{
     scheme: 'http' | 'https';
@@ -38,8 +38,9 @@ export type ServiceTemplateRuntimeSpec = Readonly<{
     start_script: string;
     stop_script?: string;
     uninstall_script?: string;
-		artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>;
-		npm?: Readonly<{ package_name: string; version: string; registry_url: string; auth_token_parameter?: string; executable: string }>;
+    environment?: Readonly<Record<string, string>>;
+    artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>;
+    npm?: Readonly<{ package_name: string; version: string; registry_url: string; auth_token_parameter?: string; executable: string }>;
   }>;
   container?: Readonly<{
     image: string;
