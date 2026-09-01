@@ -620,6 +620,107 @@ describe('web service metadata and template validation', () => {
     }
   });
 
+  it('shows audited host package bytes without container-only layer fields', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-native', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness-host',
+          name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'native',
+          workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing',
+          forward_id: 'pf-native', runtime_port: 3000, update_available: false,
+        }}
+        operation={{
+          operation_id: 'mop-native', service_id: 'mws-native', action: 'install', state: 'running', stage: 'downloading', progress_current: 2, progress_total: 7,
+          progress_detail: {
+            schema_version: 1,
+            stage_started_at_unix_ms: Date.now() - 2_000,
+            updated_at_unix_ms: Date.now(),
+            transfer: {
+              phase: 'downloading',
+              artifact_reference: 'node-v24.19.0-darwin-arm64.tar.gz@sha256:reviewed',
+              artifact_index: 1,
+              artifact_total: 1,
+              downloaded_bytes: 2_000,
+              total_bytes: 5_000,
+              bytes_per_second: 1_000,
+            },
+          },
+        }}
+        busy
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onCancelOperation={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      const trigger = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      expect(trigger.textContent).toContain('2.00 KB / 5.00 KB');
+      trigger.click();
+      const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
+      expect(details.textContent).toContain('Software package');
+      expect(details.textContent).toContain('node-v24.19.0-darwin-arm64.tar.gz@sha256:reviewed');
+      expect(details.textContent).toContain('1.00 KB/s');
+      expect(details.textContent).not.toContain('Container image');
+      expect(details.textContent).not.toContain('Layers');
+      expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('keeps elapsed time visible when a host install stage has no byte details', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-01T12:00:00Z'));
+    const stageStartedAt = Date.now() - 3_000;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-native-install', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness-host',
+          name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'native',
+          workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing',
+          forward_id: 'pf-native-install', runtime_port: 3000, update_available: false,
+        }}
+        operation={{
+          operation_id: 'mop-native-install', service_id: 'mws-native-install', action: 'install', state: 'running', stage: 'installing', progress_current: 4, progress_total: 7,
+          progress_detail: { schema_version: 1, stage_started_at_unix_ms: stageStartedAt, updated_at_unix_ms: stageStartedAt },
+        }}
+        busy
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onCancelOperation={() => undefined}
+        onUpdate={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
+      const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
+      expect(details.textContent).toContain('No byte transfer details are available for this stage.');
+      expect(details.textContent).toContain('3s');
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(details.textContent).toContain('5s');
+    } finally {
+      dispose();
+      host.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it('shows cached image facts and advances elapsed time during a silent registry check', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-31T12:00:00Z'));
