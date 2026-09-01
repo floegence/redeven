@@ -15,7 +15,8 @@ export type ContainerExecTerminalProps = Readonly<{
   sessionID: string;
   name: string;
   active: () => boolean;
-  onSessionGone?: () => void;
+  onSessionReady?: (sessionID: string) => void;
+  onSessionGone?: (sessionID: string) => void;
 }>;
 
 export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
@@ -72,6 +73,7 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
         registerViewport={() => undefined}
         registerSurfaceElement={() => undefined}
         registerActions={() => undefined}
+        onInteractive={props.onSessionReady}
         onSessionGone={props.onSessionGone}
       />
     </div>

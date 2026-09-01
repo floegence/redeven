@@ -10,8 +10,12 @@ import { I18nProvider } from '../i18n';
 
 const browserHarness = vi.hoisted(() => ({
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
+  listRuntimes: vi.fn(),
   listResources: vi.fn(),
   preflight: vi.fn(),
+  createExecSession: vi.fn(),
+  deleteExecSession: vi.fn(),
+  execTerminalProps: new Map<string, any>(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
@@ -21,6 +25,13 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
 
 vi.mock('../primitives/EnvAppDrawer', () => ({
   EnvAppDrawer: (props: { open: boolean }) => <Show when={props.open}><aside data-drawer /></Show>,
+}));
+
+vi.mock('../widgets/ContainerExecTerminal', () => ({
+  ContainerExecTerminal: (props: any) => {
+    browserHarness.execTerminalProps.set(props.sessionID, props);
+    return <div class="container-exec-terminal-surface" data-container-exec-terminal data-session-id={props.sessionID} />;
+  },
 }));
 
 vi.mock('./EnvContext', () => ({
@@ -41,10 +52,7 @@ vi.mock('../protocol/redeven_v1', () => ({
 }));
 
 vi.mock('../services/containerResourcesApi', () => ({
-  listContainerRuntimes: vi.fn().mockResolvedValue([{
-    endpoint_id: 'desktop-linux', engine: 'docker', state: 'ready', engine_version: '27.3.1', rootless: false,
-    capabilities: { collection_stats: true, volume_files: false, exec: false },
-  }, { engine: 'podman', state: 'not_installed' }]),
+  listContainerRuntimes: browserHarness.listRuntimes,
   listContainerServices: vi.fn().mockResolvedValue([
     {
       service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running', version: '27.3.1',
@@ -86,8 +94,8 @@ vi.mock('../services/containerResourcesApi', () => ({
   readContainerResourceFile: vi.fn().mockResolvedValue(new Blob()),
   cancelContainerOperation: vi.fn(),
   createContainerOperation: vi.fn(),
-  createContainerExecSession: vi.fn().mockResolvedValue({ session_id: 'exec-session-1' }),
-  deleteContainerExecSession: vi.fn().mockResolvedValue(undefined),
+  createContainerExecSession: browserHarness.createExecSession,
+  deleteContainerExecSession: browserHarness.deleteExecSession,
   getContainerStats: vi.fn().mockResolvedValue({
     sampled_at_unix_ms: 1_725_000_000_000,
     container_id: 'e2c83fcda485',
@@ -150,6 +158,13 @@ describe('native Containers responsive product surface', () => {
     document.documentElement.classList.add('dark');
     window.localStorage.clear();
     window.localStorage.setItem('redeven_ui_language_preference', 'en-US');
+    browserHarness.listRuntimes.mockReset().mockResolvedValue([{
+      endpoint_id: 'desktop-linux', engine: 'docker', state: 'ready', engine_version: '27.3.1', rootless: false,
+      capabilities: { collection_stats: true, volume_files: false, exec: false },
+    }, { engine: 'podman', state: 'not_installed' }]);
+    browserHarness.createExecSession.mockReset().mockResolvedValue({ session_id: 'exec-session-1' });
+    browserHarness.deleteExecSession.mockReset().mockResolvedValue(undefined);
+    browserHarness.execTerminalProps.clear();
     browserHarness.listResources.mockReset().mockResolvedValue([
       {
         container_id: '8bbf320351e557285fe1f143ee14a6d2334f24f5', name: 'redeven-api',
@@ -335,6 +350,52 @@ describe('native Containers responsive product surface', () => {
     expect(dialog.querySelector('[data-prune-review-list]')?.textContent).toContain('example/app:latest');
     expect(dialog.querySelector('[data-prune-resource-id="sha256:unused"]')).not.toBeNull();
     expect(dialog.textContent).not.toContain('images.prune');
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it('fills the detail body with Exec and reconnects from the inline retry action', async () => {
+    await page.viewport(1440, 900);
+    browserHarness.listRuntimes.mockResolvedValue([{
+      endpoint_id: 'desktop-linux', engine: 'docker', state: 'ready', engine_version: '27.3.1', rootless: false,
+      capabilities: { collection_stats: true, volume_files: false, exec: true },
+    }, { engine: 'podman', state: 'not_installed' }]);
+    browserHarness.createExecSession
+      .mockResolvedValueOnce({ session_id: 'exec-session-sh' })
+      .mockResolvedValueOnce({ session_id: 'exec-session-bash' })
+      .mockResolvedValueOnce({ session_id: 'exec-session-retry' });
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    const row = Array.from(root.querySelectorAll<HTMLTableRowElement>('tbody tr'))
+      .find((candidate) => candidate.textContent?.includes('postgres-development'))!;
+    row.querySelector<HTMLButtonElement>('button[aria-label="Exec"]')?.click();
+    await settle();
+
+    const detailBody = root.querySelector<HTMLElement>('.container-detail-body')!;
+    const terminal = root.querySelector<HTMLElement>('[data-container-exec-terminal]')!;
+    expect(detailBody.getBoundingClientRect().bottom - terminal.getBoundingClientRect().bottom).toBeLessThanOrEqual(40);
+    browserHarness.execTerminalProps.get('exec-session-sh')?.onSessionReady?.('exec-session-sh');
+
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.container-exec-programs button'))
+      .find((button) => button.textContent === 'bash')?.click();
+    await settle();
+    browserHarness.execTerminalProps.get('exec-session-bash')?.onSessionGone?.('exec-session-bash');
+    await settle();
+    root.querySelector<HTMLButtonElement>('.container-exec-error button')?.click();
+    await settle();
+
+    expect(browserHarness.createExecSession).toHaveBeenLastCalledWith(
+      'e2c83fcda4850de717be32128754ce4764efb434',
+      'docker',
+      'desktop-linux',
+      ['/bin/sh'],
+    );
+    expect(root.querySelector('[data-container-exec-terminal]')?.getAttribute('data-session-id')).toBe('exec-session-retry');
+    browserHarness.execTerminalProps.get('exec-session-bash')?.onSessionGone?.('exec-session-bash');
+    await settle();
+    expect(root.querySelector('[data-container-exec-terminal]')?.getAttribute('data-session-id')).toBe('exec-session-retry');
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 

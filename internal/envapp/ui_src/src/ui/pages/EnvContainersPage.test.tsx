@@ -42,6 +42,7 @@ const harness = vi.hoisted(() => ({
   fsList: vi.fn(),
   createExecSession: vi.fn(),
   deleteExecSession: vi.fn(),
+  execTerminalProps: new Map<string, any>(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -140,7 +141,10 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 vi.mock('../widgets/ContainerExecTerminal', () => ({
-  ContainerExecTerminal: (props: any) => <div data-container-exec-terminal data-session-id={props.sessionID} />,
+  ContainerExecTerminal: (props: any) => {
+    harness.execTerminalProps.set(props.sessionID, props);
+    return <div data-container-exec-terminal data-session-id={props.sessionID} />;
+  },
 }));
 
 vi.mock('../widgets/TextFilePreviewPane', () => ({
@@ -324,6 +328,7 @@ describe('native Containers page', () => {
     harness.createOperation.mockReset().mockResolvedValue({ operation_id: 'operation-1', state: 'queued' });
     harness.createExecSession.mockReset().mockResolvedValue({ session_id: 'exec-session-1' });
     harness.deleteExecSession.mockReset().mockResolvedValue(undefined);
+    harness.execTerminalProps.clear();
     harness.fsList.mockReset().mockResolvedValue({ entries: [] });
   });
 
@@ -1484,6 +1489,118 @@ describe('native Containers page', () => {
     host.querySelector<HTMLButtonElement>('button[aria-label="containers.detail.back"]')?.click();
     await settle();
     expect(harness.deleteExecSession).toHaveBeenCalledWith('exec-session-1');
+  });
+
+  it('retries a replacement Exec session with the last command that became interactive', async () => {
+    harness.listRuntimes.mockResolvedValue([{
+      endpoint_id: 'docker-primary', engine: 'docker', state: 'ready',
+      capabilities: { collection_stats: true, volume_files: false, exec: true },
+    }]);
+    harness.listResources.mockResolvedValue([{
+      container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false },
+    }]);
+    harness.resourceDetails.mockResolvedValue({ container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false } });
+    harness.createExecSession
+      .mockResolvedValueOnce({ session_id: 'exec-session-sh' })
+      .mockResolvedValueOnce({ session_id: 'exec-session-bash' })
+      .mockResolvedValueOnce({ session_id: 'exec-session-retry' });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.exec.open"]')?.click();
+    await settle();
+    harness.execTerminalProps.get('exec-session-sh')?.onSessionReady?.('exec-session-sh');
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-exec-programs button'))
+      .find((button) => button.textContent === 'bash')?.click();
+    await settle();
+    harness.execTerminalProps.get('exec-session-bash')?.onSessionGone?.('exec-session-bash');
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-exec-error button'))
+      .find((button) => button.textContent?.includes('containers.actions.retry'))?.click();
+    await settle();
+
+    expect(harness.createExecSession).toHaveBeenLastCalledWith(
+      'container-2', 'docker', 'docker-primary', ['/bin/sh'],
+    );
+    expect(host.querySelector('[data-container-exec-terminal]')?.getAttribute('data-session-id')).toBe('exec-session-retry');
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-exec-programs button'))
+      .find((button) => button.textContent === 'sh')?.dataset.variant).toBe('default');
+
+    harness.execTerminalProps.get('exec-session-bash')?.onSessionGone?.('exec-session-bash');
+    await settle();
+    expect(host.querySelector('[data-container-exec-terminal]')?.getAttribute('data-session-id')).toBe('exec-session-retry');
+  });
+
+  it('retries the same Exec command after that command became interactive', async () => {
+    harness.listRuntimes.mockResolvedValue([{
+      endpoint_id: 'docker-primary', engine: 'docker', state: 'ready',
+      capabilities: { collection_stats: true, volume_files: false, exec: true },
+    }]);
+    harness.listResources.mockResolvedValue([{
+      container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false },
+    }]);
+    harness.resourceDetails.mockResolvedValue({ container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false } });
+    harness.createExecSession
+      .mockResolvedValueOnce({ session_id: 'exec-session-sh' })
+      .mockResolvedValueOnce({ session_id: 'exec-session-bash' })
+      .mockResolvedValueOnce({ session_id: 'exec-session-retry' });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.exec.open"]')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-exec-programs button'))
+      .find((button) => button.textContent === 'bash')?.click();
+    await settle();
+    harness.execTerminalProps.get('exec-session-bash')?.onSessionReady?.('exec-session-bash');
+    harness.execTerminalProps.get('exec-session-bash')?.onSessionGone?.('exec-session-bash');
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('.container-exec-error button')?.click();
+    await settle();
+    expect(harness.createExecSession).toHaveBeenLastCalledWith(
+      'container-2', 'docker', 'docker-primary', ['/bin/bash'],
+    );
+  });
+
+  it('retries the requested Exec command when session creation fails', async () => {
+    harness.listRuntimes.mockResolvedValue([{
+      endpoint_id: 'docker-primary', engine: 'docker', state: 'ready',
+      capabilities: { collection_stats: true, volume_files: false, exec: true },
+    }]);
+    harness.listResources.mockResolvedValue([{
+      container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false },
+    }]);
+    harness.resourceDetails.mockResolvedValue({ container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false } });
+    harness.createExecSession
+      .mockResolvedValueOnce({ session_id: 'exec-session-sh' })
+      .mockRejectedValueOnce(new Error('exec transport unavailable'))
+      .mockResolvedValueOnce({ session_id: 'exec-session-retry' });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.exec.open"]')?.click();
+    await settle();
+    harness.execTerminalProps.get('exec-session-sh')?.onSessionReady?.('exec-session-sh');
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-exec-programs button'))
+      .find((button) => button.textContent === 'bash')?.click();
+    await settle();
+
+    expect(host.querySelector('.container-exec-error')?.textContent).toContain('exec transport unavailable');
+    host.querySelector<HTMLButtonElement>('.container-exec-error button')?.click();
+    await settle();
+    expect(harness.createExecSession).toHaveBeenLastCalledWith(
+      'container-2', 'docker', 'docker-primary', ['/bin/bash'],
+    );
+    expect(host.querySelector('[data-container-exec-terminal]')?.getAttribute('data-session-id')).toBe('exec-session-retry');
   });
 
   it('clears stale inventory and presents refresh failure recovery', async () => {
