@@ -20,8 +20,8 @@ github.com/floegence/floret/v7 v7.0.1 h1:u5L0c+A+2LASAQJ8hBKtc/XOOYwEFD2IPaHwipy
 github.com/floegence/floret/v7 v7.0.1/go.mod h1:w5HZ92LC0BtZ88pQ3pCQEhIye5+FP+Luz3qkWmXLAM0=
 github.com/floegence/flowersec/flowersec-go/v4 v4.0.0 h1:GKtBnBuMcbtwA07odi5u1vlkKc5mwyjPNa5FFvEPhoE=
 github.com/floegence/flowersec/flowersec-go/v4 v4.0.0/go.mod h1:enj0/Gz+txXXlZ0BU0NNS+8afdFjskpsKT3++zLH5z4=
-github.com/floegence/redevplugin/v3 v3.0.20 h1:RMgEs58QFRHwvwR6PbW0W7Noqwm4RmFbaI5RrkYWv88=
-github.com/floegence/redevplugin/v3 v3.0.20/go.mod h1:QS54E1rnGQRVQnAuQagW91x/Oi3vlZmpCjfZ6rKnBZk=
+github.com/floegence/redevplugin/v3 v3.0.21 h1:az9GJE25+3PHCLXMJYa2ztkxywQykJFVOAZOGqs+40s=
+github.com/floegence/redevplugin/v3 v3.0.21/go.mod h1:QS54E1rnGQRVQnAuQagW91x/Oi3vlZmpCjfZ6rKnBZk=
 github.com/go-ole/go-ole v1.2.6 h1:/Fpf6oFPoeFik9ty7siob0G6Ke8QvQEuVcuChpwXzpY=
 github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
 github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
