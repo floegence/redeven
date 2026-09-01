@@ -51,8 +51,9 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
+	managerStateDir := filepath.Join(home, ".redeven", "local-environment")
 	manager, err := New(ManagerOptions{
-		StateDir: filepath.Join(home, ".redeven", "local-environment"),
+		StateDir: managerStateDir,
 		Registry: registry,
 		Scope:    scope,
 	})
@@ -83,19 +84,54 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(canonicalHome, "Redeven", "workspaces", "managed-services", DeepSeekHarnessTemplateID)
-	if hostTemplate.DefaultWorkspacePath != want || containerTemplate.DefaultWorkspacePath != want {
-		t.Fatalf("default workspaces = %q, %q; want %q", hostTemplate.DefaultWorkspacePath, containerTemplate.DefaultWorkspacePath, want)
+	hostWorkspace := filepath.Join(canonicalHome, "Redeven", "workspaces", "managed-services", DeepSeekHarnessHostTemplateID)
+	containerWorkspace := filepath.Join(canonicalHome, "Redeven", "workspaces", "managed-services", DeepSeekHarnessContainerTemplateID)
+	if hostTemplate.ServiceFamilyID != DeepSeekHarnessHostTemplateID || containerTemplate.ServiceFamilyID != DeepSeekHarnessContainerTemplateID {
+		t.Fatalf("DeepSeek service families = %q, %q", hostTemplate.ServiceFamilyID, containerTemplate.ServiceFamilyID)
 	}
-	if strings.Contains(filepath.Clean(strings.TrimPrefix(want, canonicalHome)), " ") {
-		t.Fatalf("generated workspace suffix contains spaces: %q", want)
+	wantHostDataLocation := filepath.Join(managerStateDir, "apps", "managed-web-services", DeepSeekHarnessProductID, "data")
+	if hostTemplate.DataLocation != wantHostDataLocation || containerTemplate.DataLocation != "" {
+		t.Fatalf("DeepSeek data locations = %q, %q; want %q and no synthetic container path", hostTemplate.DataLocation, containerTemplate.DataLocation, wantHostDataLocation)
+	}
+	if hostTemplate.DefaultWorkspacePath != hostWorkspace || containerTemplate.DefaultWorkspacePath != containerWorkspace || hostWorkspace == containerWorkspace {
+		t.Fatalf("default workspaces = %q, %q; want %q, %q", hostTemplate.DefaultWorkspacePath, containerTemplate.DefaultWorkspacePath, hostWorkspace, containerWorkspace)
+	}
+	if strings.Contains(filepath.Clean(strings.TrimPrefix(hostWorkspace, canonicalHome)), " ") || strings.Contains(filepath.Clean(strings.TrimPrefix(containerWorkspace, canonicalHome)), " ") {
+		t.Fatalf("generated workspace suffix contains spaces: %q, %q", hostWorkspace, containerWorkspace)
 	}
 	if hostTemplate.DefaultWorkspacePath == home {
 		t.Fatal("managed service defaulted to the whole home directory")
 	}
-	info, err := os.Stat(want)
-	if err != nil || !info.IsDir() {
-		t.Fatalf("dedicated workspace was not prepared: info=%v err=%v", info, err)
+	for _, workspace := range []string{hostWorkspace, containerWorkspace} {
+		info, err := os.Stat(workspace)
+		if err != nil || !info.IsDir() {
+			t.Fatalf("dedicated workspace %q was not prepared: info=%v err=%v", workspace, info, err)
+		}
+	}
+}
+
+func TestDeepSeekTemplateFamiliesCanCoexistButCannotDuplicate(t *testing.T) {
+	t.Parallel()
+	existing := []pfregistry.ManagedService{{
+		ServiceID:       "mws_host",
+		TemplateID:      DeepSeekHarnessHostTemplateID,
+		ServiceFamilyID: DeepSeekHarnessHostTemplateID,
+	}}
+	containerTemplate := Template{
+		TemplateID:      DeepSeekHarnessContainerTemplateID,
+		ServiceFamilyID: DeepSeekHarnessContainerTemplateID,
+	}
+	if err := validateServiceFamilyAvailability(existing, containerTemplate); err != nil {
+		t.Fatalf("independent DeepSeek template family was rejected: %v", err)
+	}
+	hostTemplate := Template{
+		TemplateID:      DeepSeekHarnessHostTemplateID,
+		ServiceFamilyID: DeepSeekHarnessHostTemplateID,
+	}
+	err := validateServiceFamilyAvailability(existing, hostTemplate)
+	var managedErr *Error
+	if !errors.As(err, &managedErr) || managedErr.Code != "INSTANCE_ALREADY_EXISTS" {
+		t.Fatalf("duplicate DeepSeek host family error = %v", err)
 	}
 }
 
@@ -314,7 +350,7 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: DeepSeekHarnessTemplateID, Deployment: string(DeploymentNative), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "running", ForwardID: "pf_one", RuntimePort: 3080}
+	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID, Deployment: string(DeploymentNative), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "running", ForwardID: "pf_one", RuntimePort: 3080}
 	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}); err != nil {
 		t.Fatal(err)
 	}
@@ -546,7 +582,7 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: DeepSeekHarnessTemplateID, Deployment: string(DeploymentNative), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "installing", ForwardID: "pf_interrupted", RuntimeIdentity: "native:mws_interrupted:nonce:99", RuntimePort: 3080}
+	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID, Deployment: string(DeploymentNative), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "installing", ForwardID: "pf_interrupted", RuntimeIdentity: "native:mws_interrupted:nonce:99", RuntimePort: 3080}
 	op := pfregistry.ManagedOperation{OperationID: "mop_interrupted", ServiceID: service.ServiceID, RequestID: "request-interrupted", RequestFingerprint: "fingerprint", Action: string(ActionInstall), State: "running", Stage: "downloading"}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, op); err != nil {
 		t.Fatal(err)

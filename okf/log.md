@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-09-01
+* **Exact DeepSeek template instances**: Host and container templates now own
+  separate service families and template-specific default workspaces, so both
+  may coexist without misleading installed state. Template Open reuses the
+  main service route only when the exact instance is ready. Registry v7
+  atomically migrates historical built-in DeepSeek family identity while
+  preserving existing workspace paths, user data, snapshots, configuration,
+  secrets, forwards, resources, operations, timestamps, and recovery journals.
+
 ## 2026-08-31
 * **Stable Flower menus and title summaries**: Thread menus now keep only
   semantic ThreadID and trigger identity across summary refreshes and row

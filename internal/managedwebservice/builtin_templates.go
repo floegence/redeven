@@ -37,20 +37,22 @@ type builtInTemplateDefinition struct {
 	DiskBytes         int64
 	Notices           []TemplateNotice
 	DefaultAccessMode string
+	DataDirectory     string
 }
 
 func builtInTemplateDefinitions() []builtInTemplateDefinition {
 	return []builtInTemplateDefinition{
 		{
-			TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessTemplateID,
+			TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID,
 			Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessHost", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
 			Deployment: DeploymentNative, Revision: 1, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
 			Notices:           deepSeekHarnessNotices(false),
 			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
+			DataDirectory:     DeepSeekHarnessProductID,
 		},
 		{
-			TemplateID: DeepSeekHarnessContainerTemplateID, ServiceFamilyID: DeepSeekHarnessTemplateID,
+			TemplateID: DeepSeekHarnessContainerTemplateID, ServiceFamilyID: DeepSeekHarnessContainerTemplateID,
 			Name: "DeepSeek Harness · Container", Description: "Run the reviewed community DeepSeek Harness image in Docker.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessContainer", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
 			DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Deployment: DeploymentDocker, ContainerMode: "single",
@@ -194,7 +196,7 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 				spec = webtopTemplateSpec(definition.TemplateID, dockerArtifact{Image: webtopImage, Digest: "sha256:" + strings.Repeat("0", 64)})
 			}
 		}
-		workspace, err := m.prepareDefaultWorkspace(definition.ServiceFamilyID)
+		workspace, err := m.prepareDefaultWorkspace(definition.TemplateID)
 		if err != nil {
 			return nil, err
 		}
@@ -202,10 +204,14 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 		if err != nil {
 			return nil, err
 		}
+		dataLocation := ""
+		if definition.DataDirectory != "" {
+			dataLocation = filepath.Join(m.stateDir, definition.DataDirectory, "data")
+		}
 		items = append(items, Template{
 			TemplateID: definition.TemplateID, ServiceFamilyID: definition.ServiceFamilyID, Name: definition.Name, Description: definition.Description,
 			Version: definition.Version, LocalizationKey: definition.LocalizationKey, BrandIcon: definition.BrandIcon, Notices: definition.Notices,
-			DeveloperPreview: definition.DeveloperPreview, DiskBytes: definition.DiskBytes, DataLocation: filepath.Join(m.stateDir, definition.ServiceFamilyID, "data"),
+			DeveloperPreview: definition.DeveloperPreview, DiskBytes: definition.DiskBytes, DataLocation: dataLocation,
 			SourceURL: definition.SourceURL, DockerSourceURL: definition.DockerSourceURL, Source: "builtin", Deployment: definition.Deployment,
 			ContainerMode: definition.ContainerMode, Revision: definition.Revision, Editable: false,
 			Duplicateable: completeBuiltInDuplicateSpec(spec),

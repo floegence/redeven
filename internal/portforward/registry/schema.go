@@ -14,7 +14,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry"
-	registryCurrentSchemaVersion = 6
+	registryCurrentSchemaVersion = 7
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -29,9 +29,29 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryToV4},
 			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryToV5},
 			{FromVersion: 5, ToVersion: 6, Apply: migrateRegistryToV6},
+			{FromVersion: 6, ToVersion: 7, Apply: migrateRegistryToV7},
 		},
 		Verify: verifyRegistrySchema,
 	}
+}
+
+func migrateRegistryToV7(tx *sql.Tx) error {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v6"); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`
+UPDATE managed_web_services
+SET service_family_id='deepseek-harness-host'
+WHERE template_source='builtin'
+  AND template_id='deepseek-harness-host'
+  AND service_family_id='deepseek-harness';
+UPDATE managed_web_services
+SET service_family_id='deepseek-harness-container'
+WHERE template_source='builtin'
+  AND template_id='deepseek-harness-container'
+  AND service_family_id='deepseek-harness';
+`)
+	return err
 }
 
 func migrateRegistryToV6(tx *sql.Tx) error {
@@ -390,7 +410,7 @@ func migrateRegistryToV1(tx *sql.Tx) error {
 }
 
 func verifyRegistrySchema(tx *sql.Tx) error {
-	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v6"); err != nil {
+	if err := verifyRegistryShape(tx, []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"}, "v7"); err != nil {
 		return err
 	}
 	if err := verifyRegistryAccessModeColumn(tx); err != nil {
@@ -402,12 +422,33 @@ func verifyRegistrySchema(tx *sql.Tx) error {
 	if err := verifyRegistryManagedDocumentDigests(tx); err != nil {
 		return err
 	}
+	if err := verifyRegistryDeepSeekServiceFamilies(tx); err != nil {
+		return err
+	}
 	var invalid int
 	if err := tx.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE access_mode NOT IN ('unified_proxy','desktop_loopback')`).Scan(&invalid); err != nil {
 		return err
 	}
 	if invalid != 0 {
 		return fmt.Errorf("port forward registry has %d invalid access modes", invalid)
+	}
+	return nil
+}
+
+func verifyRegistryDeepSeekServiceFamilies(tx *sql.Tx) error {
+	var invalid int
+	err := tx.QueryRow(`
+SELECT COUNT(1)
+FROM managed_web_services
+WHERE template_source='builtin'
+  AND ((template_id='deepseek-harness-host' AND service_family_id<>'deepseek-harness-host')
+    OR (template_id='deepseek-harness-container' AND service_family_id<>'deepseek-harness-container'))
+`).Scan(&invalid)
+	if err != nil {
+		return err
+	}
+	if invalid != 0 {
+		return fmt.Errorf("managed Web Service registry has %d invalid DeepSeek Harness service families", invalid)
 	}
 	return nil
 }
@@ -567,7 +608,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return err
 	}
 	expectedTables := []string{"managed_web_service_operations", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}
-	if version == "v5" || version == "v6" {
+	if version == "v5" || version == "v6" || version == "v7" {
 		expectedTables = []string{"managed_web_service_operations", "managed_web_service_resources", "managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards"}
 	}
 	if !slices.Equal(tables, expectedTables) {
@@ -597,7 +638,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return fmt.Errorf("managed Web Service template request column mismatch: got %v, want %v", columns, templateRequestColumns)
 	}
 	managedServiceColumns := []string{"service_id", "template_id", "template_source", "template_revision", "template_snapshot_json", "template_snapshot_sha256", "service_family_id", "deployment", "workspace_path", "configuration_json", "version", "desired_state", "observed_state", "forward_id", "runtime_identity", "runtime_manifest_json", "runtime_port", "artifact_reference", "last_error_code", "last_error_message", "created_at_unix_ms", "updated_at_unix_ms"}
-	if version == "v5" || version == "v6" {
+	if version == "v5" || version == "v6" || version == "v7" {
 		managedServiceColumns = append(managedServiceColumns, "configuration_revision", "configuration_sha256")
 	}
 	columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_services")
@@ -608,7 +649,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 		return fmt.Errorf("managed web service column mismatch: got %v, want %v", columns, managedServiceColumns)
 	}
 	operationColumns := []string{"operation_id", "service_id", "request_id", "request_fingerprint", "action", "delete_data", "state", "stage", "progress_current", "progress_total", "cancel_requested", "error_code", "error_message", "created_at_unix_ms", "updated_at_unix_ms", "finished_at_unix_ms"}
-	if version == "v6" {
+	if version == "v6" || version == "v7" {
 		operationColumns = append(operationColumns, "progress_detail_json")
 	}
 	columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_service_operations")
@@ -618,7 +659,7 @@ func verifyRegistryShape(tx *sql.Tx, expectedColumns []string, version string) e
 	if !slices.Equal(columns, operationColumns) {
 		return fmt.Errorf("managed web service operation column mismatch: got %v, want %v", columns, operationColumns)
 	}
-	if version == "v5" || version == "v6" {
+	if version == "v5" || version == "v6" || version == "v7" {
 		resourceColumns := []string{"service_id", "resource_id", "kind", "engine_identity", "created_at_unix_ms"}
 		columns, err = sqliteutil.TableColumnNamesTx(tx, "managed_web_service_resources")
 		if err != nil {

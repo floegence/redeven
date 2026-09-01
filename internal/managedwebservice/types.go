@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	DeepSeekHarnessTemplateID          = "deepseek-harness"
+	DeepSeekHarnessProductID           = "deepseek-harness"
 	DeepSeekHarnessHostTemplateID      = "deepseek-harness-host"
 	DeepSeekHarnessContainerTemplateID = "deepseek-harness-container"
 	DeepSeekHarnessVersion             = "0.1.1-rc.2"

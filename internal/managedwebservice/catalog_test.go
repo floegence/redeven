@@ -12,7 +12,7 @@ import (
 func TestAuditedNativeCatalogPinsEverySupportedPlatform(t *testing.T) {
 	t.Parallel()
 	catalog := auditedNativeCatalog()
-	if catalog.TemplateID != DeepSeekHarnessTemplateID || catalog.Version != DeepSeekHarnessVersion || len(catalog.Platforms) != 4 {
+	if catalog.TemplateID != DeepSeekHarnessProductID || catalog.Version != DeepSeekHarnessVersion || len(catalog.Platforms) != 4 {
 		t.Fatalf("audited native catalog = %+v", catalog)
 	}
 	for _, platform := range []string{"darwin-arm64", "darwin-amd64", "linux-arm64", "linux-amd64"} {

@@ -15,7 +15,7 @@ import (
 
 func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T) {
 	t.Parallel()
-	backend := &managedBackendStub{catalog: []managedwebservice.Template{{TemplateID: managedwebservice.DeepSeekHarnessTemplateID, Version: managedwebservice.DeepSeekHarnessVersion}}}
+	backend := &managedBackendStub{catalog: []managedwebservice.Template{{TemplateID: managedwebservice.DeepSeekHarnessHostTemplateID, Version: managedwebservice.DeepSeekHarnessVersion}}}
 	channelID := "ch_managed_permissions"
 
 	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
@@ -26,7 +26,7 @@ func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T)
 		t.Fatalf("catalog response status = %d body=%s", response.Code, response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness","deployment":"native","workspace_path":"/workspace"}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness-host","deployment":"native","workspace_path":"/workspace"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	readServer.handleManagedWebServicesAPI(response, request)
@@ -35,7 +35,7 @@ func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T)
 	}
 
 	fullServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness","deployment":"native","workspace_path":"/workspace"}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness-host","deployment":"native","workspace_path":"/workspace"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	fullServer.handleManagedWebServicesAPI(response, request)
@@ -138,7 +138,7 @@ func TestManagedWebServiceJSONRejectsUnknownFields(t *testing.T) {
 	backend := &managedBackendStub{}
 	channelID := "ch_managed_json"
 	server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
-	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness","deployment":"native","workspace_path":"/workspace","api_key":"must-not-be-accepted"}`))
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness-host","deployment":"native","workspace_path":"/workspace","api_key":"must-not-be-accepted"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response := httptest.NewRecorder()
 	server.handleManagedWebServicesAPI(response, request)

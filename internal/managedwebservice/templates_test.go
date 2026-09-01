@@ -51,6 +51,9 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 	if source.DefaultWorkspacePath == "" || copy.DefaultWorkspacePath == "" || source.DefaultWorkspacePath == copy.DefaultWorkspacePath {
 		t.Fatalf("independent template workspaces = %q, %q", source.DefaultWorkspacePath, copy.DefaultWorkspacePath)
 	}
+	if filepath.Base(source.DefaultWorkspacePath) != source.TemplateID || filepath.Base(copy.DefaultWorkspacePath) != copy.TemplateID {
+		t.Fatalf("template-specific workspace suffixes = %q, %q", source.DefaultWorkspacePath, copy.DefaultWorkspacePath)
+	}
 	if copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.StartScript != source.Spec.Host.StartScript {
 		t.Fatalf("duplicate definition = %+v", copy.Spec)
 	}
@@ -78,6 +81,16 @@ func TestDuplicateBuiltInHostRetainsReleaseLockedRuntime(t *testing.T) {
 	}
 	if copy.Source != "custom" || copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || copy.Spec.Host.Artifact != nil {
 		t.Fatalf("duplicated built-in host = %+v", copy)
+	}
+}
+
+func TestDeepSeekProductIdentityIsNotAnInstallableTemplate(t *testing.T) {
+	t.Parallel()
+	manager := &Manager{}
+	_, err := manager.Template(context.Background(), DeepSeekHarnessProductID)
+	var managedErr *Error
+	if !errors.As(err, &managedErr) || managedErr.Code != "TEMPLATE_NOT_FOUND" {
+		t.Fatalf("product identity template lookup error = %v", err)
 	}
 }
 

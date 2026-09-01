@@ -95,6 +95,7 @@ describe('ServiceTemplateCatalog', () => {
     const onCategoryChange = vi.fn((next: 'host' | 'container') => setCategory(next));
     const onCreate = vi.fn();
     const onDeploy = vi.fn();
+    const onOpen = vi.fn();
     const onDuplicate = vi.fn();
     const onEdit = vi.fn();
     const onDelete = vi.fn();
@@ -111,13 +112,14 @@ describe('ServiceTemplateCatalog', () => {
       onQueryChange,
       onCreate,
       onDeploy,
+      onOpen,
       onDuplicate,
       onEdit,
       onDelete,
       ...overrides,
     };
     dispose = render(() => <ServiceTemplateCatalog {...props} />, host);
-    return { onCategoryChange, onCreate, onDeploy, onDuplicate, onEdit, onDelete, onQueryChange };
+    return { onCategoryChange, onCreate, onDeploy, onOpen, onDuplicate, onEdit, onDelete, onQueryChange };
   }
 
   it('presents built-in and custom templates as a selectable list with a detail pane', () => {
@@ -241,8 +243,32 @@ describe('ServiceTemplateCatalog', () => {
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
     expect(installedCard.getAttribute('data-template-state')).toBe('installed');
     installedCard.click();
-    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('This service family already has an instance');
+    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('A service from this template is installed in this Environment');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
+  });
+
+  it('opens the exact installed service from the template menu without starting it', () => {
+    const installed = { ...builtIn, installed: true, openable: true };
+    const actions = mount({ templates: [installed] });
+
+    const openAction = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dropdown-items] button'))
+      .find((button) => button.textContent?.trim() === 'Open');
+    expect(openAction?.disabled).toBe(false);
+    openAction?.click();
+
+    expect(actions.onOpen).toHaveBeenCalledOnce();
+    expect(actions.onDeploy).not.toHaveBeenCalled();
+  });
+
+  it('keeps the installed-service open action visible with its unavailable reason', () => {
+    const installed = { ...builtIn, installed: true, openable: false, openUnavailableReason: 'The service is not running.' };
+    mount({ templates: [installed] });
+
+    const openAction = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dropdown-items] button'))
+      .find((button) => button.textContent?.includes('Open'));
+    expect(openAction?.disabled).toBe(true);
+    expect(openAction?.textContent).toContain('The service is not running.');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-more"]')?.disabled).toBe(false);
   });
 
   it('shows a distinct no-results state and clears the search', () => {

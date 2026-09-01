@@ -1024,6 +1024,64 @@ describe('EnvPortForwardsPage', () => {
     });
   });
 
+  it('matches installed templates exactly and reuses the managed-service open flow', async () => {
+    const templates = [
+      {
+        template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness-host', name: 'DeepSeek Harness · Host', description: 'Host deployment',
+        brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1,
+        duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true,
+        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness-host', deployments: [{ deployment: 'native', available: true }], workspace_roots: [],
+      },
+      {
+        template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness-container', name: 'DeepSeek Harness · Container', description: 'Container deployment',
+        brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessContainer', source: 'builtin', deployment: 'docker', revision: 1,
+        duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true,
+        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness-container', deployments: [{ deployment: 'docker', available: true }], workspace_roots: [],
+      },
+    ];
+    const service = {
+      service_id: 'mws-container', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness-container',
+      name: 'DeepSeek Harness · Container', template_source: 'builtin', deployment: 'docker', workspace_path: templates[1].default_workspace_path,
+      version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'pf-container', runtime_port: 3080,
+      access_mode: 'unified_proxy', update_available: false,
+    };
+    const assign = vi.fn();
+    vi.spyOn(window, 'open').mockReturnValue({ location: { assign }, close: vi.fn() } as unknown as Window);
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: service.forward_id, target_url: 'http://127.0.0.1:3080', access_mode: 'unified_proxy' }] };
+      if (url === '/_redeven_proxy/api/forward-sessions' && init?.method === 'POST') return { forward: { forward_id: service.forward_id, target_url: 'http://127.0.0.1:3080' }, app_path: '/', ephemeral: false };
+      if (url === '/_redeven_proxy/api/forwards/pf-container/touch') return { forward_id: service.forward_id };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+
+    const hostRow = host.querySelector<HTMLElement>('[data-template-id="deepseek-harness-host"]');
+    expect(hostRow?.getAttribute('data-template-state')).toBe('available');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(false);
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
+    await flushPage();
+    const containerRow = host.querySelector<HTMLElement>('[data-template-id="deepseek-harness-container"]');
+    expect(containerRow?.getAttribute('data-template-state')).toBe('installed');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
+
+    const openFromTemplate = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button'))
+      .find((button) => button.title === 'Open');
+    expect(openFromTemplate?.disabled).toBe(false);
+    openFromTemplate?.click();
+
+    await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forward-sessions', {
+      method: 'POST', body: JSON.stringify({ target: 'http://127.0.0.1:3080' }),
+    }));
+    await waitForAssertion(() => expect(assign).toHaveBeenCalledWith('https://localhost/pf/pf-container/'));
+  });
+
   it('keeps service discovery and managed actions in one compact visual frame', async () => {
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
