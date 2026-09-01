@@ -40,7 +40,7 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 		}
 		seenSignals[name] = struct{}{}
 	}
-	for _, signal := range []string{"ask_user", "task_complete"} {
+	for _, signal := range []string{"ask_user"} {
 		if _, ok := seenSignals[signal]; !ok {
 			continue
 		}

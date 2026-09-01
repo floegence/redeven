@@ -52,8 +52,8 @@ describe('Flower activity running sheen', () => {
     expect(css).not.toContain('.flower-activity-terminal-chip');
     expect(css).toContain('.flower-activity-terminal-command-token-command');
     expect(css).toContain('.flower-activity-web-panel,');
-    expect(css).toContain('.flower-activity-question-panel,');
-    expect(css).toContain('.flower-activity-completion-panel');
+    expect(css).toContain('.flower-activity-question-panel {');
+    expect(css).not.toContain('.flower-activity-completion-panel');
   });
 
   it('bounds Web Fetch previews and keeps external-link controls interactive', () => {

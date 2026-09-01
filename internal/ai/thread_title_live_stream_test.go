@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v6/identity"
-	flruntime "github.com/floegence/floret/v6/runtime"
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -71,14 +71,6 @@ func (mock *liveAutomaticTitleOpenAIMock) handle(w http.ResponseWriter, r *http.
 			text = "Live title"
 		}
 		writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": text})
-	}
-	if !isTitle {
-		call := map[string]any{
-			"type": "function_call", "id": "fc_live_title_complete", "call_id": "call_live_title_complete",
-			"name": "task_complete", "arguments": `{}`,
-		}
-		writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 1, "item": call})
-		writeTestRealtimeSSE(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 1, "item": call})
 	}
 	writeTestRealtimeSSE(w, flusher, map[string]any{
 		"type": "response.completed",

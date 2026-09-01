@@ -172,7 +172,6 @@ describe('presentFlowerActivityItem', () => {
     { name: 'web_search', renderer: 'web_search' },
     { name: 'web_fetch', renderer: 'web_fetch' },
     { name: 'question', renderer: 'question' },
-    { name: 'completion', renderer: 'completion' },
     { name: 'subagents', renderer: undefined, toolName: 'subagents' },
   ] as const)('does not expose approved lifecycle state in $name presentation', ({ renderer, toolName }) => {
     const presentation = presentFlowerActivityItem(item({
@@ -946,34 +945,6 @@ describe('presentFlowerActivityItem', () => {
       },
     });
     expect(JSON.stringify(presentation)).not.toContain('secret-value');
-  });
-
-  it('renders completion payloads as outcome sections', () => {
-    const presentation = presentFlowerActivityItem(item({
-      tool_name: 'task_complete',
-      renderer: 'completion',
-      label: 'task_complete',
-      payload: {
-        result: 'Implemented.',
-        evidence_refs: ['go test ./...'],
-        remaining_risks: ['visual QA pending'],
-        next_actions: ['ship'],
-      },
-    }));
-
-    expect(presentation.detailBlocks[0]).toEqual({
-      kind: 'completion',
-      completion: {
-        result: 'Implemented.',
-        summary: '',
-        details: '',
-        evidence_refs: ['go test ./...'],
-        remaining_risks: ['visual QA pending'],
-        next_actions: ['ship'],
-      },
-    });
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('result');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('evidence');
   });
 
   it('renders todo details from structured payload', () => {

@@ -6,6 +6,13 @@
   and elapsed time through the existing persisted operation stream. Host
   install stages without byte-level telemetry keep elapsed time visible and do
   not invent transfer totals or expose source URL query data.
+* **Floret v7 Turn surfaces and natural completion**: Redeven now consumes
+  Floret v7.0.1. Each new Turn uses the current persisted settings, System
+  Prompt, and tools; Ask User, tool loops, retries, and restart recovery reuse
+  the immutable checkpointed surface. Natural provider stop completes the
+  Turn, and removed historical tools use the neutral Activity presentation.
+  The known legacy continuation-prompt repair crosses one explicit context
+  projection boundary without compaction or stale continuation reuse.
 * **Exact DeepSeek template instances**: Host and container templates now own
   separate service families and template-specific default workspaces, so both
   may coexist without misleading installed state. Template Open reuses the
@@ -20,18 +27,15 @@
   replacement. Floret title events request one lifecycle-owned canonical
   summary publisher outside the event callback; publication failure fences the
   live stream so reconnect restores the authoritative title baseline.
-* **Cross-Turn model switching and stable context**: Redeven now consumes
-  Floret v6.1.1. Persisted thread settings are the only model authority for an
+* **Cross-Turn model switching and stable context**: Persisted thread settings are the only model authority for an
   existing thread; request model fields only validate the frozen choice. Idle
   Flash to Pro to Flash switches retain append-only canonical history and
   model-specific render prefixes without carrying provider continuation state
   across models or compacting small context.
-* **Append-only Flower context and explicit completion**: Redeven now consumes
-  Floret v6.1.1, keeps the hosted Agent System Prompt stable, restores the
-  original canonical Turn input after Ask User, appends mutable environment
-  facts as per-turn supplemental context, fixes the model tool surface for the
-  active generation, and requires structured `ask_user` or `task_complete`
-  signals instead of treating a natural model stop as success.
+* **Append-only Flower context**: Flower restores the original canonical Turn
+  input after Ask User, appends mutable environment facts as per-turn
+  supplemental context, and keeps one fixed model surface during an active
+  Turn.
 * **Ask User live continuation**: Floret publishes a clean `preparing` Run before
   provider dispatch and fences attempts per Run. Redeven forwards the resulting
   waiting-response, streaming reasoning, and assistant growth before terminal

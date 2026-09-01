@@ -170,25 +170,21 @@ func TestPermissionSnapshotConsistencyForBuiltinMatrix(t *testing.T) {
 	}
 }
 
-func TestBuiltInControlSignalDefinitions_ExposeAskUserAndTaskComplete(t *testing.T) {
+func TestBuiltInControlSignalDefinitionsExposeOnlyAskUser(t *testing.T) {
 	t.Parallel()
 
-	if got := toolNames(builtInControlSignalDefinitions()); !reflect.DeepEqual(got, []string{"ask_user", "task_complete"}) {
-		t.Fatalf("control signals=%v, want [ask_user task_complete]", got)
-	}
-	if got := toolNames(builtInModelCapabilityDefinitions()); !containsString(got, "task_complete") {
-		t.Fatalf("model capability surface omits task_complete signal: %v", got)
+	if got := toolNames(builtInControlSignalDefinitions()); !reflect.DeepEqual(got, []string{"ask_user"}) {
+		t.Fatalf("control signals=%v, want [ask_user]", got)
 	}
 }
 
-func TestRunCapabilityContractKeepsExplicitCompletionSignal(t *testing.T) {
+func TestRunCapabilityContractKeepsOnlyAvailableInteractionSignal(t *testing.T) {
 	t.Parallel()
 
 	contract := resolveRunCapabilityContract(nil, nil, []ToolDef{
-		{Name: "task_complete"},
 		{Name: "ask_user"},
 	}, false)
-	if !reflect.DeepEqual(contract.AllowedSignals, []string{"ask_user", "task_complete"}) {
-		t.Fatalf("allowed signals=%v, want [ask_user task_complete]", contract.AllowedSignals)
+	if !reflect.DeepEqual(contract.AllowedSignals, []string{"ask_user"}) {
+		t.Fatalf("allowed signals=%v, want [ask_user]", contract.AllowedSignals)
 	}
 }

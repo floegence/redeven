@@ -1159,8 +1159,8 @@ describe('buildFlowerTimelineEntries', () => {
     const timeline = activityTimeline({
       items: [activityItem({
         item_id: 'completion-1',
-        tool_name: 'task_complete',
-        renderer: 'completion',
+		tool_name: 'retired_tool',
+        renderer: 'structured',
         payload: { result: { summary: 'done', details: 'ok' } },
       })],
     });

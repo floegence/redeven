@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/floegence/floret/v6/identity"
-	flruntime "github.com/floegence/floret/v6/runtime"
-	flstorage "github.com/floegence/floret/v6/storage"
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
+	flstorage "github.com/floegence/floret/v7/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -107,10 +107,11 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 }
 
 func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flruntime.AgentRequest) (floretEffectRequest, error) {
-	if s == nil || s.threadsDB == nil {
+	db := s.snapshotThreadStore()
+	if db == nil {
 		return floretEffectRequest{}, errors.New("Flower thread catalog is unavailable")
 	}
-	settings, err := s.threadsDB.GetThreadSettingsByCanonicalThreadID(ctxOrBackground(ctx), request.ThreadID.String())
+	settings, err := db.GetThreadSettingsByCanonicalThreadID(ctxOrBackground(ctx), request.ThreadID.String())
 	if err != nil {
 		return floretEffectRequest{}, err
 	}
@@ -164,21 +165,22 @@ func runInputFromFloret(input flruntime.UserInput) RunInput {
 }
 
 func (s *Service) executionAuthorityForRequest(ctx context.Context, request flruntime.AgentRequest) (*threadstore.ExecutionAuthority, error) {
-	if s == nil || s.threadsDB == nil {
+	db := s.snapshotThreadStore()
+	if db == nil {
 		return nil, errors.New("Flower execution authority store is unavailable")
 	}
 	if key := strings.TrimSpace(request.RequestKey); key != "" {
-		if authority, err := s.threadsDB.GetExecutionAuthority(ctxOrBackground(ctx), key); err != nil || authority != nil {
+		if authority, err := db.GetExecutionAuthority(ctxOrBackground(ctx), key); err != nil || authority != nil {
 			return authority, err
 		}
 	}
 	if request.TurnID != "" {
-		if authority, err := s.threadsDB.GetExecutionAuthorityByTurn(ctxOrBackground(ctx), request.ThreadID.String(), request.TurnID.String()); err != nil || authority != nil {
+		if authority, err := db.GetExecutionAuthorityByTurn(ctxOrBackground(ctx), request.ThreadID.String(), request.TurnID.String()); err != nil || authority != nil {
 			return authority, err
 		}
 	}
 	if request.RetrySource != "" {
-		return s.threadsDB.GetExecutionAuthorityByTurn(ctxOrBackground(ctx), request.ThreadID.String(), request.RetrySource.String())
+		return db.GetExecutionAuthorityByTurn(ctxOrBackground(ctx), request.ThreadID.String(), request.RetrySource.String())
 	}
 	return nil, nil
 }

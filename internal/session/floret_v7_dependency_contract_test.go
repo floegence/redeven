@@ -13,7 +13,7 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-func TestFloretDependencyIsExactPublishedV6(t *testing.T) {
+func TestFloretDependencyIsExactPublishedV7(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -25,8 +25,8 @@ func TestFloretDependencyIsExactPublishedV6(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const path = "github.com/floegence/floret/v6"
-	const version = "v6.1.1"
+	const path = "github.com/floegence/floret/v7"
+	const version = "v7.0.1"
 	found := false
 	for _, requirement := range module.Require {
 		if requirement.Mod.Path == path {
@@ -79,7 +79,7 @@ func TestFloretDependencyIsExactPublishedV6(t *testing.T) {
 			if unquoteErr != nil {
 				return unquoteErr
 			}
-			if path == "github.com/floegence/floret" || strings.HasPrefix(path, "github.com/floegence/floret/") && !strings.HasPrefix(path, "github.com/floegence/floret/v6/") {
+			if path == "github.com/floegence/floret" || strings.HasPrefix(path, "github.com/floegence/floret/") && !strings.HasPrefix(path, "github.com/floegence/floret/v7/") {
 				relative, _ := filepath.Rel(root, filePath)
 				t.Fatalf("%s imports retired Floret module path %q", relative, path)
 			}
@@ -88,6 +88,46 @@ func TestFloretDependencyIsExactPublishedV6(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("scan Go imports: %v", err)
+	}
+}
+
+func TestRepositoryDoesNotRetainRemovedCompletionTool(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	removedTool := strings.Join([]string{"task", "complete"}, "_")
+	removedIdentifier := strings.Join([]string{"Task", "Complete"}, "")
+	extensions := map[string]bool{
+		".css": true, ".go": true, ".html": true, ".js": true, ".json": true,
+		".md": true, ".mjs": true, ".sh": true, ".ts": true, ".tsx": true,
+		".yaml": true, ".yml": true,
+	}
+	err := filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case ".git", "node_modules", "build", "coverage", "out", "target":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !extensions[strings.ToLower(filepath.Ext(filePath))] {
+			return nil
+		}
+		body, err := os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(body), removedTool) || strings.Contains(string(body), removedIdentifier) {
+			relative, _ := filepath.Rel(root, filePath)
+			t.Fatalf("%s retains the removed completion-tool contract", relative)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan repository: %v", err)
 	}
 }
 

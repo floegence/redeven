@@ -62,7 +62,7 @@ func (m *openAIContinuationMock) handle(w http.ResponseWriter, r *http.Request) 
 	m.issuedResponseIDs = append(m.issuedResponseIDs, responseID)
 	m.mu.Unlock()
 
-	writeOpenAIResponsesSSE(w, r, strings.TrimSpace(fmt.Sprint(req["model"])), responseID, token, containsString(extractOpenAIToolNames(req), "task_complete"))
+	writeOpenAIResponsesSSE(w, r, strings.TrimSpace(fmt.Sprint(req["model"])), responseID, token)
 }
 
 func (m *openAIContinuationMock) snapshot() ([]string, []string) {
@@ -71,7 +71,7 @@ func (m *openAIContinuationMock) snapshot() ([]string, []string) {
 	return append([]string(nil), m.previousResponseIDs...), append([]string(nil), m.issuedResponseIDs...)
 }
 
-func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model string, responseID string, token string, complete bool) {
+func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model string, responseID string, token string) {
 	if strings.TrimSpace(model) == "" {
 		model = "gpt-5-mini"
 	}
@@ -114,11 +114,6 @@ func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model strin
 			"id":   itemID,
 		},
 	})
-	if complete {
-		call := map[string]any{"type": "function_call", "id": "fc_" + responseID, "call_id": "call_" + responseID, "name": "task_complete", "arguments": `{}`}
-		writeSSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 1, "item": call})
-		writeSSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 1, "item": call})
-	}
 	writeSSEJSON(w, flusher, map[string]any{
 		"type": "response.completed",
 		"response": map[string]any{
@@ -206,7 +201,7 @@ func TestOpenAIProviderStreamTurnUsesPreviousResponseIDAndReturnsProviderState(t
 		mu.Lock()
 		captured = previousResponseID
 		mu.Unlock()
-		writeOpenAIResponsesSSE(w, r, "gpt-5-mini", "resp_next", "hello", false)
+		writeOpenAIResponsesSSE(w, r, "gpt-5-mini", "resp_next", "hello")
 	}))
 	t.Cleanup(srv.Close)
 

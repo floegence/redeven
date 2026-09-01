@@ -164,10 +164,9 @@ func TestDeriveThreadRunState(t *testing.T) {
 		wantCode    string
 		wantMsg     string
 	}{
-		{name: "task complete success", endReason: "complete", finalReason: "task_complete", err: nil, wantState: "success", wantMsg: ""},
 		{name: "natural stop success", endReason: "complete", finalReason: "natural_stop", err: nil, wantState: "success", wantMsg: ""},
 		{name: "ask user waiting", endReason: "complete", finalReason: "ask_user_waiting_model", err: nil, wantState: "waiting_user", wantMsg: ""},
-		{name: "unknown final reason rejected", endReason: "complete", finalReason: "unknown_final_reason", err: nil, wantState: "failed", wantMsg: "Run ended without explicit completion."},
+		{name: "unknown final reason rejected", endReason: "complete", finalReason: "unknown_final_reason", err: nil, wantState: "failed", wantMsg: "Run ended without a valid terminal result."},
 		{name: "canceled", endReason: "canceled", finalReason: "", err: nil, wantState: "canceled", wantMsg: ""},
 		{name: "timed out", endReason: "timed_out", finalReason: "", err: nil, wantState: "timed_out", wantCode: runErrorCodeProviderUnreachable, wantMsg: "The selected AI provider could not be reached. Check the provider endpoint and network connection."},
 		{name: "disconnected", endReason: "disconnected", finalReason: "", err: nil, wantState: "failed", wantMsg: "Disconnected."},

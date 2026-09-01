@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	openai "github.com/openai/openai-go"
 )
 

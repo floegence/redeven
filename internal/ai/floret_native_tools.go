@@ -3,8 +3,8 @@ package ai
 import (
 	"strings"
 
-	fltools "github.com/floegence/floret/v6/tools"
-	"github.com/floegence/floret/v6/tools/webfetch"
+	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/floret/v7/tools/webfetch"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 

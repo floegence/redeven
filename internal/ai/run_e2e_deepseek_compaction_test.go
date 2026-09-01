@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -43,9 +43,7 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 	if apiKey == "" {
 		t.Fatal("REDEVEN_FLOWER_CONTEXT_E2E_API_KEY is required")
 	}
-	recorder := &deepSeekContextRecorder{
-		markers: []string{deepSeekManualContextMarker, deepSeekAutomaticContextMarker}, normalizeMainResponses: true,
-	}
+	recorder := &deepSeekContextRecorder{markers: []string{deepSeekManualContextMarker, deepSeekAutomaticContextMarker}}
 	proxyURL := newDeepSeekRecordingProxy(t, baseURL, recorder)
 
 	providerID := "deepseek-compaction-e2e"
@@ -108,7 +106,7 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 		var before FlowerContextUsage
 		for index := 1; index <= 4; index++ {
 			seed := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, fmt.Sprintf("deepseek-compaction-manual-seed-%d", index), threadID, manualModelID,
-				deepSeekCompactionPrompt("manual", oldestMarker, 12_000, "Reply with ACK_"+oldestMarker+", then call task_complete with output set to ACK_"+oldestMarker+"."))
+				deepSeekCompactionPrompt("manual", oldestMarker, 12_000, "Reply with ACK_"+oldestMarker+" and finish normally without calling tools."))
 			before = requireDeepSeekContextUsage(t, seed, "manual seed", deepSeekManualE2EContextWindow)
 			if len(seed.Thread.ContextCompactions) != 0 {
 				t.Fatalf("manual seed %d unexpectedly compacted: count=%d", index, len(seed.Thread.ContextCompactions))
@@ -131,7 +129,7 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 		threadID := createDeepSeekCompactionThread(t, ctx, svc, &meta, modelID, "Automatic context compaction")
 		oldestMarker := deepSeekAutomaticContextMarker
 		seed := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, "deepseek-compaction-automatic-seed", threadID, modelID,
-			deepSeekCompactionPrompt("automatic", oldestMarker, 2_000, "Reply with ACK_"+oldestMarker+", then call task_complete with output set to ACK_"+oldestMarker+"."))
+			deepSeekCompactionPrompt("automatic", oldestMarker, 2_000, "Reply with ACK_"+oldestMarker+" and finish normally without calling tools."))
 		before := requireDeepSeekContextUsage(t, seed, "automatic seed", deepSeekCompactionE2EContextWindow)
 		if len(seed.Thread.ContextCompactions) != 0 {
 			t.Fatalf("automatic seed unexpectedly compacted: count=%d", len(seed.Thread.ContextCompactions))
@@ -142,7 +140,7 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 		for attempt, triggerTokens := range []int{8_000, 8_000, 8_000, 8_000} {
 			requestID := fmt.Sprintf("deepseek-compaction-automatic-trigger-%02d", attempt+1)
 			prompt := deepSeekCompactionPrompt("automatic-trigger", oldestMarker, triggerTokens,
-				"Reply with the oldest remembered marker, then call task_complete with output set to "+oldestMarker+".")
+				"Reply with the oldest remembered marker and finish normally without calling tools.")
 			detail = sendDeepSeekCompactionTurn(t, ctx, svc, &meta, requestID, threadID, modelID, prompt)
 			currentInput := int64(0)
 			if detail.Thread.ContextUsage != nil {
@@ -182,20 +180,21 @@ func assertDeepSeekCompactionRequestReset(t *testing.T, recorder *deepSeekContex
 	recorder.mu.Lock()
 	observations := append([]deepSeekContextObservation(nil), recorder.observations...)
 	recorder.mu.Unlock()
-	maxMessages := 0
 	resetIndex := -1
+	var previous *deepSeekContextObservation
 	for index, observation := range observations {
 		if markerIndex < 0 || markerIndex >= len(observation.MarkerPresence) || !observation.MarkerPresence[markerIndex] {
 			continue
 		}
-		messageCount := len(observation.MessageHashes)
-		if messageCount < maxMessages {
+		if previous != nil && !stringPrefix(previous.MessageHashes, observation.MessageHashes) {
+			if previous.SystemHash != observation.SystemHash || previous.ToolsHash != observation.ToolsHash {
+				t.Fatalf("compaction changed the execution surface at observation %d", index)
+			}
 			resetIndex = index
 			break
 		}
-		if messageCount > maxMessages {
-			maxMessages = messageCount
-		}
+		current := observation
+		previous = &current
 	}
 	if resetIndex < 0 {
 		t.Fatalf("completed compaction did not reset the observed render generation for marker %d", markerIndex+1)
@@ -256,10 +255,8 @@ func sendDeepSeekCompactionTurn(t *testing.T, ctx context.Context, svc *Service,
 		ClientRequestID: requestID, ThreadID: threadID, Model: modelID,
 		Input: RunInput{Text: text},
 		Options: RunOptions{
-			PermissionType:     config.AIPermissionFullAccess,
 			ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff},
 			NoUserInteraction:  true,
-			ToolAllowlist:      []string{"ask_user"},
 		},
 	})
 	if err != nil {

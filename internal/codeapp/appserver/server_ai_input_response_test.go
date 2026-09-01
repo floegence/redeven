@@ -14,9 +14,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/floegence/floret/v6/identity"
-	flprovider "github.com/floegence/floret/v6/provider"
-	flruntime "github.com/floegence/floret/v6/runtime"
+	"github.com/floegence/floret/v7/identity"
+	flprovider "github.com/floegence/floret/v7/provider"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -230,7 +230,7 @@ func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, 
 	result := runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), identity.ThreadID(threadID), appserverAskUserGateway{toolID: toolID, args: string(args)}, appserverTestFloretTurnRequest{
 		TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID),
 		Input:   flruntime.TurnInput{Text: "wait for user input"},
-		Signals: flruntime.TurnSignalSpec{Definitions: flruntime.CoreControlDefinitions(false), Identity: "core-control-v1", Project: flruntime.ProjectCoreControlSignal},
+		Signals: flruntime.TurnSignalSpec{Definitions: flruntime.CoreControlDefinitions(), Identity: "core-control-v1", Project: flruntime.ProjectCoreControlSignal},
 	})
 	if len(result.Interactions) != 1 || result.Interactions[0].Kind != flruntime.ThreadInteractionInput || result.Interactions[0].Resolved {
 		t.Fatalf("waiting thread view=%#v", result)

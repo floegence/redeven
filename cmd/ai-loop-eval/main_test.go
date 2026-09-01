@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v6/identity"
-	"github.com/floegence/floret/v6/observation"
-	flruntime "github.com/floegence/floret/v6/runtime"
-	fltools "github.com/floegence/floret/v6/tools"
+	"github.com/floegence/floret/v7/identity"
+	"github.com/floegence/floret/v7/observation"
+	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/ai"
 )
 
@@ -133,7 +133,7 @@ func TestExtractLatestAssistantTextIgnoresRawToolCallBlocks(t *testing.T) {
 	got := visibleAssistantTextFromBlocks([]any{
 		map[string]any{
 			"type":     "tool-call",
-			"toolName": "task_complete",
+			"toolName": "retired_tool",
 			"args": map[string]any{
 				"result": "This raw tool payload must not become visible output.",
 			},

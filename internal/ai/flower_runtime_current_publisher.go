@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 const flowerRuntimeCurrentPublishInterval = 50 * time.Millisecond

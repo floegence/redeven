@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
-	fltools "github.com/floegence/floret/v6/tools"
-	"github.com/floegence/floret/v6/tools/webfetch"
+	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/floret/v7/tools/webfetch"
 )
 
 func TestFloretNativeWebFetchDefinitionIsSingleSharedSurface(t *testing.T) {

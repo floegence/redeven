@@ -186,11 +186,6 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 				"id":   itemID,
 			},
 		})
-		if containsString(requestToolNames, "task_complete") {
-			call := map[string]any{"type": "function_call", "id": "fc_test_complete", "call_id": "call_test_complete", "name": "task_complete", "arguments": `{}`}
-			writeSSEJSON(w, f, map[string]any{"type": "response.output_item.added", "output_index": 1, "item": call})
-			writeSSEJSON(w, f, map[string]any{"type": "response.output_item.done", "output_index": 1, "item": call})
-		}
 		writeSSEJSON(w, f, map[string]any{
 			"type": "response.completed",
 			"response": map[string]any{
@@ -242,28 +237,15 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 		})
-		if containsString(requestToolNames, "task_complete") {
-			writeSSEJSON(w, f, map[string]any{
-				"id": "chatcmpl_test_1", "created": time.Now().Unix(), "model": model,
-				"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"tool_calls": []any{map[string]any{
-					"index": 0, "id": "call_test_complete", "type": "function", "function": map[string]any{"name": "task_complete", "arguments": `{}`},
-				}}}}},
-			})
-		}
 		writeSSEJSON(w, f, map[string]any{
 			"id":      "chatcmpl_test_1",
 			"created": time.Now().Unix(),
 			"model":   model,
 			"choices": []any{
 				map[string]any{
-					"index": 0,
-					"delta": map[string]any{},
-					"finish_reason": func() string {
-						if containsString(requestToolNames, "task_complete") {
-							return "tool_calls"
-						}
-						return "stop"
-					}(),
+					"index":         0,
+					"delta":         map[string]any{},
+					"finish_reason": "stop",
 				},
 			},
 		})
@@ -299,7 +281,7 @@ func writeSSEJSON(w io.Writer, f http.Flusher, v any) {
 	f.Flush()
 }
 
-func TestIntegration_ModelGateway_OpenAI_IdentityQuestionCompletesWithExplicitSignal(t *testing.T) {
+func TestIntegration_ModelGateway_OpenAI_IdentityQuestionCompletesWithNaturalStop(t *testing.T) {
 	t.Parallel()
 
 	token := "我是 Flower。"

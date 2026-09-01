@@ -35,7 +35,7 @@ func TestRunReplay_UsesActivityTimelineAndFinalText(t *testing.T) {
               {
                 "item_id": "tool_done",
                 "tool_id": "tool_done",
-                "tool_name": "task_complete",
+                "tool_name": "retired_tool",
                 "kind": "control",
                 "status": "success",
                 "severity": "quiet",

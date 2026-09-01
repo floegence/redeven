@@ -527,8 +527,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
 	const (
-		floretModule  = "github.com/floegence/floret/v6"
-		floretVersion = "v6.1.1"
+		floretModule  = "github.com/floegence/floret/v7"
+		floretVersion = "v7.0.1"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -606,7 +606,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedMarkers := map[string][]string{
 		filepath.Join("okf", "ai", "floret-thread-runtime.md"): {
-			"Floret v6 `ThreadService`",
+			"Floret v7 `ThreadService`",
 			"canonical journal is the only durable lifecycle fact source",
 			"`View`, `Send`, `Respond`, `Cancel`, `Retry`",
 		},
@@ -616,7 +616,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v6 v6.1.1",
+			"github.com/floegence/floret/v7 v7.0.1",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
 			"published Flowersec Go and Core v4.0.0 plus Floe Webapp v0.47.0",
@@ -796,7 +796,7 @@ func TestFloretCanonicalThreadCreationIsCreateCoordinatorOnly(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if importPath != "github.com/floegence/floret/v6/runtime" {
+			if importPath != "github.com/floegence/floret/v7/runtime" {
 				continue
 			}
 			alias := "runtime"
@@ -853,8 +853,6 @@ func TestFloretGatewayBoundaryUsesStableAgentIdentity(t *testing.T) {
 		"flruntime.WithAgentTools(surface.FloretToolItems...)",
 		"flruntime.WithAgentThreadTitleMode",
 		"flruntime.ThreadTitleModeProvider",
-		"flruntime.WithAgentTurnCompletionPolicy",
-		"flruntime.TurnCompletionExplicitSignal",
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("floret_runtime.go must construct the immutable hosted Agent with %q", marker)
@@ -973,7 +971,7 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 
 	root := repoRootForTest(t)
 	forbidden := []string{
-		"github.com/floegence/floret/v6/" + "internal",
+		"github.com/floegence/floret/v7/" + "internal",
 		"Run" + "ProjectedTurn",
 		"ProjectedTurn" + "Request",
 		"ProjectedTurn" + "Result",
@@ -1345,7 +1343,7 @@ func TestFlowerDoesNotPersistOrRebuildFloretToolState(t *testing.T) {
 	}
 }
 
-func TestFloretControlSignalsAreNotSyntheticToolCallRecords(t *testing.T) {
+func TestFloretAskUserIsNotASyntheticToolCallRecord(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -1366,17 +1364,14 @@ func TestFloretControlSignalsAreNotSyntheticToolCallRecords(t *testing.T) {
 		content := string(data)
 		for _, marker := range []string{
 			"persist" + "SyntheticToolSuccess",
-			"persist" + "TaskCompleteSignal",
 			"persist" + "AskUserWaitingSignal",
-			"record" + "TaskCompleteSignal",
 		} {
 			if strings.Contains(content, marker) {
 				rel, _ := filepath.Rel(root, path)
 				t.Fatalf("%s must not persist Floret control signals as synthetic tool-call records: %q", rel, marker)
 			}
 		}
-		if strings.Contains(content, "ai_tool_calls") &&
-			(strings.Contains(content, `"task_complete"`) || strings.Contains(content, `"ask_user"`)) {
+		if strings.Contains(content, "ai_tool_calls") && strings.Contains(content, `"ask_user"`) {
 			rel, _ := filepath.Rel(root, path)
 			t.Fatalf("%s must not couple control signals to ai_tool_calls persistence", rel)
 		}

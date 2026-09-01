@@ -5741,8 +5741,7 @@ html.dark .flower-component-shell {
 
 .flower-activity-web-panel,
 .flower-activity-web-fetch-panel,
-.flower-activity-question-panel,
-.flower-activity-completion-panel {
+.flower-activity-question-panel {
   display: grid;
   min-width: 0;
   gap: 0.5rem;
@@ -5867,8 +5866,7 @@ html.dark .flower-component-shell {
   text-transform: uppercase;
 }
 
-.flower-activity-web-section,
-.flower-activity-completion-section {
+.flower-activity-web-section {
   display: grid;
   min-width: 0;
   gap: 0.3125rem;
@@ -5891,8 +5889,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-web-entry-title,
-.flower-activity-question-text,
-.flower-activity-completion-result {
+.flower-activity-question-text {
   min-width: 0;
   color: color-mix(in srgb, var(--foreground) 80%, var(--muted-foreground) 20%);
   font-size: 0.75rem;
@@ -5954,21 +5951,6 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--muted-foreground) 84%, transparent);
   font-size: 0.625rem;
   font-weight: 560;
-}
-
-.flower-activity-completion-list {
-  display: grid;
-  min-width: 0;
-  gap: 0.25rem;
-  margin: 0;
-  padding-left: 1rem;
-  color: color-mix(in srgb, var(--foreground) 74%, var(--muted-foreground) 26%);
-  font-size: 0.71875rem;
-  line-height: 1.38;
-}
-
-.flower-activity-completion-list li {
-  padding-left: 0.0625rem;
 }
 
 .flower-activity-todo-list {

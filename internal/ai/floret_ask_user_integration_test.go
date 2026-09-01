@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v6/identity"
-	flruntime "github.com/floegence/floret/v6/runtime"
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionrpc"
@@ -57,7 +57,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			writeAskUserIntegrationCompletedResponse(w, flusher, "resp_waiting")
 			return
 		}
-		writeAskUserIntegrationTaskCompleteResponse(w, flusher, "resp_resumed", "Deployment target accepted.")
+		writeAskUserIntegrationTextResponse(w, flusher, "resp_resumed", "Deployment target accepted.")
 	}))
 	t.Cleanup(providerServer.Close)
 
@@ -109,6 +109,9 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "openai/gpt-5-nano"); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("SetThreadModel while waiting error=%v, want ErrThreadBusy", err)
 	}
+	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionReadonly)); !errors.Is(err, ErrThreadBusy) {
+		t.Fatalf("SetThreadPermissionType while waiting error=%v, want ErrThreadBusy", err)
+	}
 	if _, err := svc.SubmitRequestUserInputResponse(context.Background(), meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: thread.ThreadID, Model: "openai/gpt-5-nano",
 		Response: RequestUserInputResponse{
@@ -152,19 +155,13 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	}
 }
 
-func TestRedevenHostedRunNaturalStopRequiresTaskComplete(t *testing.T) {
+func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {
 	t.Parallel()
 
 	var mainCalls atomic.Int32
-	var sawExplicitContinuation atomic.Bool
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
 		var request map[string]any
-		if err := json.Unmarshal(body, &request); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -174,30 +171,20 @@ func TestRedevenHostedRunNaturalStopRequiresTaskComplete(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		tools, _ := request["tools"].([]any)
 		if len(tools) == 0 {
-			writeAskUserIntegrationTextResponse(w, flusher, "resp_title_explicit", "Explicit completion")
+			writeAskUserIntegrationTextResponse(w, flusher, "resp_title_natural", "Natural completion")
 			return
 		}
-		switch mainCalls.Add(1) {
-		case 1:
-			writeAskUserIntegrationTextResponse(w, flusher, "resp_natural_stop", "Draft before explicit completion.")
-		case 2:
-			if strings.Contains(string(body), "Draft before explicit completion.") &&
-				strings.Contains(string(body), "requires an explicit control signal") &&
-				strings.Contains(string(body), "ask_user") &&
-				strings.Contains(string(body), "task_complete") {
-				sawExplicitContinuation.Store(true)
-			}
-			writeAskUserIntegrationTaskCompleteResponse(w, flusher, "resp_explicit_complete", "Finished explicitly.")
-		default:
+		if mainCalls.Add(1) != 1 {
 			t.Fatalf("unexpected main provider request %d", mainCalls.Load())
 		}
+		writeAskUserIntegrationTextResponse(w, flusher, "resp_natural_stop", "Finished naturally.")
 	}))
 	t.Cleanup(providerServer.Close)
 
 	stateDir := t.TempDir()
 	meta := &session.Meta{
-		EndpointID: "env_explicit_completion", ChannelID: "channel_explicit_completion",
-		NamespacePublicID: "namespace_explicit", UserPublicID: "user_explicit", UserEmail: "explicit@example.com",
+		EndpointID: "env_natural_completion", ChannelID: "channel_natural_completion",
+		NamespacePublicID: "namespace_natural", UserPublicID: "user_natural", UserEmail: "natural@example.com",
 		CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
 	}
 	svc, err := NewService(Options{
@@ -221,7 +208,7 @@ func TestRedevenHostedRunNaturalStopRequiresTaskComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Finish only when explicit."},
+		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Finish with a normal response."},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	}); err != nil {
 		t.Fatal(err)
@@ -229,14 +216,13 @@ func TestRedevenHostedRunNaturalStopRequiresTaskComplete(t *testing.T) {
 	completed := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
 		return strings.TrimSpace(view.RunStatus) == "success"
 	})
-	if mainCalls.Load() != 2 || !sawExplicitContinuation.Load() {
-		t.Fatalf("main calls=%d explicit continuation=%t", mainCalls.Load(), sawExplicitContinuation.Load())
+	if mainCalls.Load() != 1 {
+		t.Fatalf("main calls=%d, want one natural-stop request", mainCalls.Load())
 	}
-	if !strings.Contains(completed.LastMessagePreview, "Finished explicitly") {
-		t.Fatalf("last message=%q, want explicit completion output", completed.LastMessagePreview)
+	if !strings.Contains(completed.LastMessagePreview, "Finished naturally") {
+		t.Fatalf("last message=%q, want natural completion output", completed.LastMessagePreview)
 	}
-	requireAssistantTimelineTextContains(t, context.Background(), svc, meta, thread.ThreadID, "Draft before explicit completion.")
-	requireAssistantTimelineTextContains(t, context.Background(), svc, meta, thread.ThreadID, "Finished explicitly.")
+	requireAssistantTimelineTextContains(t, context.Background(), svc, meta, thread.ThreadID, "Finished naturally.")
 }
 
 func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderCompletes(t *testing.T) {
@@ -279,7 +265,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 		writeDeepSeekIntegrationReasoningDelta(w, flusher, "chat_resumed_receipt", " receipt")
 		select {
 		case <-releaseProvider:
-			writeDeepSeekIntegrationTaskCompleteResponse(w, flusher, "chat_resumed_receipt", "Receipt accepted.")
+			writeDeepSeekIntegrationNaturalResponse(w, flusher, "chat_resumed_receipt", "Receipt accepted.")
 		case <-r.Context().Done():
 		}
 	}))
@@ -512,19 +498,6 @@ func writeAskUserIntegrationTextResponse(w http.ResponseWriter, flusher http.Flu
 	writeAskUserIntegrationCompletedResponse(w, flusher, responseID)
 }
 
-func writeAskUserIntegrationTaskCompleteResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
-	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_text.delta", "delta": text})
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"type": "response.output_item.added", "output_index": 1,
-		"item": map[string]any{"type": "function_call", "id": "fc_" + responseID, "call_id": "call_" + responseID, "name": "task_complete", "arguments": `{}`},
-	})
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"type": "response.output_item.done", "output_index": 1,
-		"item": map[string]any{"type": "function_call", "id": "fc_" + responseID, "call_id": "call_" + responseID, "name": "task_complete", "arguments": `{}`},
-	})
-	writeAskUserIntegrationCompletedResponse(w, flusher, responseID)
-}
-
 func writeDeepSeekIntegrationReasoningDelta(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
 	writeOpenAISSEJSON(w, flusher, map[string]any{
 		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
@@ -532,20 +505,14 @@ func writeDeepSeekIntegrationReasoningDelta(w http.ResponseWriter, flusher http.
 	})
 }
 
-func writeDeepSeekIntegrationTaskCompleteResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
+func writeDeepSeekIntegrationNaturalResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
 	writeOpenAISSEJSON(w, flusher, map[string]any{
 		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
-			"role": "assistant", "content": text,
-			"tool_calls": []any{map[string]any{
-				"index": 0, "id": "call_" + responseID, "type": "function",
-				"function": map[string]any{"name": "task_complete", "arguments": `{}`},
-			}},
-		}}},
+		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{"role": "assistant", "content": text}}},
 	})
 	writeOpenAISSEJSON(w, flusher, map[string]any{
 		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": "tool_calls", "delta": map[string]any{}}},
+		"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "delta": map[string]any{}}},
 	})
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()
