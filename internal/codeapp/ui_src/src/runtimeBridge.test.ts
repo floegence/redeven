@@ -11,7 +11,6 @@ vi.mock("@floegence/flowersec-core/proxy", () => ({
 import {
   APP_BRIDGE_CAPABILITY_NONCE_STORAGE_KEY,
   APP_MAX_WS_FRAME_BYTES_STORAGE_KEY,
-  APP_PROXY_FETCH_MESSAGE_TYPE,
   MAX_WS_FRAME_BYTES,
   controllerOriginFromAppHost,
   parseAppProxyFetchMessage,
@@ -101,9 +100,9 @@ describe("runtimeBridge", () => {
     });
   });
 
-  test("maps generated Service Worker requests into the strict v2 runtime bridge", () => {
+  test("maps the standard Flowersec Service Worker request into the proxy runtime", () => {
     expect(parseAppProxyFetchMessage({
-      type: APP_PROXY_FETCH_MESSAGE_TYPE,
+      type: "flowersec-proxy:fetch",
       req: {
         id: "request-1",
         method: "GET",
@@ -133,7 +132,7 @@ describe("runtimeBridge", () => {
     const port = { postMessage: vi.fn(), close: vi.fn() } as unknown as MessagePort;
     const handle = registerCodeAppProxyBridge(targetWindowWithStorage(undefined, messages));
     const data = {
-      type: APP_PROXY_FETCH_MESSAGE_TYPE,
+      type: "flowersec-proxy:fetch",
       req: { id: "request-1", method: "GET", path: "/", headers: [] },
     };
 
