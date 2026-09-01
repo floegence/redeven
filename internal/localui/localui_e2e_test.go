@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
-	"github.com/floegence/flowersec/flowersec-go/v3/controlplane"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	"github.com/floegence/flowersec/flowersec-go/v4/controlplane"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessrpc"
 	fsrpc "github.com/floegence/redeven/internal/fs"
@@ -169,10 +169,10 @@ func TestServer_E2E_DesktopBridgeMintsPrivateLoopbackArtifact(t *testing.T) {
 	}
 	nestedArtifact, err := base64.RawURLEncoding.DecodeString(wire.ArtifactB64U)
 	if err != nil {
-		t.Fatalf("decode nested Flowersec v3 artifact: %v", err)
+		t.Fatalf("decode nested Transport v3 artifact: %v", err)
 	}
 	if _, err := flowersec.ParseArtifact(nestedArtifact); err != nil {
-		t.Fatalf("nested Flowersec v3 artifact is invalid: %v", err)
+		t.Fatalf("nested Transport v3 artifact is invalid: %v", err)
 	}
 }
 

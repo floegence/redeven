@@ -13,7 +13,7 @@ import (
 
 	termgo "github.com/floegence/floeterm/terminal-go"
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"

@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
-	"github.com/floegence/flowersec/flowersec-go/v3/controlplane"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	"github.com/floegence/flowersec/flowersec-go/v4/controlplane"
 )
 
 type outputWriter struct {

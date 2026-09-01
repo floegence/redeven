@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go-Version" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go-Version" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node.js-Version" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF-Wissen" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven stellt Funktionen in den Vordergrund. Die Laufzeit bleibt dennoch die Ve
 
 - Die Laufzeit läuft auf dem Endpunkt und hält Klartextdaten dort.
 - Die Steuerungsebene stellt Bootstrap-Nutzdaten, Freigaben und unveränderliche Sitzungsmetadaten aus.
-- [Flowersec](https://github.com/floegence/flowersec) überträgt verschlüsselte Bytes zwischen Client und Endpunkt-Laufzeit. Die Browser-Oberflächen nutzen Flowersec Core 3.1.1 und das Go-Modul `flowersec-go/v3@v3.1.1`.
+- [Flowersec](https://github.com/floegence/flowersec) überträgt verschlüsselte Bytes zwischen Client und Endpunkt-Laufzeit. Die Browser-Oberflächen nutzen Flowersec Core 4.0.0 und das Go-Modul `flowersec-go/v4@v4.0.0`.
 - Wirksame Berechtigungen stammen aus serverseitig ausgestellten Sitzungsfreigaben und werden durch die lokale Berechtigungsrichtlinie begrenzt (`read`, `write`, `execute`, `admin`; keine Kategorie schließt eine andere ein).
 - Lokale Konfiguration, E2EE-Material, Audit-Logs und Diagnosedaten verbleiben im Zustandsverzeichnis des Endpunkts.
 - GitHub Releases bleiben die öffentliche Referenz für Binärdateien, Prüfsummen, Signaturen und OKF-Verifikationsdateien.
@@ -163,7 +163,7 @@ Aus dem Quellcode kompilieren, linten und verifizieren.
 
 ### Voraussetzungen
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm oder Node.js `corepack`

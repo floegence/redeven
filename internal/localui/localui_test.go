@@ -20,7 +20,7 @@ import (
 	"testing/fstest"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	appserverpkg "github.com/floegence/redeven/internal/codeapp/appserver"
@@ -53,7 +53,7 @@ func TestServer_ConnectArtifactStoresOnlyPluginCredentialHash(t *testing.T) {
 		t.Fatalf("artifact envelope is incomplete: %+v", envelope)
 	}
 	if _, err := flowersec.ParseArtifact(envelope.ConnectArtifact); err != nil {
-		t.Fatalf("connect artifact is not a Flowersec v3 artifact: %v", err)
+		t.Fatalf("connect artifact is not a Transport v3 artifact: %v", err)
 	}
 	channelID := envelope.ChannelID
 	s.pendingMu.Lock()

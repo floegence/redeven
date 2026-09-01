@@ -41,7 +41,7 @@ type GrantServerNotify struct {
 }
 
 // ChannelInitGrant is the Redeven control-plane notification DTO. It is
-// intentionally limited to the published Flowersec v3 artifact grant fields;
+// intentionally limited to the published Transport v3 artifact grant fields;
 // transport/session implementation details stay inside Flowersec.
 type ChannelInitGrant struct {
 	ArtifactJSON           json.RawMessage `json:"artifact_json"`

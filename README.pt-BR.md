@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Versão do Go" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Versão do Go" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Versão do Node.js" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="Conhecimento OKF" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Versões publicadas" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ O Redeven prioriza os recursos, mas o ambiente de execução continua sendo o li
 
 - O ambiente de execução reside no endpoint e mantém nele os dados em texto simples.
 - O plano de controle emite cargas de inicialização, concessões e metadados de sessão imutáveis.
-- O [Flowersec](https://github.com/floegence/flowersec) transporta bytes criptografados entre o cliente e o ambiente de execução do endpoint. As superfícies do navegador usam o Flowersec Core 3.1.1 e o módulo Go `flowersec-go/v3@v3.1.1`.
+- O [Flowersec](https://github.com/floegence/flowersec) transporta bytes criptografados entre o cliente e o ambiente de execução do endpoint. As superfícies do navegador usam o Flowersec Core 4.0.0 e o módulo Go `flowersec-go/v4@v4.0.0`.
 - As permissões efetivas vêm de concessões de sessão emitidas pelo servidor e são limitadas pela política local (`read`, `write`, `execute`, `admin`; nenhuma categoria implica outra).
 - Configuração local, material E2EE, logs de auditoria e diagnósticos permanecem no diretório de estado do endpoint.
 - GitHub Releases continua sendo a fonte pública de referência para binários, somas de verificação, assinaturas e recursos de verificação OKF.
@@ -163,7 +163,7 @@ Compile, execute o lint e verifique o projeto a partir do código-fonte.
 
 ### Pré-requisitos
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm ou Node.js `corepack`

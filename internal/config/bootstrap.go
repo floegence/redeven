@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 )
 
 type BootstrapArgs struct {

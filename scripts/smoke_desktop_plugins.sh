@@ -111,7 +111,7 @@ prepare_linux_target() {
   fi
   [[ -x "$runtime_cache/redevplugin-runtime" && -f "$runtime_cache/.redevplugin-release-artifacts-verified.json" ]] || { echo "published Linux runtime evidence was not produced" >&2; return 1; }
   "$ROOT_DIR/scripts/build_assets.sh" >/dev/null
-  docker run --rm --platform linux/arm64 -v "$ROOT_DIR:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src golang:1.26.6-bookworm bash -ceu 'CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/redeven ./cmd/redeven; CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/io-server ./scripts/fixtures/redevplugin_io_smoke_server'
+  docker run --rm --platform linux/arm64 -v "$ROOT_DIR:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src golang:1.27.0-bookworm bash -ceu 'CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/redeven ./cmd/redeven; CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/io-server ./scripts/fixtures/redevplugin_io_smoke_server'
   REDEVPLUGIN_IO_SMOKE_HTTP_PORT="$FIXTURE_HTTP_PORT" \
   REDEVPLUGIN_IO_SMOKE_WS_PORT="$FIXTURE_HTTP_PORT" \
   REDEVPLUGIN_IO_SMOKE_TCP_PORT="$FIXTURE_TCP_PORT" \

@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"

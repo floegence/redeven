@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go バージョン" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go バージョン" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node.js バージョン" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF ナレッジ" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="リリース" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven は機能を前面に出しますが、実際のホストを管理する
 
 - ランタイムはエンドポイント上で動作し、平文をそこに保持します。
 - コントロールプレーンはブートストラップペイロード、権限、不変のセッションメタデータを発行します。
-- [Flowersec](https://github.com/floegence/flowersec) はクライアントとエンドポイントランタイムの間で暗号化されたバイト列を転送します。ブラウザー画面は Flowersec Core 3.1.1、Go 消費モジュールは `flowersec-go/v3@v3.1.1` を使用します。
+- [Flowersec](https://github.com/floegence/flowersec) はクライアントとエンドポイントランタイムの間で暗号化されたバイト列を転送します。ブラウザー画面は Flowersec Core 4.0.0、Go 消費モジュールは `flowersec-go/v4@v4.0.0` を使用します。
 - 有効な権限はサーバー発行のセッション権限から得られ、ローカル権限ポリシーによって制限されます（`read`、`write`、`execute`、`admin`。どのカテゴリも他のカテゴリを暗黙に含みません）。
 - ローカル設定、E2EE 資料、監査ログ、診断情報はエンドポイントの状態ディレクトリに残ります。
 - GitHub Releases は、バイナリ、チェックサム、署名、OKF 検証アセットの公開された信頼できる情報源です。
@@ -163,7 +163,7 @@ Redeven は、保守対象のリポジトリ知識を [OKF v0.1](okf/index.md) �
 
 ### 前提条件
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm または Node.js `corepack`

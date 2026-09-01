@@ -21,10 +21,11 @@ import (
 )
 
 const (
-	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v3"
-	flowersecGoVersion   = "v3.2.0"
+	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersecGoVersion   = "v4.0.0"
 	flowersecCorePackage = "@floegence/flowersec-core"
-	flowersecCoreVersion = "3.2.0"
+	flowersecCoreVersion = "4.0.0"
+	floeWebappVersion    = "0.47.0"
 )
 
 func TestDesktopPnpmPeerInstallSettingMatchesLockfile(t *testing.T) {
@@ -140,6 +141,7 @@ func TestFlowersecGoImportPolicyRejectsRetiredModulePaths(t *testing.T) {
 		{name: "unversioned", path: "github.com/floegence/flowersec/flowersec-go", flowersec: true, current: false},
 		{name: "v1", path: "github.com/floegence/flowersec/flowersec-go/v1", flowersec: true, current: false},
 		{name: "v2", path: "github.com/floegence/flowersec/flowersec-go/" + "v2", flowersec: true, current: false},
+		{name: "v3", path: "github.com/floegence/flowersec/flowersec-go/" + "v3", flowersec: true, current: false},
 		{name: "nearby module", path: "github.com/floegence/flowersec-tools", flowersec: false, current: false},
 	}
 	for _, test := range tests {
@@ -369,7 +371,7 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 		"IssuePrivateLoopbackDirect(",
 	} {
 		if !strings.Contains(localUISource, marker) {
-			t.Fatalf("Local UI direct server must use the Flowersec v3 Acceptor boundary %q", marker)
+			t.Fatalf("Local UI direct server must use the current Flowersec Acceptor boundary %q", marker)
 		}
 	}
 }
@@ -380,59 +382,61 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"0.46.7\"",
+			"\"@floegence/floe-webapp-boot\": \"0.47.0\"",
+			"\"@floegence/floe-webapp-core\": \"0.47.0\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.46.7.tgz",
+			"floe-webapp-boot-0.47.0.tgz",
+			"floe-webapp-core-0.47.0.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.46.7",
+			"@floegence/floe-webapp-boot@0.47.0",
+			"@floegence/floe-webapp-core@0.47.0",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.46.7\"",
-			"\"@floegence/floe-webapp-core\": \"0.46.8\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.46.7\"",
+			"\"@floegence/floe-webapp-boot\": \"0.47.0\"",
+			"\"@floegence/floe-webapp-core\": \"0.47.0\"",
+			"\"@floegence/floe-webapp-protocol\": \"0.47.0\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.18.1\"",
-			"\"@floegence/flowersec-core\": \"3.2.0\"",
+			"\"@floegence/flowersec-core\": \"4.0.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.46.7.tgz",
-			"floe-webapp-core-0.46.8.tgz",
-			"floe-webapp-protocol-0.46.7.tgz",
+			"floe-webapp-boot-0.47.0.tgz",
+			"floe-webapp-core-0.47.0.tgz",
+			"floe-webapp-protocol-0.47.0.tgz",
 			"floeterm-terminal-web-0.18.1.tgz",
-			"flowersec-core-3.2.0.tgz",
+			"flowersec-core-4.0.0.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.46.7",
-			"@floegence/floe-webapp-core@0.46.8",
-			"@floegence/floe-webapp-protocol@0.46.7",
+			"@floegence/floe-webapp-boot@0.47.0",
+			"@floegence/floe-webapp-core@0.47.0",
+			"@floegence/floe-webapp-protocol@0.47.0",
 			"@floegence/floeterm-terminal-web@0.18.1",
-			"@floegence/flowersec-core@3.2.0",
+			"@floegence/flowersec-core@4.0.0",
 		},
 		"internal/codeapp/ui_src/package.json": {
-			"\"@floegence/flowersec-core\": \"3.2.0\"",
+			"\"@floegence/flowersec-core\": \"4.0.0\"",
 		},
 		"internal/codeapp/ui_src/package-lock.json": {
-			"flowersec-core-3.2.0.tgz",
+			"flowersec-core-4.0.0.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.46.7",
-			"@floegence/floe-webapp-core | 0.46.7",
-			"@floegence/floe-webapp-core | 0.46.8",
-			"@floegence/floe-webapp-protocol | 0.46.7",
+			"@floegence/floe-webapp-boot | 0.47.0",
+			"@floegence/floe-webapp-core | 0.47.0",
+			"@floegence/floe-webapp-protocol | 0.47.0",
 			"@floegence/floeterm-terminal-web | 0.18.1",
-			"@floegence/flowersec-core | 3.2.0",
+			"@floegence/flowersec-core | 4.0.0",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.18.1",
-			"Flowersec Go v3.2.0",
-			"Flowersec Core v3.2.0",
+			"Flowersec Go v4.0.0",
+			"Flowersec Core v4.0.0",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.18.1",
 			"semantic Presentation",
-			"Floe Webapp Boot and Protocol v0.46.7 plus Core v0.46.8",
-			"Flowersec Core v3.2.0",
+			"Floe Webapp Boot, Core, and Protocol v0.47.0",
+			"Flowersec Core v4.0.0",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -440,186 +444,6 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		for _, expected := range expectedMarkers {
 			if !strings.Contains(content, expected) {
 				t.Fatalf("%s must contain published dependency marker %q", file, expected)
-			}
-		}
-		if strings.Contains(content, "0.36.66") {
-			t.Fatalf("%s must not retain @floegence/floe-webapp 0.36.66", file)
-		}
-		if strings.Contains(content, "0.36.74") {
-			t.Fatalf("%s must not retain previous @floegence/floe-webapp 0.36.74 release", file)
-		}
-		for _, previousMarker := range []string{
-			"floe-webapp-boot-0.44.0.tgz",
-			"floe-webapp-core-0.44.0.tgz",
-			"floe-webapp-protocol-0.44.0.tgz",
-			"@floegence/floe-webapp-boot@0.44.0",
-			"@floegence/floe-webapp-core@0.44.0",
-			"@floegence/floe-webapp-protocol@0.44.0",
-			"@floegence/floe-webapp-boot | 0.44.0",
-			"@floegence/floe-webapp-core | 0.44.0",
-			"@floegence/floe-webapp-protocol | 0.44.0",
-			"Floe Webapp Boot, Core, and Protocol v0.44.0",
-			"flowersec-core-2.3.6.tgz",
-			"@floegence/flowersec-core@2.3.6",
-			"\"@floegence/flowersec-core\": \"2.3.6\"",
-			"floe-webapp-boot-0.40.16.tgz",
-			"floe-webapp-core-0.40.16.tgz",
-			"floe-webapp-protocol-0.40.16.tgz",
-			"@floegence/floe-webapp-boot@0.40.16",
-			"@floegence/floe-webapp-core@0.40.16",
-			"@floegence/floe-webapp-protocol@0.40.16",
-			"\"@floegence/floeterm-terminal-web\": \"0.12.2\"",
-			"@floegence/floeterm-terminal-web@0.12.2",
-			"floeterm-terminal-web-0.12.2.tgz",
-			"@floegence/floeterm-terminal-web | 0.12.2",
-			"terminal-web v0.12.2",
-			"@floegence/beamterm-renderer@1.0.1",
-			"beamterm-renderer-1.0.1.tgz",
-			"@floegence/beamterm-renderer | 1.0.1",
-			"beamterm-renderer` v1.0.1",
-			"@floegence/beamterm-renderer@1.0.2",
-			"beamterm-renderer-1.0.2.tgz",
-			"@floegence/beamterm-renderer | 1.0.2",
-			"beamterm-renderer` v1.0.2",
-			"@floegence/ghostty-web@0.5.0-rc.0",
-			"ghostty-web-0.5.0-rc.0.tgz",
-			"@floegence/ghostty-web | 0.5.0-rc.0",
-			"terminal-web v0.14.1",
-			"floeterm-terminal-web-0.14.1.tgz",
-			"@floegence/floeterm-terminal-web@0.14.1",
-			"@floegence/floeterm-terminal-web | 0.14.1",
-			"terminal-web v0.15.1",
-			"floeterm-terminal-web-0.15.1.tgz",
-			"@floegence/floeterm-terminal-web@0.15.1",
-			"@floegence/floeterm-terminal-web | 0.15.1",
-			"\"@floegence/floe-webapp-boot\": \"0.40.0\"",
-			"\"@floegence/floe-webapp-core\": \"0.40.0\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.40.0\"",
-			"@floegence/floe-webapp-boot@0.40.0",
-			"@floegence/floe-webapp-core@0.40.0",
-			"@floegence/floe-webapp-protocol@0.40.0",
-			"floe-webapp-boot-0.40.0.tgz",
-			"floe-webapp-core-0.40.0.tgz",
-			"floe-webapp-protocol-0.40.0.tgz",
-			"@floegence/floe-webapp-boot | 0.40.0",
-			"@floegence/floe-webapp-core | 0.40.0",
-			"@floegence/floe-webapp-protocol | 0.40.0",
-			"Floe Webapp Core v0.40.0",
-			"\"@floegence/floe-webapp-boot\": \"0.39.10\"",
-			"\"@floegence/floe-webapp-core\": \"0.39.10\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.39.10\"",
-			"@floegence/floe-webapp-boot@0.39.10",
-			"@floegence/floe-webapp-core@0.39.10",
-			"@floegence/floe-webapp-protocol@0.39.10",
-			"floe-webapp-boot-0.39.10.tgz",
-			"floe-webapp-core-0.39.10.tgz",
-			"floe-webapp-protocol-0.39.10.tgz",
-			"@floegence/floe-webapp-boot | 0.39.10",
-			"@floegence/floe-webapp-core | 0.39.10",
-			"@floegence/floe-webapp-protocol | 0.39.10",
-			"Floe Webapp Core v0.39.10",
-			"\"@floegence/floe-webapp-core\": \"^0.39.3\"",
-			"\"@floegence/floe-webapp-core\": \"0.39.3\"",
-			"@floegence/floe-webapp-core@0.39.3",
-			"floe-webapp-core-0.39.3.tgz",
-			"@floegence/floe-webapp-core | 0.39.3",
-			"\"@floegence/floe-webapp-boot\": \"^0.39.2\"",
-			"\"@floegence/floe-webapp-core\": \"^0.39.2\"",
-			"\"@floegence/floe-webapp-protocol\": \"^0.39.2\"",
-			"@floegence/floe-webapp-boot@0.39.2",
-			"@floegence/floe-webapp-core@0.39.2",
-			"@floegence/floe-webapp-protocol@0.39.2",
-			"floe-webapp-boot-0.39.2.tgz",
-			"floe-webapp-core-0.39.2.tgz",
-			"floe-webapp-protocol-0.39.2.tgz",
-			"@floegence/floe-webapp-boot | 0.39.2",
-			"@floegence/floe-webapp-core | 0.39.2",
-			"@floegence/floe-webapp-protocol | 0.39.2",
-			"Floe Webapp v0.39.2",
-			"\"@floegence/floe-webapp-core\": \"^0.39.4\"",
-			"@floegence/floe-webapp-core@0.39.4",
-			"floe-webapp-core-0.39.4.tgz",
-			"@floegence/floe-webapp-core | 0.39.4",
-			"Floe Webapp Core v0.39.4",
-			"@floegence/floe-webapp-boot@0.39.0",
-			"@floegence/floe-webapp-core@0.39.0",
-			"@floegence/floe-webapp-protocol@0.39.0",
-			"floe-webapp-boot-0.39.0.tgz",
-			"floe-webapp-core-0.39.0.tgz",
-			"floe-webapp-protocol-0.39.0.tgz",
-			"@floegence/floe-webapp-boot | 0.39.0",
-			"@floegence/floe-webapp-core | 0.39.0",
-			"@floegence/floe-webapp-protocol | 0.39.0",
-			"Floe Webapp v0.39.0",
-			"@floegence/floe-webapp-boot@0.38.0",
-			"@floegence/floe-webapp-core@0.38.0",
-			"@floegence/floe-webapp-protocol@0.38.0",
-			"floe-webapp-boot-0.38.0.tgz",
-			"floe-webapp-core-0.38.0.tgz",
-			"floe-webapp-protocol-0.38.0.tgz",
-			"@floegence/floe-webapp-boot | 0.38.0",
-			"@floegence/floe-webapp-core | 0.38.0",
-			"@floegence/floe-webapp-protocol | 0.38.0",
-			"Floe Webapp v0.38.0",
-			"@floegence/floe-webapp-boot@0.37.4",
-			"@floegence/floe-webapp-core@0.37.4",
-			"@floegence/floe-webapp-protocol@0.37.4",
-			"floe-webapp-boot-0.37.4.tgz",
-			"floe-webapp-core-0.37.4.tgz",
-			"floe-webapp-protocol-0.37.4.tgz",
-			"@floegence/floe-webapp-boot | 0.37.4",
-			"@floegence/floe-webapp-core | 0.37.4",
-			"@floegence/floe-webapp-protocol | 0.37.4",
-			"Floe Webapp v0.37.4",
-			"@floegence/floe-webapp-boot@0.37.3",
-			"@floegence/floe-webapp-core@0.37.3",
-			"@floegence/floe-webapp-protocol@0.37.3",
-			"floe-webapp-boot-0.37.3.tgz",
-			"floe-webapp-core-0.37.3.tgz",
-			"floe-webapp-protocol-0.37.3.tgz",
-			"@floegence/floe-webapp-boot | 0.37.3",
-			"@floegence/floe-webapp-core | 0.37.3",
-			"@floegence/floe-webapp-protocol | 0.37.3",
-			"@floegence/floeterm-terminal-web@0.5.24",
-			"floeterm-terminal-web-0.5.24.tgz",
-			"@floegence/floeterm-terminal-web | 0.5.24",
-			"terminal-web v0.5.24",
-			"@floegence/floeterm-terminal-web@0.6.0",
-			"floeterm-terminal-web-0.6.0.tgz",
-			"@floegence/floeterm-terminal-web | 0.6.0",
-			"terminal-web v0.6.0",
-			"\"@floegence/floeterm-terminal-web\": \"0.8.0\"",
-			"@floegence/floeterm-terminal-web@0.8.0",
-			"floeterm-terminal-web-0.8.0.tgz",
-			"@floegence/floeterm-terminal-web | 0.8.0",
-			"terminal-web v0.8.0",
-			"\"@floegence/floeterm-terminal-web\": \"0.9.0\"",
-			"@floegence/floeterm-terminal-web@0.9.0",
-			"floeterm-terminal-web-0.9.0.tgz",
-			"@floegence/floeterm-terminal-web | 0.9.0",
-			"terminal-web v0.9.0",
-			"Floe Webapp v0.37.3",
-			"@floegence/floe-webapp-boot@0.37.0",
-			"@floegence/floe-webapp-core@0.37.0",
-			"@floegence/floe-webapp-protocol@0.37.0",
-			"floe-webapp-boot-0.37.0.tgz",
-			"floe-webapp-core-0.37.0.tgz",
-			"floe-webapp-protocol-0.37.0.tgz",
-			"@floegence/floe-webapp-boot | 0.37.0",
-			"@floegence/floe-webapp-core | 0.37.0",
-			"@floegence/floe-webapp-protocol | 0.37.0",
-			"@floegence/floe-webapp-boot@0.37.2",
-			"@floegence/floe-webapp-core@0.37.2",
-			"@floegence/floe-webapp-protocol@0.37.2",
-			"floe-webapp-boot-0.37.2.tgz",
-			"floe-webapp-core-0.37.2.tgz",
-			"floe-webapp-protocol-0.37.2.tgz",
-			"@floegence/floe-webapp-boot | 0.37.2",
-			"@floegence/floe-webapp-core | 0.37.2",
-			"@floegence/floe-webapp-protocol | 0.37.2",
-		} {
-			if strings.Contains(content, previousMarker) {
-				t.Fatalf("%s must not retain previous dependency marker %q", file, previousMarker)
 			}
 		}
 		assertNoLocalNPMReference(t, file, content)
@@ -636,6 +460,18 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"internal/codeapp/ui_src/pnpm-lock.yaml",
 	} {
 		assertOnlyCurrentFlowersecNPMDependency(t, root, file)
+	}
+	for file, packages := range map[string][]string{
+		"desktop/package.json":                     {"@floegence/floe-webapp-boot", "@floegence/floe-webapp-core"},
+		"desktop/package-lock.json":                {"@floegence/floe-webapp-boot", "@floegence/floe-webapp-core"},
+		"desktop/pnpm-lock.yaml":                   {"@floegence/floe-webapp-boot", "@floegence/floe-webapp-core"},
+		"internal/envapp/ui_src/package.json":      {"@floegence/floe-webapp-boot", "@floegence/floe-webapp-core", "@floegence/floe-webapp-protocol"},
+		"internal/envapp/ui_src/package-lock.json": {"@floegence/floe-webapp-boot", "@floegence/floe-webapp-core", "@floegence/floe-webapp-protocol"},
+		"internal/envapp/ui_src/pnpm-lock.yaml":    {"@floegence/floe-webapp-boot", "@floegence/floe-webapp-core", "@floegence/floe-webapp-protocol"},
+	} {
+		for _, packageName := range packages {
+			assertOnlyCurrentNPMDependency(t, root, file, packageName, floeWebappVersion)
+		}
 	}
 
 	for _, relDir := range []string{
@@ -783,7 +619,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"github.com/floegence/floret/v6 v6.1.1",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go and Core v3.2.0 plus Floe Webapp v0.46.7",
+			"published Flowersec Go and Core v4.0.0 plus Floe Webapp v0.47.0",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
@@ -1742,7 +1578,7 @@ func assertOnlyCurrentFlowersecGoImports(t *testing.T, root string) {
 }
 
 func classifyFlowersecGoImport(importPath string) (flowersec bool, current bool) {
-	moduleRoot, versionSuffix, found := strings.Cut(flowersecGoModule, "/v3")
+	moduleRoot, versionSuffix, found := strings.Cut(flowersecGoModule, "/v4")
 	if !found || versionSuffix != "" || moduleRoot == "" {
 		return false, false
 	}
@@ -1753,6 +1589,11 @@ func classifyFlowersecGoImport(importPath string) (flowersec bool, current bool)
 }
 
 func assertOnlyCurrentFlowersecNPMDependency(t *testing.T, root string, file string) {
+	t.Helper()
+	assertOnlyCurrentNPMDependency(t, root, file, flowersecCorePackage, flowersecCoreVersion)
+}
+
+func assertOnlyCurrentNPMDependency(t *testing.T, root string, file string, packageName string, packageVersion string) {
 	t.Helper()
 
 	content := readRepoFile(t, root, file)
@@ -1770,66 +1611,68 @@ func assertOnlyCurrentFlowersecNPMDependency(t *testing.T, root string, file str
 		t.Fatalf("parse %s: %v", file, err)
 	}
 	found := 0
-	validateFlowersecNPMNode(t, file, document, &found)
+	validateExactNPMNode(t, file, packageName, packageVersion, document, &found)
 	if found == 0 {
-		t.Fatalf("%s does not declare or resolve %s", file, flowersecCorePackage)
+		t.Fatalf("%s does not declare or resolve %s", file, packageName)
 	}
 }
 
-func validateFlowersecNPMNode(t *testing.T, file string, value any, found *int) {
+func validateExactNPMNode(t *testing.T, file string, packageName string, packageVersion string, value any, found *int) {
 	t.Helper()
 
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
 			switch {
-			case key == flowersecCorePackage:
+			case key == packageName:
 				*found++
-				assertFlowersecNPMReference(t, file, key, child)
-			case key == "node_modules/"+flowersecCorePackage:
+				assertExactNPMReference(t, file, key, packageVersion, child)
+			case key == "node_modules/"+packageName:
 				*found++
 				resolved, ok := child.(map[string]any)
-				if !ok || resolved["version"] != flowersecCoreVersion {
-					t.Fatalf("%s resolves %s without exact version %s", file, key, flowersecCoreVersion)
+				if !ok || resolved["version"] != packageVersion {
+					t.Fatalf("%s resolves %s without exact version %s", file, key, packageVersion)
 				}
-			case strings.HasPrefix(key, flowersecCorePackage+"@"):
+			case strings.HasPrefix(key, packageName+"@"):
 				*found++
-				want := flowersecCorePackage + "@" + flowersecCoreVersion
+				want := packageName + "@" + packageVersion
 				if key != want && !strings.HasPrefix(key, want+"(") {
-					t.Fatalf("%s resolves unexpected Flowersec package key %q", file, key)
+					t.Fatalf("%s resolves unexpected package key %q", file, key)
 				}
 			}
-			validateFlowersecNPMNode(t, file, child, found)
+			validateExactNPMNode(t, file, packageName, packageVersion, child, found)
 		}
 	case []any:
 		for _, child := range typed {
-			validateFlowersecNPMNode(t, file, child, found)
+			validateExactNPMNode(t, file, packageName, packageVersion, child, found)
 		}
 	case string:
-		if strings.Contains(typed, "flowersec-core-") && strings.Contains(typed, ".tgz") {
+		archiveName := packageName[strings.LastIndex(packageName, "/")+1:]
+		if strings.Contains(typed, archiveName+"-") && strings.Contains(typed, ".tgz") {
 			*found++
-			if !strings.Contains(typed, "flowersec-core-"+flowersecCoreVersion+".tgz") {
-				t.Fatalf("%s contains unexpected Flowersec package artifact %q", file, typed)
+			if !strings.Contains(typed, archiveName+"-"+packageVersion+".tgz") {
+				t.Fatalf("%s contains unexpected %s package artifact %q", file, packageName, typed)
 			}
 		}
 	}
 }
 
-func assertFlowersecNPMReference(t *testing.T, file string, key string, value any) {
+func assertExactNPMReference(t *testing.T, file string, key string, packageVersion string, value any) {
 	t.Helper()
 
 	switch typed := value.(type) {
 	case string:
-		if typed != flowersecCoreVersion {
-			t.Fatalf("%s declares %s=%q, want %s", file, key, typed, flowersecCoreVersion)
+		if typed != packageVersion {
+			t.Fatalf("%s declares %s=%q, want %s", file, key, typed, packageVersion)
 		}
 	case map[string]any:
 		matched := false
 		for _, field := range []string{"specifier", "version"} {
 			if fieldValue, ok := typed[field]; ok {
 				matched = true
-				if fieldValue != flowersecCoreVersion {
-					t.Fatalf("%s declares %s.%s=%v, want %s", file, key, field, fieldValue, flowersecCoreVersion)
+				version, ok := fieldValue.(string)
+				if !ok || version != packageVersion && (field != "version" || !strings.HasPrefix(version, packageVersion+"(")) {
+					t.Fatalf("%s declares %s.%s=%v, want %s", file, key, field, fieldValue, packageVersion)
 				}
 			}
 		}

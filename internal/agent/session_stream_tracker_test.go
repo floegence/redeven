@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 )
 
 type trackerTestSession struct {

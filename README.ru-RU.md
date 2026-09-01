@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Версия Go" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Версия Go" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Версия Node.js" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="База знаний OKF" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Релизы" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven делает акцент на возможностях, однако с
 
 - Среда выполнения находится на конечной точке и сохраняет там данные в открытом виде.
 - Плоскость управления выдаёт данные первичной настройки, разрешения и неизменяемые метаданные сеанса.
-- [Flowersec](https://github.com/floegence/flowersec) передаёт зашифрованные байты между клиентом и средой выполнения конечной точки. Браузерные интерфейсы используют Flowersec Core 3.1.1, а Go-модуль потребителя — `flowersec-go/v3@v3.1.1`.
+- [Flowersec](https://github.com/floegence/flowersec) передаёт зашифрованные байты между клиентом и средой выполнения конечной точки. Браузерные интерфейсы используют Flowersec Core 4.0.0, а Go-модуль потребителя — `flowersec-go/v4@v4.0.0`.
 - Эффективные разрешения формируются из выданных сервером разрешений сеанса и ограничиваются локальной политикой (`read`, `write`, `execute`, `admin`; ни одна категория не подразумевает другую).
 - Локальная конфигурация, материалы E2EE, журналы аудита и диагностика остаются в каталоге состояния конечной точки.
 - GitHub Releases остаётся общедоступным источником истины для бинарных файлов, контрольных сумм, подписей и ресурсов проверки OKF.
@@ -163,7 +163,7 @@ Redeven хранит поддерживаемые знания репозито�
 
 ### Предварительные требования
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm или Node.js `corepack`

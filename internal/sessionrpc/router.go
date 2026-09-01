@@ -1,7 +1,7 @@
 // Package sessionrpc contains Redeven's application RPC registrations.
 //
 // It deliberately owns no transport, framing, connection, or session
-// lifecycle. Flowersec v3 supplies those concerns through SessionHandlers and
+// lifecycle. Transport v3 supplies those concerns through SessionHandlers and
 // RPCPeer; this package only keeps product type IDs and JSON handlers together.
 package sessionrpc
 
@@ -11,7 +11,7 @@ import (
 	"errors"
 	"sync"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 )
 
 // Error is a bounded Redeven application error returned to a peer.

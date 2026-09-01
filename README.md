@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node Version" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF Knowledge" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven leads with capability, but the runtime is still the trust boundary becau
 
 - The runtime lives on the endpoint and keeps plaintext there.
 - The control plane issues bootstrap payloads, grants, and immutable session metadata.
-- [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes between the client and the endpoint runtime; browser surfaces use Flowersec Core 3.1.1 and the Go consumer module is `flowersec-go/v3@v3.1.1`.
+- [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes between the client and the endpoint runtime; browser surfaces use Flowersec Core 4.0.0 and the Go consumer module is `flowersec-go/v4@v4.0.0`.
 - Effective permissions come from server-issued session grants, clamped by the local permission policy (`read`, `write`, `execute`, `admin` — no category implies any other).
 - Local config, E2EE material, audit logs, and diagnostics stay in the endpoint state directory.
 - GitHub Releases remain the public source of truth for binaries, checksums, signatures, and OKF verification assets.
@@ -163,7 +163,7 @@ Build, lint, and verify from source.
 
 ### Prerequisites
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm or Node.js `corepack`

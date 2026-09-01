@@ -24,8 +24,8 @@ import (
 	"sync"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
-	"github.com/floegence/flowersec/flowersec-go/v3/controlplane"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	"github.com/floegence/flowersec/flowersec-go/v4/controlplane"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
