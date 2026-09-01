@@ -9,7 +9,8 @@ export const REDEVEN_APP_PROXY_SW_SUFFIX = "/_redeven_app_sw.js";
 export const MAX_WS_FRAME_BYTES = 32 * 1024 * 1024;
 export const APP_BRIDGE_CAPABILITY_NONCE_STORAGE_KEY = "redeven_app_bridge_capability_nonce";
 export const APP_MAX_WS_FRAME_BYTES_STORAGE_KEY = "redeven_app_max_ws_frame_bytes";
-export const APP_PROXY_FETCH_MESSAGE_TYPE = "redeven:app_proxy_fetch_v2";
+
+const FLOWERSEC_PROXY_FETCH_MESSAGE_TYPE = "flowersec-proxy:fetch";
 
 export type OriginLocationLike = Readonly<{
   protocol: string;
@@ -37,7 +38,7 @@ function asRecord(value: unknown): MessageRecord | null {
 
 export function parseAppProxyFetchMessage(value: unknown): ProxyFetchRequest | null {
   const message = asRecord(value);
-  if (message?.type !== APP_PROXY_FETCH_MESSAGE_TYPE) return null;
+  if (message?.type !== FLOWERSEC_PROXY_FETCH_MESSAGE_TYPE) return null;
 
   const raw = asRecord(message.req);
   if (
