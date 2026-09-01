@@ -627,13 +627,14 @@ func TestServer_DistRoutes_AreIsolated(t *testing.T) {
 		}
 	}
 
-	// inject.js is only served to codespace origins.
+	// inject.js is served only to untrusted application origins.
 	for _, tc := range []struct {
 		name   string
 		origin string
 		want   int
 	}{
 		{name: "codespace", origin: "https://cs-abc.example.com", want: http.StatusOK},
+		{name: "port_forward", origin: "https://pf-abc.example.com", want: http.StatusOK},
 		{name: "env", origin: "https://env-123.example.com", want: http.StatusNotFound},
 		{name: "plugin", origin: "https://plg-containerengine.example.com", want: http.StatusNotFound},
 		{name: "missing_origin", origin: "", want: http.StatusNotFound},
@@ -729,7 +730,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 				"api":        http.StatusNotFound,
 				"plugin_api": http.StatusNotFound,
 				"env":        http.StatusNotFound,
-				"inject":     http.StatusNotFound,
+				"inject":     http.StatusOK,
 			},
 		},
 		{
@@ -1078,6 +1079,7 @@ func TestServer_EnvAppDistCacheHeadersScope(t *testing.T) {
 	assertCache("/_redeven_proxy/env/index.html", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/env/workbench", http.StatusOK, "no-store")
 	assertCacheForOrigin("/_redeven_proxy/inject.js", "https://cs-abc.example.com", http.StatusOK, "no-store")
+	assertCacheForOrigin("/_redeven_proxy/inject.js", "https://pf-abc.example.com", http.StatusOK, "no-store")
 	assertCacheForOrigin("/_redeven_proxy/inject.js", "https://env-123.example.com", http.StatusNotFound, "no-store")
 	assertCache("/_redeven_proxy/env/favicon.svg", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/env/logo.png", http.StatusOK, "no-store")
@@ -3702,7 +3704,7 @@ func TestServer_DistFS_UsesEmbedLayout(t *testing.T) {
 
 	// Guardrail: the app server expects DistFS to be rooted at "dist/" and serve:
 	// - /_redeven_proxy/env/* -> env/*
-	// - /_redeven_proxy/inject.js -> inject.js for codespace origins only
+	// - /_redeven_proxy/inject.js -> inject.js for codespace and port-forward origins only
 	dist := fstest.MapFS{
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
@@ -3718,12 +3720,14 @@ func TestServer_DistFS_UsesEmbedLayout(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/inject.js", nil)
-	req.Header.Set("Origin", "https://cs-abc.example.com")
-	rr := httptest.NewRecorder()
-	srv.serveHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("inject.js status = %d, want %d", rr.Code, http.StatusOK)
+	for _, origin := range []string{"https://cs-abc.example.com", "https://pf-abc.example.com"} {
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/inject.js", nil)
+		req.Header.Set("Origin", origin)
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("inject.js origin=%q status = %d, want %d", origin, rr.Code, http.StatusOK)
+		}
 	}
 }
 
