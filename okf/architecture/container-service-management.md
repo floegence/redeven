@@ -65,9 +65,11 @@ revision, sections, and apply modes. Missing files are creatable; permission,
 invalid syntax, symlink, and unsupported ownership are explicit source-local
 states. One failed source never hides another source.
 
-Docker Desktop has an Engine source at `~/.docker/daemon.json` and a CLI proxy
-source at `~/.docker/config.json`. Native Docker has its official system or
-rootless Engine source plus the same current-user CLI proxy source. Local
+Docker Desktop has an Engine source at `~/.docker/daemon.json` and a Docker CLI
+source at the current user's Docker configuration directory. Native Docker has
+its official system or rootless Engine source plus the same current-user Docker
+CLI source. `DOCKER_CONFIG` changes that directory when it is an absolute path.
+Local
 Podman has the current user's `containers.conf`. Podman Machine and remote
 services remain unavailable because their configuration is not a local host
 file owned by this controller. Redeven never reads or writes Docker Desktop's
@@ -77,16 +79,27 @@ Engine proxy mode edits HTTP, HTTPS, and NO_PROXY fields while preserving
 unrelated document fields. Advanced mode edits the complete JSON or TOML
 document with the existing Monaco-backed editor. Docker Desktop Engine exposes
 advanced mode only because daemon proxy fields do not control Desktop proxy
-behavior. CLI proxy exposes a structured form only: reads return only
-`proxies.default`, writes merge only that object, and `auths`, credential
-stores, other proxy targets, and unknown fields never enter the API. CLI proxy
-settings affect new containers and builds, not image pulls or existing
-containers.
+behavior. The Docker CLI source owns one complete `config.json` document and
+one revision. Its General, Proxies, Credentials, and Advanced views mutate that
+same safe JSON draft; they are not independent configuration stores. The
+projection includes contexts, output formats, headers, aliases, features,
+plugins, credential-helper selection, every proxy target, and unknown fields.
+Command-line options and environment variables remain authoritative overrides;
+the response names `DOCKER_CONTEXT` or `DOCKER_HOST` when one is active without
+returning its value.
+
+The Docker-managed `auths` object is the only protected document field. Its
+payload never enters the API. The response may list registry names so the user
+can understand which entries will be preserved. A candidate containing
+`auths` is rejected; a valid candidate is merged with the exact original
+`auths` value before atomic replacement. Registry sign-in and sign-out remain
+owned by `docker login` and `docker logout`. Docker CLI proxy settings affect
+new containers and builds, not image pulls, the daemon, or existing containers.
 
 Each update includes `source_id` and that source's `base_revision`, is limited
 to 256 KiB, and requires the exact service name. A changed revision fails
 before write. Engine sources support save and, where lifecycle control exists,
-save-and-restart. CLI proxy supports save only and never requests a restart.
+save-and-restart. Docker CLI supports save only and never requests a restart.
 
 Candidates are validated before review and execution: Docker uses `dockerd
 --validate --config-file`; Podman uses temporary `CONTAINERS_CONF` and read-only
@@ -94,11 +107,12 @@ Candidates are validated before review and execution: Docker uses `dockerd
 restores old bytes and attempts one recovery start on failure; failed recovery
 returns `SERVICE_RECOVERY_REQUIRED` without hidden retries.
 
-Configuration, credentials, and real host paths never enter the database,
-Operations, audit, logs, or public errors. Schema v4 keys sanitized state by
+Configuration documents, credential payloads, and real host paths never enter
+the database, Operations, audit, logs, or public errors. Configuration reads
+require Read and Admin and remain `no-store`. Schema v5 keys sanitized state by
 `(service_id, source_id)` and stores only revision, restart-required state,
-generation, and update time. The contiguous v3 migration maps existing state
-to the `engine` source and fails atomically on drift.
+generation, and update time. Its contiguous migrations map legacy service state
+to `engine` and rename the retired `client_proxy` source to `docker_cli`.
 
 ## Product surface and observation
 
@@ -110,12 +124,15 @@ transition. Reduced-motion removes movement; forced-colors replaces brand color
 with the audited monochrome variant. Skeletons preserve the final card geometry.
 
 Every locally configurable card has one configuration action. Shared top-level
-Tabs select Engine or CLI proxy; each source shows its display path and status.
+Tabs select Engine or Docker CLI; each source shows its display path and status.
 Engine uses structured proxy fields where valid and Monaco-backed advanced
-editing. CLI proxy uses masked fields with explicit reveal controls and a short
-scope note. Podman Machine and remote configuration remain disabled with a
-local reason; no button leaves Redeven. Service operation progress stays on its
-owning card and opens the existing Operations detail when selected.
+editing. Docker CLI presents General, Proxies, Credentials, and Advanced views
+over one draft. Proxy values are masked with explicit reveal controls, output
+formats use their exact Docker field names, protected registry names are
+read-only, and Advanced exposes the complete non-credential document. Podman
+Machine and remote configuration remain disabled with a local reason; no button
+leaves Redeven. Service operation progress stays on its owning card and opens
+the existing Operations detail when selected.
 
 All container-service and resource stop actions use the shared filled stop
 glyph. List, detail, menu, and service-card surfaces consume the same operation
@@ -142,7 +159,7 @@ inventory, and Web Service state.
 - `redeven:internal/containerengine/container_services_test.go` - Proves independent detection, systemd non-elevation, machine inspect association, revision conflict, and symlink rejection.
 - `redeven:internal/containerresource/service.go` - Enriches service preflight with current container and Web Service impact.
 - `redeven:internal/containerresource/dispatch.go` - Executes and reconciles service lifecycle and configuration operations.
-- `redeven:internal/containerresource/schema.go` - Owns the v4 per-source metadata-only schema and contiguous migration.
+- `redeven:internal/containerresource/schema.go` - Owns the v5 per-source metadata-only schema and contiguous migrations.
 - `redeven:internal/codeapp/appserver/container_resources.go` - Exposes service reads and enforces Local API permissions, audit redaction, and no-store delivery.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Owns the service page, card-local operation progress, source tabs, masked CLI proxy form, and Engine editor.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Owns the service page, card-local operation progress, source tabs, one Docker CLI draft, and the Engine editor.
 - `redeven:assets/container_service_icons.json` - Pins and hashes the audited Docker and Podman brand variants used by the service cards.

@@ -60,15 +60,17 @@ const (
 type ContainerServiceConfigurationSourceID string
 
 const (
-	ContainerServiceConfigurationSourceEngine      ContainerServiceConfigurationSourceID = "engine"
-	ContainerServiceConfigurationSourceClientProxy ContainerServiceConfigurationSourceID = "client_proxy"
+	ContainerServiceConfigurationSourceEngine    ContainerServiceConfigurationSourceID = "engine"
+	ContainerServiceConfigurationSourceDockerCLI ContainerServiceConfigurationSourceID = "docker_cli"
 )
 
 type ContainerServiceConfigurationSection string
 
 const (
-	ContainerServiceConfigurationSectionProxy    ContainerServiceConfigurationSection = "proxy"
-	ContainerServiceConfigurationSectionAdvanced ContainerServiceConfigurationSection = "advanced"
+	ContainerServiceConfigurationSectionGeneral     ContainerServiceConfigurationSection = "general"
+	ContainerServiceConfigurationSectionProxy       ContainerServiceConfigurationSection = "proxy"
+	ContainerServiceConfigurationSectionCredentials ContainerServiceConfigurationSection = "credentials"
+	ContainerServiceConfigurationSectionAdvanced    ContainerServiceConfigurationSection = "advanced"
 )
 
 type ContainerServiceConfigurationAccess struct {
@@ -138,19 +140,22 @@ const (
 )
 
 type ContainerServiceConfigurationSource struct {
-	SourceID        ContainerServiceConfigurationSourceID     `json:"source_id"`
-	DisplayPath     string                                    `json:"display_path"`
-	Status          ContainerServiceConfigurationSourceStatus `json:"status"`
-	Exists          bool                                      `json:"exists"`
-	Format          ContainerServiceConfigurationKind         `json:"format"`
-	Sections        []ContainerServiceConfigurationSection    `json:"sections"`
-	ApplyModes      []ContainerServiceApplyMode               `json:"apply_modes"`
-	Content         string                                    `json:"content,omitempty"`
-	BaseRevision    string                                    `json:"base_revision,omitempty"`
-	HTTPProxy       string                                    `json:"http_proxy,omitempty"`
-	HTTPSProxy      string                                    `json:"https_proxy,omitempty"`
-	NoProxy         string                                    `json:"no_proxy,omitempty"`
-	RestartRequired bool                                      `json:"restart_required,omitempty"`
+	SourceID            ContainerServiceConfigurationSourceID     `json:"source_id"`
+	DisplayPath         string                                    `json:"display_path"`
+	Status              ContainerServiceConfigurationSourceStatus `json:"status"`
+	Exists              bool                                      `json:"exists"`
+	Format              ContainerServiceConfigurationKind         `json:"format"`
+	Sections            []ContainerServiceConfigurationSection    `json:"sections"`
+	ApplyModes          []ContainerServiceApplyMode               `json:"apply_modes"`
+	Content             string                                    `json:"content,omitempty"`
+	BaseRevision        string                                    `json:"base_revision,omitempty"`
+	HTTPProxy           string                                    `json:"http_proxy,omitempty"`
+	HTTPSProxy          string                                    `json:"https_proxy,omitempty"`
+	NoProxy             string                                    `json:"no_proxy,omitempty"`
+	ProtectedRegistries []string                                  `json:"protected_registries,omitempty"`
+	ContextOptions      []string                                  `json:"context_options,omitempty"`
+	ContextOverriddenBy string                                    `json:"context_overridden_by,omitempty"`
+	RestartRequired     bool                                      `json:"restart_required,omitempty"`
 }
 
 type ContainerServiceConfiguration struct {
@@ -395,7 +400,7 @@ func validateContainerServiceConfigurationUpdate(req ContainerServiceConfigurati
 }
 
 func (id ContainerServiceConfigurationSourceID) valid() bool {
-	return id == ContainerServiceConfigurationSourceEngine || id == ContainerServiceConfigurationSourceClientProxy
+	return id == ContainerServiceConfigurationSourceEngine || id == ContainerServiceConfigurationSourceDockerCLI
 }
 
 func containerServiceConfigurationSource(configuration ContainerServiceConfiguration, sourceID ContainerServiceConfigurationSourceID) (ContainerServiceConfigurationSource, bool) {

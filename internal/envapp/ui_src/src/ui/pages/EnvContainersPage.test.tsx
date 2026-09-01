@@ -267,7 +267,7 @@ describe('native Containers page', () => {
       {
         service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'stopped',
         capabilities: { start: true, stop: true, restart: true },
-        configuration: { mode: 'local', sources: ['engine', 'client_proxy'] },
+        configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
       },
       {
         service_id: 'container_service_podman', engine: 'podman', name: 'Local Podman', implementation: 'podman_local', state: 'running',
@@ -280,7 +280,7 @@ describe('native Containers page', () => {
       service_id: 'container_service_docker',
       sources: [
         { source_id: 'engine', display_path: '~/.docker/daemon.json', status: 'ready', exists: true, format: 'json', sections: ['advanced'], apply_modes: ['save', 'save_and_restart'], content: '{}\n', base_revision: 'sha256:engine' },
-        { source_id: 'client_proxy', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['proxy'], apply_modes: ['save'], base_revision: 'sha256:client', http_proxy: 'http://proxy.example.test' },
+        { source_id: 'docker_cli', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['general', 'proxy', 'credentials', 'advanced'], apply_modes: ['save'], base_revision: 'sha256:client', content: '{\n  "currentContext": "desktop-linux",\n  "credsStore": "desktop",\n  "proxies": {\n    "default": {\n      "httpProxy": "http://proxy.example.test"\n    }\n  }\n}\n', protected_registries: ['registry.example.test'], context_options: ['default', 'desktop-linux'] },
       ],
     });
     harness.listResources.mockReset().mockResolvedValue([{
@@ -378,17 +378,17 @@ describe('native Containers page', () => {
     expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
   });
 
-  it('edits Docker Desktop engine and CLI proxy sources without an external handoff', async () => {
+  it('edits one complete Docker CLI document without exposing registry credentials', async () => {
     harness.listServices.mockResolvedValue([{
       service_id: 'container_service_desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'running',
       capabilities: { start: true, stop: true, restart: true },
-      configuration: { mode: 'local', sources: ['engine', 'client_proxy'] },
+      configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
     }]);
     harness.getServiceConfiguration.mockResolvedValue({
       service_id: 'container_service_desktop',
       sources: [
         { source_id: 'engine', display_path: '~/.docker/daemon.json', status: 'missing', exists: false, format: 'json', sections: ['advanced'], apply_modes: ['save', 'save_and_restart'], content: '{}\n', base_revision: 'sha256:missing' },
-        { source_id: 'client_proxy', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['proxy'], apply_modes: ['save'], base_revision: 'sha256:client' },
+        { source_id: 'docker_cli', display_path: '~/.docker/config.json', status: 'ready', exists: true, format: 'json', sections: ['general', 'proxy', 'credentials', 'advanced'], apply_modes: ['save'], base_revision: 'sha256:client', content: '{\n  "currentContext": "desktop-linux",\n  "credsStore": "desktop",\n  "proxies": {\n    "default": {\n      "httpProxy": "http://proxy.example.test"\n    }\n  },\n  "plugins": {\n    "debug": {\n      "hooks": "exec"\n    }\n  }\n}\n', protected_registries: ['registry.example.test'], context_options: ['default', 'desktop-linux'] },
       ],
     });
     const host = document.createElement('div');
@@ -407,13 +407,17 @@ describe('native Containers page', () => {
 
     expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_desktop');
     expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
-    const clientProxyTab = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] [role="tab"]'))
-      .find((button) => button.textContent?.includes('containers.services.clientProxy'));
-    clientProxyTab?.click();
+    const dockerCLITab = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.services.dockerCLI'));
+    dockerCLITab?.click();
     await settle();
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.clientProxyScope');
+    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.dockerCLIScope');
     expect(host.querySelector('[data-dialog]')?.textContent).not.toContain('containers.services.openSettings');
-    const httpProxy = host.querySelector<HTMLInputElement>('[data-dialog] .container-service-proxy-form input');
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.services.proxies'))
+      ?.click();
+    await settle();
+    const httpProxy = host.querySelectorAll<HTMLInputElement>('[data-dialog] .container-service-cli-profile input')[1] ?? null;
     expect(httpProxy).not.toBeNull();
     httpProxy!.value = 'http://updated-proxy.example.test:3128';
     httpProxy!.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -431,12 +435,15 @@ describe('native Containers page', () => {
       ?.click();
     await settle();
     expect(harness.preflight).toHaveBeenCalledWith('container.services.configuration.update', expect.objectContaining({
-      source_id: 'client_proxy',
+      source_id: 'docker_cli',
       base_revision: 'sha256:client',
-      mode: 'proxy',
+      mode: 'document',
       apply_mode: 'save',
-      http_proxy: 'http://updated-proxy.example.test:3128',
+      content: expect.stringContaining('http://updated-proxy.example.test:3128'),
     }));
+    const submitted = harness.preflight.mock.calls.at(-1)?.[1] as { content?: string };
+    expect(submitted.content).toContain('"plugins"');
+    expect(submitted.content).not.toContain('"auths"');
   });
 
   it('explains why a running remote service cannot be configured locally', async () => {

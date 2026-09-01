@@ -10,7 +10,7 @@ import (
 
 const (
 	schemaKind           = "container_resources_product_v1"
-	currentSchemaVersion = 4
+	currentSchemaVersion = 5
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -24,6 +24,7 @@ func schemaSpec() sqliteutil.Spec {
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateToV5},
 		},
 		Verify: verifySchema,
 	}
@@ -156,8 +157,44 @@ DROP TABLE container_service_configuration_state_v3;
 	return err
 }
 
+func migrateToV5(tx *sql.Tx) error {
+	if err := verifyContainerResourceSchema(tx, true, true, true); err != nil {
+		return fmt.Errorf("verify container resources v4 schema: %w", err)
+	}
+	if err := verifyContainerServiceConfigurationSourceIDs(tx, "engine", "client_proxy"); err != nil {
+		return fmt.Errorf("verify container resources v4 configuration sources: %w", err)
+	}
+	_, err := tx.Exec(`
+UPDATE container_service_configuration_state
+SET source_id = 'docker_cli'
+WHERE source_id = 'client_proxy';
+`)
+	return err
+}
+
 func verifySchema(tx *sql.Tx) error {
-	return verifyContainerResourceSchema(tx, true, true, true)
+	if err := verifyContainerResourceSchema(tx, true, true, true); err != nil {
+		return err
+	}
+	return verifyContainerServiceConfigurationSourceIDs(tx, "engine", "docker_cli")
+}
+
+func verifyContainerServiceConfigurationSourceIDs(tx *sql.Tx, allowed ...string) error {
+	rows, err := tx.Query(`SELECT DISTINCT source_id FROM container_service_configuration_state ORDER BY source_id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sourceID string
+		if err := rows.Scan(&sourceID); err != nil {
+			return err
+		}
+		if !slices.Contains(allowed, sourceID) {
+			return fmt.Errorf("unsupported container service configuration source %q", sourceID)
+		}
+	}
+	return rows.Err()
 }
 
 func verifyContainerResourceSchema(tx *sql.Tx, includeComposeProjects, includeContainerServices, multiSourceContainerServices bool) error {
