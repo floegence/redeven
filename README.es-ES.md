@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Versión de Go" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Versión de Go" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Versión de Node.js" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="Conocimiento OKF" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Versiones publicadas" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven da prioridad a las funciones, pero el entorno de ejecución sigue siendo
 
 - El entorno de ejecución reside en el endpoint y mantiene allí los datos en texto claro.
 - El plano de control emite cargas de inicialización, concesiones y metadatos de sesión inmutables.
-- [Flowersec](https://github.com/floegence/flowersec) transporta bytes cifrados entre el cliente y el entorno de ejecución del endpoint. Las superficies del navegador usan Flowersec Core 3.1.1 y el módulo Go `flowersec-go/v3@v3.1.1`.
+- [Flowersec](https://github.com/floegence/flowersec) transporta bytes cifrados entre el cliente y el entorno de ejecución del endpoint. Las superficies del navegador usan Flowersec Core 4.0.0 y el módulo Go `flowersec-go/v4@v4.0.0`.
 - Los permisos efectivos proceden de concesiones de sesión emitidas por el servidor y quedan limitados por la política local (`read`, `write`, `execute`, `admin`; ninguna categoría implica otra).
 - La configuración local, el material E2EE, los registros de auditoría y los diagnósticos permanecen en el directorio de estado del endpoint.
 - GitHub Releases sigue siendo la fuente pública de referencia para binarios, sumas de comprobación, firmas y recursos de verificación de OKF.
@@ -163,7 +163,7 @@ Compila, ejecuta el lint y verifica el proyecto desde el código fuente.
 
 ### Requisitos previos
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm o Node.js `corepack`

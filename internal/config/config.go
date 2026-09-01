@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 )
 
 const (
@@ -39,7 +39,7 @@ const (
 )
 
 // DirectConnectInfo is the control-plane artifact envelope persisted by
-// Redeven. The opaque artifact bytes are interpreted only by Flowersec v3.
+// Redeven. The opaque artifact bytes are interpreted only by Transport v3.
 type DirectConnectInfo struct {
 	ArtifactJSON   json.RawMessage `json:"artifact_json"`
 	ExpiresAtUnixS int64           `json:"expires_at_unix_s"`

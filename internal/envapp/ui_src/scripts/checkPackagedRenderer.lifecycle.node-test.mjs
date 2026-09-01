@@ -35,7 +35,7 @@ function requestTrustedJSON(url, certificate, body) {
   });
 }
 
-test('packaged renderer close terminates its published Flowersec Go v3 peer', async () => {
+test('packaged renderer close terminates its published Flowersec Go peer', async () => {
   const tls = await createBuiltDistTLS();
   const server = await createBuiltDistServer({ accessReady: true, tls });
   try {
@@ -171,8 +171,8 @@ test('locked packaged renderer verifies the access gate without opening privileg
   assert.doesNotMatch(packagedRendererSource, /pluginEntryCount/u);
 });
 
-test('unlocked packaged renderer starts the published Flowersec Go v3 WSS peer', () => {
-  assert.match(packagedRendererSource, /flowersec-v3-smoke-peer/u);
+test('unlocked packaged renderer starts the published Flowersec Go WSS peer', () => {
+  assert.match(packagedRendererSource, /flowersec-smoke-peer/u);
   assert.match(packagedRendererSource, /GOWORK: 'off'/u);
   assert.match(packagedRendererSource, /--ignore-certificate-errors-spki-list/u);
   assert.doesNotMatch(packagedRendererSource, /@floegence\/flowersec-core\/node/u);

@@ -40,12 +40,12 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | github.com/anthropics/anthropic-sdk-go | v1.22.1 | MIT | Runtime | https://pkg.go.dev/github.com/anthropics/anthropic-sdk-go@v1.22.1 | Detected from LICENSE. |
 | github.com/coder/websocket | v1.8.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/coder/websocket@v1.8.15 | coder/websocket is distributed under a BSD-style license. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
-| github.com/dunglas/httpsfv | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.0 | Detected from LICENSE. |
+| github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.18.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.18.1 | Floegence first-party dependency. |
 | github.com/floegence/floret/v6 | v6.1.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v6@v6.1.1 | Detected from LICENSE. |
-| github.com/floegence/flowersec/flowersec-go/v3 | v3.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v3@v3.2.0 | Floegence first-party dependency. |
+| github.com/floegence/flowersec/flowersec-go/v4 | v4.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v4@v4.0.0 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin/v3 | v3.0.20 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.20 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
@@ -61,8 +61,8 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | github.com/pelletier/go-toml/v2 | v2.4.3 | MIT | Runtime | https://pkg.go.dev/github.com/pelletier/go-toml/v2@v2.4.3 | Detected from LICENSE. |
 | github.com/power-devops/perfstat | v0.0.0-20240221224432-82ca36839d55 | MIT | Runtime | https://pkg.go.dev/github.com/power-devops/perfstat@v0.0.0-20240221224432-82ca36839d55 | Detected from LICENSE. |
 | github.com/quic-go/qpack | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/qpack@v0.6.0 | Detected from LICENSE.md. |
-| github.com/quic-go/quic-go | v0.61.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/quic-go@v0.61.0 | Detected from LICENSE. |
-| github.com/quic-go/webtransport-go | v0.12.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/webtransport-go@v0.12.0 | Detected from LICENSE. |
+| github.com/quic-go/quic-go | v0.62.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/quic-go@v0.62.0 | Detected from LICENSE. |
+| github.com/quic-go/webtransport-go | v0.13.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/webtransport-go@v0.13.0 | Detected from LICENSE. |
 | github.com/remyoudompheng/bigfft | v0.0.0-20230129092748-24d4a6f8daec | BSD-style | Runtime | https://pkg.go.dev/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec | Detected from LICENSE. |
 | github.com/santhosh-tekuri/jsonschema/v5 | v5.3.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/santhosh-tekuri/jsonschema/v5@v5.3.1 | Detected from LICENSE. |
 | github.com/shirou/gopsutil/v4 | v4.25.12 | BSD-style | Runtime | https://pkg.go.dev/github.com/shirou/gopsutil/v4@v4.25.12 | Detected from LICENSE. |
@@ -196,17 +196,16 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.46.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.46.7 |  |
-| @floegence/floe-webapp-core | 0.46.7 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.46.7 |  |
-| @floegence/floe-webapp-core | 0.46.8 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.46.8 |  |
-| @floegence/floe-webapp-protocol | 0.46.7 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.46.7 |  |
+| @floegence/floe-webapp-boot | 0.47.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.47.0 |  |
+| @floegence/floe-webapp-core | 0.47.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.47.0 |  |
+| @floegence/floe-webapp-protocol | 0.47.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.47.0 |  |
 | @floegence/floeterm-terminal-web | 0.18.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.18.1 | Built-in theme attribution and license texts are reproduced below from the verified 0.18.1 package. |
-| @floegence/flowersec-core | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/3.2.0 |  |
-| @floegence/flowersec-node-native-darwin-arm64 | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/3.2.0 |  |
-| @floegence/flowersec-node-native-darwin-x64 | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/3.2.0 |  |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/3.2.0 |  |
-| @floegence/flowersec-node-native-linux-x64-gnu | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/3.2.0 |  |
-| @floegence/flowersec-node-native | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/3.2.0 |  |
+| @floegence/flowersec-core | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/4.0.0 |  |
+| @floegence/flowersec-node-native-darwin-arm64 | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/4.0.0 |  |
+| @floegence/flowersec-node-native-darwin-x64 | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/4.0.0 |  |
+| @floegence/flowersec-node-native-linux-arm64-gnu | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/4.0.0 |  |
+| @floegence/flowersec-node-native-linux-x64-gnu | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/4.0.0 |  |
+| @floegence/flowersec-node-native | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/4.0.0 |  |
 | @floegence/redevplugin-contracts | 3.0.20 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.20 |  |
 | @floegence/redevplugin-ui | 3.0.20 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.20 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
@@ -251,11 +250,11 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | @napi-rs/canvas | 1.0.6 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas/v/1.0.6 |  |
 | @napi-rs/wasm-runtime | 1.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fwasm-runtime/v/1.1.1 |  |
 | @napi-rs/wasm-runtime | 1.1.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fwasm-runtime/v/1.1.5 |  |
-| @noble/ciphers | 2.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fciphers/v/2.3.0 |  |
-| @noble/curves | 2.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fcurves/v/2.3.0 |  |
+| @noble/ciphers | 2.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fciphers/v/2.4.0 |  |
+| @noble/curves | 2.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fcurves/v/2.4.0 |  |
 | @noble/hashes | 1.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40noble%2Fhashes/v/1.4.0 |  |
 | @noble/hashes | 2.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40noble%2Fhashes/v/2.2.0 | License verified from the exact registry package manifest. |
-| @noble/hashes | 2.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fhashes/v/2.3.0 |  |
+| @noble/hashes | 2.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fhashes/v/2.4.0 |  |
 | @oxc-project/types | 0.133.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40oxc-project%2Ftypes/v/0.133.0 |  |
 | @peculiar/asn1-schema | 2.8.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40peculiar%2Fasn1-schema/v/2.8.0 |  |
 | @peculiar/json-schema | 1.1.12 | MIT | Desktop shell | https://www.npmjs.com/package/%40peculiar%2Fjson-schema/v/1.1.12 |  |
@@ -1048,9 +1047,8 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | totalist | 3.0.1 | MIT | Env App UI | https://www.npmjs.com/package/totalist/v/3.0.1 |  |
 | tough-cookie | 5.1.2 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/tough-cookie/v/5.1.2 |  |
 | tough-cookie | 6.0.1 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/tough-cookie/v/6.0.1 |  |
-| tr46 | 5.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tr46/v/5.0.0 |  |
 | tr46 | 5.1.1 | MIT | Env App UI | https://www.npmjs.com/package/tr46/v/5.1.1 |  |
-| tr46 | 6.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/tr46/v/6.0.0 |  |
+| tr46 | 6.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tr46/v/6.0.0 |  |
 | trim-lines | 3.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/trim-lines/v/3.0.1 |  |
 | truncate-utf8-bytes | 1.0.2 | WTFPL | Desktop shell | https://www.npmjs.com/package/truncate-utf8-bytes/v/1.0.2 |  |
 | ts-api-utils | 2.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ts-api-utils/v/2.4.0 |  |
@@ -1107,8 +1105,7 @@ The host dependency lock, Node.js archives, and OCI image identities enter a sig
 | wrap-ansi | 7.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/wrap-ansi/v/7.0.0 |  |
 | wrappy | 1.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/wrappy/v/1.0.2 |  |
 | ws | 8.21.0 | MIT | Env App UI | https://www.npmjs.com/package/ws/v/8.21.0 |  |
-| ws | 8.21.2 | MIT | Desktop shell | https://www.npmjs.com/package/ws/v/8.21.2 | License verified from the exact registry package manifest. |
-| ws | 8.21.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ws/v/8.21.3 |  |
+| ws | 8.21.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ws/v/8.21.2 | License verified from the exact registry package manifest. |
 | xml-name-validator | 5.0.0 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/xml-name-validator/v/5.0.0 |  |
 | xmlbuilder | 15.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/xmlbuilder/v/15.1.1 |  |
 | xmlchars | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/xmlchars/v/2.2.0 |  |

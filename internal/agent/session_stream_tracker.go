@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 )
 
 // drainingEndpointSession accounts a stream before Flowersec dispatches its

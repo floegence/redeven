@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go 版本" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go 版本" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node.js 版本" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF 知識庫" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="發行版本" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven 以能力為核心，但執行階段仍是信任邊界，因為它實際
 
 - 執行階段位於端點，明文資料始終保留在端點。
 - 控制平面簽發引導初始化資料、授權及不可變的工作階段中繼資料。
-- [Flowersec](https://github.com/floegence/flowersec) 在用戶端與端點執行階段之間傳輸加密位元組；瀏覽器介面使用 Flowersec Core 3.1.1，Go 消費模組為 `flowersec-go/v3@v3.1.1`。
+- [Flowersec](https://github.com/floegence/flowersec) 在用戶端與端點執行階段之間傳輸加密位元組；瀏覽器介面使用 Flowersec Core 4.0.0，Go 消費模組為 `flowersec-go/v4@v4.0.0`。
 - 有效權限來自伺服器簽發的工作階段授權，並受本機權限原則限制（`read`、`write`、`execute`、`admin`，任何類別都不隱含其他類別）。
 - 本機設定、E2EE 資料、稽核記錄與診斷資料都保留在端點狀態目錄。
 - GitHub Releases 始終是二進位檔、總和檢查碼、簽章及 OKF 驗證資產的公開權威來源。
@@ -163,7 +163,7 @@ Redeven 在 [OKF v0.1](okf/index.md) 中維護儲存庫知識。OKF 語料由目
 
 ### 必要條件
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm 或 Node.js `corepack`

@@ -7,7 +7,7 @@ timestamp: 2026-08-26T00:00:00Z
 ---
 # Summary
 
-Every public Local UI listener uses HTTPS backed by an explicitly generated device CA, and each browser or client must trust that CA in the trust store it actually uses. Flowersec direct sessions use an independent runtime-assigned WSS listener and v3 artifact. Loopback remains the default; network exposure additionally requires a fixed port and an effective Local UI password. Redeven never falls back to plaintext HTTP, `ws:`, a v2 route, or an alternate listener.
+Every public Local UI listener uses HTTPS backed by an explicitly generated device CA, and each browser or client must trust that CA in the trust store it actually uses. Flowersec direct sessions use an independent runtime-assigned WSS listener and Transport v3 artifact. Loopback remains the default; network exposure additionally requires a fixed port and an effective Local UI password. Redeven never falls back to plaintext HTTP, `ws:`, a v2 route, or an alternate listener.
 
 # Contract
 
@@ -21,7 +21,7 @@ The CA key and certificate live under the Local Environment state directory with
 
 The public HTTPS listener accepts only canonical authorities derived from its actual bound addresses. Wildcard binds enumerate usable same-family interface addresses and exclude loopback, unspecified, multicast, link-local, zoned, mapped, inactive, and duplicate addresses. Display URLs, startup reports, Runtime status, health, and access status expose those HTTPS authorities rather than wildcard placeholders.
 
-Each HTTPS listener has a separate dynamically assigned WSS listener served by Flowersec Go v3 `NewWebSocketHTTPServer` at `/flowersec/v3/direct`. Artifact issuance maps the already validated HTTPS authority to its exact WSS authority and uses a CA TLS policy. The browser requires `https:` before it requests an artifact; HTTP never selects a weaker transport or URL guess.
+Each HTTPS listener has a separate dynamically assigned WSS listener served by Flowersec Go v4 `NewWebSocketHTTPServer` at `/flowersec/v3/direct`. Artifact issuance maps the already validated HTTPS authority to its exact WSS authority and uses a CA TLS policy. The browser requires `https:` before it requests an artifact; HTTP never selects a weaker transport or URL guess.
 
 Trusted Desktop, SSH, and container traffic enters through a separate exact loopback bridge. Every bridge request requires a fresh 256-bit token carried only by the private runtime status, `0600` launch report, or stdio hello. Desktop injects the token only for the exact bridge origin and never forwards it to the independent Flowersec WSS origin. The bridge authority and token are machine-only and never join public display, diagnostics, renderer startup, or exposure projections. It may obtain an artifact whose sole candidate is the independent WSS listener, but it cannot expose or reuse that listener as a public fallback.
 

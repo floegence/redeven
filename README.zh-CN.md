@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go 版本" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go 版本" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node.js 版本" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF 知识库" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="发行版本" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven 以能力为先，但运行时仍然是信任边界，因为它实际掌
 
 - 运行时位于端点，明文数据始终保留在端点。
 - 控制平面签发引导载荷、授权和不可变的会话元数据。
-- [Flowersec](https://github.com/floegence/flowersec) 在客户端与端点运行时之间传输加密字节；浏览器界面使用 Flowersec Core 3.1.1，Go 消费模块为 `flowersec-go/v3@v3.1.1`。
+- [Flowersec](https://github.com/floegence/flowersec) 在客户端与端点运行时之间传输加密字节；浏览器界面使用 Flowersec Core 4.0.0，Go 消费模块为 `flowersec-go/v4@v4.0.0`。
 - 有效权限来自服务器签发的会话授权，并受本地权限策略约束（`read`、`write`、`execute`、`admin`，任何类别都不会隐含其他类别）。
 - 本地配置、E2EE 材料、审计日志和诊断数据保留在端点状态目录中。
 - GitHub Releases 始终是二进制文件、校验和、签名及 OKF 验证资产的公开权威来源。
@@ -163,7 +163,7 @@ Redeven 在 [OKF v0.1](okf/index.md) 中维护仓库知识。OKF 语料由当前
 
 ### 前置条件
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm 或 Node.js `corepack`

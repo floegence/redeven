@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Version de Go" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Version de Go" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Version de Node.js" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="Base de connaissances OKF" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Versions publiées" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven met les fonctionnalités au premier plan, mais l'environnement d'exécut
 
 - L'environnement d'exécution réside sur le point de terminaison et y conserve les données en clair.
 - Le plan de contrôle émet les charges utiles d'initialisation, les autorisations et les métadonnées de session immuables.
-- [Flowersec](https://github.com/floegence/flowersec) transporte des octets chiffrés entre le client et l'environnement d'exécution du point de terminaison. Les surfaces du navigateur utilisent Flowersec Core 3.1.1 et le module Go `flowersec-go/v3@v3.1.1`.
+- [Flowersec](https://github.com/floegence/flowersec) transporte des octets chiffrés entre le client et l'environnement d'exécution du point de terminaison. Les surfaces du navigateur utilisent Flowersec Core 4.0.0 et le module Go `flowersec-go/v4@v4.0.0`.
 - Les permissions effectives proviennent des autorisations de session émises par le serveur, limitées par la politique locale (`read`, `write`, `execute`, `admin` ; aucune catégorie n'en implique une autre).
 - La configuration locale, le matériel E2EE, les journaux d'audit et les diagnostics restent dans le répertoire d'état du point de terminaison.
 - GitHub Releases demeure la référence publique pour les binaires, sommes de contrôle, signatures et ressources de vérification OKF.
@@ -163,7 +163,7 @@ Exécutez la compilation, le lint et les vérifications depuis les sources.
 
 ### Prérequis
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm ou Node.js `corepack`

@@ -15,7 +15,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
 const distDir = path.resolve(scriptDir, '../../ui/dist/env');
 const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent_icons.json');
-const flowersecV3SmokePeerDir = path.join(scriptDir, 'flowersec-v3-smoke-peer');
+const flowersecSmokePeerDir = path.join(scriptDir, 'flowersec-smoke-peer');
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const pluginMarketCatalogPath = '/_redeven_proxy/api/plugins/market/catalog';
@@ -115,9 +115,9 @@ async function createBuiltDistTLS() {
   };
 }
 
-async function startFlowersecV3SmokePeer({ tls, allowedOrigin, onEvent }) {
+async function startFlowersecSmokePeer({ tls, allowedOrigin, onEvent }) {
   if (!tls?.certificatePath || !tls?.privateKeyPath) {
-    throw new Error('Flowersec v3 smoke peer requires an explicit TLS identity');
+    throw new Error('Flowersec smoke peer requires an explicit TLS identity');
   }
   const child = spawn('go', [
     'run', '.',
@@ -125,7 +125,7 @@ async function startFlowersecV3SmokePeer({ tls, allowedOrigin, onEvent }) {
     '--private-key', tls.privateKeyPath,
     '--allowed-origin', allowedOrigin,
   ], {
-    cwd: flowersecV3SmokePeerDir,
+    cwd: flowersecSmokePeerDir,
     env: { ...process.env, GOWORK: 'off' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -136,10 +136,10 @@ async function startFlowersecV3SmokePeer({ tls, allowedOrigin, onEvent }) {
   let ready;
   try {
     ready = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Flowersec v3 smoke peer startup timed out')), 30_000);
+      const timer = setTimeout(() => reject(new Error('Flowersec smoke peer startup timed out')), 30_000);
       const rejectOnExit = (code, signal) => {
         clearTimeout(timer);
-        reject(new Error(`Flowersec v3 smoke peer exited before ready (${code ?? signal}): ${stderr.trim()}`));
+        reject(new Error(`Flowersec smoke peer exited before ready (${code ?? signal}): ${stderr.trim()}`));
       };
       child.once('exit', rejectOnExit);
       lines.on('line', (line) => {
@@ -180,7 +180,7 @@ async function startFlowersecV3SmokePeer({ tls, allowedOrigin, onEvent }) {
           clearTimeout(timer);
           lines.close();
           if (code === 0) resolve();
-          else reject(new Error(`Flowersec v3 smoke peer failed (${code ?? signal}): ${stderr.trim()}`));
+          else reject(new Error(`Flowersec smoke peer failed (${code ?? signal}): ${stderr.trim()}`));
         });
       });
       child.stdin.end();
@@ -411,7 +411,7 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls = null, flowersecPeerFactory = startFlowersecV3SmokePeer } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer } = {}) {
   if (accessReady && (!tls?.certificate || !tls?.privateKey)) {
     throw new Error('connected built Env App dist server requires an explicit TLS identity');
   }

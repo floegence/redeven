@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"

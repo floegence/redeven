@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 	"github.com/floegence/redeven/internal/rpcutil"
 	"github.com/floegence/redeven/internal/sys"
 )

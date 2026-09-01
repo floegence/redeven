@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
-	flowercontrol "github.com/floegence/flowersec/flowersec-go/v3/controlplane"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowercontrol "github.com/floegence/flowersec/flowersec-go/v4/controlplane"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"

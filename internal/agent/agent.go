@@ -22,7 +22,7 @@ import (
 	"time"
 
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	flowersec "github.com/floegence/flowersec/flowersec-go/v3"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessproxy"
 	"github.com/floegence/redeven/internal/accessrpc"
@@ -1204,7 +1204,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 	}()
 
 	if len(grant.ArtifactJSON) == 0 {
-		return errors.New("missing Flowersec v3 data artifact")
+		return errors.New("missing Transport v3 data artifact")
 	}
 	artifact, err := flowersec.ParseArtifact(grant.ArtifactJSON)
 	if err != nil {

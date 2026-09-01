@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@floegence/flowersec-core':
-        specifier: 3.2.0
-        version: 3.2.0
+        specifier: 4.0.0
+        version: 4.0.0
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.4
@@ -233,40 +233,40 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@floegence/flowersec-core@3.2.0':
-    resolution: {integrity: sha512-dZJ+GAPYH91RLkytRNz9X0aByevnVQtcGpj+0tdLCNTOtbgaL5FVfH2IaqLlCPoKuFikxoAShSVS/xnUCdc1Bg==}
-    engines: {node: '>=20.19.0'}
+  '@floegence/flowersec-core@4.0.0':
+    resolution: {integrity: sha512-6wWDNqt0zRQ6Uf2kiQbc/2JmgcShts+uyYH5LG8m3MnYql2Zijf/Pde7MgMfdRej0ZHjzJUM6zgsDfvl7yRYUA==}
+    engines: {node: '>=24.20.0'}
     hasBin: true
 
-  '@floegence/flowersec-node-native-darwin-arm64@3.2.0':
-    resolution: {integrity: sha512-R1zSc+BOZ5zsupPN9rxQIUp/HQHtVNInOebarDdwtlPwKaLPPOJs3SWQwfqtXmDyXmJlFIg1QtRh0LyNxq1Sjw==}
-    engines: {node: '>=20.19.0'}
+  '@floegence/flowersec-node-native-darwin-arm64@4.0.0':
+    resolution: {integrity: sha512-w9zx1AvTLUG3rmWYBoGT3xktoYCRJVbLgLItTsl67muTIlcCYsR7/JwrHN1HhnoGplgx8S4n5HkAIsHllBipNA==}
+    engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-darwin-x64@3.2.0':
-    resolution: {integrity: sha512-80IAHM3Uv/Q9ZHCqsymChHDVS8h0uhwPFiUqY2X777r+o2VXgsmJwJ7OHmayAKqN8QUDhw7FVO9Sl6XrQCGYYQ==}
-    engines: {node: '>=20.19.0'}
+  '@floegence/flowersec-node-native-darwin-x64@4.0.0':
+    resolution: {integrity: sha512-5yiTyUABL5itzLio+q0QR6ofSo0EYgAanASVt3DVAdL5LwhETdsw3vffuh2MBEYJBJLQHny1mgrIHpBNCLpLfw==}
+    engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@3.2.0':
-    resolution: {integrity: sha512-e6CnUwxyDKfYVmGjhrUtFVG/eyS2adF+sHnJEO9uHfxazLLaJN3etfhG7INAnaouixewML3y4zFde+D+Z7LPdA==}
-    engines: {node: '>=20.19.0'}
+  '@floegence/flowersec-node-native-linux-arm64-gnu@4.0.0':
+    resolution: {integrity: sha512-ZUK5gTA+zxKzRFtClNXMtbzG4/6X8MQg1iMl64Jy3DeGKh/nrKovaHqaqkMzG2rbZ2kfoqdLLg4bfY0U5zQoow==}
+    engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@3.2.0':
-    resolution: {integrity: sha512-weekQ5Y+eMdvIWbDlXA2kZSo5HOrgCAV7s+Ncs2kfgHaxFP6ZJW/I/BSir8+3D35Cq0aFeQFZPkCLtfd8TQfvQ==}
-    engines: {node: '>=20.19.0'}
+  '@floegence/flowersec-node-native-linux-x64-gnu@4.0.0':
+    resolution: {integrity: sha512-EEuBbWhBthgiVdhFmbvJR+FHE7wxUmw3W5RpVYK+hvL3kYOzRgjvZCzK+idMFHWpWqTRGQOVOpsCdQ0OE5syJw==}
+    engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native@3.2.0':
-    resolution: {integrity: sha512-bb8pfVcEORYzK3eRFvSVAMD4luvE9JEJyJ9oJaW3atULy/e8NbkgNzOQLdZ0UbvWjE87ebXxS+y3XJjnZrlEXQ==}
-    engines: {node: '>=20.19.0'}
+  '@floegence/flowersec-node-native@4.0.0':
+    resolution: {integrity: sha512-xNN05vCMUSD+/jyeyUn7RqvMrp8Zsl+GDDmka7s9oD+FNg/fjv/9++eImFKfpgsPAnP+GyfdOAFdC0Iretx3TA==}
+    engines: {node: '>=24.20.0'}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -291,16 +291,16 @@ packages:
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
 
-  '@noble/ciphers@2.3.0':
-    resolution: {integrity: sha512-Clu/xdfgVTf9o7ngLOURaxePwR0j8sjclKEtVij10/jGulwFsPWCvvRgG/XjUVf8Nei+jLG6uwyXzUTGY1DQrw==}
+  '@noble/ciphers@2.4.0':
+    resolution: {integrity: sha512-AnjFn0Jv92laAkvMrghlFZq4qQCIN/4DxFV/eooqtC2YTjB7kBeLMS2T9KJX4Dn+ZVXLOwK0lSgqDtx9gvxtiw==}
     engines: {node: '>= 20.19.0'}
 
-  '@noble/curves@2.3.0':
-    resolution: {integrity: sha512-v7cY+4oWYPQszRj6ZFGzTVL7uP2TaLo1xMhWHzYC5wj0ZhOXQ5x+sBre8rF3hi8cAoi0bh1qXoovoOkdFtvqEg==}
+  '@noble/curves@2.4.0':
+    resolution: {integrity: sha512-P4/62zrgfH33CneE3Dn4WhJVA22YUU0eR51wKIan4NVRvwsA0YnPTwWGpNbpuacSujmSFLvyzpyuR30+fbq2Ew==}
     engines: {node: '>= 20.19.0'}
 
-  '@noble/hashes@2.3.0':
-    resolution: {integrity: sha512-oN+QwyX7VSHotibwubG3kpzbwKrfnyR6OOO+3Nk/53ADL7FmgHHz4TgrbaYKvvOw09u6QTx0oiH1cNCIOuN0CQ==}
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
     engines: {node: '>= 20.19.0'}
 
   '@oxc-project/types@0.143.0':
@@ -961,9 +961,9 @@ packages:
     resolution: {integrity: sha512-yau8yJdTt989Mm0Bd/236QnzEiPf2xLLTqUZRUJOo/3CB078LSwzei343DgtJVmfJKJE3TMINY1u42SQsP6mXw==}
     engines: {node: '>=14.0.0'}
 
-  tr46@5.0.0:
-    resolution: {integrity: sha512-tk2G5R2KRwBd+ZN0zaEXpmzdKyOYksXwywulIX95MBODjSzMIuQnQ3m8JxgbhnL1LeVo7lqQKsYa1O3Htl7K5g==}
-    engines: {node: '>=18'}
+  tr46@6.0.0:
+    resolution: {integrity: sha512-bLVMLPtstlZ4iMQHpFHTR7GAGj2jxi8Dg0s2h2MafAE4uSWF98FC/3MomU51iQAMf8/qDUbKWf5GxuvvVcXEhw==}
+    engines: {node: '>=20'}
 
   ts-api-utils@2.5.0:
     resolution: {integrity: sha512-OJ/ibxhPlqrMM0UiNHJ/0CKQkoKF243/AEmplt3qpRgkW8VG7IfOS41h7V8TjITqdByHzrjcS/2si+y4lIh8NA==}
@@ -1081,8 +1081,8 @@ packages:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
 
-  ws@8.21.3:
-    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+  ws@8.21.2:
+    resolution: {integrity: sha512-54dMVAo4WIe6SKy3vBgN+9bJZqqQ8IMRevAkOLQALhi49qkkQDQfWdAZ8KQlXiEabw88ARXXdUrlvtbKQX+aKw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -1223,37 +1223,37 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@floegence/flowersec-core@3.2.0':
+  '@floegence/flowersec-core@4.0.0':
     dependencies:
-      '@noble/ciphers': 2.3.0
-      '@noble/curves': 2.3.0
-      '@noble/hashes': 2.3.0
-      tr46: 5.0.0
-      ws: 8.21.3
+      '@noble/ciphers': 2.4.0
+      '@noble/curves': 2.4.0
+      '@noble/hashes': 2.4.0
+      tr46: 6.0.0
+      ws: 8.21.2
     optionalDependencies:
-      '@floegence/flowersec-node-native': 3.2.0
+      '@floegence/flowersec-node-native': 4.0.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/flowersec-node-native-darwin-arm64@3.2.0':
+  '@floegence/flowersec-node-native-darwin-arm64@4.0.0':
     optional: true
 
-  '@floegence/flowersec-node-native-darwin-x64@3.2.0':
+  '@floegence/flowersec-node-native-darwin-x64@4.0.0':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@3.2.0':
+  '@floegence/flowersec-node-native-linux-arm64-gnu@4.0.0':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@3.2.0':
+  '@floegence/flowersec-node-native-linux-x64-gnu@4.0.0':
     optional: true
 
-  '@floegence/flowersec-node-native@3.2.0':
+  '@floegence/flowersec-node-native@4.0.0':
     optionalDependencies:
-      '@floegence/flowersec-node-native-darwin-arm64': 3.2.0
-      '@floegence/flowersec-node-native-darwin-x64': 3.2.0
-      '@floegence/flowersec-node-native-linux-arm64-gnu': 3.2.0
-      '@floegence/flowersec-node-native-linux-x64-gnu': 3.2.0
+      '@floegence/flowersec-node-native-darwin-arm64': 4.0.0
+      '@floegence/flowersec-node-native-darwin-x64': 4.0.0
+      '@floegence/flowersec-node-native-linux-arm64-gnu': 4.0.0
+      '@floegence/flowersec-node-native-linux-x64-gnu': 4.0.0
     optional: true
 
   '@humanfs/core@0.19.2':
@@ -1274,13 +1274,13 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
-  '@noble/ciphers@2.3.0': {}
+  '@noble/ciphers@2.4.0': {}
 
-  '@noble/curves@2.3.0':
+  '@noble/curves@2.4.0':
     dependencies:
-      '@noble/hashes': 2.3.0
+      '@noble/hashes': 2.4.0
 
-  '@noble/hashes@2.3.0': {}
+  '@noble/hashes@2.4.0': {}
 
   '@oxc-project/types@0.143.0': {}
 
@@ -1895,7 +1895,7 @@ snapshots:
 
   tinyrainbow@3.1.1: {}
 
-  tr46@5.0.0:
+  tr46@6.0.0:
     dependencies:
       punycode: 2.3.1
 
@@ -1960,6 +1960,6 @@ snapshots:
 
   word-wrap@1.2.5: {}
 
-  ws@8.21.3: {}
+  ws@8.21.2: {}
 
   yocto-queue@0.1.0: {}

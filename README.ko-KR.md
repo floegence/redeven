@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go 버전" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go 버전" src="https://img.shields.io/badge/Go-1.27.0-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node.js 버전" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF 지식" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="릴리스" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -134,7 +134,7 @@ Redeven은 기능을 앞세우지만, 런타임이 실제 호스트를 제어하
 
 - 런타임은 엔드포인트에 존재하며 평문을 그곳에 유지합니다.
 - 컨트롤 플레인은 부트스트랩 페이로드, 권한, 변경 불가능한 세션 메타데이터를 발급합니다.
-- [Flowersec](https://github.com/floegence/flowersec)은 클라이언트와 엔드포인트 런타임 사이에서 암호화된 바이트를 전송합니다. 브라우저 화면은 Flowersec Core 3.1.1을, Go 소비 모듈은 `flowersec-go/v3@v3.1.1`을 사용합니다.
+- [Flowersec](https://github.com/floegence/flowersec)은 클라이언트와 엔드포인트 런타임 사이에서 암호화된 바이트를 전송합니다. 브라우저 화면은 Flowersec Core 4.0.0을, Go 소비 모듈은 `flowersec-go/v4@v4.0.0`을 사용합니다.
 - 유효 권한은 서버가 발급한 세션 권한에서 나오며 로컬 권한 정책으로 제한됩니다(`read`, `write`, `execute`, `admin`; 어떤 범주도 다른 범주를 암시하지 않습니다).
 - 로컬 설정, E2EE 자료, 감사 로그, 진단 정보는 엔드포인트 상태 디렉터리에 남습니다.
 - GitHub Releases는 바이너리, 체크섬, 서명, OKF 검증 자산의 공개 기준 정보입니다.
@@ -163,7 +163,7 @@ Redeven은 관리되는 저장소 지식을 [OKF v0.1](okf/index.md)에 보관�
 
 ### 사전 요구 사항
 
-- Go `1.26.6`
+- Go `1.27.0`
 - Node.js `26.7.0`
 - npm
 - pnpm 또는 Node.js `corepack`
