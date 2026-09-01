@@ -116,23 +116,30 @@ to `engine` and rename the retired `client_proxy` source to `docker_cli`.
 
 ## Product surface and observation
 
-The Containers header exposes one “Container services” item in its three-dot
-menu. It opens a component-local service page without duplicating resource tabs
-or endpoints. Compact cards use audited Docker and Podman marks from one pinned
-theSVG revision, status color, supported actions, and a short entrance/elevation
-transition. Reduced-motion removes movement; forced-colors replaces brand color
-with the audited monochrome variant. Skeletons preserve the final card geometry.
+The Containers header exposes one direct Settings action for “Container
+services”; runtime warnings decorate that same action instead of adding a
+second entry. It opens a component-local service page without duplicating
+resource tabs or endpoints. Compact cards use audited Docker and Podman marks
+from one pinned theSVG revision, status color, supported actions, and a short
+page-entry/elevation transition. Reduced-motion removes movement; forced-colors
+replaces brand color with the audited monochrome variant. Initial skeletons use
+the same card tracks, brand mark, status, guidance, and action geometry as the
+loaded cards. Refresh preserves the last authoritative cards, animates only the
+refresh indicator, and reports failure inline; it never replaces usable content
+with a skeleton or replays card-entry animation.
 
 Every locally configurable card has one configuration action. Shared top-level
 Tabs select Engine or Docker CLI; each source shows its display path and status.
 Engine uses structured proxy fields where valid and Monaco-backed advanced
 editing. Docker CLI presents General, Proxies, Credentials, and Advanced views
-over one draft. Proxy values are masked with explicit reveal controls, output
-formats use their exact Docker field names, protected registry names are
-read-only, and Advanced exposes the complete non-credential document. Podman
-Machine and remote configuration remain disabled with a local reason; no button
-leaves Redeven. Service operation progress stays on its owning card and opens
-the existing Operations detail when selected.
+over one draft. General leads with the common context and detach-key tasks;
+optional output formatting stays collapsed until requested and pairs every
+stored field key with the Docker command it affects. Proxy values are masked
+with explicit reveal controls, protected registry names are read-only, and
+Advanced exposes the complete non-credential document. Podman Machine and
+remote configuration remain disabled with a local reason; no button leaves
+Redeven. Service operation progress stays on its owning card and opens the
+existing Operations detail when selected.
 
 All container-service and resource stop actions use the shared filled stop
 glyph. List, detail, menu, and service-card surfaces consume the same operation

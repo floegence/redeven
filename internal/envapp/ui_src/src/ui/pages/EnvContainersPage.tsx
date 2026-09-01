@@ -191,9 +191,17 @@ type ContainerServiceConfigurationDraft = Readonly<{
 
 type ContainerServiceConfigurationSection = 'general' | 'proxy' | 'credentials' | 'advanced';
 type DockerCLIConfigurationDocument = Record<string, unknown>;
-const dockerCLIOutputFormatFields = [
-  'psFormat', 'imagesFormat', 'networksFormat', 'pluginsFormat', 'statsFormat',
-  'servicesFormat', 'tasksFormat', 'secretFormat', 'configFormat', 'nodeFormat',
+const dockerCLIOutputFormats = [
+  { key: 'psFormat', command: 'docker ps' },
+  { key: 'imagesFormat', command: 'docker images' },
+  { key: 'networksFormat', command: 'docker network ls' },
+  { key: 'pluginsFormat', command: 'docker plugin ls' },
+  { key: 'statsFormat', command: 'docker stats' },
+  { key: 'servicesFormat', command: 'docker service ls' },
+  { key: 'tasksFormat', command: 'docker service ps' },
+  { key: 'secretFormat', command: 'docker secret ls' },
+  { key: 'configFormat', command: 'docker config ls' },
+  { key: 'nodeFormat', command: 'docker node ls' },
 ] as const;
 
 type ReviewState = Readonly<{
@@ -879,6 +887,13 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       ? parseDockerCLIConfiguration(serviceConfigurationDraft()?.content ?? '')
       : null
   ));
+  const customizedDockerCLIOutputFormatCount = createMemo(() => {
+    const document = dockerCLIConfigurationDocument();
+    return dockerCLIOutputFormats.filter(({ key }) => dockerCLIString(document, key).trim() !== '').length;
+  });
+  const containerServicesInitialLoading = createMemo(() => (
+    containerServicesLoading() && containerServices().length === 0
+  ));
   const [serviceConfigurationError, setServiceConfigurationError] = createSignal('');
   const [pruneOpen, setPruneOpen] = createSignal(false);
   const [pruneTargetKey, setPruneTargetKey] = createSignal('');
@@ -1124,7 +1139,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       if (!controller.signal.aborted) setContainerServices(next);
     } catch (cause) {
       if (!controller.signal.aborted) {
-        setContainerServices([]);
         setContainerServicesError(cause instanceof Error ? cause.message : String(cause));
       }
     } finally {
@@ -3186,22 +3200,39 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     ? i18n.t(`containers.services.guidance.${service.guidance_code}` as Parameters<typeof i18n.t>[0], { engine: runtimeName(service.engine) })
     : '';
 
+  const renderContainerServicesSkeleton = (): JSX.Element => (
+    <div class="container-services-grid container-services-grid--loading" aria-label={i18n.t('containers.loading')}>
+      <For each={[{ guidance: false, actions: 3 }, { guidance: true, actions: 1 }]}>{(item) => (
+        <div class="container-service-card container-service-card--loading">
+          <div class="container-service-card__mark"><span class="container-skeleton container-service-card__loading-brand" /></div>
+          <span class="container-service-card__loading-identity"><span class="container-skeleton container-skeleton--name" /><span class="container-skeleton container-skeleton--secondary" /></span>
+          <span class="container-skeleton container-service-card__loading-status" />
+          <Show when={item.guidance}><span class="container-skeleton container-service-card__loading-guidance" /></Show>
+          <span class="container-service-card__actions container-service-card__loading-actions"><For each={Array.from({ length: item.actions })}>{() => <span class="container-skeleton" />}</For></span>
+        </div>
+      )}</For>
+    </div>
+  );
+
   const renderContainerServicesPage = (): JSX.Element => (
-    <section class="container-services-page" data-container-services-page>
+    <section class="container-services-page" data-container-services-page aria-busy={containerServicesLoading()}>
       <header class="container-services-page__header">
         <Button size="sm" variant="ghost" class="container-icon-action" onClick={closeContainerServices} aria-label={i18n.t('containers.detail.back')}><ArrowLeft class="h-4 w-4" /></Button>
         <div><h2>{i18n.t('containers.services.title')}</h2><p>{i18n.t('containers.services.description')}</p></div>
       </header>
-      <Show when={!containerServicesLoading()} fallback={<div class="container-services-grid" aria-label={i18n.t('containers.loading')}><For each={[0, 1]}>{(_, index) => <div class="container-service-card container-service-card--loading" style={{ '--service-index': `${index()}` } as JSX.CSSProperties}><span class="container-skeleton container-skeleton--resource-icon" /><span class="container-service-card__loading-identity"><span class="container-skeleton container-skeleton--name" /><span class="container-skeleton container-skeleton--secondary" /></span><span class="container-skeleton container-service-card__loading-status" /><span class="container-service-card__loading-actions"><span class="container-skeleton" /><span class="container-skeleton" /></span></div>}</For></div>}>
-        <Show when={!containerServicesError()} fallback={<div class="container-engine-state" role="alert"><AlertTriangle class="h-6 w-6" /><strong>{i18n.t('containers.services.loadFailed')}</strong><p>{containerServicesError()}</p><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>}>
-          <div class="container-services-grid">
-            <For each={containerServices()}>{(service, index) => {
+      <Show when={!containerServicesInitialLoading()} fallback={renderContainerServicesSkeleton()}>
+        <Show when={!containerServicesError() || containerServices().length > 0} fallback={<div class="container-engine-state" role="alert"><AlertTriangle class="h-6 w-6" /><strong>{i18n.t('containers.services.loadFailed')}</strong><p>{containerServicesError()}</p><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>}>
+          <Show when={containerServicesError() && containerServices().length > 0}>
+            <div class="container-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4" /><div><strong>{i18n.t('containers.services.loadFailed')}</strong><small>{containerServicesError()}</small></div><Button size="sm" variant="outline" onClick={() => void loadContainerServices()}>{i18n.t('containers.actions.retry')}</Button></div>
+          </Show>
+          <div class="container-services-grid" data-refreshing={containerServicesLoading() ? 'true' : 'false'}>
+            <For each={containerServices()}>{(service) => {
               const operation = () => serviceOperation(service.service_id);
               const active = () => operation() && operationActive(operation()!);
               const guidance = () => service.state !== 'running' || service.remote || service.configuration.mode === 'unavailable'
                 ? serviceGuidance(service)
                 : '';
-              return <article class="container-service-card" data-state={service.state} data-active={active() ? 'true' : 'false'} style={{ '--service-index': `${index()}` } as JSX.CSSProperties}>
+              return <article class="container-service-card" data-state={service.state} data-active={active() ? 'true' : 'false'}>
                 <div class="container-service-card__mark"><ContainerServiceBrandMark engine={service.engine} remote={service.remote} /></div>
                 <div class="container-service-card__identity"><span>{runtimeName(service.engine)}</span><h3>{service.name}</h3><small>{i18n.t(`containers.services.implementations.${service.implementation}` as Parameters<typeof i18n.t>[0])}<Show when={service.version}> · {service.version}</Show><Show when={service.rootless}> · {i18n.t('containers.services.rootless')}</Show></small></div>
                 <Tag variant={service.state === 'running' ? 'success' : service.state === 'error' || service.state === 'permission' ? 'error' : 'neutral'} tone="soft" size="sm">{serviceStateLabel(service.state)}</Tag>
@@ -3231,10 +3262,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             <h1 class="truncate text-base font-semibold tracking-tight">{i18n.t('containers.title')}</h1>
           </div>
           <div class="container-header-controls">
-            <Show when={readyRuntimes().length > 0 && runtimeIssues().length > 0}>
-              <Button size="sm" variant="ghost" class="container-icon-action" onClick={openContainerServices} aria-label={i18n.t('containers.services.title')} title={i18n.t('containers.services.title')}><AlertTriangle class="h-4 w-4 text-[var(--redeven-status-warning-foreground)]" /></Button>
-            </Show>
-            <Dropdown align="end" items={[{ id: 'services', label: i18n.t('containers.services.title'), icon: () => <Layers class="h-3.5 w-3.5" /> }]} onSelect={openContainerServices} triggerAriaLabel={i18n.t('containers.detail.actions')} trigger={<button type="button" class="container-icon-action inline-flex items-center justify-center" title={i18n.t('containers.detail.actions')}><MoreVertical class="h-4 w-4" /></button>} />
+            <Button size="sm" variant="ghost" class="container-icon-action container-services-entry" onClick={openContainerServices} aria-label={i18n.t('containers.services.title')} title={i18n.t('containers.services.title')} aria-pressed={servicesOpen()}>
+              <Settings class="h-4 w-4" aria-hidden="true" />
+              <Show when={readyRuntimes().length > 0 && runtimeIssues().length > 0}><span class="container-services-entry__issue" aria-hidden="true" /></Show>
+            </Button>
             <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => void (servicesOpen() ? loadContainerServices() : reloadConsole(true))} disabled={servicesOpen() ? containerServicesLoading() : consoleBusy()} aria-label={i18n.t('containers.actions.refresh')} title={i18n.t('containers.actions.refresh')}><Refresh class={`h-4 w-4 ${(servicesOpen() ? containerServicesLoading() : consoleBusy()) ? 'animate-spin motion-reduce:animate-none' : ''}`} /></Button>
             <Button size="sm" variant="ghost" class="container-icon-action" onClick={() => setOperationsOpen(true)} aria-label={i18n.t('containers.operations.title')} title={i18n.t('containers.operations.title')}>
               <Activity class="h-4 w-4" aria-hidden="true" />
@@ -3339,12 +3370,16 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                     <Show when={dockerCLIConfigurationDocument()} keyed>{(document) => <>
                       <Show when={serviceConfigurationMode() === 'general'}>
                         <div class="container-service-cli-form">
-                          <p class="container-service-config-lead">{i18n.t('containers.services.dockerCLIScope')}</p>
-                          <label><span>{i18n.t('containers.services.currentContext')}</span><Select value={dockerCLIString(document, 'currentContext') || 'default'} onChange={(value) => setDockerCLIString('currentContext', value)} options={Array.from(new Set(['default', ...(source.context_options ?? []), dockerCLIString(document, 'currentContext')].filter(Boolean))).map((value) => ({ value, label: value }))} /></label>
+                          <div class="container-service-cli-intro"><Info class="h-4 w-4" aria-hidden="true" /><p>{i18n.t('containers.services.dockerCLIScope')}</p></div>
+                          <div class="container-service-cli-common-grid">
+                            <label class="container-service-cli-setting-card"><span class="container-service-cli-setting-card__heading"><Layers class="h-4 w-4" aria-hidden="true" /><span><strong>{i18n.t('containers.services.currentContext')}</strong><code>currentContext</code></span></span><Select value={dockerCLIString(document, 'currentContext') || 'default'} onChange={(value) => setDockerCLIString('currentContext', value)} options={Array.from(new Set(['default', ...(source.context_options ?? []), dockerCLIString(document, 'currentContext')].filter(Boolean))).map((value) => ({ value, label: value }))} /></label>
+                            <label class="container-service-cli-setting-card"><span class="container-service-cli-setting-card__heading"><Terminal class="h-4 w-4" aria-hidden="true" /><span><strong>{i18n.t('containers.services.detachKeys')}</strong><code>detachKeys</code></span></span><Input value={dockerCLIString(document, 'detachKeys')} onInput={(event) => setDockerCLIString('detachKeys', event.currentTarget.value)} placeholder={i18n.t('containers.services.detachKeysPlaceholder')} autocomplete="off" /></label>
+                          </div>
                           <Show when={source.context_overridden_by}><div class="container-service-config-note container-service-config-note--warning"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.contextOverridden', { variable: source.context_overridden_by ?? '' })}</div></Show>
-                          <label><span>{i18n.t('containers.services.detachKeys')}</span><Input value={dockerCLIString(document, 'detachKeys')} onInput={(event) => setDockerCLIString('detachKeys', event.currentTarget.value)} placeholder={i18n.t('containers.services.detachKeysPlaceholder')} autocomplete="off" /></label>
-                          <div class="container-service-cli-section__heading"><div><strong>{i18n.t('containers.services.outputFormats')}</strong><p>{i18n.t('containers.services.outputFormatsDescription')}</p></div></div>
-                          <div class="container-service-cli-grid"><For each={dockerCLIOutputFormatFields}>{(key) => <label><code>{key}</code><Input value={dockerCLIString(document, key)} onInput={(event) => setDockerCLIString(key, event.currentTarget.value)} placeholder={i18n.t('containers.services.outputFormatPlaceholder')} autocomplete="off" /></label>}</For></div>
+                          <details class="container-service-cli-disclosure">
+                            <summary><span class="container-service-cli-disclosure__mark"><FileText class="h-4 w-4" aria-hidden="true" /></span><span class="container-service-cli-disclosure__copy"><strong>{i18n.t('containers.services.outputFormats')}</strong><small>{i18n.t('containers.services.outputFormatsDescription')}</small></span><Tag tone="soft" size="sm">{customizedDockerCLIOutputFormatCount()}/{dockerCLIOutputFormats.length}</Tag><ChevronRight class="container-service-cli-disclosure__chevron h-4 w-4" aria-hidden="true" /></summary>
+                            <div class="container-service-cli-output-grid"><For each={dockerCLIOutputFormats}>{(format) => <label><span><strong>{format.command}</strong><code>{format.key}</code></span><Input value={dockerCLIString(document, format.key)} onInput={(event) => setDockerCLIString(format.key, event.currentTarget.value)} placeholder={i18n.t('containers.services.outputFormatPlaceholder')} autocomplete="off" /></label>}</For></div>
+                          </details>
                         </div>
                       </Show>
                       <Show when={serviceConfigurationMode() === 'proxy'}>
