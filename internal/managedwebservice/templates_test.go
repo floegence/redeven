@@ -8,6 +8,7 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -63,6 +64,111 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 	}
 }
 
+func TestHostLifecyclePlanUsesRuntimeCommandsWithoutPersistingProjection(t *testing.T) {
+	t.Parallel()
+	spec := deepSeekHostTemplateSpec()
+	plan := hostLifecyclePlan(DeploymentNative, spec)
+	if plan == nil || plan.SchemaVersion != hostLifecyclePlanSchemaVersion || plan.Driver != "native" || plan.RuntimeBundle != deepSeekRuntimeBundleID || plan.Package == nil {
+		t.Fatalf("native lifecycle plan = %+v", plan)
+	}
+	if !strings.Contains(plan.Install.Steps[1].CommandTemplate, "<managed-node> <managed-npm-cli> ci --omit=dev") || !strings.Contains(plan.Install.Steps[1].CommandTemplate, "--strict-allow-scripts") {
+		t.Fatalf("native install plan = %+v", plan.Install)
+	}
+	if !strings.Contains(plan.Start.Steps[0].CommandTemplate, "--no-open") || !strings.Contains(spec.Host.StartScript, "--no-open") {
+		t.Fatalf("native start plan=%+v script=%q", plan.Start, spec.Host.StartScript)
+	}
+	if len(plan.Uninstall.Steps) != 4 || plan.Uninstall.Steps[0].Kind != "terminate_managed_process_group" || plan.Uninstall.Steps[1].Kind != "remove_managed_installation" || plan.Uninstall.Steps[2].Kind != "remove_managed_data_on_request" || plan.Uninstall.Steps[3].Kind != "remove_managed_logs" {
+		t.Fatalf("native uninstall plan = %+v", plan.Uninstall)
+	}
+	encoded, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "lifecycle_plan") {
+		t.Fatalf("persistent template spec contains lifecycle projection: %s", encoded)
+	}
+}
+
+func TestHostLifecyclePlanSeparatesManagedWorkFromTemplateHooks(t *testing.T) {
+	t.Parallel()
+	spec := TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion,
+		Kind:          DeploymentHost,
+		Endpoint:      WebEndpointSpec{Scheme: "http"},
+		Host: &HostTemplateSpec{
+			RuntimeBundle:   deepSeekRuntimeBundleID,
+			InstallScript:   `curl "https://private.example.invalid/install?token=must-not-leak"`,
+			StartScript:     `exec /Users/alice/private/bin/service`,
+			StopScript:      `service stop --credential must-not-leak`,
+			UninstallScript: `service clean /Users/alice/private`,
+		},
+	}
+	plan := hostLifecyclePlan(DeploymentHost, spec)
+	if plan == nil || plan.Driver != "host_script" || plan.Install.Ownership != "redeven_with_template_hook" || plan.Start.Ownership != "template" {
+		t.Fatalf("host lifecycle plan = %+v", plan)
+	}
+	if got := plan.Install.Steps[len(plan.Install.Steps)-1]; got.Kind != "run_template_script" || got.CommandTemplate != "<after-install-hook>" {
+		t.Fatalf("install hook step = %+v", got)
+	}
+	if got := plan.Stop.Steps[0]; got.Kind != "run_template_script" || got.CommandTemplate != "<before-stop-hook>" {
+		t.Fatalf("stop hook step = %+v", got)
+	}
+	if got := plan.Uninstall.Steps[0]; got.Kind != "run_template_script" || got.CommandTemplate != "<before-stop-hook>" {
+		t.Fatalf("uninstall stop hook step = %+v", got)
+	}
+	if got := plan.Uninstall.Steps[2]; got.Kind != "run_template_script" || got.CommandTemplate != "<before-uninstall-hook>" {
+		t.Fatalf("uninstall hook step = %+v", got)
+	}
+	encoded, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, privateValue := range []string{spec.Host.InstallScript, spec.Host.StartScript, spec.Host.StopScript, spec.Host.UninstallScript} {
+		if strings.Contains(string(encoded), privateValue) {
+			t.Fatalf("lifecycle plan leaked template script %q: %s", privateValue, encoded)
+		}
+	}
+}
+
+func TestHostLifecyclePlanRedactsArtifactURLQuery(t *testing.T) {
+	t.Parallel()
+	spec := TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion,
+		Kind:          DeploymentHost,
+		Endpoint:      WebEndpointSpec{Scheme: "http"},
+		Host: &HostTemplateSpec{
+			Artifact: &HostArtifactSpec{
+				DownloadURL:       "https://downloads.example.invalid/service.tar.gz?token=must-not-leak",
+				SizeBytes:         1024,
+				SHA256:            strings.Repeat("a", 64),
+				ExecutableRelPath: "bin/service",
+			},
+			StartScript: "exec service",
+		},
+	}
+	plan := hostLifecyclePlan(DeploymentHost, spec)
+	if plan == nil || plan.Package == nil || strings.Contains(plan.Package.Reference, "token") || plan.Package.Reference != "service.tar.gz@sha256:"+strings.Repeat("a", 64) {
+		t.Fatalf("artifact lifecycle plan = %+v", plan)
+	}
+}
+
+func TestHostLifecyclePlanDescribesPureScriptRuntimeOwnership(t *testing.T) {
+	t.Parallel()
+	spec := TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion,
+		Kind:          DeploymentHost,
+		Endpoint:      WebEndpointSpec{Scheme: "http"},
+		Host:          &HostTemplateSpec{StartScript: "exec service"},
+	}
+	plan := hostLifecyclePlan(DeploymentHost, spec)
+	if plan == nil || plan.Install.Ownership != lifecycleOwnershipRedeven || len(plan.Install.Steps) != 1 || plan.Install.Steps[0].Kind != "prepare_managed_directories" {
+		t.Fatalf("pure-script install plan = %+v", plan)
+	}
+	if len(plan.Uninstall.Steps) != 4 || plan.Uninstall.Steps[0].Kind != "terminate_managed_process_group" || plan.Uninstall.Steps[1].Kind != "remove_managed_installation" || plan.Uninstall.Steps[2].Kind != "remove_managed_logs" || plan.Uninstall.Steps[3].Kind != "remove_managed_data_on_request" {
+		t.Fatalf("pure-script uninstall plan = %+v", plan.Uninstall)
+	}
+}
+
 func TestDuplicateBuiltInHostRetainsReleaseLockedRuntime(t *testing.T) {
 	t.Parallel()
 	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
@@ -81,6 +187,9 @@ func TestDuplicateBuiltInHostRetainsReleaseLockedRuntime(t *testing.T) {
 	}
 	if copy.Source != "custom" || copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || copy.Spec.Host.Artifact != nil {
 		t.Fatalf("duplicated built-in host = %+v", copy)
+	}
+	if copy.HostLifecyclePlan == nil || copy.HostLifecyclePlan.Driver != "host_script" || copy.HostLifecyclePlan.Start.Steps[0].CommandTemplate != "<template-start-script>" || !strings.Contains(copy.HostLifecyclePlan.Install.Steps[2].CommandTemplate, "--strict-allow-scripts") || !strings.Contains(copy.Spec.Host.StartScript, "--no-open") {
+		t.Fatalf("duplicated built-in host lifecycle plan = %+v", copy.HostLifecyclePlan)
 	}
 }
 
@@ -314,6 +423,9 @@ func TestTemplateFromRecordAcceptsPersistedDocumentIdentity(t *testing.T) {
 	}
 	if loaded.EffectiveSpec == nil || loaded.EffectiveSpec.Host == nil || loaded.EffectiveSpec.Host.StartScript != spec.Host.StartScript {
 		t.Fatalf("effective migrated custom template = %+v", loaded.EffectiveSpec)
+	}
+	if loaded.HostLifecyclePlan == nil || loaded.HostLifecyclePlan.Start.Steps[0].CommandTemplate != "<template-start-script>" || loaded.Spec.Host.StartScript != spec.Host.StartScript || strings.Contains(loaded.Spec.Host.StartScript, "--no-open") {
+		t.Fatalf("historical custom template lifecycle projection = %+v", loaded.HostLifecyclePlan)
 	}
 }
 

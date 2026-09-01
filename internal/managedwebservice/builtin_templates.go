@@ -46,7 +46,7 @@ func builtInTemplateDefinitions() []builtInTemplateDefinition {
 			TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID,
 			Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion,
 			LocalizationKey: "deepSeekHarnessHost", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
-			Deployment: DeploymentNative, Revision: 1, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
+			Deployment: DeploymentNative, Revision: 2, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
 			Notices:           deepSeekHarnessNotices(false),
 			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
 			DataDirectory:     DeepSeekHarnessProductID,
@@ -150,7 +150,7 @@ func webtopTemplateSpec(templateID string, artifact dockerArtifact) TemplateSpec
 }
 
 func deepSeekHostTemplateSpec() TemplateSpec {
-	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: `exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"`, RuntimeBundle: deepSeekRuntimeBundleID}}
+	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: deepSeekHostStartScript(), RuntimeBundle: deepSeekRuntimeBundleID}}
 }
 
 func deepSeekContainerTemplateSpec(artifact dockerArtifact, available bool) TemplateSpec {
@@ -218,6 +218,7 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 			Available:     available, ReasonCode: reasonCode, Reason: reason, SortOrder: definition.SortOrder,
 			Deployments:          []DeploymentAvailability{{Deployment: definition.Deployment, Available: available, ReasonCode: reasonCode, Reason: reason}},
 			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: &effectiveSpec,
+			HostLifecyclePlan: hostLifecyclePlan(definition.Deployment, spec),
 			DefaultAccessMode: defaultAccessMode(definition.DefaultAccessMode),
 		})
 	}

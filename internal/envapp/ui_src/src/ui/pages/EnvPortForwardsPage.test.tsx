@@ -1296,6 +1296,7 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     expect(drawer.querySelector('h2')?.textContent).toBe('New service template');
     expect(drawer.textContent).toContain('Install script');
+    expect(drawer.querySelector('[data-testid="host-lifecycle-plan-pending"]')?.textContent).toContain('Save the template to let the Runtime validate and publish its read-only execution plan.');
     expect(drawer.textContent).toContain('Save template');
     expect(drawer.querySelector<HTMLInputElement>('[data-template-field="name"]')?.placeholder).toBe('Team dashboard');
     expect(drawer.querySelector<HTMLTextAreaElement>('[data-template-field="startScript"]')?.placeholder).toContain('REDEVEN_SERVICE_PORT');
@@ -1577,6 +1578,31 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service updated', expect.any(String)));
   });
 
+  it('explains that native template updates do not stop or replace the runtime', async () => {
+    const service = {
+      service_id: 'mws-deepseek-host', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness-host',
+      name: 'DeepSeek Harness', description: 'Native host service', localization_key: 'deepSeekHarnessHost', brand_icon: 'deepseek-harness', deployment: 'native',
+      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness-host', version: '0.1.1-rc.2', target_version: '0.1.1-rc.2', target_revision: 2,
+      update_available: true, update_notices: [], desired_state: 'running', observed_state: 'running', forward_id: 'managed-deepseek-host', runtime_port: 32101,
+    };
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.textContent).toContain('Update available'));
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-row"] button')).find((button) => button.textContent?.trim() === 'Update')?.click();
+    await flushPage();
+
+    const dialogText = host.querySelector('[data-testid="managed-service-update-dialog"]')?.textContent ?? '';
+    expect(dialogText).toContain('does not stop or restart the service');
+    expect(dialogText).toContain('runtime, workspace, managed data, and configuration remain unchanged');
+    expect(dialogText).not.toContain('restores the previous image');
+  });
+
   it('searches the catalog using localized built-in identity copy', async () => {
     const templates = [
       { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'Unlocalized host name', description: 'Unlocalized host description', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [] },
@@ -1634,7 +1660,21 @@ describe('EnvPortForwardsPage', () => {
       template_id: 'tmpl-host-copy', service_family_id: 'family-copy', name: 'DeepSeek Harness host copy', description: 'Host deployment',
       source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, version: '0.1.1-rc.2', developer_preview: false,
       deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }],
-      spec: { schema_version: 1, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web', runtime_bundle: 'deepseek-harness-0.1.1-rc.2-node-24.19.0' } },
+      spec: { schema_version: 1, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open', runtime_bundle: 'deepseek-harness-0.1.1-rc.2-node-24.19.0' } },
+      host_lifecycle_plan: {
+        schema_version: 1,
+        driver: 'host_script',
+        runtime_bundle: 'deepseek-harness-0.1.1-rc.2-node-24.19.0',
+        package: { reference: 'deepseek-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 1024 },
+        install: { ownership: 'redeven', steps: [
+          { kind: 'prepare_managed_directories' },
+          { kind: 'prepare_verified_package', reference: 'deepseek-runtime.tar.gz@sha256:1234' },
+          { kind: 'run_locked_dependency_install', command_template: '<managed-node> <managed-npm-cli> ci --omit=dev --strict-allow-scripts' },
+        ] },
+        start: { ownership: 'template', steps: [{ kind: 'run_template_script', command_template: '<template-start-script>' }] },
+        stop: { ownership: 'redeven', steps: [{ kind: 'terminate_managed_process_group' }] },
+        uninstall: { ownership: 'redeven', steps: [{ kind: 'remove_managed_installation' }, { kind: 'remove_managed_logs' }, { kind: 'remove_managed_data_on_request' }] },
+      },
     };
     let updateBody: Record<string, any> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -1654,10 +1694,17 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     document.querySelector<HTMLButtonElement>('button[title="Edit template"]')?.click();
     await flushPage();
+    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('<managed-node> <managed-npm-cli> ci --omit=dev --strict-allow-scripts');
+    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('Uses the editable command below.');
+    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).not.toContain('<template-start-script>');
+    expect(document.querySelector('label[for="template-editor-install-script"]')?.textContent).toContain('After-install hook');
+    expect(document.querySelector('#template-editor-install-script-help')?.textContent).toContain('No additional command configured.');
+    expect((document.querySelector('#template-editor-start-script') as HTMLTextAreaElement | null)?.value).toContain('--no-open');
     const save = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save template');
     save?.click();
 
     await waitForAssertion(() => expect(updateBody?.spec?.host?.runtime_bundle).toBe('deepseek-harness-0.1.1-rc.2-node-24.19.0'));
+    expect(updateBody).not.toHaveProperty('host_lifecycle_plan');
   });
 
   it('restores an active managed operation and exposes cancellation after a page reload', async () => {

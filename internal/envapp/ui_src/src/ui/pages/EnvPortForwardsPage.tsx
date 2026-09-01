@@ -44,7 +44,9 @@ import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
 import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
 import {
   ServiceTemplateCatalog,
+  HostLifecyclePlanDetails,
   ServiceTemplateIdentity,
+  type HostLifecyclePlan,
   type ServiceTemplateCategory,
   type ServiceTemplateKind,
   type ServiceTemplatePresentation,
@@ -187,6 +189,7 @@ type ManagedCatalogTemplate = Readonly<{
   default_access_mode?: WebServiceAccessMode;
   spec?: ManagedTemplateSpec;
   effective_spec?: ManagedTemplateSpec;
+  host_lifecycle_plan?: HostLifecyclePlan;
 }>;
 
 type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
@@ -217,6 +220,7 @@ export type TemplateEditorDraft = {
   composeYAML: string;
   mainService: string;
   originalSpec?: ManagedTemplateSpec;
+  hostLifecyclePlan?: HostLifecyclePlan;
 };
 
 export type TemplateEditorField = 'name' | 'description' | 'version' | 'path' | 'healthPath' | 'startScript' | 'image' | 'containerPort' | 'environment' | 'mainService' | 'composeYAML';
@@ -303,6 +307,7 @@ function draftFromTemplate(template: ManagedCatalogTemplate): TemplateEditorDraf
     composeYAML: spec?.compose?.yaml ?? draft.composeYAML,
     mainService: spec?.compose?.main_service ?? draft.mainService,
     originalSpec: spec,
+    hostLifecyclePlan: template.host_lifecycle_plan,
   };
 }
 
@@ -1968,6 +1973,7 @@ export function EnvPortForwardsPage() {
       defaultWorkspacePath: template.default_workspace_path,
       defaultAccessMode: template.default_access_mode,
       runtimeSpec: template.effective_spec,
+      hostLifecyclePlan: template.host_lifecycle_plan,
       developerPreview: template.developer_preview,
       available: template.available,
       availabilityReason: templateUnavailableReason(template),
@@ -2914,18 +2920,50 @@ export function EnvPortForwardsPage() {
                   <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.serviceRuntimeSettings')}</h3>
                   <Show when={draft().kind === 'host'}>
                     <p class="mt-2 text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.hostScriptNote')}</p>
+                    <Show when={draft().hostLifecyclePlan} fallback={(
+                      <section class="service-template-lifecycle-plan mt-4" data-testid="host-lifecycle-plan-pending">
+                        <h4 class="text-[11px] font-semibold leading-5 text-foreground">{i18n.t('webServices.managed.managedLifecycle')}</h4>
+                        <p class="mt-1 text-[11px] leading-4 text-muted-foreground">{i18n.t('webServices.managed.lifecyclePlanAfterSave')}</p>
+                      </section>
+                    )}>{(plan) => (
+                      <div class="mt-4">
+                        <HostLifecyclePlanDetails plan={plan()} templateCommands="reference" />
+                      </div>
+                    )}</Show>
                     <div class="mt-3">
                       <TemplateEditorLabel for="template-editor-start-script" label={i18n.t('webServices.managed.startScript')} required />
                       <Textarea id="template-editor-start-script" data-template-field="startScript" value={draft().startScript} rows={7} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.startScript')} aria-invalid={invalid('startScript') ? 'true' : undefined} aria-describedby="template-editor-start-script-help" onInput={(event) => update({ startScript: event.currentTarget.value })} />
                       <TemplateEditorGuidance id="template-editor-start-script-help" help={i18n.t('webServices.managed.help.startScript')} error={error('startScript')} visible={templateValidationVisible()} />
                     </div>
                     <details class="service-template-editor__advanced mt-3" open={Boolean(draft().installScript || draft().stopScript || draft().uninstallScript)}>
-                      <summary class="cursor-pointer py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.optionalLifecycleScripts')}</summary>
+                      <summary class="cursor-pointer py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.lifecycleHooks')}</summary>
                       <div class="space-y-3 pb-1 pt-2">
-                        <div><TemplateEditorLabel for="template-editor-install-script" label={i18n.t('webServices.managed.installScript')} /><Textarea id="template-editor-install-script" value={draft().installScript} rows={5} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.installScript')} onInput={(event) => update({ installScript: event.currentTarget.value })} /></div>
+                        <div>
+                          <TemplateEditorLabel
+                            for="template-editor-install-script"
+                            label={i18n.t(draft().hostLifecyclePlan?.install.steps.some((step) => step.kind === 'prepare_verified_package') ? 'webServices.managed.afterInstallHook' : 'webServices.managed.installScript')}
+                          />
+                          <Textarea id="template-editor-install-script" value={draft().installScript} rows={5} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.installScript')} aria-describedby="template-editor-install-script-help" onInput={(event) => update({ installScript: event.currentTarget.value })} />
+                          <p id="template-editor-install-script-help" class="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            {i18n.t(draft().hostLifecyclePlan?.install.steps.some((step) => step.kind === 'prepare_verified_package') ? 'webServices.managed.help.afterInstallHook' : 'webServices.managed.help.installScript')}
+                            <Show when={!draft().installScript.trim()}> {i18n.t('webServices.managed.noAdditionalCommand')}</Show>
+                          </p>
+                        </div>
                         <div class="grid gap-3 sm:grid-cols-2">
-                          <div><TemplateEditorLabel for="template-editor-stop-script" label={i18n.t('webServices.managed.stopScript')} /><Textarea id="template-editor-stop-script" value={draft().stopScript} rows={4} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.stopScript')} onInput={(event) => update({ stopScript: event.currentTarget.value })} /></div>
-                          <div><TemplateEditorLabel for="template-editor-uninstall-script" label={i18n.t('webServices.managed.uninstallScript')} /><Textarea id="template-editor-uninstall-script" value={draft().uninstallScript} rows={4} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.uninstallScript')} onInput={(event) => update({ uninstallScript: event.currentTarget.value })} /></div>
+                          <div>
+                            <TemplateEditorLabel for="template-editor-stop-script" label={i18n.t('webServices.managed.beforeStopHook')} />
+                            <Textarea id="template-editor-stop-script" value={draft().stopScript} rows={4} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.stopScript')} aria-describedby="template-editor-stop-script-help" onInput={(event) => update({ stopScript: event.currentTarget.value })} />
+                            <p id="template-editor-stop-script-help" class="mt-1 text-[11px] leading-4 text-muted-foreground">
+                              {i18n.t('webServices.managed.help.beforeStopHook')}<Show when={!draft().stopScript.trim()}> {i18n.t('webServices.managed.noAdditionalCommand')}</Show>
+                            </p>
+                          </div>
+                          <div>
+                            <TemplateEditorLabel for="template-editor-uninstall-script" label={i18n.t('webServices.managed.beforeUninstallHook')} />
+                            <Textarea id="template-editor-uninstall-script" value={draft().uninstallScript} rows={4} class="font-mono text-xs" placeholder={i18n.t('webServices.managed.placeholders.uninstallScript')} aria-describedby="template-editor-uninstall-script-help" onInput={(event) => update({ uninstallScript: event.currentTarget.value })} />
+                            <p id="template-editor-uninstall-script-help" class="mt-1 text-[11px] leading-4 text-muted-foreground">
+                              {i18n.t('webServices.managed.help.beforeUninstallHook')}<Show when={!draft().uninstallScript.trim()}> {i18n.t('webServices.managed.noAdditionalCommand')}</Show>
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </details>
@@ -3023,7 +3061,11 @@ export function EnvPortForwardsPage() {
               </div>
               <div class="rounded-lg border bg-muted/25 p-3 text-xs">
                 <div class="font-medium text-foreground">{i18n.t('webServices.managed.updateKeepsData')}</div>
-                <p class="mt-1 leading-5 text-muted-foreground">{i18n.t('webServices.managed.updateKeepsDataDescription')}</p>
+                <p class="mt-1 leading-5 text-muted-foreground">
+                  {i18n.t(service.deployment === 'native'
+                    ? 'webServices.managed.nativeUpdateKeepsRuntimeDescription'
+                    : 'webServices.managed.updateKeepsDataDescription')}
+                </p>
               </div>
               <Show when={(service.update_notices?.length ?? 0) > 0}>
                 <ManagedTemplateNotices

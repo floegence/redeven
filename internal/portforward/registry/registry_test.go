@@ -1242,7 +1242,8 @@ func TestFinalizeManagedOperationCommitsOperationAndServiceErrorAtomically(t *te
 	}
 	op.State, op.Stage, op.ErrorCode, op.ErrorMessage, op.FinishedAtUnixMs = "failed", "failed", "IMAGE_PULL_FAILED", "The image could not be pulled.", 12
 	desired, observed := "stopped", "error"
-	patch := ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage}
+	revision, snapshot, snapshotHash, version := int64(2), `{"revision":2}`, strings.Repeat("a", 64), "2"
+	patch := ManagedServicePatch{TemplateRevision: &revision, TemplateSnapshotJSON: &snapshot, TemplateSnapshotSHA256: &snapshotHash, Version: &version, DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage}
 	if err := r.FinalizeManagedOperation(context.Background(), op, patch); err == nil {
 		t.Fatal("FinalizeManagedOperation unexpectedly ignored the service update failure")
 	}
@@ -1254,7 +1255,7 @@ func TestFinalizeManagedOperationCommitsOperationAndServiceErrorAtomically(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if storedOperation == nil || storedOperation.State != "pending" || storedOperation.FinishedAtUnixMs != 0 || storedService == nil || storedService.ObservedState != "installing" || storedService.LastErrorCode != "" {
+	if storedOperation == nil || storedOperation.State != "pending" || storedOperation.FinishedAtUnixMs != 0 || storedService == nil || storedService.TemplateRevision != 1 || storedService.Version != "1" || storedService.ObservedState != "installing" || storedService.LastErrorCode != "" {
 		t.Fatalf("failed finalization partially committed: operation=%+v service=%+v", storedOperation, storedService)
 	}
 	if _, err := r.db.Exec(`DROP TRIGGER reject_service_finalize`); err != nil {
@@ -1265,7 +1266,7 @@ func TestFinalizeManagedOperationCommitsOperationAndServiceErrorAtomically(t *te
 	}
 	storedOperation, _ = r.GetManagedOperation(context.Background(), op.OperationID)
 	storedService, _ = r.GetManagedService(context.Background(), service.ServiceID)
-	if storedOperation == nil || storedOperation.State != "failed" || storedService == nil || storedService.ObservedState != "error" || storedService.LastErrorCode != "IMAGE_PULL_FAILED" {
+	if storedOperation == nil || storedOperation.State != "failed" || storedService == nil || storedService.TemplateRevision != 2 || storedService.TemplateSnapshotJSON != snapshot || storedService.TemplateSnapshotSHA256 != snapshotHash || storedService.Version != "2" || storedService.ObservedState != "error" || storedService.LastErrorCode != "IMAGE_PULL_FAILED" {
 		t.Fatalf("successful finalization did not commit together: operation=%+v service=%+v", storedOperation, storedService)
 	}
 }

@@ -851,6 +851,18 @@ func (r *Registry) FinalizeManagedOperation(ctx context.Context, op ManagedOpera
 	}
 	sets, args := []string{}, []any{}
 	add := func(column string, value any) { sets = append(sets, column+" = ?"); args = append(args, value) }
+	if patch.TemplateRevision != nil {
+		add("template_revision", *patch.TemplateRevision)
+	}
+	if patch.TemplateSnapshotJSON != nil {
+		add("template_snapshot_json", strings.TrimSpace(*patch.TemplateSnapshotJSON))
+	}
+	if patch.TemplateSnapshotSHA256 != nil {
+		add("template_snapshot_sha256", strings.TrimSpace(*patch.TemplateSnapshotSHA256))
+	}
+	if patch.Version != nil {
+		add("version", strings.TrimSpace(*patch.Version))
+	}
 	if patch.DesiredState != nil {
 		add("desired_state", strings.TrimSpace(*patch.DesiredState))
 	}

@@ -69,6 +69,32 @@ export type ServiceTemplateRuntimeSpec = Readonly<{
   compose?: Readonly<{ yaml: string; main_service: string }>;
 }>;
 
+export type HostLifecycleStep = Readonly<{
+  kind: 'prepare_managed_directories' | 'prepare_verified_package' | 'run_locked_dependency_install' | 'run_template_script' | 'launch_managed_runtime' | 'terminate_managed_process_group' | 'remove_managed_installation' | 'remove_managed_logs' | 'remove_managed_data_on_request';
+  reference?: string;
+  command_template?: string;
+}>;
+
+export type HostLifecycleActionPlan = Readonly<{
+  ownership: 'none' | 'redeven' | 'template' | 'redeven_with_template_hook';
+  steps: ReadonlyArray<HostLifecycleStep>;
+}>;
+
+export type HostLifecyclePlan = Readonly<{
+  schema_version: 1;
+  driver: 'native' | 'host_script';
+  runtime_bundle?: string;
+  package?: Readonly<{
+    reference: string;
+    sha256: string;
+    size_bytes: number;
+  }>;
+  install: HostLifecycleActionPlan;
+  start: HostLifecycleActionPlan;
+  stop: HostLifecycleActionPlan;
+  uninstall: HostLifecycleActionPlan;
+}>;
+
 export type ServiceTemplatePresentation = Readonly<{
   id: string;
   name: string;
@@ -86,6 +112,7 @@ export type ServiceTemplatePresentation = Readonly<{
   defaultWorkspacePath?: string;
   defaultAccessMode?: string;
   runtimeSpec?: ServiceTemplateRuntimeSpec;
+  hostLifecyclePlan?: HostLifecyclePlan;
   developerPreview: boolean;
   available: boolean;
   availabilityReason?: string;
@@ -233,35 +260,103 @@ function ContainerTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec }): 
   );
 }
 
-function HostTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec }): JSX.Element {
+type HostLifecycleAction = 'install' | 'start' | 'stop' | 'uninstall';
+
+function lifecycleActionLabel(action: HostLifecycleAction, i18n: ReturnType<typeof useI18n>): string {
+  return i18n.t(`webServices.managed.lifecycleAction.${action}` as Parameters<typeof i18n.t>[0]);
+}
+
+function lifecycleOwnershipLabel(ownership: HostLifecycleActionPlan['ownership'], i18n: ReturnType<typeof useI18n>): string {
+  return i18n.t(`webServices.managed.lifecycleOwnership.${ownership}` as Parameters<typeof i18n.t>[0]);
+}
+
+function lifecycleStepLabel(step: HostLifecycleStep, action: HostLifecycleAction, managedInstall: boolean, i18n: ReturnType<typeof useI18n>): string {
+  if (step.kind === 'run_template_script') {
+    if (action === 'install') return i18n.t(managedInstall ? 'webServices.managed.lifecycleStep.afterInstallHook' : 'webServices.managed.lifecycleStep.installScript');
+    if (action === 'start') return i18n.t('webServices.managed.lifecycleStep.startScript');
+    if (action === 'stop') return i18n.t('webServices.managed.lifecycleStep.beforeStopHook');
+    return i18n.t('webServices.managed.lifecycleStep.beforeUninstallHook');
+  }
+  return i18n.t(`webServices.managed.lifecycleStep.${step.kind}` as Parameters<typeof i18n.t>[0]);
+}
+
+function actionPlan(plan: HostLifecyclePlan, action: HostLifecycleAction): HostLifecycleActionPlan {
+  return plan[action];
+}
+
+export function HostLifecyclePlanDetails(props: {
+  plan: HostLifecyclePlan;
+  templateCommands?: 'show' | 'reference';
+}): JSX.Element {
   const i18n = useI18n();
-  const host = () => props.spec.host;
-  const lifecycle = () => [
-    host()?.install_script ? i18n.t('webServices.managed.settings.install_script') : '',
-    host()?.start_script ? i18n.t('webServices.managed.settings.start_script') : '',
-    host()?.stop_script ? i18n.t('webServices.managed.settings.stop_script') : '',
-    host()?.uninstall_script ? i18n.t('webServices.managed.settings.uninstall_script') : '',
-  ].filter(Boolean).join(' · ');
+  const actions: readonly HostLifecycleAction[] = ['install', 'start', 'stop', 'uninstall'];
+  const managedInstall = () => props.plan.install.steps.some((step) => step.kind === 'prepare_verified_package');
+  const templateCommands = () => props.templateCommands ?? 'show';
+
+  return (
+    <section class="service-template-lifecycle-plan" data-testid="host-lifecycle-plan">
+      <div class="service-template-lifecycle-plan__heading">
+        <h3 class="text-[11px] font-semibold leading-5 text-foreground">{i18n.t('webServices.managed.managedLifecycle')}</h3>
+        <p class="mt-1 text-[11px] leading-4 text-muted-foreground">{i18n.t('webServices.managed.managedLifecycleDescription')}</p>
+      </div>
+      <dl class="service-template-detail-grid mt-3">
+        <DetailField label={i18n.t('webServices.managed.details.lifecycleDriver')} value={props.plan.driver} mono />
+        <Show when={props.plan.runtime_bundle}>
+          <DetailField label={i18n.t('webServices.managed.details.runtimeBundle')} value={props.plan.runtime_bundle} mono />
+        </Show>
+        <Show when={props.plan.package}>{(pkg) => (
+          <>
+            <DetailField label={i18n.t('webServices.managed.softwarePackage')} value={pkg().reference} mono wide />
+            <DetailField label="SHA-256" value={pkg().sha256} mono wide />
+            <DetailField label={i18n.t('webServices.managed.disk')} value={formatTemplateBytes(pkg().size_bytes, i18n.locale())} />
+          </>
+        )}</Show>
+      </dl>
+      <div class="service-template-lifecycle-plan__actions mt-3 grid gap-2">
+        <For each={actions}>{(action) => {
+          const current = () => actionPlan(props.plan, action);
+          return (
+            <div class="service-template-lifecycle-action rounded-md border px-3 py-2.5" data-lifecycle-action={action}>
+              <div class="flex min-w-0 items-center justify-between gap-3">
+                <h4 class="text-xs font-medium text-foreground">{lifecycleActionLabel(action, i18n)}</h4>
+                <span class="shrink-0 text-[10px] font-medium text-muted-foreground">{lifecycleOwnershipLabel(current().ownership, i18n)}</span>
+              </div>
+              <Show when={current().steps.length > 0} fallback={<p class="mt-1.5 text-[11px] leading-4 text-muted-foreground">{i18n.t('webServices.managed.noAdditionalCommand')}</p>}>
+                <ol class="mt-2 grid gap-2">
+                  <For each={current().steps}>{(step, index) => (
+                    <li class="service-template-lifecycle-step min-w-0 text-[11px] leading-4 text-muted-foreground">
+                      <div class="flex min-w-0 gap-2">
+                        <span class="service-template-lifecycle-step__index flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] tabular-nums">{index() + 1}</span>
+                        <div class="min-w-0 flex-1">
+                          <span>{lifecycleStepLabel(step, action, managedInstall(), i18n)}</span>
+                          <Show when={step.reference}>
+                            <code class="mt-1 block break-all text-[10px] leading-4 text-foreground">{step.reference}</code>
+                          </Show>
+                          <Show when={step.command_template && (step.kind !== 'run_template_script' || templateCommands() === 'show')}>
+                            <code class="service-template-lifecycle-step__command mt-1 block whitespace-pre-wrap break-words rounded px-2 py-1.5 text-[10px] leading-4 text-foreground">{step.command_template}</code>
+                          </Show>
+                          <Show when={step.kind === 'run_template_script' && templateCommands() === 'reference'}>
+                            <span class="mt-1 block text-[10px] leading-4 text-muted-foreground">{i18n.t('webServices.managed.editableCommandBelow')}</span>
+                          </Show>
+                        </div>
+                      </div>
+                    </li>
+                  )}</For>
+                </ol>
+              </Show>
+            </div>
+          );
+        }}</For>
+      </div>
+    </section>
+  );
+}
+
+function HostTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec; plan?: HostLifecyclePlan }): JSX.Element {
   return (
     <>
       <EndpointTemplateDetails spec={props.spec} />
-      <DetailSection title={i18n.t('webServices.managed.serviceRuntimeSettings')}>
-        <Show when={host()?.runtime_bundle}>
-          <DetailField label={i18n.t('webServices.managed.details.runtimeBundle')} value={host()?.runtime_bundle} mono wide />
-        </Show>
-        <Show when={host()?.artifact}>{(artifact) => (
-          <>
-            <DetailField label={i18n.t('webServices.managed.details.hostArtifact')} value={artifact().download_url} mono wide />
-            <DetailField label="SHA-256" value={artifact().sha256} mono wide />
-            <DetailField label={i18n.t('webServices.managed.disk')} value={formatTemplateBytes(artifact().size_bytes, i18n.locale())} />
-            <DetailField label={i18n.t('webServices.managed.entrypoint')} value={artifact().executable_rel_path} mono />
-          </>
-        )}</Show>
-      </DetailSection>
-      <DetailSection title={i18n.t('webServices.managed.settings.section.lifecycle')}>
-        <DetailField label={i18n.t('webServices.managed.details.configuredHooks')} value={lifecycle()} wide />
-        <DetailField label={i18n.t('webServices.managed.startScript')} value={host()?.start_script} mono wide />
-      </DetailSection>
+      <Show when={props.plan}>{(plan) => <HostLifecyclePlanDetails plan={plan()} />}</Show>
     </>
   );
 }
@@ -549,7 +644,7 @@ export function ServiceTemplateDetailsPane(props: {
         <Show when={props.template.runtimeSpec}>{(spec) => (
           <Show when={spec().kind === 'container'} fallback={(
             <Show when={spec().kind === 'host'} fallback={<ComposeTemplateDetails spec={spec()} />}>
-              <HostTemplateDetails spec={spec()} />
+              <HostTemplateDetails spec={spec()} plan={props.template.hostLifecyclePlan} />
             </Show>
           )}>
             <ContainerTemplateDetails spec={spec()} />

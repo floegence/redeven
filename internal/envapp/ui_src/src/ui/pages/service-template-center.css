@@ -169,6 +169,26 @@
     overflow-wrap: anywhere;
   }
 
+  .service-template-lifecycle-plan {
+    padding: 14px 0;
+    border-top: 1px solid color-mix(in srgb, var(--redeven-stroke-divider) 72%, transparent);
+  }
+
+  .service-template-lifecycle-action {
+    border-color: color-mix(in srgb, var(--redeven-stroke-divider) 76%, transparent);
+    background: color-mix(in srgb, var(--redeven-surface-control-muted) 42%, transparent);
+  }
+
+  .service-template-lifecycle-step__index {
+    color: var(--muted-foreground);
+    background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  }
+
+  .service-template-lifecycle-step__command {
+    background: color-mix(in srgb, var(--redeven-surface-panel-elevated) 76%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--redeven-stroke-divider) 60%, transparent);
+  }
+
   .service-template-detail-links,
   .service-template-details__status {
     padding: 14px 0;

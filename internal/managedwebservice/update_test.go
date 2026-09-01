@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -52,6 +53,119 @@ func TestServiceListDerivesUpdateAvailabilityFromBuiltInRevision(t *testing.T) {
 	}
 	if len(views[0].UpdateNotices) != 1 || views[0].UpdateNotices[0].ID != webtopRootNoticeID {
 		t.Fatalf("service update notices = %+v", views[0].UpdateNotices)
+	}
+}
+
+func TestNativeHostRevisionUpdateCommitsOnlyTemplateMetadata(t *testing.T) {
+	t.Parallel()
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = registry.Close() })
+	scope, stateDir := newManagedServiceTestScope(t)
+	manager, err := New(ManagerOptions{StateDir: stateDir, Registry: registry, Scope: scope})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+
+	legacy := deepSeekHostTemplateSpec()
+	legacy.Host.StartScript = `exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"`
+	legacySnapshot, legacyHash, err := canonicalTemplateSpec(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := pfregistry.ManagedService{
+		ServiceID: "mws_native_revision_one", TemplateID: DeepSeekHarnessHostTemplateID, TemplateSource: "builtin", TemplateRevision: 1,
+		TemplateSnapshotJSON: legacySnapshot, TemplateSnapshotSHA256: legacyHash, ServiceFamilyID: DeepSeekHarnessHostTemplateID,
+		Deployment: string(DeploymentNative), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
+		DesiredState: "running", ObservedState: "running", ForwardID: "pf_native_revision_one", RuntimeIdentity: "native:preserved",
+		RuntimeManifestJSON: `{}`, RuntimePort: 43123, ArtifactReference: "/managed/runtime/preserved",
+	}
+	forward := pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:43123"}
+	if err := registry.CreateManagedService(context.Background(), service, forward); err != nil {
+		t.Fatal(err)
+	}
+	views, err := manager.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 || !views[0].UpdateAvailable || views[0].TargetRevision != 2 {
+		t.Fatalf("native update availability = %+v", views)
+	}
+
+	op, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{RequestID: "request-native-metadata-update", Action: ActionUpdate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, readErr := registry.GetManagedOperation(context.Background(), op.OperationID)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if stored != nil && stored.State == "succeeded" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	storedOperation, err := registry.GetManagedOperation(context.Background(), op.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := registry.GetManagedService(context.Background(), service.ServiceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedOperation == nil || storedOperation.State != "succeeded" || updated == nil {
+		t.Fatalf("native metadata update result: operation=%+v service=%+v", storedOperation, updated)
+	}
+	if updated.TemplateRevision != 2 || !strings.Contains(updated.TemplateSnapshotJSON, `--no-open`) || updated.TemplateSnapshotSHA256 == legacyHash {
+		t.Fatalf("native updated template identity = %+v", updated)
+	}
+	if updated.RuntimeIdentity != service.RuntimeIdentity || updated.ArtifactReference != service.ArtifactReference || updated.RuntimeManifestJSON != service.RuntimeManifestJSON || updated.RuntimePort != service.RuntimePort || updated.DesiredState != "running" || updated.ObservedState != "running" {
+		t.Fatalf("native update changed runtime state = %+v", updated)
+	}
+}
+
+func TestNativeHostMetadataUpdateRejectsRuntimeChanges(t *testing.T) {
+	t.Parallel()
+	legacy := deepSeekHostTemplateSpec()
+	legacy.Host.StartScript = `exec "$REDEVEN_INSTALL_EXECUTABLE" web`
+	snapshot, hash, err := canonicalTemplateSpec(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetSpec := deepSeekHostTemplateSpec()
+	targetSpec.Endpoint.HealthPath = "/new-health-contract"
+	service := pfregistry.ManagedService{
+		TemplateSource: "builtin", TemplateRevision: 1, TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: hash,
+		Deployment: string(DeploymentNative), Version: DeepSeekHarnessVersion, DesiredState: "stopped", ObservedState: "stopped",
+	}
+	_, err = nativeTemplateUpdatePatch(service, Template{Deployment: DeploymentNative, Revision: 2, Version: DeepSeekHarnessVersion, Spec: &targetSpec})
+	if managedErrorCode(err) != "UPDATE_UNSUPPORTED" {
+		t.Fatalf("runtime-changing native update error = %v", err)
+	}
+}
+
+func TestInterruptedNativeMetadataUpdateDoesNotTouchRuntime(t *testing.T) {
+	t.Parallel()
+	driver := &recoveryDriver{}
+	manager := &Manager{native: driver}
+	service := pfregistry.ManagedService{
+		ServiceID: "mws_native_update_interrupted", Deployment: string(DeploymentNative),
+		DesiredState: "running", ObservedState: "running", RuntimeIdentity: "native:preserved",
+	}
+	operation := pfregistry.ManagedOperation{Action: string(ActionUpdate), State: "interrupted"}
+
+	manager.reconcileInterruptedService(&service, operation)
+
+	if driver.startCalls != 0 || driver.stopCalls != 0 || driver.cleanupCalls != 0 {
+		t.Fatalf("interrupted metadata update touched Runtime: %+v", driver)
+	}
+	if service.DesiredState != "running" || service.ObservedState != "running" || service.RuntimeIdentity != "native:preserved" {
+		t.Fatalf("interrupted metadata update changed service: %+v", service)
 	}
 }
 

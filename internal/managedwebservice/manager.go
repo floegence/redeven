@@ -300,7 +300,8 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 		}
 		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
 			view.BrandIcon, view.LocalizationKey = definition.BrandIcon, definition.LocalizationKey
-			if service.TemplateSource == "builtin" && Deployment(service.Deployment) == DeploymentContainer && definition.Revision > service.TemplateRevision {
+			deployment := Deployment(service.Deployment)
+			if service.TemplateSource == "builtin" && (deployment == DeploymentContainer || deployment == DeploymentNative) && definition.Revision > service.TemplateRevision {
 				view.UpdateAvailable, view.TargetRevision, view.TargetVersion = true, definition.Revision, definition.Version
 				view.UpdateNotices = append([]TemplateNotice(nil), definition.Notices...)
 			}
@@ -603,11 +604,31 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 			err = m.runStart(ctx, &service, &op, driver)
 		}
 	case ActionUpdate:
-		updateDriver, ok := driver.(containerUpdateDriver)
-		if !ok {
-			err = serviceError("UPDATE_UNSUPPORTED", "This managed Web Service deployment cannot be updated in place.", 409, false, nil)
-		} else {
+		if Deployment(service.Deployment) == DeploymentNative {
+			var target *Template
+			target, err = m.serviceUpdateTarget(ctx, service)
+			if err == nil && target == nil {
+				err = serviceError("UPDATE_NOT_AVAILABLE", "No newer reviewed template revision is available for this service.", 409, false, nil)
+			}
+			var patch pfregistry.ManagedServicePatch
+			if err == nil {
+				m.progress(&op, "update_preparing", 1)
+				if err = ctx.Err(); err == nil {
+					patch, err = nativeTemplateUpdatePatch(service, *target)
+				}
+			}
+			if err == nil {
+				op.State, op.Stage, op.ProgressCurrent = "succeeded", "completed", operationProgressTotal
+				op.FinishedAtUnixMs = time.Now().UnixMilli()
+				blank := ""
+				patch.LastErrorCode, patch.LastErrorMessage = &blank, &blank
+				m.finalizeAndPublish(&op, patch)
+				return
+			}
+		} else if updateDriver, ok := driver.(containerUpdateDriver); ok {
 			err = m.runUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, updateDriver)
+		} else {
+			err = serviceError("UPDATE_UNSUPPORTED", "This managed Web Service deployment cannot be updated in place.", 409, false, nil)
 		}
 	case ActionReconfigure:
 		if inputs.Reconfigure == nil {
@@ -789,7 +810,11 @@ func (m *Manager) finishUpdateFailure(service *pfregistry.ManagedService, op *pf
 		cause, rollbackErr = updateErr.Cause, updateErr.RollbackErr
 	}
 	if errors.Is(cause, context.Canceled) {
-		op.State, op.Stage, op.ErrorCode, op.ErrorMessage = "cancelled", "cancelled", "OPERATION_CANCELLED", "The update was cancelled and the previous runtime was restored."
+		message := "The update was cancelled and the previous runtime was restored."
+		if service.Deployment == string(DeploymentNative) {
+			message = "The metadata update was cancelled before any service or Runtime state changed."
+		}
+		op.State, op.Stage, op.ErrorCode, op.ErrorMessage = "cancelled", "cancelled", "OPERATION_CANCELLED", message
 	} else {
 		op.State, op.Stage = "failed", "failed"
 		op.ErrorCode, op.ErrorMessage, _, _ = ErrorDetails(cause)
@@ -842,6 +867,12 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 		return
 	}
 	if OperationAction(operation.Action) == ActionUpdate {
+		if Deployment(service.Deployment) == DeploymentNative {
+			// Native template updates are one Registry transaction and never touch
+			// the running process. An interruption therefore needs no Runtime work:
+			// the service already contains either the old or the complete new metadata.
+			return
+		}
 		updateDriver, ok := driver.(containerUpdateDriver)
 		if !ok {
 			code, message := "UPDATE_UNSUPPORTED", "The interrupted update deployment cannot be recovered."
