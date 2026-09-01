@@ -240,6 +240,10 @@ type EngineImageProgressPuller interface {
 	PullImageWithProgress(context.Context, Engine, string, ImagePullProgressSink) (EngineImageResult, error)
 }
 
+type EngineRegistryCredentialProvider interface {
+	RegistryCredential(context.Context, Engine, string) (RegistryCredential, error)
+}
+
 type EngineLogFollower interface {
 	FollowLogs(ctx context.Context, req EngineLogsRequest, sink LogLineSink) error
 }
@@ -260,6 +264,17 @@ func (a *Adapter) Validate() error {
 		return errors.New("container engine client is required")
 	}
 	return nil
+}
+
+func (a *Adapter) RegistryCredential(ctx context.Context, engine Engine, registryHost string) (RegistryCredential, error) {
+	if err := a.Validate(); err != nil {
+		return RegistryCredential{}, err
+	}
+	provider, ok := a.client.(EngineRegistryCredentialProvider)
+	if !ok || interfaceIsNil(provider) {
+		return RegistryCredential{}, nil
+	}
+	return provider.RegistryCredential(ctx, engine, registryHost)
 }
 
 func engineClientIsNil(client EngineClient) bool {

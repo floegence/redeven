@@ -38,7 +38,18 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 		return "", "", err
 	}
 	executable := ""
-	if spec.Host.RuntimeBundle != "" {
+	if spec.Host.NPM != nil {
+		identity := ReleaseIdentity{}
+		executable, identity, err = d.installNPMRuntime(ctx, service, *spec.Host.NPM, progress)
+		if err != nil {
+			return "", "", err
+		}
+		releaseJSON, releaseDigest, encodeErr := canonicalReleaseIdentity(identity)
+		if encodeErr != nil {
+			return "", "", encodeErr
+		}
+		service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256 = releaseJSON, releaseDigest
+	} else if spec.Host.RuntimeBundle != "" {
 		if spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || d.manager.nativeRuntime == nil {
 			return "", "", serviceError("TEMPLATE_RUNTIME_BUNDLE_INVALID", "The saved host runtime bundle is not available in this Redeven release.", 409, false, nil)
 		}
@@ -298,7 +309,14 @@ func (d *hostScriptDriver) serviceEnvironment(service *pfregistry.ManagedService
 		"REDEVEN_INSTALL_DIR="+filepath.Join(root, "install"),
 		"REDEVEN_INSTALL_EXECUTABLE="+executable,
 	)
+	authTokenParameter := ""
+	if spec, _, specErr := effectiveSpecFromService(service); specErr == nil && spec.Host != nil && spec.Host.NPM != nil {
+		authTokenParameter = strings.TrimSpace(spec.Host.NPM.AuthTokenParameter)
+	}
 	for name, value := range parameters {
+		if name == authTokenParameter {
+			continue
+		}
 		env = append(env, name+"="+value)
 	}
 	return env, nil

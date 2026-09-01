@@ -151,6 +151,37 @@ func TestManagedWebServiceJSONRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestManagedReleaseCandidateRoutesRequireLifecyclePermissionAndForwardSecrets(t *testing.T) {
+	t.Parallel()
+	backend := &managedBackendStub{}
+	channelID := "ch_managed_releases"
+	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+	request := httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/private-host/release-candidates", strings.NewReader(`{"refresh":true,"parameters":{"registry_token":"secret"}}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response := httptest.NewRecorder()
+	readServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusForbidden || backend.templateReleaseCalls != 0 {
+		t.Fatalf("read-only release discovery status=%d calls=%d", response.Code, backend.templateReleaseCalls)
+	}
+
+	fullServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
+	request = httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/private-host/release-candidates", strings.NewReader(`{"refresh":true,"parameters":{"registry_token":"secret"}}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	fullServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusOK || backend.templateReleaseCalls != 1 || !backend.lastReleaseRequest.Refresh || backend.lastReleaseRequest.Parameters["registry_token"] != "secret" {
+		t.Fatalf("template release request status=%d calls=%d request=%+v body=%s", response.Code, backend.templateReleaseCalls, backend.lastReleaseRequest, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/release-candidates", strings.NewReader(`{"refresh":true}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	fullServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusOK || backend.serviceReleaseCalls != 1 {
+		t.Fatalf("service release request status=%d calls=%d body=%s", response.Code, backend.serviceReleaseCalls, response.Body.String())
+	}
+}
+
 func TestManagedTemplateDuplicateRequiresLifecyclePermission(t *testing.T) {
 	t.Parallel()
 	backend := &managedBackendStub{}
@@ -177,18 +208,21 @@ func TestManagedTemplateDuplicateRequiresLifecyclePermission(t *testing.T) {
 }
 
 type managedBackendStub struct {
-	catalog            []managedwebservice.Template
-	createCalls        int
-	operateCalls       int
-	lastCreate         managedwebservice.CreateRequest
-	lastOperate        managedwebservice.OperationRequest
-	duplicateCalls     int
-	lastDuplicate      managedwebservice.TemplateDuplicateRequest
-	subscribeOperation pfregistry.ManagedOperation
-	settingsCalls      int
-	preflightCalls     int
-	lastMetadata       managedwebservice.ServiceMetadataPatch
-	lastDraft          managedwebservice.ReconfigureDraft
+	catalog              []managedwebservice.Template
+	createCalls          int
+	operateCalls         int
+	lastCreate           managedwebservice.CreateRequest
+	lastOperate          managedwebservice.OperationRequest
+	duplicateCalls       int
+	lastDuplicate        managedwebservice.TemplateDuplicateRequest
+	subscribeOperation   pfregistry.ManagedOperation
+	settingsCalls        int
+	preflightCalls       int
+	lastMetadata         managedwebservice.ServiceMetadataPatch
+	lastDraft            managedwebservice.ReconfigureDraft
+	templateReleaseCalls int
+	serviceReleaseCalls  int
+	lastReleaseRequest   managedwebservice.ReleaseCandidateRequest
 }
 
 func (b *managedBackendStub) Catalog(context.Context) ([]managedwebservice.Template, error) {
@@ -218,8 +252,18 @@ func (b *managedBackendStub) DuplicateTemplate(_ context.Context, _ string, requ
 func (b *managedBackendStub) ValidateTemplate(context.Context, managedwebservice.TemplateWriteRequest) error {
 	return nil
 }
+func (b *managedBackendStub) TemplateReleaseCandidates(_ context.Context, _ string, request managedwebservice.ReleaseCandidateRequest) (*managedwebservice.ReleaseCandidateResult, error) {
+	b.templateReleaseCalls++
+	b.lastReleaseRequest = request
+	return &managedwebservice.ReleaseCandidateResult{SchemaVersion: 1, Candidates: []managedwebservice.ReleaseCandidate{}}, nil
+}
 func (b *managedBackendStub) List(context.Context) ([]managedwebservice.ServiceView, error) {
 	return []managedwebservice.ServiceView{}, nil
+}
+func (b *managedBackendStub) ServiceReleaseCandidates(_ context.Context, _ string, request managedwebservice.ReleaseCandidateRequest) (*managedwebservice.ReleaseCandidateResult, error) {
+	b.serviceReleaseCalls++
+	b.lastReleaseRequest = request
+	return &managedwebservice.ReleaseCandidateResult{SchemaVersion: 1, Candidates: []managedwebservice.ReleaseCandidate{}}, nil
 }
 func (b *managedBackendStub) Settings(_ context.Context, serviceID string) (*managedwebservice.ServiceSettingsView, error) {
 	b.settingsCalls++

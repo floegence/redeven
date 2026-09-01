@@ -59,6 +59,8 @@ type ManagedService struct {
 	ConfigurationJSON      string `json:"-"`
 	ConfigurationRevision  int64  `json:"configuration_revision"`
 	ConfigurationSHA256    string `json:"configuration_sha256"`
+	ReleaseIdentityJSON    string `json:"-"`
+	ReleaseIdentitySHA256  string `json:"release_identity_sha256"`
 	Version                string `json:"version"`
 	DesiredState           string `json:"desired_state"`
 	ObservedState          string `json:"observed_state"`
@@ -178,6 +180,8 @@ type ManagedServicePatch struct {
 	ConfigurationJSON      *string
 	ConfigurationRevision  *int64
 	ConfigurationSHA256    *string
+	ReleaseIdentityJSON    *string
+	ReleaseIdentitySHA256  *string
 	Version                *string
 	DesiredState           *string
 	ObservedState          *string
@@ -358,7 +362,7 @@ func (r *Registry) ListManagedServices(ctx context.Context) ([]ManagedService, e
 	if r == nil || r.db == nil {
 		return nil, errors.New("registry not initialized")
 	}
-	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256 FROM managed_web_services ORDER BY created_at_unix_ms ASC`)
+	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256 FROM managed_web_services ORDER BY created_at_unix_ms ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +383,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 		return nil, errors.New("registry not initialized")
 	}
 	value := ManagedService{}
-	err := scanManagedService(r.db.QueryRowContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256 FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)), &value)
+	err := scanManagedService(r.db.QueryRowContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256 FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)), &value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -392,7 +396,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 type rowScanner interface{ Scan(dest ...any) error }
 
 func scanManagedService(row rowScanner, value *ManagedService) error {
-	return row.Scan(&value.ServiceID, &value.TemplateID, &value.TemplateSource, &value.TemplateRevision, &value.TemplateSnapshotJSON, &value.TemplateSnapshotSHA256, &value.ServiceFamilyID, &value.Deployment, &value.WorkspacePath, &value.ConfigurationJSON, &value.Version, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs, &value.ConfigurationRevision, &value.ConfigurationSHA256)
+	return row.Scan(&value.ServiceID, &value.TemplateID, &value.TemplateSource, &value.TemplateRevision, &value.TemplateSnapshotJSON, &value.TemplateSnapshotSHA256, &value.ServiceFamilyID, &value.Deployment, &value.WorkspacePath, &value.ConfigurationJSON, &value.Version, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs, &value.ConfigurationRevision, &value.ConfigurationSHA256, &value.ReleaseIdentityJSON, &value.ReleaseIdentitySHA256)
 }
 
 func (r *Registry) CreateManagedService(ctx context.Context, service ManagedService, forward Forward) error {
@@ -428,6 +432,13 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 		digest := sha256.Sum256([]byte(service.ConfigurationJSON))
 		service.ConfigurationSHA256 = hex.EncodeToString(digest[:])
 	}
+	if strings.TrimSpace(service.ReleaseIdentityJSON) == "" {
+		service.ReleaseIdentityJSON = `{"schema_version":1,"kind":"none"}`
+	}
+	if strings.TrimSpace(service.ReleaseIdentitySHA256) == "" {
+		digest := sha256.Sum256([]byte(service.ReleaseIdentityJSON))
+		service.ReleaseIdentitySHA256 = hex.EncodeToString(digest[:])
+	}
 	if forward.CreatedAtUnixMs <= 0 {
 		forward.CreatedAtUnixMs = now
 	}
@@ -462,7 +473,7 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 	if _, err = tx.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES(?,?,?,?,?,?,?,?,?,?)`, forward.ForwardID, forward.TargetURL, forward.Name, forward.Description, forward.HealthPath, boolToInt(forward.InsecureSkipVerify), forward.CreatedAtUnixMs, forward.UpdatedAtUnixMs, forward.LastOpenedAtUnixMs, forward.AccessMode); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.TemplateSource, service.TemplateRevision, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, service.ServiceFamilyID, service.Deployment, service.WorkspacePath, service.ConfigurationJSON, service.Version, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimeManifestJSON, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs, service.ConfigurationRevision, service.ConfigurationSHA256); err != nil {
+	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,version,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.TemplateSource, service.TemplateRevision, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, service.ServiceFamilyID, service.Deployment, service.WorkspacePath, service.ConfigurationJSON, service.Version, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimeManifestJSON, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs, service.ConfigurationRevision, service.ConfigurationSHA256, service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256); err != nil {
 		return err
 	}
 	if operation != nil {
@@ -496,6 +507,12 @@ func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, p
 	}
 	if patch.ConfigurationSHA256 != nil {
 		add("configuration_sha256", strings.TrimSpace(*patch.ConfigurationSHA256))
+	}
+	if patch.ReleaseIdentityJSON != nil {
+		add("release_identity_json", strings.TrimSpace(*patch.ReleaseIdentityJSON))
+	}
+	if patch.ReleaseIdentitySHA256 != nil {
+		add("release_identity_sha256", strings.TrimSpace(*patch.ReleaseIdentitySHA256))
 	}
 	if patch.Version != nil {
 		add("version", strings.TrimSpace(*patch.Version))
@@ -859,6 +876,12 @@ func (r *Registry) FinalizeManagedOperation(ctx context.Context, op ManagedOpera
 	}
 	if patch.TemplateSnapshotSHA256 != nil {
 		add("template_snapshot_sha256", strings.TrimSpace(*patch.TemplateSnapshotSHA256))
+	}
+	if patch.ReleaseIdentityJSON != nil {
+		add("release_identity_json", strings.TrimSpace(*patch.ReleaseIdentityJSON))
+	}
+	if patch.ReleaseIdentitySHA256 != nil {
+		add("release_identity_sha256", strings.TrimSpace(*patch.ReleaseIdentitySHA256))
 	}
 	if patch.Version != nil {
 		add("version", strings.TrimSpace(*patch.Version))

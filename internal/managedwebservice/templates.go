@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const templateSpecSchemaVersion = 1
+const templateSpecSchemaVersion = 2
 
 var (
 	templateNamePattern             = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
@@ -26,6 +27,9 @@ var (
 	managedWorkspaceIdentityPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 	composeServicePattern           = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
 	composeVolumePattern            = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+	npmPackagePattern               = regexp.MustCompile(`^(?:@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$`)
+	npmExecutablePattern            = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+	exactSemverPattern              = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[-0-9A-Za-z.]+)?(?:\+[-0-9A-Za-z.]+)?$`)
 )
 
 func (m *Manager) Template(ctx context.Context, templateID string) (*Template, error) {
@@ -208,7 +212,7 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 func completeBuiltInDuplicateSpec(spec TemplateSpec) bool {
 	switch spec.Kind {
 	case DeploymentHost:
-		return spec.Host != nil && (spec.Host.Artifact != nil || spec.Host.RuntimeBundle == deepSeekRuntimeBundleID)
+		return spec.Host != nil && (spec.Host.Artifact != nil || spec.Host.NPM != nil)
 	case DeploymentContainer:
 		return spec.Container != nil && strings.Contains(spec.Container.Image, "@sha256:")
 	default:
@@ -356,8 +360,20 @@ func validateTemplateSpec(spec TemplateSpec) error {
 				return serviceError("TEMPLATE_HOST_INVALID", "A host lifecycle script is too large or invalid.", 400, false, nil)
 			}
 		}
-		if spec.Host.RuntimeBundle != "" && (spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || spec.Host.Artifact != nil) {
-			return serviceError("TEMPLATE_RUNTIME_BUNDLE_INVALID", "The host template runtime bundle is not supported or conflicts with a package artifact.", 400, false, nil)
+		managedInstallers := 0
+		if spec.Host.Artifact != nil {
+			managedInstallers++
+		}
+		if spec.Host.NPM != nil {
+			managedInstallers++
+		}
+		if spec.Host.RuntimeBundle != "" || managedInstallers > 1 {
+			return serviceError("TEMPLATE_HOST_PACKAGE_INVALID", "Host templates may declare one artifact or npm package; legacy Runtime Bundles are not accepted by schema v2.", 400, false, nil)
+		}
+		if spec.Host.NPM != nil {
+			if err := validateNPMHostPackage(*spec.Host.NPM, spec.Parameters); err != nil {
+				return err
+			}
 		}
 	case DeploymentContainer:
 		if spec.Container == nil || !validImageReference(spec.Container.Image) || spec.Endpoint.ContainerPort < 1 || spec.Endpoint.ContainerPort > 65535 {
@@ -398,6 +414,27 @@ func validateTemplateSpec(spec TemplateSpec) error {
 		return serviceError("DEPLOYMENT_INVALID", "Choose a host, single-container, or Compose template.", 400, false, nil)
 	}
 	return nil
+}
+
+func validateNPMHostPackage(value NPMHostPackageSpec, parameters []TemplateParameter) error {
+	registryURL, err := url.Parse(strings.TrimSpace(value.RegistryURL))
+	if err != nil || registryURL.Scheme != "https" || registryURL.Hostname() == "" || registryURL.User != nil || registryURL.RawQuery != "" || registryURL.Fragment != "" {
+		return serviceError("NPM_REGISTRY_INVALID", "npm Host templates require an absolute HTTPS Registry URL without credentials, query parameters, or fragments.", 400, false, err)
+	}
+	_, validVersion := parseSemanticVersion(strings.TrimSpace(value.Version))
+	if !npmPackagePattern.MatchString(strings.TrimSpace(value.PackageName)) || !exactSemverPattern.MatchString(strings.TrimSpace(value.Version)) || !validVersion || !npmExecutablePattern.MatchString(strings.TrimSpace(value.Executable)) {
+		return serviceError("NPM_PACKAGE_INVALID", "npm Host templates require a valid package name, exact SemVer, and executable name.", 400, false, nil)
+	}
+	parameterName := strings.TrimSpace(value.AuthTokenParameter)
+	if parameterName == "" {
+		return nil
+	}
+	for _, parameter := range parameters {
+		if parameter.Name == parameterName && parameter.Type == "secret" {
+			return nil
+		}
+	}
+	return serviceError("NPM_AUTH_PARAMETER_INVALID", "The npm auth token must reference a Secret template parameter.", 400, false, nil)
 }
 
 func validImageReference(value string) bool {

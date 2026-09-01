@@ -464,6 +464,7 @@ describe('web service metadata and template validation', () => {
       name: 'Dashboard', description: '', version: '1.0.0', scheme: 'http' as const,
       path: '/', healthPath: '/healthz', containerPort: '3000', installScript: '',
       startScript: '', stopScript: '', uninstallScript: '', image: '', entrypoint: '',
+      npmPackageName: '', npmPackageVersion: '', npmRegistryURL: 'https://registry.npmjs.org/', npmExecutable: '', npmAuthTokenParameter: '',
       command: '', environment: '', mainService: '', composeYAML: '',
     };
     expect(validateTemplateDraft({ ...base, kind: 'host' })).toMatchObject({ startScript: 'required' });
@@ -1655,21 +1656,25 @@ describe('EnvPortForwardsPage', () => {
     expect(String((duplicateBody as Record<string, unknown> | null)?.request_id)).toMatch(/^envapp-/u);
   });
 
-  it('preserves a duplicated host runtime bundle when saving template edits', async () => {
+  it('preserves a duplicated declarative npm Host package when saving template edits', async () => {
     const source = {
       template_id: 'tmpl-host-copy', service_family_id: 'family-copy', name: 'DeepSeek Harness host copy', description: 'Host deployment',
       source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, version: '0.1.1-rc.2', developer_preview: false,
       deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }],
-      spec: { schema_version: 1, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open', runtime_bundle: 'deepseek-harness-0.1.1-rc.2-node-24.19.0' } },
+      spec: { schema_version: 2, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open', npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' } } },
       host_lifecycle_plan: {
         schema_version: 1,
-        driver: 'host_script',
-        runtime_bundle: 'deepseek-harness-0.1.1-rc.2-node-24.19.0',
+        driver: 'npm_host',
+        runtime_bundle: 'node-24.19.0',
+        npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' },
         package: { reference: 'deepseek-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 1024 },
         install: { ownership: 'redeven', steps: [
           { kind: 'prepare_managed_directories' },
-          { kind: 'prepare_verified_package', reference: 'deepseek-runtime.tar.gz@sha256:1234' },
-          { kind: 'run_locked_dependency_install', command_template: '<managed-node> <managed-npm-cli> ci --omit=dev --strict-allow-scripts' },
+          { kind: 'prepare_verified_node_runtime', reference: 'node-24.19.0' },
+          { kind: 'install_npm_package_without_scripts', command_template: '<managed-node> <managed-npm-cli> install @deepseek-ai/dsh@0.1.1-rc.2 --package-lock=false --ignore-scripts' },
+          { kind: 'remove_temporary_registry_credentials' },
+          { kind: 'run_npm_lifecycle_scripts', command_template: '<managed-node> <managed-npm-cli> rebuild --dangerously-allow-all-scripts' },
+          { kind: 'verify_npm_release_identity', reference: '@deepseek-ai/dsh@0.1.1-rc.2' },
         ] },
         start: { ownership: 'template', steps: [{ kind: 'run_template_script', command_template: '<template-start-script>' }] },
         stop: { ownership: 'redeven', steps: [{ kind: 'terminate_managed_process_group' }] },
@@ -1694,7 +1699,7 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     document.querySelector<HTMLButtonElement>('button[title="Edit template"]')?.click();
     await flushPage();
-    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('<managed-node> <managed-npm-cli> ci --omit=dev --strict-allow-scripts');
+    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('<managed-node> <managed-npm-cli> install @deepseek-ai/dsh@0.1.1-rc.2 --package-lock=false --ignore-scripts');
     expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('Uses the editable command below.');
     expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).not.toContain('<template-start-script>');
     expect(document.querySelector('label[for="template-editor-install-script"]')?.textContent).toContain('After-install hook');
@@ -1703,7 +1708,7 @@ describe('EnvPortForwardsPage', () => {
     const save = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save template');
     save?.click();
 
-    await waitForAssertion(() => expect(updateBody?.spec?.host?.runtime_bundle).toBe('deepseek-harness-0.1.1-rc.2-node-24.19.0'));
+    await waitForAssertion(() => expect(updateBody?.spec?.host?.npm).toEqual({ package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }));
     expect(updateBody).not.toHaveProperty('host_lifecycle_plan');
   });
 

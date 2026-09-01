@@ -25,23 +25,27 @@ const template: ServiceTemplatePresentation = {
   brandIcon: 'deepseek-harness',
   deploymentLabel: 'Host',
   version: '0.1.1-rc.2',
-  revision: 2,
+  revision: 3,
   runtimeSpec: {
-    schema_version: 1,
+    schema_version: 2,
     kind: 'host',
     endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 },
-    host: { runtime_bundle: 'deepseek-harness', start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open' },
+    host: { npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }, start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open' },
   },
   hostLifecyclePlan: {
     schema_version: 1,
-    driver: 'native',
-    runtime_bundle: 'deepseek-harness',
+    driver: 'npm_host',
+    runtime_bundle: 'node-24.19.0',
+    npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' },
     package: { reference: 'deepseek-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 536870912 },
     install: { ownership: 'redeven', steps: [
-      { kind: 'prepare_verified_package', reference: 'deepseek-runtime.tar.gz@sha256:1234' },
-      { kind: 'run_locked_dependency_install', command_template: '<managed-node> <managed-npm-cli> ci --omit=dev --legacy-peer-deps=false --no-audit --fund=false --progress=false --strict-allow-scripts' },
+      { kind: 'prepare_verified_node_runtime', reference: 'node-24.19.0' },
+      { kind: 'install_npm_package_without_scripts', command_template: '<managed-node> <managed-npm-cli> install @deepseek-ai/dsh@0.1.1-rc.2 --package-lock=false --ignore-scripts' },
+      { kind: 'remove_temporary_registry_credentials' },
+      { kind: 'run_npm_lifecycle_scripts', command_template: '<managed-node> <managed-npm-cli> rebuild --dangerously-allow-all-scripts' },
+      { kind: 'verify_npm_release_identity', reference: '@deepseek-ai/dsh@0.1.1-rc.2' },
     ] },
-    start: { ownership: 'redeven', steps: [{ kind: 'launch_managed_runtime', command_template: '<managed-launcher> web --host 127.0.0.1 --port <reserved-port> --no-open' }] },
+    start: { ownership: 'template', steps: [{ kind: 'run_template_script', command_template: '<managed-executable> web --host <service-host> --port <service-port> --no-open' }] },
     stop: { ownership: 'redeven', steps: [{ kind: 'terminate_managed_process_group' }] },
     uninstall: { ownership: 'redeven', steps: [{ kind: 'remove_managed_installation' }, { kind: 'remove_managed_logs' }, { kind: 'remove_managed_data_on_request' }] },
   },
@@ -58,7 +62,7 @@ const longContainerTemplate: ServiceTemplatePresentation = {
   kind: 'container',
   deploymentLabel: 'Container',
   runtimeSpec: {
-    schema_version: 1,
+    schema_version: 2,
     kind: 'container',
     endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/', startup_timeout_sec: 180 },
     container: {
@@ -254,7 +258,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     const details = document.querySelector<HTMLElement>('[data-testid="service-template-details"]')!;
     const plan = details.querySelector<HTMLElement>('[data-testid="host-lifecycle-plan"]')!;
     const commands = Array.from(plan.querySelectorAll<HTMLElement>('.service-template-lifecycle-step__command'));
-    expect(plan.textContent).toContain('--strict-allow-scripts');
+		expect(plan.textContent).toContain('--dangerously-allow-all-scripts');
     expect(plan.textContent).toContain('--no-open');
     expect(commands.length).toBeGreaterThanOrEqual(2);
     for (const command of commands) {

@@ -67,18 +67,18 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 func TestHostLifecyclePlanUsesRuntimeCommandsWithoutPersistingProjection(t *testing.T) {
 	t.Parallel()
 	spec := deepSeekHostTemplateSpec()
-	plan := hostLifecyclePlan(DeploymentNative, spec)
-	if plan == nil || plan.SchemaVersion != hostLifecyclePlanSchemaVersion || plan.Driver != "native" || plan.RuntimeBundle != deepSeekRuntimeBundleID || plan.Package == nil {
-		t.Fatalf("native lifecycle plan = %+v", plan)
+	plan := hostLifecyclePlan(DeploymentHost, spec)
+	if plan == nil || plan.SchemaVersion != hostLifecyclePlanSchemaVersion || plan.Driver != "npm_host" || plan.RuntimeBundle != "node-"+nodeVersion || plan.Package == nil || plan.NPM == nil {
+		t.Fatalf("npm Host lifecycle plan = %+v", plan)
 	}
-	if !strings.Contains(plan.Install.Steps[1].CommandTemplate, "<managed-node> <managed-npm-cli> ci --omit=dev") || !strings.Contains(plan.Install.Steps[1].CommandTemplate, "--strict-allow-scripts") {
-		t.Fatalf("native install plan = %+v", plan.Install)
+	if len(plan.Install.Steps) != 6 || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "install @deepseek-ai/dsh@0.1.1-rc.2") || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "--package-lock=false --ignore-scripts") || !strings.Contains(plan.Install.Steps[4].CommandTemplate, "rebuild --dangerously-allow-all-scripts") {
+		t.Fatalf("npm Host install plan = %+v", plan.Install)
 	}
 	if !strings.Contains(plan.Start.Steps[0].CommandTemplate, "--no-open") || !strings.Contains(spec.Host.StartScript, "--no-open") {
-		t.Fatalf("native start plan=%+v script=%q", plan.Start, spec.Host.StartScript)
+		t.Fatalf("npm Host start plan=%+v script=%q", plan.Start, spec.Host.StartScript)
 	}
-	if len(plan.Uninstall.Steps) != 4 || plan.Uninstall.Steps[0].Kind != "terminate_managed_process_group" || plan.Uninstall.Steps[1].Kind != "remove_managed_installation" || plan.Uninstall.Steps[2].Kind != "remove_managed_data_on_request" || plan.Uninstall.Steps[3].Kind != "remove_managed_logs" {
-		t.Fatalf("native uninstall plan = %+v", plan.Uninstall)
+	if len(plan.Uninstall.Steps) != 4 || plan.Uninstall.Steps[0].Kind != "terminate_managed_process_group" || plan.Uninstall.Steps[1].Kind != "remove_managed_installation" || plan.Uninstall.Steps[2].Kind != "remove_managed_logs" || plan.Uninstall.Steps[3].Kind != "remove_managed_data_on_request" {
+		t.Fatalf("npm Host uninstall plan = %+v", plan.Uninstall)
 	}
 	encoded, err := json.Marshal(spec)
 	if err != nil {
@@ -185,10 +185,10 @@ func TestDuplicateBuiltInHostRetainsReleaseLockedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if copy.Source != "custom" || copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || copy.Spec.Host.Artifact != nil {
+	if copy.Source != "custom" || copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.NPM == nil || copy.Spec.Host.NPM.PackageName != "@deepseek-ai/dsh" || copy.Spec.Host.NPM.Version != DeepSeekHarnessVersion || copy.Spec.Host.Artifact != nil {
 		t.Fatalf("duplicated built-in host = %+v", copy)
 	}
-	if copy.HostLifecyclePlan == nil || copy.HostLifecyclePlan.Driver != "host_script" || copy.HostLifecyclePlan.Start.Steps[0].CommandTemplate != "<template-start-script>" || !strings.Contains(copy.HostLifecyclePlan.Install.Steps[2].CommandTemplate, "--strict-allow-scripts") || !strings.Contains(copy.Spec.Host.StartScript, "--no-open") {
+	if copy.HostLifecyclePlan == nil || copy.HostLifecyclePlan.Driver != "npm_host" || !strings.Contains(copy.HostLifecyclePlan.Start.Steps[0].CommandTemplate, "--no-open") || !strings.Contains(copy.HostLifecyclePlan.Install.Steps[2].CommandTemplate, "--package-lock=false --ignore-scripts") || !strings.Contains(copy.HostLifecyclePlan.Install.Steps[4].CommandTemplate, "--dangerously-allow-all-scripts") || !strings.Contains(copy.Spec.Host.StartScript, "--no-open") {
 		t.Fatalf("duplicated built-in host lifecycle plan = %+v", copy.HostLifecyclePlan)
 	}
 }
