@@ -44,8 +44,6 @@ type AIReadinessSnapshot struct {
 	ReasonCode   string           `json:"reason_code,omitempty"`
 	Retryable    bool             `json:"retryable"`
 	SafeToRetry  bool             `json:"safe_to_retry"`
-	Committed    bool             `json:"committed"`
-	RolledBack   bool             `json:"rolled_back"`
 	IssueCount   int              `json:"issue_count,omitempty"`
 	TraceID      string           `json:"trace_id,omitempty"`
 	StartupPhase string           `json:"startup_phase,omitempty"`
@@ -155,7 +153,7 @@ func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapsh
 		})
 	case AIReadinessRecovering:
 		if !knownAIReadinessReasonCode(snapshot.ReasonCode) || !snapshot.Retryable || !snapshot.SafeToRetry ||
-			snapshot.Committed || snapshot.RolledBack || snapshot.IssueCount != 0 {
+			snapshot.IssueCount != 0 {
 			return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
 		}
 		return sanitizeAIReadinessDiagnostics(AIReadinessSnapshot{
@@ -167,7 +165,7 @@ func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapsh
 		return AIReadinessSnapshot{State: AIReadinessReady}
 	case AIReadinessDegraded:
 		if strings.TrimSpace(snapshot.ReasonCode) != AIHostThreadSettingsMissingReasonCode || snapshot.IssueCount <= 0 ||
-			snapshot.Retryable || snapshot.SafeToRetry || snapshot.Committed || snapshot.RolledBack {
+			snapshot.Retryable || snapshot.SafeToRetry {
 			return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
 		}
 		return AIReadinessSnapshot{State: AIReadinessDegraded, ReasonCode: AIHostThreadSettingsMissingReasonCode, IssueCount: snapshot.IssueCount}

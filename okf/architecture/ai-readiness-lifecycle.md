@@ -17,15 +17,15 @@ timestamp: 2026-07-25T00:00:00Z
 ## Process-local readiness
 
 The Code App composition layer owns the only AI readiness controller. Its
-closed state set is `unavailable`, `inspecting`, `migrating`, `verifying`,
-`recovering`, `ready`, and `blocked`. Store inspection, automatic domain migration, and
-verification occur only inside the single published Floret `runtime.Open` call
-that creates the actual Host retained by the new service generation. Redeven
-reports `inspecting` before that call and `verifying` after it returns while
-product composition and startup recovery finish; it must not open and close a
-disposable probe Host before opening the retained Host. Failures are mapped from
-the typed Redeven startup projection into sanitized product reason codes plus
-`retryable`, `safe_to_retry`, `committed`, and `rolled_back` facts. Generic
+closed state set is `unavailable`, `inspecting`, `optimizing`, `migrating`,
+`verifying`, `recovering`, `ready`, `degraded`, and `blocked`. Store inspection,
+automatic domain migration, and verification occur only inside the single
+published Floret `runtime.Open` call that creates the actual Host retained by
+the new service generation. Redeven reports `inspecting` before maintenance,
+then forwards Floret's real `migrating` and `verifying` phases while the retained
+Host opens; it must not guess a migration phase or open and close a disposable
+probe Host. Failures are mapped from the typed Redeven startup projection into
+sanitized product reason codes plus `retryable` and `safe_to_retry`. Generic
 service construction failures use `ai_service_startup_error`; raw errors,
 paths, schema identities, fingerprints, SQL, and backend content are not exposed.
 An old generation close failure is terminal for the process: the controller
@@ -114,19 +114,22 @@ stream. When a Runtime restart invalidates local access, the password gate
 replaces the recovery presentation; a successful regrant begins one fresh
 readiness and Flower initialization sequence.
 
-Transient inspection delays progress presentation and never invents a
-percentage. Typed busy or temporary I/O failures enter bounded `recovering`;
-unsafe failures block. The process-level `agent.lock` remains the state-root
-owner, so another runtime attaches or reports conflict instead of opening an
-empty Store. Automatic retry requires typed safety and current admin authority;
-manual retry is single-flight. No force, reset, repair, ignore, or backend
-mutation action exists. Returning to `ready` mounts a fresh Flower DOM after the
-previous surface has completed cleanup.
+Transient inspection delays use a neutral progress presentation and never
+invent a percentage, remaining time, or polling countdown. After ten seconds
+the UI shows real elapsed time without live-region announcements. After thirty
+seconds it adds one calm explanation and an optional sanitized detail view;
+normal processing never exposes retry or cancel actions. The process-level
+`agent.lock` remains the state-root owner, so another runtime attaches or reports
+conflict instead of opening an empty Store. A terminal retry is user-controlled,
+single-flight, and allowed only by typed safety plus current authority. No force,
+reset, repair, ignore, or backend mutation action exists. Returning to `ready`
+mounts a fresh Flower DOM after the previous surface has completed cleanup and
+emits one non-blocking ready notice after a long startup.
 
 Displayed diagnostics and clipboard output use the same sanitized projection.
-A bounded trace id, startup phase, and retry reason may support diagnosis, but
-raw paths, schema or SQL details, credentials, provider state, and tool output
-never cross the boundary. Unknown or contradictory facts become one
+Only the phase, real elapsed time, status, and bounded trace ID may appear;
+raw paths, schema or SQL details, credentials, provider state, retry internals,
+and tool output never cross the boundary. Unknown or contradictory facts become one
 non-retryable contract failure. Settings reports only Floret readiness and marks
 other store owners outside the check instead of fabricating health.
 

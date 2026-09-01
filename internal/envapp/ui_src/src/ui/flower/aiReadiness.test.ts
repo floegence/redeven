@@ -13,8 +13,6 @@ const ready = (): AIReadinessSnapshot => ({
   reason_code: '',
   retryable: false,
   safe_to_retry: false,
-  committed: false,
-  rolled_back: false,
 });
 
 const inspecting = (): AIReadinessSnapshot => ({
@@ -22,8 +20,6 @@ const inspecting = (): AIReadinessSnapshot => ({
   reason_code: '',
   retryable: false,
   safe_to_retry: false,
-  committed: false,
-  rolled_back: false,
 });
 
 const busy = (): AIReadinessSnapshot => ({
@@ -31,8 +27,6 @@ const busy = (): AIReadinessSnapshot => ({
   reason_code: 'temporarily_blocked',
   retryable: true,
   safe_to_retry: true,
-  committed: false,
-  rolled_back: false,
 });
 
 async function flushAsync(): Promise<void> {
@@ -81,7 +75,7 @@ describe('AI readiness model', () => {
   it('preserves the storage optimization startup phase', () => {
     expect(normalizeAIReadinessSnapshot({
       state: 'optimizing', reason_code: '', retryable: false, safe_to_retry: false,
-      committed: false, rolled_back: false, startup_phase: 'optimizing',
+      startup_phase: 'optimizing',
     })).toMatchObject({ state: 'optimizing', startup_phase: 'optimizing' });
   });
 
@@ -91,8 +85,6 @@ describe('AI readiness model', () => {
       reason_code: '',
       retryable: false,
       safe_to_retry: false,
-      committed: false,
-      rolled_back: false,
       trace_id: 'ai-start-3',
       startup_phase: 'inspecting',
     })).toEqual({
@@ -100,8 +92,6 @@ describe('AI readiness model', () => {
       reason_code: '',
       retryable: false,
       safe_to_retry: false,
-      committed: false,
-      rolled_back: false,
       trace_id: 'ai-start-3',
       startup_phase: 'inspecting',
     });
@@ -113,8 +103,6 @@ describe('AI readiness model', () => {
       reason_code: 'temporarily_blocked',
       retryable: true,
       safe_to_retry: true,
-      committed: false,
-      rolled_back: false,
       trace_id: 'ai-start-2a',
       startup_phase: 'recovering',
       retry_reason: 'temporary_store_open',
@@ -124,8 +112,6 @@ describe('AI readiness model', () => {
       reason_code: 'temporarily_blocked',
       retryable: true,
       safe_to_retry: true,
-      committed: false,
-      rolled_back: false,
       trace_id: 'ai-start-2a',
       startup_phase: 'recovering',
       retry_reason: 'temporary_store_open',
@@ -135,33 +121,29 @@ describe('AI readiness model', () => {
   it('accepts only a counted host-settings degraded state', () => {
     expect(normalizeAIReadinessSnapshot({
       state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 2,
-      retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+      retryable: false, safe_to_retry: false,
     })).toEqual({
       state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 2,
-      retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+      retryable: false, safe_to_retry: false,
     });
     expect(normalizeAIReadinessSnapshot({
       state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 0,
-      retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+      retryable: false, safe_to_retry: false,
     }).state).toBe('blocked');
   });
 
-  it('normalizes only the six sanitized wire facts', () => {
+  it('normalizes only sanitized wire facts', () => {
     expect(normalizeAIReadinessSnapshot({
       state: 'blocked',
       reason_code: ' store_io_error ',
       retryable: true,
       safe_to_retry: true,
-      committed: false,
-      rolled_back: false,
       secret_path: '/private/store.db',
     })).toEqual({
       state: 'blocked',
       reason_code: 'store_io_error',
       retryable: true,
       safe_to_retry: true,
-      committed: false,
-      rolled_back: false,
     });
 
   });
@@ -171,13 +153,9 @@ describe('AI readiness model', () => {
     { ...busy(), reason_code: 'database /private/store.db' },
     { ...ready(), reason_code: 'future_reason' },
     { ...busy(), retryable: 1 },
-    { ...busy(), committed: true, rolled_back: true },
     { ...busy(), retryable: false, safe_to_retry: true },
-    { ...busy(), reason_code: 'migration_rolled_back', rolled_back: false },
-    { ...busy(), reason_code: 'temporarily_blocked', rolled_back: true },
-    { ...busy(), reason_code: 'post_commit_verification_error', committed: false },
-    { ...busy(), reason_code: 'store_io_error', committed: true },
-    { ...ready(), reason_code: 'store_io_error', committed: true },
+    { ...busy(), reason_code: 'obsolete_startup_reason' },
+    { ...ready(), reason_code: 'store_io_error' },
     { state: 'ready' },
     null,
   ])('fails closed for an unknown or malformed contract: %#', (value) => {
@@ -186,8 +164,6 @@ describe('AI readiness model', () => {
       reason_code: 'ai_readiness_contract_error',
       retryable: false,
       safe_to_retry: false,
-      committed: false,
-      rolled_back: false,
     });
   });
 
@@ -259,8 +235,6 @@ describe('createAIReadinessController', () => {
       reason_code: 'ai_readiness_contract_error',
       retryable: false,
       safe_to_retry: false,
-      committed: false,
-      rolled_back: false,
     });
     expect(refreshController.loading()).toBe(false);
     refreshController.dispose();
@@ -275,8 +249,6 @@ describe('createAIReadinessController', () => {
       reason_code: 'ai_readiness_contract_error',
       retryable: false,
       safe_to_retry: false,
-      committed: false,
-      rolled_back: false,
     });
     expect(retryController.retryPending()).toBe(false);
     expect(request.mock.calls).toEqual([
@@ -299,8 +271,6 @@ describe('createAIReadinessController', () => {
       reason_code: 'ai_readiness_contract_error',
       retryable: false,
       safe_to_retry: false,
-      committed: false,
-      rolled_back: false,
     });
     expect(controller.loading()).toBe(false);
     controller.dispose();
@@ -313,7 +283,7 @@ describe('createAIReadinessController', () => {
         data: { readiness: busy() },
       });
     });
-    const controller = createAIReadinessController({ request, visibilitySource: null, maxAutomaticRetries: 0 });
+    const controller = createAIReadinessController({ request, visibilitySource: null });
 
     await flushAsync();
 
@@ -321,129 +291,70 @@ describe('createAIReadinessController', () => {
     controller.dispose();
   });
 
-  it('caps automatic retries for a safe temporary block', async () => {
+  it('leaves retries user-controlled after a terminal temporary block', async () => {
     const request = vi.fn(async () => busy());
     const controller = createAIReadinessController({
       request,
       visibilitySource: null,
       foregroundDelayMs: 10,
-      maxAutomaticRetries: 2,
     });
-    await flushAsync();
-
-    await vi.advanceTimersByTimeAsync(10);
-    await flushAsync();
-    await vi.advanceTimersByTimeAsync(10);
     await flushAsync();
     await vi.advanceTimersByTimeAsync(100);
     await flushAsync();
 
     expect(request.mock.calls).toEqual([
       ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
-      ['/_redeven_proxy/api/ai/readiness/retry', { method: 'POST' }],
-      ['/_redeven_proxy/api/ai/readiness/retry', { method: 'POST' }],
     ]);
     expect(controller.retryPending()).toBe(false);
     controller.dispose();
   });
 
-  it('does not POST an automatic retry without current permission', async () => {
-    const request = vi.fn(async () => busy());
+  it('records one long-start completion after thirty seconds', async () => {
+    vi.setSystemTime(new Date('2026-09-01T00:00:00Z'));
+    const responses = [inspecting(), ready(), ready()];
+    const request = vi.fn(async () => responses.shift() ?? ready());
     const controller = createAIReadinessController({
       request,
       visibilitySource: null,
-      foregroundDelayMs: 10,
-      maxAutomaticRetries: 2,
-      canAutomaticallyRetry: () => false,
+      foregroundDelayMs: 60_000,
     });
     await flushAsync();
-    await vi.advanceTimersByTimeAsync(100);
-    await flushAsync();
-
-    expect(request.mock.calls).toEqual([
-      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
-    ]);
-    expect(controller.nextCheckAt()).toBeNull();
-    controller.dispose();
-  });
-
-  it('rechecks current permission before a scheduled automatic retry POST', async () => {
-    let canAutomaticallyRetry = true;
-    const request = vi.fn(async () => busy());
-    const controller = createAIReadinessController({
-      request,
-      visibilitySource: null,
-      foregroundDelayMs: 10,
-      maxAutomaticRetries: 2,
-      canAutomaticallyRetry: () => canAutomaticallyRetry,
-    });
-    await flushAsync();
-    expect(controller.nextCheckAt()).toBe(Date.now() + 10);
-
-    canAutomaticallyRetry = false;
-    await vi.advanceTimersByTimeAsync(10);
-    await flushAsync();
-
-    expect(request.mock.calls).toEqual([
-      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
-    ]);
-    expect(controller.nextCheckAt()).toBeNull();
-    controller.dispose();
-  });
-
-  it('publishes and clears the next scheduled check time', async () => {
-    const retryResponse = deferred<AIReadinessSnapshot>();
-    const request = vi.fn((url: string) => (
-      url.endsWith('/retry') ? retryResponse.promise : Promise.resolve(inspecting())
-    ));
-    const controller = createAIReadinessController({
-      request,
-      visibilitySource: null,
-      foregroundDelayMs: 25,
-    });
-    await flushAsync();
-
-    expect(controller.nextCheckAt()).toBe(Date.now() + 25);
-    const retryPromise = controller.retry();
-    expect(controller.nextCheckAt()).toBeNull();
-
-    retryResponse.resolve(ready());
-    await retryPromise;
-    expect(controller.nextCheckAt()).toBeNull();
-    controller.dispose();
-  });
-
-  it('resets the bounded automatic retry quota after reaching ready', async () => {
-    const responses: AIReadinessSnapshot[] = [
-      busy(),
-      busy(),
-      ready(),
-      busy(),
-      ready(),
-    ];
-    const request = vi.fn(async (_url: string, _init: RequestInit) => responses.shift() ?? ready());
-    const controller = createAIReadinessController({
-      request,
-      visibilitySource: null,
-      foregroundDelayMs: 10,
-      maxAutomaticRetries: 1,
-    });
-    await flushAsync();
-
-    await vi.advanceTimersByTimeAsync(10);
-    await flushAsync();
-    expect(request.mock.calls.filter(([url]) => String(url).endsWith('/retry'))).toHaveLength(1);
-    expect(controller.nextCheckAt()).toBeNull();
-
+    expect(controller.busyStartedAt()).not.toBeNull();
+    expect(controller.longStartupReadySequence()).toBe(0);
+    await vi.advanceTimersByTimeAsync(30_000);
     await controller.refresh();
     expect(controller.snapshot()).toEqual(ready());
+    expect(controller.busyStartedAt()).toBeNull();
+    expect(controller.startupElapsedMs()).toBe(30_000);
+    expect(controller.longStartupReadySequence()).toBe(1);
     await controller.refresh();
-    expect(controller.snapshot()).toEqual(busy());
+    expect(controller.longStartupReadySequence()).toBe(1);
+    controller.dispose();
+  });
 
-    await vi.advanceTimersByTimeAsync(10);
+  it('freezes elapsed startup time when processing stops', async () => {
+    vi.setSystemTime(new Date('2026-09-01T00:00:00Z'));
+    const responses: AIReadinessSnapshot[] = [inspecting(), {
+      state: 'blocked',
+      reason_code: 'store_io_error',
+      retryable: false,
+      safe_to_retry: false,
+    }];
+    const request = vi.fn(async () => responses.shift()!);
+    const controller = createAIReadinessController({
+      request,
+      visibilitySource: null,
+      foregroundDelayMs: 60_000,
+    });
     await flushAsync();
-    expect(request.mock.calls.filter(([url]) => String(url).endsWith('/retry'))).toHaveLength(2);
-    expect(controller.snapshot()).toEqual(ready());
+    await vi.advanceTimersByTimeAsync(10_000);
+    await controller.refresh();
+
+    expect(controller.snapshot().state).toBe('blocked');
+    expect(controller.busyStartedAt()).toBeNull();
+    expect(controller.startupElapsedMs()).toBe(10_000);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(controller.startupElapsedMs()).toBe(10_000);
     controller.dispose();
   });
 
@@ -481,7 +392,6 @@ describe('createAIReadinessController', () => {
     const controller = createAIReadinessController({
       request,
       visibilitySource: null,
-      maxAutomaticRetries: 0,
     });
     await flushAsync();
 
@@ -505,7 +415,7 @@ describe('createAIReadinessController', () => {
     const request = vi.fn((url: string) => (
       url.endsWith('/retry') ? Promise.resolve(ready()) : initialResponse.promise
     ));
-    const controller = createAIReadinessController({ request, visibilitySource: null, maxAutomaticRetries: 0 });
+    const controller = createAIReadinessController({ request, visibilitySource: null });
 
     await controller.retry();
     expect(controller.snapshot()).toEqual(ready());
@@ -536,7 +446,7 @@ describe('createAIReadinessController', () => {
 
     controller.pause();
     expect(controller.loading()).toBe(false);
-    expect(controller.nextCheckAt()).toBeNull();
+    expect(controller.busyStartedAt()).toBeNull();
     expect(controller.snapshot().state).toBe('unavailable');
     await controller.refresh();
     await controller.retry();
@@ -575,19 +485,18 @@ describe('createAIReadinessController', () => {
     controller.dispose();
   });
 
-  it('clears a scheduled automatic retry while paused and resumes with one GET', async () => {
+  it('clears a scheduled poll while paused and resumes with one GET', async () => {
     const request = vi.fn()
-      .mockResolvedValueOnce(busy())
+      .mockResolvedValueOnce(inspecting())
       .mockResolvedValue(ready());
     const controller = createAIReadinessController({
       request,
       visibilitySource: null,
       foregroundDelayMs: 10,
-      maxAutomaticRetries: 2,
       initialPaused: true,
     });
     await controller.resume();
-    expect(controller.nextCheckAt()).toBe(Date.now() + 10);
+    expect(controller.busyStartedAt()).not.toBeNull();
 
     controller.pause();
     await vi.advanceTimersByTimeAsync(100);
@@ -595,7 +504,7 @@ describe('createAIReadinessController', () => {
     expect(request.mock.calls).toEqual([
       ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
     ]);
-    expect(controller.nextCheckAt()).toBeNull();
+    expect(controller.busyStartedAt()).toBeNull();
 
     await controller.resume();
     expect(request.mock.calls).toEqual([

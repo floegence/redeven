@@ -945,7 +945,6 @@ export function EnvAppShell() {
   const aiReadinessController = createAIReadinessController({
     autoStart: false,
     initialPaused: true,
-    canAutomaticallyRetry: canAdmin,
   });
   let aiReadinessAccessible = false;
   createEffect(() => {
@@ -953,6 +952,16 @@ export function EnvAppShell() {
     if (accessible && !aiReadinessAccessible) void aiReadinessController.resume();
     if (!accessible && aiReadinessAccessible) aiReadinessController.pause();
     aiReadinessAccessible = accessible;
+  });
+  let announcedLongStartupReadySequence = 0;
+  createEffect(() => {
+    const sequence = aiReadinessController.longStartupReadySequence();
+    if (sequence <= announcedLongStartupReadySequence) return;
+    announcedLongStartupReadySequence = sequence;
+    notify.success(
+      i18n.t('aiReadiness.readyNoticeTitle'),
+      i18n.t('aiReadiness.readyNoticeDescription'),
+    );
   });
   const canOpenPluginSurfaces = () => Boolean(
       protocol.status() === 'connected'

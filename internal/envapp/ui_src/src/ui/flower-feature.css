@@ -149,11 +149,31 @@
   gap: 0.625rem;
 }
 
-.ai-readiness-next-check {
+.ai-readiness-elapsed {
   margin-top: 0.625rem;
   color: var(--muted-foreground);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
+}
+
+.ai-readiness-long-task {
+  display: flex;
+  max-width: 36rem;
+  margin-top: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.ai-readiness-long-task__details {
+  flex: none;
+  color: var(--foreground);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 .ai-readiness-action,

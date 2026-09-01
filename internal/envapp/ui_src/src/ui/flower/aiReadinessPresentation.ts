@@ -33,18 +33,43 @@ function diagnosticStatus(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): str
   return text(i18n, 'aiReadiness.diagnostics.statusChecking');
 }
 
-function diagnosticRows(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): readonly AIReadinessDiagnosticRow[] {
-  const yes = text(i18n, 'aiReadiness.diagnostics.yes');
-  const no = text(i18n, 'aiReadiness.diagnostics.no');
+function diagnosticPhase(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string {
+  switch (snapshot.startup_phase || snapshot.state) {
+    case 'inspecting':
+    case 'unavailable':
+      return text(i18n, 'aiReadiness.diagnostics.phaseChecking');
+    case 'optimizing':
+    case 'recovering':
+      return text(i18n, 'aiReadiness.diagnostics.phasePreparing');
+    case 'migrating':
+      return text(i18n, 'aiReadiness.diagnostics.phaseUpdating');
+    case 'verifying':
+      return text(i18n, 'aiReadiness.diagnostics.phaseFinalCheck');
+    case 'ready':
+    case 'degraded':
+      return text(i18n, 'aiReadiness.diagnostics.phaseReady');
+    default:
+      return text(i18n, 'aiReadiness.diagnostics.phaseStopped');
+  }
+}
+
+function diagnosticElapsed(elapsedMs: number, i18n: I18nHelpers): string {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return text(i18n, 'aiReadiness.diagnostics.notAvailable');
+  const seconds = Math.floor(elapsedMs / 1_000);
+  if (seconds < 60) return i18n.t('aiReadiness.diagnostics.elapsedSeconds', { seconds });
+  return i18n.t('aiReadiness.diagnostics.elapsedMinutes', { minutes: Math.floor(seconds / 60) });
+}
+
+function diagnosticRows(
+  snapshot: AIReadinessSnapshot,
+  i18n: I18nHelpers,
+  elapsedMs: number,
+): readonly AIReadinessDiagnosticRow[] {
   return [
-    { label: text(i18n, 'aiReadiness.diagnostics.owner'), value: text(i18n, 'aiReadiness.diagnostics.ownerFloret') },
+    { label: text(i18n, 'aiReadiness.diagnostics.phase'), value: diagnosticPhase(snapshot, i18n) },
+    { label: text(i18n, 'aiReadiness.diagnostics.elapsed'), value: diagnosticElapsed(elapsedMs, i18n) },
     { label: text(i18n, 'aiReadiness.diagnostics.status'), value: diagnosticStatus(snapshot, i18n) },
-    { label: text(i18n, 'aiReadiness.diagnostics.retry'), value: snapshot.retryable && snapshot.safe_to_retry ? yes : no },
-    { label: text(i18n, 'aiReadiness.diagnostics.committed'), value: snapshot.committed ? yes : no },
-    { label: text(i18n, 'aiReadiness.diagnostics.rolledBack'), value: snapshot.rolled_back ? yes : no },
-    ...(snapshot.state === 'degraded'
-      ? [{ label: text(i18n, 'aiReadiness.diagnostics.issueCount'), value: String(snapshot.issue_count ?? 0) }]
-      : []),
+    { label: text(i18n, 'aiReadiness.diagnostics.traceID'), value: snapshot.trace_id || text(i18n, 'aiReadiness.diagnostics.notAvailable') },
   ];
 }
 
@@ -65,12 +90,10 @@ function presentationActions(
       return { primaryAction: 'open_permissions', secondaryAction: 'show_diagnostics' };
     case 'unsupported_store':
     case 'store_integrity_error':
-    case 'post_commit_verification_error':
       return canRetry
         ? { primaryAction: 'show_diagnostics', secondaryAction: 'retry' }
         : { primaryAction: 'show_diagnostics' };
     case 'store_io_error':
-    case 'migration_rolled_back':
       return canRetry
         ? { primaryAction: 'retry', secondaryAction: 'show_diagnostics' }
         : { primaryAction: 'show_diagnostics' };
@@ -100,60 +123,52 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
       case 'verifying':
         return { title: 'aiReadiness.states.verifyingTitle', description: 'aiReadiness.states.verifyingDescription', tone: 'neutral' };
       case 'recovering':
-        return { title: 'aiReadiness.states.busyTitle', description: 'aiReadiness.states.busyDescription', tone: 'neutral' };
+        return { title: 'aiReadiness.states.optimizingTitle', description: 'aiReadiness.states.optimizingDescription', tone: 'neutral' };
       case 'ready':
-        return { title: 'common.status.ready', description: 'aiReadiness.data.unopened', tone: 'neutral' };
+        return { title: 'common.status.ready', description: 'aiReadiness.data.processing', tone: 'neutral' };
       case 'unavailable':
       default:
         return { title: 'aiReadiness.states.unavailableTitle', description: 'aiReadiness.states.unavailableDescription', tone: 'neutral' };
     }
   }
 
+  if (snapshot.retryable && snapshot.safe_to_retry) {
+    return { title: 'aiReadiness.states.temporarilyUnavailableTitle', description: 'aiReadiness.states.temporarilyUnavailableDescription', tone: 'warning' };
+  }
+
   switch (snapshot.reason_code) {
     case 'temporarily_blocked':
-      return { title: 'aiReadiness.states.busyTitle', description: 'aiReadiness.states.busyDescription', tone: 'warning' };
+    case 'store_io_error':
+    case 'cancelled':
+    case 'ai_service_startup_error':
+      return { title: 'aiReadiness.states.needsCheckTitle', description: 'aiReadiness.states.needsCheckDescription', tone: 'danger' };
     case 'update_required':
       return { title: 'aiReadiness.states.updateRequiredTitle', description: 'aiReadiness.states.updateRequiredDescription', tone: 'warning' };
     case 'unsupported_store':
-      return { title: 'aiReadiness.states.unsupportedTitle', description: 'aiReadiness.states.unsupportedDescription', tone: 'danger' };
     case 'store_integrity_error':
-      return { title: 'aiReadiness.states.integrityTitle', description: 'aiReadiness.states.integrityDescription', tone: 'danger' };
-    case 'environment_permission_error':
-      return { title: 'aiReadiness.states.permissionTitle', description: 'aiReadiness.states.permissionDescription', tone: 'warning' };
-    case 'store_io_error':
-      return { title: 'aiReadiness.states.ioTitle', description: 'aiReadiness.states.ioDescription', tone: 'danger' };
-    case 'configuration_error':
-      return { title: 'aiReadiness.states.configurationTitle', description: 'aiReadiness.states.configurationDescription', tone: 'danger' };
-    case 'migration_rolled_back':
-      return { title: 'aiReadiness.states.rollbackTitle', description: 'aiReadiness.states.rollbackDescription', tone: 'warning' };
-    case 'post_commit_verification_error':
-      return { title: 'aiReadiness.states.committedTitle', description: 'aiReadiness.states.committedDescription', tone: 'danger' };
-    case 'cancelled':
-      return { title: 'aiReadiness.states.cancelledTitle', description: 'aiReadiness.states.cancelledDescription', tone: 'warning' };
-    case 'ai_service_startup_error':
-      return { title: 'aiReadiness.states.startupTitle', description: 'aiReadiness.states.startupDescription', tone: 'danger' };
     case 'contract_error':
     case 'ai_readiness_contract_error':
+      return { title: 'aiReadiness.states.needsCheckTitle', description: 'aiReadiness.states.needsCheckDescription', tone: 'danger' };
+    case 'environment_permission_error':
+      return { title: 'aiReadiness.states.permissionTitle', description: 'aiReadiness.states.permissionDescription', tone: 'warning' };
     default:
-      return { title: 'aiReadiness.states.contractTitle', description: 'aiReadiness.states.contractDescription', tone: 'danger' };
+      return { title: 'aiReadiness.states.temporarilyUnavailableTitle', description: 'aiReadiness.states.temporarilyUnavailableDescription', tone: 'warning' };
   }
 }
 
 function dataStatement(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string {
-  if (snapshot.rolled_back) return text(i18n, 'aiReadiness.data.rolledBack');
-  if (snapshot.committed) return text(i18n, 'aiReadiness.data.committed');
   if (snapshot.state === 'degraded') return text(i18n, 'aiReadiness.data.degraded');
   if (snapshot.state === 'blocked') return text(i18n, 'aiReadiness.data.preserved');
-  return text(i18n, 'aiReadiness.data.unopened');
+  return text(i18n, 'aiReadiness.data.processing');
 }
 
 export function createAIReadinessPresentation(
   snapshot: AIReadinessSnapshot,
   i18n: I18nHelpers,
-  options: Readonly<{ canRetryGeneration?: boolean }> = {},
+  options: Readonly<{ canRetryGeneration?: boolean; elapsedMs?: number }> = {},
 ): AIReadinessPresentation {
   const copy = stateCopy(snapshot);
-  const rows = diagnosticRows(snapshot, i18n);
+  const rows = diagnosticRows(snapshot, i18n, options.elapsedMs ?? -1);
   return {
     mode: snapshot.state === 'ready' ? 'ready' : snapshot.state === 'degraded' ? 'degraded' : snapshot.state === 'blocked' ? 'blocked' : 'busy',
     tone: copy.tone,

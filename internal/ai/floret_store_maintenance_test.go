@@ -50,8 +50,9 @@ func TestOpenFloretRuntimeMaintainsBeforeSingleOpen(t *testing.T) {
 			}
 			return flstorage.SQLiteMaintenanceResult{Action: flstorage.SQLiteMaintenanceActionNone, Reason: "database_missing"}, nil
 		},
-		func(ctx context.Context, _ flruntime.Options) (*flruntime.Host, error) {
+		func(ctx context.Context, opts flruntime.Options) (*flruntime.Host, error) {
 			openCalls++
+			opts.StartupProgress.OnStartupPhase(flruntime.StartupPhaseVerifying)
 			return flruntime.Open(ctx, flruntime.Options{Storage: flstorage.Memory()})
 		},
 	)
@@ -147,7 +148,8 @@ func TestOpenFloretRuntimeReportsVerifyingBeforeClassifiedOpenFailure(t *testing
 		func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
 			return flstorage.SQLiteMaintenanceResult{Action: flstorage.SQLiteMaintenanceActionNone, Reason: "file_below_threshold"}, nil
 		},
-		func(context.Context, flruntime.Options) (*flruntime.Host, error) {
+		func(_ context.Context, opts flruntime.Options) (*flruntime.Host, error) {
+			opts.StartupProgress.OnStartupPhase(flruntime.StartupPhaseVerifying)
 			return nil, fmt.Errorf("private backend detail: %w", flruntime.ErrAuthorityCorrupt)
 		},
 	)
@@ -165,6 +167,37 @@ func TestOpenFloretRuntimeReportsVerifyingBeforeClassifiedOpenFailure(t *testing
 	}
 	if strings.Contains(logged, "private backend detail") {
 		t.Fatalf("startup log exposed raw error: %q", logged)
+	}
+}
+
+func TestOpenFloretRuntimeForwardsMigrationPhasesFromFloret(t *testing.T) {
+	phases := make([]FloretStoreStartupPhase, 0, 4)
+	result, err := openFloretRuntimeWith(
+		t.Context(),
+		filepath.Join(t.TempDir(), "floret.sqlite"),
+		func(phase FloretStoreStartupPhase) { phases = append(phases, phase) },
+		nil,
+		func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
+			return flstorage.SQLiteMaintenanceResult{Action: flstorage.SQLiteMaintenanceActionNone}, nil
+		},
+		func(ctx context.Context, opts flruntime.Options) (*flruntime.Host, error) {
+			opts.StartupProgress.OnStartupPhase(flruntime.StartupPhaseMigrating)
+			opts.StartupProgress.OnStartupPhase(flruntime.StartupPhaseVerifying)
+			return flruntime.Open(ctx, flruntime.Options{Storage: flstorage.Memory()})
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = result.close() })
+	want := []FloretStoreStartupPhase{
+		FloretStoreStartupInspecting,
+		FloretStoreStartupOptimizing,
+		FloretStoreStartupMigrating,
+		FloretStoreStartupVerifying,
+	}
+	if fmt.Sprint(phases) != fmt.Sprint(want) {
+		t.Fatalf("startup phases = %v, want %v", phases, want)
 	}
 }
 

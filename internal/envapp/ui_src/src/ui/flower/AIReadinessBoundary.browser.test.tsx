@@ -41,8 +41,6 @@ function blocked(): AIReadinessSnapshot {
     reason_code: 'temporarily_blocked',
     retryable: true,
     safe_to_retry: true,
-    committed: false,
-    rolled_back: false,
   };
 }
 
@@ -55,8 +53,6 @@ function blockedReason(
     reason_code,
     retryable: false,
     safe_to_retry: false,
-    committed: false,
-    rolled_back: false,
     ...overrides,
   };
 }
@@ -81,11 +77,13 @@ function mountHarness(
     snapshot,
     loading: () => false,
     retryPending,
-    nextCheckAt: () => null,
+    busyStartedAt: () => null,
+    startupElapsedMs: () => null,
+    longStartupReadySequence: () => 0,
     refresh: async () => snapshot(),
     retry: async () => {
       setRetryPending(true);
-      performance.mark('ai-readiness-pending-committed');
+      performance.mark('ai-readiness-retry-pending');
       const next = await (retryResult ?? Promise.resolve(snapshot()));
       setSnapshot(next);
       setRetryPending(false);
@@ -162,7 +160,7 @@ describe('AIReadinessBoundary browser layout', () => {
     document.documentElement.style.fontSize = '200%';
     const host = mount();
     await sizeReadinessSurface(320, 720);
-    await expect.element(page.getByText('Agent data is temporarily in use', { exact: true })).toBeVisible();
+    await expect.element(page.getByText('Agent is temporarily unavailable', { exact: true })).toBeVisible();
     await settleFrames();
 
     const boundary = host.querySelector<HTMLElement>('.ai-readiness-boundary')!;
@@ -209,19 +207,16 @@ describe('AIReadinessBoundary browser layout', () => {
   });
 
   it.each([
-    [blockedReason('temporarily_blocked', { retryable: true, safe_to_retry: true }), 'Agent data is temporarily in use'],
+    [blockedReason('temporarily_blocked', { retryable: true, safe_to_retry: true }), 'Agent is temporarily unavailable'],
     [blockedReason('update_required'), 'Redeven needs an update'],
-    [blockedReason('unsupported_store'), 'This Agent data cannot be opened here'],
-    [blockedReason('store_integrity_error'), 'Agent data needs attention'],
+    [blockedReason('unsupported_store'), 'Agent data needs checking'],
+    [blockedReason('store_integrity_error'), 'Agent data needs checking'],
     [blockedReason('environment_permission_error'), 'Redeven cannot access Agent data'],
-    [blockedReason('store_io_error'), 'Agent data is unavailable'],
-    [blockedReason('configuration_error'), 'Agent storage configuration does not match'],
-    [blockedReason('migration_rolled_back', { rolled_back: true }), 'The Agent data update was rolled back'],
-    [blockedReason('post_commit_verification_error', { committed: true }), 'The Agent data update needs verification'],
-    [blockedReason('cancelled'), 'The Agent data check was interrupted'],
-    [blockedReason('contract_error'), 'Flower is unavailable'],
-    [blockedReason('ai_service_startup_error'), 'Flower could not start'],
-    [blockedReason('ai_readiness_contract_error'), 'Flower is unavailable'],
+    [blockedReason('store_io_error'), 'Agent data needs checking'],
+    [blockedReason('cancelled'), 'Agent data needs checking'],
+    [blockedReason('contract_error'), 'Agent data needs checking'],
+    [blockedReason('ai_service_startup_error'), 'Agent data needs checking'],
+    [blockedReason('ai_readiness_contract_error'), 'Agent data needs checking'],
   ] as const)('renders a nonblank, non-overflowing desktop state for %s', async (snapshot, title) => {
     await page.viewport(1280, 720);
     const host = mount(snapshot);
@@ -241,9 +236,9 @@ describe('AIReadinessBoundary browser layout', () => {
 
   it.each([
     [blockedReason('', { state: 'inspecting' }), 'Checking Agent data'],
-    [blockedReason('', { state: 'optimizing' }), 'Optimizing conversation storage'],
-    [blockedReason('', { state: 'migrating' }), 'Updating Agent data'],
-    [blockedReason('', { state: 'verifying' }), 'Verifying Agent data'],
+    [blockedReason('', { state: 'optimizing' }), 'Preparing Agent data'],
+    [blockedReason('', { state: 'migrating' }), 'Safely updating Agent data'],
+    [blockedReason('', { state: 'verifying' }), 'Finishing the Agent data update'],
   ] as const)('audits the %s busy phase without inventing progress', async (snapshot, title) => {
     await page.viewport(1280, 720);
     mount(snapshot);
@@ -261,13 +256,13 @@ describe('AIReadinessBoundary browser layout', () => {
     await sizeReadinessSurface(1280, 720);
     const retry = host.querySelector<HTMLButtonElement>('.ai-readiness-action--primary')!;
     performance.clearMarks('ai-readiness-input');
-    performance.clearMarks('ai-readiness-pending-committed');
+    performance.clearMarks('ai-readiness-retry-pending');
     retry.addEventListener('click', () => performance.mark('ai-readiness-input'), { capture: true, once: true });
 
     await page.getByText('Check again', { exact: true }).click();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const inputMark = performance.getEntriesByName('ai-readiness-input').at(-1);
-    const pendingMark = performance.getEntriesByName('ai-readiness-pending-committed').at(-1);
+    const pendingMark = performance.getEntriesByName('ai-readiness-retry-pending').at(-1);
     expect(inputMark).toBeTruthy();
     expect(pendingMark).toBeTruthy();
     expect(pendingMark!.startTime - inputMark!.startTime).toBeLessThanOrEqual(32);
@@ -289,7 +284,7 @@ describe('AIReadinessBoundary browser layout', () => {
     expect(child.offsetParent).not.toBeNull();
 
     setSnapshot(blockedReason('store_integrity_error'));
-    await expect.element(page.getByText('Agent data needs attention', { exact: true })).toBeVisible();
+    await expect.element(page.getByText('Agent data needs checking', { exact: true })).toBeVisible();
     expect(host.querySelector('[data-ai-readiness-content]')).toBeNull();
     expect(child.isConnected).toBe(false);
     setSnapshot(ready);

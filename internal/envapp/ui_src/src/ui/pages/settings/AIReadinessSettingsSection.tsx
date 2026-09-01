@@ -179,7 +179,7 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
       <SettingsList class="ai-readiness-settings">
         <SettingRow
           icon={Database}
-          title={i18n.t('aiReadiness.diagnostics.ownerFloret')}
+          title={i18n.t('aiReadiness.settings.floretStoreTitle')}
           description={i18n.t('aiReadiness.settings.floretDescription')}
           tone={statusTone()}
           control={<SettingsPill tone={statusTone()}>{statusLabel()}</SettingsPill>}

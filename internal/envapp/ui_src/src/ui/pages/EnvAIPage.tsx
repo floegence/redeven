@@ -76,9 +76,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
   const rpc = useRedevenRpc();
   const i18n = useI18n();
   const notification = useNotification();
-  const readinessController = env.aiReadinessController ?? createAIReadinessController({
-    canAutomaticallyRetry: () => Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner),
-  });
+  const readinessController = env.aiReadinessController ?? createAIReadinessController();
   const surfaceCopy = createMemo(() => createEnvFlowerSurfaceCopy(i18n, i18n.locale()));
   const companionCopy = createMemo<FlowerThreadSwitcherCopy | undefined>(() => (
     props.companionCopy

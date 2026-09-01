@@ -18,11 +18,8 @@ export type AIReadinessReasonCode =
   | 'update_required'
   | 'unsupported_store'
   | 'store_integrity_error'
-  | 'configuration_error'
   | 'environment_permission_error'
   | 'store_io_error'
-  | 'migration_rolled_back'
-  | 'post_commit_verification_error'
   | 'cancelled'
   | 'contract_error'
   | 'ai_service_startup_error'
@@ -34,8 +31,6 @@ export type AIReadinessSnapshot = Readonly<{
   reason_code: AIReadinessReasonCode | '';
   retryable: boolean;
   safe_to_retry: boolean;
-  committed: boolean;
-  rolled_back: boolean;
   issue_count?: number;
   trace_id?: string;
   startup_phase?: string;
@@ -46,7 +41,9 @@ export type AIReadinessController = Readonly<{
   snapshot: Accessor<AIReadinessSnapshot>;
   loading: Accessor<boolean>;
   retryPending: Accessor<boolean>;
-  nextCheckAt: Accessor<number | null>;
+  busyStartedAt: Accessor<number | null>;
+  startupElapsedMs: Accessor<number | null>;
+  longStartupReadySequence: Accessor<number>;
   refresh: () => Promise<AIReadinessSnapshot>;
   retry: () => Promise<AIReadinessSnapshot>;
   pause: () => void;
@@ -67,10 +64,8 @@ type CreateAIReadinessControllerArgs = Readonly<{
   visibilitySource?: VisibilitySource | null;
   foregroundDelayMs?: number;
   backgroundDelayMs?: number;
-  maxAutomaticRetries?: number;
   autoStart?: boolean;
   initialPaused?: boolean;
-  canAutomaticallyRetry?: () => boolean;
 }>;
 
 const READINESS_URL = '/_redeven_proxy/api/ai/readiness';
@@ -94,11 +89,8 @@ const readinessReasonCodes = new Set<AIReadinessReasonCode>([
   'update_required',
   'unsupported_store',
   'store_integrity_error',
-  'configuration_error',
   'environment_permission_error',
   'store_io_error',
-  'migration_rolled_back',
-  'post_commit_verification_error',
   'cancelled',
   'contract_error',
   'ai_service_startup_error',
@@ -111,8 +103,6 @@ const unavailableSnapshot: AIReadinessSnapshot = Object.freeze({
   reason_code: '',
   retryable: false,
   safe_to_retry: false,
-  committed: false,
-  rolled_back: false,
 });
 
 const contractErrorSnapshot: AIReadinessSnapshot = Object.freeze({
@@ -120,8 +110,6 @@ const contractErrorSnapshot: AIReadinessSnapshot = Object.freeze({
   reason_code: CONTRACT_ERROR_REASON,
   retryable: false,
   safe_to_retry: false,
-  committed: false,
-  rolled_back: false,
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -131,15 +119,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 type BooleanReadinessFacts = Readonly<{
   retryable: boolean;
   safe_to_retry: boolean;
-  committed: boolean;
-  rolled_back: boolean;
 }>;
 
 function hasBooleanFacts(value: Record<string, unknown>): value is Record<string, unknown> & BooleanReadinessFacts {
   return typeof value.retryable === 'boolean'
-    && typeof value.safe_to_retry === 'boolean'
-    && typeof value.committed === 'boolean'
-    && typeof value.rolled_back === 'boolean';
+    && typeof value.safe_to_retry === 'boolean';
 }
 
 function stableSnapshot(state: Exclude<AIReadinessState, 'blocked'>): AIReadinessSnapshot {
@@ -157,7 +141,6 @@ function optionalDiagnostic(value: unknown, maxLength: number): string | undefin
 /** Normalizes the complete, sanitized Redeven readiness wire contract. */
 export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapshot {
   if (!isRecord(value) || !hasBooleanFacts(value)) return contractErrorSnapshot;
-  if (value.committed && value.rolled_back) return contractErrorSnapshot;
   if (value.safe_to_retry && !value.retryable) return contractErrorSnapshot;
 
   const state = typeof value.state === 'string' ? value.state.trim() : '';
@@ -180,7 +163,7 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
 
   if (state === 'degraded') {
     if (reasonCode !== 'host_thread_settings_missing' || issueCount === 0
-      || value.retryable || value.safe_to_retry || value.committed || value.rolled_back) {
+      || value.retryable || value.safe_to_retry) {
       return contractErrorSnapshot;
     }
     return Object.freeze({
@@ -193,7 +176,7 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
 
   if (state === 'recovering') {
     if (!reasonCode || !readinessReasonCodes.has(reasonCode as AIReadinessReasonCode)
-      || !value.retryable || !value.safe_to_retry || value.committed || value.rolled_back || issueCount !== 0) {
+      || !value.retryable || !value.safe_to_retry || issueCount !== 0) {
       return contractErrorSnapshot;
     }
     return Object.freeze({
@@ -209,7 +192,7 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
   }
 
   if (state !== 'blocked') {
-    if (reasonCode || issueCount !== 0 || value.retryable || value.safe_to_retry || value.committed || value.rolled_back) {
+    if (reasonCode || issueCount !== 0 || value.retryable || value.safe_to_retry) {
       return contractErrorSnapshot;
     }
     if (state === 'ready') return stableSnapshot('ready');
@@ -221,16 +204,12 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
   }
 
   if (!readinessReasonCodes.has(reasonCode as AIReadinessReasonCode)) return contractErrorSnapshot;
-  if ((reasonCode === 'migration_rolled_back') !== value.rolled_back) return contractErrorSnapshot;
-  if ((reasonCode === 'post_commit_verification_error') !== value.committed) return contractErrorSnapshot;
 
   return Object.freeze({
     state: 'blocked',
     reason_code: reasonCode as AIReadinessReasonCode,
     retryable: value.retryable,
     safe_to_retry: value.safe_to_retry,
-    committed: value.committed,
-    rolled_back: value.rolled_back,
     ...(traceID ? { trace_id: traceID } : {}),
     ...(startupPhase ? { startup_phase: startupPhase } : {}),
     ...(retryReason ? { retry_reason: retryReason } : {}),
@@ -251,15 +230,6 @@ function normalizedDelay(value: number | undefined, fallback: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value!)) : fallback;
 }
 
-function normalizedCount(value: number | undefined, fallback: number): number {
-  return Number.isFinite(value) ? Math.max(0, Math.floor(value!)) : fallback;
-}
-
-function isAutomaticRetryCandidate(snapshot: AIReadinessSnapshot): boolean {
-  if (snapshot.state !== 'blocked' || !snapshot.retryable || !snapshot.safe_to_retry) return false;
-  return snapshot.reason_code === 'temporarily_blocked' || snapshot.reason_code === 'store_io_error';
-}
-
 function shouldPoll(snapshot: AIReadinessSnapshot): boolean {
   return snapshot.state === 'unavailable'
     || snapshot.state === 'inspecting'
@@ -276,18 +246,18 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     : args.visibilitySource;
   const foregroundDelayMs = normalizedDelay(args.foregroundDelayMs, 1_500);
   const backgroundDelayMs = normalizedDelay(args.backgroundDelayMs, 15_000);
-  const maxAutomaticRetries = normalizedCount(args.maxAutomaticRetries, 3);
 
   const [snapshot, setSnapshot] = createSignal<AIReadinessSnapshot>(unavailableSnapshot);
   const [loading, setLoading] = createSignal(args.autoStart !== false && args.initialPaused !== true);
   const [retryPending, setRetryPending] = createSignal(false);
-  const [nextCheckAt, setNextCheckAt] = createSignal<number | null>(null);
+  const [busyStartedAt, setBusyStartedAt] = createSignal<number | null>(null);
+  const [startupElapsedMs, setStartupElapsedMs] = createSignal<number | null>(null);
+  const [longStartupReadySequence, setLongStartupReadySequence] = createSignal(0);
 
   let disposed = false;
   let paused = args.initialPaused === true;
   let generation = 0;
   let loadingGeneration = 0;
-  let automaticRetryCount = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let retryInFlight: Promise<AIReadinessSnapshot> | null = null;
 
@@ -295,7 +265,6 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     if (timer === null) return;
     clearTimeout(timer);
     timer = null;
-    setNextCheckAt(null);
   };
 
   const currentDelay = (): number => visibilitySource?.visibilityState === 'hidden'
@@ -303,7 +272,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     : foregroundDelayMs;
 
   let refresh!: () => Promise<AIReadinessSnapshot>;
-  let startRetry!: (manual: boolean) => Promise<AIReadinessSnapshot>;
+  let startRetry!: () => Promise<AIReadinessSnapshot>;
 
   const schedule = (nextSnapshot: AIReadinessSnapshot): void => {
     clearTimer();
@@ -311,35 +280,29 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
 
     if (shouldPoll(nextSnapshot)) {
       const delay = currentDelay();
-      setNextCheckAt(Date.now() + delay);
       timer = setTimeout(() => {
         timer = null;
-        setNextCheckAt(null);
         void refresh();
-      }, delay);
-      return;
-    }
-
-    if (isAutomaticRetryCandidate(nextSnapshot)
-      && (args.canAutomaticallyRetry?.() ?? true)
-      && automaticRetryCount < maxAutomaticRetries) {
-      const delay = currentDelay();
-      setNextCheckAt(Date.now() + delay);
-      timer = setTimeout(() => {
-        timer = null;
-        setNextCheckAt(null);
-        if (!(args.canAutomaticallyRetry?.() ?? true)) return;
-        automaticRetryCount += 1;
-        void startRetry(false);
       }, delay);
     }
   };
 
   const apply = (requestGeneration: number, nextSnapshot: AIReadinessSnapshot): void => {
     if (disposed || requestGeneration !== generation) return;
-    if (nextSnapshot.state === 'ready'
-      || (nextSnapshot.state === 'blocked' && !isAutomaticRetryCandidate(nextSnapshot))) {
-      automaticRetryCount = 0;
+    const startedAt = busyStartedAt();
+    const elapsedMs = startedAt === null ? null : Math.max(0, Date.now() - startedAt);
+    if (nextSnapshot.state === 'ready') {
+      if (elapsedMs !== null) setStartupElapsedMs(elapsedMs);
+      if (elapsedMs !== null && elapsedMs >= 30_000) {
+        setLongStartupReadySequence((value) => value + 1);
+      }
+      setBusyStartedAt(null);
+    } else if (nextSnapshot.state === 'degraded' || nextSnapshot.state === 'blocked') {
+      setStartupElapsedMs(elapsedMs);
+      setBusyStartedAt(null);
+    } else if (shouldPoll(nextSnapshot) && startedAt === null) {
+      setBusyStartedAt(Date.now());
+      setStartupElapsedMs(null);
     }
     setSnapshot(nextSnapshot);
     schedule(nextSnapshot);
@@ -361,6 +324,10 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     if (disposed || paused) return Promise.resolve(snapshot());
     if (retryInFlight) return retryInFlight;
     clearTimer();
+    if (shouldPoll(snapshot()) && busyStartedAt() === null) {
+      setBusyStartedAt(Date.now());
+      setStartupElapsedMs(null);
+    }
     const requestGeneration = ++generation;
     loadingGeneration = requestGeneration;
     setLoading(true);
@@ -383,11 +350,12 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
       });
   };
 
-  startRetry = (manual: boolean): Promise<AIReadinessSnapshot> => {
+  startRetry = (): Promise<AIReadinessSnapshot> => {
     if (disposed || paused) return Promise.resolve(snapshot());
     if (retryInFlight) return retryInFlight;
     clearTimer();
-    if (manual) automaticRetryCount = 0;
+    setBusyStartedAt(Date.now());
+    setStartupElapsedMs(null);
 
     const requestGeneration = ++generation;
     loadingGeneration = 0;
@@ -414,7 +382,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     return pending;
   };
 
-  const retry = (): Promise<AIReadinessSnapshot> => startRetry(true);
+  const retry = (): Promise<AIReadinessSnapshot> => startRetry();
 
   const pause = (): void => {
     if (disposed || paused) return;
@@ -422,10 +390,11 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     generation += 1;
     loadingGeneration = 0;
     retryInFlight = null;
-    automaticRetryCount = 0;
     clearTimer();
     setLoading(false);
     setRetryPending(false);
+    setBusyStartedAt(null);
+    setStartupElapsedMs(null);
     setSnapshot(unavailableSnapshot);
   };
 
@@ -448,11 +417,25 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     clearTimer();
     setLoading(false);
     setRetryPending(false);
+    setBusyStartedAt(null);
+    setStartupElapsedMs(null);
     visibilitySource?.removeEventListener('visibilitychange', handleVisibilityChange);
   };
 
   if (getOwner()) onCleanup(dispose);
   if (args.autoStart !== false && !paused) void refresh();
 
-  return { snapshot, loading, retryPending, nextCheckAt, refresh, retry, pause, resume, dispose };
+  return {
+    snapshot,
+    loading,
+    retryPending,
+    busyStartedAt,
+    startupElapsedMs,
+    longStartupReadySequence,
+    refresh,
+    retry,
+    pause,
+    resume,
+    dispose,
+  };
 }

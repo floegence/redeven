@@ -1606,8 +1606,6 @@ beforeEach(async () => {
     reason_code: '',
     retryable: false,
     safe_to_retry: false,
-    committed: false,
-    rolled_back: false,
   });
   getEnvironmentMock.mockResolvedValue({
     public_id: 'env_local',
@@ -4931,8 +4929,6 @@ describe('EnvAppShell environment entry affordances', () => {
         reason_code: '',
         retryable: false,
         safe_to_retry: false,
-        committed: false,
-        rolled_back: false,
       });
     getLocalAccessStatusMock.mockReset()
       .mockResolvedValue({ password_required: true, unlocked: false });
@@ -4977,8 +4973,6 @@ describe('EnvAppShell environment entry affordances', () => {
         reason_code: '',
         retryable: false,
         safe_to_retry: false,
-        committed: false,
-        rolled_back: false,
       });
       await flushAsync();
       await vi.advanceTimersByTimeAsync(5_000);
@@ -5143,8 +5137,6 @@ describe('EnvAppShell remote access gate', () => {
         reason_code: '',
         retryable: false,
         safe_to_retry: false,
-        committed: false,
-        rolled_back: false,
       });
     const resumeFailure = deferred<void>();
     accessResumeMock.mockReset()
@@ -5176,8 +5168,6 @@ describe('EnvAppShell remote access gate', () => {
         reason_code: '',
         retryable: false,
         safe_to_retry: false,
-        committed: false,
-        rolled_back: false,
       });
       await flushAsync();
       await vi.advanceTimersByTimeAsync(5_000);
