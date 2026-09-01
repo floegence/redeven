@@ -261,8 +261,16 @@ type ContainerResourceEntry = Readonly<{
   item: ContainerResourceInventoryItem;
 }>;
 
+type ContainerDetailNavigation = Readonly<{
+  engine: ContainerEngine;
+  endpointID: string;
+  selectedIdentity: string;
+  match?: (item: ContainerResourceInventoryItem) => boolean;
+}>;
+
 type ContainerConsoleState =
   | Readonly<{ phase: 'loading'; target: ContainerConsoleTarget; runtimes: readonly ContainerRuntime[] }>
+  | Readonly<{ phase: 'navigating'; target: ContainerConsoleTarget; runtimes: readonly ContainerRuntime[] }>
   | Readonly<{ phase: 'ready'; target: ContainerConsoleTarget; runtimes: readonly ContainerRuntime[]; inventory: readonly ContainerResourceEntry[]; refreshing: boolean }>
   | Readonly<{ phase: 'unavailable' | 'permission'; target: ContainerConsoleTarget; runtimes: readonly ContainerRuntime[] }>
   | Readonly<{ phase: 'error'; target: ContainerConsoleTarget; runtimes: readonly ContainerRuntime[]; message: string }>;
@@ -1001,7 +1009,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const containerRunTargets = createMemo(() => readyRuntimes());
   const runtimeIssues = createMemo(() => runtimes().filter((runtime) => runtime.state !== 'ready'));
   const inventory = () => readyConsole()?.inventory ?? [];
-  const loading = () => consoleState().phase === 'loading';
+  const loading = () => consoleState().phase === 'loading' || consoleState().phase === 'navigating';
   const refreshing = () => Boolean(readyConsole()?.refreshing);
   const consoleBusy = () => loading() || refreshing();
   const availableViews = createMemo<readonly ContainerResourceView[]>(() => availableResourceViews(runtimes()));
@@ -1359,14 +1367,17 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setMutationBusy(false);
   };
 
-  const restoreRelatedNavigation = (origin: RelatedNavigationOrigin) => {
+  const restoreRelatedNavigation = (origin: RelatedNavigationOrigin, reason: 'missing' | 'ambiguous' = 'missing') => {
     if (relatedNavigationHistory.at(-1) === origin) relatedNavigationHistory.pop();
     setConsoleState(origin.state);
     setDetailTab(origin.detailTab);
     queueMicrotask(() => {
       if (inventoryScrollElement) inventoryScrollElement.scrollTop = origin.scrollTop;
     });
-    notify.info(i18n.t('containers.notifications.relatedMissingTitle'), i18n.t('containers.notifications.relatedMissingMessage'));
+    notify.info(
+      i18n.t(reason === 'ambiguous' ? 'containers.notifications.relatedAmbiguousTitle' : 'containers.notifications.relatedMissingTitle'),
+      i18n.t(reason === 'ambiguous' ? 'containers.notifications.relatedAmbiguousMessage' : 'containers.notifications.relatedMissingMessage'),
+    );
   };
 
   const loadConsole = async (
@@ -1375,7 +1386,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       rediscoverRuntimes?: boolean;
       resetListControls?: boolean;
       notifyIfSelectionMissing?: boolean;
-      navigation?: Readonly<{ engine: ContainerEngine; endpointID: string; selectedIdentity: string }>;
+      navigation?: ContainerDetailNavigation;
       restoreOnSelectionMissing?: RelatedNavigationOrigin;
     }> = {},
   ) => {
@@ -1400,10 +1411,40 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         item,
       })));
     };
+    const navigationMatches = (entries: readonly ContainerResourceEntry[]): readonly ContainerResourceEntry[] => {
+      const navigation = options.navigation;
+      if (!navigation) return [];
+      return entries.filter((entry) => (
+        entry.target.engine === navigation.engine
+        && (!navigation.endpointID || entry.target.endpoint_id === navigation.endpointID)
+        && (navigation.match
+          ? navigation.match(entry.item)
+          : resourceMatchesNavigation(target.view, entry.item, navigation.selectedIdentity))
+      ));
+    };
+    const pendingConsoleState = (
+      runtimeSet: readonly ContainerRuntime[],
+      entries: readonly ContainerResourceEntry[] | null,
+    ): ContainerConsoleState => {
+      if (options.navigation) {
+        const matches = entries ? navigationMatches(entries) : [];
+        if (entries && matches.length === 1) {
+          return {
+            phase: 'ready',
+            target: { ...target, selectedResourceKey: matches[0].key },
+            runtimes: runtimeSet,
+            inventory: entries,
+            refreshing: true,
+          };
+        }
+        return { phase: 'navigating', target, runtimes: runtimeSet };
+      }
+      return entries
+        ? { phase: 'ready', target, runtimes: runtimeSet, inventory: entries, refreshing: true }
+        : { phase: 'loading', target, runtimes: runtimeSet };
+    };
     const initialCached = cachedEntries(nextRuntimes, target);
-    setConsoleState(initialCached
-      ? { phase: 'ready', target, runtimes: nextRuntimes, inventory: initialCached, refreshing: true }
-      : { phase: 'loading', target, runtimes: nextRuntimes });
+    setConsoleState(pendingConsoleState(nextRuntimes, initialCached));
     resetResourceContext();
     if (options.resetListControls) {
       setSearchQuery('');
@@ -1418,7 +1459,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     }
     waitingForEnvironment = false;
     if (!canRead()) {
-      if (current()) setConsoleState({ phase: 'permission', target, runtimes: [] });
+      if (current()) {
+        if (options.restoreOnSelectionMissing) restoreRelatedNavigation(options.restoreOnSelectionMissing);
+        else setConsoleState({ phase: 'permission', target, runtimes: [] });
+      }
       return;
     }
 
@@ -1429,6 +1473,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
       const allowedViews = availableResourceViews(nextRuntimes);
       if (!allowedViews.includes(target.view)) {
+        if (options.restoreOnSelectionMissing) {
+          restoreRelatedNavigation(options.restoreOnSelectionMissing);
+          return;
+        }
         target = { view: 'containers', selectedResourceKey: '' };
       }
       const runtimeTargets = readyRuntimesForView(nextRuntimes, target.view);
@@ -1442,9 +1490,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
 
       const cached = cachedEntries(nextRuntimes, target);
-      setConsoleState(cached
-        ? { phase: 'ready', target, runtimes: nextRuntimes, inventory: cached, refreshing: true }
-        : { phase: 'loading', target, runtimes: nextRuntimes });
+      setConsoleState(pendingConsoleState(nextRuntimes, cached));
 
       const results = await Promise.all(runtimeTargets.map(async (runtime) => {
         try {
@@ -1486,21 +1532,19 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
       let nextSelectedResourceKey = target.selectedResourceKey;
       let navigationSelectionMissing = false;
+      let navigationSelectionAmbiguous = false;
       if (options.navigation) {
-        const navigation = options.navigation;
-        const selectedEntry = entries.find((entry) => (
-          entry.target.engine === navigation.engine
-          && (!navigation.endpointID || entry.target.endpoint_id === navigation.endpointID)
-          && resourceMatchesNavigation(target.view, entry.item, navigation.selectedIdentity)
-        ));
+        const matches = navigationMatches(entries);
+        const selectedEntry = matches.length === 1 ? matches[0] : undefined;
         nextSelectedResourceKey = selectedEntry?.key ?? '';
-        navigationSelectionMissing = !selectedEntry;
+        navigationSelectionMissing = matches.length === 0;
+        navigationSelectionAmbiguous = matches.length > 1;
       }
       const selectedStillExists = options.navigation
         ? Boolean(nextSelectedResourceKey && entries.some((entry) => entry.key === nextSelectedResourceKey))
         : !nextSelectedResourceKey || entries.some((entry) => entry.key === nextSelectedResourceKey);
       if (!selectedStillExists && options.restoreOnSelectionMissing) {
-        restoreRelatedNavigation(options.restoreOnSelectionMissing);
+        restoreRelatedNavigation(options.restoreOnSelectionMissing, navigationSelectionAmbiguous ? 'ambiguous' : 'missing');
         return;
       }
       const readyTarget = { ...target, selectedResourceKey: selectedStillExists ? nextSelectedResourceKey : '' };
@@ -1740,13 +1784,14 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     void closeExecSession();
   });
 
-  const openResourceDetail = async (
+  const openResourceDetail = (
     source: ContainerResourceEntry,
     targetView: ContainerResourceView,
+    selectedIdentity: string,
     match: (item: ContainerResourceInventoryItem) => boolean,
   ) => {
     const originState = readyConsole();
-    if (!originState) return;
+    if (!originState || !compact(selectedIdentity)) return;
     const origin: RelatedNavigationOrigin = {
       state: originState,
       detailTab: detailTab(),
@@ -1754,37 +1799,27 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         ? storedInventoryScrollTop
         : inventoryScrollElement?.scrollTop ?? storedInventoryScrollTop,
     };
-    try {
-      const items = await listContainerResources(targetView, source.target.engine, source.target.endpoint_id);
-      if (readyConsole() !== originState) return;
-      const matches = items.filter(match);
-      if (matches.length !== 1) {
-        notify.info(
-          i18n.t(matches.length > 1 ? 'containers.notifications.relatedAmbiguousTitle' : 'containers.notifications.relatedMissingTitle'),
-          i18n.t(matches.length > 1 ? 'containers.notifications.relatedAmbiguousMessage' : 'containers.notifications.relatedMissingMessage'),
-        );
-        return;
-      }
-      inventoryCache.set(inventoryCacheKey(source.target, targetView), items);
-      relatedNavigationHistory.push(origin);
-      await loadConsole(
-        { view: targetView, selectedResourceKey: resourceKey(source.target, targetView, matches[0]) },
-        { restoreOnSelectionMissing: origin },
-      );
-    } catch (cause) {
-      if (readyConsole() !== originState) return;
-      notify.error(
-        i18n.t('containers.notifications.relatedMissingTitle'),
-        cause instanceof Error ? cause.message : i18n.t('containers.notifications.relatedMissingMessage'),
-      );
-    }
+    relatedNavigationHistory.push(origin);
+    void loadConsole(
+      { view: targetView, selectedResourceKey: '' },
+      {
+        navigation: {
+          engine: source.target.engine,
+          endpointID: source.target.endpoint_id,
+          selectedIdentity,
+          match,
+        },
+        restoreOnSelectionMissing: origin,
+      },
+    );
   };
 
   const openContainerImage = (entry: ContainerResourceEntry) => {
     const container = entry.item as ContainerInventoryItem;
     const imageID = canonicalImageID(container.image_id);
     const referenceAliases = identityAliases([container.image?.reference, container.image?.digest]);
-    void openResourceDetail(entry, 'images', (item) => {
+    const selectedIdentity = compact(container.image_id || container.image?.reference || container.image?.digest);
+    openResourceDetail(entry, 'images', selectedIdentity, (item) => {
       const image = item as ImageInventoryItem;
       if (imageID) return canonicalImageID(image.id) === imageID;
       const aliases = imageIdentityAliases(image);
@@ -1795,7 +1830,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const openNamedVolume = (name: string) => {
     const source = selectedEntry();
     if (!source || !compact(name)) return;
-    void openResourceDetail(source, 'volumes', (item) => resourceIdentity('volumes', item) === compact(name));
+    openResourceDetail(source, 'volumes', name, (item) => resourceIdentity('volumes', item) === compact(name));
   };
 
   const selectResource = (entry: ContainerResourceEntry) => {
@@ -3043,9 +3078,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 if (!identity) return;
                 const source = selectedEntry();
                 if (!source) return;
-                void openResourceDetail(
+                openResourceDetail(
                   source,
                   'containers',
+                  identity,
                   (item) => resourceIdentity('containers', item) === identity,
                 );
               }}>
@@ -3284,8 +3320,54 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     </>
   );
 
+  const renderDetailSkeleton = (): JSX.Element => (
+    <article
+      class="container-detail-page container-detail-page--loading"
+      data-container-detail-loading
+      aria-label={i18n.t('containers.loading')}
+      aria-busy="true"
+    >
+      <span class="sr-only" role="status">{i18n.t('containers.loading')}</span>
+      <div class="container-detail-header">
+        <Show
+          when={relatedNavigationHistory.length > 0}
+          fallback={<span class="container-detail-skeleton__back" aria-hidden="true" />}
+        >
+          <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.back')} onClick={closeDetails}>
+            <ArrowLeft class="h-4 w-4" />
+          </Button>
+        </Show>
+        <span class="container-skeleton container-detail-skeleton__icon" aria-hidden="true" />
+        <span class="container-detail-skeleton__identity" aria-hidden="true">
+          <span class="container-skeleton container-detail-skeleton__eyebrow" />
+          <span class="container-skeleton container-detail-skeleton__name" />
+          <span class="container-skeleton container-detail-skeleton__identifier" />
+        </span>
+        <span class="container-skeleton container-skeleton--status container-detail-skeleton__status" aria-hidden="true" />
+        <span class="container-detail-actions container-detail-skeleton__actions" aria-hidden="true">
+          <span class="container-skeleton container-skeleton--action" />
+          <span class="container-skeleton container-skeleton--action" />
+        </span>
+      </div>
+      <div class="container-detail-tabs container-detail-tabs--loading" aria-hidden="true">
+        <For each={[0, 1, 2, 3]}>{(tab) => <span class="container-skeleton container-detail-skeleton__tab" data-tab={tab} />}</For>
+      </div>
+      <div class="container-detail-body" aria-hidden="true">
+        <div class="container-detail-stack container-detail-stack--loading">
+          <For each={[0, 1, 2, 3]}>{(section) => <section class="container-detail-skeleton__section">
+            <span class="container-skeleton container-detail-skeleton__section-title" data-section={section % 2} />
+            <span class="container-skeleton container-detail-skeleton__line" />
+            <span class="container-skeleton container-detail-skeleton__line" data-line="short" />
+            <span class="container-skeleton container-detail-skeleton__line" />
+          </section>}</For>
+        </div>
+      </div>
+    </article>
+  );
+
   const renderConsoleFallback = () => {
     const state = consoleState();
+    if (state.phase === 'navigating') return renderDetailSkeleton();
     if (state.phase === 'loading') {
       return (
         <div class="container-list-page" data-container-list-loading aria-label={i18n.t('containers.loading')}>

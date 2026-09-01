@@ -733,6 +733,41 @@ describe('native Containers page', () => {
     expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-1', 'docker', 'docker-primary');
   });
 
+  it('shows the target detail skeleton immediately while live navigation resolves', async () => {
+    const delayedImages = deferred<any[]>();
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage stateScope="activity" variant="activity" />, host);
+    await settle();
+    harness.listResources.mockImplementation((nextView: string) => nextView === 'images'
+      ? delayedImages.promise
+      : Promise.resolve([{
+          container_id: 'container-1', name: 'Managed API', state: 'running', management: { managed: false },
+        }]));
+
+    requestContainerResourceNavigation({
+      engine: 'docker',
+      endpointID: 'docker-primary',
+      view: 'images',
+      identity: 'sha256:image-1',
+    });
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-container-detail-loading]')).not.toBeNull();
+    expect(host.querySelector('[data-container-list-loading]')).toBeNull();
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.images');
+
+    delayedImages.resolve([{
+      id: 'sha256:image-1', reference: 'example/api:latest', referenced_containers: 1,
+    }]);
+    await settle();
+
+    expect(host.querySelector('[data-container-detail-loading]')).toBeNull();
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('example/api:latest');
+    expect(harness.listResources.mock.calls.filter(([nextView]) => nextView === 'images')).toHaveLength(1);
+  });
+
   it.each([
     ['image ID', 'sha256:config-image'],
     ['image reference', 'ghcr.io/example/webtop:stable'],
@@ -1867,6 +1902,47 @@ describe('native Containers page', () => {
     expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('api-data');
     expect(host.querySelector('.container-detail-tabs [role="tab"][aria-selected="true"]')?.textContent)
       .toContain('containers.detailTabs.used-by');
+  });
+
+  it('replaces a related resource detail with a target skeleton before loading inventory', async () => {
+    const delayedContainers = deferred<any[]>();
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'volumes'
+      ? [{ name: 'api-data', driver: 'local', referenced_containers: 1 }]
+      : [{ container_id: 'container-1', name: 'Managed API', state: 'running', management: { managed: false } }]));
+    harness.resourceDetails.mockImplementation((nextView: string) => Promise.resolve(nextView === 'volumes'
+      ? { name: 'api-data', driver: 'local', used_by: [{ container_id: 'container-full-1', name: 'API', state: 'running' }] }
+      : { container_id: 'container-full-1', name: 'API', state: 'running' }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.volumes'))?.click();
+    await settle();
+    host.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.used-by'))?.click();
+    await settle();
+    harness.listResources.mockImplementation((nextView: string) => nextView === 'containers'
+      ? delayedContainers.promise
+      : Promise.resolve([{ name: 'api-data', driver: 'local', referenced_containers: 1 }]));
+    host.querySelector<HTMLButtonElement>('.container-reference-row')?.click();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-container-detail-loading]')).not.toBeNull();
+    expect(host.querySelector('[data-container-detail-page] h2')).toBeNull();
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.containers');
+
+    delayedContainers.resolve([{
+      container_id: 'container-full-1', name: 'API', state: 'running', management: { managed: false },
+    }]);
+    await settle();
+
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('API');
+    expect(harness.listResources.mock.calls.filter(([nextView]) => nextView === 'containers')).toHaveLength(2);
   });
 
   it('keeps the source detail visible when a related container no longer exists', async () => {

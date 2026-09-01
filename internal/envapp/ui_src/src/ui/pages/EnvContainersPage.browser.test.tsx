@@ -7,6 +7,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../i18n';
+import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 
 const browserHarness = vi.hoisted(() => ({
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
@@ -323,6 +324,38 @@ describe('native Containers responsive product surface', () => {
     expect(root.querySelector('[data-container-detail-page] h2')?.textContent).toBe('api-data');
     expect(Array.from(root.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
       .find((button) => button.textContent?.includes('Used by'))?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('shows a responsive target skeleton before an external resource navigation resolves', async () => {
+    await page.viewport(390, 844);
+    const mounted = mount('activity');
+    dispose = mounted.dispose;
+    await settle();
+
+    let resolveImages: ((items: readonly unknown[]) => void) | undefined;
+    browserHarness.listResources.mockImplementation((view: string) => view === 'images'
+      ? new Promise((resolve) => { resolveImages = resolve; })
+      : Promise.resolve([]));
+    requestContainerResourceNavigation({
+      engine: 'docker',
+      endpointID: 'desktop-linux',
+      view: 'images',
+      identity: 'sha256:image-1',
+    });
+    await Promise.resolve();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    const skeleton = root.querySelector<HTMLElement>('[data-container-detail-loading]')!;
+    expect(skeleton).not.toBeNull();
+    expect(root.querySelector('[data-container-list-loading]')).toBeNull();
+    expect(root.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('Images');
+    expect(skeleton.querySelector('.container-detail-header')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(110);
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+
+    resolveImages?.([{ id: 'sha256:image-1', reference: 'example/api:latest', referenced_containers: 0 }]);
+    await settle();
+    expect(root.querySelector('[data-container-detail-loading]')).toBeNull();
+    expect(root.querySelector('[data-container-detail-page] h2')?.textContent).toBe('example/api:latest');
   });
 
   it('places cleanup in a dismissible danger menu and shows the exact reviewed resources', async () => {
