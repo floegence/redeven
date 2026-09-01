@@ -161,15 +161,6 @@ export type FlowerActivityQuestionAnswer = Readonly<{
   redacted: boolean;
 }>;
 
-export type FlowerActivityCompletionDetail = Readonly<{
-  result: string;
-  summary: string;
-  details: string;
-  evidence_refs: readonly string[];
-  remaining_risks: readonly string[];
-  next_actions: readonly string[];
-}>;
-
 export type FlowerActivityErrorDetail = Readonly<{
   message: string;
 }>;
@@ -231,10 +222,6 @@ export type FlowerActivityDetailBlock =
   | Readonly<{
     kind: 'question';
     question: FlowerActivityQuestionDetail;
-  }>
-  | Readonly<{
-    kind: 'completion';
-    completion: FlowerActivityCompletionDetail;
   }>
   | Readonly<{
     kind: 'todos';
@@ -1360,32 +1347,6 @@ function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresen
   };
 }
 
-function presentationForCompletion(item: FlowerActivityItem): FlowerActivityPresentation {
-  const payload = item.payload ?? {};
-  const title = titleForGenericItem(item, 'completion');
-  const errorBlock = errorDetailBlockForItem(item, payload);
-  const detailLines = errorBlock ? resultStatusLines(payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(payload);
-  const completion: FlowerActivityCompletionDetail = {
-    result: payloadValue(payload, 'result'),
-    summary: payloadValue(payload, 'summary'),
-    details: payloadValue(payload, 'details'),
-    evidence_refs: compactTextArray(payload.evidence_refs),
-    remaining_risks: compactTextArray(payload.remaining_risks),
-    next_actions: compactTextArray(payload.next_actions),
-  };
-  const detailBlocks: FlowerActivityDetailBlock[] = [];
-  if (errorBlock) detailBlocks.push(errorBlock);
-  detailBlocks.push({ kind: 'completion', completion });
-  if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
-  return {
-    label: titleText(title),
-    title,
-    meta: metaWithError(item, metaForItem(item)),
-    detailLines,
-    detailBlocks,
-  };
-}
-
 function titleWithToolContext(toolName: string, explicit: string, fallback: string): string {
   const meaningful = explicit && explicit !== toolName && !isApprovalLifecycleText(explicit) ? explicit : '';
   const label = meaningful || fallback;
@@ -1416,8 +1377,6 @@ function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityR
       return { kind: 'plain', text: titleWithToolContext(toolName, explicit, defaultLabelForItem(item)) };
     case 'question':
       return { kind: 'plain', text: meaningful(explicit) || trimString(item.description) || payloadValue(item.payload, 'question', 'summary') || defaultLabelForItem(item) };
-    case 'completion':
-      return { kind: 'plain', text: meaningful(explicit) || payloadValue(item.payload, 'result') || defaultLabelForItem(item) };
     default:
       return { kind: 'plain', text: titleWithToolContext(toolName, explicit, defaultLabelForItem(item)) };
   }
@@ -1460,7 +1419,6 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   web_fetch: (item) => presentationForWebFetch(item),
   todos: (item) => presentationForTodos(item),
   question: (item) => presentationForQuestion(item),
-  completion: (item) => presentationForCompletion(item),
   subagent: (item, context) => presentationForSubagents(item, context.copy),
   subagent_operation: (item, context) => presentationForSubagents(item, context.copy),
 };

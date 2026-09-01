@@ -354,18 +354,6 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("total", "pending", "in_progress", "completed", "cancelled", "truncated"),
 		),
 	},
-	"task_complete": {
-		// Legacy activity definition for persisted records; never included in a new Flower tool surface.
-		Name:             "task_complete",
-		Mutating:         false,
-		RequiresApproval: false,
-		Presentation: withPresentationOptions(
-			presentation(ToolPresentationSignal, "blocking", "completion", "interaction", "args", "result"),
-			callFallback("Complete task"),
-			resultFallback("Complete task"),
-			resultPayloadFields("result", "evidence_refs", "remaining_risks", "next_actions"),
-		),
-	},
 	"ask_user": {
 		Name:             "ask_user",
 		Mutating:         false,

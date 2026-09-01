@@ -11,9 +11,8 @@ const (
 )
 
 func classifyFinalizationReason(finalizationReason string) string {
-	// natural_stop remains readable for legacy run records; new Flower turns use task_complete.
 	switch strings.TrimSpace(finalizationReason) {
-	case "task_complete", "natural_stop":
+	case "natural_stop":
 		return finalizationClassSuccess
 	case "ask_user_waiting_model":
 		return finalizationClassWaitingUser

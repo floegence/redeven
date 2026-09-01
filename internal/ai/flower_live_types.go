@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 const FlowerLiveSchemaVersion int64 = 1

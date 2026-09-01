@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	flconfig "github.com/floegence/floret/v6/config"
-	flprovider "github.com/floegence/floret/v6/provider"
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flconfig "github.com/floegence/floret/v7/config"
+	flprovider "github.com/floegence/floret/v7/provider"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -196,7 +196,6 @@ func buildFloretThreadAgent(
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
-		flruntime.WithAgentTurnCompletionPolicy(flruntime.TurnCompletionExplicitSignal),
 	}
 	if manualCompactions != nil {
 		agentOptions = append(agentOptions, flruntime.WithAgentManualCompactions(manualCompactions))

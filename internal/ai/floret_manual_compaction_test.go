@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 func TestFlowerManualCompactionSourceRecognizesOnlyPureSlashCommand(t *testing.T) {

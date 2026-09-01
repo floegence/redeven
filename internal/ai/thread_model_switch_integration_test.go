@@ -43,7 +43,7 @@ func TestThreadModelSwitchUsesPersistedModelAcrossTurnsAndRestart(t *testing.T) 
 		mainRequests = append(mainRequests, request)
 		call := len(mainRequests)
 		captureMu.Unlock()
-		writeDeepSeekIntegrationTaskCompleteResponseForModel(w, flusher, "chat_turn_"+strconv.Itoa(call), model, "turn completed")
+		writeDeepSeekIntegrationTextResponseForModel(w, flusher, "chat_turn_"+strconv.Itoa(call), model, "turn completed")
 	}))
 	t.Cleanup(providerServer.Close)
 
@@ -87,6 +87,9 @@ func TestThreadModelSwitchUsesPersistedModelAcrossTurnsAndRestart(t *testing.T) 
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "deepseek/deepseek-v4-pro"); err != nil {
 		t.Fatalf("SetThreadModel(pro): %v", err)
 	}
+	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionReadonly)); err != nil {
+		t.Fatalf("SetThreadPermissionType(readonly): %v", err)
+	}
 	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
 		ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-flash", Input: RunInput{Text: "stale model must fail"},
 	}); !errors.Is(err, ErrThreadModelConflict) {
@@ -96,6 +99,9 @@ func TestThreadModelSwitchUsesPersistedModelAcrossTurnsAndRestart(t *testing.T) 
 
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "deepseek/deepseek-v4-flash"); err != nil {
 		t.Fatalf("SetThreadModel(flash): %v", err)
+	}
+	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionFullAccess)); err != nil {
+		t.Fatalf("SetThreadPermissionType(full_access): %v", err)
 	}
 	if err := svc.Close(); err != nil {
 		t.Fatalf("Close before restart: %v", err)
@@ -155,8 +161,14 @@ func assertModelSwitchRequestHistory(t *testing.T, requests []map[string]any) {
 	if !reflect.DeepEqual(requests[0]["tools"], requests[2]["tools"]) {
 		t.Fatal("Flash render lineage changed tools across model switch and restart")
 	}
+	if reflect.DeepEqual(requests[0]["tools"], requests[1]["tools"]) {
+		t.Fatal("new Pro turn did not receive the current readonly tool surface")
+	}
 	if !reflect.DeepEqual(requests[0]["messages"].([]any)[0], requests[2]["messages"].([]any)[0]) {
 		t.Fatal("Flash render lineage changed its first message prefix")
+	}
+	if reflect.DeepEqual(requests[0]["messages"].([]any)[0], requests[1]["messages"].([]any)[0]) {
+		t.Fatal("new Pro turn did not receive the current readonly System Prompt")
 	}
 	for i, request := range requests {
 		if _, ok := request["previous_response_id"]; ok {
@@ -173,25 +185,6 @@ func writeDeepSeekIntegrationTextResponseForModel(w http.ResponseWriter, flusher
 	writeOpenAISSEJSON(w, flusher, map[string]any{
 		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": model,
 		"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "delta": map[string]any{}}},
-	})
-	_, _ = io.WriteString(w, "data: [DONE]\n\n")
-	flusher.Flush()
-}
-
-func writeDeepSeekIntegrationTaskCompleteResponseForModel(w http.ResponseWriter, flusher http.Flusher, responseID string, model string, text string) {
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": model,
-		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
-			"role": "assistant", "content": text,
-			"tool_calls": []any{map[string]any{
-				"index": 0, "id": "call_" + responseID, "type": "function",
-				"function": map[string]any{"name": "task_complete", "arguments": `{}`},
-			}},
-		}}},
-	})
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": model,
-		"choices": []any{map[string]any{"index": 0, "finish_reason": "tool_calls", "delta": map[string]any{}}},
 	})
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()

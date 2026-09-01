@@ -287,6 +287,33 @@ describe('mapFlowerActivityItem structured rows contract', () => {
   });
 });
 
+describe('mapFlowerActivityItem retired renderer contract', () => {
+  it('keeps a neutral readable item without unknown payload data', () => {
+    const mapped = mapFlowerActivityItem({
+      item_id: 'activity-retired',
+      tool_name: 'retired_tool',
+      kind: 'tool',
+      status: 'success',
+      severity: 'quiet',
+      presentation: {
+        label: 'Historical tool',
+        renderer: 'retired_renderer',
+        payload: { arguments: { token: 'must-not-render' }, result: { private: true } },
+      },
+    });
+
+    expect(mapped).toMatchObject({
+      item_id: 'activity-retired',
+      tool_name: 'retired_tool',
+      status: 'success',
+      label: 'Historical tool',
+    });
+    expect(mapped?.renderer).toBeUndefined();
+    expect(mapped?.payload).toBeUndefined();
+    expect(JSON.stringify(mapped)).not.toContain('must-not-render');
+  });
+});
+
 describe('mapFlowerActivityItem web fetch contract', () => {
   it('preserves the dedicated renderer and bounded preview', () => {
     const mapped = mapFlowerActivityItem({

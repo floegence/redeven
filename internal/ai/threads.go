@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/floret/v6/identity"
-	flruntime "github.com/floegence/floret/v6/runtime"
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -1099,6 +1099,13 @@ func (s *Service) SetThreadPermissionType(ctx context.Context, meta *session.Met
 		return err
 	}
 	defer unlockLifecycle()
+	preferenceBlocked, err := s.threadPreferenceChangeBlocked(ctx, threadID)
+	if err != nil {
+		return err
+	}
+	if preferenceBlocked {
+		return ErrThreadBusy
+	}
 	currentPermissionType, err := threadPermissionType(th)
 	if err != nil {
 		return err

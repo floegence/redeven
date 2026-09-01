@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	flprovider "github.com/floegence/floret/v6/provider"
+	flprovider "github.com/floegence/floret/v7/provider"
 )
 
 func TestAutomaticTitleProviderAdmissionDoesNotRequireCanonicalPermissionOwner(t *testing.T) {

@@ -1,13 +1,13 @@
 ---
 type: AI Tool Contract
 title: AI terminal tool runtime
-description: Redeven PTY resources with Floret v6 canonical effect and Activity ownership.
+description: Redeven PTY resources with Floret v7 canonical effect and Activity ownership.
 tags: [ai, terminal, tools, runtime]
 timestamp: 2026-08-15T00:00:00Z
 ---
 # Summary
 
-Redeven owns PTY process resources and bounded output retention. Floret v6 owns the canonical tool call, interaction, effect attempt, result, and Activity. One effect adapter authorizes execution once and publishes stable current-view updates; Redeven does not persist a parallel terminal lifecycle or recover effects from product SQL.
+Redeven owns PTY process resources and bounded output retention. Floret v7 owns the canonical tool call, interaction, effect attempt, result, and Activity. One effect adapter authorizes execution once and publishes stable current-view updates; Redeven does not persist a parallel terminal lifecycle or recover effects from product SQL.
 
 # Contract
 

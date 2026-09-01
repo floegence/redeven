@@ -39,13 +39,10 @@ type deepSeekContextObservation struct {
 }
 
 type deepSeekContextRecorder struct {
-	mu      sync.Mutex
-	markers []string
-	// normalizeMainResponses keeps this paid qualification focused on the
-	// forwarded request while tool-free compaction summaries stay provider-native.
-	normalizeMainResponses bool
-	observations           []deepSeekContextObservation
-	err                    error
+	mu           sync.Mutex
+	markers      []string
+	observations []deepSeekContextObservation
+	err          error
 }
 
 func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservation {
@@ -145,7 +142,7 @@ func TestE2E_FlowerDeepSeekV4ContextPrefixAndModelSwitch(t *testing.T) {
 		"FLOWER_CONTEXT_PRO_TWO_6D81",
 		"FLOWER_CONTEXT_FLASH_THREE_4A73",
 	}
-	recorder := &deepSeekContextRecorder{markers: markers, normalizeMainResponses: true}
+	recorder := &deepSeekContextRecorder{markers: markers}
 	proxyURL := newDeepSeekRecordingProxy(t, baseURL, recorder)
 	providerID := "deepseek-context-e2e"
 	flashModelID := providerID + "/deepseek-v4-flash"
@@ -191,19 +188,25 @@ func TestE2E_FlowerDeepSeekV4ContextPrefixAndModelSwitch(t *testing.T) {
 	threadID := createDeepSeekCompactionThread(t, ctx, svc, &meta, flashModelID, "Context prefix and model switching")
 
 	first := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, "context-flash-one", threadID, flashModelID,
-		"Remember "+markers[0]+". Do not ask questions. Reply briefly, then call task_complete with output set to "+markers[0]+".")
+		"Remember "+markers[0]+". Do not ask questions or call tools. Reply briefly with "+markers[0]+" and finish normally.")
 	assertNoDeepSeekContextCompaction(t, first, "first Flash turn")
 	if err := svc.SetThreadModel(ctx, &meta, threadID, proModelID); err != nil {
 		t.Fatalf("switch to Pro: %v", err)
 	}
+	if err := svc.SetThreadPermissionType(ctx, &meta, threadID, string(FlowerPermissionReadonly)); err != nil {
+		t.Fatalf("switch to readonly surface: %v", err)
+	}
 	second := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, "context-pro-two", threadID, "",
-		"Remember "+markers[1]+" and the earlier marker. Do not ask questions. Reply briefly, then call task_complete with output set to "+markers[1]+".")
+		"Remember "+markers[1]+" and the earlier marker. Do not ask questions or call tools. Reply briefly with "+markers[1]+" and finish normally.")
 	assertNoDeepSeekContextCompaction(t, second, "Pro turn")
 	if err := svc.SetThreadModel(ctx, &meta, threadID, flashModelID); err != nil {
 		t.Fatalf("switch back to Flash: %v", err)
 	}
+	if err := svc.SetThreadPermissionType(ctx, &meta, threadID, string(FlowerPermissionFullAccess)); err != nil {
+		t.Fatalf("restore full-access surface: %v", err)
+	}
 	third := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, "context-flash-three", threadID, "",
-		"Remember "+markers[2]+" and both earlier markers. Do not ask questions. Reply briefly, then call task_complete with output set to "+markers[2]+".")
+		"Remember "+markers[2]+" and both earlier markers. Do not ask questions or call tools. Reply briefly with "+markers[2]+" and finish normally.")
 	assertNoDeepSeekContextCompaction(t, third, "second Flash turn")
 
 	assertDeepSeekContextObservations(t, recorder)
@@ -237,6 +240,7 @@ func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *dee
 			return
 		}
 		request.Header = incoming.Header.Clone()
+		request.Header.Del("Accept-Encoding")
 		response, roundTripErr := transport.RoundTrip(request)
 		if roundTripErr != nil {
 			http.Error(w, "DeepSeek upstream unavailable", http.StatusBadGateway)
@@ -246,18 +250,13 @@ func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *dee
 		if observation != nil {
 			t.Logf("forwarded request model=%s status=%d", observation.Model, response.StatusCode)
 		}
-		normalizeResponse := observation != nil && recorder.normalizeMainResponses && response.StatusCode >= 200 && response.StatusCode < 300
 		for key, values := range response.Header {
-			if normalizeResponse && (strings.EqualFold(key, "Content-Length") || strings.EqualFold(key, "Content-Encoding") || strings.EqualFold(key, "Transfer-Encoding")) {
+			if strings.EqualFold(key, "Content-Length") || strings.EqualFold(key, "Transfer-Encoding") {
 				continue
 			}
 			for _, value := range values {
 				w.Header().Add(key, value)
 			}
-		}
-		if normalizeResponse {
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.Header().Set("Cache-Control", "no-store")
 		}
 		w.WriteHeader(response.StatusCode)
 		flusher, _ := w.(http.Flusher)
@@ -268,19 +267,14 @@ func newDeepSeekRecordingProxy(t *testing.T, sourceBaseURL string, recorder *dee
 		for scanner.Scan() {
 			line := append([]byte(nil), scanner.Bytes()...)
 			observeDeepSeekResponseLine(line, &responseToolNames, &responseFinishReasons)
-			if !normalizeResponse {
-				_, _ = w.Write(append(line, '\n'))
-				if flusher != nil {
-					flusher.Flush()
-				}
+			_, _ = w.Write(append(line, '\n'))
+			if flusher != nil {
+				flusher.Flush()
 			}
 		}
 		if observation != nil {
 			recorder.recordResponse(observation.Index, responseToolNames, responseFinishReasons)
-			t.Logf("observed response model=%s tools=%v finishes=%v normalized=%t", observation.Model, responseToolNames, responseFinishReasons, normalizeResponse)
-		}
-		if normalizeResponse && flusher != nil {
-			writeDeepSeekIntegrationTaskCompleteResponseForModel(w, flusher, "chat_context_qualification", observation.Model, "qualification complete")
+			t.Logf("observed response model=%s tools=%v finishes=%v", observation.Model, responseToolNames, responseFinishReasons)
 		}
 	}))
 	t.Cleanup(proxy.Close)
@@ -376,6 +370,15 @@ func assertDeepSeekContextObservations(t *testing.T, recorder *deepSeekContextRe
 		if observation.HasPreviousResponseID || observation.ProviderMetadataFields != 0 {
 			t.Fatalf("turn %d carried provider continuation metadata across the model boundary", i+1)
 		}
+		if len(observation.ResponseToolNames) != 0 {
+			t.Fatalf("turn %d did not finish naturally; response tools=%v", i+1, observation.ResponseToolNames)
+		}
+		if !containsString(observation.ResponseFinishReasons, "stop") {
+			t.Fatalf("turn %d finish reasons=%v, want stop", i+1, observation.ResponseFinishReasons)
+		}
+	}
+	if selected[0].SystemHash == selected[1].SystemHash || selected[0].ToolsHash == selected[1].ToolsHash {
+		t.Fatal("Pro turn did not receive the changed readonly System Prompt and tool surface")
 	}
 	if selected[0].SystemHash == "" || selected[0].SystemHash != selected[2].SystemHash {
 		t.Fatalf("Flash System Prompt hash drifted: first=%s second=%s", selected[0].SystemHash, selected[2].SystemHash)

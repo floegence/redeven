@@ -1,13 +1,13 @@
 ---
 type: AI Runtime Contract
 title: Floret thread runtime integration
-description: Typed Floret v6 thread runtime ownership and Redeven product boundaries.
+description: Typed Floret v7 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
 timestamp: 2026-08-31T00:00:00Z
 ---
 # Summary
 
-Floret v6 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, and Retry return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
+Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, and Retry return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
 
 # Contract
 
@@ -63,7 +63,7 @@ canonical permission snapshot before model dispatch.
 
 ## Redeven adapter
 
-Redeven keeps one typed adapter over the published Floret v6 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
+Redeven keeps one typed adapter over the published Floret v7 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
 
 Floret title events are settlement notifications, not a second title source.
 The synchronous event sink requests one Service-owned, per-thread coalesced
@@ -80,15 +80,15 @@ and ordinary detail reads remain the only browser state paths; Stop never
 decorates a command response with viewer read state, projects a second detail,
 or starts a follow-up read.
 
-Redeven resolves one complete `ToolSurface` when it creates the hosted Agent.
+Redeven resolves one complete `ToolSurface` when it creates the hosted Agent for a new Turn.
 Registry tools with nil provider definitions inherit the registry definitions;
 a non-nil empty definitions slice intentionally exposes no registry tools. The
-resulting definitions and System Prompt remain fixed for that compaction
-generation. Later permission changes can only tighten the effect-authorization
-snapshot; they cannot mutate provider-visible tools. Provider tool names absent
-from the resolved definitions remain rejected before dispatch.
+current model, reasoning, definitions, System Prompt, adapter, and context
+policy are checkpointed by Floret as one immutable Turn surface. Ask User,
+ordinary tools, retries, and restart recovery reuse that surface. Idle settings
+or product-version changes affect only the next Turn.
 
-Redeven consumes Floret v6.1.1's public ordered `ThreadView.Items`, exact
+Redeven consumes Floret v7.0.1's public ordered `ThreadView.Items`, exact
 item and interaction `TurnID` plus `RunID`, exact active `ThreadView.RunID`,
 process-local `ThreadView.RunProgress`, and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
@@ -114,14 +114,14 @@ stream text. `TurnResult.Output` remains a run aggregate and is not another
 message source. Flower deduplicates exact item IDs only; equal text with
 different stable IDs remains visible.
 
-Canonical terminal failure classification comes from Floret v6.1.1
+Canonical terminal failure classification comes from Floret v7.0.1
 `ThreadView.Failure` and `ThreadSummary.Failure`. Redeven maps the typed code
 once for list, detail, live current, and command responses, then removes the
 upstream failure payload from the Flower wire view. There is no error-text or
 historical-field classifier. `effect_outcome_unknown` has one product code and
 explains that execution stopped to avoid a duplicate operation.
 
-Floret v6 accumulates a tool result into the matching call Activity by stable
+Floret v7 accumulates a tool result into the matching call Activity by stable
 `tool_call_id`. Result status and output advance the item without clearing the
 call description, command, safe targets, or other presentation facts. The same
 merge rule is used during execution and canonical journal reconstruction.
@@ -130,11 +130,16 @@ Every public Activity item passes through one host projection before it reaches
 current view, timeline pagination, live stream, or historical replay. The
 projection removes host paths, working directories, pending handles, and
 nested private values while keeping renderer, operation, status, summary,
-stable IDs, and display names. Floret v6.1.1 `StructuredActivityPayload.Rows`
+stable IDs, and display names. Floret v7.0.1 `StructuredActivityPayload.Rows`
 is the only generic rich-detail contract: Redeven creates bounded, ordered,
 safe display rows before admission, and Flower expands only those rows, a
 meaningful summary, or an error. It never rebuilds detail from raw tool JSON.
 Flower's payload contract remains the final validation boundary.
+
+Historical tool Activity does not depend on the current registry. Persisted
+presentation is authoritative; when it is absent or its renderer is no longer
+supported, Flower uses one neutral presentation and drops unknown payload data.
+A removed tool is not restored as a compatibility definition.
 
 Before the one `runtime.Open` call, Redeven invokes Floret's published
 `storage.MaintainSQLite` boundary with a bounded 30-second startup context.
@@ -147,7 +152,7 @@ database. Redeven never reads, copies, replaces, or compacts opaque Floret
 records itself.
 
 Redeven reports the `verifying` readiness phase immediately before the single
-`runtime.Open` call. Floret v6.1.1 atomically converges the exact legacy
+`runtime.Open` call. Floret v7.0.1 atomically converges the exact legacy
 tool-result Raw representation produced before UTF-8 normalization and maps
 all remaining session-tree authority failures to public
 `runtime.ErrAuthorityCorrupt`. Redeven classifies only that public error; it
@@ -193,10 +198,8 @@ compaction projection or inspect Floret storage.
 
 Floret also owns the provider prefix lineage. Redeven restores effect work from
 `AgentRequest.CanonicalTurnInput`, so an Ask User answer cannot replace the
-original user objective. The hosted Agent uses explicit-signal completion with
-`ask_user` and `task_complete` exposed together. Natural model stops remain
-canonical output and continue within the same Turn until a structured signal
-arrives or the bounded continuation policy fails.
+original user objective. Provider natural stop is the only successful completion
+rule; ordinary tools continue and `ask_user` waits before resuming the same Turn.
 
 Floret queue item `id` is the canonical mutation identity for reorder, delete,
 and promote. Its `request_key` remains the send idempotency identity used only to
@@ -208,8 +211,8 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v6.1.1 typed runtime without local replacement.
-- `redeven:internal/session/floret_v6_dependency_contract_test.go` - Enforces exact published-v6 adoption and rejects retired imports.
+- `redeven:go.mod` - Pins the released Floret v7.0.1 typed runtime without local replacement.
+- `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.
 - `redeven:internal/ai/floret_thread_context.go` - Canonical compaction mapping and timeline anchoring.
@@ -224,6 +227,6 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/ai/execution_authority_continuity_test.go` - Retry and SubAgent authority continuity across accepted turns and restart.
 - `redeven:internal/ai/stop_thread.go` - Idempotent typed cancellation without handler lookup.
 - `redeven:internal/ai/send_user_turn_flow_test.go` - Covers typed canonical send and queue behavior through the published runtime.
-- `redeven:internal/ai/floret_ask_user_integration_test.go` - Covers non-blocking interaction settlement, immediate continuation progress, live thinking before terminal state, and explicit completion.
+- `redeven:internal/ai/floret_ask_user_integration_test.go` - Covers frozen waiting-turn settings, non-blocking interaction settlement, continuation progress, and natural completion.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Latest-selection generation fence before detail cache mutation.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Deterministic out-of-order A to B to A navigation coverage.

@@ -110,12 +110,6 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			resultLabelFallback: "Update todos",
 		},
 		{
-			toolName:            "task_complete",
-			callLabelFallback:   "Complete task",
-			resultLabelFallback: "Complete task",
-			resultPayloadFields: []string{"result", "evidence_refs", "remaining_risks", "next_actions"},
-		},
-		{
 			toolName:            "ask_user",
 			callLabelFallback:   "Ask user",
 			resultLabelFallback: "Ask user",

@@ -179,12 +179,11 @@ func TestBuildLayeredSystemPrompt_RequiresHumanReadableSubagentNames(t *testing.
 	assertPromptContains(t, prompt, "never use snake_case, kebab-case")
 }
 
-func TestBuildLayeredSystemPrompt_RequiresExplicitCompletionSignal(t *testing.T) {
+func TestBuildLayeredSystemPromptUsesNaturalCompletion(t *testing.T) {
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "call task_complete")
-	assertPromptContains(t, prompt, "A natural text stop alone does not complete the task")
+	assertPromptContains(t, prompt, "When the task is complete, provide the final assistant response")
 }
 
 func TestBuildLayeredSystemPrompt_ExcludesMutableTurnFacts(t *testing.T) {

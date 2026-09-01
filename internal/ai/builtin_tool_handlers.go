@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -780,8 +780,8 @@ func builtInToolDefinitions() []ToolDef {
 
 func builtInControlSignalDefinitions() []ToolDef {
 	toSchema := toolSchemaRaw
-	defs := make([]ToolDef, 0, 2)
-	for _, core := range flruntime.CoreControlDefinitions(true) {
+	defs := make([]ToolDef, 0, 1)
+	for _, core := range flruntime.CoreControlDefinitions() {
 		name := strings.TrimSpace(core.Name)
 		description := strings.TrimSpace(core.Description)
 		inputSchema := core.InputSchema

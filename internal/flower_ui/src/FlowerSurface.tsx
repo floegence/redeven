@@ -8285,35 +8285,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </section>
   );
 
-  const completionList = (label: string, values: readonly string[]) => (
-    <Show when={values.length > 0}>
-      <div class="flower-activity-completion-section">
-        <div class="flower-activity-detail-heading">{label}</div>
-        <ul class="flower-activity-completion-list">
-          <For each={values}>
-            {(value) => <li>{value}</li>}
-          </For>
-        </ul>
-      </div>
-    </Show>
-  );
-
-  const completionBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'completion' }>) => {
-    const value = block.completion;
-    return (
-      <section class="flower-activity-completion-panel">
-        <Show when={value.result || value.summary || value.details}>
-          <div class="flower-activity-completion-result">
-            {value.result || value.summary || value.details}
-          </div>
-        </Show>
-        {completionList('Evidence', value.evidence_refs)}
-        {completionList('Risks', value.remaining_risks)}
-        {completionList('Next', value.next_actions)}
-      </section>
-    );
-  };
-
   const fileReadBlock = (messageID: string, blockIndex: number, itemID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>) => {
     const lineSummary = (() => {
       const start = Math.max(1, Math.floor(Number(block.line_offset || 1)));
@@ -8520,7 +8491,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (block.kind === 'web_search') return webSearchBlock(block);
     if (block.kind === 'web_fetch') return webFetchBlock(block);
     if (block.kind === 'question') return questionBlock(block);
-    if (block.kind === 'completion') return completionBlock(block);
     if (block.kind === 'file_read') return fileReadBlock(messageID, blockIndex, item.item_id, block);
     if (block.kind === 'file_diff') return fileDiffBlock(messageID, blockIndex, item.item_id, block);
     return detailLinesBlock(block);

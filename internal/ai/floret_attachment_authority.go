@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/v6/identity"
-	flruntime "github.com/floegence/floret/v6/runtime"
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 type floretLiveAttachmentAuthority struct {

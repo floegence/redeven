@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/gitutil"
 )
 

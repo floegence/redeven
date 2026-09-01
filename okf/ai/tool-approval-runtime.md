@@ -1,7 +1,7 @@
 ---
 type: AI Runtime Contract
 title: AI tool approval and interaction runtime
-description: Floret v6 pending interactions, effect authorization, and Flower row-local outcomes.
+description: Floret v7 pending interactions, effect authorization, and Flower row-local outcomes.
 tags: [ai, tools, approvals, flower]
 timestamp: 2026-08-14T00:00:00Z
 ---
@@ -23,8 +23,8 @@ Floret owns canonical interaction identity, atomic answer settlement, effect-att
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v6.1.1 typed runtime.
-- `redeven:internal/session/floret_v6_dependency_contract_test.go` - Enforces published-v6 adoption without local replacement.
+- `redeven:go.mod` - Pins the released Floret v7.0.1 typed runtime.
+- `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces published-v7 adoption without local replacement.
 - `redeven:internal/ai/approval_command.go` - Product approval authorization and typed mapping.
 - `redeven:internal/ai/floret_effect_authorization.go` - Revalidates product policy and transfers an invocation-bound proof exactly once.
 - `redeven:internal/ai/floret_approval_command_integration_test.go` - Exercises canonical approval and provider-correction behavior through the published runtime.

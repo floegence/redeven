@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	contextstore "github.com/floegence/redeven/internal/ai/context/store"
@@ -478,20 +478,29 @@ func (s *Service) Close() error {
 	if maintenanceDoneCh != nil {
 		<-maintenanceDoneCh
 	}
+	var floretCloseErr error
+	if closeFloret != nil {
+		floretCloseErr = closeFloret()
+	}
 	s.mu.Lock()
 	if s.threadsDB == ts {
 		s.threadsDB = nil
 	}
 	s.mu.Unlock()
-	var floretCloseErr error
-	if closeFloret != nil {
-		floretCloseErr = closeFloret()
-	}
 	var threadCloseErr error
 	if ts != nil {
 		threadCloseErr = ts.Close()
 	}
 	return errors.Join(terminalCloseErr, floretCloseErr, threadCloseErr)
+}
+
+func (s *Service) snapshotThreadStore() *threadstore.Store {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.threadsDB
 }
 
 func (s *Service) typedFloretRuntime() (flruntime.ThreadService, error) {
@@ -1598,7 +1607,7 @@ func deriveThreadRunState(endReason string, finalizationReason string, runErrorC
 			msg = strings.TrimSpace(runErr.Error())
 		}
 		if msg == "" {
-			msg = "Run ended without explicit completion."
+			msg = "Run ended without a valid terminal result."
 		}
 		return "failed", runErrorCode, userFacingRunError(runErrorCode, msg)
 	case "canceled":

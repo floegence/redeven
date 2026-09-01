@@ -781,9 +781,9 @@ export function registerEnvAIPageSendTests() {
       mockCurrentItems([{
         id: 'tool-invalid-nested', turn_id: `turn-invalid-nested-${field}`, kind: 'tool',
         activity: {
-          item_id: 'tool-invalid-nested', tool_id: 'tool-invalid-nested', tool_name: 'task_complete', kind: 'tool',
+          item_id: 'tool-invalid-nested', tool_id: 'tool-invalid-nested', tool_name: 'retired_tool', kind: 'tool',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
-          presentation: { label: 'Done', renderer: 'completion', payload: { result } },
+          presentation: { label: 'Done', renderer: 'structured', payload: { result } },
         },
       }]);
       const { host, dispose } = await renderPage();

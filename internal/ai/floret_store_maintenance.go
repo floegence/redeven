@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
-	flstorage "github.com/floegence/floret/v6/storage"
-	flstoragespi "github.com/floegence/floret/v6/storage/spi"
+	flruntime "github.com/floegence/floret/v7/runtime"
+	flstorage "github.com/floegence/floret/v7/storage"
+	flstoragespi "github.com/floegence/floret/v7/storage/spi"
 )
 
 type FloretStoreStartupClass string

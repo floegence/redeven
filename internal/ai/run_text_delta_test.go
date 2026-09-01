@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/floegence/floret/v6/identity"
-	"github.com/floegence/floret/v6/observation"
+	"github.com/floegence/floret/v7/identity"
+	"github.com/floegence/floret/v7/observation"
 )
 
 func TestTrimMarkdownDeltaOverlap_RemovesLargePrefixOverlap(t *testing.T) {

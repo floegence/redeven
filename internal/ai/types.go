@@ -14,8 +14,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/floegence/floret/v6/identity"
-	flruntime "github.com/floegence/floret/v6/runtime"
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )

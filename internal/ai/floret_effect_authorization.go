@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	flruntime "github.com/floegence/floret/v6/runtime"
-	fltools "github.com/floegence/floret/v6/tools"
+	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
 )
 
 type floretEffectAuthorizationKey struct {

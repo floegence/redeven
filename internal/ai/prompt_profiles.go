@@ -51,7 +51,7 @@ func resolvePromptProfileSpec(raw string) promptProfileSpec {
 			StrategyLines: []string{
 				"Default behavior: finish the full task in one run whenever the available tools and permissions allow it.",
 				"Keep going until the user's task is completely resolved before ending your turn.",
-				"When the task is complete, provide the final assistant response and call task_complete. A natural text stop alone does not complete the task.",
+				"When the task is complete, provide the final assistant response.",
 				"If you are unsure, use tools to verify your work before completing.",
 			},
 			InteractionLines: []string{
@@ -78,7 +78,7 @@ func resolvePromptProfileSpec(raw string) promptProfileSpec {
 			StrategyLines: []string{
 				"Default behavior: finish the delegated slice in one run whenever the available tools and permissions allow it.",
 				"Keep going until the delegated objective is completely resolved or a verified blocker remains.",
-				"When the delegated slice is complete, report the result in the assistant response and call task_complete. A natural text stop alone does not complete the task.",
+				"When the delegated slice is complete, report the result in the assistant response.",
 				"If you are unsure, use tools to verify your work before completing.",
 			},
 			InteractionLines: []string{
@@ -110,7 +110,7 @@ func resolvePromptProfileSpec(raw string) promptProfileSpec {
 			StrategyLines: []string{
 				"Default behavior: finish the full task in one run whenever the available tools and permissions allow it.",
 				"Keep going until the user's task is completely resolved before ending your turn.",
-				"When the task is complete, provide the final assistant response and call task_complete. A natural text stop alone does not complete the task.",
+				"When the task is complete, provide the final assistant response.",
 				"If you are unsure, use tools to verify your work before completing.",
 			},
 			SupportsUserInteraction:      true,
