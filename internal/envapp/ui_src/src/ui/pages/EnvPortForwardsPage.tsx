@@ -27,7 +27,7 @@ import {
   type DesktopSessionContextSnapshot,
 } from '../services/desktopSessionContext';
 import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
-import { fetchLocalApiJSON } from '../services/localApi';
+import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
 import { readUIStorageJSON, removeUIStorageItem } from '../services/uiStorage';
 import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
@@ -1195,6 +1195,18 @@ function releaseReasonLabel(candidate: ManagedReleaseCandidate, i18n: WebService
 	return i18n.t('webServices.managed.releaseReason.unavailable');
 }
 
+function releaseSourceErrorLabel(error: unknown, i18n: WebServicesI18n): string {
+	const code = error instanceof LocalApiError ? error.code : '';
+	const known = new Set([
+		'RELEASE_SOURCE_AUTH_UNAVAILABLE',
+		'RELEASE_SOURCE_AUTH_REQUIRED',
+		'RELEASE_SOURCE_RATE_LIMITED',
+		'RELEASE_SOURCE_RESPONSE_INVALID',
+		'RELEASE_SOURCE_UNAVAILABLE',
+	]);
+	return i18n.t(`webServices.managed.releaseSourceError.${known.has(code) ? code : 'unavailable'}` as EnvAppTranslationKey);
+}
+
 function releaseIdentityLabel(identity: ManagedReleaseIdentity): string {
 	return identity.version || identity.tag || identity.digest || identity.integrity || '—';
 }
@@ -1239,7 +1251,14 @@ export function ManagedReleaseCandidates(props: Readonly<{
 			</div>
 			<Show when={!props.loading} fallback={<div class="py-10 text-center text-sm text-muted-foreground">{i18n.t('common.status.loading')}</div>}>
 				<Show when={!props.error} fallback={<div class="rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive">{props.error}</div>}>
-					<div class="max-h-[22rem] space-y-2 overflow-auto pr-1">
+					<div
+						{...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+						class="max-h-[22rem] space-y-2 overflow-auto overscroll-contain pr-1 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
+						data-testid="managed-release-candidate-scroll"
+						role="region"
+						aria-label={i18n.t('webServices.managed.releaseListLabel')}
+						tabindex="0"
+					>
 						<For each={candidates()} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => (
 							<button type="button" class={cn('w-full rounded-lg border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', props.selectedID === candidate.candidate_id && 'border-primary bg-primary/[0.06]', !candidate.selectable && 'cursor-not-allowed opacity-65')} disabled={!candidate.selectable} onClick={() => props.onSelect(candidate.candidate_id)} data-release-id={candidate.candidate_id}>
 								<div class="flex items-start justify-between gap-3">
@@ -2388,7 +2407,7 @@ export function EnvPortForwardsPage() {
 			setManagedUpdatePlanRisks({});
 			setUpdateNoticeAcceptances({});
 		} catch (error) {
-			setReleaseCandidatesError(error instanceof Error ? error.message : String(error));
+			setReleaseCandidatesError(releaseSourceErrorLabel(error, i18n));
 		} finally {
 			setReleaseCandidatesLoading(false);
 		}
@@ -3557,7 +3576,7 @@ export function EnvPortForwardsPage() {
 		  </div>
 		</div>}
 	  >
-		<div class="h-full min-h-0 space-y-4 overflow-y-auto p-1 pb-3">
+		<div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 space-y-4 overflow-y-auto overscroll-contain p-1 pb-3">
 			<Show when={releasePickerTarget()?.authTokenParameter}>{(parameterName) => <div class="rounded-lg border p-3"><label class="mb-1 block text-xs font-medium" for="managed-release-token">{i18n.t('webServices.managed.registryToken', { parameter: parameterName() })}</label><Input id="managed-release-token" type="password" autocomplete="off" value={releaseSecretParameters()[parameterName()] ?? ''} onInput={(event) => setReleaseSecretParameters((current) => ({ ...current, [parameterName()]: event.currentTarget.value }))} /><p class="mt-1 text-[11px] text-muted-foreground">{i18n.t('webServices.managed.registryTokenDescription')}</p><Show when={!releaseCandidates() && !releaseCandidatesLoading()}><p class="mt-2 text-[11px] text-foreground">{i18n.t('webServices.managed.releaseTokenRefreshPrompt')}</p></Show></div>}</Show>
 			<Show when={releasePickerTarget()?.kind === 'service'}>
 			  <button type="button" class={cn('w-full rounded-lg border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', selectedReleaseID() === '' && 'border-primary bg-primary/[0.06]')} onClick={() => { setSelectedReleaseID(''); setManagedUpdatePlan(null); setManagedUpdatePlanError(''); }} data-testid="managed-release-keep-current">

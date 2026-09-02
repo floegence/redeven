@@ -260,12 +260,14 @@ func (m *Manager) discoverOCICandidates(ctx context.Context, spec TemplateSpec, 
 	reference := releaseImageRepository(spec.Container.Image)
 	registryHost := releaseRegistryHost(reference)
 	credential := containerengine.RegistryCredential{}
+	var credentialErr error
 	if m.containers != nil {
 		value, err := m.containers.RegistryCredential(ctx, containerengine.EngineDocker, registryHost)
 		if err != nil {
-			return nil, serviceError("RELEASE_SOURCE_AUTH_UNAVAILABLE", "Container Registry credentials could not be read from the current engine store.", 503, true, err)
+			credentialErr = err
+		} else {
+			credential = value
 		}
-		credential = value
 	}
 	discovery := containerengine.OCIReleaseDiscovery{Client: m.releaseHTTPClient()}
 	items, err := discovery.Discover(ctx, containerengine.OCIReleaseDiscoveryRequest{Reference: reference, PlatformOS: "linux", PlatformArch: runtime.GOARCH, Credential: credential})
@@ -274,6 +276,9 @@ func (m *Manager) discoverOCICandidates(ctx context.Context, spec TemplateSpec, 
 		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 			return nil, err
 		case errors.Is(err, containerengine.ErrImageAccessDenied):
+			if credentialErr != nil {
+				return nil, serviceError("RELEASE_SOURCE_AUTH_UNAVAILABLE", "Container Registry credentials could not be read from the current engine store.", 503, true, credentialErr)
+			}
 			return nil, serviceError("RELEASE_SOURCE_AUTH_REQUIRED", "The Container Registry rejected its current engine credentials.", 401, false, err)
 		case errors.Is(err, containerengine.ErrImageRateLimited):
 			return nil, serviceError("RELEASE_SOURCE_RATE_LIMITED", "The Container Registry rate limit was reached.", 429, true, err)

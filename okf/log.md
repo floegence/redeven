@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Usable Managed Service version drawer**: OCI release discovery now treats
+  container-engine credentials as optional until the Registry actually requires
+  authentication, so a broken or empty credential helper cannot block public
+  anonymous metadata. The fixed-footer drawer and candidate list are explicit
+  local wheel viewports, and stable release-source codes produce localized
+  diagnostics instead of backend English text.
 * **Resumed-Run startup migration**: Redeven now consumes Floret v7.1.2, whose
   v8-to-v9 migration follows canonical Run changes after interaction resumes
   within one Turn. Valid Agent data opens through the existing single runtime

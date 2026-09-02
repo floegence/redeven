@@ -3304,6 +3304,15 @@
 	  "releaseCheckedAt": "Dernière vérification",
 	  "releaseDirectSource": "Lu directement depuis le Registry configuré",
 	  "releaseCheckStale": "La dernière vérification a échoué. Le dernier résultat valide est affiché.",
+	  "releaseListLabel": "Versions disponibles",
+	  "releaseSourceError": {
+		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven n’a pas pu lire les identifiants du Registry enregistrés par le moteur de conteneurs. Vérifiez les réglages d’identifiants Docker ou Podman, puis actualisez.",
+		"RELEASE_SOURCE_AUTH_REQUIRED": "Le Registry exige des identifiants valides. Connectez-vous avec Docker ou Podman, ou fournissez le jeton Secret configuré, puis actualisez.",
+		"RELEASE_SOURCE_RATE_LIMITED": "La limite de requêtes du Registry est atteinte. Patientez un instant, puis actualisez.",
+		"RELEASE_SOURCE_RESPONSE_INVALID": "Le Registry a renvoyé des informations de version non valides. Actualisez plus tard ou vérifiez la source configurée.",
+		"RELEASE_SOURCE_UNAVAILABLE": "Redeven n’a pas pu lire les versions depuis le Registry. Vérifiez le réseau et la source configurée, puis actualisez.",
+		"unavailable": "Redeven n’a pas pu charger les versions disponibles. Vérifiez le réseau, puis actualisez."
+	  },
       "releaseSearch": "Rechercher des versions ou des tags",
       "releaseFilterLabel": "Filtrer les versions",
       "releaseFilter": { "all": "Toutes", "stable": "Stable", "preview": "Aperçu" },

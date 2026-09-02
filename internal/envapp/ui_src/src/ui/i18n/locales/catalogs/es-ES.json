@@ -3304,6 +3304,15 @@
 	  "releaseCheckedAt": "Última comprobación",
 	  "releaseDirectSource": "Leído directamente del Registry configurado",
 	  "releaseCheckStale": "La última comprobación falló. Se muestra el último resultado correcto.",
+	  "releaseListLabel": "Versiones disponibles",
+	  "releaseSourceError": {
+		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven no pudo leer las credenciales del Registry guardadas por el motor de contenedores. Revisa la configuración de credenciales de Docker o Podman y actualiza.",
+		"RELEASE_SOURCE_AUTH_REQUIRED": "El Registry requiere credenciales válidas. Inicia sesión con Docker o Podman, o proporciona el token Secret configurado, y actualiza.",
+		"RELEASE_SOURCE_RATE_LIMITED": "Se alcanzó el límite de solicitudes del Registry. Espera un momento y actualiza.",
+		"RELEASE_SOURCE_RESPONSE_INVALID": "El Registry devolvió información de versiones no válida. Actualiza más tarde o revisa la fuente configurada.",
+		"RELEASE_SOURCE_UNAVAILABLE": "Redeven no pudo leer las versiones del Registry. Revisa la red y la fuente configurada y, después, actualiza.",
+		"unavailable": "Redeven no pudo cargar las versiones disponibles. Revisa la red y actualiza."
+	  },
       "releaseSearch": "Buscar versiones o etiquetas",
       "releaseFilterLabel": "Filtrar versiones",
       "releaseFilter": { "all": "Todas", "stable": "Estable", "preview": "Preliminar" },
