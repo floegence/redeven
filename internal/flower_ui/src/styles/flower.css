@@ -6021,13 +6021,6 @@ html.dark .flower-component-shell {
   text-decoration-color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
 }
 
-.flower-activity-todo-note {
-  color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
-  font-weight: 560;
-  font-size: 0.6875rem;
-  overflow-wrap: anywhere;
-}
-
 .flower-activity-todo-badge {
   display: inline-flex;
   min-height: 1.125rem;
