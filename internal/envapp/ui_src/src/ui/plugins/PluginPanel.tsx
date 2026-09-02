@@ -295,7 +295,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
 
   const panelContents = () => (
     <>
-            <header class={cn('shrink-0 border-b', isWorkbenchPopup() ? 'px-2.5 py-2' : 'px-4 py-3 sm:px-5')}>
+            <header class={cn('shrink-0', isWorkbenchPopup() ? 'px-2.5 py-2' : 'border-b px-4 py-3 sm:px-5')}>
               <div class={cn('flex items-center', isWorkbenchPopup() ? 'gap-2' : 'gap-3')}>
                 <button type="button" data-plugin-center-market-action aria-label={i18n.t('uiCopy.plugin.centerTitle')} title={i18n.t('uiCopy.plugin.centerTitle')} class="order-last inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none sm:h-8 sm:w-8" onClick={() => { props.onOpenCenter(); props.onClose(); }}>
                   <Package class="h-4 w-4" />
@@ -432,9 +432,9 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               </Show>
             </div>
 
-            <Show when={centerTile()}>
-              <footer class={cn('flex shrink-0 items-center justify-between border-t bg-muted/25', isWorkbenchPopup() ? 'gap-2 px-3 py-2' : 'gap-3 px-4 py-3 sm:px-5')}>
-                  <div class={cn('min-w-0 text-muted-foreground', isWorkbenchPopup() ? 'text-[10px] leading-4' : 'text-xs leading-5')}>
+            <Show when={!isWorkbenchPopup() && centerTile()}>
+              <footer class="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/25 px-4 py-3 sm:px-5">
+                  <div class="min-w-0 text-xs leading-5 text-muted-foreground">
                     {i18n.t('uiCopy.plugin.launcherSummary', { count: pluginTiles().length, attention: attentionCount() })}
                   </div>
               </footer>
@@ -463,7 +463,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             aria-label={i18n.t('uiCopy.plugin.launcherTitle')}
             aria-describedby="plugin-launcher-description"
             class={cn(
-              'plugin-panel-surface redeven-plugin-motion flex max-h-[min(380px,calc(100dvh-120px))] w-[min(320px,calc(100vw-24px))] min-h-0 flex-col overflow-hidden rounded-lg text-foreground',
+              'plugin-panel-surface redeven-plugin-motion flex max-h-[min(380px,calc(100dvh-120px))] w-[min(320px,calc(100vw-24px))] min-h-0 flex-col overflow-hidden text-foreground',
             )}
           >
             <div data-plugin-panel-content class="redeven-plugin-motion flex min-h-0 flex-1 flex-col">
