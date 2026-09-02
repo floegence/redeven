@@ -197,6 +197,9 @@ describe('Flower activity running sheen', () => {
     const dropdownRule = cssRule(css, '.flower-subagents-dropdown');
     const dropdownRowRule = cssRule(css, '.flower-subagent-dropdown-row');
     const dropdownRowHoverRule = cssRule(css, '.flower-subagent-dropdown-row:hover');
+    const dropdownRunningNameRule = cssRule(css, '.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name');
+    const dropdownRunningStatusRule = cssRule(css, '.flower-subagent-dropdown-row-running .flower-subagent-dropdown-status-label');
+    const runningTextRule = cssRule(css, '.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,\n.flower-subagent-status-label-running .flower-subagent-status-text');
     const thinkingOrbRule = cssRule(css, '.flower-subagent-thinking-orb');
     const detailGeometryRule = cssRule(css, "[data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window)");
     const detailWindowRule = cssRule(css, '.flower-subagent-detail-window');
@@ -204,7 +207,7 @@ describe('Flower activity running sheen', () => {
     const detailOverviewRule = cssRule(css, '.flower-subagent-detail-overview');
     const detailSignalRule = cssRule(css, '.flower-subagent-detail-signal');
     const runningStatusRule = cssRule(css, '.flower-subagent-status-label-running');
-    const runningStatusShimmerRule = cssRule(css, '.flower-subagent-status-label-running .flower-subagent-status-text');
+    const runningStatusToneRule = cssRule(css, '.flower-subagent-status-label-running .flower-subagent-status-text');
     const detailScrollRule = cssRule(css, '.flower-subagent-detail-scroll-to-latest');
 
     expect(shellRule).toContain('isolation: isolate');
@@ -221,6 +224,10 @@ describe('Flower activity running sheen', () => {
     expect(dropdownRule).toContain('animation: flower-subagents-dropdown-enter 120ms');
     expect(dropdownRowRule).toContain('min-height: 3.875rem');
     expect(dropdownRowHoverRule).not.toContain('transform:');
+    expect(dropdownRunningNameRule).toContain('--flower-subagent-running-text-base: var(--foreground)');
+    expect(dropdownRunningStatusRule).toContain('color: var(--primary)');
+    expect(runningTextRule).toContain('background-clip: text');
+    expect(runningTextRule).toContain('animation: flower-activity-title-sweep 2.6s ease-out infinite');
     expect(css).not.toContain('flower-running-text-shimmer');
     expect(css).toContain(".flower-subagents-dropdown-metric[data-tone='completed']");
     expect(css).toContain('.flower-subagents-dropdown-group-header');
@@ -247,13 +254,12 @@ describe('Flower activity running sheen', () => {
     expect(detailOverviewRule).toContain('background: var(--flower-subagent-window-surface-band)');
     expect(detailSignalRule).toContain('border-radius: 9999px');
     expect(runningStatusRule).toContain('color: var(--primary)');
-    expect(runningStatusShimmerRule).toContain('background-clip: text');
-    expect(runningStatusShimmerRule).toContain('animation: flower-activity-title-sweep 2.6s ease-out infinite');
+    expect(runningStatusToneRule).toContain('--flower-subagent-running-text-base: var(--primary)');
     expect(detailScrollRule).toContain('position: sticky');
     expect(css).not.toContain('.flower-subagent-detail-bottom-dock');
     expect(css).not.toContain('.flower-subagent-detail-bottom-track');
     expect(css).not.toContain('.flower-subagent-status-loader');
-    expect(css).toContain(".flower-subagent-status-label-running .flower-subagent-status-text {\n    animation: none !important;");
+    expect(css).toContain('.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,\n  .flower-subagent-status-label-running .flower-subagent-status-text {\n    animation: none !important;');
     expect(css).not.toContain('.flower-subagent-detail-tail-pulse');
     expect(css).not.toContain('.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('z-index: 50');

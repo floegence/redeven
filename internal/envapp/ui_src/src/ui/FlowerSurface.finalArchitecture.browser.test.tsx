@@ -245,8 +245,12 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(document.querySelector(`[data-flower-subagent-row="0"]`)));
     const subagentRow = document.querySelector(`[data-flower-subagent-row="0"]`) as HTMLButtonElement;
     const rowOrb = subagentRow.querySelector<HTMLCanvasElement>('[data-thinking-orb-state="composing"]');
+    const rowTitle = subagentRow.querySelector('.flower-subagent-dropdown-name') as HTMLElement;
+    const rowStatus = subagentRow.querySelector('.flower-subagent-dropdown-status-label') as HTMLElement;
+    const rowStatusColor = getComputedStyle(rowStatus).color;
     expect(rowOrb).not.toBeNull();
     expect(rowOrb?.classList.contains('flower-subagent-thinking-orb')).toBe(true);
+    expect(getComputedStyle(rowTitle).animationName).toBe('flower-activity-title-sweep');
     subagentRow.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
 
@@ -260,6 +264,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(getComputedStyle(detailSignal).borderRadius).toBe('9999px');
     expect(statusText.textContent).toBe('Running');
     expect(getComputedStyle(statusText).animationName).toBe('flower-activity-title-sweep');
+    expect(rowStatusColor).toBe(getComputedStyle(statusText).color);
 
     expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
     stream.push({

@@ -8408,6 +8408,11 @@ button.flower-attachment-preview-trigger:disabled {
   letter-spacing: 0;
 }
 
+.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name {
+  --flower-subagent-running-text-base: var(--foreground);
+  --flower-subagent-running-text-highlight: color-mix(in srgb, var(--primary) 58%, var(--foreground) 42%);
+}
+
 .flower-subagent-dropdown-description {
   min-width: 0;
   color: color-mix(in srgb, var(--muted-foreground) 84%, transparent);
@@ -8457,7 +8462,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-dropdown-row-running .flower-subagent-dropdown-status-label {
-  color: color-mix(in srgb, var(--flower-subagents-active) 82%, var(--foreground) 18%);
+  color: var(--primary);
 }
 
 .flower-subagent-dropdown-row-waiting_input .flower-subagent-dropdown-status-label {
@@ -8682,14 +8687,20 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-status-label-running .flower-subagent-status-text {
-  color: var(--primary);
+  --flower-subagent-running-text-base: var(--primary);
+  --flower-subagent-running-text-highlight: color-mix(in srgb, var(--primary) 34%, var(--flower-subagent-window-text) 66%);
+}
+
+.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,
+.flower-subagent-status-label-running .flower-subagent-status-text {
+  color: var(--flower-subagent-running-text-base);
   background: linear-gradient(
     90deg,
-    var(--primary) 0%,
-    var(--primary) 40%,
-    color-mix(in srgb, var(--primary) 34%, var(--flower-subagent-window-text) 66%) 50%,
-    var(--primary) 60%,
-    var(--primary) 100%
+    var(--flower-subagent-running-text-base) 0%,
+    var(--flower-subagent-running-text-base) 40%,
+    var(--flower-subagent-running-text-highlight) 50%,
+    var(--flower-subagent-running-text-base) 60%,
+    var(--flower-subagent-running-text-base) 100%
   );
   background-position: 100% 0;
   background-size: 250% 100%;
@@ -10149,6 +10160,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     content: none !important;
   }
 
+  .flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,
   .flower-subagent-status-label-running .flower-subagent-status-text {
     animation: none !important;
     background: none !important;
@@ -10185,6 +10197,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     content: none;
   }
 
+  .flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,
   .flower-subagent-status-label-running .flower-subagent-status-text {
     animation: none;
     background: none;
