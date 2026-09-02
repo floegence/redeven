@@ -1,6 +1,14 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Stable live SubAgent detail**: The parent workspace stream now forwards
+  every safely projected child `ThreadView` as `subagent_current`, independently
+  from lifecycle-driven membership replacement. One stable floating-window
+  selection orders HTTP and SSE by canonical parent-child identity and
+  `view_version`, survives temporary inventory omission and initial failure,
+  and refreshes once after reconnect. Fake pagination, detail timeline DTOs,
+  polling, load-more state, syncing copy, pulse animation, and the flashing
+  bottom status lane are removed.
 * **Stable hosted effect authorization**: Redeven now consumes Floret v7.1.0
   and binds one defensive copy of correlation and permission-snapshot labels to
   every production Agent. Fresh runs, retries, Ask User continuations, and

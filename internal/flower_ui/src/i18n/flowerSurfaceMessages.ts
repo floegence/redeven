@@ -338,8 +338,6 @@ export const flowerSurfaceEnUS = {
     completedLabel: 'Ended',
     threadIDLabel: 'Thread',
     lastMessageLabel: 'Latest handoff',
-    loadMore: 'Load more',
-    loadingMore: 'Loading...',
     detailTimelineLabel: 'Subagent execution record',
     detailInstructionLabel: 'Delegated instruction',
     detailConstraintsLabel: 'Runtime constraints',
@@ -347,7 +345,6 @@ export const flowerSurfaceEnUS = {
     detailActivityLabel: '{count} operations',
     detailOutcomeLabel: 'Outcome',
     detailRetry: 'Retry',
-    detailSyncing: 'Syncing latest activity',
     unavailableThread: 'Thread not available',
     readOnlyComposerLabel: 'Read only · Managed by parent thread',
     status: {

@@ -689,7 +689,7 @@ func (service *Service) publishFlowerSubagentsPatch(ctx context.Context, endpoin
 	service.broadcastFlowerSubagentsPatch(endpointID, parentThreadID, items)
 }
 
-func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Meta, parentThreadID, childThreadID string, afterOrdinal int64, limit int) (*FlowerSubagentDetailResponse, error) {
+func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Meta, parentThreadID, childThreadID string) (*FlowerSubagentDetailResponse, error) {
 	if service == nil {
 		return nil, errors.New("nil service")
 	}
@@ -697,7 +697,7 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 		return nil, err
 	}
 	parentThreadID, childThreadID = strings.TrimSpace(parentThreadID), strings.TrimSpace(childThreadID)
-	if parentThreadID == "" || childThreadID == "" || afterOrdinal < 0 || strings.TrimSpace(meta.EndpointID) == "" {
+	if parentThreadID == "" || childThreadID == "" || strings.TrimSpace(meta.EndpointID) == "" {
 		return nil, errors.New("invalid request")
 	}
 	if err := service.requireEndpointThreadAuthority(ctx, meta.EndpointID, parentThreadID); err != nil {
@@ -723,40 +723,9 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 		return nil, err
 	}
 	snapshot := subagentSnapshotFromThread(*summary, view)
-	messages := make([]FlowerTimelineMessage, 0, len(view.Items))
-	rows := make([]FlowerSubagentTimelineRow, 0, len(view.Items))
-	for _, item := range view.Items {
-		if item.Kind != flruntime.ThreadItemUser && item.Kind != flruntime.ThreadItemAssistant {
-			continue
-		}
-		role := "user"
-		if item.Kind == flruntime.ThreadItemAssistant {
-			role = "assistant"
-		}
-		message := FlowerTimelineMessage{
-			MessageID: item.ID, ThreadID: childThreadID, TurnID: item.TurnID.String(), Role: role,
-			Content: item.Text, Status: "success", Live: false, ActiveCursor: false,
-		}
-		messages = append(messages, message)
-		rows = append(rows, FlowerSubagentTimelineRow{
-			Ordinal: int64(len(rows) + 1), Kind: "message", Type: role,
-			Message: &FlowerSubagentDetailMessage{Role: role, Text: item.Text, Preview: truncateRunes(item.Text, 240)},
-		})
-	}
-	if limit <= 0 || limit > 500 {
-		limit = 200
-	}
-	start := int(afterOrdinal)
-	if start > len(rows) {
-		start = len(rows)
-	}
-	end := start + limit
-	if end > len(rows) {
-		end = len(rows)
-	}
 	return &FlowerSubagentDetailResponse{
-		Summary: flowerSubagentSummaryFromSnapshot(snapshot), Messages: messages, Timeline: rows[start:end],
-		NextOrdinal: int64(end), HasMore: end < len(rows), RetainedFrom: 0, GeneratedAtMs: time.Now().UnixMilli(),
+		Summary: flowerSubagentSummaryFromSnapshot(snapshot),
+		Current: view,
 	}, nil
 }
 

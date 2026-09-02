@@ -1014,8 +1014,6 @@
       "completedLabel": "Finalizados",
       "threadIDLabel": "Hilo",
       "lastMessageLabel": "Último traspaso",
-      "loadMore": "Cargar más",
-      "loadingMore": "Cargando...",
       "detailTimelineLabel": "Registro de ejecución del subagente",
       "detailInstructionLabel": "Instrucción delegada",
       "detailConstraintsLabel": "Restricciones de ejecución",
@@ -1023,7 +1021,6 @@
       "detailActivityLabel": "{count} operaciones",
       "detailOutcomeLabel": "Resultado",
       "detailRetry": "Reintentar",
-      "detailSyncing": "Sincronizando la actividad más reciente",
       "unavailableThread": "Hilo no disponible",
       "readOnlyComposerLabel": "Solo lectura · Gestionado por el hilo padre",
       "status": {
@@ -4258,8 +4255,6 @@
       "completedLabel": "Finalizados",
       "threadIDLabel": "Hilo",
       "lastMessageLabel": "Último traspaso",
-      "loadMore": "Cargar más",
-      "loadingMore": "Cargando...",
       "detailTimelineLabel": "Registro de ejecución del subagente",
       "detailInstructionLabel": "Instrucción delegada",
       "detailConstraintsLabel": "Restricciones de ejecución",
@@ -4267,7 +4262,6 @@
       "detailActivityLabel": "Operaciones: {count}",
       "detailOutcomeLabel": "Resultado",
       "detailRetry": "Reintentar",
-      "detailSyncing": "Sincronizando la actividad más reciente",
       "unavailableThread": "Hilo no disponible",
       "readOnlyComposerLabel": "Solo lectura · Gestionado por el hilo padre",
       "status": {

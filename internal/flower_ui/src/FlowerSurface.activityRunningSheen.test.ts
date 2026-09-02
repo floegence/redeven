@@ -205,7 +205,6 @@ describe('Flower activity running sheen', () => {
     const detailSignalRule = cssRule(css, '.flower-subagent-detail-signal');
     const runningStatusRule = cssRule(css, '.flower-subagent-status-label-running');
     const runningStatusShimmerRule = cssRule(css, '.flower-subagent-status-label-running .flower-subagent-status-text');
-    const detailDockRule = cssRule(css, '.flower-subagent-detail-bottom-dock');
     const detailScrollRule = cssRule(css, '.flower-subagent-detail-scroll-to-latest');
 
     expect(shellRule).toContain('isolation: isolate');
@@ -250,16 +249,12 @@ describe('Flower activity running sheen', () => {
     expect(runningStatusRule).toContain('color: var(--primary)');
     expect(runningStatusShimmerRule).toContain('background-clip: text');
     expect(runningStatusShimmerRule).toContain('animation: flower-activity-title-sweep 2.6s ease-out infinite');
-    expect(detailDockRule).toContain('border-top:');
-    expect(detailDockRule).toContain('align-items: center');
-    expect(detailDockRule).toContain('background: var(--flower-subagent-window-surface-band)');
-    expect(detailDockRule).not.toContain('space-between');
     expect(detailScrollRule).toContain('position: sticky');
-    expect(cssRule(css, '.flower-subagent-detail-bottom-track')).toContain('flex: 1 1 auto');
-    expect(cssRule(css, '.flower-subagent-detail-bottom-track')).not.toContain('flex-end');
+    expect(css).not.toContain('.flower-subagent-detail-bottom-dock');
+    expect(css).not.toContain('.flower-subagent-detail-bottom-track');
     expect(css).not.toContain('.flower-subagent-status-loader');
     expect(css).toContain(".flower-subagent-status-label-running .flower-subagent-status-text {\n    animation: none !important;");
-    expect(css).toContain('.flower-subagent-detail-tail-pulse');
+    expect(css).not.toContain('.flower-subagent-detail-tail-pulse');
     expect(css).not.toContain('.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('z-index: 50');
     expect(detailScrollRule).not.toContain('z-index: ');

@@ -344,8 +344,6 @@
       "completedLabel": "Encerrados",
       "threadIDLabel": "Conversa",
       "lastMessageLabel": "Última passagem",
-      "loadMore": "Carregar mais",
-      "loadingMore": "Carregando...",
       "detailTimelineLabel": "Registro de execução do subagente",
       "detailInstructionLabel": "Instrução delegada",
       "detailConstraintsLabel": "Restrições de execução",
@@ -353,7 +351,6 @@
       "detailActivityLabel": "Operações: {count}",
       "detailOutcomeLabel": "Resultado",
       "detailRetry": "Tentar novamente",
-      "detailSyncing": "Sincronizando a atividade mais recente",
       "unavailableThread": "Conversa indisponível",
       "readOnlyComposerLabel": "Somente leitura · Gerenciado pelo encadeamento de conversa pai",
       "status": {

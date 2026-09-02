@@ -1151,7 +1151,7 @@ func TestFloretLegacyThreadTranscriptAPIsAreNotUsedInProduction(t *testing.T) {
 	}
 }
 
-func TestFloretDetailBoundaryDoesNotReadRawOrRebuildSubagentActivity(t *testing.T) {
+func TestFloretDetailBoundaryUsesCurrentWithoutRawRebuild(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -1186,7 +1186,7 @@ func TestFloretDetailBoundaryDoesNotReadRawOrRebuildSubagentActivity(t *testing.
 		"floretActivity" + "ForToolResult(nil",
 	} {
 		if strings.Contains(content, marker) {
-			t.Fatalf("subagents_floret.go must consume Floret detail activity_timeline instead of retaining marker %q", marker)
+			t.Fatalf("subagents_floret.go must consume the Floret current view without retaining raw rebuild marker %q", marker)
 		}
 	}
 }

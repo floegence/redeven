@@ -22,11 +22,10 @@ const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (
   return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
 };
 import type {
-  FlowerActivityItem,
-  FlowerActivityTimelineBlock,
-  FlowerApprovalCommandResult,
-	FlowerChatMessage,
-  FlowerInputRequest,
+	FlowerActivityItem,
+	FlowerActivityTimelineBlock,
+	FlowerApprovalCommandResult,
+	FlowerInputRequest,
   FlowerRouterDecision,
   FlowerSettingsDraft,
   FlowerSurfaceAdapter,
@@ -675,181 +674,49 @@ export function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}):
   };
 }
 
-export function subagentActivityMessage(
-	block: FlowerActivityTimelineBlock,
-	overrides: Partial<FlowerChatMessage> = {},
-): FlowerChatMessage {
-	return {
-		id: 'child-turn-activity',
-		turn_id: 'child-turn-activity',
-		thread_id: 'thread-child-review',
-		run_id: block.run_id,
-		turn_ordinal: 2,
-		role: 'assistant',
-		content: '',
-		status: 'complete',
-		created_at_ms: 150,
-		blocks: [block],
-		...overrides,
-	};
-}
-
 export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): FlowerSubagentDetail {
+  const summary = overrides.summary ?? subagentSummary();
   return {
-    summary: {
-      parent_thread_id: 'thread-parent-subagents',
-      thread_id: 'thread-child-review',
-      task_name: 'Review API contract',
-      agent_type: 'reviewer',
-      status: 'running',
-      last_message: 'Reading the API boundary.',
-      can_send_input: false,
-      can_interrupt: true,
-      can_close: true,
-      created_at_ms: 100,
-		updated_at_ms: 160,
-	},
-	messages: [
-		{
-			id: 'child-user-follow-up',
-			turn_id: 'child-turn-1',
-			thread_id: 'thread-child-review',
-			run_id: 'child-run-1',
-			turn_ordinal: 1,
-			role: 'user',
-			content: 'Review the API boundary.',
-			status: 'complete',
-			created_at_ms: 110,
-		},
-		{
-			id: 'child-turn-1',
-			turn_id: 'child-turn-1',
-			thread_id: 'thread-child-review',
-			run_id: 'child-run-1',
-			turn_ordinal: 1,
-			role: 'assistant',
-			content: 'Child handoff ready.',
-			status: 'complete',
-			created_at_ms: 160,
-		},
-		subagentActivityMessage(activityTimeline({
-			thread_id: 'thread-child-review',
-			run_id: 'subagent:thread-child-review',
-			turn_id: 'child-canonical',
-			items: [
-				activityItem({
-					item_id: 'call-terminal-running',
-					tool_id: 'call-terminal-running',
-					tool_name: 'terminal.exec',
-					renderer: 'terminal',
-					label: 'go test ./internal/ui',
-					status: 'running',
-					payload: { command: 'go test ./internal/ui', status: 'running' },
-				}),
-				activityItem({
-					item_id: 'call-terminal',
-					tool_id: 'call-terminal',
-					tool_name: 'terminal.exec',
-					renderer: 'terminal',
-					label: 'go test ./internal/ai',
-					status: 'success',
-					payload: {
-						command: 'go test ./internal/ai',
-						status: 'success',
-						output: 'PASS ./internal/ai',
-						first_seq: 1,
-						last_seq: 1,
-						latest_seq: 1,
-						has_more: false,
-						truncated: false,
-						content_ref: 'hash-tool-result',
-					},
-				}),
-			],
-		})),
-	],
-	timeline: [
-      {
-        ordinal: 1,
-        kind: 'user_message',
-        created_at_ms: 110,
-        message: {
-          role: 'user',
-          text: 'Review the API boundary.',
-        },
-      },
-      {
-        ordinal: 2,
-        kind: 'tool_call',
-        created_at_ms: 130,
-        tool_call: {
-          id: 'call-terminal-running',
-          name: 'terminal.exec',
-          args_preview: 'go test ./internal/ui',
-        },
-      },
-      {
-        ordinal: 3,
-        kind: 'tool_result',
-        created_at_ms: 140,
-        tool_result: {
-          call_id: 'call-terminal',
-          tool_name: 'terminal.exec',
-          preview: 'PASS ./internal/ai',
-          truncated: false,
-          content_sha256: 'hash-tool-result',
-        },
-      },
-      {
-        ordinal: 4,
-        kind: 'assistant_message',
-        created_at_ms: 160,
-        message: {
-          role: 'assistant',
-          text: 'Child handoff ready.',
-        },
-      },
-    ],
-    activity: activityTimeline({
-      thread_id: 'thread-child-review',
-      run_id: 'subagent:thread-child-review',
-      turn_id: 'child-canonical',
+    summary,
+    current: {
+      thread_id: summary.thread_id,
+      view_version: 7,
+      activity: 'active',
+      turn_id: 'child-turn-1',
+      run_id: 'child-run-1',
       items: [
-        activityItem({
-          item_id: 'call-terminal-running',
-          tool_id: 'call-terminal-running',
-          tool_name: 'terminal.exec',
-          renderer: 'terminal',
-          label: 'go test ./internal/ui',
-          status: 'running',
-          payload: {
-            command: 'go test ./internal/ui',
-            status: 'running',
-          },
-        }),
-        activityItem({
-          item_id: 'call-terminal',
-          tool_id: 'call-terminal',
-          tool_name: 'terminal.exec',
-          renderer: 'terminal',
-          label: 'go test ./internal/ai',
-          status: 'success',
-          payload: {
-            command: 'go test ./internal/ai',
-            status: 'success',
-			output: 'PASS ./internal/ai',
-			first_seq: 1,
-			last_seq: 1,
-			latest_seq: 1,
-			has_more: false,
-			truncated: false,
-            content_ref: 'hash-tool-result',
-          },
-        }),
+        {
+          id: 'child-user-follow-up', turn_id: 'child-turn-1', run_id: 'child-run-1', ordinal: 1,
+          kind: 'user', text: 'Review the API boundary.', created_at: new Date(110).toISOString(),
+        },
+        {
+          id: 'call-terminal-running', turn_id: 'child-turn-1', run_id: 'child-run-1', ordinal: 2,
+          kind: 'tool', created_at: new Date(130).toISOString(),
+          activity: { ...activityItem({
+            item_id: 'call-terminal-running', tool_id: 'call-terminal-running', tool_name: 'terminal.exec',
+            renderer: 'terminal', label: 'go test ./internal/ui', status: 'running',
+            payload: { command: 'go test ./internal/ui', status: 'running' },
+          }) },
+        },
+        {
+          id: 'call-terminal', turn_id: 'child-turn-1', run_id: 'child-run-1', ordinal: 3,
+          kind: 'tool', created_at: new Date(140).toISOString(),
+          activity: { ...activityItem({
+            item_id: 'call-terminal', tool_id: 'call-terminal', tool_name: 'terminal.exec',
+            renderer: 'terminal', label: 'go test ./internal/ai', status: 'success',
+            payload: {
+              command: 'go test ./internal/ai', status: 'success', output: 'PASS ./internal/ai',
+              first_seq: 1, last_seq: 1, latest_seq: 1, has_more: false, truncated: false,
+              content_ref: 'hash-tool-result',
+            },
+          }) },
+        },
+        {
+          id: 'child-turn-1', turn_id: 'child-turn-1', run_id: 'child-run-1', ordinal: 4,
+          kind: 'assistant', text: 'Child handoff ready.', created_at: new Date(160).toISOString(), live: true,
+        },
       ],
-    }),
-    next_ordinal: 5,
-    generated_at_ms: 170,
+    },
     ...overrides,
   };
 }

@@ -542,93 +542,9 @@ export type FlowerSubagentSummary = Readonly<{
   updated_at_ms?: number;
 }>;
 
-export type FlowerSubagentDetailMessage = Readonly<{
-  role?: string;
-  text?: string;
-  preview?: string;
-}>;
-
-export type FlowerSubagentToolCallView = Readonly<{
-  id?: string;
-  name?: string;
-  args_preview?: string;
-  args_hash?: string;
-}>;
-
-export type FlowerSubagentToolResultView = Readonly<{
-  call_id?: string;
-  tool_name?: string;
-  status?: string;
-  preview?: string;
-  truncated?: boolean;
-  original_bytes?: number;
-  visible_bytes?: number;
-  original_lines?: number;
-  visible_lines?: number;
-  strategy?: string;
-  content_sha256?: string;
-}>;
-
-export type FlowerSubagentGenericView = Readonly<{
-  title?: string;
-  body?: string;
-  metadata?: Readonly<Record<string, string>>;
-}>;
-
-export type FlowerSubagentApprovalView = Readonly<{
-  state?: string;
-  tool_id?: string;
-  tool_name?: string;
-  tool_kind?: string;
-  args_hash?: string;
-  reason?: string;
-  metadata?: Readonly<Record<string, string>>;
-}>;
-
-export type FlowerSubagentTurnMarkerView = Readonly<{
-  status?: string;
-  metadata?: Readonly<Record<string, string>>;
-}>;
-
-export type FlowerSubagentCompactionView = Readonly<{
-  summary_schema_version?: string;
-  summary?: string;
-  trigger?: string;
-  reason?: string;
-  phase?: string;
-  tokens_before?: number;
-  tokens_after_estimate?: number;
-  metadata?: Readonly<Record<string, string>>;
-}>;
-
-export type FlowerSubagentTimelineRow = Readonly<{
-  ordinal: number;
-  kind: string;
-  type?: string;
-  created_at_ms: number;
-  message?: FlowerSubagentDetailMessage;
-  tool_call?: FlowerSubagentToolCallView;
-  tool_result?: FlowerSubagentToolResultView;
-  approval?: FlowerSubagentApprovalView;
-  turn_marker?: FlowerSubagentTurnMarkerView;
-  compaction?: FlowerSubagentCompactionView;
-  generic?: FlowerSubagentGenericView;
-  error?: string;
-  metadata?: Readonly<Record<string, string>>;
-}>;
-
 export type FlowerSubagentDetail = Readonly<{
   summary: FlowerSubagentSummary;
-  messages: readonly FlowerChatMessage[];
-  timeline: readonly FlowerSubagentTimelineRow[];
-  activity?: FlowerActivityTimelineBlock;
-  context_usage?: FlowerContextUsage | null;
-  context_compactions?: readonly FlowerContextCompaction[];
-  timeline_decorations?: readonly FlowerTimelineDecoration[];
-  next_ordinal?: number;
-  has_more?: boolean;
-  retained_from?: number;
-  generated_at_ms: number;
+  current: FlowerRuntimeCurrentView;
 }>;
 
 export type FlowerSafeTarget = Readonly<{
@@ -800,6 +716,8 @@ export type FlowerLiveStreamEnvelope = Readonly<{
   summaries?: readonly FlowerThreadSnapshot[];
   /** Typed current-state replacement from Floret; never contains replay metadata. */
   current?: FlowerRuntimeCurrentView;
+  /** Parent-scoped typed current-state replacement for one SubAgent thread. */
+  subagent_current?: FlowerRuntimeCurrentView;
   /** Full replacement of the parent thread's canonical Subagent inventory. */
   subagents?: readonly FlowerSubagentSummary[];
   context_usage?: FlowerContextUsage | null;
@@ -1165,7 +1083,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string) => Promise<FlowerThreadView>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;
-  loadSubagentDetail: (parentThreadID: string, childThreadID: string, afterOrdinal?: number, limit?: number) => Promise<FlowerSubagentDetail>;
+  loadSubagentDetail: (parentThreadID: string, childThreadID: string) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerThreadView>;
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadView | undefined>;

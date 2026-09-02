@@ -7,7 +7,7 @@ timestamp: 2026-08-18T00:00:00Z
 ---
 # Summary
 
-Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. A selected summary that advances beyond cached detail requests that exact revision through one per-thread coordinator without cursor replay or polling.
+Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, open SubAgent current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. A selected summary that advances beyond cached detail requests that exact revision through one per-thread coordinator without cursor replay or polling.
 
 Env App retains one `EnvAIPage` and one `FlowerSurface` after access becomes
 available. Activity companion, Activity full page, and the selected Workbench
@@ -68,9 +68,10 @@ the prior Run's attempt identity.
 Canonical Thread ownership is immutable product routing metadata. The runtime
 view pump resolves `thread_id -> (endpoint_id, parent_thread_id?)` once and
 reuses that binding instead of querying SQLite for every provider token. Root
-current views feed the thread cache. Child current views feed only a
-parent-scoped full Subagent inventory replacement; they never become a root
-summary or detail view. The binding contains no lifecycle, message, permission,
+current views feed the thread cache. Each child current is sent through its
+parent stream as `thread.batch.subagent_current`; it never becomes a root
+summary. Child lifecycle boundaries separately refresh the parent-scoped full
+SubAgent inventory. The binding contains no lifecycle, message, permission,
 model, or settings state and is removed with the Thread or Service.
 
 The server never silently drops an authoritative frame. An initial baseline
@@ -93,10 +94,21 @@ valid only after an authoritative empty list response. A reconnecting `ready`
 baseline replaces the root summary set and removes stale non-root cache entries.
 
 `thread.batch.subagents` is a strict full replacement for one cached parent
-detail; an empty array clears it. The patch never creates a summary, changes the
-selected thread, or navigates to a child. The top-right panel and Activity rows
-read this same canonical inventory, and both open the existing floating
-Subagent detail window.
+inventory; an empty array clears it. The patch never creates a summary, changes
+the selected thread, navigates to a child, or clears an open child detail.
+`thread.batch.subagent_current` is independent: the envelope identifies the
+parent, the nested view identifies the child, and only the exact active pair may
+accept it. The top-right panel and Activity rows read the canonical inventory,
+and both open the existing floating SubAgent detail window.
+
+The open child detail is one stable browser selection containing parent and
+child identity, summary snapshot, request generation, loading state, and the
+highest accepted current. HTTP and SSE share its monotonic `view_version`
+receiver. A reconnecting `ready` starts one deduplicated HTTP refresh for that
+open child; ordinary time passage starts none. Membership refresh, late HTTP,
+and unrelated parent or child frames cannot close or replace it. There is no
+child detail pagination, polling, tail timer, request lock, sync message, pulse,
+or bottom status lane.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. One detail request may run per thread and selection cycle. Updates received during that request retain only the greatest target revision and start at most one follow-up request. A cache hit with no newer summary renders immediately and does not revalidate. A failed revision is not retried automatically in the same display cycle; without cached detail Flower leaves loading and shows an explicit retry, while an update failure with valid cached detail is non-blocking. There is no retry delay, exhausted state, foreground reload, initial-request map, or message-content completeness guess.
 

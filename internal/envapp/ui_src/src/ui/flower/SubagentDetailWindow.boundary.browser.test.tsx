@@ -84,13 +84,7 @@ function windowProps(open: boolean, onOpenChange: (open: boolean) => void): Suba
     onScroll: () => undefined,
     showScrollToLatest: false,
     onScrollToLatest: () => undefined,
-    hasMore: false,
-    loadingMore: false,
-    onLoadMore: () => undefined,
     onRetryLoad: () => undefined,
-    tailLoading: true,
-    tailError: '',
-    onRetryTail: () => undefined,
     viewportLeftInset: 12,
     zIndex: 160,
     threadLoadingLabel: 'Loading subagent detail',
@@ -169,14 +163,12 @@ describe('Subagent detail window boundary', () => {
 
       const titlebar = surface.querySelector<HTMLElement>("[data-floe-floating-window-titlebar='true']");
       const overview = surface.querySelector<HTMLElement>('.flower-subagent-detail-overview');
-      const dock = surface.querySelector<HTMLElement>('.flower-subagent-detail-bottom-dock');
       expect(titlebar).not.toBeNull();
       expect(overview).not.toBeNull();
-      expect(dock).not.toBeNull();
+      expect(surface.querySelector('[data-flower-subagent-dock]')).toBeNull();
       expect(getComputedStyle(titlebar!).backgroundImage).toBe('none');
       expect(getComputedStyle(titlebar!).backgroundColor).not.toBe(surfaceStyle.backgroundColor);
       expect(getComputedStyle(overview!).backgroundColor).not.toBe(surfaceStyle.backgroundColor);
-      expect(getComputedStyle(dock!).backgroundColor).toBe(getComputedStyle(overview!).backgroundColor);
       expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1000);
 
       fixture.dispatchEvent(new PointerEvent('pointerdown', {

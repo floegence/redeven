@@ -40,7 +40,7 @@ func TestFlowerWorkspaceStreamAcceptsEmptySelectionAndReceivesBackgroundThreadUp
 	}
 }
 
-func TestFlowerWorkspaceStreamRoutesChildCurrentToParentSubagentInventory(t *testing.T) {
+func TestFlowerWorkspaceStreamRoutesChildCurrentAndInventoryToParent(t *testing.T) {
 	t.Parallel()
 	svc := newFlowerLiveMemoryTestService()
 	meta := flowerLiveMemoryTestMeta("env_live_subagent_inventory")
@@ -78,8 +78,16 @@ func TestFlowerWorkspaceStreamRoutesChildCurrentToParentSubagentInventory(t *tes
 	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if envelope.ThreadID != parentThreadID || envelope.Current != nil || envelope.Subagents == nil || len(*envelope.Subagents) != 1 {
-		t.Fatalf("child projection=%#v, want parent inventory patch without child current", envelope)
+	if envelope.ThreadID != parentThreadID || envelope.Current != nil || envelope.SubagentCurrent == nil || envelope.SubagentCurrent.ThreadID.String() != childThreadID || envelope.SubagentCurrent.ViewVersion != 1 {
+		t.Fatalf("child projection=%#v, want parent-scoped child current", envelope)
+	}
+	frame = nextFlowerLiveStreamFrame(t, subscription)
+	envelope = FlowerLiveStreamEnvelope{}
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.ThreadID != parentThreadID || envelope.Current != nil || envelope.SubagentCurrent != nil || envelope.Subagents == nil || len(*envelope.Subagents) != 1 {
+		t.Fatalf("child inventory projection=%#v, want independent parent inventory replacement", envelope)
 	}
 	item := (*envelope.Subagents)[0]
 	if item.ThreadID != childThreadID || item.TaskName != "Research models" || item.Status != subagentStatusRunning {
@@ -87,8 +95,18 @@ func TestFlowerWorkspaceStreamRoutesChildCurrentToParentSubagentInventory(t *tes
 	}
 	svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
 		ThreadID: identity.ThreadID(childThreadID), ViewVersion: 2, Activity: flruntime.ThreadActivityActive,
+		Items: []flruntime.ThreadItem{{
+			ID: "assistant-child", TurnID: "turn-child", RunID: "run-child", Ordinal: 1,
+			Kind: flruntime.ThreadItemAssistant, Text: "streamed child content", Live: true,
+		}},
 	})
-	time.Sleep(2 * flowerRuntimeCurrentPublishInterval)
+	frame = nextFlowerLiveStreamFrame(t, subscription)
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.SubagentCurrent == nil || envelope.SubagentCurrent.ViewVersion != 2 || len(envelope.SubagentCurrent.Items) != 1 || envelope.SubagentCurrent.Items[0].Text != "streamed child content" {
+		t.Fatalf("text-only child projection=%#v, want complete current view", envelope.SubagentCurrent)
+	}
 	if got := listCalls.Load(); got != 1 {
 		t.Fatalf("text-only child updates loaded parent inventory %d times, want 1", got)
 	}
@@ -96,6 +114,7 @@ func TestFlowerWorkspaceStreamRoutesChildCurrentToParentSubagentInventory(t *tes
 		ThreadID: identity.ThreadID(childThreadID), ViewVersion: 3, Activity: flruntime.ThreadActivityActive,
 		Attention: flruntime.AttentionSummary{InputCount: 1},
 	})
+	_ = nextFlowerLiveStreamFrame(t, subscription)
 	_ = nextFlowerLiveStreamFrame(t, subscription)
 	if got := listCalls.Load(); got != 2 {
 		t.Fatalf("child lifecycle updates loaded parent inventory %d times, want 2", got)
