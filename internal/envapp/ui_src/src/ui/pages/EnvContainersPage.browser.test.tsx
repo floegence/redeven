@@ -245,8 +245,17 @@ describe('native Containers responsive product surface', () => {
     expect(root.querySelector('.container-list-heading')).toBeNull();
     expect(root.querySelectorAll('thead th')).toHaveLength(5);
     expect(rows).toHaveLength(3);
+    expect(rows.every((row) => row.hasAttribute('data-container-resource-row'))).toBe(true);
     expect(rows[0].textContent).not.toContain('8bbf320351e557285fe1f143ee14a6d2334f24f5');
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+
+    const hoveredCell = rows[0].querySelector<HTMLTableCellElement>('td')!;
+    const idleCellBackground = getComputedStyle(hoveredCell).backgroundColor;
+    expect(getComputedStyle(hoveredCell).boxShadow).toBe('none');
+    await page.elementLocator(rows[0]).hover();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 160));
+    expect(getComputedStyle(hoveredCell).backgroundColor).not.toBe(idleCellBackground);
+    expect(getComputedStyle(hoveredCell).boxShadow).toContain('inset');
 
     const overflow = root.querySelector<HTMLButtonElement>('.container-row-menu button');
     expect(overflow).not.toBeNull();
