@@ -9125,6 +9125,10 @@ button.flower-attachment-preview-trigger:disabled {
   padding-bottom: 0.58rem;
 }
 
+.flower-subagent-ledger-entry > .flower-subagent-ledger-single-activity-summary {
+  display: none;
+}
+
 .flower-subagent-ledger-single-activity-body {
   display: grid;
   min-width: 0;

@@ -230,6 +230,47 @@ type FlowerMessageAttachmentPreviewTarget = Readonly<{
   mimeType: string;
   url: string;
 }>;
+
+type FlowerActivityViewportScope = Readonly<{
+  viewport: Accessor<HTMLDivElement | undefined>;
+  anchorActive: (revision?: number) => boolean;
+  beginAnchor: () => number;
+  releaseAnchor: (revision: number) => void;
+  invalidateAnchor: () => void;
+}>;
+
+function createFlowerActivityViewportScope(
+  viewport: Accessor<HTMLDivElement | undefined>,
+  stopFollowing: () => void,
+  requestAnimationFrame: (callback: FrameRequestCallback) => number,
+): FlowerActivityViewportScope {
+  let revision = 0;
+  let activeRevision = 0;
+  return {
+    viewport,
+    anchorActive: (expectedRevision) => (
+      activeRevision !== 0
+      && (expectedRevision === undefined || expectedRevision === activeRevision)
+    ),
+    beginAnchor: () => {
+      stopFollowing();
+      revision += 1;
+      activeRevision = revision;
+      return revision;
+    },
+    releaseAnchor: (expectedRevision) => {
+      if (activeRevision !== expectedRevision) return;
+      requestAnimationFrame(() => {
+        if (activeRevision === expectedRevision) activeRevision = 0;
+      });
+    },
+    invalidateAnchor: () => {
+      revision += 1;
+      activeRevision = 0;
+    },
+  };
+}
+
 function messageHasUserRejectedTool(message: FlowerChatMessage): boolean {
   return (message.blocks ?? []).some((block) => (
     block.type === 'activity-timeline'
@@ -1225,14 +1266,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
   });
   let transcriptViewportRef: HTMLDivElement | undefined;
-  let activityViewportAnchorRevision = 0;
   const subagentDetailScroll = createFlowerScrollTailController({
     reducedMotionPreferred,
     requestAnimationFrame: requestTranscriptAnimationFrame,
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
   });
+  let subagentDetailViewportRef: HTMLDivElement | undefined;
+  const transcriptActivityViewport = createFlowerActivityViewportScope(
+    () => transcriptViewportRef,
+    transcriptScroll.stopFollowing,
+    requestTranscriptAnimationFrame,
+  );
+  const subagentDetailActivityViewport = createFlowerActivityViewportScope(
+    () => subagentDetailViewportRef,
+    subagentDetailScroll.stopFollowing,
+    requestTranscriptAnimationFrame,
+  );
   const resetSubagentDetailScroll = () => {
+    subagentDetailActivityViewport.invalidateAnchor();
     subagentDetailScroll.dispose();
+    subagentDetailViewportRef = undefined;
+    subagentDetailScroll.bind(undefined);
     subagentDetailScroll.markNearBottom();
   };
   const closeSubagentOverlays = () => {
@@ -4443,7 +4497,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } catch {
       return false;
     }
-    const wasNearBottom = subagentDetailScroll.captureWasNearBottom();
     let accepted = false;
     setActiveSubagentDetail((active) => {
       if (!active || active.parentThreadID !== parentThreadID || active.childThreadID !== childThreadID) return active;
@@ -4459,8 +4512,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         error: '',
       };
     });
-    if (accepted && wasNearBottom) {
-      requestTranscriptAnimationFrame(() => subagentDetailScroll.scheduleTailScroll());
+    if (accepted) {
+      subagentDetailScroll.measureAfterLayout();
     }
     return accepted;
   };
@@ -5168,23 +5221,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadTailPreparing() && event?.isTrusted) {
       cancelSelectedThreadTailReveal();
     }
+    if (transcriptActivityViewport.anchorActive()) return;
     transcriptScroll.onScroll();
   };
   const updateTranscriptFollowFromWheel = (event: WheelEvent) => {
-    activityViewportAnchorRevision += 1;
+    transcriptActivityViewport.invalidateAnchor();
     if (selectedThreadTailPreparing() && event.deltaY < 0) {
       cancelSelectedThreadTailReveal();
     }
     transcriptScroll.onWheel(event);
   };
   const updateTranscriptFollowFromTouch = () => {
-    activityViewportAnchorRevision += 1;
+    transcriptActivityViewport.invalidateAnchor();
     if (selectedThreadTailPreparing()) {
       cancelSelectedThreadTailReveal();
     }
   };
   const cancelActivityViewportAnchorFromPointer = () => {
-    activityViewportAnchorRevision += 1;
+    transcriptActivityViewport.invalidateAnchor();
   };
   const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => transcriptScroll.scrollToBottom(options);
   const measureTranscriptNearBottomAfterLayout = () => transcriptScroll.measureAfterLayout();
@@ -8353,6 +8407,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     blockIndex: Accessor<number>,
     timeline: Accessor<FlowerActivityTimelineBlock>,
     item: Accessor<FlowerActivityItem>,
+    viewportScope: FlowerActivityViewportScope,
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
     const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, {
@@ -8399,23 +8454,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     let anchorRevision = 0;
     const beginActivityViewportAnchor = () => {
       if (anchoredTitleTop !== undefined) return;
-      const viewport = transcriptViewportRef;
+      const viewport = viewportScope.viewport();
       const title = toggleButtonRef;
       if (!viewport || !title) return;
       const viewportBounds = viewport.getBoundingClientRect();
       const titleBounds = title.getBoundingClientRect();
       if (titleBounds.bottom < viewportBounds.top || titleBounds.top > viewportBounds.bottom) return;
-      transcriptScroll.stopFollowing();
-      activityViewportAnchorRevision += 1;
-      anchorRevision = activityViewportAnchorRevision;
+      anchorRevision = viewportScope.beginAnchor();
       anchoredTitleTop = titleBounds.top;
     };
     const stabilizeActivityViewportAnchor = () => {
-      if (anchoredTitleTop === undefined || anchorRevision !== activityViewportAnchorRevision) {
+      if (anchoredTitleTop === undefined || !viewportScope.anchorActive(anchorRevision)) {
         anchoredTitleTop = undefined;
         return;
       }
-      const viewport = transcriptViewportRef;
+      const viewport = viewportScope.viewport();
       const title = toggleButtonRef;
       if (!viewport || !title) return;
       const delta = title.getBoundingClientRect().top - anchoredTitleTop;
@@ -8423,8 +8476,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     const releaseActivityViewportAnchor = () => {
       stabilizeActivityViewportAnchor();
+      viewportScope.releaseAnchor(anchorRevision);
       anchoredTitleTop = undefined;
     };
+    onCleanup(() => viewportScope.releaseAnchor(anchorRevision));
     const toggleDisclosure = () => {
       beginActivityViewportAnchor();
       disclosureControl.toggle();
@@ -8613,6 +8668,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     messageID: Accessor<string>,
     blockIndex: Accessor<number>,
     block: Accessor<FlowerActivityTimelineBlock>,
+    viewportScope: FlowerActivityViewportScope,
   ) => {
     const visibleItems = createMemo(() => block().items.filter(activityItemVisible));
     const visibleItemKeys = createMemo(() => visibleItems().map((item) => activityItemKey(messageID(), block(), item)));
@@ -8634,6 +8690,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     blockIndex,
                     block,
                     item,
+                    viewportScope,
                   )}
                 </Show>
               );
@@ -8920,6 +8977,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     failed: Accessor<boolean>,
     copyText: Accessor<string>,
     assistantCopyBlockKey: Accessor<string>,
+    viewportScope: FlowerActivityViewportScope,
   ) => {
     const activity = createMemo(() => block().type === 'activity' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' }> : null);
     const content = createMemo(() => block().type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
@@ -8959,12 +9017,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           () => message().id,
           () => activityBlockValue().block_index,
           () => activityBlockValue().block,
+          viewportScope,
         )}
       </Show>
     );
   };
 
-  const messageEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>) => {
+  const messageEntry = (
+    entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>,
+    viewportScope: FlowerActivityViewportScope,
+  ) => {
     const message = createMemo(() => entry().message);
     const activeCursor = createMemo(() => (
       selectedThreadLiveStatus() === 'running'
@@ -9094,7 +9156,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
                     return (
                       <Show when={block()}>
-                        {(value) => messageBlockView(message, value, streamingBlockKey, failed, copyText, assistantCopyBlockKey)}
+                        {(value) => messageBlockView(
+                          message,
+                          value,
+                          streamingBlockKey,
+                          failed,
+                          copyText,
+                          assistantCopyBlockKey,
+                          viewportScope,
+                        )}
                       </Show>
                     );
                   }}
@@ -9350,10 +9420,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const timelineEntry = (entry: Accessor<FlowerTimelineEntry>) => {
+  const timelineEntry = (
+    entry: Accessor<FlowerTimelineEntry>,
+    viewportScope: FlowerActivityViewportScope,
+  ) => {
     switch (entry().type) {
       case 'message':
-        return messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>);
+        return messageEntry(
+          () => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>,
+          viewportScope,
+        );
       case 'queued_turn':
         return queuedTurnEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'queued_turn' }>);
       case 'context_compaction':
@@ -9559,6 +9635,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const retrySubagentDetailLoad = () => {
     void refreshActiveSubagentDetail(true);
   };
+  const bindSubagentDetailViewport = (node: HTMLDivElement) => {
+    subagentDetailViewportRef = node;
+    subagentDetailScroll.bind(node);
+  };
+  const updateSubagentDetailFollowFromWheel = (event: WheelEvent) => {
+    subagentDetailActivityViewport.invalidateAnchor();
+    subagentDetailScroll.onWheel(event);
+  };
+  const cancelSubagentDetailActivityViewportAnchor = () => {
+    subagentDetailActivityViewport.invalidateAnchor();
+  };
+  const updateSubagentDetailNearBottom = () => {
+    if (subagentDetailActivityViewport.anchorActive()) return;
+    subagentDetailScroll.onScroll();
+  };
 
   const subagentDetailDialog = () => (
     <SubagentDetailWindow
@@ -9566,6 +9657,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       onOpenChange={(open) => {
         if (!open) closeSubagentOverlays();
       }}
+      threadID={activeSubagentID()}
       title={subagentDetailWindowTitle()}
       status={subagentDetailActiveStatus()}
       statusLabel={subagentSummaryStatus()}
@@ -9577,9 +9669,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       error={subagentDetailError()}
       detailAvailable={Boolean(subagentDetailThread())}
       entries={subagentDetailTimelineEntries()}
-      renderEntry={(entry) => timelineEntry(() => entry)}
-      bindScroll={(node) => { subagentDetailScroll.bind(node); }}
-      onScroll={() => subagentDetailScroll.onScroll()}
+      renderEntry={(entry) => timelineEntry(entry, subagentDetailActivityViewport)}
+      bindScroll={bindSubagentDetailViewport}
+      onScroll={updateSubagentDetailNearBottom}
+      onWheel={updateSubagentDetailFollowFromWheel}
+      onPointerDown={cancelSubagentDetailActivityViewportAnchor}
+      onTouchMove={cancelSubagentDetailActivityViewportAnchor}
       showScrollToLatest={showSubagentDetailScrollToLatestButton()}
       onScrollToLatest={() => subagentDetailScroll.scrollToBottom({ smooth: true })}
       onRetryLoad={retrySubagentDetailLoad}
@@ -10476,7 +10571,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   const entry = createMemo(() => visibleTimelineEntriesByKey().get(entryKey) ?? null);
                   return (
                     <Show when={entry()}>
-                      {(value) => timelineEntry(value)}
+                      {(value) => timelineEntry(value, transcriptActivityViewport)}
                     </Show>
                   );
                 }}

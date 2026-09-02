@@ -186,6 +186,8 @@ describe('Flower final thread cache and workspace transport', () => {
     const parent = thread({
       thread_id: 'thread-parent-live-subagent',
       title: 'Parent research task',
+      status: 'running',
+      active_run_id: 'parent-run',
       subagents: [],
     });
     const peer = thread({
@@ -207,12 +209,52 @@ describe('Flower final thread cache and workspace transport', () => {
     }]);
     const surfaceAdapter = adapter(true);
     const firstDetail = deferred<FlowerSubagentDetail>();
+    let parentDetailVersion = 1;
+    const runningChildCurrent = (viewVersion: number, output: string): FlowerRuntimeCurrentView => ({
+      thread_id: child.thread_id,
+      view_version: viewVersion,
+      activity: 'active',
+      turn_id: 'child-turn',
+      run_id: 'child-run',
+      items: [
+        {
+          id: 'child-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
+          kind: 'assistant', text: 'Live child content.',
+        },
+        {
+          id: 'child-tool-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 2,
+          kind: 'tool', activity: {
+            item_id: 'child-tool-live', tool_id: 'child-tool-live', tool_name: 'terminal.exec', kind: 'tool',
+            status: 'running', severity: 'normal', needs_attention: false, requires_approval: false,
+            presentation: {
+              label: 'Run command',
+              description: 'Inspect live output',
+              renderer: 'terminal',
+              payload: { command: 'inspect --stream', output },
+            },
+          },
+        },
+        ...(viewVersion >= 12 ? [{
+          id: 'child-tool-peer', turn_id: 'child-turn', run_id: 'child-run', ordinal: 3,
+          kind: 'tool' as const, activity: {
+            item_id: 'child-tool-peer', tool_id: 'child-tool-peer', tool_name: 'terminal.exec', kind: 'tool',
+            status: 'running', severity: 'normal', needs_attention: false, requires_approval: false,
+            presentation: {
+              label: 'Run command',
+              description: 'Inspect peer output',
+              renderer: 'terminal',
+              payload: { command: 'inspect --peer', output: 'peer stream' },
+            },
+          },
+        }] : []),
+      ],
+    });
     const loadSubagentDetail = vi.fn()
       .mockImplementationOnce(async () => firstDetail.promise)
       .mockResolvedValue(subagentDetail({
         summary: { ...child, status: 'completed' },
         current: {
-          thread_id: child.thread_id, view_version: 10, activity: 'idle', turn_id: 'child-turn',
+          thread_id: child.thread_id, view_version: 20, activity: 'idle', turn_id: 'child-turn',
           last_outcome: 'completed',
           items: [{
             id: 'child-final', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
@@ -223,7 +265,10 @@ describe('Flower final thread cache and workspace transport', () => {
     const runtime = renderSurfaceWithAdapter({
       ...surfaceAdapter,
       listThreads: vi.fn(async () => [parent, peer]),
-      loadThread: vi.fn(async (threadID: string) => liveBootstrap(threadID === parent.thread_id ? parent : peer, 1)),
+      loadThread: vi.fn(async (threadID: string) => liveBootstrap(
+        threadID === parent.thread_id ? parent : peer,
+        threadID === parent.thread_id ? parentDetailVersion : 1,
+      )),
       connectLiveStream: stream.connect,
       loadSubagentDetail,
     });
@@ -302,23 +347,7 @@ describe('Flower final thread cache and workspace transport', () => {
       schema_version: 1,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
-      subagent_current: {
-        thread_id: child.thread_id, view_version: 9, activity: 'active', turn_id: 'child-turn', run_id: 'child-run',
-        items: [
-          {
-            id: 'child-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
-            kind: 'assistant', text: 'Live child content.',
-          },
-          {
-            id: 'child-tool-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 2,
-            kind: 'tool', activity: {
-              item_id: 'child-tool-live', tool_id: 'child-tool-live', tool_name: 'terminal.exec', kind: 'tool',
-              status: 'running', severity: 'normal', needs_attention: false, requires_approval: false,
-              presentation: { label: 'Run command' },
-            },
-          },
-        ],
-      },
+      subagent_current: runningChildCurrent(9, 'stream chunk 1'),
     });
     await waitFor(() => Boolean(detail.querySelector('[data-flower-activity-item-id="child-tool-live"]')));
     const runningToolRow = detail.querySelector('[data-flower-activity-item-id="child-tool-live"]') as HTMLElement;
@@ -326,6 +355,107 @@ describe('Flower final thread cache and workspace transport', () => {
     const runningToolTitle = runningToolRow.querySelector('.flower-activity-inline-title') as HTMLElement;
     expect(getComputedStyle(runningToolButton).boxShadow).toBe('none');
     expect(getComputedStyle(runningToolTitle, '::after').animationName).toBe('flower-activity-title-sweep');
+
+    const parentViewport = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+    const childViewport = detail.querySelector('.flower-subagent-detail-transcript') as HTMLDivElement;
+    let parentScrollTop = 800;
+    let childScrollTop = 800;
+    Object.defineProperties(parentViewport, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1_200 },
+      scrollTop: {
+        configurable: true,
+        get: () => parentScrollTop,
+        set: (value: number) => { parentScrollTop = value; },
+      },
+    });
+    Object.defineProperties(childViewport, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1_200 },
+      scrollTop: {
+        configurable: true,
+        get: () => childScrollTop,
+        set: (value: number) => { childScrollTop = value; },
+      },
+    });
+    vi.spyOn(childViewport, 'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({
+      x: 0, y: 0, width: 800, height: 400,
+    }));
+    vi.spyOn(runningToolButton, 'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({
+      x: 20, y: 100, width: 700, height: 32,
+    }));
+    parentViewport.dispatchEvent(new Event('scroll'));
+    childViewport.dispatchEvent(new Event('scroll'));
+
+    runningToolButton.click();
+    childViewport.dispatchEvent(new Event('scroll'));
+    await waitFor(() => runningToolButton.getAttribute('aria-expanded') === 'true');
+    await waitFor(() => Boolean(detail.querySelector('.flower-activity-terminal-output')));
+    const terminalViewport = detail.querySelector('.flower-activity-terminal-output');
+
+    Object.defineProperty(childViewport, 'scrollHeight', { configurable: true, value: 1_600 });
+    for (let viewVersion = 10; viewVersion <= 14; viewVersion += 1) {
+      stream.push({
+        schema_version: 1,
+        kind: 'thread.batch',
+        thread_id: parent.thread_id,
+        subagent_current: runningChildCurrent(viewVersion, `stream chunk ${viewVersion - 8}`),
+      });
+      await wait(55);
+      expect(detail.querySelector('[data-flower-activity-item-id="child-tool-live"]')).toBe(runningToolRow);
+      expect(detail.querySelector('.flower-activity-terminal-output')).toBe(terminalViewport);
+      expect(runningToolButton.getAttribute('aria-expanded')).toBe('true');
+    }
+    await waitFor(() => runningToolRow.dataset.state === 'open');
+    expect(detail.querySelector('[data-flower-subagent-ledger-kind="activity"]')?.textContent).toContain('2 operations');
+    expect(childViewport.scrollTop).toBeLessThan(1_180);
+    expect(parentViewport.scrollTop).toBe(800);
+    expect(terminalViewport?.textContent).toContain('stream chunk 6');
+
+    Object.defineProperty(parentViewport, 'scrollHeight', { configurable: true, value: 1_600 });
+    parentDetailVersion = 2;
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      current: {
+        thread_id: parent.thread_id,
+        view_version: 2,
+        activity: 'active',
+        turn_id: 'parent-turn',
+        run_id: 'parent-run',
+        items: [{
+          id: 'parent-live', turn_id: 'parent-turn', run_id: 'parent-run', ordinal: 1,
+          kind: 'assistant', text: 'Parent live growth.', live: true,
+        }],
+      },
+    });
+    await waitFor(() => parentViewport.scrollTop === 1_200);
+
+    await waitFor(() => Boolean(detail.querySelector('.flower-subagent-detail-scroll-to-latest button')));
+    const childScrollToLatest = detail.querySelector('.flower-subagent-detail-scroll-to-latest button') as HTMLButtonElement;
+    childScrollToLatest.click();
+    await waitFor(() => childViewport.scrollTop === 1_200);
+    expect(parentViewport.scrollTop).toBe(1_200);
+
+    childViewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -24, bubbles: true }));
+    childScrollTop = 900;
+    childViewport.dispatchEvent(new Event('scroll'));
+    Object.defineProperty(childViewport, 'scrollHeight', { configurable: true, value: 1_800 });
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      subagent_current: runningChildCurrent(15, 'stream chunk 7'),
+    });
+    await wait(55);
+    expect(childViewport.scrollTop).toBe(900);
+    expect(parentViewport.scrollTop).toBe(1_200);
+    await waitFor(() => Boolean(detail.querySelector('.flower-subagent-detail-scroll-to-latest button')));
+    (detail.querySelector('.flower-subagent-detail-scroll-to-latest button') as HTMLButtonElement).click();
+    await waitFor(() => childViewport.scrollTop === 1_400);
+    expect(parentViewport.scrollTop).toBe(1_200);
+
     await wait(25);
     presenceObserver.disconnect();
     expect(document.querySelector('[data-floe-geometry-surface="floating-window"]')).toBe(detailWindow);
