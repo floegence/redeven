@@ -3330,14 +3330,14 @@
       "deploySelectedRelease": "Ausgewählte Version bereitstellen",
       "downgradeRequiresStopped": "Stoppen Sie den Dienst, bevor Sie eine ältere Version auswählen.",
       "releaseRisk": {
-        "npm_lifecycle_scripts": "Ich verstehe, dass npm-Lifecycle-Skripte mit den Rechten meines aktuellen Umgebungsbenutzers ausgeführt werden und auf dessen lesbare oder beschreibbare Daten zugreifen können.",
-        "non_recommended_release": "Ich verstehe, dass diese Version nicht von Redeven empfohlen wird.",
-        "non_default_release": "Ich verstehe, dass diese Version nicht der Standardversion der benutzerdefinierten Vorlage entspricht.",
-        "preview_release": "Ich verstehe, dass dies eine Vorschauversion ist und instabil sein oder inkompatible Änderungen enthalten kann.",
-        "deprecated_release": "Ich verstehe, dass die Quelle diese Version als veraltet kennzeichnet.",
-        "downgrade": "Ich verstehe, dass Redeven bei einem Startfehler die vorige Laufzeitumgebung wiederherstellen kann, Anwendungsdaten aber nicht automatisch rückwärts migriert werden.",
-        "version_order_unknown": "Ich verstehe, dass diese Tags nicht sicher geordnet werden können und ein späterer Wechsel zu oder von dieser Version das Stoppen des Dienstes erfordern kann.",
-        "tag_digest_moved": "Ich verstehe, dass dieses Tag jetzt auf einen anderen Digest verweist."
+        "npm_lifecycle_scripts": "npm-Lifecycle-Skripte werden mit den Rechten des aktuellen Umgebungsbenutzers ausgeführt und können auf dessen lesbare oder beschreibbare Daten zugreifen.",
+        "non_recommended_release": "Diese Version wird nicht von Redeven empfohlen.",
+        "non_default_release": "Diese Version entspricht nicht der Standardversion der benutzerdefinierten Vorlage.",
+        "preview_release": "Dies ist eine Vorschauversion und kann instabil sein oder inkompatible Änderungen enthalten.",
+        "deprecated_release": "Die Quelle kennzeichnet diese Version als veraltet.",
+        "downgrade": "Redeven kann bei einem Startfehler die vorige Laufzeitumgebung wiederherstellen, Anwendungsdaten werden aber nicht automatisch rückwärts migriert.",
+        "version_order_unknown": "Diese Tags können nicht sicher geordnet werden. Vor einem Wechsel zu oder von dieser Version muss der Dienst gestoppt werden.",
+        "tag_digest_moved": "Dieses Tag verweist jetzt auf einen anderen Digest als zuvor."
       },
       "keepCurrentVersion": "Aktuelle Anwendungsversion beibehalten",
       "keepCurrentVersionDescription": "Wendet nur eine neuere Vorlagenrevision an. Redeven setzt die Anwendung nicht auf die empfohlene Version zurück.",

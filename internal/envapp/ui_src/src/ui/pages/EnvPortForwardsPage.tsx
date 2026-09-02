@@ -214,14 +214,14 @@ type ManagedReleaseStatus = Readonly<{
 }>;
 
 type ManagedUpdatePlan = Readonly<{
-  schema_version: 1;
+  schema_version: 2;
   update_plan_id: string;
   current_release: ManagedReleaseIdentity;
   target_release: ManagedReleaseIdentity;
   current_template_revision: number;
   target_template_revision: number;
   notices?: ReadonlyArray<ManagedTemplateNotice>;
-  required_risk_ids?: ReadonlyArray<string>;
+  risk_ids?: ReadonlyArray<string>;
   requires_stopped?: boolean;
   expires_at_unix_ms: number;
 }>;
@@ -236,7 +236,6 @@ type ManagedReleasePickerTarget = Readonly<{
 
 type SelectedTemplateRelease = Readonly<{
 	candidate: ManagedReleaseCandidate;
-	acceptedRisks: ReadonlyArray<string>;
 	parameters: Readonly<Record<string, string>>;
 }>;
 
@@ -1165,7 +1164,7 @@ export function ManagedTemplateNotices(props: {
 
 type ManagedReleaseDefaultKind = 'redeven' | 'template';
 
-function releaseRiskIDs(candidate: ManagedReleaseCandidate | undefined, defaultKind: ManagedReleaseDefaultKind = 'redeven'): string[] {
+function releaseRiskHintIDs(candidate: ManagedReleaseCandidate | undefined, defaultKind: ManagedReleaseDefaultKind = 'redeven'): string[] {
 	if (!candidate) return [];
 	return [
 		...(candidate.source_kind === 'npm' ? ['npm_lifecycle_scripts'] : []),
@@ -1178,8 +1177,24 @@ function releaseRiskIDs(candidate: ManagedReleaseCandidate | undefined, defaultK
 	];
 }
 
-function releaseRiskLabel(id: string, i18n: WebServicesI18n): string {
+function releaseRiskHintLabel(id: string, i18n: WebServicesI18n): string {
 	return i18n.t(`webServices.managed.releaseRisk.${id}` as EnvAppTranslationKey);
+}
+
+function ManagedReleaseRiskHints(props: Readonly<{ riskIDs: ReadonlyArray<string> }>): JSX.Element {
+	const i18n = useI18n();
+	return (
+		<Show when={props.riskIDs.length > 0}>
+			<ul class="space-y-1.5 text-[11px] leading-5 text-muted-foreground" data-testid="managed-release-risk-hints">
+				<For each={props.riskIDs}>{(risk) => (
+					<li class="flex items-start gap-1.5">
+						<AlertTriangle class="mt-1 h-3 w-3 shrink-0 text-warning" aria-hidden="true" />
+						<span>{releaseRiskHintLabel(risk, i18n)}</span>
+					</li>
+				)}</For>
+			</ul>
+		</Show>
+	);
 }
 
 function releaseTrustLabel(trust: string, i18n: WebServicesI18n): string {
@@ -1218,12 +1233,10 @@ export function ManagedReleaseCandidates(props: Readonly<{
 	query: string;
 	filter: 'all' | 'stable' | 'preview';
 	selectedID: string;
-	acceptedRisks: Readonly<Record<string, boolean>>;
 	onQueryChange: (value: string) => void;
 	onFilterChange: (value: 'all' | 'stable' | 'preview') => void;
 	onSelect: (candidateID: string) => void;
-	onRiskChange: (riskID: string, accepted: boolean) => void;
-	showRisks?: boolean;
+	showRiskHints?: boolean;
 	defaultKind?: ManagedReleaseDefaultKind;
 }>): JSX.Element {
 	const i18n = useI18n();
@@ -1273,10 +1286,8 @@ export function ManagedReleaseCandidates(props: Readonly<{
 					</div>
 				</Show>
 			</Show>
-			<Show when={props.showRisks && selected()} keyed>{(candidate) => (
-				<div class="space-y-2 rounded-lg border border-warning/25 bg-warning/[0.05] p-3">
-					<For each={releaseRiskIDs(candidate, props.defaultKind)}>{(risk) => <Checkbox checked={Boolean(props.acceptedRisks[risk])} onChange={(checked) => props.onRiskChange(risk, Boolean(checked))} label={releaseRiskLabel(risk, i18n)} size="sm" />}</For>
-				</div>
+			<Show when={props.showRiskHints && selected()} keyed>{(candidate) => (
+				<ManagedReleaseRiskHints riskIDs={releaseRiskHintIDs(candidate, props.defaultKind)} />
 			)}</Show>
 		</div>
 	);
@@ -2025,14 +2036,11 @@ export function EnvPortForwardsPage() {
 	const [releaseQuery, setReleaseQuery] = createSignal('');
 	const [releaseFilter, setReleaseFilter] = createSignal<'all' | 'stable' | 'preview'>('all');
 	const [selectedReleaseID, setSelectedReleaseID] = createSignal('');
-	const [releaseRiskAcceptances, setReleaseRiskAcceptances] = createSignal<Record<string, boolean>>({});
 	const [releaseSecretParameters, setReleaseSecretParameters] = createSignal<Record<string, string>>({});
 	const [managedUpdatePlan, setManagedUpdatePlan] = createSignal<ManagedUpdatePlan | null>(null);
 	const [managedUpdatePlanLoading, setManagedUpdatePlanLoading] = createSignal(false);
 	const [managedUpdatePlanError, setManagedUpdatePlanError] = createSignal('');
-	const [managedUpdatePlanRisks, setManagedUpdatePlanRisks] = createSignal<Record<string, boolean>>({});
 	const [selectedTemplateRelease, setSelectedTemplateRelease] = createSignal<SelectedTemplateRelease | null>(null);
-	const [installReleaseRiskAcceptances, setInstallReleaseRiskAcceptances] = createSignal<Record<string, boolean>>({});
   const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
   const managedRowOperation = (serviceID: string) => managedOperations.operationForService(serviceID);
 
@@ -2127,18 +2135,17 @@ export function EnvPortForwardsPage() {
     setSelectedTemplateID(null);
     setTemplateDraft(null);
     setInstallNoticeAcceptances({});
-    setTemplateValidationVisible(false);
+		setTemplateValidationVisible(false);
 		setSelectedTemplateRelease(null);
-		setInstallReleaseRiskAcceptances({});
   };
 
   const installManaged = async () => {
     const template = selectedTemplate();
-	if (!template || managedInstallSubmitting() || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || !installReleaseRisksAccepted() || managedState().some((service) => service.template_id === template.template_id) || !canManageManagedService()) return;
+	if (!template || managedInstallSubmitting() || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.template_id === template.template_id) || !canManageManagedService()) return;
     setManagedInstallSubmitting(true);
     try {
 		const selectedRelease = selectedTemplateRelease();
-		const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), parameters: selectedRelease?.parameters ?? {}, accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()), target_release_id: selectedRelease?.candidate.candidate_id, accepted_release_risks: installReleaseRisks().filter((risk) => installReleaseRiskAcceptances()[risk]) }) });
+		const result = await fetchLocalApiJSON<{ service: ManagedService; operation: ManagedOperation }>('/_redeven_proxy/api/managed-web-services', { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), template_id: template.template_id, deployment: template.deployment, workspace_path: workspacePath().trim(), access_mode: managedAccessMode(), parameters: selectedRelease?.parameters ?? {}, accepted_notice_revisions: acceptedNoticeRevisions(template.notices, installNoticeAcceptances()), target_release_id: selectedRelease?.candidate.candidate_id }) });
       const operationPromise = managedOperations.track(result.operation);
       void operationPromise
         .then(async (operation) => {
@@ -2177,11 +2184,11 @@ export function EnvPortForwardsPage() {
     }
   };
 
-	const managedAction = async (serviceID: string, action: ManagedAction | 'update', noticeRevisions: Readonly<Record<string, number>> = {}, update?: Readonly<{ updatePlanID: string; acceptedRisks: ReadonlyArray<string> }>) => {
+	const managedAction = async (serviceID: string, action: ManagedAction | 'update', noticeRevisions: Readonly<Record<string, number>> = {}, updatePlanID = '') => {
     if (!canManageManagedService()) return;
     let operationID = managedOperations.begin(serviceID, action).operation_id;
     try {
-		const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions, ...(update ? { update_plan_id: update.updatePlanID, accepted_release_risks: update.acceptedRisks } : {}) }) });
+		const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions, ...(updatePlanID ? { update_plan_id: updatePlanID } : {}) }) });
       operationID = result.operation_id;
       const operationPromise = managedOperations.track(result);
       await loadManaged(false);
@@ -2353,13 +2360,11 @@ export function EnvPortForwardsPage() {
 		const source = target.kind === 'template' ? templateByID(target.id)?.source : target.service?.template_source;
 		return source === 'custom' ? 'template' : 'redeven';
 	});
-	const releaseRisksAccepted = () => releaseRiskIDs(selectedReleaseCandidate(), selectedReleaseDefaultKind()).every((risk) => releaseRiskAcceptances()[risk]);
-	const managedUpdatePlanRisksAccepted = () => (managedUpdatePlan()?.required_risk_ids ?? []).every((risk) => managedUpdatePlanRisks()[risk]);
 	const managedUpdatePlanNoticesAccepted = () => requiredNoticesAccepted(managedUpdatePlan()?.notices, updateNoticeAcceptances());
 	const managedUpdatePlanRequiresStopped = () => Boolean(managedUpdatePlan()?.requires_stopped && (releasePickerTarget()?.service?.desired_state !== 'stopped' || releasePickerTarget()?.service?.observed_state !== 'stopped'));
-	const installReleaseRisks = createMemo(() => {
+	const installReleaseRiskHints = createMemo(() => {
 		const selected = selectedTemplateRelease()?.candidate;
-		if (selected) return releaseRiskIDs(selected, selectedTemplate()?.source === 'custom' ? 'template' : 'redeven');
+		if (selected) return releaseRiskHintIDs(selected, selectedTemplate()?.source === 'custom' ? 'template' : 'redeven');
 		const template = selectedTemplate();
 		const release = template?.recommended_release;
 		if (!release || release.kind === 'none') return [];
@@ -2371,17 +2376,13 @@ export function EnvPortForwardsPage() {
 			...(!semantic ? ['version_order_unknown'] : []),
 		];
 	});
-	const installReleaseRisksAccepted = () => installReleaseRisks().every((risk) => installReleaseRiskAcceptances()[risk]);
-
 	const closeReleasePicker = () => {
 		setReleasePickerTarget(null);
 		setReleaseCandidates(null);
 		setReleaseCandidatesError('');
 		setSelectedReleaseID('');
-		setReleaseRiskAcceptances({});
 		setManagedUpdatePlan(null);
 		setManagedUpdatePlanError('');
-		setManagedUpdatePlanRisks({});
 		setUpdateNoticeAcceptances({});
 		setReleaseQuery('');
 		setReleaseFilter('all');
@@ -2401,10 +2402,8 @@ export function EnvPortForwardsPage() {
 				? result.candidates.find((candidate) => candidate.selectable && candidate.is_recommended)
 				: undefined;
 			setSelectedReleaseID(recommended?.candidate_id ?? '');
-			setReleaseRiskAcceptances({});
 			setManagedUpdatePlan(null);
 			setManagedUpdatePlanError('');
-			setManagedUpdatePlanRisks({});
 			setUpdateNoticeAcceptances({});
 		} catch (error) {
 			setReleaseCandidatesError(releaseSourceErrorLabel(error, i18n));
@@ -2445,7 +2444,6 @@ export function EnvPortForwardsPage() {
 		setManagedUpdatePlanLoading(true);
 		setManagedUpdatePlan(null);
 		setManagedUpdatePlanError('');
-		setManagedUpdatePlanRisks({});
 		setUpdateNoticeAcceptances({});
 		try {
 			const candidateID = selectedReleaseID();
@@ -2465,14 +2463,13 @@ export function EnvPortForwardsPage() {
 		const target = releasePickerTarget();
 		const plan = managedUpdatePlan();
 		if (target?.kind !== 'service' || !plan) return;
-		const risks = plan.required_risk_ids ?? [];
-		if (!risks.every((risk) => managedUpdatePlanRisks()[risk]) || !requiredNoticesAccepted(plan.notices, updateNoticeAcceptances())) return;
+		if (!requiredNoticesAccepted(plan.notices, updateNoticeAcceptances())) return;
 		if (plan.requires_stopped && (target.service?.desired_state !== 'stopped' || target.service?.observed_state !== 'stopped')) return;
 		const notices = acceptedNoticeRevisions(plan.notices, updateNoticeAcceptances());
 		const updatePlanID = plan.update_plan_id;
 		const serviceID = target.id;
 		closeReleasePicker();
-		void managedAction(serviceID, 'update', notices, { updatePlanID, acceptedRisks: risks });
+		void managedAction(serviceID, 'update', notices, updatePlanID);
 	};
 
   const openTemplateCatalog = () => {
@@ -2488,7 +2485,6 @@ export function EnvPortForwardsPage() {
     if (!template.available || installedServiceForTemplate(template)) return;
 		if (!preserveRelease) {
 			setSelectedTemplateRelease(null);
-			setInstallReleaseRiskAcceptances({});
 		}
     setSelectedTemplateID(template.template_id);
     setWorkspacePath(template.default_workspace_path);
@@ -2500,12 +2496,10 @@ export function EnvPortForwardsPage() {
 	const confirmReleaseSelection = () => {
 		const target = releasePickerTarget();
 		const candidate = selectedReleaseCandidate();
-		if (target?.kind !== 'template' || !candidate || !candidate.selectable || !releaseRisksAccepted()) return;
-		const acceptedRisks = releaseRiskIDs(candidate, selectedReleaseDefaultKind());
+		if (target?.kind !== 'template' || !candidate || !candidate.selectable) return;
 		const template = templateByID(target.id);
 		if (!template) return;
-		setSelectedTemplateRelease({ candidate, acceptedRisks, parameters: releaseSecretParameters() });
-		setInstallReleaseRiskAcceptances(Object.fromEntries(acceptedRisks.map((risk) => [risk, true])));
+		setSelectedTemplateRelease({ candidate, parameters: releaseSecretParameters() });
 		closeReleasePicker();
 		beginTemplateInstall(template, true);
 	};
@@ -3221,7 +3215,7 @@ export function EnvPortForwardsPage() {
             <div class="ml-auto flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{templateDrawerView() === 'install' ? i18n.t('common.actions.close') : i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
-				<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances()) || !installReleaseRisksAccepted()}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : i18n.t('webServices.managed.installStart')}</Button>
+				<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : i18n.t('webServices.managed.installStart')}</Button>
               </Show>
               <Show when={templateDrawerView() === 'editor'}>
                 <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</Button>
@@ -3265,7 +3259,7 @@ export function EnvPortForwardsPage() {
 					<Button size="sm" variant="outline" onClick={() => openTemplateReleasePicker(template.template_id)} disabled={managedInstallSubmitting()}>{i18n.t('webServices.managed.chooseVersion')}</Button>
 				</div>
 				<div class="mt-3 rounded-lg border bg-muted/20 p-3"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{template.source === 'builtin' ? i18n.t('webServices.managed.recommendedVersion') : i18n.t('webServices.managed.defaultVersion')}</div><div class="mt-1 font-mono text-sm text-foreground">{selectedTemplateRelease()?.candidate.version || selectedTemplateRelease()?.candidate.tag || (template.recommended_release ? releaseIdentityLabel(template.recommended_release) : '—')}</div></div>
-				<Show when={installReleaseRisks().length > 0}><div class="mt-3 space-y-2 rounded-lg border border-warning/25 bg-warning/[0.05] p-3" data-testid="managed-release-risks"><For each={installReleaseRisks()}>{(risk) => <Checkbox checked={Boolean(installReleaseRiskAcceptances()[risk])} onChange={(checked) => setInstallReleaseRiskAcceptances((current) => ({ ...current, [risk]: Boolean(checked) }))} label={releaseRiskLabel(risk, i18n)} size="sm" />}</For></div></Show>
+				<Show when={installReleaseRiskHints().length > 0}><div class="mt-3"><ManagedReleaseRiskHints riskIDs={installReleaseRiskHints()} /></div></Show>
 			  </section>
               <section class="service-template-install-section border-t pt-4">
                 <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.workspaceSection')}</h3>
@@ -3566,11 +3560,11 @@ export function EnvPortForwardsPage() {
 		  <div class="ml-auto flex gap-2">
 			<Button size="sm" variant="outline" onClick={closeReleasePicker} disabled={managedUpdatePlanLoading()}>{i18n.t('webServices.actions.cancel')}</Button>
 			<Show when={releasePickerTarget()?.kind === 'template'}>
-			  <Button size="sm" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable || !releaseRisksAccepted()}>{i18n.t('webServices.managed.deploySelectedRelease')}</Button>
+			  <Button size="sm" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable}>{i18n.t('webServices.managed.deploySelectedRelease')}</Button>
 			</Show>
 			<Show when={releasePickerTarget()?.kind === 'service'}>
 			  <Show when={managedUpdatePlan()} fallback={<Button size="sm" variant="default" onClick={() => void createManagedUpdatePlan()} disabled={!canReviewManagedUpdate() || managedUpdatePlanLoading()}>{managedUpdatePlanLoading() ? i18n.t('webServices.managed.preparingUpdatePlan') : i18n.t('webServices.managed.reviewUpdatePlan')}</Button>}>
-				<Button size="sm" variant="default" onClick={submitManagedUpdatePlan} disabled={!canManageManagedService() || !managedUpdatePlanRisksAccepted() || !managedUpdatePlanNoticesAccepted() || managedUpdatePlanRequiresStopped()}>{i18n.t('webServices.managed.update')}</Button>
+				<Button size="sm" variant="default" onClick={submitManagedUpdatePlan} disabled={!canManageManagedService() || !managedUpdatePlanNoticesAccepted() || managedUpdatePlanRequiresStopped()}>{i18n.t('webServices.managed.update')}</Button>
 			  </Show>
 			</Show>
 		  </div>
@@ -3584,7 +3578,7 @@ export function EnvPortForwardsPage() {
 				<p class="mt-2 text-[11px] text-muted-foreground">{i18n.t('webServices.managed.keepCurrentVersionDescription')}</p>
 			  </button>
 			</Show>
-			<ManagedReleaseCandidates result={releaseCandidates()} loading={releaseCandidatesLoading()} error={releaseCandidatesError()} query={releaseQuery()} filter={releaseFilter()} selectedID={selectedReleaseID()} acceptedRisks={releaseRiskAcceptances()} onQueryChange={setReleaseQuery} onFilterChange={setReleaseFilter} onSelect={(candidateID) => { setSelectedReleaseID(candidateID); setReleaseRiskAcceptances({}); setManagedUpdatePlan(null); setManagedUpdatePlanError(''); setManagedUpdatePlanRisks({}); setUpdateNoticeAcceptances({}); }} onRiskChange={(riskID, accepted) => setReleaseRiskAcceptances((current) => ({ ...current, [riskID]: accepted }))} showRisks={releasePickerTarget()?.kind === 'template'} defaultKind={selectedReleaseDefaultKind()} />
+			<ManagedReleaseCandidates result={releaseCandidates()} loading={releaseCandidatesLoading()} error={releaseCandidatesError()} query={releaseQuery()} filter={releaseFilter()} selectedID={selectedReleaseID()} onQueryChange={setReleaseQuery} onFilterChange={setReleaseFilter} onSelect={(candidateID) => { setSelectedReleaseID(candidateID); setManagedUpdatePlan(null); setManagedUpdatePlanError(''); setUpdateNoticeAcceptances({}); }} showRiskHints={releasePickerTarget()?.kind === 'template'} defaultKind={selectedReleaseDefaultKind()} />
 			<Show when={releasePickerTarget()?.kind === 'service' && !canReviewManagedUpdate() && !managedUpdatePlan() && !releaseCandidatesLoading() && !releaseCandidatesError()}><div class="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.updateNotRequired')}</div></Show>
 			<Show when={managedUpdatePlanError()}><div class="rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive">{managedUpdatePlanError()}</div></Show>
 			<Show when={managedUpdatePlan()} keyed>{(plan) => <section class="space-y-3 rounded-lg border bg-muted/20 p-4" data-testid="managed-update-plan">
@@ -3597,7 +3591,7 @@ export function EnvPortForwardsPage() {
 			  </div>
 			  <Show when={managedUpdatePlanRequiresStopped()}><div class="rounded-md border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.downgradeRequiresStopped')}</div></Show>
 			  <Show when={(plan.notices?.length ?? 0) > 0}><ManagedTemplateNotices notices={localizedManagedNotices(plan.notices, releasePickerTarget()?.service?.localizations, i18n.locale())} accepted={updateNoticeAcceptances()} disabled={false} onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))} /></Show>
-			  <Show when={(plan.required_risk_ids?.length ?? 0) > 0}><div class="space-y-2 rounded-md border border-warning/25 bg-warning/[0.05] p-3"><For each={plan.required_risk_ids}>{(risk) => <Checkbox checked={Boolean(managedUpdatePlanRisks()[risk])} onChange={(accepted) => setManagedUpdatePlanRisks((current) => ({ ...current, [risk]: Boolean(accepted) }))} label={releaseRiskLabel(risk, i18n)} size="sm" />}</For></div></Show>
+			  <ManagedReleaseRiskHints riskIDs={plan.risk_ids ?? []} />
 			</section>}</Show>
 		</div>
 	  </EnvAppDrawer>

@@ -254,7 +254,6 @@ type CreateRequest struct {
 	AcceptedNoticeRevisions map[string]int64  `json:"accepted_notice_revisions,omitempty"`
 	AccessMode              string            `json:"access_mode,omitempty"`
 	TargetReleaseID         string            `json:"target_release_id,omitempty"`
-	AcceptedReleaseRisks    []string          `json:"accepted_release_risks,omitempty"`
 }
 
 type TemplateWriteRequest struct {
@@ -276,7 +275,6 @@ type OperationRequest struct {
 	AcceptedNoticeRevisions map[string]int64    `json:"accepted_notice_revisions,omitempty"`
 	Reconfigure             *ReconfigureRequest `json:"reconfigure,omitempty"`
 	UpdatePlanID            string              `json:"update_plan_id,omitempty"`
-	AcceptedReleaseRisks    []string            `json:"accepted_release_risks,omitempty"`
 }
 
 type ReleaseIdentity struct {
@@ -368,7 +366,7 @@ type UpdatePlan struct {
 	CurrentTemplateRevision int64            `json:"current_template_revision"`
 	TargetTemplateRevision  int64            `json:"target_template_revision"`
 	Notices                 []TemplateNotice `json:"notices,omitempty"`
-	RequiredRiskIDs         []string         `json:"required_risk_ids,omitempty"`
+	RiskIDs                 []string         `json:"risk_ids,omitempty"`
 	RequiresStopped         bool             `json:"requires_stopped,omitempty"`
 	ExpiresAtUnixMs         int64            `json:"expires_at_unix_ms"`
 }

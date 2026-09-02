@@ -458,8 +458,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	defer m.requestMu.Unlock()
 	parameterJSON, _ := json.Marshal(req.Parameters)
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
-	releaseRiskJSON, _ := json.Marshal(req.AcceptedReleaseRisks)
-	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), strings.TrimSpace(req.AccessMode), strings.TrimSpace(req.TargetReleaseID), string(parameterJSON), string(noticeJSON), string(releaseRiskJSON))
+	fingerprint := requestFingerprint("install", req.TemplateID, string(req.Deployment), strings.TrimSpace(req.WorkspacePath), strings.TrimSpace(req.AccessMode), strings.TrimSpace(req.TargetReleaseID), string(parameterJSON), string(noticeJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -527,30 +526,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		if err != nil {
 			return nil, err
 		}
-		if err := validateInstallReleaseRisks(*template, selectedRelease, req.AcceptedReleaseRisks); err != nil {
-			return nil, err
-		}
 		updated := releaseCandidateTemplate(*template, *selectedRelease)
 		template = &updated
-	} else {
-		identity := defaultReleaseIdentity(*template)
-		if identity.Kind != "none" {
-			channel := "stable"
-			value := identity.Version
-			if identity.Kind == "oci" {
-				value = identity.Tag
-			}
-			trimmed := strings.TrimPrefix(value, "v")
-			if _, semantic := parseSemanticVersion(trimmed); !semantic || !exactSemverPattern.MatchString(trimmed) {
-				channel = "special"
-			} else if strings.Contains(trimmed, "-") {
-				channel = "preview"
-			}
-			declared := cachedReleaseCandidate{Candidate: ReleaseCandidate{SourceKind: identity.Kind, Source: identity.Source, Registry: identity.Registry, Version: identity.Version, Tag: identity.Tag, Channel: channel, Trust: identity.Trust}, Identity: identity}
-			if err := validateInstallReleaseRisks(*template, &declared, req.AcceptedReleaseRisks); err != nil {
-				return nil, err
-			}
-		}
 	}
 	configurationJSON, configurationHash, err := canonicalServiceConfiguration(configuration)
 	if err != nil {
@@ -697,8 +674,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	defer m.requestMu.Unlock()
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
 	reconfigureJSON, _ := json.Marshal(req.Reconfigure)
-	releaseRiskJSON, _ := json.Marshal(req.AcceptedReleaseRisks)
-	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), strings.TrimSpace(req.UpdatePlanID), string(noticeJSON), string(reconfigureJSON), string(releaseRiskJSON))
+	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), strings.TrimSpace(req.UpdatePlanID), string(noticeJSON), string(reconfigureJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -755,7 +731,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	var releaseCandidate *cachedReleaseCandidate
 	var updatePlan *cachedUpdatePlan
 	if req.Action == ActionUpdate {
-		updatePlan, err = m.resolveUpdatePlan(ctx, service, req.UpdatePlanID, req.AcceptedReleaseRisks)
+		updatePlan, err = m.resolveUpdatePlan(ctx, service, req.UpdatePlanID)
 		if err != nil {
 			return nil, err
 		}

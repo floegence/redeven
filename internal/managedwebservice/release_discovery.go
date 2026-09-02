@@ -551,23 +551,6 @@ func releaseRelation(current *ReleaseIdentity, target ReleaseIdentity) string {
 	return "unknown"
 }
 
-func validateInstallReleaseRisks(template Template, candidate *cachedReleaseCandidate, accepted []string) error {
-	acceptedSet := map[string]struct{}{}
-	for _, id := range accepted {
-		acceptedSet[strings.TrimSpace(id)] = struct{}{}
-	}
-	if candidate == nil {
-		return nil
-	}
-	required := updatePlanRisks(template, candidate, nil, candidate.Identity, true, "unknown")
-	for _, id := range required {
-		if _, ok := acceptedSet[id]; !ok {
-			return serviceError("RELEASE_RISK_ACKNOWLEDGEMENT_REQUIRED", "Accept every release safety warning before continuing.", 409, false, nil)
-		}
-	}
-	return nil
-}
-
 func (m *Manager) startReleaseDiscovery() {
 	m.releaseMu.Lock()
 	if m.releaseCancel != nil {

@@ -55,11 +55,10 @@ describe('EnvPortForwardsPage browser presentation', () => {
       query=""
       filter={filter()}
       selectedID={selected()}
-      acceptedRisks={{}}
       onQueryChange={() => undefined}
       onFilterChange={setFilter}
       onSelect={setSelected}
-      onRiskChange={() => undefined}
+      showRiskHints
     />, host);
     await settle();
 
@@ -80,6 +79,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(surface.textContent).not.toContain('0.1.0');
     await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-release-id="preview"]')!);
     expect(selected()).toBe('preview');
+    expect(surface.querySelector('[data-testid="managed-release-risk-hints"]')?.textContent).toContain('preview release');
+    expect(surface.querySelector('[data-testid="managed-release-risk-hints"] input[type="checkbox"]')).toBeNull();
     expect(surface.getBoundingClientRect().width).toBeLessThanOrEqual(390);
   });
 

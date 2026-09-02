@@ -3343,14 +3343,14 @@
       "deploySelectedRelease": "部署所選版本",
       "downgradeRequiresStopped": "選擇較舊版本前請先停止服務。",
       "releaseRisk": {
-        "npm_lifecycle_scripts": "我了解 npm 生命週期指令碼會以目前環境使用者權限執行，並可能存取該使用者可讀寫的資料。",
-        "non_recommended_release": "我了解此版本不是 Redeven 推薦版本。",
-        "non_default_release": "我了解此版本不是自訂範本設定的預設版本。",
-        "preview_release": "我了解這是預覽版本，可能不穩定或出現不相容變更。",
-        "deprecated_release": "我了解來源已將此版本標記為棄用。",
-        "downgrade": "我了解啟動失敗時 Redeven 可還原舊執行環境，但應用程式資料不會自動反向遷移。",
-        "version_order_unknown": "我了解這些標籤無法安全比較版本順序，日後切換到此版本或從此版本切出時可能需要先停止服務。",
-        "tag_digest_moved": "我了解此標籤目前指向的摘要已變更。"
+        "npm_lifecycle_scripts": "npm 生命週期指令碼會以目前環境使用者權限執行，並可能存取該使用者可讀寫的資料。",
+        "non_recommended_release": "此版本不是 Redeven 推薦版本。",
+        "non_default_release": "此版本不是自訂範本設定的預設版本。",
+        "preview_release": "這是預覽版本，可能不穩定或出現不相容變更。",
+        "deprecated_release": "來源已將此版本標記為棄用。",
+        "downgrade": "啟動失敗時 Redeven 可還原舊執行環境，但應用程式資料不會自動反向遷移。",
+        "version_order_unknown": "這些標籤無法安全比較版本順序；切換到此版本或從此版本切出時需要先停止服務。",
+        "tag_digest_moved": "此標籤目前指向的摘要已變更。"
       },
       "keepCurrentVersion": "保留目前應用程式版本",
       "keepCurrentVersionDescription": "若有新範本修訂，只套用範本變更；Redeven 不會把應用程式切回推薦版本。",

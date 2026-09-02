@@ -3330,14 +3330,14 @@
       "deploySelectedRelease": "Déployer la version sélectionnée",
       "downgradeRequiresStopped": "Arrêtez le service avant de choisir une version antérieure.",
       "releaseRisk": {
-        "npm_lifecycle_scripts": "Je comprends que les scripts de cycle de vie npm s’exécutent avec les droits de l’utilisateur actuel de l’environnement et peuvent accéder aux données que cet utilisateur peut lire ou modifier.",
-        "non_recommended_release": "Je comprends qu’il ne s’agit pas de la version recommandée par Redeven.",
-        "non_default_release": "Je comprends qu’il ne s’agit pas de la version par défaut du modèle personnalisé.",
-        "preview_release": "Je comprends qu’il s’agit d’une version d’aperçu qui peut être instable ou comporter des changements incompatibles.",
-        "deprecated_release": "Je comprends que la source marque cette version comme obsolète.",
-        "downgrade": "Je comprends que Redeven peut restaurer l’ancien environnement d’exécution en cas d’échec du démarrage, mais que les données de l’application ne sont pas migrées en sens inverse.",
-        "version_order_unknown": "Je comprends que ces tags ne peuvent pas être ordonnés de façon sûre et qu’un changement ultérieur vers ou depuis cette version peut exiger l’arrêt du service.",
-        "tag_digest_moved": "Je comprends que ce tag pointe désormais vers un digest différent."
+        "npm_lifecycle_scripts": "Les scripts de cycle de vie npm s’exécutent avec les droits de l’utilisateur actuel de l’environnement et peuvent accéder aux données que cet utilisateur peut lire ou modifier.",
+        "non_recommended_release": "Il ne s’agit pas de la version recommandée par Redeven.",
+        "non_default_release": "Il ne s’agit pas de la version par défaut du modèle personnalisé.",
+        "preview_release": "Il s’agit d’une version d’aperçu qui peut être instable ou comporter des changements incompatibles.",
+        "deprecated_release": "La source marque cette version comme obsolète.",
+        "downgrade": "Redeven peut restaurer l’ancien environnement d’exécution en cas d’échec du démarrage, mais les données de l’application ne sont pas migrées en sens inverse.",
+        "version_order_unknown": "Ces tags ne peuvent pas être ordonnés de façon sûre. Le service doit être arrêté avant tout changement vers ou depuis cette version.",
+        "tag_digest_moved": "Ce tag pointe désormais vers un digest différent de celui utilisé auparavant."
       },
       "keepCurrentVersion": "Conserver la version actuelle de l’application",
       "keepCurrentVersionDescription": "Applique uniquement une nouvelle révision du modèle. Redeven ne rétablira pas la version recommandée.",
