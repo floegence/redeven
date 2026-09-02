@@ -1,6 +1,10 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Resumed-Run startup migration**: Redeven now consumes Floret v7.1.2, whose
+  v8-to-v9 migration follows canonical Run changes after interaction resumes
+  within one Turn. Valid Agent data opens through the existing single runtime
+  path; Redeven adds no schema inspection, repair, or fallback.
 * **Stable streamed SubAgent disclosures**: Child ledger groups and entries now
   reconcile only by canonical semantic keys, retain one activity owner while a
   single operation becomes a batch, and update content through accessors. Main
@@ -10,7 +14,7 @@
   object-reference render paths, batch-only disclosure state, global anchor
   revision, parent-scroll fallback, and proximity capture that re-enabled child
   tail following after an explicit interaction.
-* **Fork context identity**: Redeven now consumes Floret v7.1.1. Canonical
+* **Fork context identity**: Redeven now consumes Floret v7.1.2. Canonical
   context snapshots for direct and nested forks use the destination ThreadID,
   preserve historical Turn and Run identity plus cumulative usage, and remain
   stable after restart. Redeven keeps one public `ThreadContextReader` path and
