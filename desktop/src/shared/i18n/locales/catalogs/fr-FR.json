@@ -344,8 +344,6 @@
       "completedLabel": "Terminés",
       "threadIDLabel": "Fil",
       "lastMessageLabel": "Dernier relais",
-      "loadMore": "Charger davantage",
-      "loadingMore": "Chargement...",
       "detailTimelineLabel": "Journal d’exécution du sous-agent",
       "detailInstructionLabel": "Instruction déléguée",
       "detailConstraintsLabel": "Contraintes d’exécution",
@@ -353,7 +351,6 @@
       "detailActivityLabel": "Opérations : {count}",
       "detailOutcomeLabel": "Résultat",
       "detailRetry": "Réessayer",
-      "detailSyncing": "Synchronisation de l’activité récente",
       "unavailableThread": "Fil indisponible",
       "readOnlyComposerLabel": "Lecture seule · Géré par le fil de conversation parent",
       "status": {

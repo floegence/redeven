@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   FlowerLiveStreamEnvelope,
   FlowerRuntimeCurrentView,
+  FlowerSubagentDetail,
   FlowerTurnLaunchInput,
   FlowerTurnLaunchReceipt,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -181,10 +182,15 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(markThreadRead.mock.calls.map((call) => call[1].activity_revision)).toEqual([7, 9]);
   });
 
-  it('routes a live Subagent inventory to the parent panel and opens its floating detail', async () => {
+  it('keeps a running Subagent window open and orders HTTP, live, and reconnect current views', async () => {
     const parent = thread({
       thread_id: 'thread-parent-live-subagent',
       title: 'Parent research task',
+      subagents: [],
+    });
+    const peer = thread({
+      thread_id: 'thread-peer-live-subagent',
+      title: 'Another parent task',
       subagents: [],
     });
     const child = subagentSummary({
@@ -197,15 +203,29 @@ describe('Flower final thread cache and workspace transport', () => {
     const stream = controlledWorkspaceStream([{
       schema_version: 1,
       kind: 'ready',
-      summaries: [parent],
+      summaries: [parent, peer],
     }]);
     const surfaceAdapter = adapter(true);
+    const firstDetail = deferred<FlowerSubagentDetail>();
+    const loadSubagentDetail = vi.fn()
+      .mockImplementationOnce(async () => firstDetail.promise)
+      .mockResolvedValue(subagentDetail({
+        summary: { ...child, status: 'completed' },
+        current: {
+          thread_id: child.thread_id, view_version: 10, activity: 'idle', turn_id: 'child-turn',
+          last_outcome: 'completed',
+          items: [{
+            id: 'child-final', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
+            kind: 'assistant', text: 'Reconnected final child result.',
+          }],
+        },
+      }));
     const runtime = renderSurfaceWithAdapter({
       ...surfaceAdapter,
-      listThreads: vi.fn(async () => [parent]),
-      loadThread: vi.fn(async () => liveBootstrap(parent, 1)),
+      listThreads: vi.fn(async () => [parent, peer]),
+      loadThread: vi.fn(async (threadID: string) => liveBootstrap(threadID === parent.thread_id ? parent : peer, 1)),
       connectLiveStream: stream.connect,
-      loadSubagentDetail: vi.fn(async () => subagentDetail({ summary: child })),
+      loadSubagentDetail,
     });
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`)));
@@ -240,8 +260,163 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(getComputedStyle(detailSignal).borderRadius).toBe('9999px');
     expect(statusText.textContent).toBe('Running');
     expect(getComputedStyle(statusText).animationName).toBe('flower-activity-title-sweep');
+
+    expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      subagents: [],
+    });
+    await waitFor(() => runtime.querySelector('.flower-header-icon-badge') === null);
+    expect(document.querySelector('[data-flower-subagent-detail="open"]')).not.toBeNull();
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      subagent_current: {
+        thread_id: child.thread_id, view_version: 8, activity: 'active', turn_id: 'child-turn', run_id: 'child-run',
+        items: [{
+          id: 'child-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
+          kind: 'assistant', text: 'Live child content.', live: true,
+        }],
+      },
+    });
+    await waitFor(() => document.body.textContent?.includes('Live child content.') === true);
+
+    firstDetail.resolve(subagentDetail({
+      summary: child,
+      current: {
+        thread_id: child.thread_id, view_version: 7, activity: 'active', turn_id: 'child-turn', run_id: 'child-run',
+        items: [{
+          id: 'child-stale', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
+          kind: 'assistant', text: 'Stale HTTP content.', live: true,
+        }],
+      },
+    }));
+    await wait(25);
+    expect(document.body.textContent).toContain('Live child content.');
+    expect(document.body.textContent).not.toContain('Stale HTTP content.');
+    expect(document.querySelector('[data-flower-subagent-dock]')).toBeNull();
+
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: 'other-parent',
+      subagent_current: { thread_id: child.thread_id, view_version: 99, items: [] },
+    });
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      subagent_current: { thread_id: 'other-child', view_version: 99, items: [] },
+    });
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      subagent_current: {
+        thread_id: child.thread_id,
+        view_version: 100,
+        items: [{ id: 'incomplete-child-item', ordinal: 1, kind: 'assistant', text: 'Invalid child content.' }],
+      } as unknown as FlowerRuntimeCurrentView,
+    });
+    await wait(25);
+    expect(document.body.textContent).toContain('Live child content.');
+    expect(document.body.textContent).not.toContain('Invalid child content.');
+
+    stream.push({ schema_version: 1, kind: 'ready', summaries: [parent, peer] });
+    await waitFor(() => loadSubagentDetail.mock.calls.length === 2);
+    await waitFor(() => document.body.textContent?.includes('Reconnected final child result.') === true);
+
+    expect(document.querySelector('[data-floe-geometry-surface="floating-window"]')).not.toBeNull();
     expect(runtime.querySelector(`[data-thread-id="${parent.thread_id}"]`)?.getAttribute('data-flower-thread-active')).toBe('true');
     expect(runtime.querySelector(`[data-thread-id="${child.thread_id}"]`)).toBeNull();
+
+    (runtime.querySelector(`[data-thread-id="${peer.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector(`[data-thread-id="${peer.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    expect(document.querySelector('[data-flower-subagent-detail="open"]')).toBeNull();
+  });
+
+  it('keeps the Subagent window mounted after initial failure and retries in place', async () => {
+    const parent = thread({
+      thread_id: 'thread-parent-subagent-retry',
+      title: 'Parent retry task',
+      subagents: [],
+    });
+    const child = subagentSummary({
+      parent_thread_id: parent.thread_id,
+      thread_id: 'thread-child-subagent-retry',
+      task_name: 'Retry child detail',
+      status: 'running',
+    });
+    const stream = controlledWorkspaceStream([{
+      schema_version: 1,
+      kind: 'ready',
+      summaries: [parent],
+    }]);
+    const firstDetail = deferred<FlowerSubagentDetail>();
+    const loadSubagentDetail = vi.fn()
+      .mockImplementationOnce(async () => firstDetail.promise)
+      .mockResolvedValue(subagentDetail({
+        summary: child,
+        current: {
+          thread_id: child.thread_id,
+          view_version: 2,
+          activity: 'active',
+          turn_id: 'child-turn-retry',
+          run_id: 'child-run-retry',
+          items: [{
+            id: 'child-retry-result',
+            turn_id: 'child-turn-retry',
+            run_id: 'child-run-retry',
+            ordinal: 1,
+            kind: 'assistant',
+            text: 'Child detail recovered.',
+            live: true,
+          }],
+        },
+      }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [parent]),
+      loadThread: vi.fn(async () => liveBootstrap(parent, 1)),
+      connectLiveStream: stream.connect,
+      loadSubagentDetail,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector(`[data-thread-id="${parent.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      subagents: [child],
+    });
+    await waitFor(() => runtime.querySelector('.flower-header-icon-badge')?.textContent === '1');
+    (runtime.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
+    (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
+
+    const windowBeforeFailure = document.querySelector('[data-floe-geometry-surface="floating-window"]');
+    expect(windowBeforeFailure).not.toBeNull();
+    firstDetail.reject(new Error('Temporary child detail failure.'));
+    await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-retry')));
+    expect(document.querySelector('[data-floe-geometry-surface="floating-window"]')).toBe(windowBeforeFailure);
+
+    (document.querySelector('.flower-subagent-detail-retry') as HTMLButtonElement).click();
+    await waitFor(() => document.body.textContent?.includes('Child detail recovered.') === true);
+    expect(loadSubagentDetail).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[data-floe-geometry-surface="floating-window"]')).toBe(windowBeforeFailure);
+    expect(document.querySelector('[data-flower-subagent-dock]')).toBeNull();
   });
 
   it('wraps live thinking without making the transcript horizontally scrollable', async () => {

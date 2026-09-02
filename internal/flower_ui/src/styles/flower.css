@@ -8830,8 +8830,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-detail-retry,
-.flower-subagent-detail-inline-error button,
-.flower-subagent-detail-tail-error button {
+.flower-subagent-detail-inline-error button {
   display: inline-flex;
   width: max-content;
   cursor: pointer;
@@ -8849,9 +8848,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-subagent-detail-retry:hover,
 .flower-subagent-detail-retry:focus-visible,
 .flower-subagent-detail-inline-error button:hover,
-.flower-subagent-detail-inline-error button:focus-visible,
-.flower-subagent-detail-tail-error button:hover,
-.flower-subagent-detail-tail-error button:focus-visible {
+.flower-subagent-detail-inline-error button:focus-visible {
   border-color: color-mix(in srgb, currentColor 45%, var(--flower-subagent-window-border));
   outline: 2px solid color-mix(in srgb, currentColor 18%, transparent);
   outline-offset: 1px;
@@ -9181,102 +9178,6 @@ button.flower-attachment-preview-trigger:disabled {
   font-size: 0.6875rem;
 }
 
-.flower-subagent-detail-bottom-dock {
-  display: flex;
-  min-width: 0;
-  min-height: 2.7rem;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.65rem;
-  border-top: 1px solid var(--flower-subagent-window-border-soft);
-  background: var(--flower-subagent-window-surface-band);
-  padding: 0.48rem 0.75rem;
-}
-
-.flower-subagent-detail-load-more-button {
-  flex: 0 0 auto;
-  cursor: pointer;
-  border: 1px solid var(--flower-subagent-window-border);
-  border-radius: 4px;
-  background: transparent;
-  color: color-mix(in srgb, var(--flower-subagent-window-accent) 72%, var(--flower-subagent-window-text) 28%);
-  padding: 0.34rem 0.62rem;
-  font-size: 0.6875rem;
-  font-weight: 690;
-}
-
-.flower-subagent-detail-load-more-button:hover,
-.flower-subagent-detail-load-more-button:focus-visible {
-  border-color: color-mix(in srgb, var(--flower-subagent-window-accent) 52%, var(--flower-subagent-window-border));
-  background: color-mix(in srgb, var(--flower-subagent-window-accent) 8%, transparent);
-  outline: 2px solid color-mix(in srgb, var(--flower-subagent-window-accent) 16%, transparent);
-  outline-offset: 1px;
-}
-
-.flower-subagent-detail-load-more-button:disabled {
-  cursor: not-allowed;
-  color: var(--flower-subagent-window-muted);
-  opacity: 0.58;
-}
-
-.flower-subagent-detail-bottom-track {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.flower-subagent-detail-bottom-track .flower-model-status-lane {
-  min-height: 1.5rem;
-  justify-content: flex-start;
-}
-
-.flower-subagent-detail-tail-state,
-.flower-subagent-detail-tail-error {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--flower-subagent-window-muted);
-  font-size: 0.6875rem;
-  font-weight: 620;
-}
-
-.flower-subagent-detail-tail-pulse {
-  width: 0.42rem;
-  height: 0.42rem;
-  flex: 0 0 auto;
-  background: var(--flower-subagent-window-accent);
-  animation: flower-subagent-tail-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes flower-subagent-tail-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.78);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.flower-subagent-detail-tail-error {
-  color: var(--flower-subagent-window-danger);
-}
-
-.flower-subagent-detail-tail-error > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.flower-subagent-detail-tail-error button {
-  flex: 0 0 auto;
-  padding-block: 0.2rem;
-}
-
 .flower-subagent-detail-scroll-to-latest {
   position: sticky;
   bottom: 0.75rem;
@@ -9340,15 +9241,6 @@ button.flower-attachment-preview-trigger:disabled {
     padding-right: 1.35rem;
   }
 
-  .flower-subagent-detail-bottom-dock {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-
-  .flower-subagent-detail-load-more-button {
-    width: 100%;
-  }
 }
 
 @media (hover: none) {
@@ -9363,8 +9255,7 @@ button.flower-attachment-preview-trigger:disabled {
     transition: none !important;
   }
 
-  .flower-subagent-detail-loading-row,
-  .flower-subagent-detail-tail-pulse {
+  .flower-subagent-detail-loading-row {
     animation: none !important;
   }
 

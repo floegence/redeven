@@ -208,6 +208,25 @@ describe('runtime Flower surface adapter read state', () => {
 		expect(detail).not.toHaveProperty('live_state');
 	});
 
+	it('loads one typed Subagent current without pagination parameters', async () => {
+		const loadSubagentDetail = vi.fn(async () => ({
+			detail: {
+				summary: {
+					parent_thread_id: 'parent-detail', thread_id: 'child-detail', task_name: 'Inspect detail', status: 'running',
+					can_send_input: false, can_interrupt: true, can_close: true,
+				},
+				current: { thread_id: 'child-detail', view_version: 4, activity: 'active' as const },
+			},
+		}));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadSubagentDetail }));
+
+		const detail = await adapter.loadSubagentDetail(' parent-detail ', ' child-detail ');
+
+		expect(loadSubagentDetail).toHaveBeenCalledWith('parent-detail', 'child-detail');
+		expect(detail.current.view_version).toBe(4);
+		expect(detail).toEqual(expect.not.objectContaining({ timeline: expect.anything(), generated_at_ms: expect.anything() }));
+	});
+
 	it('trims and forwards canonical continuation retries', async () => {
 		const retryThread = vi.fn(async () => undefined);
 		const loadThread = vi.fn(async () => ({
@@ -366,6 +385,14 @@ describe('runtime Flower surface adapter read state', () => {
 						can_close: true,
 					}],
 				};
+				yield {
+					schema_version: 1,
+					kind: 'thread.batch',
+					thread_id: 'thread_stream',
+					subagent_current: {
+						thread_id: 'thread_child', view_version: 6, activity: 'active', run_id: 'run_child',
+					},
+				};
 			});
 			const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream }));
 			const controller = new AbortController();
@@ -374,7 +401,7 @@ describe('runtime Flower surface adapter read state', () => {
 				signal: controller.signal,
 			})) frames.push(frame);
 
-			expect(frames).toHaveLength(4);
+			expect(frames).toHaveLength(5);
 			expect(frames[0]).toMatchObject({
 				kind: 'ready',
 				summaries: [{ thread_id: 'thread_stream', messages: [] }],
@@ -395,6 +422,11 @@ describe('runtime Flower surface adapter read state', () => {
 				kind: 'thread.batch',
 				thread_id: 'thread_stream',
 				subagents: [{ thread_id: 'thread_child', task_name: 'Research models', status: 'running' }],
+			});
+			expect(frames[4]).toMatchObject({
+				kind: 'thread.batch',
+				thread_id: 'thread_stream',
+				subagent_current: { thread_id: 'thread_child', view_version: 6, run_id: 'run_child' },
 			});
 		});
 

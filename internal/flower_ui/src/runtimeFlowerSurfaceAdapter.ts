@@ -91,7 +91,7 @@ export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
   loadThread(threadID: string): Promise<unknown>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<unknown>;
-  loadSubagentDetail(parentThreadID: string, childThreadID: string, afterOrdinal: number, limit: number): Promise<LoadSubagentDetailResponse>;
+  loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
@@ -193,6 +193,9 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   const current = value.current && typeof value.current === 'object'
     ? value.current as FlowerRuntimeCurrentView
     : undefined;
+  const subagentCurrent = value.subagent_current && typeof value.subagent_current === 'object'
+    ? value.subagent_current as FlowerRuntimeCurrentView
+    : undefined;
   const contextCompactions = mapFlowerContextCompactions(value.context_compactions);
   const timelineDecorations = mapFlowerTimelineDecorations(value.timeline_decorations);
   const contextUsage = mapContextUsage(value.context_usage);
@@ -203,6 +206,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     ...(trim(value.thread_id) ? { thread_id: trim(value.thread_id) } : {}),
     ...(summaries ? { summaries } : {}),
     ...(current ? { current } : {}),
+    ...(subagentCurrent ? { subagent_current: subagentCurrent } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
     ...(contextUsage ? { context_usage: contextUsage } : {}),
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
@@ -212,7 +216,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
 }
 
 function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetail {
-  if (!raw.detail) throw new Error('Missing subagent detail.');
+  if (!raw.detail?.current || !raw.detail.summary) throw new Error('Missing subagent detail.');
   return raw.detail;
 }
 
@@ -257,16 +261,11 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         }
       },
     } : {}),
-    loadSubagentDetail: async (parentThreadID, childThreadID, afterOrdinal = 0, limit = 200) => {
+    loadSubagentDetail: async (parentThreadID, childThreadID) => {
       const parentID = trim(parentThreadID);
       const childID = trim(childThreadID);
       if (!parentID || !childID) throw new Error(missingThreadIDMessage(options));
-      return mapSubagentDetail(await options.transport.loadSubagentDetail(
-        parentID,
-        childID,
-        Math.max(0, Math.floor(Number(afterOrdinal) || 0)),
-        Math.max(1, Math.min(500, Math.floor(Number(limit) || 200))),
-      ));
+      return mapSubagentDetail(await options.transport.loadSubagentDetail(parentID, childID));
     },
     markThreadRead,
     ...(options.canMutate === false ? {} : {

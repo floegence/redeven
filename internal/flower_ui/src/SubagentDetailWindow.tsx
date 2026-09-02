@@ -40,13 +40,7 @@ export type SubagentDetailWindowProps = Readonly<{
   onScroll: () => void;
   showScrollToLatest: boolean;
   onScrollToLatest: () => void;
-  hasMore: boolean;
-  loadingMore: boolean;
-  onLoadMore: () => void;
   onRetryLoad: () => void;
-  tailLoading: boolean;
-  tailError: string;
-  onRetryTail: () => void;
   viewportLeftInset: number;
   zIndex: number;
   threadLoadingLabel: string;
@@ -239,12 +233,6 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
       </details>
     );
   };
-  const showStatusLane = createMemo(() => props.tailLoading || Boolean(props.tailError));
-  const showDock = createMemo(() => (
-    props.hasMore
-    || showStatusLane()
-  ));
-
   return (
     <FloatingWindow
       open={props.open}
@@ -324,7 +312,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
             <div class="flower-subagent-detail-inline-error" role="alert">
               <AlertTriangle class="h-3.5 w-3.5" />
               <span>{props.error}</span>
-              <button type="button" onClick={props.onLoadMore}>{props.copy.detailRetry}</button>
+              <button type="button" onClick={props.onRetryLoad}>{props.copy.detailRetry}</button>
             </div>
           </Show>
           <div
@@ -360,39 +348,6 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
           </div>
         </Show>
 
-        <Show when={showDock()}>
-          <footer class="flower-subagent-detail-bottom-dock" data-flower-subagent-dock>
-            <Show when={props.hasMore}>
-              <button
-                type="button"
-                class="flower-subagent-detail-load-more-button"
-                disabled={props.loadingMore || props.tailLoading}
-                onClick={props.onLoadMore}
-              >
-                {props.loadingMore ? props.copy.loadingMore : props.copy.loadMore}
-              </button>
-            </Show>
-            <Show when={showStatusLane()}>
-              <div class="flower-subagent-detail-bottom-track">
-                <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
-                  <Show when={props.tailLoading}>
-                    <span class="flower-subagent-detail-tail-state">
-                      <span class="flower-subagent-detail-tail-pulse" aria-hidden="true" />
-                      <span>{props.copy.detailSyncing}</span>
-                    </span>
-                  </Show>
-                  <Show when={props.tailError}>
-                    <span class="flower-subagent-detail-tail-error">
-                      <AlertTriangle class="h-3.5 w-3.5" />
-                      <span>{props.tailError}</span>
-                      <button type="button" onClick={props.onRetryTail}>{props.copy.detailRetry}</button>
-                    </span>
-                  </Show>
-                </div>
-              </div>
-            </Show>
-          </footer>
-        </Show>
       </div>
     </FloatingWindow>
   );

@@ -204,92 +204,9 @@ type FlowerSubagentSummary struct {
 	UpdatedAtUnixMs int64  `json:"updated_at_ms,omitempty"`
 }
 
-type FlowerSubagentDetailMessage struct {
-	Role        string                 `json:"role,omitempty"`
-	Text        string                 `json:"text,omitempty"`
-	Preview     string                 `json:"preview,omitempty"`
-	Attachments []FlowerAttachmentView `json:"attachments,omitempty"`
-}
-
-type FlowerSubagentToolCallView struct {
-	ID          string `json:"id,omitempty"`
-	Name        string `json:"name,omitempty"`
-	ArgsPreview string `json:"args_preview,omitempty"`
-	ArgsHash    string `json:"args_hash,omitempty"`
-}
-
-type FlowerSubagentToolResultView struct {
-	CallID        string `json:"call_id,omitempty"`
-	ToolName      string `json:"tool_name,omitempty"`
-	Status        string `json:"status,omitempty"`
-	Preview       string `json:"preview,omitempty"`
-	Truncated     bool   `json:"truncated,omitempty"`
-	OriginalBytes int    `json:"original_bytes,omitempty"`
-	VisibleBytes  int    `json:"visible_bytes,omitempty"`
-	OriginalLines int    `json:"original_lines,omitempty"`
-	VisibleLines  int    `json:"visible_lines,omitempty"`
-	Strategy      string `json:"strategy,omitempty"`
-	ContentSHA256 string `json:"content_sha256,omitempty"`
-}
-
-type FlowerSubagentGenericView struct {
-	Title    string            `json:"title,omitempty"`
-	Body     string            `json:"body,omitempty"`
-	Metadata map[string]string `json:"metadata,omitempty"`
-}
-
-type FlowerSubagentApprovalView struct {
-	State    string            `json:"state,omitempty"`
-	ToolID   string            `json:"tool_id,omitempty"`
-	ToolName string            `json:"tool_name,omitempty"`
-	ToolKind string            `json:"tool_kind,omitempty"`
-	ArgsHash string            `json:"args_hash,omitempty"`
-	Reason   string            `json:"reason,omitempty"`
-	Metadata map[string]string `json:"metadata,omitempty"`
-}
-
-type FlowerSubagentTurnMarkerView struct {
-	Status   string            `json:"status,omitempty"`
-	Metadata map[string]string `json:"metadata,omitempty"`
-}
-
-type FlowerSubagentCompactionView struct {
-	Trigger             string            `json:"trigger,omitempty"`
-	Reason              string            `json:"reason,omitempty"`
-	Phase               string            `json:"phase,omitempty"`
-	TokensBefore        int64             `json:"tokens_before,omitempty"`
-	TokensAfterEstimate int64             `json:"tokens_after_estimate,omitempty"`
-	Metadata            map[string]string `json:"metadata,omitempty"`
-}
-
-type FlowerSubagentTimelineRow struct {
-	Ordinal     int64                         `json:"ordinal"`
-	Kind        string                        `json:"kind"`
-	Type        string                        `json:"type,omitempty"`
-	CreatedAtMs int64                         `json:"created_at_ms"`
-	Message     *FlowerSubagentDetailMessage  `json:"message,omitempty"`
-	ToolCall    *FlowerSubagentToolCallView   `json:"tool_call,omitempty"`
-	ToolResult  *FlowerSubagentToolResultView `json:"tool_result,omitempty"`
-	Approval    *FlowerSubagentApprovalView   `json:"approval,omitempty"`
-	TurnMarker  *FlowerSubagentTurnMarkerView `json:"turn_marker,omitempty"`
-	Compaction  *FlowerSubagentCompactionView `json:"compaction,omitempty"`
-	Generic     *FlowerSubagentGenericView    `json:"generic,omitempty"`
-	Error       string                        `json:"error,omitempty"`
-	Metadata    map[string]string             `json:"metadata,omitempty"`
-}
-
 type FlowerSubagentDetailResponse struct {
-	Summary             FlowerSubagentSummary       `json:"summary"`
-	Messages            []FlowerTimelineMessage     `json:"messages"`
-	Timeline            []FlowerSubagentTimelineRow `json:"timeline"`
-	Activity            *ActivityTimelineBlock      `json:"activity,omitempty"`
-	ContextUsage        *FlowerContextUsage         `json:"context_usage,omitempty"`
-	ContextCompactions  []FlowerContextCompaction   `json:"context_compactions,omitempty"`
-	TimelineDecorations []FlowerTimelineDecoration  `json:"timeline_decorations,omitempty"`
-	NextOrdinal         int64                       `json:"next_ordinal,omitempty"`
-	HasMore             bool                        `json:"has_more,omitempty"`
-	RetainedFrom        int64                       `json:"retained_from,omitempty"`
-	GeneratedAtMs       int64                       `json:"generated_at_ms"`
+	Summary FlowerSubagentSummary `json:"summary"`
+	Current flruntime.ThreadView  `json:"current"`
 }
 
 type CreateThreadRequest struct {

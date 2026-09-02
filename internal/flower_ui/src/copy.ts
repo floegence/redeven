@@ -209,8 +209,6 @@ export type FlowerSubagentsCopy = Readonly<{
   completedLabel: string;
   threadIDLabel: string;
   lastMessageLabel: string;
-  loadMore: string;
-  loadingMore: string;
   detailTimelineLabel: string;
   detailInstructionLabel: string;
   detailConstraintsLabel: string;
@@ -218,7 +216,6 @@ export type FlowerSubagentsCopy = Readonly<{
   detailActivityLabel: (count: number) => string;
   detailOutcomeLabel: string;
   detailRetry: string;
-  detailSyncing: string;
   unavailableThread: string;
   readOnlyComposerLabel: string;
   statusLabels: Readonly<Record<'queued' | 'running' | 'waiting_input' | 'completed' | 'failed' | 'canceled' | 'timed_out' | 'unknown', string>>;
@@ -869,8 +866,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     completedLabel: 'Ended',
     threadIDLabel: 'Thread',
     lastMessageLabel: 'Latest handoff',
-    loadMore: 'Load more',
-    loadingMore: 'Loading...',
     detailTimelineLabel: 'Subagent execution record',
     detailInstructionLabel: 'Delegated instruction',
     detailConstraintsLabel: 'Runtime constraints',
@@ -878,7 +873,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     detailActivityLabel: (count) => count === 1 ? '1 operation' : `${count} operations`,
     detailOutcomeLabel: 'Outcome',
     detailRetry: 'Retry',
-    detailSyncing: 'Syncing latest activity',
     unavailableThread: 'Thread not available',
     readOnlyComposerLabel: 'Read only · Managed by parent thread',
     statusLabels: {

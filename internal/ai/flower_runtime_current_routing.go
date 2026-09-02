@@ -57,6 +57,7 @@ func (s *Service) broadcastFlowerRuntimeProjection(endpointID string, current fl
 		s.broadcastFlowerRuntimeCurrent(endpointID, current)
 		return
 	}
+	s.broadcastFlowerSubagentRuntimeCurrent(endpointID, parentThreadID, current)
 	boundary := flowerSubagentInventoryBoundary(current)
 	s.mu.Lock()
 	if s.flowerSubagentBoundaryByThread == nil {

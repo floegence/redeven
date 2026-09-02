@@ -81,7 +81,7 @@ import type {
   FlowerReasoningCapability,
   FlowerReasoningSelection,
   FlowerSubagentDetail,
-  FlowerSubagentTimelineRow,
+  FlowerSubagentSummary,
   FlowerWorkingDirectoryPathContext,
 } from './contracts/flowerSurfaceContracts';
 import { flowerThreadHasActiveTurnEvidence, projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
@@ -326,11 +326,14 @@ type SelectedThreadTailReveal = Readonly<{
   threadID: string;
   sequence: number;
 }>;
-type FlowerSubagentDetailTailRequest = Readonly<{
+type ActiveSubagentDetail = Readonly<{
   parentThreadID: string;
   childThreadID: string;
-  openedRevision: number;
-  afterOrdinal: number;
+  item: FlowerSubagentPanelItem;
+  generation: number;
+  requestStatus: 'idle' | 'loading';
+  detail: FlowerSubagentDetail | null;
+  error: string;
 }>;
 type PendingAdmissionHandoff = Readonly<{
   sessionKey: string;
@@ -362,11 +365,7 @@ const FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME = 12;
 const SELECTED_THREAD_TAIL_REVEAL_FALLBACK_MS = 120;
 const FLOWER_TERMINAL_THREAD_STATUSES = new Set<FlowerThreadStatus>(['idle', 'failed', 'success', 'canceled', 'read_only']);
 const FLOWER_ACTIVE_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
-const SUBAGENT_DETAIL_PAGE_SIZE = 200;
 const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 400, height: 480 } as const;
-const SUBAGENT_DETAIL_TAIL_RUNNING_INTERVAL_MS = 1500;
-const SUBAGENT_DETAIL_TAIL_QUEUED_INTERVAL_MS = 2500;
-const SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS = 4000;
 const FLOWER_SURFACE_LAYER = {
   subagentWindow: 160,
   contextPreview: 162,
@@ -520,85 +519,6 @@ function loadThreadRailWidth(): number {
   return Number.isFinite(stored) ? clampThreadRailWidth(stored) : THREAD_RAIL_WIDTH_DEFAULT;
 }
 
-function hashSubagentPreview(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
-}
-
-function subagentTimelineRowBaseIdentity(row: FlowerSubagentTimelineRow): string {
-  return [
-    'row',
-    String(Math.max(0, Math.floor(Number(row.ordinal ?? 0)))),
-    trimString(row.kind),
-    trimString(row.type ?? ''),
-  ].join(':');
-}
-
-function subagentTimelineRowIdentity(row: FlowerSubagentTimelineRow): string {
-  const base = subagentTimelineRowBaseIdentity(row);
-  const metadataID = trimString(row.metadata?.id)
-    || trimString(row.metadata?.row_id)
-    || trimString(row.metadata?.event_id)
-    || trimString(row.metadata?.activity_id);
-  if (metadataID) return `${base}:meta:${metadataID}`;
-  const toolCallID = trimString(row.tool_call?.id);
-  if (toolCallID) return `${base}:tool-call:${toolCallID}`;
-  const toolResultID = trimString(row.tool_result?.call_id);
-  if (toolResultID) return `${base}:tool-result:${toolResultID}`;
-  const preview = [
-    row.message?.text,
-    row.message?.preview,
-    row.error,
-    row.generic?.title,
-    row.generic?.body,
-  ].map((value) => trimString(value)).filter(Boolean).join('\x1e');
-  return preview ? `${base}:preview:${hashSubagentPreview(preview)}` : base;
-}
-
-function mergeSubagentDetailPage(current: FlowerSubagentDetail | null, page: FlowerSubagentDetail): FlowerSubagentDetail {
-  if (!current || current.summary.thread_id !== page.summary.thread_id) return page;
-  const pageIsNewer = Number(page.generated_at_ms ?? 0) >= Number(current.generated_at_ms ?? 0);
-  const metadataSource = pageIsNewer ? page : current;
-  const byKey = new Map<string, FlowerSubagentTimelineRow>();
-  const order = new Map<string, number>();
-  for (const row of current.timeline) {
-    const key = subagentTimelineRowIdentity(row);
-    if (!order.has(key)) order.set(key, order.size);
-    byKey.set(key, row);
-  }
-  for (const row of page.timeline) {
-    const key = subagentTimelineRowIdentity(row);
-    if (!order.has(key)) order.set(key, order.size);
-    byKey.set(key, row);
-  }
-  const timeline = Array.from(byKey.entries())
-    .sort(([leftKey, left], [rightKey, right]) => {
-      if (left.ordinal !== right.ordinal) return left.ordinal - right.ordinal;
-      return (order.get(leftKey) ?? 0) - (order.get(rightKey) ?? 0);
-    })
-    .map(([, row]) => row);
-  return {
-    ...metadataSource,
-    timeline,
-    activity: pageIsNewer ? page.activity : current.activity,
-    summary: metadataSource.summary,
-    next_ordinal: Math.max(
-      Math.floor(Number(current.next_ordinal ?? 0)),
-      Math.floor(Number(page.next_ordinal ?? 0)),
-    ) || metadataSource.next_ordinal,
-    has_more: pageIsNewer ? page.has_more : current.has_more,
-    retained_from: Math.min(
-      Math.floor(Number(current.retained_from ?? page.retained_from ?? 0)),
-      Math.floor(Number(page.retained_from ?? current.retained_from ?? 0)),
-    ) || metadataSource.retained_from,
-    generated_at_ms: Math.max(Number(current.generated_at_ms ?? 0), Number(page.generated_at_ms ?? 0)),
-  };
-}
-
 function normalizeSubagentPanelStatus(value: unknown): FlowerSubagentPanelStatus {
   const raw = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
     ? trimString(String(value)).toLowerCase()
@@ -610,6 +530,8 @@ function normalizeSubagentPanelStatus(value: unknown): FlowerSubagentPanelStatus
       return 'running';
     case 'waiting':
     case 'waiting_input':
+    case 'waiting_user':
+    case 'waiting_approval':
     case 'interrupted':
       return 'waiting_input';
     case 'completed':
@@ -892,9 +814,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   createEffect(on(
     () => selectedThreadID(),
-    () => {
+    (threadID) => {
       setContextSnapshotPreview(null);
       clearWorkingDirectoryCopyConfirmation();
+      const active = untrack(activeSubagentDetail);
+      if (active && active.parentThreadID !== trimString(threadID)) closeSubagentOverlays();
     },
     { defer: false },
   ));
@@ -956,18 +880,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [permissionMenuActiveIndex, setPermissionMenuActiveIndex] = createSignal(0);
   const [pendingPermissionPatch, setPendingPermissionPatch] = createSignal<PendingPermissionPatch | null>(null);
   const [pendingModelPatch, setPendingModelPatch] = createSignal<PendingModelPatch | null>(null);
-  const [activeSubagentID, setActiveSubagentID] = createSignal('');
-  const [subagentDetail, setSubagentDetail] = createSignal<FlowerSubagentDetail | null>(null);
-  const [subagentDetailLoading, setSubagentDetailLoading] = createSignal(false);
-  const [subagentDetailLoadingMore, setSubagentDetailLoadingMore] = createSignal(false);
-  const [subagentDetailError, setSubagentDetailError] = createSignal('');
-  const [subagentDetailTailLoading, setSubagentDetailTailLoading] = createSignal(false);
-  const [subagentDetailTailError, setSubagentDetailTailError] = createSignal('');
-  const [subagentDetailTailRevision, setSubagentDetailTailRevision] = createSignal(0);
-  const [subagentDetailOpenedRevision, setSubagentDetailOpenedRevision] = createSignal(0);
+  const [activeSubagentDetail, setActiveSubagentDetail] = createSignal<ActiveSubagentDetail | null>(null);
+  const activeSubagentID = () => activeSubagentDetail()?.childThreadID ?? '';
+  const subagentDetail = () => activeSubagentDetail()?.detail ?? null;
+  const subagentDetailLoading = () => {
+    const active = activeSubagentDetail();
+    return active?.requestStatus === 'loading' && !active.detail;
+  };
+  const subagentDetailError = () => activeSubagentDetail()?.error ?? '';
+  let subagentDetailGeneration = 0;
   let threadLoadSequence = 0;
   let engagementBootstrapSequence = 0;
   let threadsRefreshSequence = 0;
+  let flowerLiveReadyCount = 0;
   type ThreadDetailLoadTarget = Readonly<{
     cycle: number;
     revision: number;
@@ -1020,8 +945,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameRestoreRef: HTMLElement | undefined;
   let threadSwitcherTriggerRef: HTMLButtonElement | undefined;
   let threadSwitcherRef: HTMLDivElement | undefined;
-  let subagentDetailTailTimer: number | undefined;
-  let subagentDetailTailInFlight: FlowerSubagentDetailTailRequest | null = null;
   let selectedThreadTailRevealFrame = 0;
   let selectedThreadTailRevealTimer: number | undefined;
   let deferredThreadSelectionFrame = 0;
@@ -1307,26 +1230,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestAnimationFrame: requestTranscriptAnimationFrame,
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
   });
-  const clearSubagentDetailTail = () => {
-    if (subagentDetailTailTimer !== undefined) {
-      window.clearTimeout(subagentDetailTailTimer);
-      subagentDetailTailTimer = undefined;
-    }
-    subagentDetailTailInFlight = null;
-    setSubagentDetailTailLoading(false);
-    setSubagentDetailTailError('');
+  const resetSubagentDetailScroll = () => {
     subagentDetailScroll.dispose();
     subagentDetailScroll.markNearBottom();
   };
   const closeSubagentOverlays = () => {
     setSubagentDropdownOpen(false);
-    setActiveSubagentID('');
-    setSubagentDetail(null);
-    setSubagentDetailError('');
-    setSubagentDetailLoading(false);
-    setSubagentDetailLoadingMore(false);
-    clearSubagentDetailTail();
-    setSubagentDetailOpenedRevision((revision) => revision + 1);
+    subagentDetailGeneration += 1;
+    setActiveSubagentDetail(null);
+    resetSubagentDetailScroll();
   };
   const selectedThreadTailPreparing = createMemo(() => {
     const pending = selectedThreadTailReveal();
@@ -4256,6 +4168,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
     if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
+      if (envelope.kind === 'ready') flowerLiveReadyCount += 1;
       const selectedID = selectedThreadID();
       const incoming = (envelope.summaries ?? [])
         .filter((summary) => !retiredThreadIDs.has(summary.thread_id));
@@ -4274,6 +4187,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (selectedID) {
         void requestSelectedThreadDetailFromSummary(selectedID, selectedSummaryAfter);
       }
+      if (envelope.kind === 'ready' && flowerLiveReadyCount > 1 && activeSubagentDetail()) {
+        void refreshActiveSubagentDetail();
+      }
       return;
     }
     if (envelope.kind === 'thread.batch' && envelope.subagents !== undefined) {
@@ -4285,6 +4201,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           subagents,
         })));
       }
+    }
+    if (envelope.kind === 'thread.batch' && envelope.subagent_current) {
+      const parentThreadID = trimString(envelope.thread_id);
+      acceptActiveSubagentCurrent(parentThreadID, envelope.subagent_current);
       return;
     }
     if (envelope.current) {
@@ -4480,64 +4400,127 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSubagentDropdownOpen((open) => !open);
   };
 
-  const openSubagentDetail = async (item: FlowerSubagentPanelItem) => {
-    const parentID = trimString(selectedThread()?.thread_id);
-    const childID = trimString(item.threadID);
-    if (!parentID || !childID) return;
-    const openedRevision = untrack(subagentDetailOpenedRevision) + 1;
-    const requestID = `${parentID}\x00${childID}\x00${openedRevision}`;
-    setSubagentDetailOpenedRevision(openedRevision);
-    clearSubagentDetailTail();
-    setActiveSubagentID(childID);
-    setSubagentDropdownOpen(false);
-    setSubagentDetail(null);
-    setSubagentDetailError('');
-    setSubagentDetailLoading(true);
-    setSubagentDetailLoadingMore(false);
-    setSubagentDetailTailRevision(0);
+  const subagentSummaryFromItem = (parentThreadID: string, item: FlowerSubagentPanelItem): FlowerSubagentSummary => {
+    const childThreadID = trimString(item.threadID);
+    const canonical = selectedThread()?.subagents?.find((summary) => (
+      trimString(summary.parent_thread_id) === parentThreadID
+      && trimString(summary.thread_id) === childThreadID
+    ));
+    if (canonical) return canonical;
+    return {
+      parent_thread_id: parentThreadID,
+      thread_id: childThreadID,
+      task_name: trimString(item.taskName) || trimString(item.title),
+      task_description: trimString(item.taskDescription),
+      agent_type: trimString(item.agentType),
+      status: item.status,
+      can_send_input: false,
+      can_interrupt: false,
+      can_close: false,
+      created_at_ms: item.createdAtMs,
+      updated_at_ms: item.updatedAtMs,
+    };
+  };
+
+  const acceptActiveSubagentCurrent = (
+    parentThreadID: string,
+    current: FlowerSubagentDetail['current'],
+    summary?: FlowerSubagentSummary,
+  ): boolean => {
+    const childThreadID = trimString(current.thread_id);
+    const viewVersion = Math.max(0, Math.floor(Number(current.view_version) || 0));
+    if (!parentThreadID || !childThreadID || !viewVersion) return false;
+    const selected = untrack(activeSubagentDetail);
+    if (!selected || selected.parentThreadID !== parentThreadID || selected.childThreadID !== childThreadID) return false;
+    const nextSummary = summary
+      && trimString(summary.parent_thread_id) === parentThreadID
+      && trimString(summary.thread_id) === childThreadID
+      ? summary
+      : selected.detail?.summary ?? subagentSummaryFromItem(parentThreadID, selected.item);
     try {
-      const detail = await props.adapter.loadSubagentDetail(parentID, childID, 0, SUBAGENT_DETAIL_PAGE_SIZE);
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` !== requestID) return;
-      setSubagentDetail(detail);
-      setSubagentDetailTailRevision((revision) => revision + 1);
-      requestTranscriptAnimationFrame(() => subagentDetailScroll.scrollToBottom({ smooth: false }));
-    } catch (error) {
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` !== requestID) return;
-      setSubagentDetailError(getErrorMessage(error));
-    } finally {
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` === requestID) {
-        setSubagentDetailLoading(false);
+      if (!projectSubagentDetailThread({ summary: nextSummary, current })) return false;
+    } catch {
+      return false;
+    }
+    const wasNearBottom = subagentDetailScroll.captureWasNearBottom();
+    let accepted = false;
+    setActiveSubagentDetail((active) => {
+      if (!active || active.parentThreadID !== parentThreadID || active.childThreadID !== childThreadID) return active;
+      const currentVersion = Math.max(0, Math.floor(Number(active.detail?.current.view_version) || 0));
+      if (viewVersion <= currentVersion) {
+        if (!active.detail || active.detail.summary === nextSummary) return active;
+        return { ...active, detail: { ...active.detail, summary: nextSummary } };
       }
+      accepted = true;
+      return {
+        ...active,
+        detail: { summary: nextSummary, current },
+        error: '',
+      };
+    });
+    if (accepted && wasNearBottom) {
+      requestTranscriptAnimationFrame(() => subagentDetailScroll.scheduleTailScroll());
+    }
+    return accepted;
+  };
+
+  const refreshActiveSubagentDetail = async (scrollToBottom = false): Promise<void> => {
+    const active = untrack(activeSubagentDetail);
+    if (!active || active.requestStatus === 'loading') return;
+    const generation = ++subagentDetailGeneration;
+    const request = { ...active, generation, requestStatus: 'loading' as const, error: '' };
+    setActiveSubagentDetail(request);
+    try {
+      const detail = await props.adapter.loadSubagentDetail(request.parentThreadID, request.childThreadID);
+      const parentThreadID = trimString(detail.summary.parent_thread_id);
+      const childThreadID = trimString(detail.summary.thread_id);
+      if (
+        parentThreadID !== request.parentThreadID
+        || childThreadID !== request.childThreadID
+        || trimString(detail.current.thread_id) !== request.childThreadID
+      ) {
+        throw new Error('Subagent detail identity does not match the selected thread.');
+      }
+      try {
+        if (!projectSubagentDetailThread(detail)) throw new Error();
+      } catch {
+        throw new Error('Subagent detail is invalid.');
+      }
+      const current = untrack(activeSubagentDetail);
+      if (!current || current.generation !== generation) return;
+      acceptActiveSubagentCurrent(request.parentThreadID, detail.current, detail.summary);
+      setActiveSubagentDetail((latest) => (
+        latest?.generation === generation ? { ...latest, requestStatus: 'idle', error: '' } : latest
+      ));
+      if (scrollToBottom) {
+        requestTranscriptAnimationFrame(() => subagentDetailScroll.scrollToBottom({ smooth: false }));
+      }
+    } catch (error) {
+      setActiveSubagentDetail((current) => (
+        current?.generation === generation
+          ? { ...current, requestStatus: 'idle', error: getErrorMessage(error) }
+          : current
+      ));
     }
   };
 
-  const loadMoreSubagentDetail = async () => {
+  const openSubagentDetail = (item: FlowerSubagentPanelItem) => {
     const parentID = trimString(selectedThread()?.thread_id);
-    const childID = trimString(activeSubagentID());
-    const detail = subagentDetail();
-    if (!parentID || !childID || !detail?.has_more || subagentDetailLoadingMore() || subagentDetailTailInFlight) return;
-    const afterOrdinal = Math.max(0, Math.floor(detail.next_ordinal ?? detail.timeline[detail.timeline.length - 1]?.ordinal ?? 0));
-    const openedRevision = subagentDetailOpenedRevision();
-    const requestID = `${parentID}\x00${childID}\x00${openedRevision}`;
-    const wasNearBottom = subagentDetailScroll.captureWasNearBottom();
-    setSubagentDetailError('');
-    setSubagentDetailLoadingMore(true);
-    try {
-      const page = await props.adapter.loadSubagentDetail(parentID, childID, afterOrdinal, SUBAGENT_DETAIL_PAGE_SIZE);
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` !== requestID) return;
-      setSubagentDetail((current) => mergeSubagentDetailPage(current, page));
-      setSubagentDetailTailRevision((revision) => revision + 1);
-      if (wasNearBottom) {
-        requestTranscriptAnimationFrame(() => subagentDetailScroll.scheduleTailScroll());
-      }
-    } catch (error) {
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` !== requestID) return;
-      setSubagentDetailError(getErrorMessage(error));
-    } finally {
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` === requestID) {
-        setSubagentDetailLoadingMore(false);
-      }
-    }
+    const childID = trimString(item.threadID);
+    if (!parentID || !childID) return;
+    subagentDetailGeneration += 1;
+    resetSubagentDetailScroll();
+    setActiveSubagentDetail({
+      parentThreadID: parentID,
+      childThreadID: childID,
+      item,
+      generation: subagentDetailGeneration,
+      requestStatus: 'idle',
+      detail: null,
+      error: '',
+    });
+    setSubagentDropdownOpen(false);
+    void refreshActiveSubagentDetail(true);
   };
 
   const launchChatTurn = async (promptInput: string) => {
@@ -5262,147 +5245,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedActiveSubagentCount = createMemo(() => selectedActiveSubagentItems().length);
   const selectedSettledSubagentCount = createMemo(() => selectedSettledSubagentItems().length);
   const activeSubagentItem = createMemo(() => {
-    const activeID = trimString(activeSubagentID());
-    if (!activeID) return null;
-    return selectedSubagentItems().find((item) => trimString(item.threadID) === activeID) ?? null;
+    const active = activeSubagentDetail();
+    if (!active) return null;
+    return selectedSubagentItems().find((item) => trimString(item.threadID) === active.childThreadID) ?? active.item;
   });
-  createEffect(() => {
-    const activeID = trimString(activeSubagentID());
-    if (!activeID) return;
-    if (activeSubagentItem()) return;
-    closeSubagentOverlays();
-  });
+  const subagentDetailThread = createMemo(() => projectSubagentDetailThread(subagentDetail()));
 
   const subagentDetailActiveStatus = createMemo<FlowerSubagentPanelStatus>(() => {
     const itemStatus = activeSubagentItem()?.status ?? 'unknown';
-    const detailStatus = normalizeSubagentPanelStatus(subagentDetail()?.summary.status);
+    const detailStatus = normalizeSubagentPanelStatus(subagentDetailThread()?.status ?? subagentDetail()?.summary.status);
     if (detailStatus !== 'unknown') return detailStatus;
     return itemStatus;
-  });
-
-  const subagentDetailCanTail = createMemo(() => {
-    switch (subagentDetailActiveStatus()) {
-      case 'queued':
-      case 'running':
-      case 'waiting_input':
-        return Boolean(activeSubagentID());
-      default:
-        return false;
-    }
-  });
-
-  const latestSubagentDetailOrdinal = (): number => {
-    const detail = subagentDetail();
-    if (!detail) return 0;
-    const lastOrdinal = detail.timeline.reduce((max, row) => Math.max(max, Math.floor(Number(row.ordinal ?? 0))), 0);
-    const nextOrdinal = Math.floor(Number(detail.next_ordinal ?? 0));
-    return Math.max(0, nextOrdinal, lastOrdinal);
-  };
-
-  const runSubagentDetailTailRequest = async (request: FlowerSubagentDetailTailRequest): Promise<boolean> => {
-    if (subagentDetailTailInFlight) return false;
-    subagentDetailTailInFlight = request;
-    setSubagentDetailTailLoading(true);
-    const wasNearBottom = subagentDetailScroll.captureWasNearBottom();
-    try {
-      const page = await props.adapter.loadSubagentDetail(
-        request.parentThreadID,
-        request.childThreadID,
-        request.afterOrdinal,
-        SUBAGENT_DETAIL_PAGE_SIZE,
-      );
-      const stillCurrent = trimString(selectedThread()?.thread_id) === request.parentThreadID
-        && trimString(activeSubagentID()) === request.childThreadID
-        && subagentDetailOpenedRevision() === request.openedRevision;
-      if (!stillCurrent) return false;
-      setSubagentDetail((current) => mergeSubagentDetailPage(current, page));
-      setSubagentDetailTailError('');
-      setSubagentDetailTailRevision((revision) => revision + 1);
-      if (wasNearBottom) {
-        requestTranscriptAnimationFrame(() => subagentDetailScroll.scheduleTailScroll());
-      }
-      return true;
-    } catch (error) {
-      const stillCurrent = trimString(selectedThread()?.thread_id) === request.parentThreadID
-        && trimString(activeSubagentID()) === request.childThreadID
-        && subagentDetailOpenedRevision() === request.openedRevision;
-      if (stillCurrent) {
-        setSubagentDetailTailError(getErrorMessage(error));
-      }
-      return false;
-    } finally {
-      const stillCurrent = trimString(selectedThread()?.thread_id) === request.parentThreadID
-        && trimString(activeSubagentID()) === request.childThreadID
-        && subagentDetailOpenedRevision() === request.openedRevision;
-      if (stillCurrent) {
-        setSubagentDetailTailLoading(false);
-      }
-      if (subagentDetailTailInFlight === request) {
-        subagentDetailTailInFlight = null;
-      }
-    }
-  };
-
-  const retrySubagentDetailTail = () => {
-    const parentThreadID = trimString(selectedThread()?.thread_id);
-    const childThreadID = trimString(activeSubagentID());
-    const openedRevision = subagentDetailOpenedRevision();
-    if (!parentThreadID || !childThreadID || !openedRevision || subagentDetailTailInFlight) return;
-    if (subagentDetailTailTimer !== undefined) {
-      window.clearTimeout(subagentDetailTailTimer);
-      subagentDetailTailTimer = undefined;
-    }
-    const request: FlowerSubagentDetailTailRequest = {
-      parentThreadID,
-      childThreadID,
-      openedRevision,
-      afterOrdinal: latestSubagentDetailOrdinal(),
-    };
-    void runSubagentDetailTailRequest(request).finally(() => {
-      setSubagentDetailTailRevision((revision) => revision + 1);
-    });
-  };
-
-  createEffect(() => {
-    const parentID = trimString(selectedThread()?.thread_id);
-    const childID = trimString(activeSubagentID());
-    const openedRevision = subagentDetailOpenedRevision();
-    const canTail = subagentDetailCanTail();
-    subagentDetailTailRevision();
-    if (subagentDetailTailTimer !== undefined) {
-      window.clearTimeout(subagentDetailTailTimer);
-      subagentDetailTailTimer = undefined;
-    }
-    if (!parentID || !childID || !openedRevision || !canTail || subagentDetailLoading() || subagentDetailLoadingMore()) {
-      subagentDetailTailInFlight = null;
-      setSubagentDetailTailLoading(false);
-      return;
-    }
-    const status = subagentDetailActiveStatus();
-    const interval = subagentDetailTailError()
-      ? SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS
-      : status === 'queued'
-        ? SUBAGENT_DETAIL_TAIL_QUEUED_INTERVAL_MS
-        : SUBAGENT_DETAIL_TAIL_RUNNING_INTERVAL_MS;
-    subagentDetailTailTimer = window.setTimeout(() => {
-      subagentDetailTailTimer = undefined;
-      if (subagentDetailTailInFlight || subagentDetailLoadingMore()) return;
-      const request: FlowerSubagentDetailTailRequest = {
-        parentThreadID: parentID,
-        childThreadID: childID,
-        openedRevision,
-        afterOrdinal: latestSubagentDetailOrdinal(),
-      };
-      void runSubagentDetailTailRequest(request).finally(() => {
-        setSubagentDetailTailRevision((revision) => revision + 1);
-      });
-    }, interval);
-    onCleanup(() => {
-      if (subagentDetailTailTimer !== undefined) {
-        window.clearTimeout(subagentDetailTailTimer);
-        subagentDetailTailTimer = undefined;
-      }
-    });
   });
 
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
@@ -9699,7 +9552,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
-  const subagentDetailThread = createMemo(() => projectSubagentDetailThread(subagentDetail()));
   const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread()));
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
@@ -9707,13 +9559,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && !subagentDetailScroll.nearBottom()
   ));
   const retrySubagentDetailLoad = () => {
-    const item = activeSubagentItem();
-    if (item) void openSubagentDetail(item);
+    void refreshActiveSubagentDetail(true);
   };
 
   const subagentDetailDialog = () => (
     <SubagentDetailWindow
-      open={Boolean(activeSubagentID())}
+      open={Boolean(activeSubagentDetail())}
       onOpenChange={(open) => {
         if (!open) closeSubagentOverlays();
       }}
@@ -9733,13 +9584,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       onScroll={() => subagentDetailScroll.onScroll()}
       showScrollToLatest={showSubagentDetailScrollToLatestButton()}
       onScrollToLatest={() => subagentDetailScroll.scrollToBottom({ smooth: true })}
-      hasMore={Boolean(subagentDetail()?.has_more)}
-      loadingMore={subagentDetailLoadingMore()}
-      onLoadMore={() => void loadMoreSubagentDetail()}
       onRetryLoad={retrySubagentDetailLoad}
-      tailLoading={subagentDetailTailLoading()}
-      tailError={subagentDetailTailError()}
-      onRetryTail={retrySubagentDetailTail}
       viewportLeftInset={Math.max(12, threadRailWidth() + 12)}
       zIndex={FLOWER_SURFACE_LAYER.subagentWindow}
       threadLoadingLabel={copy().chat.threadLoading}

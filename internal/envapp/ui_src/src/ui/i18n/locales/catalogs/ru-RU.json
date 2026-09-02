@@ -1030,8 +1030,6 @@
       "completedLabel": "Завершены",
       "threadIDLabel": "Ветка",
       "lastMessageLabel": "Последняя передача",
-      "loadMore": "Загрузить ещё",
-      "loadingMore": "Загрузка...",
       "detailTimelineLabel": "Журнал выполнения субагента",
       "detailInstructionLabel": "Делегированная инструкция",
       "detailConstraintsLabel": "Ограничения выполнения",
@@ -1039,7 +1037,6 @@
       "detailActivityLabel": "Операций: {count}",
       "detailOutcomeLabel": "Результат",
       "detailRetry": "Повторить",
-      "detailSyncing": "Синхронизация последних действий",
       "unavailableThread": "Ветка недоступна",
       "readOnlyComposerLabel": "Только чтение · Управляется родительской беседой",
       "status": {
@@ -4354,8 +4351,6 @@
       "completedLabel": "Завершены",
       "threadIDLabel": "Ветка",
       "lastMessageLabel": "Последняя передача",
-      "loadMore": "Загрузить ещё",
-      "loadingMore": "Загрузка...",
       "detailTimelineLabel": "Журнал выполнения субагента",
       "detailInstructionLabel": "Делегированная инструкция",
       "detailConstraintsLabel": "Ограничения выполнения",
@@ -4363,7 +4358,6 @@
       "detailActivityLabel": "Операций: {count}",
       "detailOutcomeLabel": "Результат",
       "detailRetry": "Повторить",
-      "detailSyncing": "Синхронизация последних действий",
       "unavailableThread": "Ветка недоступна",
       "readOnlyComposerLabel": "Только чтение · Управляется родительской беседой",
       "status": {

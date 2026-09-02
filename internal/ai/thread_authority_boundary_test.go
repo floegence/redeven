@@ -52,7 +52,7 @@ func TestForeignEndpointCannotReadSubagentDetail(t *testing.T) {
 		ChannelID: "foreign-channel", EndpointID: "foreign-endpoint", NamespacePublicID: "foreign-namespace",
 		UserPublicID: "foreign-user", CanRead: true, CanWrite: true, CanExecute: true,
 	}
-	if _, err := svc.GetFlowerSubagentDetail(t.Context(), foreign, parent.ThreadID, child.ThreadID.String(), 0, 50); !errorsIsNoRows(err) {
+	if _, err := svc.GetFlowerSubagentDetail(t.Context(), foreign, parent.ThreadID, child.ThreadID.String()); !errorsIsNoRows(err) {
 		t.Fatalf("foreign subagent detail error=%v, want endpoint-scoped not found", err)
 	}
 }

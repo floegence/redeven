@@ -79,6 +79,36 @@ func TestFlowerCurrentJSONConsumesTypedFailureWithoutExposingFloretPayload(t *te
 	}
 }
 
+func TestFlowerSubagentCurrentUsesTheCanonicalCurrentProjection(t *testing.T) {
+	rawError := "private child provider state"
+	outcome := flruntime.TurnOutcomeFailed
+	current := flruntime.ThreadView{
+		ThreadID: identity.ThreadID("child-projection"), ViewVersion: 7, LastOutcome: &outcome,
+		Failure: &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureEngineContract, Message: rawError},
+	}
+	for name, value := range map[string]any{
+		"detail": FlowerSubagentDetailResponse{
+			Summary: FlowerSubagentSummary{ParentThreadID: "parent-projection", ThreadID: "child-projection", TaskName: "Inspect projection"},
+			Current: current,
+		},
+		"live": FlowerLiveStreamEnvelope{
+			SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch,
+			ThreadID: "parent-projection", SubagentCurrent: &current,
+		},
+	} {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatalf("%s marshal: %v", name, err)
+		}
+		if strings.Contains(string(encoded), rawError) || strings.Contains(string(encoded), `"failure"`) {
+			t.Fatalf("%s exposed private current payload: %s", name, encoded)
+		}
+		if !strings.Contains(string(encoded), `"run_error_code":"floret_engine_failed"`) {
+			t.Fatalf("%s omitted projected failure code: %s", name, encoded)
+		}
+	}
+}
+
 func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testing.T) {
 	outcome := flruntime.TurnOutcomeFailed
 	failure := &flruntime.ThreadTurnFailure{

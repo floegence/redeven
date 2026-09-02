@@ -4227,26 +4227,15 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
+			if r.URL.RawQuery != "" {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "subagent detail query parameters are not supported"})
+				return
+			}
 			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			childID := strings.TrimSpace(parts[2])
-			afterOrdinal := int64(0)
-			if raw := strings.TrimSpace(r.URL.Query().Get("after_ordinal")); raw != "" {
-				v, err := strconv.ParseInt(raw, 10, 64)
-				if err != nil || v < 0 {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_ordinal"})
-					return
-				}
-				afterOrdinal = v
-			}
-			limit := 200
-			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-				if v, err := strconv.Atoi(raw); err == nil && v > 0 {
-					limit = v
-				}
-			}
-			resp, err := aiSvc.GetFlowerSubagentDetail(r.Context(), meta, threadID, childID, afterOrdinal, limit)
+			resp, err := aiSvc.GetFlowerSubagentDetail(r.Context(), meta, threadID, childID)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {

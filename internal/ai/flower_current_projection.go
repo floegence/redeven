@@ -131,7 +131,7 @@ func projectCurrentAttachmentURLs(parent map[string]any, attachments []flruntime
 	}
 }
 
-func replaceFlowerCurrentJSON(encoded []byte, current flruntime.ThreadView) ([]byte, error) {
+func replaceFlowerCurrentJSONField(encoded []byte, field string, current flruntime.ThreadView) ([]byte, error) {
 	currentJSON, err := flowerCurrentJSON(current)
 	if err != nil {
 		return nil, err
@@ -144,8 +144,12 @@ func replaceFlowerCurrentJSON(encoded []byte, current flruntime.ThreadView) ([]b
 	if err := json.Unmarshal(encoded, &root); err != nil {
 		return nil, err
 	}
-	root["current"] = currentValue
+	root[field] = currentValue
 	return json.Marshal(root)
+}
+
+func replaceFlowerCurrentJSON(encoded []byte, current flruntime.ThreadView) ([]byte, error) {
+	return replaceFlowerCurrentJSONField(encoded, "current", current)
 }
 
 func marshalFlowerCurrentEnvelope(value any, current flruntime.ThreadView) ([]byte, error) {
@@ -158,6 +162,11 @@ func marshalFlowerCurrentEnvelope(value any, current flruntime.ThreadView) ([]by
 
 func (d FlowerThreadDetail) MarshalJSON() ([]byte, error) {
 	type wire FlowerThreadDetail
+	return marshalFlowerCurrentEnvelope(wire(d), d.Current)
+}
+
+func (d FlowerSubagentDetailResponse) MarshalJSON() ([]byte, error) {
+	type wire FlowerSubagentDetailResponse
 	return marshalFlowerCurrentEnvelope(wire(d), d.Current)
 }
 
@@ -192,8 +201,14 @@ func (e FlowerLiveStreamEnvelope) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if e.Current == nil {
-		return encoded, nil
+	if e.Current != nil {
+		encoded, err = replaceFlowerCurrentJSON(encoded, *e.Current)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return replaceFlowerCurrentJSON(encoded, *e.Current)
+	if e.SubagentCurrent != nil {
+		return replaceFlowerCurrentJSONField(encoded, "subagent_current", *e.SubagentCurrent)
+	}
+	return encoded, nil
 }
