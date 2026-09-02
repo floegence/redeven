@@ -31,7 +31,7 @@ type hostProcess struct {
 	done        <-chan struct{}
 }
 
-func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress operationProgress) (string, string, error) {
+func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.ManagedService, progress operationProgress) (string, string, error) {
 	spec, _, err := effectiveSpecFromService(service)
 	if err != nil {
 		return "", "", err

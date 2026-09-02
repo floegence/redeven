@@ -333,7 +333,7 @@ func TestWebtopRealDockerLifecycle(t *testing.T) {
 			_, _ = client.Action(context.Background(), containerengine.EngineActionRequest{Engine: containerengine.EngineDocker, Method: containerengine.MethodRemove, ContainerID: customContainerName(service.ServiceID), Force: true})
 			_ = adapter.RemoveVolume(context.Background(), containerengine.VolumeRemoveRequest{Engine: containerengine.EngineDocker, Name: volumeName})
 		})
-		runtimeID, artifactReference, err := driver.Install(ctx, service, catalogPayload{}, discardOperationProgress)
+		runtimeID, artifactReference, err := driver.Install(ctx, service, discardOperationProgress)
 		if err != nil {
 			t.Fatalf("install %s: %v", templateID, err)
 		}

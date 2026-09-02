@@ -523,7 +523,7 @@ describe('web service metadata and template validation', () => {
           name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'container',
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
           forward_id: 'pf-failed', runtime_port: 3000, update_available: false,
-          last_failure: { action: 'start', stage: 'starting', error_code: 'CONTAINER_NAME_MISMATCH', message: 'Raw backend message must not be shown.', operation_id: 'mop-failed', occurred_at_unix_ms: 1_777_777_777_000 },
+          last_failure: { action: 'start', stage: 'starting', error_code: 'DATA_IDENTITY_MISSING', message: 'Raw backend message must not be shown.', operation_id: 'mop-failed', occurred_at_unix_ms: 1_777_777_777_000 },
         }}
         busy={false}
         canOpen
@@ -550,8 +550,8 @@ describe('web service metadata and template validation', () => {
       row.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
       await Promise.resolve();
       expect(clipboardMocks.writeText).toHaveBeenCalledOnce();
-      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('CONTAINER_NAME_MISMATCH');
-      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('The container name no longer matches this managed service.');
+      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('DATA_IDENTITY_MISSING');
+      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('Redeven could not find the saved identity for this service data volume.');
       expect(clipboardMocks.writeText.mock.calls[0]?.[0]).not.toContain('Raw backend message');
       expect(clipboardMocks.writeText.mock.calls[0]?.[0]).not.toContain('Secret');
       expect(notificationMocks.success).not.toHaveBeenCalled();

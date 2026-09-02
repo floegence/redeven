@@ -18,13 +18,6 @@ const (
 	nodeVersion              = "24.19.0"
 )
 
-type catalogPayload struct {
-	TemplateID string                    `json:"template_id"`
-	Version    string                    `json:"version"`
-	Platforms  map[string]nativeArtifact `json:"platforms"`
-	Docker     map[string]dockerArtifact `json:"docker"`
-}
-
 type nativeArtifact struct {
 	DownloadURL       string `json:"download_url"`
 	SHA256            string `json:"sha256"`
@@ -118,15 +111,6 @@ func auditedNativeArtifact(platform string) (nativeArtifact, bool) {
 		NPMCLIRelPath:     archiveRoot + "/lib/node_modules/npm/bin/npm-cli.js",
 		ExecutableRelPath: "bin/dsh",
 	}, true
-}
-
-func auditedNativeCatalog() catalogPayload {
-	platforms := make(map[string]nativeArtifact, 4)
-	for _, platform := range []string{"darwin-arm64", "darwin-amd64", "linux-arm64", "linux-amd64"} {
-		artifact, _ := auditedNativeArtifact(platform)
-		platforms[platform] = artifact
-	}
-	return catalogPayload{TemplateID: DeepSeekHarnessProductID, Version: DeepSeekHarnessVersion, Platforms: platforms}
 }
 
 func validatePackageURL(raw, origin string) error {

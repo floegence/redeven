@@ -116,8 +116,9 @@ func TestNativeInstallBuildsPrivateReleaseLockedRuntime(t *testing.T) {
 		ArchiveRoot: "node-test", NodeRelPath: "node-test/bin/node", NPMCLIRelPath: "node-test/lib/node_modules/npm/bin/npm-cli.js", ExecutableRelPath: "bin/dsh",
 	}
 	installCalls := 0
+	stateDir := t.TempDir()
 	driver := &nativeDriver{
-		stateDir: t.TempDir(), client: server.Client(), packageOrigin: server.URL,
+		stateDir: stateDir, client: server.Client(), packageOrigin: server.URL,
 		packageInstaller: func(_ context.Context, _, _, appRoot, _ string) error {
 			installCalls++
 			entry := filepath.Join(appRoot, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js")
@@ -128,19 +129,18 @@ func TestNativeInstallBuildsPrivateReleaseLockedRuntime(t *testing.T) {
 		},
 	}
 	service := &pfregistry.ManagedService{ServiceID: "mws_native_install"}
-	catalog := catalogPayload{Platforms: map[string]nativeArtifact{currentPlatformKey(): artifact}}
-	_, executable, err := driver.Install(context.Background(), service, catalog, discardOperationProgress)
+	installRoot := filepath.Join(stateDir, DeepSeekHarnessProductID, "native", DeepSeekHarnessVersion, currentPlatformKey())
+	executable, err := driver.installRuntimeBundle(context.Background(), service, artifact, installRoot, discardOperationProgress)
 	if err != nil {
 		t.Fatal(err)
 	}
-	installRoot := filepath.Dir(filepath.Dir(executable))
 	if installCalls != 1 || !regularExecutable(executable) {
 		t.Fatalf("native install calls=%d executable=%q", installCalls, executable)
 	}
 	if err := verifyInstalledNativeRuntime(installRoot, artifact); err != nil {
 		t.Fatalf("verify installed runtime: %v", err)
 	}
-	_, replayed, err := driver.Install(context.Background(), service, catalog, discardOperationProgress)
+	replayed, err := driver.installRuntimeBundle(context.Background(), service, artifact, installRoot, discardOperationProgress)
 	if err != nil || replayed != executable || installCalls != 1 {
 		t.Fatalf("idempotent native install executable=%q calls=%d err=%v", replayed, installCalls, err)
 	}

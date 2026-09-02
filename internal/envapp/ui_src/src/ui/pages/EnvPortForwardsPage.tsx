@@ -876,6 +876,12 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
     case 'CONTAINER_MOUNT_MISMATCH':
     case 'CONTAINER_DEVICE_MISMATCH':
     case 'CONTAINER_NETWORK_MISMATCH': return i18n.t('webServices.managed.containerConfigurationChanged');
+    case 'DATA_IDENTITY_MISSING': return i18n.t('webServices.managed.dataIdentityMissing');
+    case 'DATA_IDENTITY_INVALID': return i18n.t('webServices.managed.dataIdentityInvalid');
+    case 'DATA_VOLUME_MISSING': return i18n.t('webServices.managed.dataVolumeMissing');
+    case 'DATA_IDENTITY_MISMATCH': return i18n.t('webServices.managed.dataIdentityChanged');
+    case 'DATA_IDENTITY_UNAVAILABLE': return i18n.t('webServices.managed.dataIdentityUnavailable');
+    case 'DATA_VOLUME_CREATE_FAILED': return i18n.t('webServices.managed.dataVolumeCreateFailed');
     case 'HOST_RUNTIME_PREPARE_FAILED':
     case 'HOST_LOG_PREPARE_FAILED': return i18n.t('webServices.managed.hostRuntimePrepareFailed');
     case 'HOST_PROCESS_IDENTITY_MISMATCH':

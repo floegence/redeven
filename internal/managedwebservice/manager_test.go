@@ -190,71 +190,7 @@ func TestCatalogKeepsPinnedDockerTemplateAvailable(t *testing.T) {
 	}
 }
 
-func TestDockerInstallUsesPinnedCatalogWithoutOnlineCatalogLookup(t *testing.T) {
-	t.Parallel()
-	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer registry.Close()
-	service := pfregistry.ManagedService{
-		ServiceID: "mws_pinned_docker", TemplateID: DeepSeekHarnessContainerTemplateID,
-		Deployment: string(DeploymentDocker), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
-		DesiredState: "running", ObservedState: "installing", ForwardID: "pf_pinned_docker", RuntimePort: 3080,
-	}
-	op := pfregistry.ManagedOperation{
-		OperationID: "mop_pinned_docker", ServiceID: service.ServiceID, RequestID: "request-pinned-docker",
-		RequestFingerprint: "fingerprint", Action: string(ActionInstall), State: "running", Stage: "environment_check",
-	}
-	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, op); err != nil {
-		t.Fatal(err)
-	}
-
-	installErr := errors.New("stop after catalog capture")
-	driver := &captureInstallCatalogDriver{installErr: installErr}
-	manager := &Manager{registry: registry, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
-	if err := manager.runInstall(context.Background(), &service, &op, driver); !errors.Is(err, installErr) {
-		t.Fatalf("runInstall() error = %v", err)
-	}
-	for _, platform := range []string{"linux-amd64", "linux-arm64"} {
-		artifact, ok := driver.catalog.Docker[platform]
-		if !ok || artifact.Image != auditedDockerImage || !dockerDigestPattern.MatchString(artifact.Digest) {
-			t.Fatalf("captured Docker artifact %s = %+v", platform, artifact)
-		}
-	}
-}
-
 type catalogDockerEngineClient struct{}
-
-type captureInstallCatalogDriver struct {
-	catalog    catalogPayload
-	installErr error
-}
-
-func (d *captureInstallCatalogDriver) Install(_ context.Context, _ *pfregistry.ManagedService, catalog catalogPayload, _ operationProgress) (string, string, error) {
-	d.catalog = catalog
-	return "", "", d.installErr
-}
-
-func (*captureInstallCatalogDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {
-	return "", errors.New("unexpected start")
-}
-
-func (*captureInstallCatalogDriver) Stop(context.Context, *pfregistry.ManagedService) error {
-	return errors.New("unexpected stop")
-}
-
-func (*captureInstallCatalogDriver) Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error {
-	return errors.New("unexpected uninstall")
-}
-
-func (*captureInstallCatalogDriver) CleanupPartial(context.Context, *pfregistry.ManagedService) error {
-	return errors.New("unexpected cleanup")
-}
-
-func (*captureInstallCatalogDriver) Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error) {
-	return nil, errors.New("unexpected logs")
-}
 
 type uninstallOwnershipDriver struct {
 	stopCalls      int
@@ -262,7 +198,7 @@ type uninstallOwnershipDriver struct {
 	uninstallErr   error
 }
 
-func (d *uninstallOwnershipDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
+func (d *uninstallOwnershipDriver) Install(context.Context, *pfregistry.ManagedService, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 
@@ -292,7 +228,7 @@ func (d *uninstallOwnershipDriver) Logs(context.Context, *pfregistry.ManagedServ
 
 type successfulStopDriver struct{}
 
-func (*successfulStopDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
+func (*successfulStopDriver) Install(context.Context, *pfregistry.ManagedService, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 
@@ -354,7 +290,7 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID, Deployment: string(DeploymentNative), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "running", ForwardID: "pf_one", RuntimePort: 3080}
+	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID, Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "running", ForwardID: "pf_one", RuntimePort: 3080}
 	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}); err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +396,7 @@ func TestListProjectsTheCurrentOperationDetail(t *testing.T) {
 	defer registry.Close()
 	service := pfregistry.ManagedService{
 		ServiceID: "mws_artifact", TemplateID: DeepSeekHarnessContainerTemplateID, TemplateSource: "builtin",
-		Deployment: string(DeploymentDocker), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
+		Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
 		DesiredState: "stopped", ObservedState: "error", ForwardID: "pf_artifact", RuntimePort: 3080,
 	}
 	operation := pfregistry.ManagedOperation{
@@ -606,7 +542,7 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID, Deployment: string(DeploymentNative), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "installing", ForwardID: "pf_interrupted", RuntimeIdentity: "native:mws_interrupted:nonce:99", RuntimePort: 3080}
+	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID, Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "installing", ForwardID: "pf_interrupted", RuntimeIdentity: "native:mws_interrupted:nonce:99", RuntimePort: 3080}
 	op := pfregistry.ManagedOperation{OperationID: "mop_interrupted", ServiceID: service.ServiceID, RequestID: "request-interrupted", RequestFingerprint: "fingerprint", Action: string(ActionInstall), State: "running", Stage: "downloading"}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, op); err != nil {
 		t.Fatal(err)
@@ -677,7 +613,7 @@ type recoveryDriver struct {
 	stopCalls    int
 }
 
-func (d *recoveryDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
+func (d *recoveryDriver) Install(context.Context, *pfregistry.ManagedService, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 func (d *recoveryDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {
@@ -699,7 +635,7 @@ func (d *recoveryDriver) Logs(context.Context, *pfregistry.ManagedService, int) 
 	return nil, errors.New("unexpected logs")
 }
 
-func (d *blockingStopDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
+func (d *blockingStopDriver) Install(context.Context, *pfregistry.ManagedService, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 func (d *blockingStopDriver) Start(context.Context, *pfregistry.ManagedService) (string, error) {

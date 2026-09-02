@@ -28,8 +28,6 @@ const (
 type Deployment string
 
 const (
-	DeploymentNative    Deployment = "native"
-	DeploymentDocker    Deployment = "docker"
 	DeploymentHost      Deployment = "host"
 	DeploymentContainer Deployment = "container"
 	DeploymentCompose   Deployment = "compose"

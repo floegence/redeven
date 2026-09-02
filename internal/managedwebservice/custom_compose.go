@@ -23,7 +23,7 @@ type composeTemplateDriver struct {
 }
 
 func (d *composeTemplateDriver) RebuildStoppedRuntime(ctx context.Context, service *pfregistry.ManagedService, _ TemplateSpec, _ string) (string, string, error) {
-	runtimeID, artifact, err := d.Install(ctx, service, catalogPayload{}, func(string, int64, ...pfregistry.ManagedOperationTransferProgress) {})
+	runtimeID, artifact, err := d.Install(ctx, service, func(string, int64, ...pfregistry.ManagedOperationTransferProgress) {})
 	if err != nil {
 		return "", "", err
 	}
@@ -70,7 +70,7 @@ func (d *composeTemplateDriver) FindReconfiguredRuntime(ctx context.Context, ser
 	return d.identity(service, hex.EncodeToString(digest[:])), nil
 }
 
-func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress operationProgress) (string, string, error) {
+func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, progress operationProgress) (string, string, error) {
 	if d.adapter == nil {
 		return "", "", serviceError("DOCKER_UNAVAILABLE", "Docker Compose is not available in this Environment.", 409, true, nil)
 	}

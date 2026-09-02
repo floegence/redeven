@@ -171,7 +171,7 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 	}
 	spec := *source.Spec
 	spec.SchemaVersion = templateSpecSchemaVersion
-	spec.Kind = duplicateKind(source.Deployment, spec.Kind)
+	spec.Kind = source.Deployment
 	if source.Source == "builtin" && !completeBuiltInDuplicateSpec(spec) {
 		return nil, serviceError("TEMPLATE_UNAVAILABLE", "This built-in template cannot be duplicated until its exact audited deployment definition is available.", 409, true, nil)
 	}
@@ -221,17 +221,6 @@ func completeBuiltInDuplicateSpec(spec TemplateSpec) bool {
 	}
 }
 
-func duplicateKind(deployment, specKind Deployment) Deployment {
-	switch deployment {
-	case DeploymentNative:
-		return DeploymentHost
-	case DeploymentDocker:
-		return DeploymentContainer
-	default:
-		return specKind
-	}
-}
-
 func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.ManagedTemplate) (*Template, error) {
 	spec, err := verifiedTemplateSpec(record.SpecJSON, record.SpecSHA256)
 	if errors.Is(err, errTemplateSpecIdentityMismatch) {
@@ -254,7 +243,7 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 		ContainerMode: containerMode(spec.Kind), Revision: record.Revision, Editable: true, Duplicateable: true, DerivedFromTemplateID: record.DerivedFromTemplateID,
 		DerivedFromRevision: record.DerivedFromRevision, ServiceFamilyID: record.ServiceFamilyID, Available: available, ReasonCode: code, Reason: reason,
 		Deployments: []DeploymentAvailability{{Deployment: spec.Kind, Available: available, ReasonCode: code, Reason: reason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: &effectiveSpec,
-		HostLifecyclePlan: hostLifecyclePlan(spec.Kind, spec),
+		HostLifecyclePlan: hostLifecyclePlan(spec),
 		DefaultAccessMode: pfregistry.AccessModeUnifiedProxy,
 	}, nil
 }
@@ -285,7 +274,7 @@ func containerMode(kind Deployment) string {
 	if kind == DeploymentCompose {
 		return "compose"
 	}
-	if kind == DeploymentContainer || kind == DeploymentDocker {
+	if kind == DeploymentContainer {
 		return "single"
 	}
 	return ""

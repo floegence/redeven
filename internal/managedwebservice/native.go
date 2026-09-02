@@ -35,23 +35,6 @@ type nativeDriver struct {
 	packageInstaller func(context.Context, string, string, string, string) error
 }
 
-func (d *nativeDriver) Install(ctx context.Context, service *pfregistry.ManagedService, catalog catalogPayload, progress operationProgress) (string, string, error) {
-	artifact, ok := catalog.Platforms[currentPlatformKey()]
-	if !ok {
-		return "", "", serviceError("PLATFORM_UNSUPPORTED", "This Redeven release does not include a host runtime for the Environment platform.", 409, false, nil)
-	}
-	packageOrigin := d.packageOrigin
-	if packageOrigin == "" {
-		packageOrigin = defaultNodePackageOrigin
-	}
-	if err := validateNativeArtifact(artifact, d.client, packageOrigin); err != nil {
-		return "", "", err
-	}
-	installRoot := filepath.Join(d.stateDir, DeepSeekHarnessProductID, "native", DeepSeekHarnessVersion, currentPlatformKey())
-	executable, err := d.installRuntimeBundle(ctx, service, artifact, installRoot, progress)
-	return "", executable, err
-}
-
 func (d *nativeDriver) installRuntimeBundle(ctx context.Context, service *pfregistry.ManagedService, artifact nativeArtifact, installRoot string, progress operationProgress) (string, error) {
 	executable := filepath.Join(installRoot, filepath.FromSlash(artifact.ExecutableRelPath))
 	if err := verifyInstalledNativeRuntime(installRoot, artifact); err == nil {

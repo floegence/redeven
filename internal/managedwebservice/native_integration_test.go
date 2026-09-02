@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,7 +19,7 @@ func TestNativeDeepSeekHarnessReleaseInstallAndWeb(t *testing.T) {
 	if os.Getenv("REDEVEN_TEST_NATIVE_DEEPSEEK_HARNESS") != "1" {
 		t.Skip("set REDEVEN_TEST_NATIVE_DEEPSEEK_HARNESS=1 to run the release download smoke test")
 	}
-	_, ok := auditedNativeArtifact(currentPlatformKey())
+	artifact, ok := auditedNativeArtifact(currentPlatformKey())
 	if !ok {
 		t.Skip("the current platform does not have a release-locked native runtime")
 	}
@@ -42,7 +43,8 @@ func TestNativeDeepSeekHarnessReleaseInstallAndWeb(t *testing.T) {
 		WorkspacePath: workspace, Version: DeepSeekHarnessVersion, TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: snapshotDigest,
 		ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
 	}
-	_, executable, err := installer.Install(context.Background(), service, auditedNativeCatalog(), func(stage string, _ int64, _ ...pfregistry.ManagedOperationTransferProgress) { t.Log(stage) })
+	installRoot := filepath.Join(stateDir, DeepSeekHarnessProductID, "native", DeepSeekHarnessVersion, currentPlatformKey())
+	executable, err := installer.installRuntimeBundle(context.Background(), service, artifact, installRoot, func(stage string, _ int64, _ ...pfregistry.ManagedOperationTransferProgress) { t.Log(stage) })
 	if err != nil {
 		t.Fatal(err)
 	}

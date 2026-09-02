@@ -35,11 +35,7 @@ func nativePackageInstallCommandTemplate() string {
 	return strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, nativePackageInstallArguments()...), " ")
 }
 
-func nativeStartCommandTemplate() string {
-	return strings.Join(append([]string{"<managed-launcher>"}, deepSeekWebArguments("127.0.0.1", "<reserved-port>")...), " ")
-}
-
-func hostLifecyclePlan(deployment Deployment, spec TemplateSpec) *HostLifecyclePlan {
+func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
 	if spec.Kind != DeploymentHost || spec.Host == nil {
 		return nil
 	}
@@ -48,7 +44,7 @@ func hostLifecyclePlan(deployment Deployment, spec TemplateSpec) *HostLifecycleP
 		SchemaVersion: hostLifecyclePlanSchemaVersion,
 		Driver:        "host_script",
 		RuntimeBundle: host.RuntimeBundle,
-		Install:       HostLifecycleActionPlan{Ownership: lifecycleOwnershipNone, Steps: []HostLifecycleStep{}},
+		Install:       HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedeven, Steps: []HostLifecycleStep{{Kind: "prepare_managed_directories"}}},
 		Start:         HostLifecycleActionPlan{Ownership: lifecycleOwnershipTemplate, Steps: []HostLifecycleStep{{Kind: "run_template_script", CommandTemplate: "<template-start-script>"}}},
 		Stop:          HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedeven, Steps: []HostLifecycleStep{{Kind: "terminate_managed_process_group"}}},
 		Uninstall: HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedeven, Steps: []HostLifecycleStep{
@@ -58,10 +54,6 @@ func hostLifecyclePlan(deployment Deployment, spec TemplateSpec) *HostLifecycleP
 			{Kind: "remove_managed_logs"},
 		}},
 	}
-	if deployment != DeploymentNative {
-		plan.Install = HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedeven, Steps: []HostLifecycleStep{{Kind: "prepare_managed_directories"}}}
-	}
-
 	managedInstall := false
 	if host.NPM != nil {
 		managedInstall = true
@@ -110,7 +102,7 @@ func hostLifecyclePlan(deployment Deployment, spec TemplateSpec) *HostLifecycleP
 	if managedInstall {
 		plan.Install.Ownership = lifecycleOwnershipRedeven
 	}
-	if strings.TrimSpace(host.InstallScript) != "" && deployment != DeploymentNative {
+	if strings.TrimSpace(host.InstallScript) != "" {
 		commandTemplate := "<template-install-script>"
 		if managedInstall {
 			commandTemplate = "<after-install-hook>"
@@ -123,11 +115,6 @@ func hostLifecyclePlan(deployment Deployment, spec TemplateSpec) *HostLifecycleP
 		}
 	}
 
-	if deployment == DeploymentNative {
-		plan.Driver = "native"
-		plan.Start = HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedeven, Steps: []HostLifecycleStep{{Kind: "launch_managed_runtime", CommandTemplate: nativeStartCommandTemplate()}}}
-		return plan
-	}
 	if strings.TrimSpace(host.StopScript) != "" {
 		plan.Stop.Ownership = lifecycleOwnershipRedevenWithTemplateHook
 		plan.Stop.Steps = append([]HostLifecycleStep{{Kind: "run_template_script", CommandTemplate: "<before-stop-hook>"}}, plan.Stop.Steps...)

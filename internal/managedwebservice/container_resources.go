@@ -2,8 +2,6 @@ package managedwebservice
 
 import (
 	"context"
-	"errors"
-	"os"
 	"strings"
 
 	"github.com/floegence/redeven/internal/containerengine"
@@ -28,7 +26,7 @@ type ContainerResourceOwner struct {
 func containerResourceLinks(service pfregistry.ManagedService) []ContainerResourceLink {
 	identity := strings.TrimSpace(service.RuntimeIdentity)
 	switch Deployment(service.Deployment) {
-	case DeploymentDocker, DeploymentContainer:
+	case DeploymentContainer:
 		links := make([]ContainerResourceLink, 0, 2)
 		if identity != "" {
 			links = append(links, ContainerResourceLink{Kind: string(ContainerResourceContainer), Engine: string(containerengine.EngineDocker), View: "containers", Identity: identity})
@@ -97,7 +95,7 @@ func (m *Manager) serviceOwnsContainerResource(ctx context.Context, service *pfr
 	deployment := Deployment(service.Deployment)
 	switch kind {
 	case ContainerResourceContainer:
-		if (deployment == DeploymentDocker || deployment == DeploymentContainer) && strings.TrimSpace(service.RuntimeIdentity) == identity {
+		if deployment == DeploymentContainer && strings.TrimSpace(service.RuntimeIdentity) == identity {
 			return true, nil
 		}
 		if deployment != DeploymentCompose || strings.TrimSpace(service.RuntimeIdentity) == "" {
@@ -135,23 +133,9 @@ func (m *Manager) serviceOwnsVolume(ctx context.Context, service *pfregistry.Man
 		return false, nil
 	}
 	switch Deployment(service.Deployment) {
-	case DeploymentDocker:
-		driver := &dockerDriver{stateDir: m.stateDir}
-		raw, err := os.ReadFile(driver.markerPath())
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		var marker retainedDockerVolume
-		if err := decodeStrictJSON(raw, &marker); err != nil {
-			return false, err
-		}
-		return marker.Name == identity, nil
 	case DeploymentContainer:
-		driver := &containerTemplateDriver{manager: m}
-		marker, err := driver.loadVolumeSet(service)
+		driver := &containerTemplateDriver{manager: m, adapter: m.containers}
+		marker, err := driver.loadVolumeSet(ctx, service)
 		if err != nil {
 			return false, err
 		}
