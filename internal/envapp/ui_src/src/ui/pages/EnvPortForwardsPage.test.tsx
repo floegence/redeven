@@ -13,6 +13,7 @@ import {
   resolveWebServiceOpenRoute,
   validateTemplateDraft,
 } from './EnvPortForwardsPage';
+import { LocalApiError } from '../services/localApi';
 
 const notificationMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -161,6 +162,18 @@ vi.mock('../services/floeproxyContract', () => ({
 vi.mock('../services/localApi', () => ({
   fetchLocalApi: localApiMocks.fetchLocalApi,
   fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
+  LocalApiError: class LocalApiError extends Error {
+    readonly status: number;
+    readonly code: string;
+    readonly data: unknown;
+
+    constructor(args: Readonly<{ message: string; status?: number; code?: string; data?: unknown }>) {
+      super(args.message);
+      this.status = args.status ?? 0;
+      this.code = args.code ?? '';
+      this.data = args.data;
+    }
+  },
 }));
 
 vi.mock('../services/sandboxOrigins', () => ({
@@ -1612,6 +1625,33 @@ describe('EnvPortForwardsPage', () => {
     streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-desktop-update', service_id: 'mws-desktop', action: 'update', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`));
     streamController?.close();
     await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service updated', expect.any(String)));
+  });
+
+  it('shows a localized release-source error instead of the backend message', async () => {
+    const service = {
+      service_id: 'mws-release-error', template_id: 'example-container', service_family_id: 'example-container',
+      name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace',
+      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-release-error', runtime_port: 32102,
+    };
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-release-error/release-candidates' && init?.method === 'POST') {
+        throw new LocalApiError({
+          code: 'RELEASE_SOURCE_AUTH_UNAVAILABLE',
+          status: 503,
+          message: 'Container Registry credentials could not be read from the current engine store.',
+        });
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-version"]')).toBeTruthy());
+    host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-candidates"]')?.textContent).toContain('Redeven could not read the container engine’s saved registry credentials.'));
+    expect(host.textContent).not.toContain('Container Registry credentials could not be read from the current engine store.');
   });
 
   it('keeps the current application release when reviewing a template-only update', async () => {

@@ -5,15 +5,18 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
@@ -105,6 +108,97 @@ func TestDiscoverNPMCandidatesKeepsLastSuccessAndNeverReturnsToken(t *testing.T)
 	}
 	if len(result.Candidates) != 1 || result.CheckedAtUnixMs != checkedAt || result.LastErrorCode == "" {
 		t.Fatalf("stale success state was not preserved: %#v", result)
+	}
+}
+
+type releaseCredentialClient struct {
+	credentialErr error
+}
+
+func (*releaseCredentialClient) Status(context.Context, containerengine.Engine) (containerengine.EngineStatus, error) {
+	return containerengine.EngineStatus{}, nil
+}
+
+func (*releaseCredentialClient) List(context.Context, containerengine.Engine, bool) ([]containerengine.EngineContainer, error) {
+	return nil, nil
+}
+
+func (*releaseCredentialClient) Inspect(context.Context, containerengine.Engine, string) (containerengine.EngineContainer, error) {
+	return containerengine.EngineContainer{}, nil
+}
+
+func (*releaseCredentialClient) Action(context.Context, containerengine.EngineActionRequest) (containerengine.EngineActionResult, error) {
+	return containerengine.EngineActionResult{}, nil
+}
+
+func (*releaseCredentialClient) TailLogs(context.Context, containerengine.EngineLogsRequest) (containerengine.EngineLogsResult, error) {
+	return containerengine.EngineLogsResult{}, nil
+}
+
+func (*releaseCredentialClient) PullImage(context.Context, containerengine.Engine, string) (containerengine.EngineImageResult, error) {
+	return containerengine.EngineImageResult{}, nil
+}
+
+func (c *releaseCredentialClient) RegistryCredential(context.Context, containerengine.Engine, string) (containerengine.RegistryCredential, error) {
+	return containerengine.RegistryCredential{}, c.credentialErr
+}
+
+func TestDiscoverOCICandidatesFallsBackToAnonymousForPublicRegistry(t *testing.T) {
+	platformDigest := testReleaseDigest("b")
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "" {
+			t.Errorf("anonymous Registry request unexpectedly used authorization")
+		}
+		switch request.URL.Path {
+		case "/v2/team/app/tags/list":
+			_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"1.2.3"}})
+		case "/v2/team/app/manifests/1.2.3":
+			response.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
+			_ = json.NewEncoder(response).Encode(map[string]any{"schemaVersion": 2, "manifests": []map[string]any{{"digest": platformDigest, "platform": map[string]string{"os": "linux", "architecture": runtime.GOARCH}}}})
+		default:
+			t.Fatalf("unexpected Registry request %s", request.URL)
+		}
+	}))
+	t.Cleanup(server.Close)
+	adapter, err := containerengine.NewAdapter(&releaseCredentialClient{credentialErr: errors.New("credential helper is unavailable")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := strings.TrimPrefix(server.URL, "https://")
+	manager := &Manager{containers: adapter, releaseClient: server.Client()}
+	items, err := manager.discoverOCICandidates(context.Background(), TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion,
+		Kind:          DeploymentContainer,
+		Container:     &ContainerTemplateSpec{Image: host + "/team/app:1.0.0@" + testReleaseDigest("c")},
+	}, nil, "builtin")
+	if err != nil {
+		t.Fatalf("public anonymous discovery failed after credential lookup error: %v", err)
+	}
+	if len(items) != 1 || items[0].Candidate.Tag != "1.2.3" || !items[0].Candidate.Selectable {
+		t.Fatalf("unexpected anonymous candidates: %#v", items)
+	}
+}
+
+func TestDiscoverOCICandidatesReportsCredentialStoreOnlyWhenRegistryRequiresAuthentication(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(server.Close)
+	credentialErr := errors.New("credential helper is unavailable")
+	adapter, err := containerengine.NewAdapter(&releaseCredentialClient{credentialErr: credentialErr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := strings.TrimPrefix(server.URL, "https://")
+	manager := &Manager{containers: adapter, releaseClient: server.Client()}
+	_, err = manager.discoverOCICandidates(context.Background(), TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion,
+		Kind:          DeploymentContainer,
+		Container:     &ContainerTemplateSpec{Image: host + "/team/app:1.0.0@" + testReleaseDigest("c")},
+	}, nil, "builtin")
+	code, _, _, retryable := ErrorDetails(err)
+	if code != "RELEASE_SOURCE_AUTH_UNAVAILABLE" || !retryable {
+		t.Fatalf("authenticated Registry error = (%q, retryable=%t), want RELEASE_SOURCE_AUTH_UNAVAILABLE", code, retryable)
 	}
 }
 

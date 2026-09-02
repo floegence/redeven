@@ -3304,6 +3304,15 @@
 	  "releaseCheckedAt": "마지막 확인",
 	  "releaseDirectSource": "구성된 Registry에서 직접 읽음",
 	  "releaseCheckStale": "최근 확인에 실패하여 마지막 성공 결과를 표시합니다.",
+	  "releaseListLabel": "사용 가능한 버전",
+	  "releaseSourceError": {
+		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven이 컨테이너 엔진에 저장된 Registry 자격 증명을 읽지 못했습니다. Docker 또는 Podman 자격 증명 설정을 확인한 후 새로 고치세요.",
+		"RELEASE_SOURCE_AUTH_REQUIRED": "Registry에 유효한 자격 증명이 필요합니다. Docker 또는 Podman에 로그인하거나 구성된 Secret 토큰을 입력한 후 새로 고치세요.",
+		"RELEASE_SOURCE_RATE_LIMITED": "Registry 요청 한도에 도달했습니다. 잠시 기다린 후 새로 고치세요.",
+		"RELEASE_SOURCE_RESPONSE_INVALID": "Registry가 잘못된 버전 정보를 반환했습니다. 나중에 새로 고치거나 구성된 소스를 확인하세요.",
+		"RELEASE_SOURCE_UNAVAILABLE": "Redeven이 Registry에서 버전을 읽지 못했습니다. 네트워크와 구성된 소스를 확인한 후 새로 고치세요.",
+		"unavailable": "Redeven이 사용 가능한 버전을 불러오지 못했습니다. 네트워크를 확인한 후 새로 고치세요."
+	  },
       "releaseSearch": "버전 또는 태그 검색",
       "releaseFilterLabel": "버전 필터",
       "releaseFilter": { "all": "전체", "stable": "안정", "preview": "미리 보기" },

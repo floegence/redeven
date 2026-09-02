@@ -3304,6 +3304,15 @@
 	  "releaseCheckedAt": "最近检查时间",
 	  "releaseDirectSource": "直接从配置的 Registry 读取",
 	  "releaseCheckStale": "最近一次检查失败，当前显示上次成功结果。",
+	  "releaseListLabel": "可用版本",
+	  "releaseSourceError": {
+		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven 无法读取容器引擎保存的 Registry 凭据。请检查 Docker 或 Podman 的凭据设置后刷新。",
+		"RELEASE_SOURCE_AUTH_REQUIRED": "Registry 要求有效凭据。请先通过 Docker 或 Podman 登录，或提供已配置的 Secret Token，然后刷新。",
+		"RELEASE_SOURCE_RATE_LIMITED": "Registry 请求已达到限额，请稍后刷新。",
+		"RELEASE_SOURCE_RESPONSE_INVALID": "Registry 返回的版本信息无效，请稍后刷新或检查配置的来源。",
+		"RELEASE_SOURCE_UNAVAILABLE": "Redeven 无法从 Registry 读取版本。请检查网络和配置的来源后刷新。",
+		"unavailable": "Redeven 无法加载可用版本。请检查网络后刷新。"
+	  },
       "releaseSearch": "搜索版本或标签",
       "releaseFilterLabel": "筛选版本",
       "releaseFilter": { "all": "全部", "stable": "稳定版", "preview": "预览版" },

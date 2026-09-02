@@ -3247,6 +3247,15 @@ export const enUS = defineDictionary({
 	  releaseCheckedAt: 'Last checked',
 	  releaseDirectSource: 'Read directly from the configured registry',
 	  releaseCheckStale: 'The latest check failed. Showing the last successful result.',
+	  releaseListLabel: 'Available versions',
+	  releaseSourceError: {
+		RELEASE_SOURCE_AUTH_UNAVAILABLE: 'Redeven could not read the container engine’s saved registry credentials. Check Docker or Podman credential settings, then refresh.',
+		RELEASE_SOURCE_AUTH_REQUIRED: 'The registry requires valid credentials. Sign in with Docker or Podman, or provide the configured Secret token, then refresh.',
+		RELEASE_SOURCE_RATE_LIMITED: 'The registry request limit was reached. Wait a moment, then refresh.',
+		RELEASE_SOURCE_RESPONSE_INVALID: 'The registry returned invalid version information. Refresh later or check the configured source.',
+		RELEASE_SOURCE_UNAVAILABLE: 'Redeven could not read versions from the registry. Check the network and configured source, then refresh.',
+		unavailable: 'Redeven could not load available versions. Check the network, then refresh.',
+	  },
       releaseSearch: 'Search versions or tags',
       releaseFilterLabel: 'Filter versions',
       releaseFilter: {

@@ -3304,6 +3304,15 @@
 	  "releaseCheckedAt": "最終確認日時",
 	  "releaseDirectSource": "設定された Registry から直接取得",
 	  "releaseCheckStale": "最新の確認に失敗したため、前回成功時の結果を表示しています。",
+	  "releaseListLabel": "利用可能なバージョン",
+	  "releaseSourceError": {
+		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "コンテナエンジンに保存された Registry 認証情報を Redeven が読み取れませんでした。Docker または Podman の認証情報設定を確認してから更新してください。",
+		"RELEASE_SOURCE_AUTH_REQUIRED": "Registry には有効な認証情報が必要です。Docker または Podman でログインするか、設定済みの Secret トークンを入力してから更新してください。",
+		"RELEASE_SOURCE_RATE_LIMITED": "Registry のリクエスト上限に達しました。しばらく待ってから更新してください。",
+		"RELEASE_SOURCE_RESPONSE_INVALID": "Registry から無効なバージョン情報が返されました。後でもう一度更新するか、設定された取得元を確認してください。",
+		"RELEASE_SOURCE_UNAVAILABLE": "Redeven が Registry からバージョンを取得できませんでした。ネットワークと設定された取得元を確認してから更新してください。",
+		"unavailable": "Redeven が利用可能なバージョンを読み込めませんでした。ネットワークを確認してから更新してください。"
+	  },
       "releaseSearch": "バージョンまたはタグを検索",
       "releaseFilterLabel": "バージョンを絞り込む",
       "releaseFilter": { "all": "すべて", "stable": "安定版", "preview": "プレビュー" },

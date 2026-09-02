@@ -3304,6 +3304,15 @@
 	  "releaseCheckedAt": "Zuletzt geprüft",
 	  "releaseDirectSource": "Direkt aus der konfigurierten Registry gelesen",
 	  "releaseCheckStale": "Die letzte Prüfung ist fehlgeschlagen. Angezeigt wird das letzte erfolgreiche Ergebnis.",
+	  "releaseListLabel": "Verfügbare Versionen",
+	  "releaseSourceError": {
+		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven konnte die im Container-Modul gespeicherten Registry-Anmeldedaten nicht lesen. Prüfen Sie die Anmeldedateneinstellungen von Docker oder Podman und aktualisieren Sie dann die Ansicht.",
+		"RELEASE_SOURCE_AUTH_REQUIRED": "Die Registry erfordert gültige Anmeldedaten. Melden Sie sich mit Docker oder Podman an oder geben Sie das konfigurierte Secret-Token an und aktualisieren Sie dann die Ansicht.",
+		"RELEASE_SOURCE_RATE_LIMITED": "Das Anfragelimit der Registry wurde erreicht. Warten Sie kurz und aktualisieren Sie dann die Ansicht.",
+		"RELEASE_SOURCE_RESPONSE_INVALID": "Die Registry hat ungültige Versionsinformationen zurückgegeben. Aktualisieren Sie die Ansicht später oder prüfen Sie die konfigurierte Quelle.",
+		"RELEASE_SOURCE_UNAVAILABLE": "Redeven konnte keine Versionen aus der Registry lesen. Prüfen Sie das Netzwerk und die konfigurierte Quelle und aktualisieren Sie dann die Ansicht.",
+		"unavailable": "Redeven konnte die verfügbaren Versionen nicht laden. Prüfen Sie das Netzwerk und aktualisieren Sie dann die Ansicht."
+	  },
       "releaseSearch": "Versionen oder Tags suchen",
       "releaseFilterLabel": "Versionen filtern",
       "releaseFilter": { "all": "Alle", "stable": "Stabil", "preview": "Vorschau" },

@@ -64,11 +64,16 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await settle();
 
     const surface = document.querySelector<HTMLElement>('[data-testid="managed-release-candidates"]')!;
+    const scrollViewport = document.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
     expect(surface.textContent).toContain('Current installed release');
     expect(surface.textContent).toContain('sha512-current');
     expect(surface.textContent).toContain('0.1.2-alpha.3');
     expect(surface.textContent).toContain('Deprecated');
     expect(document.querySelector<HTMLButtonElement>('[data-release-id="deprecated"]')?.disabled).toBe(false);
+    expect(scrollViewport.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
+    expect(scrollViewport.getAttribute('data-redeven-workbench-wheel-role')).toBe('local-scroll-viewport');
+    expect(scrollViewport.tabIndex).toBe(0);
+    expect(getComputedStyle(scrollViewport).overflowY).toBe('auto');
     await userEvent.click(Array.from(surface.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Preview')!);
     await settle();
     expect(surface.textContent).toContain('0.1.2-alpha.3');
