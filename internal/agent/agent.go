@@ -206,7 +206,7 @@ type activeSession struct {
 	meta              session.Meta
 	grantDigest       [sha256.Size]byte
 	grantExpiresAt    int64
-	connectedAtUnixMs int64 // set after ConnectTunnel succeeds
+	connectedAtUnixMs int64 // set after the Flowersec connection succeeds
 	pluginGeneration  PluginSessionGeneration
 	runtimeLease      *runtimeservice.WorkloadLease
 }

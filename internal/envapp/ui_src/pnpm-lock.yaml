@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': 5.0.0
+  '@floegence/flowersec-core': 5.0.1
   '@babel/core': ^7.29.7
   brace-expansion: ^5.0.9
   dompurify: ^3.4.13
@@ -33,20 +33,20 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: 0.48.0
-        version: 0.48.0
+        specifier: 0.48.1
+        version: 0.48.1
       '@floegence/floe-webapp-core':
-        specifier: 0.48.0
-        version: 0.48.0(solid-js@1.9.13)
+        specifier: 0.48.1
+        version: 0.48.1(solid-js@1.9.13)
       '@floegence/floe-webapp-protocol':
-        specifier: 0.48.0
-        version: 0.48.0(solid-js@1.9.13)
+        specifier: 0.48.1
+        version: 0.48.1(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
         specifier: 0.18.1
         version: 0.18.1
       '@floegence/flowersec-core':
-        specifier: 5.0.0
-        version: 5.0.0
+        specifier: 5.0.1
+        version: 5.0.1
       '@floegence/redevplugin-contracts':
         specifier: 3.0.21
         version: 3.0.21
@@ -360,18 +360,18 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-boot@0.48.0':
-    resolution: {integrity: sha512-Kl5xwJlDQynt86+ML0tC8Bd8ZRyzYQF6M5PIZymVNP4InDIsoh88m4lqh2xZmCVPBzwjqrfYVrU2JkVjb+dneg==}
+  '@floegence/floe-webapp-boot@0.48.1':
+    resolution: {integrity: sha512-irOY2oKydfwlzXVzxov89ag/r3h4jGPIWNgL2ukYxC5Gmmm6uZ98AT5rJX2SZZL9SyDM3QQ4s0g3wxJZ4dbTxg==}
     engines: {node: '>=24.20.0'}
 
-  '@floegence/floe-webapp-core@0.48.0':
-    resolution: {integrity: sha512-xI66dIINwMlggA+Y5p0+3xpB3RGWcHBhZAEch3dyReunP4xEOPqYfBfBNrWNPXyPOQhYiUwjsN74lB8SCSmlXg==}
+  '@floegence/floe-webapp-core@0.48.1':
+    resolution: {integrity: sha512-rZTgqAQIeWmGFAnT+rPpyB5HwQTCR9AcvHDlRaFyjzBJKXRDKx6CWh/+LRpc/1g/EnAIHQ9WmJD0tmNJ7bVKJA==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.48.0':
-    resolution: {integrity: sha512-VvPs5ErNZUt4JwRBu8TSEInCouv872fTY6U1Hy7v5F/Cf3zuKMk6Lz1VQZ/XkBLCXATN6syfhf9I3Gosfc4b7w==}
+  '@floegence/floe-webapp-protocol@0.48.1':
+    resolution: {integrity: sha512-hfl4mIYcPDnURdOktsb5nQ65JOL3cmIHn0uD9ryRA4ey+8Y52R9n21ZTAKRyuOBQIahp30IEJCkI0nBKQjyxPA==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -379,39 +379,39 @@ packages:
   '@floegence/floeterm-terminal-web@0.18.1':
     resolution: {integrity: sha512-2zytctVP+HWaYt/CppDiEn/fTbupJS6b7GNto5i80Q0fWhSvZGgLjG4Wsmi5kKm9YhByrCfDz7JdOULG9E6+zg==}
 
-  '@floegence/flowersec-core@5.0.0':
-    resolution: {integrity: sha512-BVNsldzL5EpIKBFaW67k6jY8r8nbVAEpWZdzsSCBdsL/iz2f0k5wqmK4u7HKiNeEVfh0nfQCVH3uu/j95Zrs/g==}
+  '@floegence/flowersec-core@5.0.1':
+    resolution: {integrity: sha512-VmbS1OvK8VOUqq7Ws5K+eqPNjBJh4RQcIkb2SoLeCV+jQLHIajASfMeUjBDZ/cT1trVnKrpb8sdpS+vEeEbnbA==}
     engines: {node: '>=24.20.0'}
     hasBin: true
 
-  '@floegence/flowersec-node-native-darwin-arm64@5.0.0':
-    resolution: {integrity: sha512-rnlV7Oeyhxw5yOhaJgbrkzzQ4gx/qBcAVoSggr6STVbmCeREsbdNK8Igx6hFRiJJ+cqSjpkbpzOdK+qFf5M+YQ==}
+  '@floegence/flowersec-node-native-darwin-arm64@5.0.1':
+    resolution: {integrity: sha512-KrRx6lkZIjl2h1wVR4JzHauBn+CIY0aoH42HY0RfYnNE/YKgL50kXW+1MIqxRCAKQWVs9yiNcyMyKVhTy5eWuw==}
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-darwin-x64@5.0.0':
-    resolution: {integrity: sha512-vkOi7gT5mVgZHP6InRsye/hPG5QZlqdyX3k666z5nBhnv1NuBaWvqWW4bjgSx47FUJHvuzmzDRtPmztU2m5YGA==}
+  '@floegence/flowersec-node-native-darwin-x64@5.0.1':
+    resolution: {integrity: sha512-WYA88sPr+J6DthBCJw2uq771s1YYHsMS/N/kIeVetMiEOMdt89l7Q3QHBHgRHGgCeIuf9eRc5UEE/LJ05txLGg==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@5.0.0':
-    resolution: {integrity: sha512-rw12DYqRf7s8YL3LmtNaAPp4kbYA0qb81fH4i3TdOcbRCaO32r0zwXyLrBjy+EN0klEsPEmQ1zvH9Vrm7q3s1g==}
+  '@floegence/flowersec-node-native-linux-arm64-gnu@5.0.1':
+    resolution: {integrity: sha512-/t77dXzHNlV5Hgd4u3Hzu/FKrqtmeFttJL228P3/dAfRT/AzOWTZlWvTp1bNT7/fGSAKvBP4EcHTy/hTPbWPbw==}
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@5.0.0':
-    resolution: {integrity: sha512-PEqckY4mqh5mgo0aUZBy18Kdd/uIR1MuX+0NCIMCiKWWq//qc0yVSr04ZnLeqnf8rWqsth0cCCmFeNvZ16vQ7A==}
+  '@floegence/flowersec-node-native-linux-x64-gnu@5.0.1':
+    resolution: {integrity: sha512-hBCG7GLjwBwXdW5K5UaEDPW/vIV1pepcx1PvqJhmx02+5H7ZA6hQ7sa5rxgW0/wOA4K8wp+KsKtnFlLI+nnTPg==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native@5.0.0':
-    resolution: {integrity: sha512-eO9hJCGeNvqy1r51LyhasYq07QQeE9l2FxJk0JYTJNu3q/vlnABjmmUNjsC3cQdiDmu2fhQhb0K6An2gvSfuHg==}
+  '@floegence/flowersec-node-native@5.0.1':
+    resolution: {integrity: sha512-H8UXo7SHfdG7HCakMSI1DIoE3K0EP6dMHnzSbfd7Hr7cIWxd6UYZwt2V1dYd5dqqE2z8oAWAcYNOnB4gT/59aw==}
     engines: {node: '>=24.20.0'}
 
   '@floegence/redevplugin-contracts@3.0.21':
@@ -2863,14 +2863,14 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-boot@0.48.0':
+  '@floegence/floe-webapp-boot@0.48.1':
     dependencies:
-      '@floegence/flowersec-core': 5.0.0
+      '@floegence/flowersec-core': 5.0.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.48.0(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.48.1(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -2882,9 +2882,9 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.13)
       tailwind-merge: 3.6.0
 
-  '@floegence/floe-webapp-protocol@0.48.0(solid-js@1.9.13)':
+  '@floegence/floe-webapp-protocol@0.48.1(solid-js@1.9.13)':
     dependencies:
-      '@floegence/flowersec-core': 5.0.0
+      '@floegence/flowersec-core': 5.0.1
       solid-js: 1.9.13
     transitivePeerDependencies:
       - bufferutil
@@ -2892,7 +2892,7 @@ snapshots:
 
   '@floegence/floeterm-terminal-web@0.18.1': {}
 
-  '@floegence/flowersec-core@5.0.0':
+  '@floegence/flowersec-core@5.0.1':
     dependencies:
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0
@@ -2900,29 +2900,29 @@ snapshots:
       tr46: 6.0.0
       ws: 8.21.2
     optionalDependencies:
-      '@floegence/flowersec-node-native': 5.0.0
+      '@floegence/flowersec-node-native': 5.0.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/flowersec-node-native-darwin-arm64@5.0.0':
+  '@floegence/flowersec-node-native-darwin-arm64@5.0.1':
     optional: true
 
-  '@floegence/flowersec-node-native-darwin-x64@5.0.0':
+  '@floegence/flowersec-node-native-darwin-x64@5.0.1':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@5.0.0':
+  '@floegence/flowersec-node-native-linux-arm64-gnu@5.0.1':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@5.0.0':
+  '@floegence/flowersec-node-native-linux-x64-gnu@5.0.1':
     optional: true
 
-  '@floegence/flowersec-node-native@5.0.0':
+  '@floegence/flowersec-node-native@5.0.1':
     optionalDependencies:
-      '@floegence/flowersec-node-native-darwin-arm64': 5.0.0
-      '@floegence/flowersec-node-native-darwin-x64': 5.0.0
-      '@floegence/flowersec-node-native-linux-arm64-gnu': 5.0.0
-      '@floegence/flowersec-node-native-linux-x64-gnu': 5.0.0
+      '@floegence/flowersec-node-native-darwin-arm64': 5.0.1
+      '@floegence/flowersec-node-native-darwin-x64': 5.0.1
+      '@floegence/flowersec-node-native-linux-arm64-gnu': 5.0.1
+      '@floegence/flowersec-node-native-linux-x64-gnu': 5.0.1
     optional: true
 
   '@floegence/redevplugin-contracts@3.0.21': {}
