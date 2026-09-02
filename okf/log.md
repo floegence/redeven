@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Fork context identity**: Redeven now consumes Floret v7.1.1. Canonical
+  context snapshots for direct and nested forks use the destination ThreadID,
+  preserve historical Turn and Run identity plus cumulative usage, and remain
+  stable after restart. Redeven keeps one public `ThreadContextReader` path and
+  adds no downstream repair or compatibility read.
 * **Complete SubAgent handoffs**: Wait and inspect now prove parent membership
   from bounded summaries, then read each completed child's exact current-Turn
   Assistant result from the canonical Floret View. Model results use one

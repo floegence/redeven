@@ -16,7 +16,7 @@ non-expandable row instead of inventing an empty diff panel.
 
 # Contract
 
-Published Floret v7.1.0 owns the product-neutral file Activity payload. A read
+Published Floret v7.1.1 owns the product-neutral file Activity payload. A read
 carries bounded content and line metadata. A single-file mutation carries its
 display name, change type, added and deleted line counts, unified diff,
 unavailable reason, and truncation state. A patch carries aggregate counts and

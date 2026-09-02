@@ -112,6 +112,131 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	}
 }
 
+func TestFlowerForkDetailPreservesCanonicalContextAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	server := newRealtimeTestServer(t, 0)
+	stateDir := t.TempDir()
+	svc := openRealtimeTestService(t, stateDir, server.URL)
+	closed := false
+	t.Cleanup(func() {
+		if !closed {
+			_ = svc.Close()
+		}
+	})
+	meta := testSendTurnMeta()
+
+	source, err := svc.CreateThread(ctx, meta, "Fork context source", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, turn := range []struct {
+		requestID string
+		text      string
+	}{
+		{requestID: "fork-context-usage", text: "Record canonical usage."},
+		{requestID: "fork-context-compaction", text: "/compact"},
+	} {
+		if _, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+			ClientRequestID: turn.requestID, ThreadID: source.ThreadID, Input: RunInput{Text: turn.text},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		waitForFloretThreadIdle(t, svc.threadRuntime, identity.ThreadID(source.ThreadID))
+		if index == 0 {
+			waitForThreadContextUsage(t, svc, source.ThreadID)
+		}
+	}
+
+	sourceDetail, err := svc.GetFlowerThreadDetail(ctx, meta, source.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceContext := readThreadContextForForkTest(t, svc, source.ThreadID)
+	if sourceContext.UsageTotals == nil || sourceContext.UsageTotals.InputTokens == 0 {
+		t.Fatalf("source usage totals=%#v, want committed provider usage", sourceContext.UsageTotals)
+	}
+	if len(sourceContext.Compactions) != 1 || len(sourceDetail.Thread.ContextCompactions) != 1 {
+		t.Fatalf("source compactions=(canonical:%d detail:%d), want one", len(sourceContext.Compactions), len(sourceDetail.Thread.ContextCompactions))
+	}
+
+	forked, err := svc.ForkThread(ctx, meta, source.ThreadID, "Fork context target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	forkDetail, err := svc.GetFlowerThreadDetail(ctx, meta, forked.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forkContext := readThreadContextForForkTest(t, svc, forked.ThreadID)
+	assertForkContextDetail(t, sourceContext, forkContext, forkDetail, forked.ThreadID)
+
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	closed = true
+	restarted := openRealtimeTestService(t, stateDir, server.URL)
+	t.Cleanup(func() { _ = restarted.Close() })
+	restartedDetail, err := restarted.GetFlowerThreadDetail(ctx, meta, forked.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restartedContext := readThreadContextForForkTest(t, restarted, forked.ThreadID)
+	assertForkContextDetail(t, sourceContext, restartedContext, restartedDetail, forked.ThreadID)
+}
+
+func readThreadContextForForkTest(t *testing.T, svc *Service, threadID string) flruntime.ThreadContextSnapshot {
+	t.Helper()
+	reader, ok := svc.threadRuntime.(flruntime.ThreadContextReader)
+	if !ok {
+		t.Fatal("published Floret runtime does not expose ThreadContextReader")
+	}
+	snapshot, err := reader.Context(t.Context(), identity.ThreadID(threadID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snapshot
+}
+
+func waitForThreadContextUsage(t *testing.T, svc *Service, threadID string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		snapshot := readThreadContextForForkTest(t, svc, threadID)
+		if snapshot.UsageTotals != nil && snapshot.UsageTotals.InputTokens > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			view, _ := svc.threadRuntime.View(t.Context(), identity.ThreadID(threadID))
+			t.Fatalf("thread %q did not commit provider usage: outcome=%v failure=%v view=%#v", threadID, view.LastOutcome, view.Failure, view)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func assertForkContextDetail(t *testing.T, source flruntime.ThreadContextSnapshot, fork flruntime.ThreadContextSnapshot, detail *FlowerThreadDetail, threadID string) {
+	t.Helper()
+	if detail == nil || detail.Thread.ThreadID != threadID || detail.Current.ThreadID != identity.ThreadID(threadID) {
+		t.Fatalf("fork detail identity=%#v, want thread %q", detail, threadID)
+	}
+	if source.UsageTotals == nil || fork.UsageTotals == nil || *fork.UsageTotals != *source.UsageTotals {
+		t.Fatalf("fork usage totals=%#v, want %#v", fork.UsageTotals, source.UsageTotals)
+	}
+	if detail.Thread.ContextUsage == nil || detail.Thread.ContextUsage.ThreadUsage == nil {
+		t.Fatalf("fork detail usage=%#v, want canonical totals", detail.Thread.ContextUsage)
+	}
+	if len(source.Compactions) != 1 || len(fork.Compactions) != 1 || len(detail.Thread.ContextCompactions) != 1 {
+		t.Fatalf("fork compactions=(source:%d canonical:%d detail:%d), want one", len(source.Compactions), len(fork.Compactions), len(detail.Thread.ContextCompactions))
+	}
+	sourceCompaction := source.Compactions[0]
+	forkCompaction := fork.Compactions[0]
+	if forkCompaction.ThreadID != identity.ThreadID(threadID) {
+		t.Fatalf("fork context ThreadID=%q, want %q", forkCompaction.ThreadID, threadID)
+	}
+	if forkCompaction.TurnID != sourceCompaction.TurnID || forkCompaction.RunID != sourceCompaction.RunID || forkCompaction.OperationID != sourceCompaction.OperationID {
+		t.Fatalf("fork historical identity=%#v, want TurnID=%q RunID=%q operation=%q", forkCompaction, sourceCompaction.TurnID, sourceCompaction.RunID, sourceCompaction.OperationID)
+	}
+}
+
 func waitForFlowerLiveUsage(t *testing.T, usage <-chan FlowerContextUsage) FlowerContextUsage {
 	t.Helper()
 	select {
