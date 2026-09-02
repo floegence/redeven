@@ -170,8 +170,7 @@ type run struct {
 	muFloretContract    sync.Mutex
 	floretContractErr   error
 
-	muPendingCommand       sync.Mutex
-	pendingCommandID       string
+	muCanonicalAttachments sync.Mutex
 	canonicalAttachmentIDs []string
 
 	finalizationReason string
@@ -489,14 +488,9 @@ func (r *run) beginExecutionAdmission(ctx context.Context) (context.Context, fun
 	return admittedContext, release, nil
 }
 
-func (r *run) admitFloretProviderRequest(ctx context.Context, request flprovider.Request) (context.Context, func(), error) {
+func (r *run) admitFloretProviderRequest(ctx context.Context, _ flprovider.Request) (context.Context, func(), error) {
 	if err := r.floretContractError(); err != nil {
 		return nil, nil, err
-	}
-	if request.LogicalRequestID != "thread_title" || len(request.Tools) != 0 || len(request.HostedTools) != 0 {
-		if err := r.ensureCanonicalPermissionSnapshotPersisted(ctx); err != nil {
-			return nil, nil, err
-		}
 	}
 	return r.beginExecutionAdmission(ctx)
 }

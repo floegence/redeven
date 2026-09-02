@@ -8,10 +8,10 @@ quality_exception: Unified template contract linking catalog interaction, defini
 ---
 # Summary
 
-- Authority: Redeven owns the Environment-local catalog, custom definitions, revisions, duplicate lineage, and service-family identities. [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.
+- Authority: Redeven owns the Environment-local template catalog and identities; [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.
 - Outcome: one right-side drawer supports browsing, editing, duplication, and safe deployment of host and container definitions.
-- Invariants: built-ins are immutable, custom definitions are revisioned, duplication creates a new family, every template has a dedicated default workspace, installed state resolves by exact template identity, deployments use immutable snapshots, release choice is separate from template revision, and required safety notices are versioned and enforced by the Runtime.
-- Failure boundary: malformed, unsafe, unavailable, or conflicting definitions fail before lifecycle work; an installed definition cannot be deleted.
+- Invariants: built-ins are immutable, custom definitions are revisioned, duplication creates a new family, installed state uses exact template identity, deployments use immutable snapshots, and release choice remains separate from template revision.
+- Failure boundary: malformed, unsafe, unavailable, or conflicting definitions fail before lifecycle work; installed definitions cannot be deleted.
 
 # Contract
 

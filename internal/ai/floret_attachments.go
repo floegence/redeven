@@ -81,9 +81,9 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []
 	out := flruntime.TurnInput{Text: strings.TrimSpace(input.Text), References: append([]flruntime.MessageReference(nil), references...)}
 	uploadIDs := make([]string, 0, len(input.Attachments))
 	if r != nil {
-		r.muPendingCommand.Lock()
+		r.muCanonicalAttachments.Lock()
 		r.canonicalAttachmentIDs = nil
-		r.muPendingCommand.Unlock()
+		r.muCanonicalAttachments.Unlock()
 	}
 	if input.StructuredResponse != nil {
 		summary := strings.TrimSpace(input.StructuredResponse.PublicSummary)
@@ -138,9 +138,9 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []
 	if err := out.Validate(); err != nil {
 		return flruntime.TurnInput{}, err
 	}
-	r.muPendingCommand.Lock()
+	r.muCanonicalAttachments.Lock()
 	r.canonicalAttachmentIDs = uniqueStrings(uploadIDs)
-	r.muPendingCommand.Unlock()
+	r.muCanonicalAttachments.Unlock()
 	return out, nil
 }
 

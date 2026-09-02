@@ -18,16 +18,9 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-type floretHostedPreparation struct {
-	agent             *flruntime.Agent
-	labels            flruntime.RunLabels
-	contextProjection floretContextProjection
-	turnInput         flruntime.TurnInput
-}
-
-func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, adapterOverride ...ModelGateway) (floretHostedPreparation, error) {
+func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, adapterOverride ...ModelGateway) (*flruntime.Agent, error) {
 	if r == nil {
-		return floretHostedPreparation{}, errors.New("nil run")
+		return nil, errors.New("nil run")
 	}
 	providerType := strings.ToLower(strings.TrimSpace(providerCfg.Type))
 	_, modelName, ok := strings.Cut(strings.TrimSpace(req.Model), "/")
@@ -36,7 +29,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
-		return floretHostedPreparation{}, r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", strings.TrimSpace(req.Model)))
+		return nil, r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", strings.TrimSpace(req.Model)))
 	}
 
 	capability := contextmodel.NormalizeCapability(req.ModelCapability)
@@ -62,7 +55,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		var err error
 		adapter, err = newProviderAdapter(providerType, strings.TrimSpace(providerCfg.BaseURL), strings.TrimSpace(apiKey), providerCfg.StrictToolSchema)
 		if err != nil {
-			return floretHostedPreparation{}, r.failRun("Failed to initialize provider adapter", err)
+			return nil, r.failRun("Failed to initialize provider adapter", err)
 		}
 	}
 
@@ -94,7 +87,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	r.effectPermissionSurfaceConfig = surfaceConfig
 	initialSurface, err := r.buildRunToolSurface(ctx, surfaceConfig)
 	if err != nil {
-		return floretHostedPreparation{}, r.failRun("Failed to initialize run tool surface", err)
+		return nil, r.failRun("Failed to initialize run tool surface", err)
 	}
 	req.Options.PermissionType = permissionTypeString(initialSurface.PermissionType)
 	r.recordRunDiagnostic("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
@@ -134,23 +127,21 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}, Host: initialSurface.HostContext}
 	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, capability.WireModelName, flProvider.stateCompatibilityRoute())
 	if err != nil {
-		return floretHostedPreparation{}, r.failRun("Failed to initialize Floret model identity", err)
+		return nil, r.failRun("Failed to initialize Floret model identity", err)
 	}
-	var contextProjection floretContextProjection
-	var turnInput flruntime.TurnInput
 	var frozenAttachments map[string]frozenFloretAttachment
 	if req.Retry == nil {
-		contextProjection, err = floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority)
+		contextProjection, err := floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority)
 		if err != nil {
-			return floretHostedPreparation{}, r.failRun("Failed to prepare linked context", err)
+			return nil, r.failRun("Failed to prepare linked context", err)
 		}
-		turnInput, err = r.floretTurnInput(ctx, req.Input, contextProjection.References)
+		turnInput, err := r.floretTurnInput(ctx, req.Input, contextProjection.References)
 		if err != nil {
-			return floretHostedPreparation{}, r.failRun("Failed to prepare message attachments", err)
+			return nil, r.failRun("Failed to prepare message attachments", err)
 		}
-		turnInput, frozenAttachments, err = r.preflightFloretTurnAttachments(ctx, turnInput, flProvider)
+		_, frozenAttachments, err = r.preflightFloretTurnAttachments(ctx, turnInput, flProvider)
 		if err != nil {
-			return floretHostedPreparation{}, r.failRun("Failed to validate message attachments", err)
+			return nil, r.failRun("Failed to validate message attachments", err)
 		}
 	}
 	attachmentResolver := r.floretAttachmentResolver(frozenAttachments, flProvider)
@@ -161,18 +152,16 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	agent, err := buildFloretThreadAgent(
 		r,
 		initialSurface,
+		labels,
 		floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens, req.ModelCapability.MaxOutputTokens),
 		req.Options,
 		flProvider,
 		flowerManualCompactionSource(req.Input, r.executionKey),
 	)
 	if err != nil {
-		return floretHostedPreparation{}, r.failRun("Failed to initialize Floret host", err)
+		return nil, r.failRun("Failed to initialize Floret host", err)
 	}
-	return floretHostedPreparation{
-		agent:  agent,
-		labels: labels, contextProjection: contextProjection, turnInput: turnInput,
-	}, nil
+	return agent, nil
 }
 
 // buildFloretThreadAgent is the Redeven effect adapter boundary. It assembles
@@ -182,6 +171,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 func buildFloretThreadAgent(
 	r *run,
 	surface runToolSurface,
+	labels flruntime.RunLabels,
 	contextPolicy flconfig.ContextPolicy,
 	options RunOptions,
 	provider *floretProviderAdapter,
@@ -192,6 +182,7 @@ func buildFloretThreadAgent(
 	}
 	agentOptions := []flruntime.AgentOption{
 		flruntime.WithAgentTools(surface.FloretToolItems...),
+		flruntime.WithAgentRunLabels(labels),
 		flruntime.WithAgentEffectAuthorization(floretEffectAuthorizationGateForRun(r)),
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),

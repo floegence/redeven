@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -61,39 +60,15 @@ func (r *run) preparePermissionSnapshot(snapshot PermissionSnapshot) (Permission
 	if r == nil {
 		return PermissionSnapshot{}, errors.New("missing permission snapshot owner")
 	}
-	ownerRunID, ownerThreadID, _ := r.floretCanonicalIdentity()
-	if ownerRunID == "" {
-		r.muPendingCommand.Lock()
-		logicalRequestID := strings.TrimSpace(r.pendingCommandID)
-		r.muPendingCommand.Unlock()
-		if logicalRequestID != "" {
-			ownerRunID, ownerThreadID = logicalRequestID, r.threadID
-		} else {
-			ownerRunID, ownerThreadID = r.id, r.threadID
-		}
+	ownerID := strings.TrimSpace(r.executionKey)
+	if ownerID == "" {
+		ownerID = strings.TrimSpace(r.id)
 	}
-	snapshot = permissionSnapshotWithOwnerIdentity(snapshot, r.endpointID, ownerThreadID, ownerRunID)
+	snapshot = permissionSnapshotWithOwnerIdentity(snapshot, r.endpointID, r.threadID, ownerID)
 	if !permissionSnapshotActive(snapshot) || strings.TrimSpace(snapshot.SnapshotHash) == "" {
 		return PermissionSnapshot{}, errors.New("permission snapshot is empty")
 	}
-	r.setPermissionState(snapshot.PermissionType, snapshot)
 	return snapshot, nil
-}
-
-func (r *run) ensureCanonicalPermissionSnapshotPersisted(_ context.Context) error {
-	if r == nil {
-		return errors.New("missing permission snapshot owner")
-	}
-	ownerRunID, ownerThreadID, _ := r.floretCanonicalIdentity()
-	if strings.TrimSpace(ownerRunID) == "" || strings.TrimSpace(ownerThreadID) == "" {
-		return errors.New("Floret canonical permission owner is unavailable")
-	}
-	snapshot := permissionSnapshotWithOwnerIdentity(r.currentPermissionSnapshot(), r.endpointID, ownerThreadID, ownerRunID)
-	if err := validatePermissionSnapshotConsistency(snapshot); err != nil {
-		return fmt.Errorf("validate canonical permission snapshot: %w", err)
-	}
-	r.setPermissionState(snapshot.PermissionType, snapshot)
-	return nil
 }
 
 func (r *run) setPermissionState(permissionType FlowerPermissionType, snapshot PermissionSnapshot) {
