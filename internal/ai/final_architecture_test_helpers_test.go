@@ -136,11 +136,24 @@ func writeTestRealtimeSSE(w io.Writer, flusher http.Flusher, payload any) {
 
 func newRealtimeTestService(t *testing.T, delay time.Duration) *Service {
 	t.Helper()
+	server := newRealtimeTestServer(t, delay)
+	svc := openRealtimeTestService(t, t.TempDir(), server.URL)
+	t.Cleanup(func() { _ = svc.Close() })
+	return svc
+}
+
+func newRealtimeTestServer(t *testing.T, delay time.Duration) *httptest.Server {
+	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(slowOpenAIMock{delay: delay}.handle))
 	t.Cleanup(server.Close)
-	cfg := &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", BaseURL: strings.TrimSuffix(server.URL, "/") + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}
+	return server
+}
+
+func openRealtimeTestService(t *testing.T, stateDir string, baseURL string) *Service {
+	t.Helper()
+	cfg := &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", BaseURL: strings.TrimSuffix(baseURL, "/") + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}
 	svc, err := NewService(Options{
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "bash", Config: cfg,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: t.TempDir(), Shell: "bash", Config: cfg,
 		RunMaxWallTime: 30 * time.Second, RunIdleTimeout: 10 * time.Second, ToolApprovalTimeout: 5 * time.Second,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return "sk-test", strings.TrimSpace(providerID) == "openai", nil
@@ -149,7 +162,6 @@ func newRealtimeTestService(t *testing.T, delay time.Duration) *Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = svc.Close() })
 	return svc
 }
 
