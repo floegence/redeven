@@ -5,6 +5,7 @@ import { AlertTriangle, Bot, ChevronDown, Clock, Refresh } from '@floegence/floe
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerSubagentsCopy } from './copy';
+import { FlowerThinkingOrb } from './FlowerThinkingOrb';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import {
   projectSubagentLedgerItems,
@@ -264,13 +265,17 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
       >
         <header class="flower-subagent-detail-overview">
           <div class={cn('flower-subagent-detail-signal', `flower-subagent-detail-signal-${props.status}`)} aria-hidden="true">
-            <Bot class="h-4 w-4" />
+            <Show when={props.status === 'running'} fallback={<Bot class="h-4 w-4" />}>
+              <FlowerThinkingOrb class="flower-subagent-detail-thinking-orb" running />
+            </Show>
           </div>
           <div class="flower-subagent-detail-overview-copy">
             <div class="flower-subagent-detail-overview-meta">
               <span class={cn('flower-subagent-status-label', `flower-subagent-status-label-${props.status}`)}>
-                {props.statusIndicator}
-                <span>{props.statusLabel}</span>
+                <Show when={props.status !== 'running'}>{props.statusIndicator}</Show>
+                <span class="flower-subagent-status-text">
+                  {props.statusLabel}
+                </span>
               </span>
               <Show when={props.agentTypeLabel}>
                 <span class="flower-subagent-detail-agent-type">{props.agentTypeLabel}</span>

@@ -8371,13 +8371,11 @@ button.flower-attachment-preview-trigger:disabled {
   justify-content: center;
 }
 
-.flower-subagent-status-indicator-running {
-  color: color-mix(in srgb, var(--flower-subagents-active) 82%, var(--foreground) 18%);
-}
-
-.flower-subagent-status-loader {
-  width: 0.75rem;
-  height: 0.75rem;
+.flower-subagent-thinking-orb {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
 }
 
 .flower-subagent-status-indicator-completed {
@@ -8609,14 +8607,20 @@ button.flower-attachment-preview-trigger:disabled {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--flower-subagent-window-border);
-  border-radius: 5px;
+  border-radius: 9999px;
   background: var(--flower-subagent-window-surface-soft);
   color: var(--flower-subagent-window-muted);
 }
 
 .flower-subagent-detail-signal-running {
-  border-color: color-mix(in srgb, var(--flower-subagent-window-accent) 52%, var(--flower-subagent-window-border));
-  color: var(--flower-subagent-window-accent);
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--flower-subagent-window-border));
+  color: var(--primary);
+}
+
+.flower-subagent-detail-thinking-orb {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .flower-subagent-detail-signal-queued,
@@ -8670,7 +8674,29 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-status-label-running {
-  color: var(--flower-subagent-window-accent);
+  color: var(--primary);
+}
+
+.flower-subagent-status-text {
+  display: inline-block;
+}
+
+.flower-subagent-status-label-running .flower-subagent-status-text {
+  color: var(--primary);
+  background: linear-gradient(
+    90deg,
+    var(--primary) 0%,
+    var(--primary) 40%,
+    color-mix(in srgb, var(--primary) 34%, var(--flower-subagent-window-text) 66%) 50%,
+    var(--primary) 60%,
+    var(--primary) 100%
+  );
+  background-position: 100% 0;
+  background-size: 250% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: flower-activity-title-sweep 2.6s ease-out infinite;
 }
 
 .flower-subagent-status-label-queued,
@@ -10213,7 +10239,6 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-activity-waiting-clock::before,
   .flower-activity-waiting-clock::after,
   .flower-activity-inline-loader-square,
-  .flower-subagent-status-loader .flower-activity-inline-loader-square,
   .flower-compaction-divider-running-clock::before,
   .flower-compaction-divider-running-clock::after,
   .flower-compaction-divider-label-shimmer::after,
@@ -10231,6 +10256,12 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 
   .flower-activity-inline-row-running .flower-activity-inline-title::after {
     content: none !important;
+  }
+
+  .flower-subagent-status-label-running .flower-subagent-status-text {
+    animation: none !important;
+    background: none !important;
+    -webkit-text-fill-color: currentColor;
   }
 
   .flower-model-status-text {
@@ -10261,5 +10292,11 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 @media (forced-colors: active) {
   .flower-activity-inline-row-running .flower-activity-inline-title::after {
     content: none;
+  }
+
+  .flower-subagent-status-label-running .flower-subagent-status-text {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
   }
 }

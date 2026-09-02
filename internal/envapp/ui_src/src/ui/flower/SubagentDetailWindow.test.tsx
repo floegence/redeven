@@ -2,7 +2,7 @@
 
 import { For, Show, createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -31,9 +31,14 @@ import { SubagentDetailWindow, type SubagentDetailWindowProps } from '../../../.
 
 const disposers: Array<() => void> = [];
 
+beforeEach(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => null);
+});
+
 afterEach(() => {
   while (disposers.length > 0) disposers.pop()?.();
   document.body.innerHTML = '';
+  vi.restoreAllMocks();
 });
 
 function activityEntry(key: string, timestamp: number, status: FlowerActivityStatus, label = key): FlowerTimelineEntry {
