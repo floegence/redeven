@@ -137,6 +137,14 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function mount(variant: 'activity' | 'workbench' = 'activity') {
   const host = document.createElement('div');
   host.style.position = 'fixed';
@@ -291,6 +299,50 @@ describe('native Containers responsive product surface', () => {
     expect(detailPage.querySelector('.container-sparkline')).toBeNull();
     expect(detailPage.querySelector('[data-container-network-panel]')?.textContent).toContain('/s');
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it('keeps a container detail open when a return refresh finishes', async () => {
+    await page.viewport(1440, 900);
+    const refreshedContainers = deferred<any[]>();
+    const containers = [
+      {
+        container_id: 'container-1', name: 'API', state: 'running', image_id: 'sha256:abcdef',
+        image: { reference: 'example/api:latest' }, management: { managed: false },
+      },
+      {
+        container_id: 'container-2', name: 'Worker', state: 'running', image_id: 'sha256:fedcba',
+        image: { reference: 'example/worker:latest' }, management: { managed: false },
+      },
+    ];
+    let containerRequests = 0;
+    browserHarness.listResources.mockImplementation((view: string) => {
+      if (view === 'images') {
+        return Promise.resolve([{ id: 'sha256:abcdef', reference: 'example/api:latest', tags: ['example/api:latest'] }]);
+      }
+      containerRequests += 1;
+      return containerRequests === 1 ? Promise.resolve(containers) : refreshedContainers.promise;
+    });
+    browserHarness.resourceDetails.mockImplementation((view: string, identity: string) => Promise.resolve(view === 'images'
+      ? { id: 'sha256:abcdef', reference: 'example/api:latest' }
+      : { container_id: identity, name: identity === 'container-2' ? 'Worker' : 'API', state: 'running' }));
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    root.querySelector<HTMLButtonElement>('.container-secondary-cell .container-resource-link')?.click();
+    await settle();
+    expect(root.querySelector('[data-container-detail-page] h2')?.textContent).toBe('example/api:latest');
+
+    root.querySelector<HTMLButtonElement>('[data-container-detail-page] button[aria-label="Back"]')?.click();
+    await settle();
+    root.querySelectorAll<HTMLTableRowElement>('tbody tr')[1]?.click();
+    await settle();
+    expect(root.querySelector('[data-container-detail-page] h2')?.textContent).toBe('Worker');
+
+    refreshedContainers.resolve(containers);
+    await settle();
+    expect(root.querySelector('[data-container-detail-page] h2')?.textContent).toBe('Worker');
   });
 
   it('opens a volume user directly as a container detail and restores the source detail', async () => {
