@@ -1,5 +1,7 @@
 .redeven-containers {
   --container-selection: color-mix(in srgb, var(--redeven-status-primary-soft) 72%, transparent);
+  --container-interactive-hover: color-mix(in srgb, var(--foreground) 7%, var(--redeven-surface-main));
+  --container-interactive-accent: color-mix(in srgb, var(--ring) 76%, var(--foreground) 24%);
   container-type: inline-size;
   background: var(--redeven-surface-main);
 }
@@ -456,10 +458,17 @@
 .container-resource-table-shell th { height: 38px; padding: 0 12px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 10px; font-weight: 620; white-space: nowrap; }
 .container-sort-control { display: inline-flex; height: 32px; align-items: center; gap: 5px; border-radius: 5px; }
 .container-sort-control:hover { color: var(--foreground); }
-.container-resource-table-shell td { height: 54px; max-width: 300px; padding: 7px 12px; border-bottom: 1px solid color-mix(in srgb, var(--border) 58%, transparent); }
+.container-resource-table-shell td {
+  height: 54px;
+  max-width: 300px;
+  padding: 7px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
 .container-resource-table-shell tbody tr { cursor: pointer; outline: none; }
-.container-resource-table-shell tbody tr:hover td { background: color-mix(in srgb, var(--redeven-surface-panel-hover) 58%, transparent); }
 .container-resource-table-shell tbody tr:focus-visible td { background: var(--container-selection); }
+.container-resource-table-shell tbody tr:focus-visible td:first-child { box-shadow: inset 2px 0 0 var(--container-interactive-accent); }
+.container-resource-table-shell tbody tr:focus-visible .container-row-actions > svg:last-child { color: var(--foreground); transform: translateX(2px); }
 .container-resource-table-shell th:first-child,
 .container-resource-table-shell td:first-child { width: 92px; }
 .container-resource-table-shell .container-actions-column { width: 126px; text-align: right; }
@@ -471,8 +480,15 @@
 .container-resource-link { display: inline-flex; max-width: 100%; min-height: 28px; align-items: center; gap: 4px; overflow: hidden; color: var(--primary); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .container-resource-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .container-row-actions { justify-content: flex-end; }
+.container-row-actions > svg:last-child { transition: color 120ms ease, transform 120ms ease; }
 .container-destructive-action { color: var(--destructive) !important; }
 .floe-floating-menu button:has(.text-destructive) { color: var(--destructive); }
+
+@media (hover: hover) and (pointer: fine) {
+  .container-resource-table-shell:not(.container-resource-table-shell--loading) tbody tr:hover td { background: var(--container-interactive-hover); }
+  .container-resource-table-shell:not(.container-resource-table-shell--loading) tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--container-interactive-accent); }
+  .container-resource-table-shell:not(.container-resource-table-shell--loading) tbody tr:hover .container-row-actions > svg:last-child { color: var(--foreground); transform: translateX(2px); }
+}
 
 .container-status {
   display: inline-flex;
@@ -568,7 +584,6 @@
 .container-skeleton--mobile-status { width: 48px; height: 23px; }
 
 .container-resource-table-shell--loading tbody tr { cursor: default; }
-.container-resource-table-shell--loading tbody tr:hover td { background: transparent; }
 
 .container-mobile-skeleton-copy {
   display: grid;
@@ -690,13 +705,13 @@
 .container-file-row,
 .container-layer-row { min-height: 48px; border-bottom: 1px solid color-mix(in srgb, var(--border) 56%, transparent); }
 .container-reference-row { display: flex; width: 100%; align-items: center; gap: 10px; padding: 0 8px; text-align: left; }
-.container-reference-row:hover { background: color-mix(in srgb, var(--redeven-surface-panel-hover) 52%, transparent); }
+.container-reference-row:not(:disabled):hover { background: var(--container-interactive-hover); }
 .container-mount-row { display: flex; align-items: center; gap: 12px; padding: 8px; }
 .container-mount-row > div { display: grid; gap: 3px; }
 .container-mount-row strong { font-family: var(--font-mono); font-size: 11px; }
 .container-mount-row span { color: var(--muted-foreground); font-size: 10px; }
 .container-mount-row--link { width: 100%; text-align: left; }
-.container-mount-row--link:hover { background: color-mix(in srgb, var(--redeven-surface-panel-hover) 52%, transparent); }
+.container-mount-row--link:hover { background: var(--container-interactive-hover); }
 .container-mount-groups { display: grid; max-width: 880px; gap: 24px; }
 .container-mount-groups section { display: grid; gap: 6px; }
 .container-mount-groups h3 { color: var(--muted-foreground); font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
@@ -893,7 +908,7 @@
   border-bottom: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
   text-align: left;
 }
-.container-operation-card:hover { background: color-mix(in srgb, var(--redeven-surface-panel-hover) 54%, transparent); }
+.container-operation-card:hover { background: var(--container-interactive-hover); }
 .container-operation-card[aria-selected="true"] { background: color-mix(in srgb, var(--redeven-status-primary-soft) 62%, transparent); }
 .container-operation-card > span:nth-child(2) { display: grid; gap: 3px; }
 .container-operation-card strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1088,6 +1103,7 @@
   .redeven-containers button[aria-selected="true"],
   .redeven-containers button[aria-pressed="true"],
   .container-resource-table-shell tbody tr:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+  .container-resource-table-shell:not(.container-resource-table-shell--loading) tbody tr:hover { outline: 1px solid Highlight; outline-offset: -1px; }
   .container-status,
   .container-resource-icon { border: 1px solid CanvasText; }
   .container-skeleton { border: 1px solid CanvasText; background: Canvas; }

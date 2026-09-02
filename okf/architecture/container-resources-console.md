@@ -61,6 +61,12 @@ Containers default to Active; other views default to All. Shared Dropdown and
 Dialog primitives own outside-click, Escape, focus, and Workbench-safe floating
 behavior.
 
+Every resource view uses the same interactive table-row contract. A fine-pointer
+hover shows a visible surface change, a leading accent, and a small disclosure
+response; keyboard focus presents the same hierarchy. Loading rows and static
+detail rows do not advertise navigation, and forced-colors mode uses an explicit
+outline instead of depending on mixed background colors.
+
 The header's shared three-dot menu also opens the independent
 [Container service management](container-service-management.md) page. The
 normal resource surface never displays service implementation or endpoint
