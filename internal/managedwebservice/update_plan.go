@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	updatePlanSchemaVersion = 1
+	updatePlanSchemaVersion = 2
 	updatePlanTTL           = 15 * time.Minute
 
 	releaseRiskNonRecommended = "non_recommended_release"
@@ -77,7 +77,7 @@ func (m *Manager) CreateUpdatePlan(ctx context.Context, serviceID string, reques
 	}
 
 	relation := releaseRelation(current, targetIdentity)
-	requiredRisks := updatePlanRisks(*targetTemplate, selected, current, targetIdentity, releaseChanged, relation)
+	riskHints := updatePlanRiskHints(*targetTemplate, selected, current, targetIdentity, releaseChanged, relation)
 	requiresStopped := releaseChanged && (relation == "older" || relation == "unknown")
 	id, err := randomID("upl")
 	if err != nil {
@@ -87,7 +87,7 @@ func (m *Manager) CreateUpdatePlan(ctx context.Context, serviceID string, reques
 	plan := UpdatePlan{
 		SchemaVersion: updatePlanSchemaVersion, UpdatePlanID: id, CurrentRelease: *current, TargetRelease: targetIdentity,
 		CurrentTemplateRevision: service.TemplateRevision, TargetTemplateRevision: targetTemplate.Revision,
-		Notices: append([]TemplateNotice(nil), targetTemplate.Notices...), RequiredRiskIDs: requiredRisks,
+		Notices: append([]TemplateNotice(nil), targetTemplate.Notices...), RiskIDs: riskHints,
 		RequiresStopped: requiresStopped, ExpiresAtUnixMs: expiresAt.UnixMilli(),
 	}
 	release := cachedReleaseCandidate{
@@ -135,7 +135,7 @@ func materializeReleaseSpec(base TemplateSpec, identity ReleaseIdentity) (Templa
 	return target, nil
 }
 
-func updatePlanRisks(template Template, selected *cachedReleaseCandidate, current *ReleaseIdentity, target ReleaseIdentity, releaseChanged bool, relation string) []string {
+func updatePlanRiskHints(template Template, selected *cachedReleaseCandidate, current *ReleaseIdentity, target ReleaseIdentity, releaseChanged bool, relation string) []string {
 	required := []string{}
 	if releaseChanged {
 		if template.RecommendedRelease == nil || !sameReleaseSelection(*template.RecommendedRelease, target) {
@@ -184,7 +184,7 @@ func uniqueStrings(values []string) []string {
 	return result
 }
 
-func (m *Manager) resolveUpdatePlan(ctx context.Context, service *pfregistry.ManagedService, planID string, acceptedRisks []string) (*cachedUpdatePlan, error) {
+func (m *Manager) resolveUpdatePlan(ctx context.Context, service *pfregistry.ManagedService, planID string) (*cachedUpdatePlan, error) {
 	planID = strings.TrimSpace(planID)
 	if planID == "" {
 		return nil, serviceError("UPDATE_PLAN_REQUIRED", "Create and review an update plan before updating this managed Web Service.", 409, false, nil)
@@ -223,15 +223,6 @@ func (m *Manager) resolveUpdatePlan(ctx context.Context, service *pfregistry.Man
 	targetSpec, err := materializeReleaseSpec(*template.Spec, targetIdentity)
 	if err != nil {
 		return nil, err
-	}
-	accepted := map[string]struct{}{}
-	for _, risk := range acceptedRisks {
-		accepted[strings.TrimSpace(risk)] = struct{}{}
-	}
-	for _, risk := range cached.Plan.RequiredRiskIDs {
-		if _, ok := accepted[risk]; !ok {
-			return nil, serviceError("RELEASE_RISK_ACKNOWLEDGEMENT_REQUIRED", "Accept every release safety warning before continuing.", 409, false, nil)
-		}
 	}
 	if cached.Plan.RequiresStopped && (service.DesiredState != "stopped" || service.ObservedState != "stopped") {
 		return nil, serviceError("UPDATE_REQUIRES_STOPPED", "Stop the service before applying a downgrade or a release with unknown version order.", 409, false, nil)

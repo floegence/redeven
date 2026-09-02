@@ -186,8 +186,8 @@ func TestUpdatePlanKeepsCurrentReleaseUnlessUserSelectsAnotherVersion(t *testing
 	if plan.TargetRelease.Version != "1.0.0" || plan.CurrentTemplateRevision != 1 || plan.TargetTemplateRevision != 2 {
 		t.Fatalf("template-only plan = %+v", plan)
 	}
-	if !slicesContain(plan.RequiredRiskIDs, releaseRiskNPMScripts) || slicesContain(plan.RequiredRiskIDs, releaseRiskNonDefault) {
-		t.Fatalf("template-only risks = %v", plan.RequiredRiskIDs)
+	if plan.SchemaVersion != 2 || !slicesContain(plan.RiskIDs, releaseRiskNPMScripts) || slicesContain(plan.RiskIDs, releaseRiskNonDefault) {
+		t.Fatalf("template-only risk hints = %+v", plan)
 	}
 
 	candidates, err := fixture.manager.ServiceReleaseCandidates(ctx, fixture.service.ServiceID, ReleaseCandidateRequest{})
@@ -202,15 +202,15 @@ func TestUpdatePlanKeepsCurrentReleaseUnlessUserSelectsAnotherVersion(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.TargetRelease.Version != "2.0.0" || plan.RequiresStopped || slicesContain(plan.RequiredRiskIDs, releaseRiskNonDefault) {
+	if plan.TargetRelease.Version != "2.0.0" || plan.RequiresStopped || slicesContain(plan.RiskIDs, releaseRiskNonDefault) {
 		t.Fatalf("recommended update plan = %+v", plan)
 	}
-	if !slicesContain(plan.RequiredRiskIDs, releaseRiskNPMScripts) {
-		t.Fatalf("npm lifecycle risk missing from %v", plan.RequiredRiskIDs)
+	if !slicesContain(plan.RiskIDs, releaseRiskNPMScripts) {
+		t.Fatalf("npm lifecycle risk hint missing from %v", plan.RiskIDs)
 	}
 }
 
-func TestUpdatePlanAllowsDeprecatedDowngradeButRequiresStoppedServiceAndRiskReview(t *testing.T) {
+func TestUpdatePlanAllowsDeprecatedDowngradeWithAdvisoryRisksButRequiresStoppedService(t *testing.T) {
 	fixture := newUpdatePlanFixture(t)
 	ctx := context.Background()
 	candidates, err := fixture.manager.ServiceReleaseCandidates(ctx, fixture.service.ServiceID, ReleaseCandidateRequest{})
@@ -226,8 +226,8 @@ func TestUpdatePlanAllowsDeprecatedDowngradeButRequiresStoppedServiceAndRiskRevi
 		t.Fatal(err)
 	}
 	for _, risk := range []string{releaseRiskNonDefault, releaseRiskDeprecated, releaseRiskDowngrade, releaseRiskNPMScripts} {
-		if !slicesContain(plan.RequiredRiskIDs, risk) {
-			t.Fatalf("risk %q missing from %v", risk, plan.RequiredRiskIDs)
+		if !slicesContain(plan.RiskIDs, risk) {
+			t.Fatalf("risk hint %q missing from %v", risk, plan.RiskIDs)
 		}
 	}
 	if !plan.RequiresStopped {
@@ -237,7 +237,7 @@ func TestUpdatePlanAllowsDeprecatedDowngradeButRequiresStoppedServiceAndRiskRevi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.manager.resolveUpdatePlan(ctx, stored, plan.UpdatePlanID, plan.RequiredRiskIDs); managedErrorCode(err) != "UPDATE_REQUIRES_STOPPED" {
+	if _, err := fixture.manager.resolveUpdatePlan(ctx, stored, plan.UpdatePlanID); managedErrorCode(err) != "UPDATE_REQUIRES_STOPPED" {
 		t.Fatalf("running downgrade resolve error = %v", err)
 	}
 }
@@ -269,7 +269,7 @@ func TestUpdatePlanRejectsEmptyAndExpiredPlans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.manager.resolveUpdatePlan(ctx, stored, plan.UpdatePlanID, plan.RequiredRiskIDs); managedErrorCode(err) != "UPDATE_PLAN_EXPIRED" {
+	if _, err := fixture.manager.resolveUpdatePlan(ctx, stored, plan.UpdatePlanID); managedErrorCode(err) != "UPDATE_PLAN_EXPIRED" {
 		t.Fatalf("expired plan resolve error = %v", err)
 	}
 }
@@ -312,7 +312,7 @@ func TestSpecialReleaseRiskDoesNotBlockSelection(t *testing.T) {
 		Candidate: ReleaseCandidate{Channel: "special", Selectable: true},
 		Identity:  ReleaseIdentity{Kind: "oci", Source: "registry.example/app", Tag: "nightly", Digest: testReleaseDigest("a")},
 	}
-	risks := updatePlanRisks(template, selected, &ReleaseIdentity{Kind: "oci", Source: "registry.example/app", Tag: "1.0.0", Digest: testReleaseDigest("b")}, selected.Identity, true, "unknown")
+	risks := updatePlanRiskHints(template, selected, &ReleaseIdentity{Kind: "oci", Source: "registry.example/app", Tag: "1.0.0", Digest: testReleaseDigest("b")}, selected.Identity, true, "unknown")
 	for _, risk := range []string{releaseRiskNonRecommended, releaseRiskUnknownOrder} {
 		if !slicesContain(risks, risk) {
 			t.Fatalf("risk %q missing from %v", risk, risks)

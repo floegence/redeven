@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Advisory Managed Service version risks**: Version selection and update plans
+  now show non-recommended, preview, deprecated, npm-script, downgrade,
+  unknown-order, and moved-tag facts as compact read-only hints. Ephemeral update
+  plan schema v2 exposes `risk_ids` for presentation and removes release-risk
+  acknowledgement fields and checkbox gates; source verification, platform
+  compatibility, and stopped-state requirements remain enforced by the Manager.
 * **Usable Managed Service version drawer**: OCI release discovery now treats
   container-engine credentials as optional until the Registry actually requires
   authentication, so a broken or empty credential helper cannot block public

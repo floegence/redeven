@@ -3330,14 +3330,14 @@
       "deploySelectedRelease": "Implantar a versão selecionada",
       "downgradeRequiresStopped": "Pare o serviço antes de escolher uma versão anterior.",
       "releaseRisk": {
-        "npm_lifecycle_scripts": "Entendo que os scripts de ciclo de vida do npm são executados com as permissões do usuário atual do ambiente e podem acessar dados que esse usuário possa ler ou alterar.",
-        "non_recommended_release": "Entendo que esta não é a versão recomendada pelo Redeven.",
-        "non_default_release": "Entendo que esta não é a versão padrão do modelo personalizado.",
-        "preview_release": "Entendo que esta é uma versão de prévia e pode ser instável ou conter alterações incompatíveis.",
-        "deprecated_release": "Entendo que a origem marca esta versão como obsoleta.",
-        "downgrade": "Entendo que o Redeven pode restaurar o ambiente de execução anterior se a inicialização falhar, mas os dados do aplicativo não são migrados automaticamente para trás.",
-        "version_order_unknown": "Entendo que não é possível ordenar essas tags com segurança e que uma troca futura para esta versão ou a partir dela pode exigir a interrupção do serviço.",
-        "tag_digest_moved": "Entendo que esta tag agora aponta para um digest diferente."
+        "npm_lifecycle_scripts": "Os scripts de ciclo de vida do npm são executados com as permissões do usuário atual do ambiente e podem acessar dados que esse usuário possa ler ou alterar.",
+        "non_recommended_release": "Esta não é a versão recomendada pelo Redeven.",
+        "non_default_release": "Esta não é a versão padrão do modelo personalizado.",
+        "preview_release": "Esta é uma versão de prévia e pode ser instável ou conter alterações incompatíveis.",
+        "deprecated_release": "A origem marca esta versão como obsoleta.",
+        "downgrade": "O Redeven pode restaurar o ambiente de execução anterior se a inicialização falhar, mas os dados do aplicativo não são migrados automaticamente para trás.",
+        "version_order_unknown": "Não é possível ordenar essas tags com segurança. O serviço deve ser interrompido antes de mudar para esta versão ou sair dela.",
+        "tag_digest_moved": "Esta tag agora aponta para um digest diferente do anterior."
       },
       "keepCurrentVersion": "Manter a versão atual do aplicativo",
       "keepCurrentVersionDescription": "Aplica apenas uma revisão mais recente do modelo. O Redeven não voltará o aplicativo para a versão recomendada.",

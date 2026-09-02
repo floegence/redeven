@@ -3330,14 +3330,14 @@
       "deploySelectedRelease": "Desplegar la versión seleccionada",
       "downgradeRequiresStopped": "Detén el servicio antes de elegir una versión anterior.",
       "releaseRisk": {
-        "npm_lifecycle_scripts": "Entiendo que los scripts de ciclo de vida de npm se ejecutan con los permisos del usuario actual del entorno y pueden acceder a los datos que ese usuario pueda leer o modificar.",
-        "non_recommended_release": "Entiendo que esta no es la versión recomendada por Redeven.",
-        "non_default_release": "Entiendo que esta no es la versión predeterminada de la plantilla personalizada.",
-        "preview_release": "Entiendo que esta es una versión preliminar y puede ser inestable o contener cambios incompatibles.",
-        "deprecated_release": "Entiendo que el origen marca esta versión como obsoleta.",
-        "downgrade": "Entiendo que Redeven puede restaurar el entorno de ejecución anterior si falla el inicio, pero los datos de la aplicación no se migran automáticamente hacia atrás.",
-        "version_order_unknown": "Entiendo que estas etiquetas no se pueden ordenar con seguridad y que un cambio posterior hacia o desde esta versión puede requerir detener el servicio.",
-        "tag_digest_moved": "Entiendo que esta etiqueta ahora apunta a un digest diferente."
+        "npm_lifecycle_scripts": "Los scripts de ciclo de vida de npm se ejecutan con los permisos del usuario actual del entorno y pueden acceder a los datos que ese usuario pueda leer o modificar.",
+        "non_recommended_release": "Esta no es la versión recomendada por Redeven.",
+        "non_default_release": "Esta no es la versión predeterminada de la plantilla personalizada.",
+        "preview_release": "Esta es una versión preliminar y puede ser inestable o contener cambios incompatibles.",
+        "deprecated_release": "El origen marca esta versión como obsoleta.",
+        "downgrade": "Redeven puede restaurar el entorno de ejecución anterior si falla el inicio, pero los datos de la aplicación no se migran automáticamente hacia atrás.",
+        "version_order_unknown": "Estas etiquetas no se pueden ordenar con seguridad. El servicio debe detenerse antes de cambiar a esta versión o desde ella.",
+        "tag_digest_moved": "Esta etiqueta ahora apunta a un digest diferente al anterior."
       },
       "keepCurrentVersion": "Conservar la versión actual de la aplicación",
       "keepCurrentVersionDescription": "Aplica solo una revisión nueva de la plantilla. Redeven no devolverá la aplicación a la versión recomendada.",

@@ -1382,7 +1382,7 @@ describe('EnvPortForwardsPage', () => {
     expect(workspace?.dataset.path).toBe(template.default_workspace_path);
   });
 
-  it('presents both Desktop Service templates and requires the declared risk acknowledgement before install', async () => {
+  it('presents template notices as the only install acknowledgement and keeps release risks advisory', async () => {
     const notice = {
       id: 'interactive-desktop-root-and-network',
       revision: 1,
@@ -1451,10 +1451,9 @@ describe('EnvPortForwardsPage', () => {
     expect(install?.disabled).toBe(true);
     host.querySelector<HTMLInputElement>('[data-testid="managed-template-notices"] input[type="checkbox"]')?.click();
     await flushPage();
-    expect(install?.disabled).toBe(true);
-    for (const checkbox of host.querySelectorAll<HTMLInputElement>('[data-testid="managed-release-risks"] input[type="checkbox"]')) checkbox.click();
-    await flushPage();
     expect(install?.disabled).toBe(false);
+    expect(host.querySelector('[data-testid="managed-release-risk-hints"]')?.textContent).toContain('cannot be ordered safely');
+    expect(host.querySelector('[data-testid="managed-release-risk-hints"] input[type="checkbox"]')).toBeNull();
     install?.click();
 
     await waitForAssertion(() => expect(createBody).toMatchObject({
@@ -1553,7 +1552,7 @@ describe('EnvPortForwardsPage', () => {
     }
   });
 
-  it('updates only through a reviewed version plan and sends its notice and risk acknowledgements', async () => {
+  it('updates through a reviewed plan while keeping release risks advisory', async () => {
     const updateNotice = {
       id: 'interactive-desktop-root-and-network', revision: 2, severity: 'warning',
       acknowledgement_required: true,
@@ -1580,7 +1579,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/release-candidates' && init?.method === 'POST') return { schema_version: 1, current_release: currentRelease, recommended_release: currentRelease, latest_stable_release: candidate, candidates: [candidate], check_status: 'fresh', checked_at_unix_ms: Date.now() };
       if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/update-plans' && init?.method === 'POST') {
         updatePlanBody = JSON.parse(String(init.body));
-        return { schema_version: 1, update_plan_id: 'upl-reviewed', current_release: currentRelease, target_release: targetRelease, current_template_revision: 1, target_template_revision: 2, notices: [updateNotice], required_risk_ids: ['non_recommended_release'], expires_at_unix_ms: Date.now() + 60_000 };
+        return { schema_version: 2, update_plan_id: 'upl-reviewed', current_release: currentRelease, target_release: targetRelease, current_template_revision: 1, target_template_revision: 2, notices: [updateNotice], risk_ids: ['non_recommended_release'], expires_at_unix_ms: Date.now() + 60_000 };
       }
       if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/operations' && init?.method === 'POST') {
         operationBody = JSON.parse(String(init.body));
@@ -1601,23 +1600,25 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-release-id="candidate-new"]')?.click();
+    await flushPage();
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review update plan')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeTruthy());
     expect(updatePlanBody).toEqual({ target_candidate_id: 'candidate-new' });
     const update = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Update');
     expect(update?.disabled).toBe(true);
     const planChecks = host.querySelectorAll<HTMLInputElement>('[data-testid="managed-update-plan"] input[type="checkbox"]');
-    expect(planChecks).toHaveLength(2);
+    expect(planChecks).toHaveLength(1);
+    expect(host.querySelector('[data-testid="managed-release-risk-hints"]')?.textContent).toContain('not the version recommended by Redeven');
     planChecks.forEach((checkbox) => checkbox.click());
     await flushPage();
     expect(update?.disabled).toBe(false);
     update?.click();
 
-    await waitForAssertion(() => expect(operationBody).toMatchObject({
+    await waitForAssertion(() => expect(operationBody).toEqual({
+      request_id: expect.any(String),
       action: 'update',
       update_plan_id: 'upl-reviewed',
       accepted_notice_revisions: { 'interactive-desktop-root-and-network': 2 },
-      accepted_release_risks: ['non_recommended_release'],
     }));
     expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeNull();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Update'));
@@ -1670,7 +1671,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services/mws-host/release-candidates') return { schema_version: 1, current_release: currentRelease, recommended_release: currentRelease, candidates: [], check_status: 'fresh', checked_at_unix_ms: Date.now() };
       if (url === '/_redeven_proxy/api/managed-web-services/mws-host/update-plans' && init?.method === 'POST') {
         planBody = JSON.parse(String(init.body));
-        return { schema_version: 1, update_plan_id: 'upl-template-only', current_release: currentRelease, target_release: currentRelease, current_template_revision: 1, target_template_revision: 2, required_risk_ids: ['npm_lifecycle_scripts'], expires_at_unix_ms: Date.now() + 60_000 };
+        return { schema_version: 2, update_plan_id: 'upl-template-only', current_release: currentRelease, target_release: currentRelease, current_template_revision: 1, target_template_revision: 2, risk_ids: ['npm_lifecycle_scripts'], expires_at_unix_ms: Date.now() + 60_000 };
       }
       throw new Error(`Unexpected local API call: ${url}`);
     });
