@@ -9159,10 +9159,6 @@ button.flower-attachment-preview-trigger:disabled {
   padding: 0.18rem 0.35rem;
 }
 
-.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button {
-  box-shadow: 2px 0 0 var(--flower-subagent-window-accent) inset;
-}
-
 .flower-subagent-ledger-entry-body .flower-activity-inline-title {
   font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.75rem;

@@ -261,6 +261,7 @@ describe('Flower activity running sheen', () => {
     expect(css).not.toContain('.flower-subagent-status-loader');
     expect(css).toContain('.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,\n  .flower-subagent-status-label-running .flower-subagent-status-text {\n    animation: none !important;');
     expect(css).not.toContain('.flower-subagent-detail-tail-pulse');
+    expect(css).not.toContain('.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button {');
     expect(css).not.toContain('.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('z-index: 50');
     expect(detailScrollRule).not.toContain('z-index: ');
